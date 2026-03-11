@@ -14,17 +14,40 @@ You can interact with the running app via `agent-flutter` — a CLI that taps wi
 
 ### Setup
 ```bash
-# Emulator must be running (adb devices), app in debug mode
-AGENT_FLUTTER_LOG=/tmp/flutter-run.log agent-flutter connect
+# 1. Emulator must be running
+adb devices                          # should show emulator-5554
+# If not: sg kvm -c "$ANDROID_HOME/emulator/emulator -avd omi-dev -no-window -gpu swiftshader_indirect -no-audio -no-boot-anim &"
+
+# 2. Set system language to English (REQUIRED — non-English IME breaks text input)
+adb shell "settings put system system_locales en-US"
+adb shell "setprop persist.sys.locale en-US"
+
+# 3. App must be running in debug mode with flutter run stdout captured
+cd app && flutter run -d emulator-5554 --flavor dev > /tmp/omi-flutter.log 2>&1 &
+# Wait for "VM Service" line to appear in the log
+
+# 4. Connect agent-flutter (AGENT_FLUTTER_LOG must point to flutter run stdout, NOT logcat)
+AGENT_FLUTTER_LOG=/tmp/omi-flutter.log agent-flutter connect
 agent-flutter snapshot -i --json    # see what's on screen
 ```
+
+**Prerequisites:**
+- AVD name: `omi-dev` (check: `$ANDROID_HOME/emulator/emulator -list-avds`)
+- KVM access required: user must be in `kvm` group (`sg kvm -c "..."` if not in current session)
+- App package: `com.friend.ios.dev` (dev flavor)
+- **System language must be English** — non-English IME breaks `fill` commands
+- **App must be authenticated and connected to the correct backend** (local, dev, or prod — depends on the task)
+- Marionette already integrated: `marionette_flutter: ^0.3.0` in pubspec.yaml
 
 ### Commands
 
 | Command | Purpose | Example |
 |---------|---------|---------|
 | `snapshot -i --json` | See all interactive widgets with refs, types, bounds | `agent-flutter snapshot -i --json` |
-| `press @ref` | Tap a widget | `agent-flutter press @e3` |
+| `press @ref` | Tap a widget by ref | `agent-flutter press @e3` |
+| `press x y` | Tap by coordinates (ADB input tap) | `agent-flutter press 540 1200` |
+| `press @ref --adb` | Tap by ref using ADB (for stale refs) | `agent-flutter press @e3 --adb` |
+| `dismiss` | Dismiss system dialogs (location, permissions) | `agent-flutter dismiss` |
 | `find type X press` | Find widget by type and tap | `agent-flutter find type button press` |
 | `find text "X" press` | Find by visible text and tap | `agent-flutter find text "Settings" press` |
 | `find type X --index N press` | Tap Nth match (0-indexed) | `agent-flutter find type switch --index 0 press` |
@@ -34,7 +57,7 @@ agent-flutter snapshot -i --json    # see what's on screen
 | `screenshot PATH` | Capture current screen | `agent-flutter screenshot /tmp/screen.png` |
 
 **Key rules:**
-- Refs go stale after any mutation — always re-snapshot before the next interaction.
+- Refs go stale frequently (Flutter rebuilds widget tree aggressively) — always re-snapshot before every interaction, not just after mutations.
 - `find type X` is more stable than hardcoded `@ref` numbers.
 - `AGENT_FLUTTER_LOG` must point to `flutter run` stdout (not logcat).
 - After hot restart: `disconnect` → wait 3s → `connect`.
@@ -55,23 +78,92 @@ sleep 3 && agent-flutter disconnect && agent-flutter connect
 
 ### Screen Map
 ```
-Home (page.dart)
-├── [top-right button] → Settings (settings_drawer.dart)
-│   ├── [1st row] → Profile (profile.dart)
-│   │   ├── Name, Email
-│   │   └── Language → Language Settings (language_settings_page.dart)
-│   │       └── App Language → Bottom sheet picker (language_selection_dialog.dart)
-│   ├── [scroll down] → Developer Settings (developer.dart)
-│   │   └── Switch toggles for debug features
-│   ├── Transcription Settings (transcription_settings_page.dart)
-│   ├── Notification Settings (notifications_settings_page.dart)
-│   ├── Privacy (privacy.dart)
-│   ├── Device Settings (device_settings.dart)
-│   └── About (about.dart)
-├── [bottom nav tab 1] → Home / Conversations
-├── [bottom nav tab 2] → Chat
-├── [bottom nav tab 3] → Memories
-└── [bottom nav tab 4] → Apps
+Onboarding (wrapper.dart) — 11-step wizard
+├── 0: Auth (auth.dart) — Google/Apple sign-in
+├── 1: Name (name_widget.dart)
+├── 2: Primary Language (primary_language_widget.dart)
+├── 3: Found Omi (found_omi_widget.dart)
+├── 4: Permissions (permissions_widget.dart)
+├── 5: User Review (user_review_page.dart)
+├── 6-7: Welcome / Find Devices (placeholders)
+├── 8: Speech Profile (speech_profile_widget.dart)
+├── 9: Knowledge Graph (knowledge_graph_step.dart)
+└── 10: Complete (complete_screen.dart)
+
+Home (page.dart) — main app after auth
+├── [top bar] Connect Device | Search | History | Settings gear
+├── [center] Daily Score card → Add Goal
+├── [Ask Omi button] → Chat (chat/page.dart)
+│   └── Text input, voice recorder, AI responses, message actions
+├── [record button] → Conversation Capturing (conversation_capturing/page.dart)
+│   └── Live transcript, waveform, stop button
+│
+├── [tab 0] Conversations (conversations_page.dart)
+│   ├── Folder tabs (All, Starred, custom folders)
+│   ├── Daily summaries toggle
+│   ├── Today's tasks widget
+│   └── Conversation item → Detail (conversation_detail/page.dart)
+│       └── Transcript, Summary, Action Items tabs, share, audio
+│
+├── [tab 1] Action Items (action_items_page.dart)
+│   ├── Categories: Today, Tomorrow, Later, No Deadline, Overdue
+│   ├── FAB → Create task sheet (action_item_form_sheet.dart)
+│   ├── Task checkboxes, drag-drop reorder
+│   └── Task → Goal linking
+│
+├── [tab 2] Memories (memories/page.dart)
+│   ├── Search bar, graph button, management button
+│   ├── FAB → Add memory dialog
+│   ├── Category chips filter
+│   ├── Memory item → Quick edit sheet (memory_edit_sheet.dart)
+│   ├── Graph → Memory Graph (memory_graph_page.dart)
+│   └── Management → Category management sheet
+│
+├── [tab 3] Apps (apps/page.dart)
+│   ├── Search, filter, create buttons
+│   ├── Popular apps (horizontal scroll)
+│   ├── Category sections → Category apps page
+│   ├── App item → App Detail (app_detail/app_detail.dart)
+│   │   └── Reviews, capabilities, install/enable
+│   └── Create → Custom app or MCP server
+│
+└── [settings gear] → Settings Drawer (settings_drawer.dart)
+    ├── Profile (profile.dart)
+    │   ├── Name → Change name dialog
+    │   ├── Email (read-only)
+    │   ├── Language → Language Settings (language_settings_page.dart)
+    │   ├── Custom Vocabulary (custom_vocabulary_page.dart)
+    │   ├── Speech Profile (speech_profile/page.dart)
+    │   ├── Identifying Others (people.dart)
+    │   ├── Payment Methods (payments/payments_page.dart)
+    │   ├── Conversation Display (conversation_display_settings.dart)
+    │   ├── Data Privacy (data_privacy_page.dart)
+    │   └── Delete Account (delete_account.dart)
+    ├── Notifications (notifications_settings_page.dart)
+    │   ├── Frequency slider (0-5)
+    │   ├── Daily Summary toggle + time picker
+    │   └── Daily Reflection toggle
+    ├── Plan & Usage (usage_page.dart)
+    ├── Offline Sync (sync_page.dart)
+    │   ├── Local storage, recordings list
+    │   ├── Fast transfer settings
+    │   └── Private cloud sync
+    ├── Device Settings (device_settings.dart) — requires BLE device
+    │   ├── Device info (name, ID, firmware, SD card)
+    │   ├── LED brightness slider, mic gain slider
+    │   └── Double tap action picker
+    ├── Integrations (integrations_page.dart) — BETA
+    │   └── Google Calendar, Gmail, Apple Health
+    ├── Phone Calls (phone_calls_page.dart)
+    ├── Developer Settings (developer.dart)
+    │   ├── Custom STT provider config
+    │   ├── API key management
+    │   └── MCP API keys
+    ├── What's New → Changelog sheet
+    ├── Referral Program (referral_page.dart) — NEW
+    ├── About (about.dart)
+    │   └── Privacy Policy, Website, Discord, Help
+    └── Sign Out → Confirmation dialog
 ```
 
 ### Widget Patterns
@@ -118,12 +210,31 @@ sleep 3 && agent-flutter disconnect && agent-flutter connect
 
 Reference flows in `app/e2e/flows/*.yaml` describe the app's key user journeys. Read these to understand navigation paths and expected UI state. Each flow lists `covers:` (source files) and `steps:` (actions + assertions).
 
-| Flow | Covers | What it describes |
-|------|--------|-------------------|
-| `flows/home-navigation.yaml` | page.dart, settings_drawer.dart | Home → Settings → scroll → back |
-| `flows/settings-toggle.yaml` | settings_drawer.dart, developer.dart | Home → Settings → Developer → switch toggle |
-| `flows/tab-navigation.yaml` | page.dart | Bottom nav: switching between 4 tabs |
-| `flows/language-change.yaml` | profile.dart, language_settings_page.dart | Settings → Profile → Language → picker → locale swap |
+| Flow | What it describes |
+|------|-------------------|
+| **Core Navigation** | |
+| `flows/tab-navigation.yaml` | Bottom nav: switching between 4 tabs, scroll, return home |
+| `flows/home-navigation.yaml` | Home → Settings → scroll → back |
+| `flows/search.yaml` | Search icon → query → results → clear |
+| `flows/onboarding.yaml` | Full 11-step onboarding: auth → name → language → permissions → complete |
+| **Main Tabs** | |
+| `flows/conversations.yaml` | Conversations list, folder tabs, starred filter, daily score, detail view |
+| `flows/action-items.yaml` | Task creation, categories, checkbox toggle, goal linking |
+| `flows/memories.yaml` | Memory search, graph view, category filter, add/edit memory |
+| `flows/apps.yaml` | App explore, search, categories, detail view, create custom app |
+| `flows/chat.yaml` | Ask Omi → text/voice input → AI response |
+| `flows/record-conversation.yaml` | Phone mic capture → live transcript → stop |
+| **Settings** | |
+| `flows/settings-profile.yaml` | Profile: name, language, vocabulary, speech profile, privacy |
+| `flows/settings-notifications.yaml` | Frequency slider, daily summary toggle, time picker |
+| `flows/settings-developer.yaml` | STT provider, API keys, MCP keys |
+| `flows/settings-integrations.yaml` | Google Calendar, Gmail, Apple Health connect/disconnect |
+| `flows/settings-device.yaml` | Device info, LED brightness, mic gain, double tap (requires BLE) |
+| `flows/settings-sync.yaml` | Offline sync, local storage, recordings, fast transfer |
+| `flows/settings-plan-usage.yaml` | Current plan, usage stats, upgrade options |
+| `flows/settings-about.yaml` | About page, external links |
+| `flows/settings-toggle.yaml` | Developer Settings switch toggle (legacy) |
+| `flows/language-change.yaml` | Profile → Language → picker → locale swap via shared_prefs |
 
 When you modify a Dart file, check if any flow's `covers:` includes it. If so, that flow describes the user journey your change affects — use it to understand context and verify your work.
 
@@ -141,10 +252,13 @@ After making changes, verify them in the live app:
 | Problem | Solution |
 |---------|----------|
 | Widget not found | Re-snapshot, try scrolling, check if on wrong screen, match by bounds position |
+| Ref expired between commands | Use `press x y` with coordinates from last snapshot bounds, or `press @ref --adb` |
+| System dialog blocking (location, permissions) | `agent-flutter dismiss` — detects and dismisses via ADB |
 | "No isolate with Marionette" | ADB foreground + disconnect + reconnect |
 | Bottom nav tabs not detected | `back` until nav bar appears, filter InkWell y > 780 |
 | Hot restart breaks connection | Wait 3s → disconnect → connect |
 | Text labels null | Match by `type`, `flutterType`, or `bounds` — Marionette doesn't extract child text |
+| Non-English IME breaks text input | Set system locale to English: `adb shell "settings put system system_locales en-US"` |
 
 ## Guard Conditions
 
