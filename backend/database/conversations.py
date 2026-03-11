@@ -1,5 +1,6 @@
 import copy
 import json
+import os
 import uuid
 import zlib
 from datetime import datetime, timedelta, timezone
@@ -322,7 +323,8 @@ def create_audio_files_from_chunks(
     # Group chunks based on gap rule (90s threshold accommodates both 5s and 60s chunk durations)
     audio_files = []
     current_group = []
-    gap_threshold = 90  # seconds — must exceed max chunk duration (60s) to avoid false splits
+    _batch_enabled = os.environ.get('PRIVATE_CLOUD_BATCH_PUSHER_ENABLED', 'false').lower() == 'true'
+    gap_threshold = 90 if _batch_enabled else 30  # 90s for 60s batching, 30s for legacy 5s chunks
 
     for i, chunk in enumerate(chunks):
         if not current_group:
