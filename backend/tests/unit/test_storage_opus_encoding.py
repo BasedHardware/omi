@@ -151,8 +151,8 @@ class TestExtensionHelpers:
         assert storage_mod._strip_extension("file.unknown") == "file"
 
 
-class TestUploadWithOpusFlag:
-    """Tests for upload_audio_chunk with PRIVATE_CLOUD_OPUS_ENABLED."""
+class TestUploadOpusEncoding:
+    """Tests for upload_audio_chunk with always-on Opus encoding."""
 
     def _setup_mock_bucket(self):
         mock_bucket = MagicMock()
@@ -161,10 +161,9 @@ class TestUploadWithOpusFlag:
         storage_mod.storage_client.bucket.return_value = mock_bucket
         return mock_bucket, mock_blob
 
-    @patch.object(storage_mod, 'PRIVATE_CLOUD_OPUS_ENABLED', True)
     @patch.object(storage_mod, 'users_db')
     def test_opus_standard_extension(self, mock_users_db):
-        """With Opus enabled, standard upload uses .opus extension."""
+        """Standard upload uses .opus extension."""
         _, mock_blob = self._setup_mock_bucket()
 
         path = storage_mod.upload_audio_chunk(
@@ -178,11 +177,10 @@ class TestUploadWithOpusFlag:
         assert path.endswith('.opus')
         assert '.opus.enc' not in path
 
-    @patch.object(storage_mod, 'PRIVATE_CLOUD_OPUS_ENABLED', True)
     @patch.object(storage_mod, 'encryption')
     @patch.object(storage_mod, 'users_db')
     def test_opus_enhanced_extension(self, mock_users_db, mock_encryption):
-        """With Opus enabled, enhanced upload uses .opus.enc extension."""
+        """Enhanced upload uses .opus.enc extension."""
         _, mock_blob = self._setup_mock_bucket()
         mock_encryption.encrypt_audio_chunk.return_value = b'\x01' * 50
 
@@ -196,11 +194,10 @@ class TestUploadWithOpusFlag:
 
         assert path.endswith('.opus.enc')
 
-    @patch.object(storage_mod, 'PRIVATE_CLOUD_OPUS_ENABLED', True)
     @patch.object(storage_mod, 'encryption')
     @patch.object(storage_mod, 'users_db')
     def test_opus_data_passed_to_encryption(self, mock_users_db, mock_encryption):
-        """With Opus enabled, encrypted upload passes Opus data (not raw PCM) to encryption."""
+        """Encrypted upload passes Opus data (not raw PCM) to encryption."""
         _, mock_blob = self._setup_mock_bucket()
         mock_encryption.encrypt_audio_chunk.return_value = b'\x01' * 50
 
@@ -216,22 +213,6 @@ class TestUploadWithOpusFlag:
         # The data passed to encrypt should be Opus-encoded (much smaller than 160000)
         call_args = mock_encryption.encrypt_audio_chunk.call_args[0]
         assert len(call_args[0]) < len(pcm_data)
-
-    @patch.object(storage_mod, 'PRIVATE_CLOUD_OPUS_ENABLED', False)
-    @patch.object(storage_mod, 'users_db')
-    def test_opus_disabled_uses_bin(self, mock_users_db):
-        """With Opus disabled, standard upload still uses .bin."""
-        _, mock_blob = self._setup_mock_bucket()
-
-        path = storage_mod.upload_audio_chunk(
-            chunk_data=b'\x00' * 100,
-            uid='test-uid',
-            conversation_id='conv-1',
-            timestamp=1234567890.123,
-            data_protection_level='standard',
-        )
-
-        assert path.endswith('.bin')
 
 
 class TestListAudioChunksExtensions:
