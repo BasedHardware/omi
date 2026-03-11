@@ -217,6 +217,7 @@ async def _websocket_util_trigger(
                 if retries < PRIVATE_CLOUD_SYNC_MAX_RETRIES:
                     batch['retries'] = retries + 1
                     batch['data'] = bytearray(chunk_data)
+                    batch['queued_at'] = time.monotonic()  # reset age so next retry waits ~60s
                     pending[conv_id] = batch
                     logger.error(f"Private cloud batch upload failed (retry {retries + 1}): {e} {uid} {conv_id}")
                 else:
