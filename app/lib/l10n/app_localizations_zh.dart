@@ -8346,4 +8346,57 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get phoneCallsMaybeLater => '以后再说';
+
+  @override
+  String get deleteSynced => '删除已同步';
+
+  @override
+  String get deleteSyncedFiles => '删除已同步录音';
+
+  @override
+  String get deleteSyncedFilesMessage => '这些录音已同步到您的手机。此操作无法撤销。';
+
+  @override
+  String get syncedFilesDeleted => '已同步录音已删除';
+
+  @override
+  String get deletePending => '删除待处理';
+
+  @override
+  String get deletePendingFiles => '删除待处理录音';
+
+  @override
+  String get deletePendingFilesWarning => '这些录音尚未同步到您的手机，将永久丢失。此操作无法撤销。';
+
+  @override
+  String get pendingFilesDeleted => '待处理录音已删除';
+
+  @override
+  String get deleteAllFiles => '删除所有录音';
+
+  @override
+  String get deleteAll => '全部删除';
+
+  @override
+  String get deleteAllFilesWarning => '这将删除已同步和待处理的录音。待处理录音尚未同步，将永久丢失。';
+
+  @override
+  String get allFilesDeleted => '所有录音已删除';
+
+  @override
+  String nFiles(int count) {
+    return '$count个录音';
+  }
+
+  @override
+  String get manageStorage => '管理存储';
+
+  @override
+  String get safelyBackedUp => '已安全备份到您的手机';
+
+  @override
+  String get notYetSynced => '尚未同步到您的手机';
+
+  @override
+  String get clearAll => '全部清除';
 }
