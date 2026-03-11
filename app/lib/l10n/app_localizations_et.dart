@@ -8551,4 +8551,7 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get clearAll => 'Tühjenda kõik';
+
+  @override
+  String get deleteAssociatedData => 'Kustuta seotud mälestused ja ülesanded';
 }

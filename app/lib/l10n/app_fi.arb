@@ -2747,5 +2747,6 @@
     "manageStorage": "Hallitse tallennustilaa",
     "safelyBackedUp": "Turvallisesti varmuuskopioitu puhelimeesi",
     "notYetSynced": "Ei vielä synkronoitu puhelimeesi",
-    "clearAll": "Tyhjennä kaikki"
+    "clearAll": "Tyhjennä kaikki",
+    "deleteAssociatedData": "Poista liittyvät muistot ja tehtävät"
 }

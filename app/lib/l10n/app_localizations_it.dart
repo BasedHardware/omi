@@ -8605,4 +8605,7 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get clearAll => 'Cancella tutto';
+
+  @override
+  String get deleteAssociatedData => 'Elimina ricordi e attività associati';
 }

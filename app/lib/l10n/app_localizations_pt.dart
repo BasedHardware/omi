@@ -8556,4 +8556,7 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get clearAll => 'Limpar tudo';
+
+  @override
+  String get deleteAssociatedData => 'Eliminar memórias e tarefas associadas';
 }

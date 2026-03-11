@@ -8533,4 +8533,7 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get clearAll => 'सब हटाएं';
+
+  @override
+  String get deleteAssociatedData => 'संबंधित यादें और कार्य हटाएं';
 }

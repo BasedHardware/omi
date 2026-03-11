@@ -8605,4 +8605,7 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get clearAll => 'Esborrar tot';
+
+  @override
+  String get deleteAssociatedData => 'Eliminar memòries i tasques associades';
 }

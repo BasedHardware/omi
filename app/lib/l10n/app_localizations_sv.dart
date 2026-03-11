@@ -8557,4 +8557,7 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get clearAll => 'Rensa allt';
+
+  @override
+  String get deleteAssociatedData => 'Ta bort tillhörande minnen och uppgifter';
 }

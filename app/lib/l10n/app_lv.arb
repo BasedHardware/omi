@@ -2747,5 +2747,6 @@
     "manageStorage": "Pārvaldīt krātuvi",
     "safelyBackedUp": "Droši dublēts jūsu tālrunī",
     "notYetSynced": "Vēl nav sinhronizēts ar jūsu tālruni",
-    "clearAll": "Notīrīt visu"
+    "clearAll": "Notīrīt visu",
+    "deleteAssociatedData": "Dzēst saistītās atmiņas un uzdevumus"
 }

@@ -2714,5 +2714,6 @@
     "manageStorage": "إدارة التخزين",
     "safelyBackedUp": "تم النسخ الاحتياطي بأمان إلى هاتفك",
     "notYetSynced": "لم تتم المزامنة بعد مع هاتفك",
-    "clearAll": "مسح الكل"
+    "clearAll": "مسح الكل",
+    "deleteAssociatedData": "حذف الذكريات والمهام المرتبطة"
 }

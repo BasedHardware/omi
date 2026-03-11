@@ -8556,4 +8556,7 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get clearAll => 'Xóa tất cả';
+
+  @override
+  String get deleteAssociatedData => 'Xóa các ký ức và nhiệm vụ liên quan';
 }

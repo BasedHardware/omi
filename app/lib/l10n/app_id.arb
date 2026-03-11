@@ -2789,5 +2789,6 @@
     "manageStorage": "Kelola penyimpanan",
     "safelyBackedUp": "Dicadangkan dengan aman ke ponsel Anda",
     "notYetSynced": "Belum disinkronkan ke ponsel Anda",
-    "clearAll": "Hapus semua"
+    "clearAll": "Hapus semua",
+    "deleteAssociatedData": "Hapus memori dan tugas terkait"
 }

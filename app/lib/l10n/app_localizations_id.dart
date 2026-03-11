@@ -8563,4 +8563,7 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get clearAll => 'Hapus semua';
+
+  @override
+  String get deleteAssociatedData => 'Hapus memori dan tugas terkait';
 }

@@ -2747,5 +2747,6 @@
     "manageStorage": "Gestisci archivio",
     "safelyBackedUp": "Salvato sul tuo telefono",
     "notYetSynced": "Non ancora sincronizzato con il tuo telefono",
-    "clearAll": "Cancella tutto"
+    "clearAll": "Cancella tutto",
+    "deleteAssociatedData": "Elimina ricordi e attività associati"
 }

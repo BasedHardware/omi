@@ -15980,6 +15980,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Clear All'**
   String get clearAll;
+
+  /// No description provided for @deleteAssociatedData.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete associated memories and tasks'**
+  String get deleteAssociatedData;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

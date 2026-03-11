@@ -8581,4 +8581,7 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get clearAll => 'Alles wissen';
+
+  @override
+  String get deleteAssociatedData => 'Gekoppelde herinneringen en taken verwijderen';
 }

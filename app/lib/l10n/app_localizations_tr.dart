@@ -8565,4 +8565,7 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get clearAll => 'Tümünü temizle';
+
+  @override
+  String get deleteAssociatedData => 'İlişkili anıları ve görevleri sil';
 }

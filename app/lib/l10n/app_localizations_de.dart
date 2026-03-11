@@ -8625,4 +8625,7 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get clearAll => 'Alles löschen';
+
+  @override
+  String get deleteAssociatedData => 'Zugehörige Erinnerungen und Aufgaben löschen';
 }

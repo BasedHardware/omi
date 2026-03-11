@@ -8596,4 +8596,7 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get clearAll => 'Șterge tot';
+
+  @override
+  String get deleteAssociatedData => 'Șterge amintirile și sarcinile asociate';
 }

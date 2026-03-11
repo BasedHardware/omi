@@ -2782,5 +2782,6 @@
     "manageStorage": "Depolamayı yönet",
     "safelyBackedUp": "Telefonunuza güvenli şekilde yedeklendi",
     "notYetSynced": "Henüz telefonunuzla senkronize edilmedi",
-    "clearAll": "Tümünü temizle"
+    "clearAll": "Tümünü temizle",
+    "deleteAssociatedData": "İlişkili anıları ve görevleri sil"
 }

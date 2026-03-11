@@ -2756,5 +2756,6 @@
     "manageStorage": "Administrer lager",
     "safelyBackedUp": "Sikkert sikkerhedskopieret til din telefon",
     "notYetSynced": "Endnu ikke synkroniseret med din telefon",
-    "clearAll": "Ryd alt"
+    "clearAll": "Ryd alt",
+    "deleteAssociatedData": "Slet tilknyttede minder og opgaver"
 }

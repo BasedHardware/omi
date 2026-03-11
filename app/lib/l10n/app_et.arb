@@ -2747,5 +2747,6 @@
     "manageStorage": "Halda salvestusruumi",
     "safelyBackedUp": "Turvaliselt teie telefonile varundatud",
     "notYetSynced": "Pole veel teie telefoniga sünkroniseeritud",
-    "clearAll": "Tühjenda kõik"
+    "clearAll": "Tühjenda kõik",
+    "deleteAssociatedData": "Kustuta seotud mälestused ja ülesanded"
 }

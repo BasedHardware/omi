@@ -8399,4 +8399,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get clearAll => '全部清除';
+
+  @override
+  String get deleteAssociatedData => '删除相关记忆和任务';
 }

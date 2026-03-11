@@ -8550,4 +8550,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get clearAll => 'Clear All';
+
+  @override
+  String get deleteAssociatedData => 'Delete associated memories and tasks';
 }

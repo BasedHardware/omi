@@ -2748,5 +2748,6 @@
     "manageStorage": "Gestionar almacenamiento",
     "safelyBackedUp": "Respaldado en tu teléfono",
     "notYetSynced": "Aún no sincronizado con tu teléfono",
-    "clearAll": "Borrar todo"
+    "clearAll": "Borrar todo",
+    "deleteAssociatedData": "Eliminar recuerdos y tareas asociados"
 }

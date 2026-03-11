@@ -8551,4 +8551,7 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get clearAll => 'Tyhjennä kaikki';
+
+  @override
+  String get deleteAssociatedData => 'Poista liittyvät muistot ja tehtävät';
 }

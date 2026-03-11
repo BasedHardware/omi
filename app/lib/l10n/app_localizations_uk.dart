@@ -8565,4 +8565,7 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get clearAll => 'Очистити все';
+
+  @override
+  String get deleteAssociatedData => 'Видалити пов\'язані спогади та завдання';
 }

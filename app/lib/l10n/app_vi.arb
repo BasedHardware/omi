@@ -2752,5 +2752,6 @@
     "manageStorage": "Quản lý lưu trữ",
     "safelyBackedUp": "Đã sao lưu an toàn vào điện thoại",
     "notYetSynced": "Chưa đồng bộ với điện thoại của bạn",
-    "clearAll": "Xóa tất cả"
+    "clearAll": "Xóa tất cả",
+    "deleteAssociatedData": "Xóa các ký ức và nhiệm vụ liên quan"
 }

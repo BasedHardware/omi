@@ -8409,4 +8409,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get clearAll => 'すべて削除';
+
+  @override
+  String get deleteAssociatedData => '関連するメモリーとタスクを削除';
 }

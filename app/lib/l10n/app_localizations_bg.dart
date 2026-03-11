@@ -8589,4 +8589,7 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get clearAll => 'Изчисти всичко';
+
+  @override
+  String get deleteAssociatedData => 'Изтриване на свързаните спомени и задачи';
 }

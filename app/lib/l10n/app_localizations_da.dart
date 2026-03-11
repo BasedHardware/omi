@@ -8537,4 +8537,7 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get clearAll => 'Ryd alt';
+
+  @override
+  String get deleteAssociatedData => 'Slet tilknyttede minder og opgaver';
 }

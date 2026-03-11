@@ -2747,5 +2747,6 @@
     "manageStorage": "Hantera lagring",
     "safelyBackedUp": "Säkerhetskopierat till din telefon",
     "notYetSynced": "Inte synkroniserat med din telefon ännu",
-    "clearAll": "Rensa allt"
+    "clearAll": "Rensa allt",
+    "deleteAssociatedData": "Ta bort tillhörande minnen och uppgifter"
 }

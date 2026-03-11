@@ -8570,4 +8570,7 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get clearAll => 'Notīrīt visu';
+
+  @override
+  String get deleteAssociatedData => 'Dzēst saistītās atmiņas un uzdevumus';
 }

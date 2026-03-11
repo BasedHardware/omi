@@ -8572,4 +8572,7 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get clearAll => 'Wyczyść wszystko';
+
+  @override
+  String get deleteAssociatedData => 'Usuń powiązane wspomnienia i zadania';
 }

@@ -8411,4 +8411,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get clearAll => '모두 지우기';
+
+  @override
+  String get deleteAssociatedData => '관련 기억 및 작업 삭제';
 }

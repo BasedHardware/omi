@@ -8617,4 +8617,7 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get clearAll => 'Εκκαθάριση όλων';
+
+  @override
+  String get deleteAssociatedData => 'Διαγραφή συσχετισμένων αναμνήσεων και εργασιών';
 }

@@ -8571,4 +8571,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get clearAll => 'Borrar todo';
+
+  @override
+  String get deleteAssociatedData => 'Eliminar recuerdos y tareas asociados';
 }

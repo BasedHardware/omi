@@ -10294,5 +10294,6 @@
     "clearAll": "Clear All",
     "@clearAll": {
         "description": "Button label to clear all files"
-    }
+    },
+    "deleteAssociatedData": "Delete associated memories and tasks"
 }

@@ -2752,5 +2752,6 @@
     "manageStorage": "Spravovať úložisko",
     "safelyBackedUp": "Bezpečne zálohované na vašom telefóne",
     "notYetSynced": "Zatiaľ nesynchronizované s vaším telefónom",
-    "clearAll": "Vymazať všetko"
+    "clearAll": "Vymazať všetko",
+    "deleteAssociatedData": "Vymazať súvisiace spomienky a úlohy"
 }

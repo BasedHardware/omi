@@ -8632,4 +8632,7 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get clearAll => 'Tout effacer';
+
+  @override
+  String get deleteAssociatedData => 'Supprimer les souvenirs et tâches associés';
 }

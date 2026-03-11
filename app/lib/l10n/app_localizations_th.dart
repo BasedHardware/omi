@@ -8508,4 +8508,7 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get clearAll => 'ล้างทั้งหมด';
+
+  @override
+  String get deleteAssociatedData => 'ลบความทรงจำและงานที่เกี่ยวข้อง';
 }

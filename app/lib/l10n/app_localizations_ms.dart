@@ -8577,4 +8577,7 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get clearAll => 'Kosongkan semua';
+
+  @override
+  String get deleteAssociatedData => 'Padam memori dan tugas berkaitan';
 }

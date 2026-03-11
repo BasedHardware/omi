@@ -8547,4 +8547,7 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get clearAll => 'Tøm alt';
+
+  @override
+  String get deleteAssociatedData => 'Slett tilknyttede minner og oppgaver';
 }

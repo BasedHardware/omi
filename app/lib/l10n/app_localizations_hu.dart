@@ -8591,4 +8591,7 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get clearAll => 'Összes törlése';
+
+  @override
+  String get deleteAssociatedData => 'Kapcsolódó emlékek és feladatok törlése';
 }

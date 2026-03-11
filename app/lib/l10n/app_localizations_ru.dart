@@ -8581,4 +8581,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get clearAll => 'Очистить всё';
+
+  @override
+  String get deleteAssociatedData => 'Удалить связанные воспоминания и задачи';
 }

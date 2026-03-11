@@ -8543,4 +8543,7 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get clearAll => 'Vymazať všetko';
+
+  @override
+  String get deleteAssociatedData => 'Vymazať súvisiace spomienky a úlohy';
 }

@@ -8549,4 +8549,7 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get clearAll => 'Vymazat vše';
+
+  @override
+  String get deleteAssociatedData => 'Smazat související vzpomínky a úkoly';
 }
