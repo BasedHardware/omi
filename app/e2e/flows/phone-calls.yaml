@@ -1,14 +1,11 @@
-# E2E Flow: Phone Calls — setup, contacts, keypad, calling
-# Tests: phone setup intro, number entry, contacts tab, keypad, call button
+# E2E Flow: Phone Call Settings — verified numbers management
+# Tests: settings navigation, verified number list, empty state
 
 name: phone-calls
-description: Phone calls feature — setup wizard, contacts search, keypad dialing
+description: Phone call settings — view verified numbers, manage phone call configuration
 covers:
-  - app/lib/pages/phone_calls/phone_calls_page.dart
-  - app/lib/pages/phone_calls/phone_setup_intro_page.dart
-  - app/lib/pages/phone_calls/phone_setup_number_page.dart
-  - app/lib/pages/phone_calls/phone_setup_verify_page.dart
-  - app/lib/pages/phone_calls/active_call_page.dart
+  - app/lib/pages/settings/phone_call_settings_page.dart
+  - app/lib/pages/settings/settings_drawer.dart
 setup: normal
 
 steps:
@@ -18,48 +15,21 @@ steps:
     screenshot: settings-open
 
   - name: Open Phone Calls setting
+    scroll: down
     press: { type: gesture, hint: "Phone Calls row in settings" }
     screenshot: phone-calls-entry
 
-  - name: Verify phone setup or calls page
+  - name: Verify phone call settings page
     assert:
-      interactive_count: { min: 3 }
+      interactive_count: { min: 1 }
     note: >
-      If phone not set up: shows PhoneSetupIntroPage with hero icon,
-      3 step rows, and "Get Started" button.
-      If already set up: shows PhoneCallsPage with Contacts/Keypad tabs.
-    screenshot: phone-calls-main
+      PhoneCallSettingsPage shows "Your Verified Numbers" list.
+      Each number has phone icon, number text, verification timestamp,
+      and delete button. Empty state when no numbers verified.
+    screenshot: phone-call-settings
 
-  - name: Phone setup intro (if not set up)
-    note: >
-      Hero phone icon, 3 steps (get number, dial, contacts),
-      "Get Started" button, disclaimer text.
-      Press "Get Started" to go to number entry.
-    press: { type: button, hint: "Get Started button" }
-    screenshot: phone-setup-number
-
-  - name: Phone number entry page
-    assert:
-      interactive_count: { min: 4, hint: "country picker, phone input, continue button" }
-    note: >
-      Country picker with flag + code, phone TextField,
-      Continue button (purple when valid, gray when empty).
-    screenshot: phone-number-entry
-
-  - name: Back to phone calls
+  - name: Back to settings
     back: true
-
-  - name: Contacts tab (if set up)
-    note: "Tab 0: Contacts with search field and contact list"
-    press: { type: tab, hint: "Contacts tab" }
-    screenshot: phone-contacts
-
-  - name: Keypad tab
-    press: { type: tab, hint: "Keypad tab" }
-    assert:
-      interactive_count: { min: 12, hint: "12 dialpad keys + call button + backspace" }
-    screenshot: phone-keypad
 
   - name: Back to home
-    back: true
     back: true
