@@ -231,6 +231,34 @@ kill -SIGUSR2 $(pgrep -f "flutter_tools.*run" | head -1)
 sleep 3 && agent-flutter disconnect && agent-flutter connect
 ```
 
+## YAML Flow Schema
+
+Each flow file has these top-level keys:
+```yaml
+name: string          # Flow identifier
+description: string   # What this flow covers
+covers: [string]      # Source files this flow exercises
+setup: normal | signed_out | { requires: condition }
+steps: [Step]         # Ordered list of actions
+```
+
+Each step can use these action keys (map to agent-flutter commands):
+
+| YAML Key | agent-flutter Command | Example |
+|----------|----------------------|---------|
+| `press: { type: X }` | `find type X press` | `press: { type: button }` |
+| `press: { type: X, hint: "..." }` | `find type X press` (hint helps identify which) | `press: { type: gesture, hint: "settings gear" }` |
+| `press: { bottom_nav_tab: N }` | `find type InkWell` at y>780, pick Nth | `press: { bottom_nav_tab: 0 }` |
+| `fill: { type: X, value: "..." }` | `find type X` then `fill @ref "value"` | `fill: { type: textfield, value: "test" }` |
+| `scroll: up\|down` | `agent-flutter scroll up\|down` | `scroll: down` |
+| `back: true` | `agent-flutter press` Android back / `adb shell input keyevent 4` | `back: true` |
+| `assert: { text, interactive_count, bottom_nav_tabs }` | `snapshot -i --json` then verify | `assert: { text: "Settings" }` |
+| `screenshot: name` | `agent-flutter screenshot /tmp/name.png` | `screenshot: home-view` |
+| `dismiss: true` | `agent-flutter dismiss` | `dismiss: true` |
+| `wait: { text: "..." }` | poll `snapshot` until text appears | `wait: { text: "Loading" }` |
+| `note: string` | No command — context for the agent | `note: "FAB is bottom-right"` |
+| `name: string` | No command — step label | `name: "Open settings"` |
+
 ## Known Flows
 
 Reference flows in `app/e2e/flows/*.yaml` describe the app's key user journeys. Read these to understand navigation paths and expected UI state. Each flow lists `covers:` (source files) and `steps:` (actions + assertions).
