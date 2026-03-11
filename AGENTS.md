@@ -78,13 +78,12 @@ Edit → Verify → Evidence loop:
 1. Edit code, hot restart: `kill -SIGUSR2 $(pgrep -f "flutter run" | head -1)`
 2. Connect: `AGENT_FLUTTER_LOG=/tmp/flutter-run.log agent-flutter connect`
 3. Verify: `agent-flutter snapshot -i` (see widgets on screen)
-4. Interact: `agent-flutter press @e3` / `find type button press` / `fill @e5 "text"`
+4. Interact: `agent-flutter press @e3` / `press 540 1200` (coordinates) / `find type button press` / `fill @e5 "text"` / `dismiss` (system dialogs)
 5. Evidence: `agent-flutter screenshot /tmp/evidence.png`
 
 Key rules:
 - Must reconnect after every hot restart (kills VM Service session).
-- Prefer `click` over `press` for SwiftUI — `click` sends CGEvent clicks (triggers NavigationLink), `press` sends AXPress (AppKit only).
-- Refs stale after `click`/`press`/`fill`/`scroll` — re-snapshot before next interaction.
+- Refs go stale frequently (Flutter rebuilds aggressively) — always re-snapshot before every interaction. Use `press x y` as fallback.
 - Use `AGENT_FLUTTER_LOG` pointing to flutter run stdout (not logcat) for auto-detect.
 - Prefer `find type X` or `find key "name"` over hardcoded `@ref` for stability.
 - When adding interactive widgets, use `Key('descriptive_name')` for agent discoverability.
