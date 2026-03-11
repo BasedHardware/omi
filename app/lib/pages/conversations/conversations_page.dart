@@ -342,6 +342,7 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                         children: [
                           if (index == 0) const SizedBox(height: 10),
                           ConversationsGroupWidget(
+                            key: ValueKey(date),
                             isFirst: index == 0,
                             conversations: memoriesForDate,
                             date: date,

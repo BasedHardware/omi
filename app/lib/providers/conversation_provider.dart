@@ -701,11 +701,11 @@ class ConversationProvider extends ChangeNotifier {
 
   /////////////////////////////////////////////////////////////////
 
-  void deleteConversation(ServerConversation conversation, int index) {
+  void deleteConversation(ServerConversation conversation) {
     conversations.removeWhere((element) => element.id == conversation.id);
+    searchedConversations.removeWhere((element) => element.id == conversation.id);
     deleteConversationServer(conversation.id);
-    _groupConversationsByDateWithoutNotify();
-    notifyListeners();
+    groupConversationsByDate();
   }
 
   @override
