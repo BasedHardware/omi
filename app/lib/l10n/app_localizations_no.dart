@@ -8491,4 +8491,60 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get phoneCallsMaybeLater => 'Kanskje senere';
+
+  @override
+  String get deleteSynced => 'Slett synkroniserte';
+
+  @override
+  String get deleteSyncedFiles => 'Slett synkroniserte opptak';
+
+  @override
+  String get deleteSyncedFilesMessage =>
+      'Disse opptakene er allerede synkronisert med telefonen din. Dette kan ikke angres.';
+
+  @override
+  String get syncedFilesDeleted => 'Synkroniserte opptak slettet';
+
+  @override
+  String get deletePending => 'Slett ventende';
+
+  @override
+  String get deletePendingFiles => 'Slett ventende opptak';
+
+  @override
+  String get deletePendingFilesWarning =>
+      'Disse opptakene er IKKE synkronisert med telefonen din og vil gå permanent tapt. Dette kan ikke angres.';
+
+  @override
+  String get pendingFilesDeleted => 'Ventende opptak slettet';
+
+  @override
+  String get deleteAllFiles => 'Slett alle opptak';
+
+  @override
+  String get deleteAll => 'Slett alle';
+
+  @override
+  String get deleteAllFilesWarning =>
+      'Dette sletter synkroniserte og ventende opptak. Ventende opptak er IKKE synkronisert og vil gå permanent tapt.';
+
+  @override
+  String get allFilesDeleted => 'Alle opptak slettet';
+
+  @override
+  String nFiles(int count) {
+    return '$count opptak';
+  }
+
+  @override
+  String get manageStorage => 'Administrer lagring';
+
+  @override
+  String get safelyBackedUp => 'Sikkert sikkerhetskopiert til telefonen din';
+
+  @override
+  String get notYetSynced => 'Ennå ikke synkronisert med telefonen din';
+
+  @override
+  String get clearAll => 'Tøm alt';
 }
