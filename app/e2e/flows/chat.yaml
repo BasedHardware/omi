@@ -1,0 +1,52 @@
+# E2E Flow: Chat / Ask Omi — AI conversation
+# Tests: open chat, send message, voice input, message actions
+
+name: chat
+description: Ask Omi chat — open chat overlay, send text message, use voice recorder, view message actions
+covers:
+  - app/lib/pages/chat/page.dart
+  - app/lib/pages/home/page.dart
+setup: normal
+
+steps:
+  - name: Verify home screen with Ask Omi button
+    assert:
+      interactive_count: { min: 8 }
+    note: >
+      Ask Omi button is a GestureDetector at y≈740-770, x>200.
+      It's a purple pill-shaped button above the record button.
+    screenshot: home-with-ask-omi
+
+  - name: Tap Ask Omi
+    press: { type: gesture, hint: "Ask Omi button — GestureDetector at y≈740, x>200, w≈136" }
+    screenshot: chat-opened
+
+  - name: Verify chat page
+    assert:
+      interactive_count: { min: 3, hint: "text field, send button, voice recorder" }
+    note: >
+      Chat page shows: message list, text input at bottom,
+      voice recorder widget, app selection context.
+      Text field auto-focuses on open.
+    screenshot: chat-view
+
+  - name: Type a message
+    fill: { type: textfield, value: "Hello, what can you do?" }
+    screenshot: chat-typing
+
+  - name: Send message
+    press: { type: gesture, hint: "send button next to text field" }
+    screenshot: chat-sent
+
+  - name: Wait for AI response
+    wait: { timeout: 10000, hint: "AI response appears in message list" }
+    screenshot: chat-response
+
+  - name: Scroll chat history
+    scroll: up
+    screenshot: chat-scrolled
+
+  - name: Back to home
+    back: true
+    assert:
+      text: "Conversations"
