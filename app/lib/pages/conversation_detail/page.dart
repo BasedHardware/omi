@@ -364,28 +364,20 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
     }
   }
 
-  void _handleDelete(BuildContext context, ConversationDetailProvider provider) {
+  void _handleDelete(BuildContext context, ConversationDetailProvider provider) async {
     HapticFeedback.mediumImpact();
     final connectivityProvider = Provider.of<ConnectivityProvider>(context, listen: false);
     if (connectivityProvider.isConnected) {
-      showDialog(
-        context: context,
-        builder: (c) => getDialog(
-          context,
-          () => Navigator.pop(context),
-          () {
-            {
-              final convoProvider = context.read<ConversationProvider>();
-              convoProvider.deleteConversation(provider.conversation);
-            }
-            Navigator.pop(context); // Close dialog
-            Navigator.pop(context, {'deleted': true}); // Close detail page
-          },
-          context.l10n.deleteConversationTitle,
-          context.l10n.deleteConversationMessage,
-          okButtonText: context.l10n.confirm,
-        ),
-      );
+      final result = await showDeleteConversationDialog(context);
+      if (result != null) {
+        if (!context.mounted) return;
+        final convoProvider = context.read<ConversationProvider>();
+        convoProvider.deleteConversation(
+          provider.conversation,
+          deleteAssociatedData: result.deleteAssociatedData,
+        );
+        Navigator.pop(context, {'deleted': true});
+      }
     } else {
       showDialog(
         context: context,
