@@ -168,8 +168,6 @@ Home (page.dart) — main app after auth
     │   └── MCP API keys
     ├── What's New → Changelog sheet
     ├── Referral Program (referral_page.dart) — NEW
-    ├── About (about.dart)
-    │   └── Privacy Policy, Website, Discord, Help
     └── Sign Out → Confirmation dialog
 
 Persona Profile (persona_profile.dart) — AI clone management
@@ -291,7 +289,6 @@ Reference flows in `app/e2e/flows/*.yaml` describe the app's key user journeys. 
 | `flows/settings-device.yaml` | Device info, LED brightness, mic gain, double tap (requires BLE) |
 | `flows/settings-sync.yaml` | Offline sync, local storage, recordings, fast transfer |
 | `flows/settings-plan-usage.yaml` | Current plan, usage stats, upgrade options |
-| `flows/settings-about.yaml` | About page, external links |
 | `flows/settings-transcription.yaml` | Omi Cloud vs Custom STT, provider config, API keys |
 | `flows/settings-toggle.yaml` | Developer Settings switch toggle (legacy) |
 | `flows/language-change.yaml` | Profile → Language → picker → locale swap via shared_prefs |
@@ -315,6 +312,7 @@ After making changes, verify them in the live app:
 | Ref expired between commands | Use `press x y` with coordinates from last snapshot bounds, or `press @ref --adb` |
 | System dialog blocking (location, permissions) | `agent-flutter dismiss` — detects and dismisses via ADB |
 | "No isolate with Marionette" | ADB foreground + disconnect + reconnect |
+| Snapshot returns 0 interactive elements | Marionette lost widget tree — `disconnect` then `connect` to re-attach |
 | Bottom nav tabs not detected | `back` until nav bar appears, filter InkWell y > 780 |
 | Hot restart breaks connection | Wait 3s → disconnect → connect |
 | Text labels null | Match by `type`, `flutterType`, or `bounds` — Marionette doesn't extract child text |
