@@ -408,26 +408,21 @@ def upload_audio_chunks_batch(
     batch_name = f'{first_ts}-{last_ts}' if len(sorted_chunks) > 1 else first_ts
 
     if protection_level == 'enhanced':
-        # Encrypt each chunk individually (length-prefixed), then concatenate
-        batch_data = bytearray()
-        for chunk in sorted_chunks:
-            encrypted_chunk = encryption.encrypt_audio_chunk(chunk['data'], uid)
-            batch_data.extend(encrypted_chunk)
-
+        # Encrypt each chunk individually (length-prefixed), stream to GCS
         path = f'chunks/{uid}/{conversation_id}/{batch_name}.batch.enc'
         blob = bucket.blob(path)
-        blob.upload_from_string(bytes(batch_data), content_type='application/octet-stream')
-        del batch_data
+        with blob.open('wb', content_type='application/octet-stream') as f:
+            for chunk in sorted_chunks:
+                encrypted_chunk = encryption.encrypt_audio_chunk(chunk['data'], uid)
+                f.write(encrypted_chunk)
+                del encrypted_chunk
     else:
-        # Standard — concatenate raw PCM data
-        batch_data = bytearray()
-        for chunk in sorted_chunks:
-            batch_data.extend(chunk['data'])
-
+        # Standard — stream raw PCM data to GCS
         path = f'chunks/{uid}/{conversation_id}/{batch_name}.batch.bin'
         blob = bucket.blob(path)
-        blob.upload_from_string(bytes(batch_data), content_type='application/octet-stream')
-        del batch_data
+        with blob.open('wb', content_type='application/octet-stream') as f:
+            for chunk in sorted_chunks:
+                f.write(chunk['data'])
 
     return [path]
 
