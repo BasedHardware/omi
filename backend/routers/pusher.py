@@ -4,7 +4,7 @@ import json
 import time
 from collections import deque
 from datetime import datetime, timezone
-from typing import List, Set
+from typing import Dict, List, Set
 
 from fastapi import APIRouter
 from fastapi.websockets import WebSocketDisconnect, WebSocket
@@ -41,7 +41,8 @@ SPEAKER_SAMPLE_MIN_AGE = 120.0
 
 # Constants for private cloud sync
 PRIVATE_CLOUD_SYNC_PROCESS_INTERVAL = 1.0
-PRIVATE_CLOUD_CHUNK_DURATION = 5.0
+PRIVATE_CLOUD_CHUNK_DURATION = 60.0
+PRIVATE_CLOUD_BATCH_MAX_AGE = 60.0  # seconds — flush batch if oldest chunk exceeds this age
 PRIVATE_CLOUD_SYNC_MAX_RETRIES = 3
 
 # Queue warning thresholds
@@ -164,45 +165,43 @@ async def _websocket_util_trigger(
     audio_bytes_event = asyncio.Event()  # Signals when items are added for instant wake
 
     async def process_private_cloud_queue():
-        """Background task that processes private cloud sync uploads with retry logic."""
+        """Background task that batches private cloud sync uploads by conversation_id.
+
+        Chunks are accumulated per conversation and flushed when:
+        - The batch reaches 60s of audio data, or
+        - The oldest chunk in the batch exceeds PRIVATE_CLOUD_BATCH_MAX_AGE, or
+        - The websocket disconnects (shutdown flush).
+        """
         nonlocal websocket_active
 
-        while websocket_active or len(private_cloud_queue) > 0:
-            await asyncio.sleep(PRIVATE_CLOUD_SYNC_PROCESS_INTERVAL)
+        # Pending batches keyed by conversation_id
+        pending: Dict[str, dict] = {}
 
-            if not private_cloud_queue:
-                continue
+        def _add_to_batch(chunk_info: dict):
+            conv_id = chunk_info['conversation_id']
+            if conv_id not in pending:
+                pending[conv_id] = {
+                    'data': bytearray(),
+                    'conversation_id': conv_id,
+                    'timestamp': chunk_info['timestamp'],  # oldest chunk timestamp
+                    'queued_at': time.monotonic(),
+                    'retries': 0,
+                }
+            batch = pending[conv_id]
+            batch['data'].extend(chunk_info['data'])
 
-            # Process all pending chunks
-            chunks_to_process = private_cloud_queue.copy()
-            private_cloud_queue.clear()
-
-            successful_conversation_ids = set()  # Track conversations with successful uploads
-
-            for chunk_info in chunks_to_process:
-                chunk_data = chunk_info['data']
-                conv_id = chunk_info['conversation_id']
-                timestamp = chunk_info['timestamp']
-                retries = chunk_info.get('retries', 0)
-
-                try:
-                    await asyncio.to_thread(
-                        upload_audio_chunk, chunk_data, uid, conv_id, timestamp, cached_protection_level
-                    )
-                    successful_conversation_ids.add(conv_id)
-                except Exception as e:
-                    if retries < PRIVATE_CLOUD_SYNC_MAX_RETRIES:
-                        # Re-queue with incremented retry count
-                        chunk_info['retries'] = retries + 1
-                        private_cloud_queue.append(chunk_info)
-                        logger.error(f"Private cloud upload failed (retry {retries + 1}): {e} {uid} {conv_id}")
-                    else:
-                        logger.info(
-                            f"Private cloud upload failed after {PRIVATE_CLOUD_SYNC_MAX_RETRIES} retries, dropping chunk: {e} {uid} {conv_id}"
-                        )
-
-            # Update audio_files for conversations with successful uploads
-            for conv_id in successful_conversation_ids:
+        async def _flush_batch(conv_id: str):
+            """Upload a batched chunk and update audio files."""
+            batch = pending.pop(conv_id, None)
+            if not batch or len(batch['data']) == 0:
+                return
+            chunk_data = bytes(batch['data'])
+            timestamp = batch['timestamp']
+            retries = batch.get('retries', 0)
+            try:
+                await asyncio.to_thread(
+                    upload_audio_chunk, chunk_data, uid, conv_id, timestamp, cached_protection_level
+                )
                 try:
                     audio_files = await asyncio.to_thread(conversations_db.create_audio_files_from_chunks, uid, conv_id)
                     if audio_files:
@@ -214,6 +213,46 @@ async def _websocket_util_trigger(
                         )
                 except Exception as e:
                     logger.error(f"Error updating audio files: {e} {uid} {conv_id}")
+            except Exception as e:
+                if retries < PRIVATE_CLOUD_SYNC_MAX_RETRIES:
+                    batch['retries'] = retries + 1
+                    batch['data'] = bytearray(chunk_data)
+                    pending[conv_id] = batch
+                    logger.error(f"Private cloud batch upload failed (retry {retries + 1}): {e} {uid} {conv_id}")
+                else:
+                    logger.info(
+                        f"Private cloud batch upload failed after {PRIVATE_CLOUD_SYNC_MAX_RETRIES} retries, dropping: {e} {uid} {conv_id}"
+                    )
+            del chunk_data
+
+        while websocket_active or len(private_cloud_queue) > 0 or len(pending) > 0:
+            await asyncio.sleep(PRIVATE_CLOUD_SYNC_PROCESS_INTERVAL)
+
+            # Drain queue into pending batches
+            if private_cloud_queue:
+                chunks_to_process = private_cloud_queue.copy()
+                private_cloud_queue.clear()
+                for chunk_info in chunks_to_process:
+                    _add_to_batch(chunk_info)
+
+            if not pending:
+                continue
+
+            now = time.monotonic()
+            batch_size_threshold = sample_rate * 2 * PRIVATE_CLOUD_CHUNK_DURATION
+
+            # Determine which conversations to flush
+            conv_ids_to_flush = []
+            for conv_id, batch in pending.items():
+                batch_age = now - batch['queued_at']
+                is_shutdown = not websocket_active
+                is_size_ready = len(batch['data']) >= batch_size_threshold
+                is_age_ready = batch_age >= PRIVATE_CLOUD_BATCH_MAX_AGE
+                if is_shutdown or is_size_ready or is_age_ready:
+                    conv_ids_to_flush.append(conv_id)
+
+            for conv_id in conv_ids_to_flush:
+                await _flush_batch(conv_id)
 
     async def process_speaker_sample_queue():
         """Background task that processes speaker sample extraction requests."""
@@ -334,7 +373,28 @@ async def _websocket_util_trigger(
 
                 # Conversation ID
                 if header_type == 103:
-                    current_conversation_id = bytes(data[4:]).decode("utf-8")
+                    new_conversation_id = bytes(data[4:]).decode("utf-8")
+                    # Flush private cloud buffer for the old conversation before switching
+                    if (
+                        private_cloud_sync_enabled
+                        and current_conversation_id
+                        and current_conversation_id != new_conversation_id
+                        and len(private_cloud_sync_buffer) > 0
+                    ):
+                        private_cloud_queue.append(
+                            {
+                                'data': bytes(private_cloud_sync_buffer),
+                                'conversation_id': current_conversation_id,
+                                'timestamp': private_cloud_chunk_start_time or time.time(),
+                                'retries': 0,
+                            }
+                        )
+                        logger.info(
+                            f"Flushed private cloud buffer on conversation switch: {len(private_cloud_sync_buffer)} bytes {uid}"
+                        )
+                        private_cloud_sync_buffer = bytearray()
+                        private_cloud_chunk_start_time = None
+                    current_conversation_id = new_conversation_id
                     logger.info(f"Pusher received conversation_id: {current_conversation_id} {uid}")
                     continue
 
