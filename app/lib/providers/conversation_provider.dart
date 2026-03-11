@@ -653,7 +653,14 @@ class ConversationProvider extends ChangeNotifier {
   String? lastDeletedConversationId;
   Map<String, DateTime> deleteTimestamps = {};
 
-  void deleteConversationLocally(ServerConversation conversation, int index, DateTime date) {
+  Map<String, bool> _deleteAssociatedDataOptions = {};
+
+  void deleteConversationLocally(
+    ServerConversation conversation,
+    int index,
+    DateTime date, {
+    bool deleteAssociatedData = false,
+  }) {
     if (lastDeletedConversationId != null &&
         memoriesToDelete.containsKey(lastDeletedConversationId) &&
         DateTime.now().difference(deleteTimestamps[lastDeletedConversationId]!) < const Duration(seconds: 3)) {
@@ -663,6 +670,7 @@ class ConversationProvider extends ChangeNotifier {
     memoriesToDelete[conversation.id] = conversation;
     lastDeletedConversationId = conversation.id;
     deleteTimestamps[conversation.id] = DateTime.now();
+    _deleteAssociatedDataOptions[conversation.id] = deleteAssociatedData;
     conversations.removeWhere((element) => element.id == conversation.id);
     groupedConversations[date]!.removeAt(index);
     if (groupedConversations[date]!.isEmpty) {
@@ -677,9 +685,15 @@ class ConversationProvider extends ChangeNotifier {
   }
 
   void deleteConversationOnServer(String conversationId) {
-    deleteConversationServer(conversationId);
+    final deleteData = _deleteAssociatedDataOptions[conversationId] ?? false;
+    deleteConversationServer(
+      conversationId,
+      deleteMemories: deleteData,
+      deleteTasks: deleteData,
+    );
     memoriesToDelete.remove(conversationId);
     deleteTimestamps.remove(conversationId);
+    _deleteAssociatedDataOptions.remove(conversationId);
     if (lastDeletedConversationId == conversationId) {
       lastDeletedConversationId = null;
     }
@@ -693,6 +707,7 @@ class ConversationProvider extends ChangeNotifier {
     }
     memoriesToDelete.remove(conversation.id);
     deleteTimestamps.remove(conversation.id);
+    _deleteAssociatedDataOptions.remove(conversation.id);
     if (lastDeletedConversationId == conversation.id) {
       lastDeletedConversationId = null;
     }
@@ -701,10 +716,13 @@ class ConversationProvider extends ChangeNotifier {
 
   /////////////////////////////////////////////////////////////////
 
-  void deleteConversation(ServerConversation conversation) {
+  void deleteConversation(
+    ServerConversation conversation, {
+    bool deleteAssociatedData = false,
+  }) {
     conversations.removeWhere((element) => element.id == conversation.id);
     searchedConversations.removeWhere((element) => element.id == conversation.id);
-    deleteConversationServer(conversation.id);
+    deleteConversationServer(conversation.id, deleteMemories: deleteAssociatedData, deleteTasks: deleteAssociatedData);
     groupConversationsByDate();
   }
 
