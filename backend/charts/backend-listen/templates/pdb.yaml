@@ -1,7 +1,10 @@
+{{- if .Values.podDisruptionBudget }}
 apiVersion: policy/v1
 kind: PodDisruptionBudget
 metadata:
   name: {{ include "backend-listen.fullname" . }}
+  labels:
+    {{- include "backend-listen.labels" . | nindent 4 }}
 spec:
   {{- if .Values.podDisruptionBudget.minAvailable }}
   minAvailable: {{ .Values.podDisruptionBudget.minAvailable }}
@@ -12,3 +15,4 @@ spec:
   selector:
     matchLabels:
       {{- include "backend-listen.selectorLabels" . | nindent 6 }}
+{{- end }}
