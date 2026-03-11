@@ -68,191 +68,201 @@ class _ConversationListItemState extends State<ConversationListItem> {
       });
     }
 
-    return Consumer<ConversationProvider>(builder: (context, provider, child) {
-      final isSelectionMode = provider.isSelectionModeActive;
-      final isSelected = provider.isConversationSelected(widget.conversation.id);
-      final isMerging = provider.isConversationMerging(widget.conversation.id);
-      final isEligible = provider.isConversationEligibleForMerge(widget.conversation.id);
+    return Consumer<ConversationProvider>(
+      builder: (context, provider, child) {
+        final isSelectionMode = provider.isSelectionModeActive;
+        final isSelected = provider.isConversationSelected(widget.conversation.id);
+        final isMerging = provider.isConversationMerging(widget.conversation.id);
+        final isEligible = provider.isConversationEligibleForMerge(widget.conversation.id);
 
-      return GestureDetector(
-        onTap: () async {
-          // If in selection mode, toggle selection only if eligible
-          if (isSelectionMode) {
-            if (!isEligible) {
-              // Show feedback that this conversation cannot be merged
-              HapticFeedback.lightImpact();
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text(context.l10n.conversationCannotBeMerged),
-                  duration: const Duration(seconds: 2),
-                ),
-              );
+        return GestureDetector(
+          onTap: () async {
+            // If in selection mode, toggle selection only if eligible
+            if (isSelectionMode) {
+              if (!isEligible) {
+                // Show feedback that this conversation cannot be merged
+                HapticFeedback.lightImpact();
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(context.l10n.conversationCannotBeMerged),
+                    duration: const Duration(seconds: 2),
+                  ),
+                );
+                return;
+              }
+              HapticFeedback.selectionClick();
+              provider.toggleConversationSelection(widget.conversation.id);
               return;
             }
-            HapticFeedback.selectionClick();
-            provider.toggleConversationSelection(widget.conversation.id);
-            return;
-          }
 
-          if (widget.conversation.isLocked) {
-            MixpanelManager().paywallOpened('Conversation List Item');
-            routeToPage(context, const UsagePage(showUpgradeDialog: true));
-            return;
-          }
-          // Calculate time difference
-          int hoursSinceConversation = DateTime.now().difference(widget.conversation.createdAt).inHours;
-
-          // Check if user is searching
-          String searchQuery = provider.previousQuery;
-          if (searchQuery.isNotEmpty) {
-            // Track conversation opened from search
-            MixpanelManager().conversationOpenedFromSearch(
-              conversation: widget.conversation,
-              searchQuery: searchQuery,
-              conversationIndexInResults: widget.conversationIdx,
-            );
-          } else {
-            // Track normal conversation list item click with time difference
-            MixpanelManager().conversationListItemClickedWithTimeDifference(
-              conversation: widget.conversation,
-              conversationIndex: widget.conversationIdx,
-              hoursSinceConversation: hoursSinceConversation,
-            );
-          }
-
-          context.read<ConversationDetailProvider>().updateConversation(widget.conversation.id, widget.date);
-          String startingTitle = context.read<ConversationDetailProvider>().conversation.structured.title;
-          provider.onConversationTap(widget.conversation.id);
-
-          await routeToPage(
-            context,
-            ConversationDetailPage(conversation: widget.conversation, isFromOnboarding: widget.isFromOnboarding),
-          );
-          if (mounted) {
-            String newTitle = context.read<ConversationDetailProvider>().conversation.structured.title;
-            if (startingTitle != newTitle) {
-              widget.conversation.structured.title = newTitle;
-              provider.upsertConversation(widget.conversation);
+            if (widget.conversation.isLocked) {
+              MixpanelManager().paywallOpened('Conversation List Item');
+              routeToPage(context, const UsagePage(showUpgradeDialog: true));
+              return;
             }
-          }
-        },
-        onLongPress: () {
-          // Enter selection mode on long press
-          if (!isSelectionMode && !isMerging) {
-            HapticFeedback.mediumImpact();
-            provider.enterSelectionMode();
-            provider.toggleConversationSelection(widget.conversation.id);
-          }
-        },
-        child: Stack(
-          children: [
-            Padding(
-              padding: EdgeInsets.only(
-                  top: 12, left: widget.isFromOnboarding ? 0 : 16, right: widget.isFromOnboarding ? 0 : 16),
-              child: AnimatedOpacity(
-                duration: const Duration(milliseconds: 200),
-                opacity: (isSelectionMode && !isEligible) ? 0.6 : 1.0,
-                child: AnimatedContainer(
+            // Calculate time difference
+            int hoursSinceConversation = DateTime.now().difference(widget.conversation.createdAt).inHours;
+
+            // Check if user is searching
+            String searchQuery = provider.previousQuery;
+            if (searchQuery.isNotEmpty) {
+              // Track conversation opened from search
+              MixpanelManager().conversationOpenedFromSearch(
+                conversation: widget.conversation,
+                searchQuery: searchQuery,
+                conversationIndexInResults: widget.conversationIdx,
+              );
+            } else {
+              // Track normal conversation list item click with time difference
+              MixpanelManager().conversationListItemClickedWithTimeDifference(
+                conversation: widget.conversation,
+                conversationIndex: widget.conversationIdx,
+                hoursSinceConversation: hoursSinceConversation,
+              );
+            }
+
+            context.read<ConversationDetailProvider>().updateConversation(widget.conversation.id, widget.date);
+            String startingTitle = context.read<ConversationDetailProvider>().conversation.structured.title;
+            provider.onConversationTap(widget.conversation.id);
+
+            var result = await routeToPage(
+              context,
+              ConversationDetailPage(conversation: widget.conversation, isFromOnboarding: widget.isFromOnboarding),
+            );
+            bool wasDeleted = result is Map && result['deleted'] == true;
+            if (mounted && !wasDeleted) {
+              String newTitle = context.read<ConversationDetailProvider>().conversation.structured.title;
+              if (startingTitle != newTitle) {
+                widget.conversation.structured.title = newTitle;
+                provider.upsertConversation(widget.conversation);
+              }
+            }
+          },
+          onLongPress: () {
+            // Enter selection mode on long press
+            if (!isSelectionMode && !isMerging) {
+              HapticFeedback.mediumImpact();
+              provider.enterSelectionMode();
+              provider.toggleConversationSelection(widget.conversation.id);
+            }
+          },
+          child: Stack(
+            children: [
+              Padding(
+                padding: EdgeInsets.only(
+                  top: 12,
+                  left: widget.isFromOnboarding ? 0 : 16,
+                  right: widget.isFromOnboarding ? 0 : 16,
+                ),
+                child: AnimatedOpacity(
                   duration: const Duration(milliseconds: 200),
-                  width: double.maxFinite,
-                  decoration: BoxDecoration(
-                    color: isSelected
-                        ? Colors.deepPurple.withValues(alpha: 0.3)
-                        : (isSelectionMode && !isEligible)
-                            ? Colors.grey.shade800
-                            : const Color(0xFF1F1F25),
-                    borderRadius: BorderRadius.circular(24.0),
-                    border: isSelected
-                        ? Border.all(color: Colors.deepPurple, width: 2)
-                        : (isSelectionMode && !isEligible)
-                            ? Border.all(color: Colors.grey.shade600, width: 1)
-                            : null,
-                  ),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(24.0),
-                    child: Dismissible(
-                      key: UniqueKey(),
-                      direction: isSelectionMode || isMerging ? DismissDirection.none : DismissDirection.endToStart,
-                      background: Container(
-                        alignment: Alignment.centerRight,
-                        padding: const EdgeInsets.only(right: 20.0),
-                        color: Colors.red,
-                        child: const Icon(Icons.delete, color: Colors.white),
-                      ),
-                      confirmDismiss: (direction) async {
-                        HapticFeedback.mediumImpact();
-                        bool showDeleteConfirmation = SharedPreferencesUtil().showConversationDeleteConfirmation;
+                  opacity: (isSelectionMode && !isEligible) ? 0.6 : 1.0,
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 200),
+                    width: double.maxFinite,
+                    decoration: BoxDecoration(
+                      color: isSelected
+                          ? Colors.deepPurple.withValues(alpha: 0.3)
+                          : (isSelectionMode && !isEligible)
+                          ? Colors.grey.shade800
+                          : const Color(0xFF1F1F25),
+                      borderRadius: BorderRadius.circular(24.0),
+                      border: isSelected
+                          ? Border.all(color: Colors.deepPurple, width: 2)
+                          : (isSelectionMode && !isEligible)
+                          ? Border.all(color: Colors.grey.shade600, width: 1)
+                          : null,
+                    ),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(24.0),
+                      child: Dismissible(
+                        key: UniqueKey(),
+                        direction: isSelectionMode || isMerging ? DismissDirection.none : DismissDirection.endToStart,
+                        background: Container(
+                          alignment: Alignment.centerRight,
+                          padding: const EdgeInsets.only(right: 20.0),
+                          color: Colors.red,
+                          child: const Icon(Icons.delete, color: Colors.white),
+                        ),
+                        confirmDismiss: (direction) async {
+                          HapticFeedback.mediumImpact();
+                          bool showDeleteConfirmation = SharedPreferencesUtil().showConversationDeleteConfirmation;
 
-                        if (!showDeleteConfirmation) return Future.value(true);
+                          if (!showDeleteConfirmation) return Future.value(true);
 
-                        final connectivityProvider = Provider.of<ConnectivityProvider>(context, listen: false);
+                          final connectivityProvider = Provider.of<ConnectivityProvider>(context, listen: false);
 
-                        if (connectivityProvider.isConnected) {
-                          return await showDialog(
-                            context: context,
-                            builder: (ctx) => getDialog(
-                              context,
-                              () => Navigator.of(context).pop(false),
-                              () => Navigator.of(context).pop(true),
-                              context.l10n.deleteConversationTitle,
-                              context.l10n.deleteConversationMessage,
-                              okButtonText: context.l10n.confirm,
-                            ),
-                          );
-                        } else {
-                          return showDialog(
-                            builder: (c) => getDialog(
+                          if (connectivityProvider.isConnected) {
+                            return await showDialog(
+                              context: context,
+                              builder: (ctx) => getDialog(
+                                context,
+                                () => Navigator.of(context).pop(false),
+                                () => Navigator.of(context).pop(true),
+                                context.l10n.deleteConversationTitle,
+                                context.l10n.deleteConversationMessage,
+                                okButtonText: context.l10n.confirm,
+                              ),
+                            );
+                          } else {
+                            return showDialog(
+                              builder: (c) => getDialog(
                                 context,
                                 () => Navigator.pop(context),
                                 () => Navigator.pop(context),
                                 context.l10n.unableToDeleteConversation,
                                 context.l10n.pleaseCheckInternetConnectionAndTryAgain,
                                 singleButton: true,
-                                okButtonText: context.l10n.ok),
-                            context: context,
-                          );
-                        }
-                      },
-                      onDismissed: (direction) async {
-                        var conversation = widget.conversation;
-                        var conversationIdx = widget.conversationIdx;
-                        MixpanelManager().conversationSwipedToDelete(conversation);
-                        provider.deleteConversationLocally(conversation, conversationIdx, widget.date);
-                      },
-                      child: Padding(
-                        padding: PlatformService.isMobile
-                            ? const EdgeInsetsDirectional.symmetric(horizontal: 16, vertical: 20)
-                            : const EdgeInsetsDirectional.all(16),
-                        child: PlatformService.isMobile
-                            ? _buildMobileLayout(context)
-                            : Column(
-                                mainAxisSize: MainAxisSize.max,
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  _getConversationHeader(),
-                                  const SizedBox(height: 16),
-                                  _buildConversationBody(context),
-                                ],
+                                okButtonText: context.l10n.ok,
                               ),
+                              context: context,
+                            );
+                          }
+                        },
+                        onDismissed: (direction) async {
+                          var conversation = widget.conversation;
+                          var conversationIdx = widget.conversationIdx;
+                          MixpanelManager().conversationSwipedToDelete(conversation);
+                          provider.deleteConversationLocally(conversation, conversationIdx, widget.date);
+                        },
+                        child: Padding(
+                          padding: PlatformService.isMobile
+                              ? const EdgeInsetsDirectional.symmetric(horizontal: 16, vertical: 20)
+                              : const EdgeInsetsDirectional.all(16),
+                          child: PlatformService.isMobile
+                              ? _buildMobileLayout(context)
+                              : Column(
+                                  mainAxisSize: MainAxisSize.max,
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    _getConversationHeader(),
+                                    const SizedBox(height: 16),
+                                    _buildConversationBody(context),
+                                  ],
+                                ),
+                        ),
                       ),
                     ),
                   ),
                 ),
               ),
-            ),
-            // Merging overlay covering the full card
-            if (isMerging)
-              Positioned.fill(
-                child: Padding(
-                  padding: EdgeInsets.only(
-                      top: 12, left: widget.isFromOnboarding ? 0 : 16, right: widget.isFromOnboarding ? 0 : 16),
-                  child: _buildMergingOverlay(),
+              // Merging overlay covering the full card
+              if (isMerging)
+                Positioned.fill(
+                  child: Padding(
+                    padding: EdgeInsets.only(
+                      top: 12,
+                      left: widget.isFromOnboarding ? 0 : 16,
+                      right: widget.isFromOnboarding ? 0 : 16,
+                    ),
+                    child: _buildMergingOverlay(),
+                  ),
                 ),
-              ),
-          ],
-        ),
-      );
-    });
+            ],
+          ),
+        );
+      },
+    );
   }
 
   Widget _buildMobileLayout(BuildContext context) {
@@ -269,10 +279,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
                   Container(
                     width: 40,
                     height: 40,
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF35343B),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
+                    decoration: BoxDecoration(color: const Color(0xFF35343B), borderRadius: BorderRadius.circular(12)),
                     alignment: Alignment.center,
                     child: Text(
                       widget.conversation.structured.getEmoji(),
@@ -302,11 +309,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
                                 if (widget.conversation.starred)
                                   const Padding(
                                     padding: EdgeInsets.only(right: 4.0),
-                                    child: FaIcon(
-                                      FontAwesomeIcons.solidStar,
-                                      size: 12,
-                                      color: Colors.amber,
-                                    ),
+                                    child: FaIcon(FontAwesomeIcons.solidStar, size: 12, color: Colors.amber),
                                   ),
                               ],
                             )
@@ -322,10 +325,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
                                   maxLines: 1,
                                 ),
                                 if (_getConversationDuration(context).isNotEmpty) ...[
-                                  const Text(
-                                    ' • ',
-                                    style: TextStyle(color: Color(0xFF9A9BA1), fontSize: 14),
-                                  ),
+                                  const Text(' • ', style: TextStyle(color: Color(0xFF9A9BA1), fontSize: 14)),
                                   Text(
                                     _getConversationDuration(context),
                                     style: const TextStyle(color: Color(0xFF9A9BA1), fontSize: 14),
@@ -336,11 +336,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
                                 if (widget.conversation.starred)
                                   const Padding(
                                     padding: EdgeInsets.only(right: 4.0),
-                                    child: FaIcon(
-                                      FontAwesomeIcons.solidStar,
-                                      size: 12,
-                                      color: Colors.amber,
-                                    ),
+                                    child: FaIcon(FontAwesomeIcons.solidStar, size: 12, color: Colors.amber),
                                   ),
                               ],
                             ),
@@ -377,18 +373,16 @@ class _ConversationListItemState extends State<ConversationListItem> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               if (widget.conversation.photos.isNotEmpty) ...[
-                Row(children: [
-                  Icon(
-                    Icons.photo_library,
-                    color: Colors.grey.shade400,
-                    size: 18,
-                  ),
-                  const SizedBox(width: 12),
-                  Text(
-                    context.l10n.conversationPhotosCount(widget.conversation.photos.length),
-                    style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: Colors.grey.shade300, height: 1.3),
-                  )
-                ]),
+                Row(
+                  children: [
+                    Icon(Icons.photo_library, color: Colors.grey.shade400, size: 18),
+                    const SizedBox(width: 12),
+                    Text(
+                      context.l10n.conversationPhotosCount(widget.conversation.photos.length),
+                      style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: Colors.grey.shade300, height: 1.3),
+                    ),
+                  ],
+                ),
                 const SizedBox(height: 4),
               ],
               Text(
@@ -405,10 +399,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          widget.conversation.structured.title.decodeString,
-          style: Theme.of(context).textTheme.titleLarge,
-        ),
+        Text(widget.conversation.structured.title.decodeString, style: Theme.of(context).textTheme.titleLarge),
       ],
     );
   }
@@ -426,11 +417,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
             ),
             child: Text(
               context.l10n.upgradeToUnlimited,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-              ),
+              style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
             ),
           ),
         ),
@@ -467,10 +454,9 @@ class _ConversationListItemState extends State<ConversationListItem> {
                       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                       child: Text(
                         widget.conversation.getTag(),
-                        style: Theme.of(context)
-                            .textTheme
-                            .bodyMedium!
-                            .copyWith(color: widget.conversation.getTagTextColor()),
+                        style: Theme.of(
+                          context,
+                        ).textTheme.bodyMedium!.copyWith(color: widget.conversation.getTagTextColor()),
                         overflow: TextOverflow.ellipsis,
                         maxLines: 1,
                       ),
@@ -518,11 +504,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
                       if (widget.conversation.starred)
                         const Padding(
                           padding: EdgeInsets.only(left: 8.0),
-                          child: FaIcon(
-                            FontAwesomeIcons.solidStar,
-                            size: 12,
-                            color: Colors.amber,
-                          ),
+                          child: FaIcon(FontAwesomeIcons.solidStar, size: 12, color: Colors.amber),
                         ),
                     ],
                   ),
@@ -572,10 +554,7 @@ class _ConversationNewStatusIndicatorState extends State<ConversationNewStatusIn
 
   @override
   Widget build(BuildContext context) {
-    return FadeTransition(
-      opacity: _opacityAnim,
-      child: Text(widget.text),
-    );
+    return FadeTransition(opacity: _opacityAnim, child: Text(widget.text));
   }
 }
 
@@ -594,13 +573,11 @@ class _MergingIndicatorState extends State<MergingIndicator> with SingleTickerPr
   @override
   void initState() {
     super.initState();
-    _controller = AnimationController(
-      duration: const Duration(milliseconds: 1200),
-      vsync: this,
-    )..repeat(reverse: true);
-    _opacityAnim = Tween<double>(begin: 1.0, end: 0.4).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
-    );
+    _controller = AnimationController(duration: const Duration(milliseconds: 1200), vsync: this)..repeat(reverse: true);
+    _opacityAnim = Tween<double>(
+      begin: 1.0,
+      end: 0.4,
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeInOut));
   }
 
   @override
@@ -616,19 +593,11 @@ class _MergingIndicatorState extends State<MergingIndicator> with SingleTickerPr
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(
-            Icons.merge_rounded,
-            color: Colors.white,
-            size: 18,
-          ),
+          const Icon(Icons.merge_rounded, color: Colors.white, size: 18),
           const SizedBox(width: 8),
           Text(
             context.l10n.mergingStatus,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 14,
-              fontWeight: FontWeight.w600,
-            ),
+            style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600),
           ),
         ],
       ),
