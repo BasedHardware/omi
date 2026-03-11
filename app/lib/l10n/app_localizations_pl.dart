@@ -8516,4 +8516,60 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get phoneCallsMaybeLater => 'Może później';
+
+  @override
+  String get deleteSynced => 'Usuń zsynchronizowane';
+
+  @override
+  String get deleteSyncedFiles => 'Usuń zsynchronizowane nagrania';
+
+  @override
+  String get deleteSyncedFilesMessage =>
+      'Te nagrania zostały już zsynchronizowane z telefonem. Tej operacji nie można cofnąć.';
+
+  @override
+  String get syncedFilesDeleted => 'Zsynchronizowane nagrania usunięte';
+
+  @override
+  String get deletePending => 'Usuń oczekujące';
+
+  @override
+  String get deletePendingFiles => 'Usuń oczekujące nagrania';
+
+  @override
+  String get deletePendingFilesWarning =>
+      'Te nagrania NIE zostały zsynchronizowane z telefonem i zostaną trwale utracone. Tej operacji nie można cofnąć.';
+
+  @override
+  String get pendingFilesDeleted => 'Oczekujące nagrania usunięte';
+
+  @override
+  String get deleteAllFiles => 'Usuń wszystkie nagrania';
+
+  @override
+  String get deleteAll => 'Usuń wszystko';
+
+  @override
+  String get deleteAllFilesWarning =>
+      'To usunie zsynchronizowane i oczekujące nagrania. Oczekujące nagrania NIE zostały zsynchronizowane i zostaną trwale utracone.';
+
+  @override
+  String get allFilesDeleted => 'Wszystkie nagrania usunięte';
+
+  @override
+  String nFiles(int count) {
+    return '$count nagrań';
+  }
+
+  @override
+  String get manageStorage => 'Zarządzaj pamięcią';
+
+  @override
+  String get safelyBackedUp => 'Bezpiecznie zapisane na Twoim telefonie';
+
+  @override
+  String get notYetSynced => 'Jeszcze nie zsynchronizowano z Twoim telefonem';
+
+  @override
+  String get clearAll => 'Wyczyść wszystko';
 }
