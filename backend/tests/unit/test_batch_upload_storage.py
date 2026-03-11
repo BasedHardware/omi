@@ -1,7 +1,7 @@
 """Unit tests for upload_audio_chunks_batch (#5418 Phase 2).
 
 Verifies:
-1. Batch upload with multiple chunks (flag enabled)
+1. Batch upload with multiple chunks (flag enabled) — streams to GCS
 2. Single chunk fallback (flag enabled)
 3. Encrypted batch upload (flag enabled, enhanced protection)
 4. Flag disabled behavior (falls back to per-chunk upload_audio_chunk)
@@ -33,6 +33,15 @@ sys.modules.setdefault("google.oauth2.service_account", MagicMock())
 from utils.other import storage as storage_mod
 
 
+def _collect_written_bytes(mock_blob):
+    """Collect all bytes written via blob.open().__enter__().write() calls."""
+    mock_file = mock_blob.open.return_value.__enter__.return_value
+    written = b''
+    for c in mock_file.write.call_args_list:
+        written += c[0][0]
+    return written
+
+
 class TestBatchUploadFlagEnabled:
     """Tests with PRIVATE_CLOUD_BATCH_ENABLED = True."""
 
@@ -46,7 +55,7 @@ class TestBatchUploadFlagEnabled:
     @patch.object(storage_mod, 'PRIVATE_CLOUD_BATCH_ENABLED', True)
     @patch.object(storage_mod, 'users_db')
     def test_batch_multiple_chunks_standard(self, mock_users_db):
-        """Multiple chunks uploaded as single concatenated .batch.bin object."""
+        """Multiple chunks streamed as single .batch.bin object."""
         mock_bucket, mock_blob = self._setup_mock_bucket()
 
         chunks = [
@@ -65,13 +74,13 @@ class TestBatchUploadFlagEnabled:
         assert len(paths) == 1
         assert paths[0].endswith('.batch.bin')
         assert '1000.000-1010.000' in paths[0]
-        mock_blob.upload_from_string.assert_called_once()
-        # Verify concatenated data is 300 bytes
-        uploaded_data = mock_blob.upload_from_string.call_args[0][0]
-        assert len(uploaded_data) == 300
-        assert uploaded_data[:100] == b'\x01' * 100
-        assert uploaded_data[100:200] == b'\x02' * 100
-        assert uploaded_data[200:] == b'\x03' * 100
+        # Verify streaming write was used (blob.open, not upload_from_string)
+        mock_blob.open.assert_called_once()
+        written = _collect_written_bytes(mock_blob)
+        assert len(written) == 300
+        assert written[:100] == b'\x01' * 100
+        assert written[100:200] == b'\x02' * 100
+        assert written[200:] == b'\x03' * 100
 
     @patch.object(storage_mod, 'PRIVATE_CLOUD_BATCH_ENABLED', True)
     @patch.object(storage_mod, 'users_db')
@@ -90,15 +99,14 @@ class TestBatchUploadFlagEnabled:
 
         assert len(paths) == 1
         assert '1000.000.batch.bin' in paths[0]
-        mock_blob.upload_from_string.assert_called_once()
+        mock_blob.open.assert_called_once()
 
     @patch.object(storage_mod, 'encryption')
     @patch.object(storage_mod, 'PRIVATE_CLOUD_BATCH_ENABLED', True)
     @patch.object(storage_mod, 'users_db')
     def test_batch_encrypted(self, mock_users_db, mock_encryption):
-        """Enhanced protection encrypts each chunk and concatenates."""
+        """Enhanced protection encrypts each chunk and streams to GCS."""
         mock_bucket, mock_blob = self._setup_mock_bucket()
-        # Each encrypted chunk returns 120 bytes (simulating length-prefix + nonce + ciphertext)
         mock_encryption.encrypt_audio_chunk.return_value = b'\xee' * 120
 
         chunks = [
@@ -116,9 +124,8 @@ class TestBatchUploadFlagEnabled:
         assert len(paths) == 1
         assert paths[0].endswith('.batch.enc')
         assert mock_encryption.encrypt_audio_chunk.call_count == 2
-        # Verify concatenated encrypted data is 240 bytes
-        uploaded_data = mock_blob.upload_from_string.call_args[0][0]
-        assert len(uploaded_data) == 240
+        written = _collect_written_bytes(mock_blob)
+        assert len(written) == 240
 
     @patch.object(storage_mod, 'PRIVATE_CLOUD_BATCH_ENABLED', True)
     @patch.object(storage_mod, 'users_db')
@@ -134,7 +141,7 @@ class TestBatchUploadFlagEnabled:
         )
 
         assert paths == []
-        mock_blob.upload_from_string.assert_not_called()
+        mock_blob.open.assert_not_called()
 
     @patch.object(storage_mod, 'PRIVATE_CLOUD_BATCH_ENABLED', True)
     @patch.object(storage_mod, 'users_db')
@@ -178,11 +185,11 @@ class TestBatchUploadFlagEnabled:
 
         # Filename should reflect sorted order: first_ts-last_ts
         assert '1000.000-1010.000' in paths[0]
-        # Uploaded data should be in timestamp order
-        uploaded_data = mock_blob.upload_from_string.call_args[0][0]
-        assert uploaded_data[:50] == b'\x01' * 50
-        assert uploaded_data[50:100] == b'\x02' * 50
-        assert uploaded_data[100:] == b'\x03' * 50
+        # Streamed data should be in timestamp order
+        written = _collect_written_bytes(mock_blob)
+        assert written[:50] == b'\x01' * 50
+        assert written[50:100] == b'\x02' * 50
+        assert written[100:] == b'\x03' * 50
 
     @patch.object(storage_mod, 'PRIVATE_CLOUD_BATCH_ENABLED', True)
     @patch.object(storage_mod, 'users_db')
@@ -234,7 +241,7 @@ class TestBatchUploadFlagDisabled:
         for p in paths:
             assert p.endswith('.bin')
             assert '.batch.' not in p
-        # 3 individual uploads
+        # 3 individual uploads via upload_from_string (per-chunk path)
         assert mock_blob.upload_from_string.call_count == 3
 
     @patch.object(storage_mod, 'PRIVATE_CLOUD_BATCH_ENABLED', False)
