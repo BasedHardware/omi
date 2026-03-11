@@ -2108,6 +2108,7 @@ workflows:
           # Copy Firebase config (prod plist injected from CI secret, dev fallback in git)
           if [ -n "$MACOS_GOOGLE_SERVICE_INFO_PLIST" ]; then
             echo "$MACOS_GOOGLE_SERVICE_INFO_PLIST" | base64 --decode > "$APP_BUNDLE/Contents/Resources/GoogleService-Info.plist"
+            plutil -lint "$APP_BUNDLE/Contents/Resources/GoogleService-Info.plist" || { echo "ERROR: Decoded GoogleService-Info.plist is invalid"; exit 1; }
             echo "Injected prod GoogleService-Info.plist from CI secret"
           else
             echo "ERROR: MACOS_GOOGLE_SERVICE_INFO_PLIST not set — refusing release build without prod Firebase config"
