@@ -8540,4 +8540,60 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get phoneCallsMaybeLater => 'Poate mai târziu';
+
+  @override
+  String get deleteSynced => 'Șterge sincronizate';
+
+  @override
+  String get deleteSyncedFiles => 'Șterge înregistrările sincronizate';
+
+  @override
+  String get deleteSyncedFilesMessage =>
+      'Aceste înregistrări sunt deja sincronizate cu telefonul dvs. Aceasta nu poate fi anulată.';
+
+  @override
+  String get syncedFilesDeleted => 'Înregistrările sincronizate au fost șterse';
+
+  @override
+  String get deletePending => 'Șterge în așteptare';
+
+  @override
+  String get deletePendingFiles => 'Șterge înregistrările în așteptare';
+
+  @override
+  String get deletePendingFilesWarning =>
+      'Aceste înregistrări NU sunt sincronizate cu telefonul dvs. și vor fi pierdute permanent. Aceasta nu poate fi anulată.';
+
+  @override
+  String get pendingFilesDeleted => 'Înregistrările în așteptare au fost șterse';
+
+  @override
+  String get deleteAllFiles => 'Șterge toate înregistrările';
+
+  @override
+  String get deleteAll => 'Șterge tot';
+
+  @override
+  String get deleteAllFilesWarning =>
+      'Aceasta va șterge înregistrările sincronizate și în așteptare. Înregistrările în așteptare NU sunt sincronizate și vor fi pierdute permanent.';
+
+  @override
+  String get allFilesDeleted => 'Toate înregistrările au fost șterse';
+
+  @override
+  String nFiles(int count) {
+    return '$count înregistrări';
+  }
+
+  @override
+  String get manageStorage => 'Gestionare stocare';
+
+  @override
+  String get safelyBackedUp => 'Salvat în siguranță pe telefonul dvs.';
+
+  @override
+  String get notYetSynced => 'Nu a fost încă sincronizat cu telefonul dvs.';
+
+  @override
+  String get clearAll => 'Șterge tot';
 }
