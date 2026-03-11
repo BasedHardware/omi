@@ -3026,7 +3026,7 @@
     "@showAll": {
         "description": "Button text to show all items"
     },
-    "noTasksForToday": "No tasks for today.\\nAsk Omi for more tasks or create manually.",
+    "noTasksForToday": "No tasks for today.\nAsk Omi for more tasks or create manually.",
     "@noTasksForToday": {
         "description": "Message shown when there are no tasks due today"
     },

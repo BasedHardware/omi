@@ -799,7 +799,7 @@
     "conversationsProcessedAutomatically": "会話は自動的に処理されます",
     "getInsightsInstantly": "すぐに洞察と要約を取得できます",
     "showAll": "すべて表示 →",
-    "noTasksForToday": "今日のタスクはありません。\\nOmiに他のタスクを尋ねるか、手動で作成してください。",
+    "noTasksForToday": "今日のタスクはありません。\nOmiに他のタスクを尋ねるか、手動で作成してください。",
     "dailyScore": "デイリースコア",
     "dailyScoreDescription": "実行に集中するための\nスコアです。",
     "searchResults": "検索結果",

@@ -798,7 +798,7 @@
     "conversationsProcessedAutomatically": "A beszélgetések automatikusan feldolgozásra kerülnek",
     "getInsightsInstantly": "Szerezzen betekintéseket és összefoglalókat azonnal",
     "showAll": "Összes megjelenítése →",
-    "noTasksForToday": "Nincs feladat mára.\\nKérdezzen Omit több feladatért, vagy hozzon létre manuálisan.",
+    "noTasksForToday": "Nincs feladat mára.\nKérdezzen Omit több feladatért, vagy hozzon létre manuálisan.",
     "dailyScore": "NAPI PONTSZÁM",
     "dailyScoreDescription": "Egy pontszám, amely segít jobban\na végrehajtásra összpontosítani.",
     "searchResults": "Keresési eredmények",
