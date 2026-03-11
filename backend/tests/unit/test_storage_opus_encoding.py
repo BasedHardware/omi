@@ -54,14 +54,13 @@ class TestOpusEncodeDecode:
         assert ratio > 5.0, f"Compression ratio {ratio:.1f}x is below 5x minimum"
 
     def test_small_input_padded(self):
-        """Input smaller than one frame is padded and still roundtrips."""
+        """Input smaller than one frame is padded but trimmed to original length on decode."""
         # 100 bytes = less than one 20ms frame (640 bytes)
         pcm_data = b'\x80' * 100
         opus_data = storage_mod.encode_pcm_to_opus(pcm_data)
         decoded = storage_mod.decode_opus_to_pcm(opus_data)
-        # Decoded length equals one full frame (padded)
-        frame_bytes = storage_mod.OPUS_FRAME_SIZE * storage_mod.OPUS_CHANNELS * 2
-        assert len(decoded) == frame_bytes
+        # Decoded length equals original input (trimmed from padded frame)
+        assert len(decoded) == len(pcm_data)
 
     def test_exact_frame_boundary(self):
         """Input exactly on frame boundary has no padding."""
@@ -72,20 +71,52 @@ class TestOpusEncodeDecode:
         assert len(decoded) == len(pcm_data)
 
     def test_packet_count_header(self):
-        """Opus output starts with correct packet count."""
+        """Opus output starts with correct packet count and original PCM length."""
         frame_bytes = storage_mod.OPUS_FRAME_SIZE * storage_mod.OPUS_CHANNELS * 2
         pcm_data = b'\x00' * (frame_bytes * 5)  # 5 frames
         opus_data = storage_mod.encode_pcm_to_opus(pcm_data)
         packet_count = struct.unpack_from('<I', opus_data, 0)[0]
+        original_pcm_len = struct.unpack_from('<I', opus_data, 4)[0]
         assert packet_count == 5
+        assert original_pcm_len == len(pcm_data)
 
     def test_empty_input(self):
         """Empty PCM produces zero packets."""
         opus_data = storage_mod.encode_pcm_to_opus(b'')
         packet_count = struct.unpack_from('<I', opus_data, 0)[0]
+        original_pcm_len = struct.unpack_from('<I', opus_data, 4)[0]
         assert packet_count == 0
+        assert original_pcm_len == 0
         decoded = storage_mod.decode_opus_to_pcm(opus_data)
         assert decoded == b''
+
+
+class TestOpusDecodeErrorHandling:
+    """Tests for decode_opus_to_pcm error handling with malformed data."""
+
+    def test_truncated_header_raises(self):
+        """Data shorter than 8 bytes raises ValueError."""
+        with pytest.raises(ValueError, match="too short"):
+            storage_mod.decode_opus_to_pcm(b'\x00' * 4)
+
+    def test_truncated_packet_length_raises(self):
+        """Truncated data missing packet length raises ValueError."""
+        # Header says 1 packet but no packet data follows
+        bad_data = struct.pack('<I', 1) + struct.pack('<I', 100)  # pkt_count=1, pcm_len=100
+        with pytest.raises(ValueError, match="Truncated"):
+            storage_mod.decode_opus_to_pcm(bad_data)
+
+    def test_truncated_packet_body_raises(self):
+        """Packet length claims more bytes than available."""
+        # Header: 1 packet, pcm_len=640; packet length says 100 but only 5 bytes follow
+        bad_data = struct.pack('<I', 1) + struct.pack('<I', 640) + struct.pack('<H', 100) + b'\x00' * 5
+        with pytest.raises(ValueError, match="Truncated"):
+            storage_mod.decode_opus_to_pcm(bad_data)
+
+    def test_zero_byte_input_raises(self):
+        """Completely empty input raises ValueError."""
+        with pytest.raises(ValueError, match="too short"):
+            storage_mod.decode_opus_to_pcm(b'')
 
 
 class TestExtensionHelpers:
