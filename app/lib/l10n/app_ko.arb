@@ -798,7 +798,7 @@
     "conversationsProcessedAutomatically": "대화는 자동으로 처리됩니다",
     "getInsightsInstantly": "즉시 인사이트와 요약을 얻으세요",
     "showAll": "모두 표시 →",
-    "noTasksForToday": "오늘의 작업이 없습니다.\\nOmi에게 더 많은 작업을 요청하거나 수동으로 생성하세요.",
+    "noTasksForToday": "오늘의 작업이 없습니다.\nOmi에게 더 많은 작업을 요청하거나 수동으로 생성하세요.",
     "dailyScore": "일일 점수",
     "dailyScoreDescription": "실행에 더 잘 집중할 수 있도록\n도와주는 점수입니다.",
     "searchResults": "검색 결과",

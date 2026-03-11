@@ -2677,7 +2677,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get showAll => 'Show All';
 
   @override
-  String get noTasksForToday => 'No tasks for today.\\nAsk Omi for more tasks or create manually.';
+  String get noTasksForToday => 'No tasks for today.\nAsk Omi for more tasks or create manually.';
 
   @override
   String get dailyScore => 'DAILY SCORE';

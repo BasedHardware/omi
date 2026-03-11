@@ -2678,7 +2678,7 @@ class AppLocalizationsBg extends AppLocalizations {
   String get showAll => 'Покажи всички →';
 
   @override
-  String get noTasksForToday => 'Няма задачи за днес.\\nПопитайте Omi за повече задачи или създайте ръчно.';
+  String get noTasksForToday => 'Няма задачи за днес.\nПопитайте Omi за повече задачи или създайте ръчно.';
 
   @override
   String get dailyScore => 'ДНЕВЕН РЕЗУЛТАТ';

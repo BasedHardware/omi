@@ -799,7 +799,7 @@
     "conversationsProcessedAutomatically": "Las conversaciones se procesan automáticamente",
     "getInsightsInstantly": "Obtén información y resúmenes al instante",
     "showAll": "Mostrar todo →",
-    "noTasksForToday": "No hay tareas para hoy.\\nPregúntale a Omi por más tareas o créalas manualmente.",
+    "noTasksForToday": "No hay tareas para hoy.\nPregúntale a Omi por más tareas o créalas manualmente.",
     "dailyScore": "PUNTUACIÓN DIARIA",
     "dailyScoreDescription": "Una puntuación para ayudarte\na enfocarte mejor en la ejecución.",
     "searchResults": "Resultados de búsqueda",

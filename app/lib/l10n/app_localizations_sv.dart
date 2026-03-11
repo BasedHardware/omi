@@ -2676,7 +2676,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get showAll => 'Visa alla →';
 
   @override
-  String get noTasksForToday => 'Inga uppgifter för idag.\\nFråga Omi om fler uppgifter eller skapa manuellt.';
+  String get noTasksForToday => 'Inga uppgifter för idag.\nFråga Omi om fler uppgifter eller skapa manuellt.';
 
   @override
   String get dailyScore => 'DAGLIG POÄNG';

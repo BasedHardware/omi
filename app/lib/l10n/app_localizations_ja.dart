@@ -2630,7 +2630,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get showAll => 'すべて表示 →';
 
   @override
-  String get noTasksForToday => '今日のタスクはありません。\\nOmiに他のタスクを尋ねるか、手動で作成してください。';
+  String get noTasksForToday => '今日のタスクはありません。\nOmiに他のタスクを尋ねるか、手動で作成してください。';
 
   @override
   String get dailyScore => 'デイリースコア';
