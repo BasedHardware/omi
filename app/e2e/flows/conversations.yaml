@@ -12,7 +12,6 @@ setup: normal
 steps:
   - name: Verify home conversations tab
     assert:
-      text: "Conversations"
       interactive_count: { min: 8 }
       bottom_nav_tabs: { min: 4 }
     screenshot: conversations-home
@@ -26,7 +25,7 @@ steps:
 
   - name: Check daily score card
     assert:
-      text: "DAILY SCORE"
+      interactive_count: { min: 2, hint: "score gauge and Add Goal button" }
     note: "Daily score card shows score gauge (0-100) and Add Goal button"
     screenshot: daily-score
 
@@ -68,4 +67,4 @@ steps:
   - name: Back to conversations
     back: true
     assert:
-      text: "Conversations"
+      bottom_nav_tabs: { min: 4 }

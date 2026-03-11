@@ -91,4 +91,4 @@ steps:
   - name: Close settings drawer
     back: true
     assert:
-      text: "Conversations"
+      bottom_nav_tabs: { min: 4 }

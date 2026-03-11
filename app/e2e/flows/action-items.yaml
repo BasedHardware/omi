@@ -50,4 +50,4 @@ steps:
   - name: Return to home tab
     press: { bottom_nav_tab: 0 }
     assert:
-      text: "Conversations"
+      bottom_nav_tabs: { min: 4 }

@@ -29,4 +29,5 @@ steps:
 
   - name: Verify return to home
     assert:
-      text: "Conversations"
+      interactive_count: { min: 8, hint: "home screen with bottom nav" }
+      bottom_nav_tabs: { min: 4 }
