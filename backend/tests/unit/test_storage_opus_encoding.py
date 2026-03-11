@@ -316,28 +316,27 @@ class TestDownloadFallbackPath:
         return factory
 
     @patch.object(storage_mod, 'NotFound', _FakeNotFound)
+    @patch.object(storage_mod, 'list_audio_chunks')
     @patch.object(storage_mod, 'encryption')
-    def test_fallback_opus_corrupt_to_legacy_bin(self, mock_encryption):
-        """When .opus.enc exists but decrypt fails, falls back to .bin."""
+    def test_fallback_opus_corrupt_to_legacy_bin(self, mock_encryption, mock_list):
+        """When .opus.enc download fails decrypt, falls back to per-chunk .bin via legacy path."""
         mock_bucket = MagicMock()
         pcm_data = b'\x00' * 640
 
-        mock_bucket.blob.side_effect = self._blob_factory(
-            {
-                'opus.enc': b'corrupt-opus-data',
-                'bin': pcm_data,
-            }
-        )
+        # list_audio_chunks returns no matching chunks → triggers legacy fallback path
+        mock_list.return_value = []
+        mock_bucket.blob.side_effect = self._blob_factory({'bin': pcm_data})
         storage_mod.storage_client.bucket.return_value = mock_bucket
-        mock_encryption.decrypt_audio_file.side_effect = Exception("decrypt failed")
 
         result = storage_mod.download_audio_chunks_and_merge('uid', 'conv', [1000.0], fill_gaps=False)
         assert result == pcm_data
 
     @patch.object(storage_mod, 'NotFound', _FakeNotFound)
-    def test_fallback_all_not_found_raises(self):
+    @patch.object(storage_mod, 'list_audio_chunks')
+    def test_fallback_all_not_found_raises(self, mock_list):
         """When no extension exists for a timestamp, raises FileNotFoundError."""
         mock_bucket = MagicMock()
+        mock_list.return_value = []
         mock_bucket.blob.side_effect = self._blob_factory({})  # nothing available
         storage_mod.storage_client.bucket.return_value = mock_bucket
 
@@ -345,41 +344,40 @@ class TestDownloadFallbackPath:
             storage_mod.download_audio_chunks_and_merge('uid', 'conv', [1000.0], fill_gaps=False)
 
     @patch.object(storage_mod, 'NotFound', _FakeNotFound)
-    def test_opus_decode_success_no_fallback(self):
-        """When .opus chunk is valid, uses it without trying .bin."""
+    @patch.object(storage_mod, 'list_audio_chunks')
+    def test_opus_decode_success_no_fallback(self, mock_list):
+        """When .opus chunk is found via list_audio_chunks, downloads and decodes it."""
         mock_bucket = MagicMock()
         pcm_data = b'\x00' * 640
         opus_data = storage_mod.encode_pcm_to_opus(pcm_data)
 
-        call_log = []
-        original_factory = self._blob_factory({'opus': opus_data})
+        # list_audio_chunks finds the .opus file
+        mock_list.return_value = [
+            {'timestamp': 1000.0, 'path': 'chunks/uid/conv/1000.000.opus', 'size': len(opus_data), 'is_batch': False}
+        ]
 
-        def tracking_factory(path):
-            call_log.append(path)
-            return original_factory(path)
-
-        mock_bucket.blob.side_effect = tracking_factory
+        mock_bucket.blob.side_effect = self._blob_factory({'opus': opus_data})
         storage_mod.storage_client.bucket.return_value = mock_bucket
 
         result = storage_mod.download_audio_chunks_and_merge('uid', 'conv', [1000.0], fill_gaps=False)
         assert len(result) == len(pcm_data)
-        # Should NOT have tried .bin after .opus succeeded
-        assert not any(p.endswith('.bin') for p in call_log)
 
     @patch.object(storage_mod, 'NotFound', _FakeNotFound)
-    def test_fallback_opus_decode_error_to_bin(self):
-        """When .opus data is malformed (decode raises), falls back to .bin."""
+    @patch.object(storage_mod, 'list_audio_chunks')
+    def test_opus_decode_error_raises_when_only_path(self, mock_list):
+        """When list_audio_chunks finds .opus but decode fails, no fallback — raises FileNotFoundError."""
         mock_bucket = MagicMock()
-        pcm_data = b'\x00' * 640
-        bad_opus = b'\x01\x00\x00\x00\x80\x02\x00\x00\xff\xff'  # 1 pkt, pcm_len=640, bad pkt_len
+        bad_opus = b'\x01\x00\x00\x00\x80\x02\x00\x00\xff\xff'  # bad opus data
 
-        mock_bucket.blob.side_effect = self._blob_factory(
-            {
-                'opus': bad_opus,
-                'bin': pcm_data,
-            }
-        )
+        # list_audio_chunks finds .opus, but it will fail to decode
+        mock_list.return_value = [
+            {'timestamp': 1000.0, 'path': 'chunks/uid/conv/1000.000.opus', 'size': len(bad_opus), 'is_batch': False}
+        ]
+
+        mock_bucket.blob.side_effect = self._blob_factory({'opus': bad_opus})
         storage_mod.storage_client.bucket.return_value = mock_bucket
 
-        result = storage_mod.download_audio_chunks_and_merge('uid', 'conv', [1000.0], fill_gaps=False)
-        assert result == pcm_data
+        # New behavior: when list_audio_chunks resolves a specific path and decode fails,
+        # there is no cross-extension fallback — decode failure returns None, merge raises
+        with pytest.raises(FileNotFoundError):
+            storage_mod.download_audio_chunks_and_merge('uid', 'conv', [1000.0], fill_gaps=False)

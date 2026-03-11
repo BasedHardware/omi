@@ -662,16 +662,18 @@ def download_audio_chunks_and_merge(
             if path not in path_to_timestamp:
                 path_to_timestamp[path] = chunk_info['timestamp']
 
-    # For timestamps not found via list, fall back to per-chunk path construction
+    # For timestamps not found via list, build candidate paths for legacy per-chunk files
+    legacy_candidates = {}  # formatted_ts -> [path1, path2, ...]
     for ts in timestamps:
         formatted_ts = f'{ts:.3f}'
         if formatted_ts not in timestamp_to_path:
-            # Try per-chunk paths (legacy files)
-            for ext in ['.opus.enc', '.enc', '.opus', '.bin']:
-                path = f'chunks/{uid}/{conversation_id}/{formatted_ts}{ext}'
-                timestamp_to_path[formatted_ts] = path
-                path_to_timestamp[path] = ts
-                break
+            candidates = [
+                f'chunks/{uid}/{conversation_id}/{formatted_ts}{ext}' for ext in ['.opus.enc', '.enc', '.opus', '.bin']
+            ]
+            legacy_candidates[formatted_ts] = candidates
+            # Use the first candidate as default; download will try it
+            timestamp_to_path[formatted_ts] = candidates[0]
+            path_to_timestamp[candidates[0]] = ts
 
     def download_single_path(path: str) -> tuple[str, bytes | None]:
         """Download a single blob path and return (path, pcm_data)."""
@@ -681,20 +683,24 @@ def download_audio_chunks_and_merge(
             logger.warning(f"Chunk not found: {path}")
             return (path, None)
 
-        # Decrypt if encrypted (.enc or .batch.enc)
-        if path.endswith('.enc'):
-            raw_data = encryption.decrypt_audio_file(chunk_data, uid)
-        else:
-            raw_data = chunk_data
+        try:
+            # Decrypt if encrypted (.enc or .batch.enc)
+            if path.endswith('.enc'):
+                raw_data = encryption.decrypt_audio_file(chunk_data, uid)
+            else:
+                raw_data = chunk_data
 
-        # Decode Opus if applicable (.opus or .opus.enc)
-        if '.opus' in path and '.batch.' not in path:
-            pcm_data = decode_opus_to_pcm(raw_data, sample_rate=sample_rate)
-            del raw_data
-        else:
-            pcm_data = raw_data
+            # Decode Opus if applicable (.opus or .opus.enc)
+            if '.opus' in path and '.batch.' not in path:
+                pcm_data = decode_opus_to_pcm(raw_data, sample_rate=sample_rate)
+                del raw_data
+            else:
+                pcm_data = raw_data
 
-        return (path, pcm_data)
+            return (path, pcm_data)
+        except Exception as e:
+            logger.warning(f"Failed to decode/decrypt {path}: {e}")
+            return (path, None)
 
     # Download unique paths in parallel (batch blobs downloaded once)
     unique_paths = list(path_to_timestamp.keys())
@@ -716,6 +722,15 @@ def download_audio_chunks_and_merge(
         path = timestamp_to_path.get(formatted_ts)
         if path and path in path_results:
             chunk_results[ts] = path_results[path]
+        elif formatted_ts in legacy_candidates:
+            # Primary path failed — try remaining legacy candidates sequentially
+            for alt_path in legacy_candidates[formatted_ts]:
+                if alt_path == path:
+                    continue  # Already tried
+                alt_path_str, alt_data = download_single_path(alt_path)
+                if alt_data is not None:
+                    chunk_results[ts] = alt_data
+                    break
 
     # Free path_results to avoid double memory
     path_results.clear()
