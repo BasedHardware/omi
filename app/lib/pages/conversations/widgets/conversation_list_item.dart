@@ -7,7 +7,6 @@ import 'package:flutter/services.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
 
-import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
 import 'package:omi/pages/conversation_detail/page.dart';
@@ -43,6 +42,7 @@ class ConversationListItem extends StatefulWidget {
 class _ConversationListItemState extends State<ConversationListItem> {
   Timer? _conversationNewStatusResetTimer;
   bool isNew = false;
+  DeleteConversationOptions? _deleteOptions;
 
   @override
   void dispose() {
@@ -190,26 +190,11 @@ class _ConversationListItemState extends State<ConversationListItem> {
                         ),
                         confirmDismiss: (direction) async {
                           HapticFeedback.mediumImpact();
-                          bool showDeleteConfirmation = SharedPreferencesUtil().showConversationDeleteConfirmation;
-
-                          if (!showDeleteConfirmation) return Future.value(true);
 
                           final connectivityProvider = Provider.of<ConnectivityProvider>(context, listen: false);
 
-                          if (connectivityProvider.isConnected) {
-                            return await showDialog(
-                              context: context,
-                              builder: (ctx) => getDialog(
-                                context,
-                                () => Navigator.of(context).pop(false),
-                                () => Navigator.of(context).pop(true),
-                                context.l10n.deleteConversationTitle,
-                                context.l10n.deleteConversationMessage,
-                                okButtonText: context.l10n.confirm,
-                              ),
-                            );
-                          } else {
-                            return showDialog(
+                          if (!connectivityProvider.isConnected) {
+                            showDialog(
                               builder: (c) => getDialog(
                                 context,
                                 () => Navigator.pop(context),
@@ -221,13 +206,27 @@ class _ConversationListItemState extends State<ConversationListItem> {
                               ),
                               context: context,
                             );
+                            return false;
                           }
+
+                          final result = await showDeleteConversationDialog(context);
+                          if (result != null) {
+                            _deleteOptions = result;
+                            return true;
+                          }
+                          return false;
                         },
                         onDismissed: (direction) async {
                           var conversation = widget.conversation;
                           var conversationIdx = widget.conversationIdx;
                           MixpanelManager().conversationSwipedToDelete(conversation);
-                          provider.deleteConversationLocally(conversation, conversationIdx, widget.date);
+                          provider.deleteConversationLocally(
+                            conversation,
+                            conversationIdx,
+                            widget.date,
+                            deleteAssociatedData: _deleteOptions?.deleteAssociatedData ?? false,
+                          );
+                          _deleteOptions = null;
                         },
                         child: Padding(
                           padding: PlatformService.isMobile
