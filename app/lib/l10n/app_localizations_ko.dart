@@ -8358,4 +8358,57 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get phoneCallsMaybeLater => '나중에';
+
+  @override
+  String get deleteSynced => '동기화된 항목 삭제';
+
+  @override
+  String get deleteSyncedFiles => '동기화된 녹음 삭제';
+
+  @override
+  String get deleteSyncedFilesMessage => '이 녹음은 이미 휴대폰에 동기화되었습니다. 이 작업은 취소할 수 없습니다.';
+
+  @override
+  String get syncedFilesDeleted => '동기화된 녹음 삭제됨';
+
+  @override
+  String get deletePending => '대기 중인 항목 삭제';
+
+  @override
+  String get deletePendingFiles => '대기 중인 녹음 삭제';
+
+  @override
+  String get deletePendingFilesWarning => '이 녹음은 휴대폰에 동기화되지 않았으며 영구적으로 손실됩니다. 이 작업은 취소할 수 없습니다.';
+
+  @override
+  String get pendingFilesDeleted => '대기 중인 녹음 삭제됨';
+
+  @override
+  String get deleteAllFiles => '모든 녹음 삭제';
+
+  @override
+  String get deleteAll => '모두 삭제';
+
+  @override
+  String get deleteAllFilesWarning => '동기화된 녹음과 대기 중인 녹음이 모두 삭제됩니다. 대기 중인 녹음은 동기화되지 않았으며 영구적으로 손실됩니다.';
+
+  @override
+  String get allFilesDeleted => '모든 녹음 삭제됨';
+
+  @override
+  String nFiles(int count) {
+    return '$count개 녹음';
+  }
+
+  @override
+  String get manageStorage => '저장소 관리';
+
+  @override
+  String get safelyBackedUp => '휴대폰에 안전하게 백업됨';
+
+  @override
+  String get notYetSynced => '아직 휴대폰에 동기화되지 않음';
+
+  @override
+  String get clearAll => '모두 지우기';
 }

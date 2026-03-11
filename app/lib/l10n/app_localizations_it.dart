@@ -8549,4 +8549,60 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get phoneCallsMaybeLater => 'Forse più tardi';
+
+  @override
+  String get deleteSynced => 'Elimina sincronizzati';
+
+  @override
+  String get deleteSyncedFiles => 'Elimina registrazioni sincronizzate';
+
+  @override
+  String get deleteSyncedFilesMessage =>
+      'Queste registrazioni sono già state sincronizzate con il tuo telefono. Questa azione non può essere annullata.';
+
+  @override
+  String get syncedFilesDeleted => 'Registrazioni sincronizzate eliminate';
+
+  @override
+  String get deletePending => 'Elimina in sospeso';
+
+  @override
+  String get deletePendingFiles => 'Elimina registrazioni in sospeso';
+
+  @override
+  String get deletePendingFilesWarning =>
+      'Queste registrazioni NON sono state sincronizzate con il tuo telefono e andranno perse permanentemente. Questa azione non può essere annullata.';
+
+  @override
+  String get pendingFilesDeleted => 'Registrazioni in sospeso eliminate';
+
+  @override
+  String get deleteAllFiles => 'Elimina tutte le registrazioni';
+
+  @override
+  String get deleteAll => 'Elimina tutto';
+
+  @override
+  String get deleteAllFilesWarning =>
+      'Questo eliminerà le registrazioni sincronizzate e in sospeso. Le registrazioni in sospeso NON sono state sincronizzate e andranno perse permanentemente.';
+
+  @override
+  String get allFilesDeleted => 'Tutte le registrazioni eliminate';
+
+  @override
+  String nFiles(int count) {
+    return '$count registrazioni';
+  }
+
+  @override
+  String get manageStorage => 'Gestisci archivio';
+
+  @override
+  String get safelyBackedUp => 'Salvato sul tuo telefono';
+
+  @override
+  String get notYetSynced => 'Non ancora sincronizzato con il tuo telefono';
+
+  @override
+  String get clearAll => 'Cancella tutto';
 }

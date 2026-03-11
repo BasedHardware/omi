@@ -313,6 +313,16 @@ class LocalWalSyncImpl implements LocalWalSync {
   }
 
   @override
+  Future<void> deleteAllPendingWals() async {
+    final pendingWals = _wals.where((w) => w.status == WalStatus.miss || w.status == WalStatus.corrupted).toList();
+    for (final wal in pendingWals) {
+      await _deleteWal(wal);
+    }
+    await _saveWalsToFile();
+    listener.onWalUpdated();
+  }
+
+  @override
   void onByteStream(List<int> value) async {
     _frames.add(value);
     _frameSynced.add(false);

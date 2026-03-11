@@ -8561,4 +8561,60 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get phoneCallsMaybeLater => 'Ίσως αργότερα';
+
+  @override
+  String get deleteSynced => 'Διαγραφή συγχρονισμένων';
+
+  @override
+  String get deleteSyncedFiles => 'Διαγραφή συγχρονισμένων ηχογραφήσεων';
+
+  @override
+  String get deleteSyncedFilesMessage =>
+      'Αυτές οι ηχογραφήσεις έχουν ήδη συγχρονιστεί με το τηλέφωνό σας. Δεν μπορεί να αναιρεθεί.';
+
+  @override
+  String get syncedFilesDeleted => 'Οι συγχρονισμένες ηχογραφήσεις διαγράφηκαν';
+
+  @override
+  String get deletePending => 'Διαγραφή εκκρεμών';
+
+  @override
+  String get deletePendingFiles => 'Διαγραφή εκκρεμών ηχογραφήσεων';
+
+  @override
+  String get deletePendingFilesWarning =>
+      'Αυτές οι ηχογραφήσεις ΔΕΝ έχουν συγχρονιστεί με το τηλέφωνό σας και θα χαθούν μόνιμα. Δεν μπορεί να αναιρεθεί.';
+
+  @override
+  String get pendingFilesDeleted => 'Οι εκκρεμείς ηχογραφήσεις διαγράφηκαν';
+
+  @override
+  String get deleteAllFiles => 'Διαγραφή όλων των ηχογραφήσεων';
+
+  @override
+  String get deleteAll => 'Διαγραφή όλων';
+
+  @override
+  String get deleteAllFilesWarning =>
+      'Αυτό θα διαγράψει συγχρονισμένες και εκκρεμείς ηχογραφήσεις. Οι εκκρεμείς ηχογραφήσεις ΔΕΝ έχουν συγχρονιστεί και θα χαθούν μόνιμα.';
+
+  @override
+  String get allFilesDeleted => 'Όλες οι ηχογραφήσεις διαγράφηκαν';
+
+  @override
+  String nFiles(int count) {
+    return '$count ηχογραφήσεις';
+  }
+
+  @override
+  String get manageStorage => 'Διαχείριση αποθήκευσης';
+
+  @override
+  String get safelyBackedUp => 'Αποθηκεύτηκε με ασφάλεια στο τηλέφωνό σας';
+
+  @override
+  String get notYetSynced => 'Δεν έχει συγχρονιστεί ακόμα με το τηλέφωνό σας';
+
+  @override
+  String get clearAll => 'Εκκαθάριση όλων';
 }

@@ -8496,4 +8496,59 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get phoneCallsMaybeLater => 'Ehkä myöhemmin';
+
+  @override
+  String get deleteSynced => 'Poista synkronoidut';
+
+  @override
+  String get deleteSyncedFiles => 'Poista synkronoidut tallenteet';
+
+  @override
+  String get deleteSyncedFilesMessage => 'Nämä tallenteet on jo synkronoitu puhelimeesi. Tätä ei voi kumota.';
+
+  @override
+  String get syncedFilesDeleted => 'Synkronoidut tallenteet poistettu';
+
+  @override
+  String get deletePending => 'Poista odottavat';
+
+  @override
+  String get deletePendingFiles => 'Poista odottavat tallenteet';
+
+  @override
+  String get deletePendingFilesWarning =>
+      'Näitä tallenteita EI ole synkronoitu puhelimeesi ja ne menetetään pysyvästi. Tätä ei voi kumota.';
+
+  @override
+  String get pendingFilesDeleted => 'Odottavat tallenteet poistettu';
+
+  @override
+  String get deleteAllFiles => 'Poista kaikki tallenteet';
+
+  @override
+  String get deleteAll => 'Poista kaikki';
+
+  @override
+  String get deleteAllFilesWarning =>
+      'Tämä poistaa synkronoidut ja odottavat tallenteet. Odottavia tallenteita EI ole synkronoitu ja ne menetetään pysyvästi.';
+
+  @override
+  String get allFilesDeleted => 'Kaikki tallenteet poistettu';
+
+  @override
+  String nFiles(int count) {
+    return '$count tallennetta';
+  }
+
+  @override
+  String get manageStorage => 'Hallitse tallennustilaa';
+
+  @override
+  String get safelyBackedUp => 'Turvallisesti varmuuskopioitu puhelimeesi';
+
+  @override
+  String get notYetSynced => 'Ei vielä synkronoitu puhelimeesi';
+
+  @override
+  String get clearAll => 'Tyhjennä kaikki';
 }

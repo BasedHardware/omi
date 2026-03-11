@@ -8510,4 +8510,59 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get phoneCallsMaybeLater => 'Belki daha sonra';
+
+  @override
+  String get deleteSynced => 'Senkronize edilenleri sil';
+
+  @override
+  String get deleteSyncedFiles => 'Senkronize kayıtları sil';
+
+  @override
+  String get deleteSyncedFilesMessage => 'Bu kayıtlar zaten telefonunuzla senkronize edildi. Bu geri alınamaz.';
+
+  @override
+  String get syncedFilesDeleted => 'Senkronize kayıtlar silindi';
+
+  @override
+  String get deletePending => 'Bekleyenleri sil';
+
+  @override
+  String get deletePendingFiles => 'Bekleyen kayıtları sil';
+
+  @override
+  String get deletePendingFilesWarning =>
+      'Bu kayıtlar telefonunuzla senkronize EDİLMEDİ ve kalıcı olarak kaybolacak. Bu geri alınamaz.';
+
+  @override
+  String get pendingFilesDeleted => 'Bekleyen kayıtlar silindi';
+
+  @override
+  String get deleteAllFiles => 'Tüm kayıtları sil';
+
+  @override
+  String get deleteAll => 'Tümünü sil';
+
+  @override
+  String get deleteAllFilesWarning =>
+      'Bu, senkronize ve bekleyen kayıtları silecek. Bekleyen kayıtlar senkronize EDİLMEDİ ve kalıcı olarak kaybolacak.';
+
+  @override
+  String get allFilesDeleted => 'Tüm kayıtlar silindi';
+
+  @override
+  String nFiles(int count) {
+    return '$count kayıt';
+  }
+
+  @override
+  String get manageStorage => 'Depolamayı yönet';
+
+  @override
+  String get safelyBackedUp => 'Telefonunuza güvenli şekilde yedeklendi';
+
+  @override
+  String get notYetSynced => 'Henüz telefonunuzla senkronize edilmedi';
+
+  @override
+  String get clearAll => 'Tümünü temizle';
 }

@@ -63,7 +63,7 @@
     },
     "clear": "Clear",
     "@clear": {
-        "description": "Clear button"
+        "description": "Button label to clear files"
     },
     "copyTranscript": "Copy Transcript",
     "@copyTranscript": {
@@ -10086,7 +10086,7 @@
     "@tasksCleanTodayMessage": {
         "description": "Confirmation dialog message for cleaning today task deadlines"
     },
-"tasksOverdue": "Overdue",
+    "tasksOverdue": "Overdue",
     "phoneCallsWithOmi": "Phone Calls with Omi",
     "phoneCallsSubtitle": "Make calls with real-time transcription",
     "phoneSetupStep1Title": "Verify your phone number",
@@ -10221,5 +10221,78 @@
     "phoneCallsMaybeLater": "Maybe later",
     "@phoneCallsMaybeLater": {
         "description": "Dismiss button text on phone calls upsell sheet"
+    },
+    "deleteSynced": "Delete Synced",
+    "@deleteSynced": {
+        "description": "Menu option to delete synced recordings"
+    },
+    "deleteSyncedFiles": "Delete Synced Recordings",
+    "@deleteSyncedFiles": {
+        "description": "Dialog title for deleting synced files"
+    },
+    "deleteSyncedFilesMessage": "These recordings have already been synced to your phone. This cannot be undone.",
+    "@deleteSyncedFilesMessage": {
+        "description": "Confirmation message for deleting synced files"
+    },
+    "syncedFilesDeleted": "Synced recordings deleted",
+    "@syncedFilesDeleted": {
+        "description": "Snackbar message after synced files deleted"
+    },
+    "deletePending": "Delete Pending",
+    "@deletePending": {
+        "description": "Menu option to delete pending recordings"
+    },
+    "deletePendingFiles": "Delete Pending Recordings",
+    "@deletePendingFiles": {
+        "description": "Dialog title for deleting pending files"
+    },
+    "deletePendingFilesWarning": "These recordings have NOT been synced to your phone and will be permanently lost. This cannot be undone.",
+    "@deletePendingFilesWarning": {
+        "description": "Warning message for deleting pending files"
+    },
+    "pendingFilesDeleted": "Pending recordings deleted",
+    "@pendingFilesDeleted": {
+        "description": "Snackbar message after pending files deleted"
+    },
+    "deleteAllFiles": "Delete All Recordings",
+    "@deleteAllFiles": {
+        "description": "Dialog title for deleting all files"
+    },
+    "deleteAll": "Delete All",
+    "@deleteAll": {
+        "description": "Menu option to delete all recordings"
+    },
+    "deleteAllFilesWarning": "This will delete both synced and pending recordings. Pending recordings have NOT been synced and will be permanently lost. This cannot be undone.",
+    "@deleteAllFilesWarning": {
+        "description": "Warning message for deleting all files"
+    },
+    "allFilesDeleted": "All recordings deleted",
+    "@allFilesDeleted": {
+        "description": "Snackbar message after all files deleted"
+    },
+    "nFiles": "{count} recordings",
+    "@nFiles": {
+        "description": "Count of files",
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    },
+    "manageStorage": "Manage Storage",
+    "@manageStorage": {
+        "description": "Menu option and sheet title for managing recording storage"
+    },
+    "safelyBackedUp": "Safely backed up to your phone",
+    "@safelyBackedUp": {
+        "description": "Description for synced files in manage storage sheet"
+    },
+    "notYetSynced": "Not yet synced to your phone",
+    "@notYetSynced": {
+        "description": "Description for pending files in manage storage sheet"
+    },
+    "clearAll": "Clear All",
+    "@clearAll": {
+        "description": "Button label to clear all files"
     }
 }

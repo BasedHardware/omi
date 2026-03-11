@@ -8522,4 +8522,59 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get phoneCallsMaybeLater => 'Mungkin nanti';
+
+  @override
+  String get deleteSynced => 'Padam yang disegerakkan';
+
+  @override
+  String get deleteSyncedFiles => 'Padam rakaman disegerakkan';
+
+  @override
+  String get deleteSyncedFilesMessage => 'Rakaman ini telah disegerakkan ke telefon anda. Ini tidak boleh dibuat asal.';
+
+  @override
+  String get syncedFilesDeleted => 'Rakaman disegerakkan dipadam';
+
+  @override
+  String get deletePending => 'Padam yang belum selesai';
+
+  @override
+  String get deletePendingFiles => 'Padam rakaman tertangguh';
+
+  @override
+  String get deletePendingFilesWarning =>
+      'Rakaman ini BELUM disegerakkan ke telefon anda dan akan hilang secara kekal. Ini tidak boleh dibuat asal.';
+
+  @override
+  String get pendingFilesDeleted => 'Rakaman tertangguh dipadam';
+
+  @override
+  String get deleteAllFiles => 'Padam semua rakaman';
+
+  @override
+  String get deleteAll => 'Padam semua';
+
+  @override
+  String get deleteAllFilesWarning =>
+      'Ini akan memadam rakaman disegerakkan dan tertangguh. Rakaman tertangguh BELUM disegerakkan dan akan hilang secara kekal.';
+
+  @override
+  String get allFilesDeleted => 'Semua rakaman dipadam';
+
+  @override
+  String nFiles(int count) {
+    return '$count rakaman';
+  }
+
+  @override
+  String get manageStorage => 'Urus storan';
+
+  @override
+  String get safelyBackedUp => 'Disandarkan dengan selamat ke telefon anda';
+
+  @override
+  String get notYetSynced => 'Belum disegerakkan ke telefon anda';
+
+  @override
+  String get clearAll => 'Kosongkan semua';
 }

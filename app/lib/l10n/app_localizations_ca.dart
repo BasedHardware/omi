@@ -8549,4 +8549,60 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get phoneCallsMaybeLater => 'Potser més tard';
+
+  @override
+  String get deleteSynced => 'Eliminar sincronitzats';
+
+  @override
+  String get deleteSyncedFiles => 'Eliminar enregistraments sincronitzats';
+
+  @override
+  String get deleteSyncedFilesMessage =>
+      'Aquests enregistraments ja estan sincronitzats amb el vostre telèfon. Això no es pot desfer.';
+
+  @override
+  String get syncedFilesDeleted => 'Enregistraments sincronitzats eliminats';
+
+  @override
+  String get deletePending => 'Eliminar pendents';
+
+  @override
+  String get deletePendingFiles => 'Eliminar enregistraments pendents';
+
+  @override
+  String get deletePendingFilesWarning =>
+      'Aquests enregistraments NO estan sincronitzats amb el vostre telèfon i es perdran permanentment. Això no es pot desfer.';
+
+  @override
+  String get pendingFilesDeleted => 'Enregistraments pendents eliminats';
+
+  @override
+  String get deleteAllFiles => 'Eliminar tots els enregistraments';
+
+  @override
+  String get deleteAll => 'Eliminar tot';
+
+  @override
+  String get deleteAllFilesWarning =>
+      'Això eliminarà els enregistraments sincronitzats i pendents. Els enregistraments pendents NO estan sincronitzats i es perdran permanentment.';
+
+  @override
+  String get allFilesDeleted => 'Tots els enregistraments eliminats';
+
+  @override
+  String nFiles(int count) {
+    return '$count enregistraments';
+  }
+
+  @override
+  String get manageStorage => 'Gestionar emmagatzematge';
+
+  @override
+  String get safelyBackedUp => 'Còpia de seguretat al vostre telèfon';
+
+  @override
+  String get notYetSynced => 'Encara no sincronitzat amb el vostre telèfon';
+
+  @override
+  String get clearAll => 'Esborrar tot';
 }
