@@ -155,6 +155,13 @@ Home (page.dart) — main app after auth
     ├── Integrations (integrations_page.dart) — BETA
     │   └── Google Calendar, Gmail, Apple Health
     ├── Phone Calls (phone_calls_page.dart)
+    │   ├── Setup: intro → number entry → verify
+    │   ├── Contacts tab (search, contact list, call)
+    │   └── Keypad tab (12 keys, call button)
+    ├── Transcription Settings (transcription_settings_page.dart)
+    │   ├── Source toggle: Omi Cloud vs Custom STT
+    │   ├── Provider selector, API key, model config
+    │   └── Advanced JSON editors, logs viewer
     ├── Developer Settings (developer.dart)
     │   ├── Custom STT provider config
     │   ├── API key management
@@ -164,6 +171,24 @@ Home (page.dart) — main app after auth
     ├── About (about.dart)
     │   └── Privacy Policy, Website, Discord, Help
     └── Sign Out → Confirmation dialog
+
+Persona Profile (persona_profile.dart) — AI clone management
+├── Avatar (100x100), name with verified badge
+├── Share Public Link button
+├── Make Public toggle
+└── 10 social link rows (omi, Twitter active; others Coming Soon)
+    └── Twitter → Social Handle Entry → Verify Identity → Clone Success
+
+Connected Device (home/device.dart) — requires BLE
+├── Device name, connection status, battery
+├── Actions: Firmware Update, SD Card Sync, Disconnect, Unpair
+└── Device info: Product, Model, Manufacturer, Firmware, ID, Serial
+
+Speech Profile (speech_profile/page.dart)
+├── Device animation, intro text
+├── Get Started / Do It Again button
+├── Question flow: text, progress bar, skip
+└── Listen to Speech Profile (if samples exist)
 ```
 
 ### Widget Patterns
@@ -224,6 +249,12 @@ Reference flows in `app/e2e/flows/*.yaml` describe the app's key user journeys. 
 | `flows/apps.yaml` | App explore, search, categories, detail view, create custom app |
 | `flows/chat.yaml` | Ask Omi → text/voice input → AI response |
 | `flows/record-conversation.yaml` | Phone mic capture → live transcript → stop |
+| **Features** | |
+| `flows/phone-calls.yaml` | Phone setup wizard, contacts search, keypad dialing |
+| `flows/persona-profile.yaml` | AI clone profile, social links, Twitter verification |
+| `flows/speech-profile.yaml` | Voice sample recording, question flow, progress |
+| `flows/device-management.yaml` | Connected device info, firmware, SD card, disconnect (requires BLE) |
+| `flows/payments.yaml` | Payment methods, Stripe/PayPal setup, active selection |
 | **Settings** | |
 | `flows/settings-profile.yaml` | Profile: name, language, vocabulary, speech profile, privacy |
 | `flows/settings-notifications.yaml` | Frequency slider, daily summary toggle, time picker |
@@ -233,6 +264,7 @@ Reference flows in `app/e2e/flows/*.yaml` describe the app's key user journeys. 
 | `flows/settings-sync.yaml` | Offline sync, local storage, recordings, fast transfer |
 | `flows/settings-plan-usage.yaml` | Current plan, usage stats, upgrade options |
 | `flows/settings-about.yaml` | About page, external links |
+| `flows/settings-transcription.yaml` | Omi Cloud vs Custom STT, provider config, API keys |
 | `flows/settings-toggle.yaml` | Developer Settings switch toggle (legacy) |
 | `flows/language-change.yaml` | Profile → Language → picker → locale swap via shared_prefs |
 
