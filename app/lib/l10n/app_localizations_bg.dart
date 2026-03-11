@@ -8533,4 +8533,60 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get phoneCallsMaybeLater => 'Може би по-късно';
+
+  @override
+  String get deleteSynced => 'Изтриване на синхронизираните';
+
+  @override
+  String get deleteSyncedFiles => 'Изтрий синхронизираните записи';
+
+  @override
+  String get deleteSyncedFilesMessage =>
+      'Тези записи вече са синхронизирани с телефона ви. Това не може да бъде отменено.';
+
+  @override
+  String get syncedFilesDeleted => 'Синхронизираните записи са изтрити';
+
+  @override
+  String get deletePending => 'Изтриване на чакащите';
+
+  @override
+  String get deletePendingFiles => 'Изтрий чакащите записи';
+
+  @override
+  String get deletePendingFilesWarning =>
+      'Тези записи НЕ са синхронизирани с телефона ви и ще бъдат загубени завинаги. Това не може да бъде отменено.';
+
+  @override
+  String get pendingFilesDeleted => 'Чакащите записи са изтрити';
+
+  @override
+  String get deleteAllFiles => 'Изтрий всички записи';
+
+  @override
+  String get deleteAll => 'Изтриване на всички';
+
+  @override
+  String get deleteAllFilesWarning =>
+      'Това ще изтрие синхронизираните и чакащите записи. Чакащите записи НЕ са синхронизирани и ще бъдат загубени завинаги.';
+
+  @override
+  String get allFilesDeleted => 'Всички записи са изтрити';
+
+  @override
+  String nFiles(int count) {
+    return '$count записа';
+  }
+
+  @override
+  String get manageStorage => 'Управление на хранилището';
+
+  @override
+  String get safelyBackedUp => 'Безопасно запазено на телефона ви';
+
+  @override
+  String get notYetSynced => 'Все още не е синхронизирано с телефона ви';
+
+  @override
+  String get clearAll => 'Изчисти всичко';
 }
