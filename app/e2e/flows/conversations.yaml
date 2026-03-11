@@ -1,0 +1,71 @@
+# E2E Flow: Conversations tab — browsing, filtering, detail view
+# Tests: conversation list, folder tabs, starred filter, daily score, conversation detail
+
+name: conversations
+description: Home conversations tab — daily score, folder filtering, starred toggle, conversation detail with transcript/summary tabs
+covers:
+  - app/lib/pages/conversations/conversations_page.dart
+  - app/lib/pages/conversation_detail/page.dart
+  - app/lib/pages/home/page.dart
+setup: normal
+
+steps:
+  - name: Verify home conversations tab
+    assert:
+      text: "Conversations"
+      interactive_count: { min: 8 }
+      bottom_nav_tabs: { min: 4 }
+    screenshot: conversations-home
+
+  - name: Identify top bar elements
+    snapshot: true
+    note: >
+      Top bar has: Connect Device button (leftmost gesture),
+      search icon (IconButton), history icon (IconButton), settings gear (IconButton rightmost).
+      InkWell elements at y>780 are bottom nav tabs.
+
+  - name: Check daily score card
+    assert:
+      text: "DAILY SCORE"
+    note: "Daily score card shows score gauge (0-100) and Add Goal button"
+    screenshot: daily-score
+
+  - name: Tap Add Goal
+    press: { type: gesture, hint: "GestureDetector labeled 'Add Goal' in score card, y≈230" }
+    screenshot: add-goal
+
+  - name: Back from goal creation
+    back: true
+
+  - name: Toggle starred filter
+    press: { type: gesture, hint: "Starred chip/tab near folder row, y≈360" }
+    screenshot: starred-filter
+
+  - name: Toggle back to All
+    press: { type: gesture, hint: "All chip/tab, y≈360" }
+    screenshot: all-conversations
+
+  - name: Tap + button to create folder
+    press: { type: gesture, hint: "GestureDetector + icon at right of folder row, y≈360" }
+    screenshot: create-folder
+
+  - name: Back from folder creation
+    back: true
+
+  - name: Open a conversation (if any exist)
+    note: "Tap any conversation item in list. If 'No conversations yet' shown, skip."
+    press: { type: gesture, hint: "conversation item in list, y>400" }
+    screenshot: conversation-detail
+
+  - name: Conversation detail tabs
+    note: >
+      Detail page has tabs: Transcript, Summary, Action Items.
+      Has share button, edit controls, audio seek.
+    assert:
+      interactive_count: { min: 3 }
+    screenshot: detail-tabs
+
+  - name: Back to conversations
+    back: true
+    assert:
+      text: "Conversations"
