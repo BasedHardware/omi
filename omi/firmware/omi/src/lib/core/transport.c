@@ -26,10 +26,10 @@
 #ifdef CONFIG_OMI_ENABLE_MONITOR
 #include "monitor.h"
 #endif
+#include "rtc.h"
 #include "sd_card.h"
 #include "settings.h"
 #include "storage.h"
-#include "rtc.h"
 LOG_MODULE_REGISTER(transport, CONFIG_LOG_DEFAULT_LEVEL);
 
 #ifdef CONFIG_OMI_ENABLE_RFSW_CTRL
@@ -222,7 +222,7 @@ static ssize_t time_sync_write_handler(struct bt_conn *conn,
 
     LOG_INF("Time sync received: %u seconds", epoch_s);
 
-    int err = rtc_set_utc_time((uint64_t)epoch_s);
+    int err = rtc_set_utc_time((uint64_t) epoch_s);
     if (err) {
         LOG_ERR("Failed to set RTC time: %d", err);
         return BT_GATT_ERR(BT_ATT_ERR_UNLIKELY);
@@ -232,11 +232,8 @@ static ssize_t time_sync_write_handler(struct bt_conn *conn,
     return len;
 }
 
-static ssize_t time_sync_read_handler(struct bt_conn *conn,
-                                      const struct bt_gatt_attr *attr,
-                                      void *buf,
-                                      uint16_t len,
-                                      uint16_t offset)
+static ssize_t
+time_sync_read_handler(struct bt_conn *conn, const struct bt_gatt_attr *attr, void *buf, uint16_t len, uint16_t offset)
 {
     uint32_t epoch_s = get_utc_time();
     LOG_INF("Time sync read: %u seconds", epoch_s);
@@ -457,8 +454,8 @@ static void exchange_func(struct bt_conn *conn, uint8_t att_err, struct bt_gatt_
 //
 
 #ifdef CONFIG_OMI_ENABLE_BATTERY
-#define BATTERY_REFRESH_INTERVAL        10000 // 10 seconds
-#define CONFIG_OMI_BATTERY_CRITICAL_MV  3500  // mV
+#define BATTERY_REFRESH_INTERVAL 10000      // 10 seconds
+#define CONFIG_OMI_BATTERY_CRITICAL_MV 3500 // mV
 uint8_t battery_percentage = 0;
 void broadcast_battery_level(struct k_work *work_item);
 
@@ -781,11 +778,13 @@ static bool push_to_gatt(struct bt_conn *conn)
 #define OPUS_PREFIX_LENGTH 1
 #define OPUS_PADDED_LENGTH 80
 #define MAX_WRITE_SIZE 440
+#define TIMESTAMP_MARKER 0xFF
 static uint32_t offset = 0;
 static uint16_t buffer_offset = 0;
 
 #ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
 static uint8_t storage_temp_data[MAX_WRITE_SIZE];
+static bool needs_timestamp_marker = true;
 bool write_to_storage(void)
 {
     uint8_t *buffer = tx_buffer + 2;
@@ -820,6 +819,32 @@ bool write_to_storage(void)
     monitor_inc_storage_write();
 #endif
     return true;
+}
+
+static void write_timestamp_to_storage(void)
+{
+    uint32_t now = get_utc_time();
+    if (now == 0) {
+        return;
+    }
+
+    if (buffer_offset + 5 > MAX_WRITE_SIZE) {
+        write_to_file(storage_temp_data, MAX_WRITE_SIZE);
+        buffer_offset = 0;
+    }
+
+    storage_temp_data[buffer_offset] = TIMESTAMP_MARKER;
+    memcpy(storage_temp_data + buffer_offset + 1, &now, sizeof(uint32_t));
+    buffer_offset += 5;
+    LOG_INF("Wrote timestamp marker: %u", now);
+}
+
+void storage_flush_buffer(void)
+{
+    if (buffer_offset > 0) {
+        write_to_file(storage_temp_data, buffer_offset);
+        buffer_offset = 0;
+    }
 }
 #endif
 
@@ -883,6 +908,7 @@ void pusher(void)
 
         if (conn && is_subscribed) {
             // Push to GATT if connected and subscribed
+            needs_timestamp_marker = true;
             push_to_gatt(conn);
             bt_conn_unref(conn);
         } else if (!conn) {
@@ -890,6 +916,14 @@ void pusher(void)
             // No BT connection, write to storage
             if (get_file_size() < MAX_STORAGE_BYTES && is_sd_on()) {
                 storage_full_warned = false;
+                if (needs_timestamp_marker) {
+                    write_timestamp_to_storage();
+                    needs_timestamp_marker = false;
+                }
+                uint32_t now = get_utc_time();
+                if (now > 0) {
+                    set_recording_start_time(now);
+                }
                 write_to_storage();
             } else {
                 if (!storage_full_warned) {
@@ -900,7 +934,8 @@ void pusher(void)
 #endif
         } else {
             // Connected but not subscribed, just sleep (buffer will be retried)
-            if (conn) bt_conn_unref(conn);
+            if (conn)
+                bt_conn_unref(conn);
             k_sleep(K_MSEC(10));
         }
     }

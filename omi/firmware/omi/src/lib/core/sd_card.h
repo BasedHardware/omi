@@ -10,12 +10,7 @@
 #define MAX_WRITE_SIZE 440
 
 /* Request types for the SD worker */
-typedef enum {
-    REQ_CLEAR_AUDIO_DIR,
-    REQ_WRITE_DATA,
-    REQ_READ_DATA,
-    REQ_SAVE_OFFSET
-} sd_req_type_t;
+typedef enum { REQ_CLEAR_AUDIO_DIR, REQ_WRITE_DATA, REQ_READ_DATA, REQ_SAVE_OFFSET } sd_req_type_t;
 
 /* Read request response object */
 struct read_resp {
@@ -142,6 +137,20 @@ int save_offset(uint32_t offset);
  * @return offset value, or negative errno code if error
  */
 uint32_t get_offset(void);
+
+/**
+ * @brief Set the recording start time (only sets if not already set)
+ *
+ * @param ts UTC epoch seconds when offline recording started
+ */
+void set_recording_start_time(uint32_t ts);
+
+/**
+ * @brief Get the recording start time
+ *
+ * @return UTC epoch seconds, or 0 if not set
+ */
+uint32_t get_recording_start_time(void);
 
 /**
  * @brief Turn on SD card power
