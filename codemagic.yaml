@@ -1841,6 +1841,7 @@ workflows:
   #   RESEND_API_KEY
   #   SENTRY_AUTH_TOKEN, SENTRY_ADMIN_UID, SENTRY_WEBHOOK_SECRET
   #   REDIS_DB_HOST, REDIS_DB_PORT, REDIS_DB_PASSWORD
+  #   MACOS_GOOGLE_SERVICE_INFO_PLIST — base64-encoded prod GoogleService-Info.plist (Firebase config)
   #   NOTE: MACOS_DEVELOPER_ID_P12/P12_PASSWORD must NOT be in this group — they live in appstore_credentials
   #
   # Re-uses from existing groups:
@@ -2109,8 +2110,8 @@ workflows:
             echo "$MACOS_GOOGLE_SERVICE_INFO_PLIST" | base64 --decode > "$APP_BUNDLE/Contents/Resources/GoogleService-Info.plist"
             echo "Injected prod GoogleService-Info.plist from CI secret"
           else
-            cp Desktop/Sources/GoogleService-Info.plist "$APP_BUNDLE/Contents/Resources/"
-            echo "WARNING: Using dev GoogleService-Info.plist (MACOS_GOOGLE_SERVICE_INFO_PLIST not set)"
+            echo "ERROR: MACOS_GOOGLE_SERVICE_INFO_PLIST not set — refusing release build without prod Firebase config"
+            exit 1
           fi
 
           # Copy SPM resource bundle (app assets: permissions.gif, herologo.png, etc.)
