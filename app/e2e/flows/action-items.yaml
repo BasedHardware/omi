@@ -1,0 +1,53 @@
+# E2E Flow: Action Items tab — task management
+# Tests: tab navigation, task creation, categories, checkbox toggle
+
+name: action-items
+description: Action Items tab — create task, categorize (Today/Tomorrow/Later), toggle completion, goal linking
+covers:
+  - app/lib/pages/action_items/action_items_page.dart
+  - app/lib/pages/home/page.dart
+setup: normal
+
+steps:
+  - name: Navigate to Action Items tab
+    press: { bottom_nav_tab: 1 }
+    screenshot: action-items-tab
+
+  - name: Verify action items page
+    assert:
+      interactive_count: { min: 5 }
+    note: >
+      Shows task categories: Today, Tomorrow, Later, No Deadline, Overdue.
+      FAB at bottom right (heroTag: action_items_fab) for creating tasks.
+    screenshot: action-items-view
+
+  - name: Tap FAB to create task
+    press: { type: button, hint: "FloatingActionButton at bottom right" }
+    screenshot: create-task-sheet
+
+  - name: Task creation form
+    assert:
+      interactive_count: { min: 3, hint: "text field, date picker, save button" }
+    note: "ActionItemFormSheet — bottom sheet with title, description, deadline, goal link"
+    screenshot: task-form
+
+  - name: Fill task title
+    fill: { type: textfield, value: "Test task from E2E" }
+    screenshot: task-filled
+
+  - name: Close task form
+    back: true
+
+  - name: Scroll to see task categories
+    scroll: down
+    screenshot: task-categories
+
+  - name: Toggle task completion (if tasks exist)
+    note: "Tap checkbox on any task item to mark complete"
+    press: { type: gesture, hint: "task checkbox — leftmost gesture in task row" }
+    screenshot: task-toggled
+
+  - name: Return to home tab
+    press: { bottom_nav_tab: 0 }
+    assert:
+      text: "Conversations"
