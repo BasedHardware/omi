@@ -1,0 +1,50 @@
+# E2E Flow: Settings → Notifications — notification preferences
+# Tests: notification frequency slider, daily summary toggle, time picker, daily reflection
+
+name: settings-notifications
+description: Settings → Notifications — adjust frequency slider, toggle daily summary with time picker, toggle daily reflection
+covers:
+  - app/lib/pages/settings/settings_drawer.dart
+  - app/lib/pages/settings/notifications_settings_page.dart
+setup: normal
+
+steps:
+  - name: Open settings drawer
+    press: { type: button, position: rightmost }
+
+  - name: Open Notifications
+    press: { type: gesture, hint: "Notifications row in settings — 2nd item after Profile" }
+    screenshot: notifications-page
+
+  - name: Verify notifications page
+    assert:
+      interactive_count: { min: 4 }
+    note: >
+      Notification Frequency: Slider (0-5) with labels Off/Minimal/Low/Balanced/High/Maximum
+      Daily Summary: Toggle switch + time picker button
+      Daily Reflection: Toggle switch
+
+  - name: Adjust notification frequency slider
+    note: "Slider widget — drag to change frequency level (0-5)"
+    screenshot: frequency-slider
+
+  - name: Toggle daily summary
+    press: { type: switch, index: 0, hint: "Daily Summary toggle switch" }
+    screenshot: daily-summary-toggled
+
+  - name: Open time picker for daily summary
+    press: { type: gesture, hint: "time picker button — shows CupertinoPicker bottom sheet" }
+    screenshot: time-picker
+
+  - name: Close time picker
+    back: true
+
+  - name: Toggle daily reflection
+    press: { type: switch, index: 1, hint: "Daily Reflection toggle switch" }
+    screenshot: daily-reflection-toggled
+
+  - name: Back to settings
+    back: true
+
+  - name: Close settings
+    back: true
