@@ -8495,4 +8495,60 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get phoneCallsMaybeLater => 'Võib-olla hiljem';
+
+  @override
+  String get deleteSynced => 'Kustuta sünkroniseeritud';
+
+  @override
+  String get deleteSyncedFiles => 'Kustuta sünkroniseeritud salvestised';
+
+  @override
+  String get deleteSyncedFilesMessage =>
+      'Need salvestised on juba teie telefoniga sünkroniseeritud. Seda ei saa tagasi võtta.';
+
+  @override
+  String get syncedFilesDeleted => 'Sünkroniseeritud salvestised kustutatud';
+
+  @override
+  String get deletePending => 'Kustuta ootel olevad';
+
+  @override
+  String get deletePendingFiles => 'Kustuta ootel salvestised';
+
+  @override
+  String get deletePendingFilesWarning =>
+      'Neid salvestisi EI ole teie telefoniga sünkroniseeritud ja need lähevad jäädavalt kaotsi. Seda ei saa tagasi võtta.';
+
+  @override
+  String get pendingFilesDeleted => 'Ootel salvestised kustutatud';
+
+  @override
+  String get deleteAllFiles => 'Kustuta kõik salvestised';
+
+  @override
+  String get deleteAll => 'Kustuta kõik';
+
+  @override
+  String get deleteAllFilesWarning =>
+      'See kustutab sünkroniseeritud ja ootel salvestised. Ootel salvestisi EI ole sünkroniseeritud ja need lähevad jäädavalt kaotsi.';
+
+  @override
+  String get allFilesDeleted => 'Kõik salvestised kustutatud';
+
+  @override
+  String nFiles(int count) {
+    return '$count salvestist';
+  }
+
+  @override
+  String get manageStorage => 'Halda salvestusruumi';
+
+  @override
+  String get safelyBackedUp => 'Turvaliselt teie telefonile varundatud';
+
+  @override
+  String get notYetSynced => 'Pole veel teie telefoniga sünkroniseeritud';
+
+  @override
+  String get clearAll => 'Tühjenda kõik';
 }
