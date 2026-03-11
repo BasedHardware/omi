@@ -154,10 +154,8 @@ Home (page.dart) — main app after auth
     │   └── Double tap action picker
     ├── Integrations (integrations_page.dart) — BETA
     │   └── Google Calendar, Gmail, Apple Health
-    ├── Phone Calls (phone_calls_page.dart)
-    │   ├── Setup: intro → number entry → verify
-    │   ├── Contacts tab (search, contact list, call)
-    │   └── Keypad tab (12 keys, call button)
+    ├── Phone Calls (phone_call_settings_page.dart)
+    │   └── Verified numbers list, delete button
     ├── Transcription Settings (transcription_settings_page.dart)
     │   ├── Source toggle: Omi Cloud vs Custom STT
     │   ├── Provider selector, API key, model config
@@ -276,8 +274,8 @@ Reference flows in `app/e2e/flows/*.yaml` describe the app's key user journeys. 
 | `flows/chat.yaml` | Ask Omi → text/voice input → AI response |
 | `flows/record-conversation.yaml` | Phone mic capture → live transcript → stop |
 | **Features** | |
-| `flows/phone-calls.yaml` | Phone setup wizard, contacts search, keypad dialing |
-| `flows/persona-profile.yaml` | AI clone profile, social links, Twitter verification |
+| `flows/phone-calls.yaml` | Phone call settings, verified numbers management |
+| `flows/persona-profile.yaml` | AI clone profile via Developer Settings, social links |
 | `flows/speech-profile.yaml` | Voice sample recording, question flow, progress |
 | `flows/device-management.yaml` | Connected device info, firmware, SD card, disconnect (requires BLE) |
 | `flows/payments.yaml` | Payment methods, Stripe/PayPal setup, active selection |
