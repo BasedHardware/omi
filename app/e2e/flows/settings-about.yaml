@@ -1,0 +1,36 @@
+# E2E Flow: Settings → About — app info and external links
+# Tests: deep settings navigation, external link items
+
+name: settings-about
+description: Settings drawer scroll → find About or other deep settings items, verify external links
+covers:
+  - app/lib/pages/settings/settings_drawer.dart
+  - app/lib/pages/settings/about.dart
+  - app/lib/pages/settings/privacy.dart
+setup: normal
+
+steps:
+  - name: Open settings drawer
+    press: { type: button, position: rightmost }
+
+  - name: Scroll settings to bottom
+    scroll: down
+    scroll: down
+    screenshot: settings-bottom
+
+  - name: Open About (or similar bottom item)
+    note: >
+      About page shows: Privacy Policy, Visit Website, Help/Inquiries, Join Community (Discord).
+      Each is a ListTile with icon and external link.
+    press: { type: gesture, hint: "About row at bottom of settings" }
+    screenshot: about-page
+
+  - name: Verify about page
+    assert:
+      interactive_count: { min: 3 }
+
+  - name: Back to settings
+    back: true
+
+  - name: Close settings
+    back: true
