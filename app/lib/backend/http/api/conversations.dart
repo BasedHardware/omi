@@ -83,9 +83,17 @@ Future<ServerConversation?> reProcessConversationServer(String conversationId, {
   return null;
 }
 
-Future<bool> deleteConversationServer(String conversationId) async {
+Future<bool> deleteConversationServer(
+  String conversationId, {
+  bool deleteMemories = false,
+  bool deleteTasks = false,
+}) async {
+  var params = <String, String>{};
+  if (deleteMemories) params['delete_memories'] = 'true';
+  if (deleteTasks) params['delete_action_items'] = 'true';
+  var queryString = params.isNotEmpty ? '?${params.entries.map((e) => '${e.key}=${e.value}').join('&')}' : '';
   var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/conversations/$conversationId',
+    url: '${Env.apiBaseUrl}v1/conversations/$conversationId$queryString',
     headers: {},
     method: 'DELETE',
     body: '',
