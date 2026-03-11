@@ -8494,4 +8494,60 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get phoneCallsMaybeLater => 'Maybe later';
+
+  @override
+  String get deleteSynced => 'Delete Synced';
+
+  @override
+  String get deleteSyncedFiles => 'Delete Synced Recordings';
+
+  @override
+  String get deleteSyncedFilesMessage =>
+      'These recordings have already been synced to your phone. This cannot be undone.';
+
+  @override
+  String get syncedFilesDeleted => 'Synced recordings deleted';
+
+  @override
+  String get deletePending => 'Delete Pending';
+
+  @override
+  String get deletePendingFiles => 'Delete Pending Recordings';
+
+  @override
+  String get deletePendingFilesWarning =>
+      'These recordings have NOT been synced to your phone and will be permanently lost. This cannot be undone.';
+
+  @override
+  String get pendingFilesDeleted => 'Pending recordings deleted';
+
+  @override
+  String get deleteAllFiles => 'Delete All Recordings';
+
+  @override
+  String get deleteAll => 'Delete All';
+
+  @override
+  String get deleteAllFilesWarning =>
+      'This will delete both synced and pending recordings. Pending recordings have NOT been synced and will be permanently lost. This cannot be undone.';
+
+  @override
+  String get allFilesDeleted => 'All recordings deleted';
+
+  @override
+  String nFiles(int count) {
+    return '$count recordings';
+  }
+
+  @override
+  String get manageStorage => 'Manage Storage';
+
+  @override
+  String get safelyBackedUp => 'Safely backed up to your phone';
+
+  @override
+  String get notYetSynced => 'Not yet synced to your phone';
+
+  @override
+  String get clearAll => 'Clear All';
 }
