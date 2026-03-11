@@ -6,13 +6,13 @@ metadata:
   labels:
     {{- include "backend-listen.labels" . | nindent 4 }}
 spec:
+  selector:
+    matchLabels:
+      {{- include "backend-listen.selectorLabels" . | nindent 6 }}
   {{- if .Values.podDisruptionBudget.minAvailable }}
   minAvailable: {{ .Values.podDisruptionBudget.minAvailable }}
   {{- end }}
   {{- if .Values.podDisruptionBudget.maxUnavailable }}
   maxUnavailable: {{ .Values.podDisruptionBudget.maxUnavailable }}
   {{- end }}
-  selector:
-    matchLabels:
-      {{- include "backend-listen.selectorLabels" . | nindent 6 }}
 {{- end }}
