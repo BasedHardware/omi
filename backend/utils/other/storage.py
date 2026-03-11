@@ -37,9 +37,6 @@ app_thumbnails_bucket = os.getenv('BUCKET_APP_THUMBNAILS')
 chat_files_bucket = os.getenv('BUCKET_CHAT_FILES')
 desktop_updates_bucket = os.getenv('BUCKET_DESKTOP_UPDATES')
 
-# Feature flags
-PRIVATE_CLOUD_BATCH_ENABLED = os.getenv('PRIVATE_CLOUD_BATCH_ENABLED', 'false').lower() == 'true'
-
 
 # *******************************************
 # ************* SPEECH PROFILE **************
@@ -359,11 +356,9 @@ def upload_audio_chunks_batch(
     data_protection_level: str = None,
 ) -> List[str]:
     """
-    Upload multiple audio chunks to GCS in a single operation per batch.
+    Upload multiple audio chunks to GCS in a single streaming write.
 
-    When PRIVATE_CLOUD_BATCH_ENABLED is true, concatenates all chunk data into one
-    GCS object (1 write op instead of N). When false, falls back to individual
-    upload_audio_chunk() calls.
+    Concatenates all chunk data into one GCS object (1 write op instead of N).
 
     Args:
         chunks: List of dicts with 'data' (bytes) and 'timestamp' (float).
@@ -373,27 +368,13 @@ def upload_audio_chunks_batch(
             skips the Firestore read. Falls back to DB read when None.
 
     Returns:
-        List of GCS paths for the uploaded chunks/batch.
+        List of GCS paths for the uploaded batch.
     """
     if not chunks:
         return []
 
     # Sort by timestamp for consistent ordering
     sorted_chunks = sorted(chunks, key=lambda c: c['timestamp'])
-
-    if not PRIVATE_CLOUD_BATCH_ENABLED:
-        # Flag disabled — fall back to per-chunk uploads
-        paths = []
-        for chunk in sorted_chunks:
-            path = upload_audio_chunk(
-                chunk_data=chunk['data'],
-                uid=uid,
-                conversation_id=conversation_id,
-                timestamp=chunk['timestamp'],
-                data_protection_level=data_protection_level,
-            )
-            paths.append(path)
-        return paths
 
     # Resolve protection level once for the entire batch
     protection_level = (
