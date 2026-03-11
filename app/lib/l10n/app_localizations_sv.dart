@@ -8501,4 +8501,60 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get phoneCallsMaybeLater => 'Kanske senare';
+
+  @override
+  String get deleteSynced => 'Ta bort synkroniserade';
+
+  @override
+  String get deleteSyncedFiles => 'Radera synkroniserade inspelningar';
+
+  @override
+  String get deleteSyncedFilesMessage =>
+      'Dessa inspelningar har redan synkroniserats med din telefon. Detta kan inte ångras.';
+
+  @override
+  String get syncedFilesDeleted => 'Synkroniserade inspelningar raderade';
+
+  @override
+  String get deletePending => 'Ta bort väntande';
+
+  @override
+  String get deletePendingFiles => 'Radera väntande inspelningar';
+
+  @override
+  String get deletePendingFilesWarning =>
+      'Dessa inspelningar har INTE synkroniserats med din telefon och kommer att förloras permanent. Detta kan inte ångras.';
+
+  @override
+  String get pendingFilesDeleted => 'Väntande inspelningar raderade';
+
+  @override
+  String get deleteAllFiles => 'Radera alla inspelningar';
+
+  @override
+  String get deleteAll => 'Ta bort alla';
+
+  @override
+  String get deleteAllFilesWarning =>
+      'Detta raderar synkroniserade och väntande inspelningar. Väntande inspelningar har INTE synkroniserats och kommer att förloras permanent.';
+
+  @override
+  String get allFilesDeleted => 'Alla inspelningar raderade';
+
+  @override
+  String nFiles(int count) {
+    return '$count inspelningar';
+  }
+
+  @override
+  String get manageStorage => 'Hantera lagring';
+
+  @override
+  String get safelyBackedUp => 'Säkerhetskopierat till din telefon';
+
+  @override
+  String get notYetSynced => 'Inte synkroniserat med din telefon ännu';
+
+  @override
+  String get clearAll => 'Rensa allt';
 }
