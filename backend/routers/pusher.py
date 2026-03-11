@@ -1,3 +1,4 @@
+import os
 import struct
 import asyncio
 import json
@@ -39,10 +40,15 @@ router = APIRouter()
 SPEAKER_SAMPLE_PROCESS_INTERVAL = 15.0
 SPEAKER_SAMPLE_MIN_AGE = 120.0
 
+# Feature flag for batch upload (Phase 2 of #5418) — default off, zero behavior change
+PRIVATE_CLOUD_BATCH_PUSHER_ENABLED = os.environ.get('PRIVATE_CLOUD_BATCH_PUSHER_ENABLED', 'false').lower() == 'true'
+
 # Constants for private cloud sync
 PRIVATE_CLOUD_SYNC_PROCESS_INTERVAL = 1.0
-PRIVATE_CLOUD_CHUNK_DURATION = 60.0
-PRIVATE_CLOUD_BATCH_MAX_AGE = 60.0  # seconds — flush batch if oldest chunk exceeds this age
+PRIVATE_CLOUD_CHUNK_DURATION = 60.0 if PRIVATE_CLOUD_BATCH_PUSHER_ENABLED else 5.0
+PRIVATE_CLOUD_BATCH_MAX_AGE = (
+    60.0 if PRIVATE_CLOUD_BATCH_PUSHER_ENABLED else 0.0
+)  # 0.0 = flush immediately (no batching)
 PRIVATE_CLOUD_SYNC_MAX_RETRIES = 3
 
 # Queue warning thresholds
