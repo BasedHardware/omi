@@ -1,0 +1,35 @@
+# E2E Flow: Transcription Settings — STT provider configuration
+# Tests: source toggle, provider selector, API key, custom config
+
+name: settings-transcription
+description: Transcription settings — Omi Cloud vs Custom STT toggle, provider selection, API key management
+covers:
+  - app/lib/pages/settings/transcription_settings_page.dart
+setup: normal
+
+steps:
+  - name: Navigate to Settings
+    press: { type: gesture, hint: "settings gear icon top-right" }
+    screenshot: settings-open
+
+  - name: Open Transcription Settings
+    scroll: down
+    press: { type: gesture, hint: "Transcription Settings row" }
+    screenshot: transcription-settings
+
+  - name: Verify transcription page
+    assert:
+      interactive_count: { min: 3, hint: "source toggle, provider config options" }
+    note: >
+      Source selector: toggle between "Omi Cloud" and "Custom STT".
+      When Custom enabled: provider dropdown, API key field (with show/hide),
+      model/language/host/port fields depending on provider.
+      Advanced section (collapsible): JSON editors for request/response config.
+      Logs section (collapsible): real-time log viewer.
+    screenshot: transcription-view
+
+  - name: Back to settings
+    back: true
+
+  - name: Back to home
+    back: true
