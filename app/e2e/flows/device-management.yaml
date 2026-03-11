@@ -1,0 +1,46 @@
+# E2E Flow: Device Management — connected device info and actions
+# Tests: device details, firmware update, SD card sync, disconnect/unpair
+
+name: device-management
+description: Connected device management — device info, battery, firmware update, SD card sync, disconnect
+covers:
+  - app/lib/pages/home/device.dart
+  - app/lib/pages/home/firmware_update.dart
+  - app/lib/pages/sdcard/about_sdcard_sync.dart
+setup:
+  requires: omi_device_connected
+
+steps:
+  - name: Open device details
+    note: "Tap connected device indicator on home screen"
+    press: { type: gesture, hint: "device connection indicator or Connect Device button" }
+    screenshot: device-details
+
+  - name: Verify device info
+    assert:
+      interactive_count: { min: 5, hint: "device name, battery, actions, info rows" }
+    note: >
+      Device name (title), connection status badge (green dot),
+      battery icon + percentage chip.
+      Actions: Firmware Update, SD Card Sync (if supported),
+      Charging Issues, Disconnect (red), Unpair (orange, conditional).
+      Info section: Product Name, Model, Manufacturer, Firmware, Device ID, Serial.
+    screenshot: device-info
+
+  - name: Check device info section
+    scroll: down
+    assert:
+      interactive_count: { min: 3, hint: "copy-to-clipboard info rows" }
+    note: "Device info rows are tappable — copies value to clipboard"
+    screenshot: device-info-bottom
+
+  - name: Tap firmware update
+    scroll: up
+    press: { type: gesture, hint: "Firmware Update or Product Update row" }
+    screenshot: firmware-update
+
+  - name: Back from firmware
+    back: true
+
+  - name: Back to home
+    back: true
