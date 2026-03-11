@@ -28,7 +28,7 @@ from utils.webhooks import (
     realtime_transcript_webhook,
     get_audio_bytes_webhook_seconds,
 )
-from utils.other.storage import upload_audio_chunk
+from utils.other.storage import upload_audio_chunk, upload_audio_chunks_batch
 from utils.speaker_identification import extract_speaker_samples
 import logging
 
@@ -205,8 +205,9 @@ async def _websocket_util_trigger(
             timestamp = batch['timestamp']
             retries = batch.get('retries', 0)
             try:
+                chunks_to_upload = [{'data': chunk_data, 'timestamp': timestamp}]
                 await asyncio.to_thread(
-                    upload_audio_chunk, chunk_data, uid, conv_id, timestamp, cached_protection_level
+                    upload_audio_chunks_batch, chunks_to_upload, uid, conv_id, cached_protection_level
                 )
                 try:
                     audio_files = await asyncio.to_thread(conversations_db.create_audio_files_from_chunks, uid, conv_id)
