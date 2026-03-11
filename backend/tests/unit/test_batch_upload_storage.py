@@ -206,6 +206,66 @@ class TestBatchUploadFlagEnabled:
 
         mock_users_db.get_data_protection_level.assert_not_called()
 
+    @patch.object(storage_mod, 'PRIVATE_CLOUD_BATCH_ENABLED', True)
+    @patch.object(storage_mod, 'users_db')
+    def test_large_batch_streams_correctly(self, mock_users_db):
+        """Large batch (50 chunks) streams without regression."""
+        mock_bucket, mock_blob = self._setup_mock_bucket()
+
+        chunks = [{'data': b'\xaa' * 80_000, 'timestamp': 1000.000 + i * 5.0} for i in range(50)]
+
+        paths = storage_mod.upload_audio_chunks_batch(
+            chunks=chunks,
+            uid='test-uid',
+            conversation_id='conv-1',
+            data_protection_level='standard',
+        )
+
+        assert len(paths) == 1
+        assert paths[0].endswith('.batch.bin')
+        mock_file = mock_blob.open.return_value.__enter__.return_value
+        assert mock_file.write.call_count == 50
+
+    @patch.object(storage_mod, 'PRIVATE_CLOUD_BATCH_ENABLED', True)
+    @patch.object(storage_mod, 'users_db')
+    def test_identical_timestamps_filename_and_order(self, mock_users_db):
+        """Chunks with identical timestamps produce valid filename and stable order."""
+        mock_bucket, mock_blob = self._setup_mock_bucket()
+
+        chunks = [
+            {'data': b'\x01' * 50, 'timestamp': 1000.000},
+            {'data': b'\x02' * 50, 'timestamp': 1000.000},
+        ]
+
+        paths = storage_mod.upload_audio_chunks_batch(
+            chunks=chunks,
+            uid='test-uid',
+            conversation_id='conv-1',
+            data_protection_level='standard',
+        )
+
+        # Same first_ts and last_ts → filename uses single timestamp
+        assert len(paths) == 1
+        assert '1000.000.batch.bin' in paths[0]
+
+    @patch.object(storage_mod, 'PRIVATE_CLOUD_BATCH_ENABLED', True)
+    @patch.object(storage_mod, 'users_db')
+    def test_streaming_api_call_args(self, mock_users_db):
+        """Batch mode uses blob.open('wb') with correct args and does NOT call upload_from_string."""
+        mock_bucket, mock_blob = self._setup_mock_bucket()
+
+        chunks = [{'data': b'\x01' * 50, 'timestamp': 1000.000}]
+
+        storage_mod.upload_audio_chunks_batch(
+            chunks=chunks,
+            uid='test-uid',
+            conversation_id='conv-1',
+            data_protection_level='standard',
+        )
+
+        mock_blob.open.assert_called_once_with('wb', content_type='application/octet-stream')
+        mock_blob.upload_from_string.assert_not_called()
+
 
 class TestBatchUploadFlagDisabled:
     """Tests with PRIVATE_CLOUD_BATCH_ENABLED = False (default)."""
@@ -283,6 +343,29 @@ class TestBatchUploadFlagDisabled:
         )
 
         assert paths == []
+
+    @patch.object(storage_mod, 'PRIVATE_CLOUD_BATCH_ENABLED', False)
+    @patch.object(storage_mod, 'users_db')
+    def test_flag_disabled_none_level_delegates_db_per_chunk(self, mock_users_db):
+        """Flag disabled + level=None delegates DB resolution to per-chunk upload_audio_chunk."""
+        mock_bucket, mock_blob = self._setup_mock_bucket()
+        mock_users_db.get_data_protection_level.return_value = 'standard'
+
+        chunks = [
+            {'data': b'\x01' * 50, 'timestamp': 1000.000},
+            {'data': b'\x02' * 50, 'timestamp': 1005.000},
+        ]
+
+        paths = storage_mod.upload_audio_chunks_batch(
+            chunks=chunks,
+            uid='test-uid',
+            conversation_id='conv-1',
+            data_protection_level=None,
+        )
+
+        assert len(paths) == 2
+        # Each per-chunk call passes data_protection_level=None, triggering DB read inside upload_audio_chunk
+        assert mock_users_db.get_data_protection_level.call_count == 2
 
     @patch.object(storage_mod, 'PRIVATE_CLOUD_BATCH_ENABLED', False)
     @patch.object(storage_mod, 'users_db')
