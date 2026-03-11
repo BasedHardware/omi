@@ -1,0 +1,54 @@
+# E2E Flow: Persona/Clone Profile — view, edit, social links
+# Tests: persona profile, name edit, share, social connections
+
+name: persona-profile
+description: Persona profile — avatar, name edit, share link, social connections (Twitter/X), public toggle
+covers:
+  - app/lib/pages/persona/persona_profile.dart
+  - app/lib/pages/persona/persona_provider.dart
+  - app/lib/pages/persona/twitter/social_profile.dart
+  - app/lib/pages/persona/twitter/verify_identity_screen.dart
+setup: normal
+
+steps:
+  - name: Navigate to Persona Profile
+    note: "Access via settings or home — routing depends on context"
+    press: { type: gesture, hint: "settings gear icon or persona entry point" }
+    screenshot: persona-entry
+
+  - name: Verify persona profile page
+    assert:
+      interactive_count: { min: 8, hint: "avatar, name, share button, toggle, social links" }
+    note: >
+      Profile image (100x100), name with verified badge,
+      "Share Public Link" button, Make Public toggle,
+      10 social link rows (omi, Twitter, Notion, Email, Telegram,
+      WhatsApp, Facebook, Instagram, YouTube, Slack).
+    screenshot: persona-profile
+
+  - name: Tap name to edit
+    press: { type: gesture, hint: "persona name text — triggers edit dialog" }
+    screenshot: persona-name-edit
+
+  - name: Close name edit dialog
+    back: true
+
+  - name: Check social links
+    scroll: down
+    assert:
+      interactive_count: { min: 5, hint: "social link rows with connect status" }
+    note: >
+      Each social link shows icon + username + status badge.
+      omi and Twitter are interactive. Others show "Coming Soon".
+    screenshot: persona-social-links
+
+  - name: Tap Twitter/X connect
+    press: { type: gesture, hint: "Twitter/X social link row" }
+    note: "Opens SocialHandleScreen for X handle entry or shows disconnect dialog if already connected"
+    screenshot: persona-twitter
+
+  - name: Back from Twitter
+    back: true
+
+  - name: Back to previous screen
+    back: true
