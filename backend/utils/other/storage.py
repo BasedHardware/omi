@@ -358,8 +358,9 @@ def encode_pcm_to_opus(pcm_data: bytes, sample_rate: int = OPUS_SAMPLE_RATE, cha
         encoded = encoder.encode(padded, frame_size)
         packets.append(encoded)
 
-    # Pack: [packet_count (4 bytes)] + [len (2 bytes) + data] per packet
+    # Pack: [packet_count (4 bytes)] + [original_pcm_len (4 bytes)] + [len (2 bytes) + data] per packet
     output = struct.pack('<I', len(packets))
+    output += struct.pack('<I', len(pcm_data))
     for pkt in packets:
         output += struct.pack('<H', len(pkt)) + pkt
 
@@ -377,24 +378,42 @@ def decode_opus_to_pcm(opus_data: bytes, sample_rate: int = OPUS_SAMPLE_RATE, ch
 
     Returns:
         Raw PCM16 audio bytes
+
+    Raises:
+        ValueError: If opus_data is too short or has invalid header/packet structure
     """
+    if len(opus_data) < 8:
+        raise ValueError(f"Opus data too short: {len(opus_data)} bytes (need at least 8 for header)")
+
     decoder = opuslib.Decoder(sample_rate, channels)
     frame_size = sample_rate * OPUS_FRAME_DURATION_MS // 1000
 
     offset = 0
     packet_count = struct.unpack_from('<I', opus_data, offset)[0]
     offset += 4
+    original_pcm_len = struct.unpack_from('<I', opus_data, offset)[0]
+    offset += 4
 
     pcm_parts = []
-    for _ in range(packet_count):
+    for i in range(packet_count):
+        if offset + 2 > len(opus_data):
+            raise ValueError(f"Truncated Opus data: expected packet {i}/{packet_count} length at offset {offset}")
         pkt_len = struct.unpack_from('<H', opus_data, offset)[0]
         offset += 2
+        if offset + pkt_len > len(opus_data):
+            raise ValueError(
+                f"Truncated Opus data: packet {i} needs {pkt_len} bytes at offset {offset}, only {len(opus_data) - offset} available"
+            )
         pkt_data = opus_data[offset : offset + pkt_len]
         offset += pkt_len
         decoded = decoder.decode(pkt_data, frame_size)
         pcm_parts.append(decoded)
 
-    return b''.join(pcm_parts)
+    result = b''.join(pcm_parts)
+    # Trim to original PCM length to remove padding from partial final frame
+    if original_pcm_len > 0 and original_pcm_len < len(result):
+        result = result[:original_pcm_len]
+    return result
 
 
 def _get_extension_for_path(path: str) -> str:
@@ -569,37 +588,35 @@ def download_audio_chunks_and_merge(
             ('bin', False, False),
         ]
 
-        chunk_data = None
-        is_encrypted = False
-        is_opus = False
-
         for ext, encrypted, opus in extensions_to_try:
             chunk_path = f'chunks/{uid}/{conversation_id}/{formatted_timestamp}.{ext}'
             try:
                 chunk_data = bucket.blob(chunk_path).download_as_bytes()
-                is_encrypted = encrypted
-                is_opus = opus
-                break
             except NotFound:
                 continue
 
-        if chunk_data is None:
-            logger.warning(f"Warning: Chunk not found for timestamp {formatted_timestamp}")
-            return (timestamp, None)
+            # Try decrypt + decode; on failure, fall back to next extension
+            try:
+                if encrypted:
+                    raw_data = encryption.decrypt_audio_file(chunk_data, uid)
+                else:
+                    raw_data = chunk_data
 
-        # Normalize to PCM: decrypt if needed, then decode Opus if needed
-        if is_encrypted:
-            raw_data = encryption.decrypt_audio_file(chunk_data, uid)
-        else:
-            raw_data = chunk_data
+                if opus:
+                    pcm_data = decode_opus_to_pcm(raw_data, sample_rate=sample_rate)
+                    del raw_data
+                else:
+                    pcm_data = raw_data
 
-        if is_opus:
-            pcm_data = decode_opus_to_pcm(raw_data, sample_rate=sample_rate)
-            del raw_data
-        else:
-            pcm_data = raw_data
+                return (timestamp, pcm_data)
+            except Exception as e:
+                logger.warning(
+                    f"Failed to decode/decrypt {ext} chunk at {formatted_timestamp}: {e}, trying next format"
+                )
+                continue
 
-        return (timestamp, pcm_data)
+        logger.warning(f"Warning: Chunk not found for timestamp {formatted_timestamp}")
+        return (timestamp, None)
 
     # Download chunks in parallel
     chunk_results = {}
