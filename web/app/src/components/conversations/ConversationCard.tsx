@@ -59,6 +59,16 @@ export const ConversationCard = memo(function ConversationCard({
 
   const handleStarClick = (e: React.MouseEvent) => {
     e.stopPropagation();
+
+    if (conversation.is_locked) {
+      MixpanelManager.track('Paywall Opened', {
+        source: 'ConversationCard Star',
+        conversation_id: conversation.id,
+      });
+      router.push('/settings?section=account&upgrade=1');
+      return;
+    }
+
     const newStarred = !isStarred;
     setIsStarred(newStarred);
     onStarToggle?.(conversation.id, newStarred);
@@ -69,19 +79,19 @@ export const ConversationCard = memo(function ConversationCard({
   };
 
   const handleClick = () => {
-    // In selection mode, preserve existing behavior (merge selection)
-    if (isSelectionMode && onSelect) {
-      onSelect(conversation.id);
-      return;
-    }
-
     // Locked conversations should push user to upgrade (mobile parity)
     if (conversation.is_locked) {
       MixpanelManager.track('Paywall Opened', {
-        source: 'ConversationCard',
+        source: isSelectionMode ? 'ConversationCard Selection' : 'ConversationCard',
         conversation_id: conversation.id,
       });
       router.push('/settings?section=account&upgrade=1');
+      return;
+    }
+
+    // In selection mode, preserve existing behavior (merge selection)
+    if (isSelectionMode && onSelect) {
+      onSelect(conversation.id);
       return;
     }
 
@@ -92,6 +102,15 @@ export const ConversationCard = memo(function ConversationCard({
   };
 
   const handleDoubleClick = () => {
+    if (conversation.is_locked) {
+      MixpanelManager.track('Paywall Opened', {
+        source: 'ConversationCard DoubleClick',
+        conversation_id: conversation.id,
+      });
+      router.push('/settings?section=account&upgrade=1');
+      return;
+    }
+
     // Double-click enters selection mode and selects this card
     if (!isSelectionMode && onEnterSelectionMode) {
       onEnterSelectionMode(conversation.id);

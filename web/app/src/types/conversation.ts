@@ -18,6 +18,11 @@ export interface ActionItem {
   id: string;
   description: string;
   completed: boolean;
+  /**
+   * When true, the item is gated behind the paywall.
+   * Optional for backwards compatibility with older API responses.
+   */
+  is_locked?: boolean;
   created_at?: string | null;
   updated_at?: string | null;
   due_at?: string | null;
