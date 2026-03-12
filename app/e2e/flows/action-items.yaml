@@ -6,6 +6,8 @@ description: Action Items tab — create task, categorize (Today/Tomorrow/Later)
 covers:
   - app/lib/pages/action_items/action_items_page.dart
   - app/lib/pages/home/page.dart
+prerequisites:
+  - auth_ready  # User completed real sign-in (Google/Apple) and onboarding. Android: `bash setup.sh android`. iOS: `bash setup.sh ios`. App must show home screen.
 setup: normal
 
 steps:
@@ -15,7 +17,7 @@ steps:
 
   - name: Verify action items page
     assert:
-      interactive_count: { min: 5 }
+      interactive_count: { min: 15, verified: "flow-walker run10: 17 elements (1 FAB, 9 gesture, 3 icon, 4 inkwell)" }
     note: >
       Shows task categories: Today, Tomorrow, Later, No Deadline, Overdue.
       FAB at bottom right (heroTag: action_items_fab) for creating tasks.
