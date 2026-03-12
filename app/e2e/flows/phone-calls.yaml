@@ -24,7 +24,7 @@ steps:
 
   - name: Verify phone call settings page
     assert:
-      interactive_count: { min: 1 }
+      text_visible: ["Your Verified Numbers"]
     note: >
       PhoneCallSettingsPage shows "Your Verified Numbers" list.
       Each number has phone icon, number text, verification timestamp,
