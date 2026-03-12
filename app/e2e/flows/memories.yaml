@@ -59,13 +59,22 @@ steps:
     press: { type: button, hint: "FloatingActionButton — add memory" }
     screenshot: add-memory-dialog
 
+  - name: Fill memory content
+    fill: { type: textfield, value: "E2E test memory — added manually" }
+    screenshot: memory-content-filled
+
   - name: Close add memory dialog
     back: true
 
   - name: Tap a memory item (if any exist)
-    note: "Opens MemoryEditSheet for quick editing"
+    note: "Opens MemoryEditSheet for quick editing — edit content, change category, save or delete"
     press: { type: gesture, hint: "memory item in list" }
     screenshot: memory-edit
+
+  - name: Verify edit sheet has controls
+    assert:
+      interactive_count: { min: 3, hint: "content field, category chips, save/delete buttons" }
+    note: "MemoryEditSheet: editable content field, category chip selector, save and delete buttons"
 
   - name: Close edit sheet
     back: true
