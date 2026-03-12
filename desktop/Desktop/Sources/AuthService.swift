@@ -1,5 +1,6 @@
 import Foundation
 @preconcurrency import FirebaseAuth
+import FirebaseCore
 import CryptoKit
 import AppKit
 import AuthenticationServices
@@ -84,13 +85,13 @@ class AuthService {
     private let kAuthTokenExpiry = "auth_tokenExpiry"
     private let kAuthTokenUserId = "auth_tokenUserId"  // User ID that owns the stored token
 
-    // Firebase Web API key from FIREBASE_API_KEY env var (use getenv to pick up setenv from .env loading).
-    // Returns empty string if missing — callers surface auth errors to user.
+    // Firebase Web API key — derived from GoogleService-Info.plist via FirebaseApp.
+    // No env var needed; key comes from whatever plist Firebase was configured with.
     private var firebaseApiKey: String {
-        if let cString = getenv("FIREBASE_API_KEY"), let apiKey = String(validatingUTF8: cString), !apiKey.isEmpty {
+        if let apiKey = FirebaseApp.app()?.options.apiKey, !apiKey.isEmpty {
             return apiKey
         }
-        NSLog("OMI AUTH ERROR: FIREBASE_API_KEY environment variable not set — auth will fail")
+        NSLog("OMI AUTH ERROR: Firebase not configured or API_KEY missing from GoogleService-Info.plist")
         return ""
     }
 
