@@ -32,5 +32,7 @@
 	<true></true>
 	<key>GOOGLE_APP_ID</key>
 	<string>1:1031333818730:ios:3bea63d8e4f41dbfafb513</string>
+	<key>AUTH_BACKEND_URL</key>
+	<string>http://localhost:8080</string>
 </dict>
 </plist>
