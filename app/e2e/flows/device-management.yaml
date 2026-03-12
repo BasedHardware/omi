@@ -22,7 +22,7 @@ steps:
 
   - name: Verify device info
     assert:
-      interactive_count: { min: 5, hint: "device name, battery, actions, info rows" }
+      text_visible: ["Firmware Update", "Disconnect"]
     note: >
       Device name (title), connection status badge (green dot),
       battery icon + percentage chip.
@@ -34,7 +34,7 @@ steps:
   - name: Check device info section
     scroll: down
     assert:
-      interactive_count: { min: 3, hint: "copy-to-clipboard info rows" }
+      text_visible: ["Device ID"]
     note: "Device info rows are tappable — copies value to clipboard"
     screenshot: device-info-bottom
 
