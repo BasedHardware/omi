@@ -156,3 +156,130 @@ impl Config {
         })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::Mutex;
+
+    // Env var tests must run serially to avoid races
+    static ENV_LOCK: Mutex<()> = Mutex::new(());
+
+    fn clear_config_env_vars() {
+        for key in &[
+            "PORT", "GEMINI_API_KEY", "GOOGLE_APPLICATION_CREDENTIALS",
+            "FIREBASE_PROJECT_ID", "FIREBASE_API_KEY", "GCP_PROJECT_ID",
+            "GCE_PROJECT_ID", "GCE_SOURCE_IMAGE", "AGENT_GCS_BUCKET",
+            "BASE_API_URL", "APPLE_CLIENT_ID", "APPLE_TEAM_ID",
+            "APPLE_KEY_ID", "APPLE_PRIVATE_KEY", "GOOGLE_CLIENT_ID",
+            "GOOGLE_CLIENT_SECRET", "ENCRYPTION_SECRET", "REDIS_DB_HOST",
+            "REDIS_DB_PORT", "REDIS_DB_PASSWORD", "POSTHOG_PERSONAL_API_KEY",
+            "POSTHOG_PROJECT_ID", "SENTRY_WEBHOOK_SECRET", "SENTRY_AUTH_TOKEN",
+            "SENTRY_ADMIN_UID", "CRISP_PLUGIN_IDENTIFIER", "CRISP_PLUGIN_KEY",
+            "CRISP_WEBSITE_ID", "PINECONE_API_KEY", "PINECONE_HOST",
+        ] {
+            env::remove_var(key);
+        }
+    }
+
+    #[test]
+    fn test_defaults_use_dev_project() {
+        let _lock = ENV_LOCK.lock().unwrap();
+        clear_config_env_vars();
+
+        let config = Config::from_env();
+
+        // All defaults must point to dev, never prod
+        assert_eq!(config.gce_project_id, "based-hardware-dev");
+        assert_eq!(config.agent_gcs_bucket, "based-hardware-dev-agent");
+        assert!(config.gce_source_image.contains("based-hardware-dev"));
+        assert!(!config.gce_project_id.contains("based-hardware-prod"));
+        assert!(config.firebase_project_id.is_none(), "no default firebase project without env var");
+    }
+
+    #[test]
+    fn test_gce_project_id_precedence() {
+        let _lock = ENV_LOCK.lock().unwrap();
+        clear_config_env_vars();
+
+        // GCE_PROJECT_ID takes priority
+        env::set_var("GCE_PROJECT_ID", "gce-proj");
+        env::set_var("FIREBASE_PROJECT_ID", "fb-proj");
+        env::set_var("GCP_PROJECT_ID", "gcp-proj");
+        let config = Config::from_env();
+        assert_eq!(config.gce_project_id, "gce-proj");
+
+        // Without GCE_PROJECT_ID, falls back to FIREBASE_PROJECT_ID
+        env::remove_var("GCE_PROJECT_ID");
+        let config = Config::from_env();
+        assert_eq!(config.gce_project_id, "fb-proj");
+
+        // Without both, falls back to GCP_PROJECT_ID
+        env::remove_var("FIREBASE_PROJECT_ID");
+        let config = Config::from_env();
+        assert_eq!(config.gce_project_id, "gcp-proj");
+
+        clear_config_env_vars();
+    }
+
+    #[test]
+    fn test_firebase_project_id_precedence() {
+        let _lock = ENV_LOCK.lock().unwrap();
+        clear_config_env_vars();
+
+        // FIREBASE_PROJECT_ID takes priority
+        env::set_var("FIREBASE_PROJECT_ID", "fb-proj");
+        env::set_var("GCP_PROJECT_ID", "gcp-proj");
+        let config = Config::from_env();
+        assert_eq!(config.firebase_project_id, Some("fb-proj".to_string()));
+
+        // Falls back to GCP_PROJECT_ID
+        env::remove_var("FIREBASE_PROJECT_ID");
+        let config = Config::from_env();
+        assert_eq!(config.firebase_project_id, Some("gcp-proj".to_string()));
+
+        clear_config_env_vars();
+    }
+
+    #[test]
+    fn test_port_default_and_override() {
+        let _lock = ENV_LOCK.lock().unwrap();
+        clear_config_env_vars();
+
+        let config = Config::from_env();
+        assert_eq!(config.port, 8080);
+
+        env::set_var("PORT", "9090");
+        let config = Config::from_env();
+        assert_eq!(config.port, 9090);
+
+        // Invalid port falls back to default
+        env::set_var("PORT", "not-a-number");
+        let config = Config::from_env();
+        assert_eq!(config.port, 8080);
+
+        clear_config_env_vars();
+    }
+
+    #[test]
+    fn test_no_prod_defaults_anywhere() {
+        let _lock = ENV_LOCK.lock().unwrap();
+        clear_config_env_vars();
+
+        let config = Config::from_env();
+
+        // Ensure no field defaults to prod project
+        let gce = &config.gce_project_id;
+        let gce_img = &config.gce_source_image;
+        let bucket = &config.agent_gcs_bucket;
+
+        assert!(!gce.contains("based-hardware-prod"), "gce_project_id must not default to prod");
+        assert!(!gce_img.contains("based-hardware-prod"), "gce_source_image must not default to prod");
+        assert!(!bucket.contains("based-hardware-prod"), "agent_gcs_bucket must not default to prod");
+
+        // Also verify no bare "based-hardware" without -dev suffix
+        // (the old prod default was just "based-hardware")
+        assert_ne!(gce.as_str(), "based-hardware", "gce_project_id must not default to prod 'based-hardware'");
+        assert_ne!(bucket.as_str(), "based-hardware-agent", "agent_gcs_bucket must not default to prod");
+    }
+}
