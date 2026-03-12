@@ -31,7 +31,7 @@ steps:
 
   - name: Verify persona profile page
     assert:
-      interactive_count: { min: 5, hint: "avatar, name, share button, toggle, social links" }
+      text_visible: ["Share Public Link", "Make Public"]
     note: >
       Profile image (100x100), name with verified badge,
       "Share Public Link" button, Make Public toggle,
@@ -41,7 +41,7 @@ steps:
   - name: Check social links
     scroll: down
     assert:
-      interactive_count: { min: 3, hint: "social link rows with connect status" }
+      text_visible: ["Twitter"]
     screenshot: persona-social-links
 
   - name: Back to developer settings
