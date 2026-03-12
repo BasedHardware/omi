@@ -134,21 +134,11 @@ pub struct TokenRequest {
     code: String,
     /// OAuth redirect_uri - validated against the original authorization request
     redirect_uri: String,
-    /// Legacy field, ignored — Firebase tokens are always returned
-    #[serde(default)]
-    use_custom_token: bool,
 }
 
 #[derive(Debug, Serialize)]
 pub struct TokenResponse {
     provider: String,
-    /// Firebase ID token (for API calls)
-    firebase_id_token: String,
-    /// Firebase refresh token (for token renewal)
-    refresh_token: String,
-    /// Firebase user ID
-    firebase_uid: String,
-    /// Provider-specific ID token (Google/Apple)
     id_token: String,
     access_token: Option<String>,
     provider_id: String,
@@ -386,19 +376,9 @@ async fn auth_token(
         });
     }
 
-    // Sign in with Firebase using the OAuth credentials (uses FIREBASE_API_KEY env var)
-    let firebase_result = sign_in_with_firebase(&state, &credentials).await
-        .map_err(|e| ErrorResponse {
-            error: "firebase_signin_failed".to_string(),
-            message: format!("Firebase sign-in failed: {}", e),
-        })?;
-
     let provider_id = credentials.provider_id.clone();
     let response = TokenResponse {
         provider: credentials.provider.clone(),
-        firebase_id_token: firebase_result.id_token,
-        refresh_token: firebase_result.refresh_token,
-        firebase_uid: firebase_result.local_id,
         id_token: credentials.id_token.clone(),
         access_token: credentials.access_token.clone(),
         provider_id,
@@ -592,88 +572,6 @@ fn generate_apple_client_secret(
     encode(&header, &claims, &key).map_err(|e| ErrorResponse {
         error: "jwt_error".to_string(),
         message: format!("Failed to generate Apple client secret: {}", e),
-    })
-}
-
-struct FirebaseSignInResult {
-    id_token: String,
-    refresh_token: String,
-    local_id: String,
-}
-
-/// Sign in with Firebase using OAuth credentials via signInWithIdp REST API.
-/// Uses FIREBASE_API_KEY env var. Returns Firebase tokens directly — no custom
-/// token generation needed.
-async fn sign_in_with_firebase(
-    state: &AuthState,
-    credentials: &OAuthCredentials,
-) -> Result<FirebaseSignInResult, Box<dyn std::error::Error + Send + Sync>> {
-    let firebase_api_key = state.config.firebase_api_key.as_ref()
-        .ok_or("FIREBASE_API_KEY not configured")?;
-
-    let sign_in_url = format!(
-        "https://identitytoolkit.googleapis.com/v1/accounts:signInWithIdp?key={}",
-        firebase_api_key
-    );
-
-    let provider_id = match credentials.provider.as_str() {
-        "google" => "google.com",
-        "apple" => "apple.com",
-        _ => return Err(format!("Unsupported provider: {}", credentials.provider).into()),
-    };
-
-    let mut post_body = format!("id_token={}&providerId={}", credentials.id_token, provider_id);
-    if let Some(access_token) = &credentials.access_token {
-        post_body.push_str(&format!("&access_token={}", access_token));
-    }
-
-    #[derive(Serialize)]
-    struct SignInRequest {
-        #[serde(rename = "postBody")]
-        post_body: String,
-        #[serde(rename = "requestUri")]
-        request_uri: String,
-        #[serde(rename = "returnIdpCredential")]
-        return_idp_credential: bool,
-        #[serde(rename = "returnSecureToken")]
-        return_secure_token: bool,
-    }
-
-    let response = state
-        .http_client
-        .post(&sign_in_url)
-        .json(&SignInRequest {
-            post_body,
-            request_uri: "http://localhost".to_string(),
-            return_idp_credential: true,
-            return_secure_token: true,
-        })
-        .send()
-        .await?;
-
-    if !response.status().is_success() {
-        let error = response.text().await?;
-        tracing::error!("Firebase sign-in failed: {}", error);
-        return Err("Firebase sign-in failed".into());
-    }
-
-    #[derive(Deserialize)]
-    struct SignInResponse {
-        #[serde(rename = "idToken")]
-        id_token: String,
-        #[serde(rename = "refreshToken")]
-        refresh_token: String,
-        #[serde(rename = "localId")]
-        local_id: String,
-    }
-
-    let result: SignInResponse = response.json().await?;
-    tracing::info!("Firebase sign-in successful, UID: {}", result.local_id);
-
-    Ok(FirebaseSignInResult {
-        id_token: result.id_token,
-        refresh_token: result.refresh_token,
-        local_id: result.local_id,
     })
 }
 
