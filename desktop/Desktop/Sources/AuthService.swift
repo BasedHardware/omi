@@ -74,8 +74,15 @@ class AuthService {
     private let kAuthTokenExpiry = "auth_tokenExpiry"
     private let kAuthTokenUserId = "auth_tokenUserId"  // User ID that owns the stored token
 
-    // Firebase Web API key (from GoogleService-Info.plist)
-    private let firebaseApiKey = "AIzaSyD9dzBdglc7IO9pPDIOvqnCoTis_xKkkC8"
+    // Firebase Web API key (read from bundled GoogleService-Info.plist, falls back to prod)
+    private var firebaseApiKey: String {
+        if let plistPath = Bundle.main.path(forResource: "GoogleService-Info", ofType: "plist"),
+           let plistDict = NSDictionary(contentsOfFile: plistPath),
+           let apiKey = plistDict["API_KEY"] as? String {
+            return apiKey
+        }
+        return "AIzaSyD9dzBdglc7IO9pPDIOvqnCoTis_xKkkC8"
+    }
 
     // MARK: - User Name Properties
 
