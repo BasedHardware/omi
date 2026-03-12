@@ -252,3 +252,309 @@ class TestBatchUpload:
 
         mock_blob.open.assert_called_once_with('wb', content_type='application/octet-stream')
         mock_blob.upload_from_string.assert_not_called()
+
+
+class TestListAudioChunksBatchAware:
+    """Tests for list_audio_chunks handling .batch.bin/.batch.enc files."""
+
+    def _setup_mock_bucket_with_blobs(self, blob_names):
+        """Set up mock bucket that returns specified blob names from list_blobs."""
+        mock_bucket = MagicMock()
+        mock_blobs = []
+        for name in blob_names:
+            mock_blob = MagicMock()
+            mock_blob.name = name
+            mock_blob.size = 1000
+            mock_blobs.append(mock_blob)
+        mock_bucket.list_blobs.return_value = mock_blobs
+        storage_mod.storage_client.bucket.return_value = mock_bucket
+        return mock_bucket
+
+    def test_list_per_chunk_files(self):
+        """Standard per-chunk .bin files are listed correctly."""
+        self._setup_mock_bucket_with_blobs(
+            [
+                'chunks/uid/conv/1000.000.bin',
+                'chunks/uid/conv/1005.000.bin',
+            ]
+        )
+
+        result = storage_mod.list_audio_chunks('uid', 'conv')
+        assert len(result) == 2
+        assert result[0]['timestamp'] == 1000.000
+        assert result[1]['timestamp'] == 1005.000
+
+    def test_list_batch_bin_file(self):
+        """Batch .batch.bin file is listed with first timestamp."""
+        self._setup_mock_bucket_with_blobs(
+            [
+                'chunks/uid/conv/1000.000-1010.000.batch.bin',
+            ]
+        )
+
+        result = storage_mod.list_audio_chunks('uid', 'conv')
+        assert len(result) == 1
+        assert result[0]['timestamp'] == 1000.000
+        assert result[0]['is_batch'] is True
+
+    def test_list_batch_enc_file(self):
+        """Batch .batch.enc file is listed with first timestamp."""
+        self._setup_mock_bucket_with_blobs(
+            [
+                'chunks/uid/conv/1000.000-1010.000.batch.enc',
+            ]
+        )
+
+        result = storage_mod.list_audio_chunks('uid', 'conv')
+        assert len(result) == 1
+        assert result[0]['timestamp'] == 1000.000
+        assert result[0]['is_batch'] is True
+
+    def test_list_single_chunk_batch(self):
+        """Single-chunk batch file (no range) is listed correctly."""
+        self._setup_mock_bucket_with_blobs(
+            [
+                'chunks/uid/conv/1000.000.batch.bin',
+            ]
+        )
+
+        result = storage_mod.list_audio_chunks('uid', 'conv')
+        assert len(result) == 1
+        assert result[0]['timestamp'] == 1000.000
+        assert result[0]['is_batch'] is True
+
+    def test_list_mixed_per_chunk_and_batch(self):
+        """Mixed per-chunk and batch files are all listed and sorted."""
+        self._setup_mock_bucket_with_blobs(
+            [
+                'chunks/uid/conv/1010.000-1020.000.batch.bin',
+                'chunks/uid/conv/1000.000.bin',
+                'chunks/uid/conv/1005.000.bin',
+            ]
+        )
+
+        result = storage_mod.list_audio_chunks('uid', 'conv')
+        assert len(result) == 3
+        assert result[0]['timestamp'] == 1000.000
+        assert result[0]['is_batch'] is False
+        assert result[1]['timestamp'] == 1005.000
+        assert result[2]['timestamp'] == 1010.000
+        assert result[2]['is_batch'] is True
+
+    def test_list_skips_meta_json(self):
+        """Meta JSON files are not listed as chunks."""
+        self._setup_mock_bucket_with_blobs(
+            [
+                'chunks/uid/conv/1000.000.bin',
+                'chunks/uid/conv/1000.000.meta.json',
+            ]
+        )
+
+        result = storage_mod.list_audio_chunks('uid', 'conv')
+        assert len(result) == 1
+
+    def test_per_chunk_has_is_batch_false(self):
+        """Per-chunk files have is_batch=False."""
+        self._setup_mock_bucket_with_blobs(
+            [
+                'chunks/uid/conv/1000.000.enc',
+            ]
+        )
+
+        result = storage_mod.list_audio_chunks('uid', 'conv')
+        assert result[0]['is_batch'] is False
+
+
+class TestDeleteAudioChunksBatchAware:
+    """Tests for delete_audio_chunks handling batch files."""
+
+    def _setup_mock_bucket_with_blobs(self, blob_names):
+        """Set up mock bucket with blobs for exists/delete and list_blobs."""
+        mock_bucket = MagicMock()
+        # Track which blobs exist
+        blob_map = {}
+        for name in blob_names:
+            mock_blob = MagicMock()
+            mock_blob.name = name
+            mock_blob.exists.return_value = True
+            blob_map[name] = mock_blob
+
+        def make_blob(path):
+            if path in blob_map:
+                return blob_map[path]
+            mb = MagicMock()
+            mb.name = path
+            mb.exists.return_value = False
+            return mb
+
+        mock_bucket.blob.side_effect = make_blob
+
+        # list_blobs returns all blobs
+        list_blobs = []
+        for name in blob_names:
+            lb = MagicMock()
+            lb.name = name
+            list_blobs.append(lb)
+        mock_bucket.list_blobs.return_value = list_blobs
+        storage_mod.storage_client.bucket.return_value = mock_bucket
+        return mock_bucket, blob_map
+
+    def test_delete_per_chunk_by_timestamp(self):
+        """Per-chunk files are deleted by exact timestamp match."""
+        mock_bucket, blob_map = self._setup_mock_bucket_with_blobs(
+            [
+                'chunks/uid/conv/1000.000.bin',
+            ]
+        )
+
+        storage_mod.delete_audio_chunks('uid', 'conv', [1000.000])
+
+        blob_map['chunks/uid/conv/1000.000.bin'].delete.assert_called_once()
+
+    def test_delete_batch_by_start_timestamp(self):
+        """Batch files are deleted when start timestamp matches."""
+        mock_bucket, blob_map = self._setup_mock_bucket_with_blobs(
+            [
+                'chunks/uid/conv/1000.000-1010.000.batch.bin',
+            ]
+        )
+
+        storage_mod.delete_audio_chunks('uid', 'conv', [1000.000])
+
+        # The batch blob found via list_blobs scan should be deleted
+        list_blobs = mock_bucket.list_blobs.return_value
+        list_blobs[0].delete.assert_called_once()
+
+    def test_delete_tries_batch_extensions(self):
+        """Direct blob lookup tries .batch.enc and .batch.bin extensions."""
+        mock_bucket, blob_map = self._setup_mock_bucket_with_blobs(
+            [
+                'chunks/uid/conv/1000.000.batch.enc',
+            ]
+        )
+
+        storage_mod.delete_audio_chunks('uid', 'conv', [1000.000])
+
+        blob_map['chunks/uid/conv/1000.000.batch.enc'].delete.assert_called_once()
+
+
+class TestDownloadAudioChunksMergeBatchAware:
+    """Tests for download_audio_chunks_and_merge handling batch blobs."""
+
+    def _setup_mock_bucket(self, list_blobs_data, download_data):
+        """
+        Set up mock bucket for download tests.
+        list_blobs_data: list of (name, size) tuples for list_audio_chunks
+        download_data: dict of path -> bytes for download_as_bytes
+        """
+        mock_bucket = MagicMock()
+
+        # list_blobs for list_audio_chunks
+        list_blobs = []
+        for name, size in list_blobs_data:
+            mb = MagicMock()
+            mb.name = name
+            mb.size = size
+            list_blobs.append(mb)
+        mock_bucket.list_blobs.return_value = list_blobs
+
+        # blob download
+        def make_blob(path):
+            mb = MagicMock()
+            mb.name = path
+            if path in download_data:
+                mb.download_as_bytes.return_value = download_data[path]
+            else:
+                from google.cloud.exceptions import NotFound
+
+                mb.download_as_bytes.side_effect = NotFound(f"Not found: {path}")
+            return mb
+
+        mock_bucket.blob.side_effect = make_blob
+        storage_mod.storage_client.bucket.return_value = mock_bucket
+        return mock_bucket
+
+    def test_download_batch_blob_found(self):
+        """Batch blob is resolved via list_audio_chunks and downloaded once."""
+        batch_path = 'chunks/uid/conv/1000.000-1010.000.batch.bin'
+        batch_data = b'\x01' * 100 + b'\x02' * 100
+
+        self._setup_mock_bucket(
+            list_blobs_data=[(batch_path, 200)],
+            download_data={batch_path: batch_data},
+        )
+
+        result = storage_mod.download_audio_chunks_and_merge(
+            uid='uid',
+            conversation_id='conv',
+            timestamps=[1000.000],
+            fill_gaps=False,
+        )
+
+        assert result == batch_data
+
+    def test_download_per_chunk_still_works(self):
+        """Per-chunk .bin files are still downloaded correctly."""
+        self._setup_mock_bucket(
+            list_blobs_data=[
+                ('chunks/uid/conv/1000.000.bin', 100),
+                ('chunks/uid/conv/1005.000.bin', 100),
+            ],
+            download_data={
+                'chunks/uid/conv/1000.000.bin': b'\x01' * 100,
+                'chunks/uid/conv/1005.000.bin': b'\x02' * 100,
+            },
+        )
+
+        result = storage_mod.download_audio_chunks_and_merge(
+            uid='uid',
+            conversation_id='conv',
+            timestamps=[1000.000, 1005.000],
+            fill_gaps=False,
+        )
+
+        assert result == b'\x01' * 100 + b'\x02' * 100
+
+    def test_download_batch_deduplicates(self):
+        """Multiple timestamps pointing to same batch blob download it once."""
+        batch_path = 'chunks/uid/conv/1000.000-1010.000.batch.bin'
+        batch_data = b'\xaa' * 300
+
+        mock_bucket = self._setup_mock_bucket(
+            # list_audio_chunks only returns batch with first timestamp
+            list_blobs_data=[(batch_path, 300)],
+            download_data={batch_path: batch_data},
+        )
+
+        result = storage_mod.download_audio_chunks_and_merge(
+            uid='uid',
+            conversation_id='conv',
+            timestamps=[1000.000],
+            fill_gaps=False,
+        )
+
+        assert result == batch_data
+
+    @patch.object(storage_mod, 'encryption')
+    def test_download_batch_encrypted_decrypts(self, mock_encryption):
+        """Encrypted batch blob is decrypted via decrypt_audio_file."""
+        batch_path = 'chunks/uid/conv/1000.000-1010.000.batch.enc'
+        encrypted_data = b'\xee' * 200
+        decrypted_data = b'\xdd' * 180
+
+        mock_encryption.decrypt_audio_file.return_value = decrypted_data
+
+        self._setup_mock_bucket(
+            list_blobs_data=[(batch_path, 200)],
+            download_data={batch_path: encrypted_data},
+        )
+
+        result = storage_mod.download_audio_chunks_and_merge(
+            uid='uid',
+            conversation_id='conv',
+            timestamps=[1000.000],
+            fill_gaps=False,
+        )
+
+        mock_encryption.decrypt_audio_file.assert_called_once_with(encrypted_data, 'uid')
+        assert result == decrypted_data
