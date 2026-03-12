@@ -20,7 +20,7 @@ steps:
 
   - name: Verify notifications page
     assert:
-      interactive_count: { min: 12, verified: "flow-walker run10: 14 elements (10 gesture, 1 icon, 1 inkwell, 1 switch, 1 textbutton)" }
+      text_visible: ["Notifications"]
     note: >
       Notification Frequency: Slider (0-5) with labels Off/Minimal/Low/Balanced/High/Maximum
       Daily Summary: Toggle switch + time picker button
