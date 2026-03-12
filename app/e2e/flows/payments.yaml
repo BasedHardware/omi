@@ -7,6 +7,8 @@ covers:
   - app/lib/pages/payments/payments_page.dart
   - app/lib/pages/payments/paypal_setup_page.dart
   - app/lib/pages/payments/stripe_connect_setup.dart
+prerequisites:
+  - auth_ready  # User completed real sign-in (Google/Apple) and onboarding. Android: `bash setup.sh android`. iOS: `bash setup.sh ios`. App must show home screen.
 setup: normal
 
 steps:
