@@ -20,7 +20,7 @@ steps:
 
   - name: Verify memories page
     assert:
-      interactive_count: { min: 20, verified: "flow-walker run10: 25 elements (15 gesture, 4 icon, 5 inkwell, 1 textfield)" }
+      text_visible: ["Search memories..."]
     note: >
       Top area has: search bar, graph button, management button.
       FAB (heroTag: memories_fab) at bottom right for adding memories.
@@ -48,7 +48,7 @@ steps:
 
   - name: Memory management sheet
     assert:
-      interactive_count: { min: 3, hint: "category filters and action buttons" }
+      text_visible: ["Clear"]
     note: "MemoryManagementSheet — shows category filters and bulk actions"
     screenshot: management-sheet
 
@@ -73,7 +73,7 @@ steps:
 
   - name: Verify edit sheet has controls
     assert:
-      interactive_count: { min: 3, hint: "content field, category chips, save/delete buttons" }
+      text_visible: ["Save", "Delete"]
     note: "MemoryEditSheet: editable content field, category chip selector, save and delete buttons"
 
   - name: Close edit sheet
