@@ -361,13 +361,18 @@ def _copy_audio_chunks_for_merge(
             chunks = list_audio_chunks(uid, conv_id)
             for chunk in chunks:
                 has_chunks = True
-                original_ts = chunk['timestamp']
 
-                # Determine extension from original path (supports .opus.enc, .opus, .enc, .bin)
-                ext = _get_extension_for_path(chunk['path'])
+                if chunk.get('is_batch'):
+                    # Batch blobs: preserve original filename structure
+                    original_filename = chunk['path'].split('/')[-1]
+                    new_path = f'chunks/{uid}/{new_conversation_id}/{original_filename}'
+                else:
+                    original_ts = chunk['timestamp']
+                    # Determine extension from original path (supports .opus.enc, .opus, .enc, .bin)
+                    ext = _get_extension_for_path(chunk['path'])
+                    # Copy to new path with same timestamp (it's absolute Unix time)
+                    new_path = f'chunks/{uid}/{new_conversation_id}/{original_ts:.3f}.{ext}'
 
-                # Copy to new path with same timestamp (it's absolute Unix time)
-                new_path = f'chunks/{uid}/{new_conversation_id}/{original_ts:.3f}.{ext}'
                 source_blob = bucket.blob(chunk['path'])
                 bucket.copy_blob(source_blob, bucket, new_path)
 
