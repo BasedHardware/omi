@@ -11,23 +11,25 @@ prerequisites:
 setup: normal
 
 steps:
-  - name: Snapshot home screen
+  - name: Verify home screen
     assert:
-      interactive_count: { min: 20, verified: "flow-walker run10: 24 elements (17 gesture, 3 icon, 4 inkwell)" }
+      text_visible: ["Today"]
     screenshot: home
 
   - name: Press settings gear (rightmost button in top bar)
     press: { type: button, position: rightmost }
     assert:
-      interactive_count: { min: 10 }
+      text_visible: ["Profile", "Notifications", "Device Settings"]
     screenshot: settings
 
   - name: Scroll down in settings
     scroll: down
+    assert:
+      text_visible: ["Developer Settings"]
     screenshot: settings-scrolled
 
   - name: Back to home
     back: true
     assert:
-      interactive_count: { min: 5 }
+      text_visible: ["Today"]
     screenshot: final
