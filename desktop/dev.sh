@@ -97,7 +97,7 @@ if grep -q "^OMI_API_URL=" "$APP_BUNDLE/Contents/Resources/.env"; then
 else
     echo "OMI_API_URL=$BACKEND_URL" >> "$APP_BUNDLE/Contents/Resources/.env"
 fi
-# Ensure AUTH_BACKEND_URL points to the local Rust desktop backend
+# Ensure AUTH_BACKEND_URL is set (prod: api.omi.me, local dev: same Rust backend)
 if grep -q "^AUTH_BACKEND_URL=" "$APP_BUNDLE/Contents/Resources/.env"; then
     sed -i '' "s|^AUTH_BACKEND_URL=.*|AUTH_BACKEND_URL=$BACKEND_URL|" "$APP_BUNDLE/Contents/Resources/.env"
 else
