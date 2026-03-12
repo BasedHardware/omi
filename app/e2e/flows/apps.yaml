@@ -17,11 +17,13 @@ setup: normal
 steps:
   - name: Navigate to Apps tab
     press: { bottom_nav_tab: 3 }
+    assert:
+      text_visible: ["Featured"]
     screenshot: apps-tab
 
   - name: Verify apps page
     assert:
-      interactive_count: { min: 15, verified: "flow-walker run10: 19 elements (2 elevated, 1 FAB, 9 gesture, 1 icon, 5 inkwell, 1 textfield)" }
+      text_visible: ["Featured", "Create Your Own App"]
     note: >
       ExploreInstallPage shows: search bar, filter button, create button,
       popular apps section (horizontal scroll), category sections.
@@ -41,7 +43,7 @@ steps:
 
   - name: Filter sheet options
     assert:
-      interactive_count: { min: 3, hint: "filter categories and apply button" }
+      text_visible: ["Filter"]
     note: "FilterSheet — category and capability filters"
     screenshot: filter-options
 
@@ -69,7 +71,7 @@ steps:
 
   - name: App detail page
     assert:
-      interactive_count: { min: 3 }
+      text_visible: ["Install"]
     note: >
       Shows: app icon, name, description, install/enable button,
       reviews section, capabilities card, info card.
@@ -96,3 +98,5 @@ steps:
 
   - name: Return to home tab
     press: { bottom_nav_tab: 0 }
+    assert:
+      text_visible: ["Today"]
