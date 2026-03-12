@@ -134,6 +134,7 @@ pub struct TokenRequest {
     code: String,
     /// OAuth redirect_uri - validated against the original authorization request
     redirect_uri: String,
+    /// Legacy field, ignored — Firebase tokens are always returned
     #[serde(default)]
     use_custom_token: bool,
 }
@@ -141,13 +142,18 @@ pub struct TokenRequest {
 #[derive(Debug, Serialize)]
 pub struct TokenResponse {
     provider: String,
+    /// Firebase ID token (for API calls)
+    firebase_id_token: String,
+    /// Firebase refresh token (for token renewal)
+    refresh_token: String,
+    /// Firebase user ID
+    firebase_uid: String,
+    /// Provider-specific ID token (Google/Apple)
     id_token: String,
     access_token: Option<String>,
     provider_id: String,
     token_type: String,
     expires_in: i64,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    custom_token: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -380,23 +386,25 @@ async fn auth_token(
         });
     }
 
+    // Sign in with Firebase using the OAuth credentials (uses FIREBASE_API_KEY env var)
+    let firebase_result = sign_in_with_firebase(&state, &credentials).await
+        .map_err(|e| ErrorResponse {
+            error: "firebase_signin_failed".to_string(),
+            message: format!("Firebase sign-in failed: {}", e),
+        })?;
+
     let provider_id = credentials.provider_id.clone();
-    let mut response = TokenResponse {
+    let response = TokenResponse {
         provider: credentials.provider.clone(),
+        firebase_id_token: firebase_result.id_token,
+        refresh_token: firebase_result.refresh_token,
+        firebase_uid: firebase_result.local_id,
         id_token: credentials.id_token.clone(),
         access_token: credentials.access_token.clone(),
         provider_id,
         token_type: "Bearer".to_string(),
         expires_in: 3600,
-        custom_token: None,
     };
-
-    if form.use_custom_token {
-        match generate_custom_token(&state, &credentials).await {
-            Ok(token) => response.custom_token = Some(token),
-            Err(e) => tracing::warn!("Failed to generate custom token: {}", e),
-        }
-    }
 
     Ok(Json(response))
 }
@@ -587,14 +595,22 @@ fn generate_apple_client_secret(
     })
 }
 
-async fn generate_custom_token(
+struct FirebaseSignInResult {
+    id_token: String,
+    refresh_token: String,
+    local_id: String,
+}
+
+/// Sign in with Firebase using OAuth credentials via signInWithIdp REST API.
+/// Uses FIREBASE_API_KEY env var. Returns Firebase tokens directly — no custom
+/// token generation needed.
+async fn sign_in_with_firebase(
     state: &AuthState,
     credentials: &OAuthCredentials,
-) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+) -> Result<FirebaseSignInResult, Box<dyn std::error::Error + Send + Sync>> {
     let firebase_api_key = state.config.firebase_api_key.as_ref()
         .ok_or("FIREBASE_API_KEY not configured")?;
 
-    // Sign in with OAuth credential using Firebase Auth REST API
     let sign_in_url = format!(
         "https://identitytoolkit.googleapis.com/v1/accounts:signInWithIdp?key={}",
         firebase_api_key
@@ -643,61 +659,22 @@ async fn generate_custom_token(
 
     #[derive(Deserialize)]
     struct SignInResponse {
+        #[serde(rename = "idToken")]
+        id_token: String,
+        #[serde(rename = "refreshToken")]
+        refresh_token: String,
         #[serde(rename = "localId")]
         local_id: String,
     }
 
     let result: SignInResponse = response.json().await?;
-    let firebase_uid = result.local_id;
+    tracing::info!("Firebase sign-in successful, UID: {}", result.local_id);
 
-    tracing::info!("Firebase sign-in successful, UID: {}", firebase_uid);
-
-    // Generate Firebase custom token using service account credentials
-    let creds_path = state.config.google_application_credentials.as_ref()
-        .ok_or("GOOGLE_APPLICATION_CREDENTIALS not configured")?;
-
-    let creds_json = std::fs::read_to_string(creds_path)
-        .map_err(|e| format!("Failed to read service account credentials: {}", e))?;
-
-    #[derive(Deserialize)]
-    struct SaCreds {
-        client_email: String,
-        private_key: String,
-    }
-
-    let sa: SaCreds = serde_json::from_str(&creds_json)
-        .map_err(|e| format!("Failed to parse service account credentials: {}", e))?;
-
-    let now = Utc::now().timestamp();
-
-    #[derive(Serialize)]
-    struct CustomTokenClaims {
-        iss: String,
-        sub: String,
-        aud: String,
-        iat: i64,
-        exp: i64,
-        uid: String,
-    }
-
-    let claims = CustomTokenClaims {
-        iss: sa.client_email.clone(),
-        sub: sa.client_email.clone(),
-        aud: "https://identitytoolkit.googleapis.com/google.identity.identitytoolkit.v1.IdentityToolkit".to_string(),
-        iat: now,
-        exp: now + 3600,
-        uid: firebase_uid.clone(),
-    };
-
-    let header = Header::new(Algorithm::RS256);
-    let key = EncodingKey::from_rsa_pem(sa.private_key.as_bytes())
-        .map_err(|e| format!("Failed to parse service account private key: {}", e))?;
-
-    let custom_token = encode(&header, &claims, &key)
-        .map_err(|e| format!("Failed to sign custom token: {}", e))?;
-
-    tracing::info!("Generated custom token for UID: {}", firebase_uid);
-    Ok(custom_token)
+    Ok(FirebaseSignInResult {
+        id_token: result.id_token,
+        refresh_token: result.refresh_token,
+        local_id: result.local_id,
+    })
 }
 
 fn render_auth_callback(code: &str, state: &str, redirect_uri: &str, error: Option<&str>) -> String {
