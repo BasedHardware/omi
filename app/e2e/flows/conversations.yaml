@@ -7,12 +7,14 @@ covers:
   - app/lib/pages/conversations/conversations_page.dart
   - app/lib/pages/conversation_detail/page.dart
   - app/lib/pages/home/page.dart
+prerequisites:
+  - auth_ready  # User completed real sign-in (Google/Apple) and onboarding. Android: `bash setup.sh android`. iOS: `bash setup.sh ios`. App must show home screen.
 setup: normal
 
 steps:
   - name: Verify home conversations tab
     assert:
-      interactive_count: { min: 8 }
+      interactive_count: { min: 20, verified: "flow-walker run10: 24 elements on home" }
       bottom_nav_tabs: { min: 4 }
     screenshot: conversations-home
 
