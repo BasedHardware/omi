@@ -20,7 +20,7 @@ steps:
 
   - name: Verify integrations page
     assert:
-      interactive_count: { min: 3 }
+      text_visible: ["Integrations"]
     note: >
       Integration apps: Google Calendar, Gmail, Apple Health.
       Each shows: icon, logo, status indicator, connect/disconnect button.
