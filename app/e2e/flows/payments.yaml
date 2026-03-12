@@ -28,7 +28,7 @@ steps:
 
   - name: Verify payments page
     assert:
-      interactive_count: { min: 2, hint: "payment method cards with manage/set active" }
+      text_visible: ["Stripe", "PayPal"]
     note: >
       PaymentMethodCard widgets showing Stripe and PayPal.
       Each card has status badge (Active, Connected, Not Connected)
