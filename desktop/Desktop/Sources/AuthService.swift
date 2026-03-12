@@ -43,12 +43,18 @@ class AuthService {
     private var appleSignInDelegate: AppleSignInDelegate?
 
     // API Configuration
-    // Auth backend URL from AUTH_BACKEND_URL env var, falls back to localhost for dev.
+    // Auth backend URL from AUTH_BACKEND_URL env var.
+    // Dev builds fall back to localhost; prod builds log error and disable auth.
     private var apiBaseURL: String {
         if let url = ProcessInfo.processInfo.environment["AUTH_BACKEND_URL"], !url.isEmpty {
             return url.hasSuffix("/") ? url : url + "/"
         }
-        return "http://localhost:8080/"
+        let isDev = Bundle.main.bundleIdentifier?.hasSuffix("-dev") == true
+        if isDev {
+            return "http://localhost:8080/"
+        }
+        NSLog("OMI AUTH ERROR: AUTH_BACKEND_URL not set in production build")
+        return "http://localhost:8080/"  // Will fail to connect — surfaces as auth error
     }
     private var redirectURI: String {
         return "\(urlScheme)://auth/callback"
@@ -79,13 +85,14 @@ class AuthService {
     private let kAuthTokenExpiry = "auth_tokenExpiry"
     private let kAuthTokenUserId = "auth_tokenUserId"  // User ID that owns the stored token
 
-    // Firebase Web API key (read from bundled GoogleService-Info.plist)
     // Firebase Web API key from FIREBASE_API_KEY env var (set in .env).
+    // Returns empty string if missing — callers surface auth errors to user.
     private var firebaseApiKey: String {
         if let apiKey = ProcessInfo.processInfo.environment["FIREBASE_API_KEY"], !apiKey.isEmpty {
             return apiKey
         }
-        fatalError("FIREBASE_API_KEY environment variable not set — cannot authenticate")
+        NSLog("OMI AUTH ERROR: FIREBASE_API_KEY environment variable not set — auth will fail")
+        return ""
     }
 
     // MARK: - User Name Properties
