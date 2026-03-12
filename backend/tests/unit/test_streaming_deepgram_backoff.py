@@ -39,7 +39,7 @@ sys.modules['deepgram'].LiveTranscriptionEvents = MagicMock()
 sys.modules['deepgram.clients.live.v1'].LiveOptions = MagicMock
 sys.modules['utils.stt.vad_gate'].GatedDeepgramSocket = MagicMock
 
-from utils.stt.streaming import connect_to_deepgram_with_backoff  # noqa: E402
+from utils.stt.streaming import connect_to_deepgram_with_backoff, process_audio_dg  # noqa: E402
 
 
 @pytest.mark.asyncio
@@ -192,3 +192,74 @@ async def test_is_active_none_skips_check():
         )
     assert result is mock_conn
     assert call_count == 2
+
+
+@pytest.mark.asyncio
+async def test_retries_zero_raises_immediately():
+    """With retries=0, the loop body never executes and the fallback exception is raised."""
+    with patch('utils.stt.streaming.connect_to_deepgram') as mock_connect:
+        with pytest.raises(Exception, match="All retry attempts failed"):
+            await connect_to_deepgram_with_backoff(
+                on_message=MagicMock(),
+                on_error=MagicMock(),
+                language='en',
+                sample_rate=16000,
+                channels=1,
+                model='nova-2-general',
+                retries=0,
+            )
+    mock_connect.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_retries_one_failure_raises_no_sleep():
+    """With retries=1, a single failure raises immediately with no sleep."""
+    sleep_calls = []
+
+    async def fake_sleep(duration):
+        sleep_calls.append(duration)
+
+    with patch('utils.stt.streaming.connect_to_deepgram', side_effect=Exception("DG fail")), patch(
+        'utils.stt.streaming.asyncio.sleep', side_effect=fake_sleep
+    ):
+        with pytest.raises(Exception, match="DG fail"):
+            await connect_to_deepgram_with_backoff(
+                on_message=MagicMock(),
+                on_error=MagicMock(),
+                language='en',
+                sample_rate=16000,
+                channels=1,
+                model='nova-2-general',
+                retries=1,
+            )
+    assert len(sleep_calls) == 0  # no sleep with only 1 retry
+
+
+@pytest.mark.asyncio
+async def test_process_audio_dg_returns_none_when_inactive():
+    """process_audio_dg returns None when is_active aborts the connection."""
+    with patch('utils.stt.streaming.connect_to_deepgram_with_backoff', new_callable=AsyncMock, return_value=None):
+        result = await process_audio_dg(
+            stream_transcript=MagicMock(),
+            language='en',
+            sample_rate=16000,
+            channels=1,
+            is_active=lambda: False,
+        )
+    assert result is None
+
+
+@pytest.mark.asyncio
+async def test_process_audio_dg_no_vad_wrap_on_none():
+    """process_audio_dg does not wrap None with GatedDeepgramSocket when VAD gate is provided."""
+    mock_gate = MagicMock()
+    with patch('utils.stt.streaming.connect_to_deepgram_with_backoff', new_callable=AsyncMock, return_value=None):
+        result = await process_audio_dg(
+            stream_transcript=MagicMock(),
+            language='en',
+            sample_rate=16000,
+            channels=1,
+            vad_gate=mock_gate,
+            is_active=lambda: False,
+        )
+    assert result is None
