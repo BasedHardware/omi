@@ -10,6 +10,8 @@ covers:
   - app/lib/pages/apps/app_detail/reviews_list_page.dart
   - app/lib/pages/apps/widgets/category_apps_page.dart
   - app/lib/pages/apps/widgets/filter_sheet.dart
+prerequisites:
+  - auth_ready  # User completed real sign-in (Google/Apple) and onboarding. Android: `bash setup.sh android`. iOS: `bash setup.sh ios`. App must show home screen.
 setup: normal
 
 steps:
@@ -19,7 +21,7 @@ steps:
 
   - name: Verify apps page
     assert:
-      interactive_count: { min: 3 }
+      interactive_count: { min: 15, verified: "flow-walker run10: 19 elements (2 elevated, 1 FAB, 9 gesture, 1 icon, 5 inkwell, 1 textfield)" }
     note: >
       ExploreInstallPage shows: search bar, filter button, create button,
       popular apps section (horizontal scroll), category sections.
