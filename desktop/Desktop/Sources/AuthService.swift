@@ -43,8 +43,16 @@ class AuthService {
     private var appleSignInDelegate: AppleSignInDelegate?
 
     // API Configuration
-    // Production: Cloud Run backend
-    private let apiBaseURL: String = "https://omi-desktop-auth-208440318997.us-central1.run.app/"
+    // Auth backend URL: read from GoogleService-Info.plist AUTH_BACKEND_URL key,
+    // falls back to local dev backend. Prod URL injected at CI via plist.
+    private var apiBaseURL: String {
+        if let plistPath = Bundle.main.path(forResource: "GoogleService-Info", ofType: "plist"),
+           let plistDict = NSDictionary(contentsOfFile: plistPath),
+           let url = plistDict["AUTH_BACKEND_URL"] as? String {
+            return url.hasSuffix("/") ? url : url + "/"
+        }
+        return "http://localhost:8080/"
+    }
     private var redirectURI: String {
         return "\(urlScheme)://auth/callback"
     }
@@ -74,14 +82,14 @@ class AuthService {
     private let kAuthTokenExpiry = "auth_tokenExpiry"
     private let kAuthTokenUserId = "auth_tokenUserId"  // User ID that owns the stored token
 
-    // Firebase Web API key (read from bundled GoogleService-Info.plist, falls back to prod)
+    // Firebase Web API key (read from bundled GoogleService-Info.plist)
     private var firebaseApiKey: String {
         if let plistPath = Bundle.main.path(forResource: "GoogleService-Info", ofType: "plist"),
            let plistDict = NSDictionary(contentsOfFile: plistPath),
            let apiKey = plistDict["API_KEY"] as? String {
             return apiKey
         }
-        return "AIzaSyD9dzBdglc7IO9pPDIOvqnCoTis_xKkkC8"
+        fatalError("GoogleService-Info.plist missing or has no API_KEY — cannot authenticate")
     }
 
     // MARK: - User Name Properties
