@@ -13,13 +13,19 @@ setup: normal
 steps:
   - name: Navigate to settings
     press: { type: button, position: rightmost }
+    assert:
+      text_visible: ["Profile", "Notifications"]
 
   - name: Scroll to Developer Settings
     scroll: down
+    assert:
+      text_visible: ["Developer Settings"]
     screenshot: settings-scrolled
 
   - name: Open Developer Settings
     press: { type: gesture, hint: "wide row in y=400-520 range after scroll" }
+    assert:
+      text_visible: ["Developer Settings"]
     screenshot: dev-settings
 
   - name: Find and toggle switch ON
@@ -32,8 +38,10 @@ steps:
 
   - name: Back to settings
     back: true
+    assert:
+      text_visible: ["Profile"]
 
   - name: Back to home
     back: true
     assert:
-      interactive_count: { min: 5 }
+      text_visible: ["Today"]
