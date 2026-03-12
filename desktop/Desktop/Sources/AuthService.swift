@@ -45,16 +45,18 @@ class AuthService {
 
     // API Configuration
     // Auth backend URL from AUTH_BACKEND_URL env var (use getenv to pick up setenv from .env loading).
-    // Dev builds fall back to localhost; prod builds log error.
+    // Points to Python backend (api.omi.me) in prod, localhost in dev.
+    // Dev builds fall back to localhost; prod builds return empty string (auth will fail visibly).
     private var apiBaseURL: String {
         if let cString = getenv("AUTH_BACKEND_URL"), let url = String(validatingUTF8: cString), !url.isEmpty {
             return url.hasSuffix("/") ? url : url + "/"
         }
         let isDev = Bundle.main.bundleIdentifier?.hasSuffix("-dev") == true
-        if !isDev {
-            NSLog("OMI AUTH ERROR: AUTH_BACKEND_URL not set in production build")
+        if isDev {
+            return "http://localhost:8080/"
         }
-        return "http://localhost:8080/"
+        NSLog("OMI AUTH ERROR: AUTH_BACKEND_URL not set in production build — auth will not work")
+        return ""
     }
     private var redirectURI: String {
         return "\(urlScheme)://auth/callback"
