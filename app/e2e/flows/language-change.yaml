@@ -20,7 +20,7 @@ steps:
   - name: Open Profile
     press: { type: gesture, hint: "first wide row y=150-200 in settings" }
     assert:
-      interactive_count: { min: 5 }
+      text_visible: ["Profile"]
 
   - name: Open Language
     press: { type: gesture, hint: "3rd row in Profile, y=250-340" }
@@ -29,7 +29,7 @@ steps:
   - name: Open App Language picker
     press: { type: gesture, hint: "first wide row y=250-400 on Language page" }
     assert:
-      interactive_count: { min: 10, hint: "picker should show many language options" }
+      text_visible: ["English"]
     screenshot: language-picker
 
   - name: Select a language from picker
@@ -42,12 +42,12 @@ steps:
   - name: Hot restart and verify Spanish UI
     hot_restart: true
     assert:
-      interactive_count: { min: 5 }
+      text_visible: ["Hoy"]
     screenshot: spanish-ui
 
   - name: Restore English locale
     adb_locale: { set: "en" }
     hot_restart: true
     assert:
-      interactive_count: { min: 5 }
+      text_visible: ["Today"]
     screenshot: english-restored
