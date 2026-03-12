@@ -107,6 +107,8 @@ agent-flutter snapshot -i --json       # structured data for parsing
 
 # 4. Interact
 agent-flutter press @e3                # tap by ref
+agent-flutter press 540 1200           # tap by coordinates (ADB fallback)
+agent-flutter dismiss                  # dismiss system dialogs (location, permissions)
 agent-flutter find type button press   # find and tap (more stable than @ref)
 agent-flutter fill @e5 "hello"         # type into textfield
 agent-flutter scroll down              # scroll current view
@@ -116,7 +118,7 @@ agent-flutter screenshot /tmp/after-change.png
 ```
 
 **Key rules:**
-- Refs go stale after any mutation (`press`, `fill`, `scroll`) — always re-snapshot before the next interaction.
+- Refs go stale frequently (Flutter rebuilds aggressively) — always re-snapshot before every interaction. Use `press x y` as fallback.
 - `AGENT_FLUTTER_LOG` must point to the flutter run stdout log file (not logcat). This is how agent-flutter finds the correct VM Service URI.
 - `find type X` or `find text "label"` is more stable than hardcoded `@ref` numbers.
 - When adding new interactive widgets, use `Key('descriptive_name')` so agents can use `find key` (survives i18n and theme changes).
