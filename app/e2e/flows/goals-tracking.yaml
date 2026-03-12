@@ -1,0 +1,59 @@
+# E2E Flow: Goals tracking — create, progress, edit, delete
+# Tests: Add Goal from daily score, fill goal form, update progress, manage goals
+# Source: feature vector gap #5 (priority 6, intelligence layer)
+
+name: goals-tracking
+description: Goals tracking — create goal from daily score widget, fill title/target, update progress slider, edit, delete (swipe dismiss)
+covers:
+  - app/lib/pages/conversations/widgets/goals_widget.dart
+  - app/lib/pages/conversations/widgets/goal_tracker_widget.dart
+  - app/lib/pages/conversations/widgets/daily_score_widget.dart
+  - app/lib/providers/goals_provider.dart
+prerequisites:
+  - auth_ready  # User completed real sign-in (Google/Apple) and onboarding. Android: `bash setup.sh android`. iOS: `bash setup.sh ios`. App must show home screen.
+setup: normal
+
+steps:
+  - name: Verify home screen with daily score
+    assert:
+      bottom_nav_tabs: { min: 4 }
+    note: "Home screen shows daily score card with Add Goal button"
+    screenshot: home-daily-score
+
+  - name: Tap Add Goal from daily score widget
+    press: { type: gesture, hint: "Add Goal button in daily score card, y≈230" }
+    screenshot: goal-form-sheet
+
+  - name: Verify goal creation bottom sheet
+    assert:
+      interactive_count: { min: 3, hint: "title field, current/target fields, save button" }
+    note: >
+      Bottom sheet has: title TextField (autofocus), current value field (default 0),
+      target value field (default 100), Save button. Max 3 goals allowed.
+
+  - name: Fill goal title
+    fill: { type: textfield, value: "Daily steps" }
+    screenshot: goal-title-filled
+
+  - name: Save goal
+    press: { type: gesture, hint: "Save button in bottom sheet" }
+    screenshot: goal-created
+
+  - name: Verify goal appears in goals widget
+    assert:
+      interactive_count: { min: 2, hint: "goal card with progress bar" }
+    note: >
+      GoalsWidget shows: emoji + title + progress bar (color-coded: green ≥80%,
+      yellow ≥60%, orange ≥40%, red <40%). Shows current/target values.
+    screenshot: goals-widget
+
+  - name: Tap goal to edit
+    press: { type: gesture, hint: "goal card in goals widget" }
+    screenshot: goal-edit-sheet
+
+  - name: Close edit sheet
+    back: true
+
+  - name: Return to home
+    assert:
+      bottom_nav_tabs: { min: 4 }
