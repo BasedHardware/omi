@@ -43,6 +43,17 @@ steps:
     press: { type: gesture, hint: "Action Items tab in tab row" }
     screenshot: action-items-tab
 
+  - name: Tap share button
+    press: { type: button, hint: "share/upload icon button in top toolbar (arrowUpFromBracket)" }
+    screenshot: share-triggered
+    note: >
+      Share button sets conversation visibility to "shared", generates link
+      (https://h.omi.me/conversations/{id}), opens native share sheet.
+      Shows loading spinner while preparing.
+
+  - name: Dismiss share sheet (if native sheet opened)
+    back: true
+
   - name: Scroll detail content
     scroll: down
     screenshot: detail-scrolled
