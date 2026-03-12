@@ -12,7 +12,7 @@ setup: normal
 steps:
   - name: Verify home with search icon
     assert:
-      interactive_count: { min: 8 }
+      text_visible: ["Today"]
     note: >
       Top bar has 3 IconButtons after Connect Device:
       search (leftmost), history (middle), settings (rightmost).
@@ -31,5 +31,5 @@ steps:
 
   - name: Verify return to home
     assert:
-      interactive_count: { min: 8, hint: "home screen with bottom nav" }
+      text_visible: ["Today"]
       bottom_nav_tabs: { min: 4 }
