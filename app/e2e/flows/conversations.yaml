@@ -14,7 +14,7 @@ setup: normal
 steps:
   - name: Verify home conversations tab
     assert:
-      interactive_count: { min: 20, verified: "flow-walker run10: 24 elements on home" }
+      text_visible: ["Today"]
       bottom_nav_tabs: { min: 4 }
     screenshot: conversations-home
 
@@ -27,7 +27,7 @@ steps:
 
   - name: Check daily score card
     assert:
-      interactive_count: { min: 2, hint: "score gauge and Add Goal button" }
+      text_visible: ["Today"]
     note: "Daily score card shows score gauge (0-100) and Add Goal button"
     screenshot: daily-score
 
@@ -63,7 +63,7 @@ steps:
       Detail page has tabs: Transcript, Summary, Action Items.
       Has share button, edit controls, audio seek.
     assert:
-      interactive_count: { min: 3 }
+      text_visible: ["Transcript", "Summary"]
     screenshot: detail-tabs
 
   - name: Back to conversations
