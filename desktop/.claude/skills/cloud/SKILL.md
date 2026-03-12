@@ -19,9 +19,8 @@ Manage the OMI Desktop Rust backend deployed on Google Cloud Run.
 
 ### Service URLs
 
-Both URLs point to the same service:
-- `https://desktop-backend-hhibjajaja-uc.a.run.app`
-- `https://desktop-backend-208440318997.us-central1.run.app`
+Cloud Run service URLs (check GCP Console for current URLs):
+- The backend service name is `desktop-backend` in the project's Cloud Run
 
 ## Quick Commands
 
