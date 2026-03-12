@@ -835,7 +835,7 @@ async fn delete_account(
         .config
         .firebase_project_id
         .clone()
-        .unwrap_or_else(|| "based-hardware".to_string());
+        .unwrap_or_else(|| "based-hardware-dev".to_string());
     state
         .firestore
         .delete_firebase_auth_user(&project_id, &user.uid)
