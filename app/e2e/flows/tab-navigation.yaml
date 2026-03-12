@@ -5,13 +5,15 @@ name: tab-navigation
 description: Bottom nav bar detection, switch between 4 tabs, scroll in tab, return to home
 covers:
   - app/lib/pages/home/page.dart
+prerequisites:
+  - auth_ready  # User completed real sign-in (Google/Apple) and onboarding. Android: `bash setup.sh android`. iOS: `bash setup.sh ios`. App must show home screen.
 setup: normal
 
 steps:
   - name: Verify home tab and nav bar
     assert:
-      interactive_count: { min: 5 }
-      bottom_nav_tabs: { min: 2 }
+      interactive_count: { min: 20, verified: "flow-walker run10: 24 elements on home" }
+      bottom_nav_tabs: { min: 4 }
     screenshot: tab-home
 
   - name: Switch to tab 2
@@ -32,5 +34,5 @@ steps:
   - name: Return to home tab
     press: { bottom_nav_tab: 0 }
     assert:
-      interactive_count: { min: 5 }
+      interactive_count: { min: 20 }
     screenshot: final
