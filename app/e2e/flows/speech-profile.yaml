@@ -7,6 +7,9 @@ covers:
   - app/lib/pages/speech_profile/page.dart
   - app/lib/pages/speech_profile/percentage_bar_progress.dart
   - app/lib/pages/speech_profile/user_speech_samples.dart
+prerequisites:
+  - auth_ready  # User completed real sign-in (Google/Apple) and onboarding. Android: `bash setup.sh android`. iOS: `bash setup.sh ios`. App must show home screen.
+  - microphone_permission  # Grant when app prompts. Android pre-grant: `adb shell pm grant com.friend.ios.dev android.permission.RECORD_AUDIO`. iOS: tap Allow on permission dialog.
 setup: normal
 
 steps:
