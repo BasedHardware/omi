@@ -19,13 +19,13 @@ The backend requires a valid Firebase ID token. This skill:
 
 ## Default User
 
-- **UID**: `bdYYRztuRfheEcjSxMdYnDyDeF13` (Matthew, i@m13v.com)
+- **UID**: read from local Firebase project (test user)
 
 ## Get a Firebase ID Token
 
 ```bash
 cd /Users/matthewdi/omi/backend && source venv/bin/activate && python3 -u -c "
-import firebase_admin, requests, json
+import firebase_admin, requests, json, os
 from firebase_admin import credentials, auth
 
 cred = credentials.Certificate('google-credentials.json')
@@ -36,9 +36,15 @@ uid = 'bdYYRztuRfheEcjSxMdYnDyDeF13'
 custom_token = auth.create_custom_token(uid)
 token_str = custom_token.decode() if isinstance(custom_token, bytes) else custom_token
 
+# Read API key from env or .env file (never hardcode)
+api_key = os.environ.get('FIREBASE_API_KEY', '')
+if not api_key:
+    print('ERROR: Set FIREBASE_API_KEY env var', file=__import__('sys').stderr)
+    exit(1)
+
 # Exchange for ID token
 resp = requests.post(
-    'https://identitytoolkit.googleapis.com/v1/accounts:signInWithCustomToken?key=AIzaSyD9dzBdglc7IO9pPDIOvqnCoTis_xKkkC8',
+    f'https://identitytoolkit.googleapis.com/v1/accounts:signInWithCustomToken?key={api_key}',
     json={'token': token_str, 'returnSecureToken': True}
 )
 if resp.status_code == 200:
@@ -55,14 +61,15 @@ Replace `ENDPOINT` with the desired path (e.g., `/v1/action-items?deleted=true`)
 
 ```bash
 cd /Users/matthewdi/omi/backend && source venv/bin/activate && TOKEN=$(python3 -u -c "
-import firebase_admin, requests
+import firebase_admin, requests, os
 from firebase_admin import credentials, auth
 cred = credentials.Certificate('google-credentials.json')
 try: firebase_admin.initialize_app(cred)
 except ValueError: pass
 ct = auth.create_custom_token('bdYYRztuRfheEcjSxMdYnDyDeF13')
 ts = ct.decode() if isinstance(ct, bytes) else ct
-r = requests.post('https://identitytoolkit.googleapis.com/v1/accounts:signInWithCustomToken?key=AIzaSyD9dzBdglc7IO9pPDIOvqnCoTis_xKkkC8', json={'token': ts, 'returnSecureToken': True})
+api_key = os.environ.get('FIREBASE_API_KEY', '')
+r = requests.post(f'https://identitytoolkit.googleapis.com/v1/accounts:signInWithCustomToken?key={api_key}', json={'token': ts, 'returnSecureToken': True})
 print(r.json()['idToken'])
 " 2>/dev/null) && curl -s "http://localhost:8080/ENDPOINT" -H "Authorization: Bearer $TOKEN" | python3 -m json.tool
 ```
@@ -98,8 +105,8 @@ curl -s "http://localhost:8080/v3/memories?limit=5" -H "Authorization: Bearer $T
 
 - **Backend URL**: `http://localhost:8080` (started via `Backend-Rust/run.sh`)
 - **Tunnel URL**: `https://omi-dev.m13v.com` (Cloudflare tunnel, also started by run.sh)
-- **Firebase Project**: `based-hardware`
-- **API Key**: `AIzaSyD9dzBdglc7IO9pPDIOvqnCoTis_xKkkC8`
+- **Firebase Project**: Set via `FIREBASE_PROJECT_ID` env var in Backend-Rust/.env
+- **API Key**: Set via `FIREBASE_API_KEY` env var (never hardcode)
 - **Credentials**: `/Users/matthewdi/omi/backend/google-credentials.json`
 - **Backend .env**: `/Users/matthewdi/omi-desktop/Backend-Rust/.env`
 
