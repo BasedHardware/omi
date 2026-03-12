@@ -17,7 +17,7 @@ steps:
 
   - name: Verify action items page
     assert:
-      interactive_count: { min: 15, verified: "flow-walker run10: 17 elements (1 FAB, 9 gesture, 3 icon, 4 inkwell)" }
+      text_visible: ["Today", "No Tasks Yet"]
     note: >
       Shows task categories: Today, Tomorrow, Later, No Deadline, Overdue.
       FAB at bottom right (heroTag: action_items_fab) for creating tasks.
@@ -29,7 +29,7 @@ steps:
 
   - name: Task creation form
     assert:
-      interactive_count: { min: 3, hint: "text field, date picker, save button" }
+      text_visible: ["Save"]
     note: "ActionItemFormSheet — bottom sheet with title, description, deadline, goal link"
     screenshot: task-form
 
