@@ -6,12 +6,14 @@ description: Ask Omi chat — open chat overlay, send text message, use voice re
 covers:
   - app/lib/pages/chat/page.dart
   - app/lib/pages/home/page.dart
+prerequisites:
+  - auth_ready  # User completed real sign-in (Google/Apple) and onboarding. Android: `bash setup.sh android`. iOS: `bash setup.sh ios`. App must show home screen.
 setup: normal
 
 steps:
   - name: Verify home screen with Ask Omi button
     assert:
-      interactive_count: { min: 8 }
+      interactive_count: { min: 20, verified: "flow-walker run10: 24 elements on home" }
     note: >
       Ask Omi button is a GestureDetector at y≈740-770, x>200.
       It's a purple pill-shaped button above the record button.
@@ -23,7 +25,7 @@ steps:
 
   - name: Verify chat page
     assert:
-      interactive_count: { min: 3, hint: "text field, send button, voice recorder" }
+      interactive_count: { min: 18, verified: "flow-walker run10: 22 elements (19 gesture, 1 textbutton, 2 textfield)", hint: "text field, send button, voice recorder" }
     note: >
       Chat page shows: message list, text input at bottom,
       voice recorder widget, app selection context.
