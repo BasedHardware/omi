@@ -11,44 +11,51 @@ class ProgressBarWithPercentage extends StatefulWidget {
 class _ProgressBarWithPercentageState extends State<ProgressBarWithPercentage> {
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      height: 60,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        mainAxisAlignment: MainAxisAlignment.end,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Padding(
-            padding: EdgeInsets.only(left: widget.progressValue > 0.05 ? 15.0 : 20.0),
-            child: SizedBox(
-              height: 46,
-              child: Stack(
-                children: [
-                  Positioned(
-                    left: ((MediaQuery.sizeOf(context).width * 0.72) *
-                        (double.parse(widget.progressValue.toStringAsFixed(2)))),
-                    child: ProgressBubble(
-                      content: '${(widget.progressValue * 100).toInt()}%',
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final barWidth = constraints.maxWidth;
+        final progress = double.parse(widget.progressValue.toStringAsFixed(2));
+        return SizedBox(
+          height: 60,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            mainAxisAlignment: MainAxisAlignment.end,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              SizedBox(
+                height: 46,
+                width: barWidth,
+                child: Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    Positioned(
+                      left: (barWidth * progress),
+                      child: FractionalTranslation(
+                        translation: const Offset(-0.5, 0.0),
+                        child: ProgressBubble(
+                          content: '${(widget.progressValue * 100).toInt()}%',
+                        ),
+                      ),
                     ),
+                  ],
+                ),
+              ),
+              SizedBox(
+                width: barWidth,
+                height: 8,
+                child: ClipRRect(
+                  borderRadius: const BorderRadius.all(Radius.circular(10)),
+                  child: LinearProgressIndicator(
+                    value: progress,
+                    backgroundColor: Colors.grey.shade300,
+                    valueColor: const AlwaysStoppedAnimation<Color>(Colors.deepPurple),
                   ),
-                ],
+                ),
               ),
-            ),
+            ],
           ),
-          SizedBox(
-            width: MediaQuery.sizeOf(context).width * 0.72,
-            height: 8,
-            child: ClipRRect(
-              borderRadius: const BorderRadius.all(Radius.circular(10)),
-              child: LinearProgressIndicator(
-                value: double.parse(widget.progressValue.toStringAsFixed(2)),
-                backgroundColor: Colors.grey.shade300,
-                valueColor: const AlwaysStoppedAnimation<Color>(Colors.deepPurple),
-              ),
-            ),
-          ),
-        ],
-      ),
+        );
+      },
     );
   }
 }

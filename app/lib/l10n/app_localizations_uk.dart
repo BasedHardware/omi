@@ -1015,7 +1015,7 @@ class AppLocalizationsUk extends AppLocalizations {
   String get vocabularyHint => 'Omi, Callie, OpenAI';
 
   @override
-  String get connect => 'Connect';
+  String get connect => 'Підключити';
 
   @override
   String get comingSoon => 'Незабаром';
@@ -2270,7 +2270,7 @@ class AppLocalizationsUk extends AppLocalizations {
   String get folderName => 'Назва папки';
 
   @override
-  String get descriptionOptional => 'Description (optional)';
+  String get descriptionOptional => 'Опис (необов\'язково)';
 
   @override
   String get failedToDeleteFolder => 'Не вдалося видалити папку';
@@ -2677,7 +2677,7 @@ class AppLocalizationsUk extends AppLocalizations {
   String get showAll => 'Показати все →';
 
   @override
-  String get noTasksForToday => 'Немає завдань на сьогодні.\\nЗапитайте Omi про більше завдань або створіть вручну.';
+  String get noTasksForToday => 'Немає завдань на сьогодні.\nЗапитайте Omi про більше завдань або створіть вручну.';
 
   @override
   String get dailyScore => 'ДЕННИЙ РАХУНОК';
@@ -8002,36 +8002,36 @@ class AppLocalizationsUk extends AppLocalizations {
   String get couldNotOpenUrl => 'Не вдалося відкрити URL. Будь ласка, спробуйте ще раз.';
 
   @override
-  String get newTask => 'New Task';
+  String get newTask => 'Нове завдання';
 
   @override
-  String get viewAll => 'View All';
+  String get viewAll => 'Переглянути все';
 
   @override
-  String get addTask => 'Add Task';
+  String get addTask => 'Додати завдання';
 
   @override
-  String get addMcpServer => 'Add MCP Server';
+  String get addMcpServer => 'Додати сервер MCP';
 
   @override
-  String get connectExternalAiTools => 'Connect external AI tools';
+  String get connectExternalAiTools => 'Підключити зовнішні інструменти ШІ';
 
   @override
   String get mcpServerUrl => 'MCP Server URL';
 
   @override
   String mcpServerConnected(int count) {
-    return '$count tools connected successfully';
+    return 'Успішно підключено інструментів: $count';
   }
 
   @override
-  String get mcpConnectionFailed => 'Failed to connect to MCP server';
+  String get mcpConnectionFailed => 'Не вдалося підключитися до сервера MCP';
 
   @override
-  String get authorizingMcpServer => 'Authorizing...';
+  String get authorizingMcpServer => 'Авторизація...';
 
   @override
-  String get whereDidYouHearAboutOmi => 'How did you find us?';
+  String get whereDidYouHearAboutOmi => 'Як ви про нас дізналися?';
 
   @override
   String get tiktok => 'TikTok';
@@ -8049,19 +8049,19 @@ class AppLocalizationsUk extends AppLocalizations {
   String get reddit => 'Reddit';
 
   @override
-  String get friendWordOfMouth => 'Friend';
+  String get friendWordOfMouth => 'Друг';
 
   @override
-  String get otherSource => 'Other';
+  String get otherSource => 'Інше';
 
   @override
-  String get pleaseSpecify => 'Please specify';
+  String get pleaseSpecify => 'Будь ласка, уточніть';
 
   @override
-  String get event => 'Event';
+  String get event => 'Подія';
 
   @override
-  String get coworker => 'Coworker';
+  String get coworker => 'Колега';
 
   @override
   String get linkedIn => 'LinkedIn';
@@ -8077,4 +8077,492 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get audioPlaybackFailed => 'Неможливо відтворити аудіо. Файл може бути пошкоджений або відсутній.';
+
+  @override
+  String get connectionGuide => 'Посібник з підключення';
+
+  @override
+  String get iveDoneThis => 'Я це зробив';
+
+  @override
+  String get pairNewDevice => 'Сполучити новий пристрій';
+
+  @override
+  String get dontSeeYourDevice => 'Не бачите свій пристрій?';
+
+  @override
+  String get reportAnIssue => 'Повідомити про проблему';
+
+  @override
+  String get pairingTitleOmi => 'Увімкніть Omi';
+
+  @override
+  String get pairingDescOmi => 'Натисніть і утримуйте пристрій, доки він не завібрує, щоб увімкнути його.';
+
+  @override
+  String get pairingTitleOmiDevkit => 'Переведіть Omi DevKit в режим сполучення';
+
+  @override
+  String get pairingDescOmiDevkit =>
+      'Натисніть кнопку один раз для ввімкнення. Світлодіод блиматиме фіолетовим у режимі сполучення.';
+
+  @override
+  String get pairingTitleOmiGlass => 'Увімкніть Omi Glass';
+
+  @override
+  String get pairingDescOmiGlass => 'Натисніть і утримуйте бічну кнопку 3 секунди для ввімкнення.';
+
+  @override
+  String get pairingTitlePlaudNote => 'Переведіть Plaud Note в режим сполучення';
+
+  @override
+  String get pairingDescPlaudNote =>
+      'Натисніть і утримуйте бічну кнопку протягом 2 секунд. Червоний світлодіод блиматиме, коли пристрій буде готовий до сполучення.';
+
+  @override
+  String get pairingTitleBee => 'Переведіть Bee в режим сполучення';
+
+  @override
+  String get pairingDescBee => 'Натисніть кнопку 5 разів поспіль. Індикатор почне блимати синім і зеленим.';
+
+  @override
+  String get pairingTitleLimitless => 'Переведіть Limitless в режим сполучення';
+
+  @override
+  String get pairingDescLimitless =>
+      'Коли горить будь-який індикатор, натисніть один раз, потім натисніть і утримуйте, доки пристрій не покаже рожеве світло, потім відпустіть.';
+
+  @override
+  String get pairingTitleFriendPendant => 'Переведіть Friend Pendant в режим сполучення';
+
+  @override
+  String get pairingDescFriendPendant =>
+      'Натисніть кнопку на кулоні, щоб увімкнути його. Він автоматично перейде в режим сполучення.';
+
+  @override
+  String get pairingTitleFieldy => 'Переведіть Fieldy в режим сполучення';
+
+  @override
+  String get pairingDescFieldy => 'Натисніть і утримуйте пристрій, доки не з\'явиться індикатор, щоб увімкнути його.';
+
+  @override
+  String get pairingTitleAppleWatch => 'Під\'єднайте Apple Watch';
+
+  @override
+  String get pairingDescAppleWatch =>
+      'Встановіть і відкрийте додаток Omi на Apple Watch, потім натисніть Під\'єднати в додатку.';
+
+  @override
+  String get pairingTitleNeoOne => 'Переведіть Neo One в режим сполучення';
+
+  @override
+  String get pairingDescNeoOne =>
+      'Натисніть і утримуйте кнопку живлення, доки не заблимає світлодіод. Пристрій стане видимим.';
+
+  @override
+  String get downloadingFromDevice => 'Завантаження з пристрою';
+
+  @override
+  String get reconnectingToInternet => 'Повторне підключення до інтернету...';
+
+  @override
+  String uploadingToCloud(int current, int total) {
+    return 'Завантаження $current з $total';
+  }
+
+  @override
+  String get processedStatus => 'Оброблено';
+
+  @override
+  String get corruptedStatus => 'Пошкоджено';
+
+  @override
+  String nPending(int count) {
+    return '$count очікують';
+  }
+
+  @override
+  String nProcessed(int count) {
+    return '$count оброблено';
+  }
+
+  @override
+  String get synced => 'Синхронізовано';
+
+  @override
+  String get noPendingRecordings => 'Немає очікуючих записів';
+
+  @override
+  String get noProcessedRecordings => 'Ще немає оброблених записів';
+
+  @override
+  String get pending => 'Очікування';
+
+  @override
+  String whatsNewInVersion(String version) {
+    return 'Що нового у $version';
+  }
+
+  @override
+  String get addToYourTaskList => 'Додати до списку завдань?';
+
+  @override
+  String get failedToCreateShareLink => 'Не вдалося створити посилання для поширення';
+
+  @override
+  String get deleteGoal => 'Видалити ціль';
+
+  @override
+  String get deviceUpToDate => 'Ваш пристрій оновлений';
+
+  @override
+  String get wifiConfiguration => 'Налаштування WiFi';
+
+  @override
+  String get wifiConfigurationSubtitle => 'Введіть дані WiFi, щоб пристрій міг завантажити прошивку.';
+
+  @override
+  String get networkNameSsid => 'Назва мережі (SSID)';
+
+  @override
+  String get enterWifiNetworkName => 'Введіть назву мережі WiFi';
+
+  @override
+  String get enterWifiPassword => 'Введіть пароль WiFi';
+
+  @override
+  String get appIconLabel => 'App Icon';
+
+  @override
+  String get onboardingWhatIKnowAboutYouTitle => 'Ось що я знаю про тебе';
+
+  @override
+  String get onboardingWhatIKnowAboutYouDescription => 'Ця карта оновлюється, коли Omi навчається з ваших розмов.';
+
+  @override
+  String get apiEnvironment => 'Середовище API';
+
+  @override
+  String get apiEnvironmentDescription => 'Оберіть сервер для підключення';
+
+  @override
+  String get production => 'Продакшн';
+
+  @override
+  String get staging => 'Тестове середовище';
+
+  @override
+  String get switchRequiresRestart => 'Перемикання потребує перезапуску додатку';
+
+  @override
+  String get switchApiConfirmTitle => 'Перемикання середовища API';
+
+  @override
+  String switchApiConfirmBody(String environment) {
+    return 'Перемкнути на $environment? Вам потрібно буде закрити та знову відкрити додаток, щоб зміни набули чинності.';
+  }
+
+  @override
+  String get switchAndRestart => 'Перемкнути';
+
+  @override
+  String get stagingDisclaimer =>
+      'Тестове середовище може бути нестабільним, мати непослідовну продуктивність, і дані можуть бути втрачені. Тільки для тестування.';
+
+  @override
+  String get apiEnvSavedRestartRequired => 'Збережено. Закрийте та знову відкрийте додаток, щоб застосувати зміни.';
+
+  @override
+  String get shared => 'Спільний';
+
+  @override
+  String get onlyYouCanSeeConversation => 'Лише ви можете бачити цю розмову';
+
+  @override
+  String get anyoneWithLinkCanView => 'Будь-хто з посиланням може переглядати';
+
+  @override
+  String get tasksCleanTodayTitle => 'Очистити завдання на сьогодні?';
+
+  @override
+  String get tasksCleanTodayMessage => 'Це видалить лише дедлайни';
+
+  @override
+  String get tasksOverdue => 'Прострочені';
+
+  @override
+  String get phoneCallsWithOmi => 'Дзвінки з Omi';
+
+  @override
+  String get phoneCallsSubtitle => 'Дзвоніть з транскрипцією в реальному часі';
+
+  @override
+  String get phoneSetupStep1Title => 'Підтвердіть свій номер телефону';
+
+  @override
+  String get phoneSetupStep1Subtitle => 'Ми зателефонуємо для підтвердження';
+
+  @override
+  String get phoneSetupStep2Title => 'Введіть код підтвердження';
+
+  @override
+  String get phoneSetupStep2Subtitle => 'Короткий код, який ви введете під час дзвінка';
+
+  @override
+  String get phoneSetupStep3Title => 'Почніть дзвонити своїм контактам';
+
+  @override
+  String get phoneSetupStep3Subtitle => 'З вбудованою живою транскрипцією';
+
+  @override
+  String get phoneGetStarted => 'Розпочати';
+
+  @override
+  String get callRecordingConsentDisclaimer => 'Запис дзвінків може вимагати згоди у вашій юрисдикції';
+
+  @override
+  String get enterYourNumber => 'Введіть свій номер';
+
+  @override
+  String get phoneNumberCallerIdHint => 'Після підтвердження це стане вашим ID дзвінка';
+
+  @override
+  String get phoneNumberHint => 'Номер телефону';
+
+  @override
+  String get failedToStartVerification => 'Не вдалося розпочати підтвердження';
+
+  @override
+  String get phoneContinue => 'Продовжити';
+
+  @override
+  String get verifyYourNumber => 'Підтвердіть свій номер';
+
+  @override
+  String get answerTheCallFrom => 'Відповідайте на дзвінок від';
+
+  @override
+  String get onTheCallEnterThisCode => 'Під час дзвінка введіть цей код';
+
+  @override
+  String get followTheVoiceInstructions => 'Дотримуйтесь голосових інструкцій';
+
+  @override
+  String get statusCalling => 'Дзвоним...';
+
+  @override
+  String get statusCallInProgress => 'Дзвінок йде';
+
+  @override
+  String get statusVerifiedLabel => 'Підтверджено';
+
+  @override
+  String get statusCallMissed => 'Пропущений дзвінок';
+
+  @override
+  String get statusTimedOut => 'Час вийшов';
+
+  @override
+  String get phoneTryAgain => 'Спробувати знову';
+
+  @override
+  String get phonePageTitle => 'Телефон';
+
+  @override
+  String get phoneContactsTab => 'Контакти';
+
+  @override
+  String get phoneKeypadTab => 'Клавіатура';
+
+  @override
+  String get grantContactsAccess => 'Надайте доступ до контактів';
+
+  @override
+  String get phoneAllow => 'Дозволити';
+
+  @override
+  String get phoneSearchHint => 'Пошук';
+
+  @override
+  String get phoneNoContactsFound => 'Контакти не знайдено';
+
+  @override
+  String get phoneEnterNumber => 'Введіть номер';
+
+  @override
+  String get failedToStartCall => 'Не вдалося розпочати дзвінок';
+
+  @override
+  String get callStateConnecting => 'Підключення...';
+
+  @override
+  String get callStateRinging => 'Дзвонить...';
+
+  @override
+  String get callStateEnded => 'Дзвінок завершено';
+
+  @override
+  String get callStateFailed => 'Дзвінок не вдався';
+
+  @override
+  String get transcriptPlaceholder => 'Транскрипція з\'явиться тут...';
+
+  @override
+  String get phoneUnmute => 'Увімкнути звук';
+
+  @override
+  String get phoneMute => 'Вимкнути звук';
+
+  @override
+  String get phoneSpeaker => 'Динамік';
+
+  @override
+  String get phoneEndCall => 'Завершити';
+
+  @override
+  String get phoneCallSettingsTitle => 'Налаштування дзвінків';
+
+  @override
+  String get yourVerifiedNumbers => 'Ваші підтверджені номери';
+
+  @override
+  String get verifiedNumbersDescription => 'Коли ви дзвоните, абонент побачить цей номер';
+
+  @override
+  String get noVerifiedNumbers => 'Немає підтверджених номерів';
+
+  @override
+  String deletePhoneNumberConfirm(String phoneNumber) {
+    return 'Видалити $phoneNumber?';
+  }
+
+  @override
+  String get deletePhoneNumberWarning => 'Для дзвінків потрібно буде повторно підтвердити';
+
+  @override
+  String get phoneDeleteButton => 'Видалити';
+
+  @override
+  String verifiedMinutesAgo(int minutes) {
+    return 'Підтверджено $minutesхв тому';
+  }
+
+  @override
+  String verifiedHoursAgo(int hours) {
+    return 'Підтверджено $hoursгод тому';
+  }
+
+  @override
+  String verifiedDaysAgo(int days) {
+    return 'Підтверджено $daysд тому';
+  }
+
+  @override
+  String verifiedOnDate(String date) {
+    return 'Підтверджено $date';
+  }
+
+  @override
+  String get verifiedFallback => 'Підтверджено';
+
+  @override
+  String get callAlreadyInProgress => 'Дзвінок вже йде';
+
+  @override
+  String get failedToGetCallToken => 'Не вдалося отримати токен. Спочатку підтвердіть номер.';
+
+  @override
+  String get failedToInitializeCallService => 'Не вдалося ініціалізувати службу дзвінків';
+
+  @override
+  String get speakerLabelYou => 'Ви';
+
+  @override
+  String get speakerLabelUnknown => 'Невідомий';
+
+  @override
+  String get showDailyScoreOnHomepage => 'Показати щоденний рахунок на головній сторінці';
+
+  @override
+  String get showTasksOnHomepage => 'Показати завдання на головній сторінці';
+
+  @override
+  String get phoneCallsUnlimitedOnly => 'Телефонні дзвінки через Omi';
+
+  @override
+  String get phoneCallsUpsellSubtitle =>
+      'Здійснюйте дзвінки через Omi та отримуйте транскрипцію в реальному часі, автоматичні зведення та багато іншого.';
+
+  @override
+  String get phoneCallsUpsellFeature1 => 'Транскрипція кожного дзвінка в реальному часі';
+
+  @override
+  String get phoneCallsUpsellFeature2 => 'Автоматичні зведення дзвінків та завдання';
+
+  @override
+  String get phoneCallsUpsellFeature3 => 'Одержувачі бачать ваш справжній номер, а не випадковий';
+
+  @override
+  String get phoneCallsUpsellFeature4 => 'Ваші дзвінки залишаються приватними та захищеними';
+
+  @override
+  String get phoneCallsUpgradeButton => 'Перейти на Безлімітний';
+
+  @override
+  String get phoneCallsMaybeLater => 'Можливо пізніше';
+
+  @override
+  String get deleteSynced => 'Видалити синхронізовані';
+
+  @override
+  String get deleteSyncedFiles => 'Видалити синхронізовані записи';
+
+  @override
+  String get deleteSyncedFilesMessage => 'Ці записи вже синхронізовані з вашим телефоном. Це не можна скасувати.';
+
+  @override
+  String get syncedFilesDeleted => 'Синхронізовані записи видалено';
+
+  @override
+  String get deletePending => 'Видалити очікувані';
+
+  @override
+  String get deletePendingFiles => 'Видалити очікувані записи';
+
+  @override
+  String get deletePendingFilesWarning =>
+      'Ці записи НЕ синхронізовані з вашим телефоном і будуть безповоротно втрачені. Це не можна скасувати.';
+
+  @override
+  String get pendingFilesDeleted => 'Очікувані записи видалено';
+
+  @override
+  String get deleteAllFiles => 'Видалити всі записи';
+
+  @override
+  String get deleteAll => 'Видалити все';
+
+  @override
+  String get deleteAllFilesWarning =>
+      'Це видалить синхронізовані та очікувані записи. Очікувані записи НЕ синхронізовані і будуть безповоротно втрачені.';
+
+  @override
+  String get allFilesDeleted => 'Всі записи видалено';
+
+  @override
+  String nFiles(int count) {
+    return '$count записів';
+  }
+
+  @override
+  String get manageStorage => 'Керування сховищем';
+
+  @override
+  String get safelyBackedUp => 'Безпечно збережено на вашому телефоні';
+
+  @override
+  String get notYetSynced => 'Ще не синхронізовано з вашим телефоном';
+
+  @override
+  String get clearAll => 'Очистити все';
 }

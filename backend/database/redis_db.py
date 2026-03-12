@@ -5,6 +5,9 @@ from typing import List, Union, Optional
 from datetime import datetime, timedelta, timezone
 
 import redis
+import logging
+
+logger = logging.getLogger(__name__)
 
 r = redis.Redis(
     host=os.getenv('REDIS_DB_HOST'),
@@ -20,7 +23,7 @@ def try_catch_decorator(func):
         try:
             return func(*args, **kwargs)
         except Exception as e:
-            print(f'Error calling {func.__name__}', e)
+            logger.error(f'Error calling {func.__name__} {e}')
             return None
 
     return wrapper
@@ -231,6 +234,10 @@ def enable_app(uid: str, app_id: str):
 
 def disable_app(uid: str, app_id: str):
     r.srem(f'users:{uid}:enabled_plugins', app_id)
+
+
+def is_app_enabled(uid: str, app_id: str) -> bool:
+    return r.sismember(f'users:{uid}:enabled_plugins', app_id)
 
 
 def get_enabled_apps(uid: str):
@@ -505,6 +512,29 @@ def get_proactive_noti_sent_at(uid: str, app_id: str):
 
 def get_proactive_noti_sent_at_ttl(uid: str, app_id: str):
     return r.ttl(f'{uid}:{app_id}:proactive_noti_sent_at')
+
+
+@try_catch_decorator
+def incr_daily_notification_count(uid: str) -> int:
+    """Atomically increment the daily mentor notification count for a user. Returns new count."""
+    from datetime import datetime, timezone
+
+    key = f'{uid}:daily_noti_count:{datetime.now(timezone.utc).strftime("%Y-%m-%d")}'
+    count = r.incr(key)
+    r.expire(key, 90000)  # 25 hours TTL
+    return count
+
+
+@try_catch_decorator
+def get_daily_notification_count(uid: str) -> int:
+    """Get the current daily mentor notification count for a user."""
+    from datetime import datetime, timezone
+
+    key = f'{uid}:daily_noti_count:{datetime.now(timezone.utc).strftime("%Y-%m-%d")}'
+    val = r.get(key)
+    if not val:
+        return 0
+    return int(val)
 
 
 def set_user_preferred_app(uid: str, app_id: str):
@@ -791,7 +821,64 @@ def delete_speech_profile_duration(uid: str):
 # ******************************************************
 
 
+# ******************************************************
+# *************** TASK SHARING TOKENS ******************
+# ******************************************************
+
+TASK_SHARE_TTL = 60 * 60 * 24 * 30  # 30 days
+
+
+@try_catch_decorator
+def store_task_share(token: str, uid: str, display_name: str, task_ids: list):
+    """Store a task share token in Redis with 30-day TTL."""
+    data = json.dumps({"uid": uid, "display_name": display_name, "task_ids": task_ids})
+    return r.set(f'task_share:{token}', data, ex=TASK_SHARE_TTL)
+
+
+@try_catch_decorator
+def get_task_share(token: str) -> Optional[dict]:
+    """Get task share data by token. Returns None if expired or not found."""
+    data = r.get(f'task_share:{token}')
+    if data:
+        return json.loads(data)
+    return None
+
+
+@try_catch_decorator
+def try_accept_task_share(token: str, uid: str) -> bool:
+    """Atomically mark a task share as accepted. Returns True on first acceptance, False if already accepted."""
+    key = f'task_share:{token}:accepted'
+    if r.sadd(key, uid) == 1:
+        r.expire(key, TASK_SHARE_TTL)
+        return True
+    return False
+
+
 def try_acquire_daily_summary_lock(uid: str, date: str, ttl: int = 60 * 60 * 2) -> bool:
     """Atomically acquire lock BEFORE expensive LLM work. Returns True if acquired, False if another job instance already holds it."""
     result = r.set(f'users:{uid}:daily_summary_lock:{date}', '1', ex=ttl, nx=True)
+    return result is not None
+
+
+@try_catch_decorator
+def set_credits_invalidation_signal(uid: str, ttl: int = 120):
+    """Signal active WebSocket sessions to refresh credits immediately.
+
+    Called when subscription changes (Stripe webhook, upgrade, etc.).
+    Active transcribe loops check this on each 60s tick and force a Firestore refresh.
+    TTL is 2 min — long enough for all streams to see it on their next 60s tick.
+    Uses GET (not GETDEL) so multiple concurrent streams all see the signal.
+    """
+    r.set(f'credits_invalidated:{uid}', '1', ex=ttl)
+
+
+@try_catch_decorator
+def check_credits_invalidation(uid: str) -> bool:
+    """Check if credits need immediate refresh.
+
+    Returns True if invalidation signal is present (caller should refresh).
+    Uses GET (not GETDEL) so all concurrent streams for the same user see the signal.
+    The signal auto-expires via its TTL.
+    """
+    result = r.get(f'credits_invalidated:{uid}')
     return result is not None

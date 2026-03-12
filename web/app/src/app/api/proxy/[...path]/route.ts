@@ -117,6 +117,18 @@ async function handleRequest(
       });
     }
 
+    // Handle download/streaming responses (e.g., data export) — pass body through without buffering
+    const contentDisposition = response.headers.get('content-disposition');
+    if (contentDisposition) {
+      return new NextResponse(response.body, {
+        status: response.status,
+        headers: {
+          'Content-Type': responseContentType || 'application/octet-stream',
+          'Content-Disposition': contentDisposition,
+        },
+      });
+    }
+
     // Handle JSON responses
     if (responseContentType?.includes('application/json')) {
       const data = await response.json();
@@ -130,9 +142,6 @@ async function handleRequest(
       ) {
         // Static reference data - cache for 1 hour
         cacheHeaders['Cache-Control'] = 'public, max-age=3600, stale-while-revalidate=86400';
-      } else if (path.includes('folders') && request.method === 'GET') {
-        // User folders - cache briefly with revalidation
-        cacheHeaders['Cache-Control'] = 'private, max-age=60, stale-while-revalidate=300';
       }
 
       return NextResponse.json(data, {

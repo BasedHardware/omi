@@ -1018,7 +1018,7 @@ class AppLocalizationsCa extends AppLocalizations {
   String get vocabularyHint => 'Omi, Callie, OpenAI';
 
   @override
-  String get connect => 'Connect';
+  String get connect => 'Connecta';
 
   @override
   String get comingSoon => 'Properament';
@@ -2279,7 +2279,7 @@ class AppLocalizationsCa extends AppLocalizations {
   String get folderName => 'Nom de la carpeta';
 
   @override
-  String get descriptionOptional => 'Description (optional)';
+  String get descriptionOptional => 'Descripció (opcional)';
 
   @override
   String get failedToDeleteFolder => 'No s\'ha pogut eliminar la carpeta';
@@ -2686,7 +2686,7 @@ class AppLocalizationsCa extends AppLocalizations {
   String get showAll => 'Mostra-ho tot →';
 
   @override
-  String get noTasksForToday => 'No hi ha tasques per avui.\\nDemana a Omi més tasques o crea-les manualment.';
+  String get noTasksForToday => 'No hi ha tasques per avui.\nDemana a Omi més tasques o crea-les manualment.';
 
   @override
   String get dailyScore => 'PUNTUACIÓ DIÀRIA';
@@ -8038,36 +8038,36 @@ class AppLocalizationsCa extends AppLocalizations {
   String get couldNotOpenUrl => 'No s\'ha pogut obrir l\'URL. Torneu-ho a provar.';
 
   @override
-  String get newTask => 'New Task';
+  String get newTask => 'Nova tasca';
 
   @override
-  String get viewAll => 'View All';
+  String get viewAll => 'Veure tot';
 
   @override
-  String get addTask => 'Add Task';
+  String get addTask => 'Afegir tasca';
 
   @override
-  String get addMcpServer => 'Add MCP Server';
+  String get addMcpServer => 'Afegeix servidor MCP';
 
   @override
-  String get connectExternalAiTools => 'Connect external AI tools';
+  String get connectExternalAiTools => 'Connecta eines d\'IA externes';
 
   @override
   String get mcpServerUrl => 'MCP Server URL';
 
   @override
   String mcpServerConnected(int count) {
-    return '$count tools connected successfully';
+    return '$count eines connectades correctament';
   }
 
   @override
-  String get mcpConnectionFailed => 'Failed to connect to MCP server';
+  String get mcpConnectionFailed => 'No s\'ha pogut connectar al servidor MCP';
 
   @override
-  String get authorizingMcpServer => 'Authorizing...';
+  String get authorizingMcpServer => 'Autoritzant...';
 
   @override
-  String get whereDidYouHearAboutOmi => 'How did you find us?';
+  String get whereDidYouHearAboutOmi => 'Com ens has trobat?';
 
   @override
   String get tiktok => 'TikTok';
@@ -8085,19 +8085,19 @@ class AppLocalizationsCa extends AppLocalizations {
   String get reddit => 'Reddit';
 
   @override
-  String get friendWordOfMouth => 'Friend';
+  String get friendWordOfMouth => 'Amic';
 
   @override
-  String get otherSource => 'Other';
+  String get otherSource => 'Altres';
 
   @override
-  String get pleaseSpecify => 'Please specify';
+  String get pleaseSpecify => 'Si us plau, especifica';
 
   @override
-  String get event => 'Event';
+  String get event => 'Esdeveniment';
 
   @override
-  String get coworker => 'Coworker';
+  String get coworker => 'Company de feina';
 
   @override
   String get linkedIn => 'LinkedIn';
@@ -8113,4 +8113,496 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get audioPlaybackFailed => 'No s\'ha pogut reproduir l\'àudio. El fitxer pot estar malmès o no existir.';
+
+  @override
+  String get connectionGuide => 'Guia de connexió';
+
+  @override
+  String get iveDoneThis => 'Ja ho he fet';
+
+  @override
+  String get pairNewDevice => 'Aparellar un dispositiu nou';
+
+  @override
+  String get dontSeeYourDevice => 'No veus el teu dispositiu?';
+
+  @override
+  String get reportAnIssue => 'Informar d\'un problema';
+
+  @override
+  String get pairingTitleOmi => 'Enceneu Omi';
+
+  @override
+  String get pairingDescOmi => 'Manteniu premut el dispositiu fins que vibri per encendre\'l.';
+
+  @override
+  String get pairingTitleOmiDevkit => 'Posa Omi DevKit en mode d\'aparellament';
+
+  @override
+  String get pairingDescOmiDevkit =>
+      'Premeu el botó un cop per encendre. El LED parpellejarà en violeta en mode d\'aparellament.';
+
+  @override
+  String get pairingTitleOmiGlass => 'Enceneu Omi Glass';
+
+  @override
+  String get pairingDescOmiGlass => 'Manteniu premut el botó lateral durant 3 segons per encendre.';
+
+  @override
+  String get pairingTitlePlaudNote => 'Posa Plaud Note en mode d\'aparellament';
+
+  @override
+  String get pairingDescPlaudNote =>
+      'Manteniu premut el botó lateral durant 2 segons. El LED vermell parpellejarà quan estigui llest per aparellar.';
+
+  @override
+  String get pairingTitleBee => 'Posa Bee en mode d\'aparellament';
+
+  @override
+  String get pairingDescBee => 'Premeu el botó 5 vegades seguidament. La llum començarà a parpellejar en blau i verd.';
+
+  @override
+  String get pairingTitleLimitless => 'Posa Limitless en mode d\'aparellament';
+
+  @override
+  String get pairingDescLimitless =>
+      'Quan qualsevol llum sigui visible, premeu un cop i després manteniu premut fins que el dispositiu mostri una llum rosa, després deixeu anar.';
+
+  @override
+  String get pairingTitleFriendPendant => 'Posa Friend Pendant en mode d\'aparellament';
+
+  @override
+  String get pairingDescFriendPendant =>
+      'Premeu el botó del penjoll per encendre\'l. Entrarà en mode d\'aparellament automàticament.';
+
+  @override
+  String get pairingTitleFieldy => 'Posa Fieldy en mode d\'aparellament';
+
+  @override
+  String get pairingDescFieldy => 'Manteniu premut el dispositiu fins que aparegui la llum per encendre\'l.';
+
+  @override
+  String get pairingTitleAppleWatch => 'Connecteu Apple Watch';
+
+  @override
+  String get pairingDescAppleWatch =>
+      'Instal·leu i obriu l\'aplicació Omi al vostre Apple Watch, després toqueu Connectar a l\'aplicació.';
+
+  @override
+  String get pairingTitleNeoOne => 'Posa Neo One en mode d\'aparellament';
+
+  @override
+  String get pairingDescNeoOne =>
+      'Manteniu premut el botó d\'engegada fins que el LED parpellegi. El dispositiu serà detectable.';
+
+  @override
+  String get downloadingFromDevice => 'Descarregant del dispositiu';
+
+  @override
+  String get reconnectingToInternet => 'Reconnectant a internet...';
+
+  @override
+  String uploadingToCloud(int current, int total) {
+    return 'Pujant $current de $total';
+  }
+
+  @override
+  String get processedStatus => 'Processat';
+
+  @override
+  String get corruptedStatus => 'Corrupte';
+
+  @override
+  String nPending(int count) {
+    return '$count pendents';
+  }
+
+  @override
+  String nProcessed(int count) {
+    return '$count processats';
+  }
+
+  @override
+  String get synced => 'Sincronitzat';
+
+  @override
+  String get noPendingRecordings => 'No hi ha enregistraments pendents';
+
+  @override
+  String get noProcessedRecordings => 'Encara no hi ha enregistraments processats';
+
+  @override
+  String get pending => 'Pendent';
+
+  @override
+  String whatsNewInVersion(String version) {
+    return 'Novetats a $version';
+  }
+
+  @override
+  String get addToYourTaskList => 'Afegir a la llista de tasques?';
+
+  @override
+  String get failedToCreateShareLink => 'No s\'ha pogut crear l\'enllaç per compartir';
+
+  @override
+  String get deleteGoal => 'Eliminar objectiu';
+
+  @override
+  String get deviceUpToDate => 'El dispositiu està actualitzat';
+
+  @override
+  String get wifiConfiguration => 'Configuració WiFi';
+
+  @override
+  String get wifiConfigurationSubtitle =>
+      'Introduïu les credencials WiFi per permetre al dispositiu descarregar el firmware.';
+
+  @override
+  String get networkNameSsid => 'Nom de la xarxa (SSID)';
+
+  @override
+  String get enterWifiNetworkName => 'Introduïu el nom de la xarxa WiFi';
+
+  @override
+  String get enterWifiPassword => 'Introduïu la contrasenya WiFi';
+
+  @override
+  String get appIconLabel => 'App Icon';
+
+  @override
+  String get onboardingWhatIKnowAboutYouTitle => 'El que sé de tu';
+
+  @override
+  String get onboardingWhatIKnowAboutYouDescription =>
+      'Aquí tens un resum del que sé de tu basant-me en les nostres converses. Pots editar qualsevol cosa que no sigui correcta.';
+
+  @override
+  String get apiEnvironment => 'Entorn de l\'API';
+
+  @override
+  String get apiEnvironmentDescription => 'Canvia entre els entorns de producció i staging de l\'API';
+
+  @override
+  String get production => 'Producció';
+
+  @override
+  String get staging => 'Staging';
+
+  @override
+  String get switchRequiresRestart => 'Canviar d\'entorn requereix reiniciar l\'aplicació';
+
+  @override
+  String get switchApiConfirmTitle => 'Canviar l\'entorn de l\'API?';
+
+  @override
+  String switchApiConfirmBody(String environment) {
+    return 'Canviar a $environment? Hauràs de tancar i tornar a obrir l\'aplicació perquè els canvis tinguin efecte.';
+  }
+
+  @override
+  String get switchAndRestart => 'Canvia';
+
+  @override
+  String get stagingDisclaimer =>
+      'L\'entorn de staging pot ser inestable, tenir un rendiment inconsistent i es poden perdre dades. Utilitza\'l només per a proves.';
+
+  @override
+  String get apiEnvSavedRestartRequired => 'Desat. Tanca i torna a obrir l\'aplicació per aplicar els canvis.';
+
+  @override
+  String get shared => 'Compartit';
+
+  @override
+  String get onlyYouCanSeeConversation => 'Només tu pots veure aquesta conversa';
+
+  @override
+  String get anyoneWithLinkCanView => 'Qualsevol persona amb l\'enllaç pot veure';
+
+  @override
+  String get tasksCleanTodayTitle => 'Netejar les tasques d\'avui?';
+
+  @override
+  String get tasksCleanTodayMessage => 'Això només eliminarà els terminis';
+
+  @override
+  String get tasksOverdue => 'Endarrerits';
+
+  @override
+  String get phoneCallsWithOmi => 'Trucades amb Omi';
+
+  @override
+  String get phoneCallsSubtitle => 'Fes trucades amb transcripcio en temps real';
+
+  @override
+  String get phoneSetupStep1Title => 'Verifica el teu numero de telefon';
+
+  @override
+  String get phoneSetupStep1Subtitle => 'Et trucarem per confirmar que es teu';
+
+  @override
+  String get phoneSetupStep2Title => 'Introdueix un codi de verificacio';
+
+  @override
+  String get phoneSetupStep2Subtitle => 'Un codi curt que escriuras a la trucada';
+
+  @override
+  String get phoneSetupStep3Title => 'Comenca a trucar als teus contactes';
+
+  @override
+  String get phoneSetupStep3Subtitle => 'Amb transcripcio en directe integrada';
+
+  @override
+  String get phoneGetStarted => 'Comenca';
+
+  @override
+  String get callRecordingConsentDisclaimer =>
+      'La gravacio de trucades pot requerir consentiment a la teva jurisdiccio';
+
+  @override
+  String get enterYourNumber => 'Introdueix el teu numero';
+
+  @override
+  String get phoneNumberCallerIdHint => 'Un cop verificat, aquest sera el teu identificador de trucada';
+
+  @override
+  String get phoneNumberHint => 'Numero de telefon';
+
+  @override
+  String get failedToStartVerification => 'No s\'ha pogut iniciar la verificacio';
+
+  @override
+  String get phoneContinue => 'Continuar';
+
+  @override
+  String get verifyYourNumber => 'Verifica el teu numero';
+
+  @override
+  String get answerTheCallFrom => 'Respon la trucada de';
+
+  @override
+  String get onTheCallEnterThisCode => 'A la trucada, introdueix aquest codi';
+
+  @override
+  String get followTheVoiceInstructions => 'Segueix les instruccions de veu';
+
+  @override
+  String get statusCalling => 'Trucant...';
+
+  @override
+  String get statusCallInProgress => 'Trucada en curs';
+
+  @override
+  String get statusVerifiedLabel => 'Verificat';
+
+  @override
+  String get statusCallMissed => 'Trucada perduda';
+
+  @override
+  String get statusTimedOut => 'Temps esgotat';
+
+  @override
+  String get phoneTryAgain => 'Torna-ho a provar';
+
+  @override
+  String get phonePageTitle => 'Telefon';
+
+  @override
+  String get phoneContactsTab => 'Contactes';
+
+  @override
+  String get phoneKeypadTab => 'Teclat';
+
+  @override
+  String get grantContactsAccess => 'Dona acces als teus contactes';
+
+  @override
+  String get phoneAllow => 'Permetre';
+
+  @override
+  String get phoneSearchHint => 'Cercar';
+
+  @override
+  String get phoneNoContactsFound => 'Cap contacte trobat';
+
+  @override
+  String get phoneEnterNumber => 'Introdueix numero';
+
+  @override
+  String get failedToStartCall => 'No s\'ha pogut iniciar la trucada';
+
+  @override
+  String get callStateConnecting => 'Connectant...';
+
+  @override
+  String get callStateRinging => 'Sonant...';
+
+  @override
+  String get callStateEnded => 'Trucada finalitzada';
+
+  @override
+  String get callStateFailed => 'Trucada fallida';
+
+  @override
+  String get transcriptPlaceholder => 'La transcripcio apareixera aqui...';
+
+  @override
+  String get phoneUnmute => 'Activar so';
+
+  @override
+  String get phoneMute => 'Silenciar';
+
+  @override
+  String get phoneSpeaker => 'Altaveu';
+
+  @override
+  String get phoneEndCall => 'Finalitzar';
+
+  @override
+  String get phoneCallSettingsTitle => 'Configuracio de trucades';
+
+  @override
+  String get yourVerifiedNumbers => 'Els teus numeros verificats';
+
+  @override
+  String get verifiedNumbersDescription => 'Quan truquis a algu, veuran aquest numero al seu telefon';
+
+  @override
+  String get noVerifiedNumbers => 'Cap numero verificat';
+
+  @override
+  String deletePhoneNumberConfirm(String phoneNumber) {
+    return 'Eliminar $phoneNumber?';
+  }
+
+  @override
+  String get deletePhoneNumberWarning => 'Hauras de verificar de nou per fer trucades';
+
+  @override
+  String get phoneDeleteButton => 'Eliminar';
+
+  @override
+  String verifiedMinutesAgo(int minutes) {
+    return 'Verificat fa ${minutes}m';
+  }
+
+  @override
+  String verifiedHoursAgo(int hours) {
+    return 'Verificat fa ${hours}h';
+  }
+
+  @override
+  String verifiedDaysAgo(int days) {
+    return 'Verificat fa ${days}d';
+  }
+
+  @override
+  String verifiedOnDate(String date) {
+    return 'Verificat el $date';
+  }
+
+  @override
+  String get verifiedFallback => 'Verificat';
+
+  @override
+  String get callAlreadyInProgress => 'Ja hi ha una trucada en curs';
+
+  @override
+  String get failedToGetCallToken => 'No s\'ha pogut obtenir el token. Verifica el teu numero primer.';
+
+  @override
+  String get failedToInitializeCallService => 'No s\'ha pogut inicialitzar el servei de trucades';
+
+  @override
+  String get speakerLabelYou => 'Tu';
+
+  @override
+  String get speakerLabelUnknown => 'Desconegut';
+
+  @override
+  String get showDailyScoreOnHomepage => 'Mostra la puntuació diària a la pàgina principal';
+
+  @override
+  String get showTasksOnHomepage => 'Mostra les tasques a la pàgina principal';
+
+  @override
+  String get phoneCallsUnlimitedOnly => 'Trucades telefòniques via Omi';
+
+  @override
+  String get phoneCallsUpsellSubtitle =>
+      'Fes trucades a través d\'Omi i obtin transcripció en temps real, resums automàtics i més.';
+
+  @override
+  String get phoneCallsUpsellFeature1 => 'Transcripció en temps real de cada trucada';
+
+  @override
+  String get phoneCallsUpsellFeature2 => 'Resums automàtics de trucades i accions a fer';
+
+  @override
+  String get phoneCallsUpsellFeature3 => 'Els destinataris veuen el teu número real, no un d\'aleatori';
+
+  @override
+  String get phoneCallsUpsellFeature4 => 'Les teves trucades es mantenen privades i segures';
+
+  @override
+  String get phoneCallsUpgradeButton => 'Actualitza a Il·limitat';
+
+  @override
+  String get phoneCallsMaybeLater => 'Potser més tard';
+
+  @override
+  String get deleteSynced => 'Eliminar sincronitzats';
+
+  @override
+  String get deleteSyncedFiles => 'Eliminar enregistraments sincronitzats';
+
+  @override
+  String get deleteSyncedFilesMessage =>
+      'Aquests enregistraments ja estan sincronitzats amb el vostre telèfon. Això no es pot desfer.';
+
+  @override
+  String get syncedFilesDeleted => 'Enregistraments sincronitzats eliminats';
+
+  @override
+  String get deletePending => 'Eliminar pendents';
+
+  @override
+  String get deletePendingFiles => 'Eliminar enregistraments pendents';
+
+  @override
+  String get deletePendingFilesWarning =>
+      'Aquests enregistraments NO estan sincronitzats amb el vostre telèfon i es perdran permanentment. Això no es pot desfer.';
+
+  @override
+  String get pendingFilesDeleted => 'Enregistraments pendents eliminats';
+
+  @override
+  String get deleteAllFiles => 'Eliminar tots els enregistraments';
+
+  @override
+  String get deleteAll => 'Eliminar tot';
+
+  @override
+  String get deleteAllFilesWarning =>
+      'Això eliminarà els enregistraments sincronitzats i pendents. Els enregistraments pendents NO estan sincronitzats i es perdran permanentment.';
+
+  @override
+  String get allFilesDeleted => 'Tots els enregistraments eliminats';
+
+  @override
+  String nFiles(int count) {
+    return '$count enregistraments';
+  }
+
+  @override
+  String get manageStorage => 'Gestionar emmagatzematge';
+
+  @override
+  String get safelyBackedUp => 'Còpia de seguretat al vostre telèfon';
+
+  @override
+  String get notYetSynced => 'Encara no sincronitzat amb el vostre telèfon';
+
+  @override
+  String get clearAll => 'Esborrar tot';
 }

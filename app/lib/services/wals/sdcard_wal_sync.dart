@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
+import 'package:omi/utils/debug_log_manager.dart';
 import 'package:omi/utils/logger.dart';
 
 import 'package:path_provider/path_provider.dart';
@@ -28,6 +29,8 @@ class SDCardWalSyncImpl implements SDCardWalSync {
 
   bool _isCancelled = false;
   bool _isSyncing = false;
+  TcpTransport? _activeTcpTransport;
+  Completer<void>? _activeTransferCompleter;
   @override
   bool get isSyncing => _isSyncing;
 
@@ -48,7 +51,15 @@ class SDCardWalSyncImpl implements SDCardWalSync {
   void cancelSync() {
     if (_isSyncing) {
       _isCancelled = true;
-      Logger.debug("SDCardWalSync: Cancel requested");
+      Logger.debug("SDCardWalSync: Cancel requested, actively tearing down connections");
+
+      // Actively disconnect TCP transport to stop data flow immediately
+      _activeTcpTransport?.disconnect();
+
+      // Complete the transfer completer so the await unblocks immediately
+      if (_activeTransferCompleter != null && !_activeTransferCompleter!.isCompleted) {
+        _activeTransferCompleter!.complete();
+      }
     }
   }
 
@@ -61,6 +72,8 @@ class SDCardWalSyncImpl implements SDCardWalSync {
     _wifiSpeedWindowStart = null;
     _wifiSpeedWindowBytes = 0;
     _lastProgressUpdate = null;
+    _activeTcpTransport = null;
+    _activeTransferCompleter = null;
   }
 
   void _updateSpeed(int bytesDownloaded) {
@@ -370,6 +383,7 @@ class SDCardWalSyncImpl implements SDCardWalSync {
         hasError = true;
         final error = TimeoutException('No data received from SD card within 5 seconds');
         Logger.debug('SD card read timeout: ${error.message}');
+        DebugLogManager.logWarning('SD card BLE read timeout: no data in 5s', {'offset': offset});
         completer.completeError(error);
       }
     });
@@ -398,6 +412,7 @@ class SDCardWalSyncImpl implements SDCardWalSync {
 
     if (_localSync == null) {
       Logger.debug("SDCard: ERROR - LocalWalSync not available, aborting to preserve data safety");
+      DebugLogManager.logError('SD card sync aborted: LocalWalSync not available', null, null);
       throw Exception('Local sync service not available. Cannot safely download SD card data.');
     }
 
@@ -407,6 +422,11 @@ class SDCardWalSyncImpl implements SDCardWalSync {
 
     Logger.debug(
         "SDCard Phase 1: Downloading ~${(totalBytesToDownload / 1024).toStringAsFixed(1)} KB to phone storage");
+    DebugLogManager.logEvent('sdcard_ble_download_started', {
+      'walId': wal.id,
+      'totalBytes': totalBytesToDownload,
+      'codec': wal.codec.toString(),
+    });
 
     _downloadStartTime = DateTime.now();
     _totalBytesDownloaded = 0;
@@ -434,6 +454,10 @@ class SDCardWalSyncImpl implements SDCardWalSync {
     } catch (e) {
       await _storageStream?.cancel();
       Logger.debug('SDCard download failed: $e');
+      DebugLogManager.logError(e, null, 'SD card BLE download failed: ${e.toString()}', {
+        'chunksDownloaded': chunksDownloaded,
+        'walId': wal.id,
+      });
       if (chunksDownloaded > 0) {
         Logger.debug("SDCard: $chunksDownloaded chunks saved before failure");
       }
@@ -442,10 +466,12 @@ class SDCardWalSyncImpl implements SDCardWalSync {
 
     if (chunksDownloaded == 0) {
       Logger.debug("SDCard: No chunks downloaded");
+      DebugLogManager.logWarning('SD card BLE download: no chunks received', {'walId': wal.id});
       return SyncLocalFilesResponse(newConversationIds: [], updatedConversationIds: []);
     }
 
     Logger.debug("SDCard Phase 1 complete: $chunksDownloaded chunks downloaded");
+    DebugLogManager.logInfo('SD card BLE download complete', {'chunks': chunksDownloaded});
 
     Logger.debug("SDCard Phase 3: Clearing SD card storage");
     await _writeToStorage(wal.device, wal.fileNum, 1, 0);
@@ -539,6 +565,7 @@ class SDCardWalSyncImpl implements SDCardWalSync {
         wal.status = WalStatus.synced;
       } catch (e) {
         Logger.debug("SDCardWalSync: Error syncing WAL ${wal.id}: $e");
+        DebugLogManager.logError(e, null, 'SD card syncAll WAL failed: ${e.toString()}', {'walId': wal.id});
         wal.isSyncing = false;
         wal.syncStartedAt = null;
         wal.syncEtaSeconds = null;
@@ -606,6 +633,7 @@ class SDCardWalSyncImpl implements SDCardWalSync {
       wal.status = WalStatus.synced;
     } catch (e) {
       Logger.debug("SDCardWalSync: Error syncing WAL ${wal.id}: $e");
+      DebugLogManager.logError(e, null, 'SD card single WAL sync failed: ${e.toString()}', {'walId': wal.id});
       walToSync.isSyncing = false;
       walToSync.syncStartedAt = null;
       walToSync.syncEtaSeconds = null;
@@ -648,6 +676,14 @@ class SDCardWalSyncImpl implements SDCardWalSync {
   }
 
   @override
+  Future<void> deleteAllPendingWals() async {
+    final pendingWals = _wals.where((w) => w.status == WalStatus.miss || w.status == WalStatus.corrupted).toList();
+    for (final wal in pendingWals) {
+      await deleteWal(wal);
+    }
+  }
+
+  @override
   Future<bool> isWifiSyncSupported() async {
     if (_device == null) {
       Logger.debug("SDCardWalSync WiFi: No device connected");
@@ -683,6 +719,21 @@ class SDCardWalSyncImpl implements SDCardWalSync {
   Map<String, String?>? getWifiCredentials() {
     // In AP mode, return null - credentials are auto-generated
     return null;
+  }
+
+  void _reconnectBleAfterCancel(String deviceId) {
+    Future(() async {
+      try {
+        await Future.delayed(const Duration(seconds: 1));
+        final conn = await ServiceManager.instance().device.ensureConnection(deviceId);
+        if (conn != null) {
+          await conn.stopWifiSync();
+          debugPrint("SDCardWalSync WiFi: Background BLE reconnect + stopWifiSync succeeded");
+        }
+      } catch (e) {
+        debugPrint("SDCardWalSync WiFi: Background BLE reconnect failed (non-fatal): $e");
+      }
+    });
   }
 
   /// Helper to clean up WiFi sync resources
@@ -752,6 +803,13 @@ class SDCardWalSyncImpl implements SDCardWalSync {
     wal.syncMethod = SyncMethod.wifi;
     listener.onWalUpdated();
 
+    final totalBytes = wal.storageTotalBytes - wal.storageOffset;
+    DebugLogManager.logEvent('sdcard_wifi_sync_started', {
+      'walId': wal.id,
+      'totalBytes': totalBytes,
+      'deviceId': deviceId,
+    });
+
     final ssid = WifiNetworkService.generateSsid(deviceId);
     final password = WifiNetworkService.generatePassword(deviceId);
     debugPrint("SDCardWalSync WiFi: Starting sync with device AP SSID: $ssid (deviceId: $deviceId)");
@@ -788,6 +846,9 @@ class SDCardWalSyncImpl implements SDCardWalSync {
         _resetSyncState();
         final errorMessage = setupResult.errorMessage ?? 'Failed to setup WiFi on device';
         final errorCode = setupResult.errorCode;
+        DebugLogManager.logError('SD card WiFi setup failed: $errorMessage', null, null, {
+          'errorCode': errorCode?.code.toRadixString(16) ?? 'none',
+        });
         if (errorCode != null) {
           debugPrint(
               "SDCardWalSync WiFi: Setup failed with error code 0x${errorCode.code.toRadixString(16)}: ${errorCode.userMessage}");
@@ -821,6 +882,7 @@ class SDCardWalSyncImpl implements SDCardWalSync {
       if (!wifiResult.success) {
         await _cleanupWifiSync(null, wifiNetwork, ssid, connection, deviceId: deviceId);
         final errorMsg = wifiResult.errorMessage ?? wifiResult.error?.userMessage ?? 'Failed to connect to device WiFi';
+        DebugLogManager.logError('SD card WiFi AP connection failed: $errorMsg', null, null);
         connectionListener?.onConnectionFailed(errorMsg);
         throw WifiSyncException('WiFi connection failed: $errorMsg');
       }
@@ -829,6 +891,7 @@ class SDCardWalSyncImpl implements SDCardWalSync {
       const tcpPort = 12345;
       debugPrint("SDCardWalSync WiFi: Step 6 - Starting TCP server on port $tcpPort");
       tcpTransport = TcpTransport(deviceId, port: tcpPort, connectionTimeout: const Duration(seconds: 60));
+      _activeTcpTransport = tcpTransport;
       try {
         await tcpTransport.connect();
         debugPrint("SDCardWalSync WiFi: Device connected to TCP server!");
@@ -836,6 +899,7 @@ class SDCardWalSyncImpl implements SDCardWalSync {
         connectionListener?.onConnected();
       } catch (e) {
         debugPrint("SDCardWalSync WiFi: TCP server error: $e");
+        DebugLogManager.logError(e, null, 'SD card WiFi TCP connection failed: ${e.toString()}');
         await _cleanupWifiSync(tcpTransport, wifiNetwork, ssid, connection, deviceId: deviceId);
         connectionListener?.onConnectionFailed('Device did not connect');
         throw WifiSyncException('Device did not connect to TCP server: $e');
@@ -915,12 +979,26 @@ class SDCardWalSyncImpl implements SDCardWalSync {
       debugPrint("SDCardWalSync WiFi: Step 8 - Receiving data ($totalBytes bytes to download)");
 
       final completer = Completer<void>();
+      _activeTransferCompleter = completer;
       StreamSubscription? audioSubscription;
 
       final audioStream = tcpTransport.dataStream;
 
       // Track position within 440-byte logical blocks
       int globalBytePosition = 0;
+
+      Timer? inactivityTimer;
+      void resetInactivityTimer() {
+        inactivityTimer?.cancel();
+        inactivityTimer = Timer(const Duration(minutes: 2), () {
+          if (!completer.isCompleted) {
+            debugPrint("SDCardWalSync WiFi: No data for 2 min, timing out (offset=$offset/${wal.storageTotalBytes})");
+            completer.complete();
+          }
+        });
+      }
+
+      resetInactivityTimer();
 
       audioSubscription = audioStream.listen(
         (List<int> value) {
@@ -934,6 +1012,7 @@ class SDCardWalSyncImpl implements SDCardWalSync {
           }
           if (completer.isCompleted) return;
 
+          resetInactivityTimer();
           tcpBuffer.addAll(value);
 
           final bufferLength = tcpBuffer.length;
@@ -1079,20 +1158,18 @@ class SDCardWalSyncImpl implements SDCardWalSync {
         },
       );
 
-      // Wait for transfer to complete with timeout
+      // Wait for transfer to complete
       try {
-        await completer.future.timeout(
-          const Duration(minutes: 5),
-          onTimeout: () {
-            Logger.debug("SDCardWalSync WiFi: Transfer timeout");
-          },
-        );
+        await completer.future;
       } catch (e) {
         Logger.debug("SDCardWalSync WiFi: Transfer error: $e");
       }
 
+      inactivityTimer?.cancel();
+
       // Check if cancelled - still save any data received before cancellation
       final wasCancelled = _isCancelled;
+      final transferComplete = offset >= wal.storageTotalBytes;
 
       // Flush all collected data in chunks
       while (bytesData.length - bytesLeft >= chunkSize) {
@@ -1121,6 +1198,8 @@ class SDCardWalSyncImpl implements SDCardWalSync {
 
       // Step 9: Cleanup
       debugPrint("SDCardWalSync WiFi: Step 9 - Cleanup");
+      _activeTcpTransport = null;
+      _activeTransferCompleter = null;
       await audioSubscription.cancel();
       await wifiStatusSubscription?.cancel();
 
@@ -1136,6 +1215,27 @@ class SDCardWalSyncImpl implements SDCardWalSync {
         debugPrint("SDCardWalSync WiFi: Error disconnecting from AP: $e");
       }
 
+      ServiceManager.instance().device.setWifiSyncInProgress(false);
+      wal.isSyncing = false;
+      wal.syncStartedAt = null;
+      wal.syncEtaSeconds = null;
+      wal.syncSpeedKBps = null;
+      wal.syncMethod = SyncMethod.ble;
+      listener.onWalUpdated();
+      _resetSyncState();
+
+      if (wasCancelled) {
+        debugPrint("SDCardWalSync WiFi: Cancelled - partial data saved, reconnecting BLE in background");
+        DebugLogManager.logWarning('SD card WiFi sync cancelled', {
+          'bytesTransferred': offset - initialOffset,
+          'totalBytes': totalBytes,
+        });
+        // Reconnect BLE and stop WiFi sync in background
+        _reconnectBleAfterCancel(deviceId);
+        return SyncLocalFilesResponse(newConversationIds: [], updatedConversationIds: []);
+      }
+
+      // Reconnect BLE for cleanup
       DeviceConnection? bleConnection;
       try {
         await Future.delayed(const Duration(seconds: 2));
@@ -1147,8 +1247,8 @@ class SDCardWalSyncImpl implements SDCardWalSync {
         debugPrint("SDCardWalSync WiFi: Could not reconnect BLE for cleanup: $e");
       }
 
-      // Only clear SD card storage if transfer completed fully (not cancelled)
-      if (!wasCancelled) {
+      // Only clear SD card if all bytes were transferred
+      if (transferComplete) {
         if (bleConnection != null) {
           try {
             await _writeToStorage(deviceId, wal.fileNum, 1, 0);
@@ -1159,10 +1259,20 @@ class SDCardWalSyncImpl implements SDCardWalSync {
           debugPrint("SDCardWalSync WiFi: Skipping SD card clear - no BLE connection");
         }
         wal.status = WalStatus.synced;
+        debugPrint("SDCardWalSync WiFi: Sync completed successfully");
+        DebugLogManager.logEvent('sdcard_wifi_sync_completed', {
+          'bytesTransferred': offset - initialOffset,
+          'framesReceived': bytesData.length,
+          'speedKBps': _currentSpeedKBps,
+        });
       } else {
-        // Cancelled - don't clear SD card, WAL remains in 'miss' status
-        // but we saved the partial data as local WAL files
-        debugPrint("SDCardWalSync WiFi: Cancelled - SD card not cleared, saved partial data");
+        debugPrint("SDCardWalSync WiFi: Transfer incomplete ($offset/${wal.storageTotalBytes}), SD card NOT cleared");
+        DebugLogManager.logWarning('SD card WiFi transfer incomplete', {
+          'bytesTransferred': offset - initialOffset,
+          'totalBytes': totalBytes,
+          'offsetReached': offset,
+          'totalRequired': wal.storageTotalBytes,
+        });
       }
 
       if (bleConnection != null) {
@@ -1173,26 +1283,13 @@ class SDCardWalSyncImpl implements SDCardWalSync {
         }
       }
 
-      ServiceManager.instance().device.setWifiSyncInProgress(false);
-
-      wal.isSyncing = false;
-      wal.syncStartedAt = null;
-      wal.syncEtaSeconds = null;
-      wal.syncSpeedKBps = null;
-      wal.syncMethod = SyncMethod.ble;
-      listener.onWalUpdated();
-      _resetSyncState();
-
-      if (wasCancelled) {
-        debugPrint("SDCardWalSync WiFi: Cancelled - partial data saved, user can retry for remaining");
-        return SyncLocalFilesResponse(newConversationIds: [], updatedConversationIds: []);
-      }
-
-      debugPrint("SDCardWalSync WiFi: Sync completed successfully");
       return resp;
     } catch (e) {
       Logger.debug("SDCardWalSync WiFi: Error during sync: $e");
+      DebugLogManager.logError(e, null, 'SD card WiFi sync error: ${e.toString()}');
 
+      _activeTcpTransport = null;
+      _activeTransferCompleter = null;
       ServiceManager.instance().device.setWifiSyncInProgress(false);
 
       // Reset WAL sync state on error

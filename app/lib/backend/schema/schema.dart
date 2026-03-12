@@ -8,5 +8,6 @@ export 'message.dart';
 export 'message_event.dart';
 export 'mcp_api_key.dart';
 export 'person.dart';
+export 'phone_call.dart';
 export 'structured.dart';
 export 'transcript_segment.dart';

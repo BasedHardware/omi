@@ -1,0 +1,53 @@
+# E2E Flow: Language change via deep navigation
+# Tests: 4-level navigation, bottom sheet picker, locale swap, hot restart verification
+
+name: language-change
+description: Settings → Profile → Language → App Language picker, change locale via shared_prefs, hot restart, verify UI, restore
+covers:
+  - app/lib/pages/settings/settings_drawer.dart
+  - app/lib/pages/settings/profile.dart
+  - app/lib/pages/settings/language_settings_page.dart
+  - app/lib/pages/settings/language_selection_dialog.dart
+prerequisites:
+  - auth_ready  # User completed real sign-in (Google/Apple) and onboarding. Android: `bash setup.sh android`. iOS: `bash setup.sh ios`. App must show home screen.
+  - adb_access  # Android only: debug build + `adb` in PATH for SharedPreferences locale manipulation. iOS: use `xcrun simctl` for simulator.
+setup: normal
+
+steps:
+  - name: Navigate to settings
+    press: { type: button, position: rightmost }
+
+  - name: Open Profile
+    press: { type: gesture, hint: "first wide row y=150-200 in settings" }
+    assert:
+      interactive_count: { min: 5 }
+
+  - name: Open Language
+    press: { type: gesture, hint: "3rd row in Profile, y=250-340" }
+    screenshot: language-page
+
+  - name: Open App Language picker
+    press: { type: gesture, hint: "first wide row y=250-400 on Language page" }
+    assert:
+      interactive_count: { min: 10, hint: "picker should show many language options" }
+    screenshot: language-picker
+
+  - name: Select a language from picker
+    press: { type: gesture, hint: "pick a non-current language row" }
+    screenshot: after-select
+
+  - name: Change locale via shared_prefs
+    adb_locale: { set: "es", hint: "modify flutter.app_locale in shared_prefs XML" }
+
+  - name: Hot restart and verify Spanish UI
+    hot_restart: true
+    assert:
+      interactive_count: { min: 5 }
+    screenshot: spanish-ui
+
+  - name: Restore English locale
+    adb_locale: { set: "en" }
+    hot_restart: true
+    assert:
+      interactive_count: { min: 5 }
+    screenshot: english-restored

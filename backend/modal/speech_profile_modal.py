@@ -12,6 +12,9 @@ from pydub import AudioSegment
 from speechbrain.inference.speaker import SpeakerRecognition
 
 from utils.stt.speech_profile import get_speech_profile_expanded, get_people_with_speech_samples
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class TranscriptSegment(BaseModel):
@@ -40,7 +43,7 @@ def sample_same_speaker_as_segment(sample_audio: str, segment: str) -> float:
             return float(score[0])
         return 0
     except Exception as e:
-        print(e)
+        logger.error(e)
         return 0
 
 
@@ -52,7 +55,7 @@ def classify_segments(audio_file_path: str, profile_path: str, people: List[dict
     # TODO: do per segment cleaning later. 1 by 1, maybe running pyannote VAD here (gpu), or using silero
     # cleaning start, end doesn't do anything, cause segments are already pointing that
 
-    print('Duration:', AudioSegment.from_wav(audio_file_path).duration_seconds)
+    logger.info(f'Duration: {AudioSegment.from_wav(audio_file_path).duration_seconds}')
 
     file_name = os.path.basename(audio_file_path)
     for i, segment in enumerate(segments):
@@ -75,7 +78,7 @@ def classify_segments(audio_file_path: str, profile_path: str, people: List[dict
 
         if not by_chunk_matches:
             continue
-        print(by_chunk_matches)
+        logger.info(by_chunk_matches)
         max_match = max(by_chunk_matches, key=by_chunk_matches.get)
         matches[i] = {'is_user': max_match == 'user', 'person_id': None if max_match == 'user' else max_match}
 

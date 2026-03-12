@@ -6,6 +6,9 @@ Prevents infinite loops, context overflow, and excessive tool usage.
 
 from typing import Dict, List, Tuple, Optional
 import time
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class SafetyGuardError(Exception):
@@ -64,7 +67,7 @@ class AgentSafetyGuard:
         self.tool_call_count += 1
         self.tool_call_history.append((tool_name, params, time.time()))
 
-        print(f"🛡️ Safety Guard: Tool call {self.tool_call_count}/{self.max_tool_calls} - {tool_name}")
+        logger.info(f"🛡️ Safety Guard: Tool call {self.tool_call_count}/{self.max_tool_calls} - {tool_name}")
 
     def estimate_response_tokens(self, response: str) -> int:
         """
@@ -100,7 +103,9 @@ class AgentSafetyGuard:
             )
 
         self.estimated_tokens = total_tokens
-        print(f"🛡️ Safety Guard: Context size: {self.estimated_tokens}/{self.max_context_tokens} tokens (+{new_tokens})")
+        logger.info(
+            f"🛡️ Safety Guard: Context size: {self.estimated_tokens}/{self.max_context_tokens} tokens (+{new_tokens})"
+        )
 
     def _is_loop_detected(self, tool_name: str, params: Dict) -> bool:
         """
@@ -188,13 +193,13 @@ class AgentSafetyGuard:
         """
         # Warn at 80% of limits
         if self.tool_call_count >= self.max_tool_calls * 0.8:
-            print(
+            logger.warning(
                 f"🛡️ Safety Guard: Warning - Tool calls at {self.tool_call_count}/{self.max_tool_calls} (80% threshold)"
             )
             return "⚠️ I'm processing a lot of information. Your response might take a moment..."
 
         if self.estimated_tokens >= self.max_context_tokens * 0.8:
-            print(
+            logger.warning(
                 f"🛡️ Safety Guard: Warning - Context size at {self.estimated_tokens}/{self.max_context_tokens} tokens (80% threshold)"
             )
             return "⚠️ Processing a large amount of data. Almost done..."

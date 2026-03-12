@@ -1,0 +1,88 @@
+# E2E Flow: Onboarding — full new-user journey
+# Tests: 11-step onboarding wizard from auth to completion
+
+name: onboarding
+description: Full onboarding flow from Get Started through auth, name, language, permissions, speech profile, to completion
+covers:
+  - app/lib/pages/onboarding/wrapper.dart
+  - app/lib/pages/onboarding/auth.dart
+  - app/lib/pages/onboarding/name/name_widget.dart
+  - app/lib/pages/onboarding/primary_language/primary_language_widget.dart
+  - app/lib/pages/onboarding/found_omi/found_omi_widget.dart
+  - app/lib/pages/onboarding/permissions/permissions_widget.dart
+  - app/lib/pages/onboarding/user_review_page.dart
+  - app/lib/pages/onboarding/speech_profile_widget.dart
+  - app/lib/pages/onboarding/knowledge_graph_step.dart
+  - app/lib/pages/onboarding/complete_screen.dart
+prerequisites:
+  - signed_out  # Fresh app state. Android: uninstall or clear data (Settings → Apps → Omi → Clear Data). iOS: delete and reinstall app. Must show Get Started screen.
+setup: signed_out
+
+steps:
+  - name: Get Started screen
+    assert:
+      text: "Get Started"
+      interactive_count: { min: 1, hint: "ElevatedButton at bottom" }
+    screenshot: get-started
+
+  - name: Tap Get Started
+    press: { type: button, hint: "ElevatedButton — Get Started" }
+    screenshot: auth-page
+
+  - name: Auth page — sign in options
+    assert:
+      text: "Sign in with Google"
+      interactive_count: { min: 2, hint: "Google button, possibly Apple button" }
+    note: "On Android, only Google sign-in shown. On iOS, both Apple and Google."
+    screenshot: auth-options
+
+  - name: Sign in with Google
+    press: { type: button, hint: "ElevatedButton — Sign in with Google" }
+    note: "Triggers consent bottom sheet, then Google OAuth flow"
+    screenshot: after-auth
+
+  - name: Name entry page
+    assert:
+      interactive_count: { min: 2, hint: "text field + continue button" }
+    fill: { type: textfield, value: "Test User" }
+    screenshot: name-entry
+
+  - name: Submit name
+    press: { type: button, hint: "Continue/Next button" }
+    screenshot: after-name
+
+  - name: Primary language selection
+    assert:
+      text: "Tell us your primary language"
+      interactive_count: { min: 3, hint: "search field + language rows + confirm" }
+    screenshot: language-selection
+
+  - name: Select English and confirm
+    press: { type: gesture, hint: "first InkWell language row — English" }
+    press: { type: button, hint: "Confirm button" }
+    screenshot: after-language
+
+  - name: Found Omi / device discovery
+    note: "Shows device scanning or skip option"
+    screenshot: found-omi
+
+  - name: Permissions request
+    note: "Requests microphone, notifications, location permissions"
+    screenshot: permissions
+
+  - name: User review page
+    note: "Loving Omi? survey/rating page"
+    screenshot: user-review
+
+  - name: Speech profile setup
+    note: "Audio capture for speaker identification"
+    screenshot: speech-profile
+
+  - name: Knowledge graph preview
+    note: "Shows memory graph visualization"
+    screenshot: knowledge-graph
+
+  - name: Onboarding complete
+    assert:
+      interactive_count: { min: 1, hint: "Continue/Get Started button" }
+    screenshot: complete

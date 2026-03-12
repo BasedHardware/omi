@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:omi/widgets/shimmer_with_timeout.dart';
 
-import 'package:omi/l10n/app_localizations.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/models/announcement.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
 
@@ -9,11 +9,8 @@ class ChangelogSheet extends StatefulWidget {
   final List<Announcement>? changelogs;
   final Future<List<Announcement>> Function()? changelogsFuture;
 
-  const ChangelogSheet({
-    super.key,
-    this.changelogs,
-    this.changelogsFuture,
-  }) : assert(changelogs != null || changelogsFuture != null);
+  const ChangelogSheet({super.key, this.changelogs, this.changelogsFuture})
+      : assert(changelogs != null || changelogsFuture != null);
 
   /// Show the changelog sheet as a modal bottom sheet with pre-loaded data.
   static Future<void> show(BuildContext context, List<Announcement> changelogs) {
@@ -27,10 +24,7 @@ class ChangelogSheet extends StatefulWidget {
     );
   }
 
-  static Future<void> showWithLoading(
-    BuildContext context,
-    Future<List<Announcement>> Function() fetchChangelogs,
-  ) {
+  static Future<void> showWithLoading(BuildContext context, Future<List<Announcement>> Function() fetchChangelogs) {
     return showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -137,18 +131,16 @@ class _ChangelogSheetState extends State<ChangelogSheet> {
   }
 
   Widget _buildHeader() {
-    String title = "What's New";
+    String title = context.l10n.whatsNew;
     if (!_isLoading && _orderedChangelogs.isNotEmpty) {
       final version = _orderedChangelogs[_currentPage].appVersion ?? '';
-      title = "What's New in $version";
+      title = context.l10n.whatsNewInVersion(version);
     }
 
     return Container(
       padding: const EdgeInsets.fromLTRB(20, 12, 12, 12),
       decoration: const BoxDecoration(
-        border: Border(
-          bottom: BorderSide(color: ResponsiveHelper.backgroundTertiary, width: 1),
-        ),
+        border: Border(bottom: BorderSide(color: ResponsiveHelper.backgroundTertiary, width: 1)),
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -176,11 +168,7 @@ class _ChangelogSheetState extends State<ChangelogSheet> {
                 ),
           IconButton(
             onPressed: () => Navigator.pop(context),
-            icon: const Icon(
-              Icons.close,
-              color: ResponsiveHelper.textSecondary,
-              size: 24,
-            ),
+            icon: const Icon(Icons.close, color: ResponsiveHelper.textSecondary, size: 24),
           ),
         ],
       ),
@@ -261,19 +249,9 @@ class _ChangelogSheetState extends State<ChangelogSheet> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(
-            Icons.error_outline,
-            color: Colors.grey.shade500,
-            size: 48,
-          ),
+          Icon(Icons.error_outline, color: Colors.grey.shade500, size: 48),
           const SizedBox(height: 16),
-          Text(
-            _error ?? 'Something went wrong',
-            style: TextStyle(
-              color: Colors.grey.shade400,
-              fontSize: 16,
-            ),
-          ),
+          Text(_error ?? 'Something went wrong', style: TextStyle(color: Colors.grey.shade400, fontSize: 16)),
           const SizedBox(height: 16),
           TextButton(
             onPressed: () {
@@ -283,7 +261,7 @@ class _ChangelogSheetState extends State<ChangelogSheet> {
               });
               _loadChangelogs();
             },
-            child: Text(AppLocalizations.of(context)!.retry),
+            child: Text(context.l10n.retry),
           ),
         ],
       ),
@@ -315,10 +293,7 @@ class _ChangelogSheetState extends State<ChangelogSheet> {
         Row(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            Text(
-              item.icon ?? '✨',
-              style: const TextStyle(fontSize: 20),
-            ),
+            Text(item.icon ?? '✨', style: const TextStyle(fontSize: 20)),
             const SizedBox(width: 12),
             Expanded(
               child: Text(
@@ -339,11 +314,7 @@ class _ChangelogSheetState extends State<ChangelogSheet> {
           padding: const EdgeInsets.only(left: 32),
           child: Text(
             item.description,
-            style: const TextStyle(
-              color: ResponsiveHelper.textSecondary,
-              fontSize: 15,
-              height: 1.5,
-            ),
+            style: const TextStyle(color: ResponsiveHelper.textSecondary, fontSize: 15, height: 1.5),
           ),
         ),
       ],
@@ -358,9 +329,7 @@ class _ChangelogSheetState extends State<ChangelogSheet> {
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
       decoration: const BoxDecoration(
-        border: Border(
-          top: BorderSide(color: ResponsiveHelper.backgroundTertiary, width: 1),
-        ),
+        border: Border(top: BorderSide(color: ResponsiveHelper.backgroundTertiary, width: 1)),
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -370,10 +339,7 @@ class _ChangelogSheetState extends State<ChangelogSheet> {
             icon: Icons.chevron_left,
             enabled: _currentPage > 0,
             onTap: () {
-              _pageController.previousPage(
-                duration: const Duration(milliseconds: 300),
-                curve: Curves.easeInOut,
-              );
+              _pageController.previousPage(duration: const Duration(milliseconds: 300), curve: Curves.easeInOut);
             },
           ),
           // Version indicator and page dots
@@ -390,10 +356,7 @@ class _ChangelogSheetState extends State<ChangelogSheet> {
               const SizedBox(height: 8),
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
-                children: List.generate(
-                  _orderedChangelogs.length,
-                  (index) => _buildPageDot(index),
-                ),
+                children: List.generate(_orderedChangelogs.length, (index) => _buildPageDot(index)),
               ),
             ],
           ),
@@ -402,10 +365,7 @@ class _ChangelogSheetState extends State<ChangelogSheet> {
             icon: Icons.chevron_right,
             enabled: _currentPage < _orderedChangelogs.length - 1,
             onTap: () {
-              _pageController.nextPage(
-                duration: const Duration(milliseconds: 300),
-                curve: Curves.easeInOut,
-              );
+              _pageController.nextPage(duration: const Duration(milliseconds: 300), curve: Curves.easeInOut);
             },
           ),
         ],
@@ -413,11 +373,7 @@ class _ChangelogSheetState extends State<ChangelogSheet> {
     );
   }
 
-  Widget _buildNavigationButton({
-    required IconData icon,
-    required bool enabled,
-    required VoidCallback onTap,
-  }) {
+  Widget _buildNavigationButton({required IconData icon, required bool enabled, required VoidCallback onTap}) {
     return GestureDetector(
       onTap: enabled ? onTap : null,
       child: Container(
@@ -427,11 +383,7 @@ class _ChangelogSheetState extends State<ChangelogSheet> {
           color: enabled ? const Color(0xFF2A2A2E) : ResponsiveHelper.backgroundTertiary,
           shape: BoxShape.circle,
         ),
-        child: Icon(
-          icon,
-          color: enabled ? ResponsiveHelper.textPrimary : ResponsiveHelper.textQuaternary,
-          size: 24,
-        ),
+        child: Icon(icon, color: enabled ? ResponsiveHelper.textPrimary : ResponsiveHelper.textQuaternary, size: 24),
       ),
     );
   }

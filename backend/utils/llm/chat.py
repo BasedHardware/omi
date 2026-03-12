@@ -19,6 +19,9 @@ from models.conversation import CategoryEnum, Conversation, ActionItem, Event, C
 from models.other import Person
 from models.transcript_segment import TranscriptSegment
 from utils.llms.memory import get_prompt_memories
+import logging
+
+logger = logging.getLogger(__name__)
 
 # ****************************************
 # ************* CHAT BASICS **************
@@ -141,7 +144,9 @@ def retrieve_is_an_omi_question(question: str) -> bool:
     {question}
     
     Is this asking about the Omi/Friend app product itself?
-    '''.replace('    ', '').strip()
+    '''.replace(
+        '    ', ''
+    ).strip()
     with_parser = llm_mini.with_structured_output(IsAnOmiQuestion)
     response: IsAnOmiQuestion = with_parser.invoke(prompt)
     try:
@@ -192,7 +197,9 @@ def retrieve_context_dates_by_question(question: str, tz: str) -> List[datetime]
     {question}
     </question>
 
-    '''.replace('    ', '').strip()
+    '''.replace(
+        '    ', ''
+    ).strip()
 
     # print(prompt)
     # print(llm_mini.invoke(prompt).content)
@@ -247,7 +254,9 @@ def _get_answer_simple_message_prompt(uid: str, messages: List[Message], app: Op
     {conversation_history}
 
     Answer:
-    """.replace('    ', '').strip()
+    """.replace(
+        '    ', ''
+    ).strip()
 
 
 def answer_simple_message(uid: str, messages: List[Message], plugin: Optional[App] = None) -> str:
@@ -278,7 +287,9 @@ def _get_answer_omi_question_prompt(messages: List[Message], context: str) -> st
     {conversation_history}
 
     Answer:
-    """.replace('    ', '').strip()
+    """.replace(
+        '    ', ''
+    ).strip()
 
 
 def answer_omi_question(messages: List[Message], context: str) -> str:
@@ -318,7 +329,8 @@ def _get_qa_rag_prompt(
       - Avoid citing irrelevant memories.
     """
 
-    return f"""
+    return (
+        f"""
     <assistant_role>
         You are an assistant for question-answering tasks.
     </assistant_role>
@@ -377,7 +389,12 @@ def _get_qa_rag_prompt(
     </question_timezone>
 
     <answer>
-    """.replace('    ', '').replace('\n\n\n', '\n\n').strip()
+    """.replace(
+            '    ', ''
+        )
+        .replace('\n\n\n', '\n\n')
+        .strip()
+    )
 
 
 def _get_agentic_qa_prompt(
@@ -407,14 +424,16 @@ def _get_agentic_qa_prompt(
         current_datetime_user = datetime.now(user_tz)
         current_datetime_str = current_datetime_user.strftime('%Y-%m-%d %H:%M:%S')
         current_datetime_iso = current_datetime_user.isoformat()
-        print(f"🌍 _get_agentic_qa_prompt - User timezone: {tz}, Current time: {current_datetime_str}")
+        logger.info(f"🌍 _get_agentic_qa_prompt - User timezone: {tz}, Current time: {current_datetime_str}")
     except Exception:
         # Fallback to UTC if timezone is invalid
         current_datetime_user = datetime.now(timezone.utc)
         current_datetime_str = current_datetime_user.strftime('%Y-%m-%d %H:%M:%S')
         current_datetime_iso = current_datetime_user.isoformat()
         tz = "UTC"
-        print(f"🌍 _get_agentic_qa_prompt - User timezone: UTC (fallback), Current time: {current_datetime_str}")
+        logger.warning(
+            f"🌍 _get_agentic_qa_prompt - User timezone: UTC (fallback), Current time: {current_datetime_str}"
+        )
 
     # Handle persona apps - they override the entire system prompt
     if app and app.is_a_persona():
@@ -446,18 +465,23 @@ When you see [Files attached: X file(s), IDs: ...], you can reference those file
 
 """
 
-    # Get user's current goal
-    user_goal = goals_db.get_user_goal(uid)
+    # Get user's current goals
+    user_goals = goals_db.get_user_goals(uid)
     goal_section = ""
-    if user_goal:
-        goal_title = user_goal.get('title', '')
-        goal_current = user_goal.get('current_value', 0)
-        goal_target = user_goal.get('target_value', 0)
+    if user_goals:
+        goals_lines = []
+        for g in user_goals:
+            g_title = g.get('title', '')
+            g_current = g.get('current_value', 0)
+            g_target = g.get('target_value', 0)
+            goals_lines.append(f'- "{g_title}" (Progress: {g_current}/{g_target})')
+        goals_list = "\n".join(goals_lines)
         goal_section = f"""
-<user_goal>
-{user_name}'s current goal: "{goal_title}" (Progress: {goal_current}/{goal_target})
-Keep this goal in mind when giving advice or suggestions.
-</user_goal>
+<user_goals>
+{user_name}'s current goals:
+{goals_list}
+Keep these goals in mind when giving advice or suggestions.
+</user_goals>
 
 """
 
@@ -498,14 +522,14 @@ Keep this context in mind when answering their question.
         cached_prompt = get_agentic_system_prompt_template()
         base_prompt = render_prompt(cached_prompt.template_text, template_variables)
 
-        print(
+        logger.info(
             f"📝 Using prompt: {cached_prompt.prompt_name} (commit: {cached_prompt.prompt_commit}, source: {cached_prompt.source})"
         )
 
         return base_prompt.strip()
 
     except Exception as e:
-        print(f"⚠️  Error fetching/rendering LangSmith prompt, using inline fallback: {e}")
+        logger.error(f"⚠️  Error fetching/rendering LangSmith prompt, using inline fallback: {e}")
 
     # Inline fallback prompt - used when LangSmith is unavailable
     #
@@ -850,14 +874,16 @@ def retrieve_memory_context_params(uid: str, memory: Conversation) -> List[str]:
 
     Conversation:
     {transcript}
-    '''.replace('    ', '').strip()
+    '''.replace(
+        '    ', ''
+    ).strip()
 
     try:
         with_parser = llm_mini.with_structured_output(TopicsContext)
         response: TopicsContext = with_parser.invoke(prompt)
         return response.topics
     except Exception as e:
-        print(f'Error determining memory discard: {e}')
+        logger.error(f'Error determining memory discard: {e}')
         return []
 
 
@@ -892,7 +918,9 @@ def obtain_emotional_message(uid: str, memory: Conversation, context: str, emoti
     ```
     {context}
     ```
-    """.replace('    ', '').strip()
+    """.replace(
+        '    ', ''
+    ).strip()
     return llm_mini.invoke(prompt).content
 
 
@@ -938,7 +966,7 @@ class OutputQuestion(BaseModel):
 
 def extract_question_from_conversation(messages: List[Message]) -> str:
     # user last messages
-    print("extract_question_from_conversation")
+    logger.info("extract_question_from_conversation")
     user_message_idx = len(messages)
     for i in range(len(messages) - 1, -1, -1):
         if messages[i].sender == MessageSender.ai:
@@ -1007,7 +1035,9 @@ def extract_question_from_conversation(messages: List[Message]) -> str:
     - this day
     - etc.
     </date_in_term>
-    '''.replace('    ', '').strip()
+    '''.replace(
+        '    ', ''
+    ).strip()
     # print(prompt)
     question = llm_mini.with_structured_output(OutputQuestion).invoke(prompt).question
     # print(question)
@@ -1054,11 +1084,13 @@ def retrieve_metadata_fields_from_transcript(
     ```
     {full_context}
     ```
-    '''.replace('    ', '')
+    '''.replace(
+        '    ', ''
+    )
     try:
         result: ExtractedInformation = llm_mini.with_structured_output(ExtractedInformation).invoke(prompt)
     except Exception as e:
-        print('e', e)
+        logger.error(f'e {e}')
         return {'people': [], 'topics': [], 'entities': [], 'dates': []}
 
     def normalize_filter(value: str) -> str:
@@ -1094,7 +1126,7 @@ def retrieve_metadata_fields_from_transcript(
             #    continue
             metadata['dates'].append(date.strftime('%Y-%m-%d'))
         except Exception as e:
-            print(f'Error parsing date: {e}')
+            logger.error(f'Error parsing date: {e}')
 
     for p in metadata['people']:
         add_filter_category_item(uid, 'people', p)
@@ -1137,7 +1169,9 @@ def retrieve_metadata_from_message(
     ```
     {message_text}
     ```
-    '''.replace('    ', '')
+    '''.replace(
+        '    ', ''
+    )
 
     return _process_extracted_metadata(uid, prompt)
 
@@ -1171,7 +1205,9 @@ def retrieve_metadata_from_text(
     ```
     {text}
     ```
-    '''.replace('    ', '')
+    '''.replace(
+        '    ', ''
+    )
 
     return _process_extracted_metadata(uid, prompt)
 
@@ -1181,7 +1217,7 @@ def _process_extracted_metadata(uid: str, prompt: str) -> dict:
     try:
         result: ExtractedInformation = llm_mini.with_structured_output(ExtractedInformation).invoke(prompt)
     except Exception as e:
-        print(f'Error extracting metadata: {e}')
+        logger.error(f'Error extracting metadata: {e}')
         return {'people': [], 'topics': [], 'entities': [], 'dates': []}
 
     def normalize_filter(value: str) -> str:
@@ -1217,7 +1253,7 @@ def _process_extracted_metadata(uid: str, prompt: str) -> dict:
                 continue
             metadata['dates'].append(date.strftime('%Y-%m-%d'))
         except Exception as e:
-            print(f'Error parsing date: {e}')
+            logger.error(f'Error parsing date: {e}')
 
     for p in metadata['people']:
         add_filter_category_item(uid, 'people', p)
@@ -1244,7 +1280,9 @@ def select_structured_filters(question: str, filters_available: dict) -> dict:
     ```
 
     Question: {question}
-    '''.replace('    ', '').strip()
+    '''.replace(
+        '    ', ''
+    ).strip()
     # print(prompt)
     with_parser = llm_mini.with_structured_output(FiltersToUse)
     try:
@@ -1292,7 +1330,9 @@ def extract_question_from_transcript(uid: str, segments: List[TranscriptSegment]
     ```
     {TranscriptSegment.segments_as_string(segments, people=people)}
     ```
-    '''.replace('    ', '').strip()
+    '''.replace(
+        '    ', ''
+    ).strip()
     return llm_mini.with_structured_output(OutputQuestion).invoke(prompt).question
 
 
@@ -1341,5 +1381,7 @@ def provide_advice_message(uid: str, segments: List[TranscriptSegment], context:
     ```
     {context}
     ```
-    """.replace('    ', '').strip()
+    """.replace(
+        '    ', ''
+    ).strip()
     return llm_mini.with_structured_output(OutputMessage).invoke(prompt).message

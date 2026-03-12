@@ -12,7 +12,6 @@ from openai import OpenAI
 
 from utils.llm.clients import llm_medium, llm_mini
 
-
 # App categories available in the system
 APP_CATEGORIES = [
     {'title': 'Conversation Analysis', 'id': 'conversation-analysis'},

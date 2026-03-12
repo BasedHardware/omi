@@ -647,6 +647,7 @@ export function ConversationDetailPanel({
           {/* Actions Menu */}
           <ConversationActionsMenu
             conversation={conversation}
+            people={people}
             onConversationUpdate={onConversationUpdate}
             onDelete={handleDelete}
           />

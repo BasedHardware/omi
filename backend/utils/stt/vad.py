@@ -1,61 +1,19 @@
 import os
-from enum import Enum
 
-import numpy as np
 import requests
 import torch
 from fastapi import HTTPException
 from pydub import AudioSegment
 
 from database import redis_db
+import logging
+
+logger = logging.getLogger(__name__)
 
 torch.set_num_threads(1)
 torch.hub.set_dir('pretrained_models')
 model, utils = torch.hub.load(repo_or_dir='snakers4/silero-vad', model='silero_vad')
-(get_speech_timestamps, save_audio, read_audio, VADIterator, collect_chunks) = utils
-
-
-class SpeechState(str, Enum):
-    speech_found = 'speech_found'
-    no_speech = 'no_speech'
-
-
-def is_speech_present(data, vad_iterator, window_size_samples=256):
-    data_int16 = np.frombuffer(data, dtype=np.int16)
-    data_float32 = data_int16.astype(np.float32) / 32768.0
-    has_start, has_end = False, False
-
-    for i in range(0, len(data_float32), window_size_samples):
-        chunk = data_float32[i : i + window_size_samples]
-        if len(chunk) < window_size_samples:
-            break
-        speech_dict = vad_iterator(chunk, return_seconds=False)
-        if speech_dict:
-            # print(speech_dict)
-            vad_iterator.reset_states()
-            return SpeechState.speech_found
-
-            # if not has_start and 'start' in speech_dict:
-            #     has_start = True
-            #
-            # if not has_end and 'end' in speech_dict:
-            #     has_end = True
-
-    # if has_start:
-    #     return SpeechState.speech_found
-    # elif has_end:
-    #     return SpeechState.no_speech
-    vad_iterator.reset_states()
-    return SpeechState.no_speech
-
-
-def is_audio_empty(file_path, sample_rate=8000):
-    wav = read_audio(file_path)
-    timestamps = get_speech_timestamps(wav, model, sampling_rate=sample_rate)
-    if len(timestamps) == 1:
-        prob_not_speech = ((timestamps[0]['end'] / 1000) - (timestamps[0]['start'] / 1000)) < 1
-        return prob_not_speech
-    return len(timestamps) == 0
+get_speech_timestamps, save_audio, read_audio, VADIterator, collect_chunks = utils
 
 
 def vad_is_empty(file_path, return_segments: bool = False, cache: bool = False):
@@ -67,21 +25,40 @@ def vad_is_empty(file_path, return_segments: bool = False, cache: bool = False):
                 return exists
             return len(exists) == 0
 
-    with open(file_path, 'rb') as file:
-        files = {'file': (file_path.split('/')[-1], file, 'audio/wav')}
-        response = requests.post(os.getenv('HOSTED_VAD_API_URL'), files=files, timeout=300)
-        response.raise_for_status()  # Raise exception for HTTP errors
-        segments = response.json()
-        if cache:
-            redis_db.set_generic_cache(caching_key, segments, ttl=60 * 60 * 24)
-        if return_segments:
-            return segments
-        print('vad_is_empty', len(segments) == 0)
-        return len(segments) == 0
+    segments = None
+    hosted_vad_url = os.getenv('HOSTED_VAD_API_URL')
+    if hosted_vad_url:
+        try:
+            with open(file_path, 'rb') as file:
+                files = {'file': (file_path.split('/')[-1], file, 'audio/wav')}
+                response = requests.post(hosted_vad_url, files=files, timeout=300)
+                response.raise_for_status()  # Raise exception for HTTP errors
+                segments = response.json()
+        except Exception as e:
+            logger.warning(f'Hosted VAD unavailable, falling back to local VAD for {file_path}: {e}')
+
+    if segments is None:
+        wav = read_audio(file_path, sampling_rate=16000)
+        timestamps = get_speech_timestamps(wav, model, sampling_rate=16000)
+        segments = [
+            {
+                'start': ts['start'] / 16000.0,
+                'end': ts['end'] / 16000.0,
+                'duration': (ts['end'] - ts['start']) / 16000.0,
+            }
+            for ts in timestamps
+        ]
+
+    if cache:
+        redis_db.set_generic_cache(caching_key, segments, ttl=60 * 60 * 24)
+    if return_segments:
+        return segments
+    logger.info(f'vad_is_empty {len(segments) == 0}')
+    return len(segments) == 0
 
 
 def apply_vad_for_speech_profile(file_path: str):
-    print('apply_vad_for_speech_profile', file_path)
+    logger.info(f'apply_vad_for_speech_profile {file_path}')
     voice_segments = vad_is_empty(file_path, return_segments=True)
     if len(voice_segments) == 0:  # TODO: front error on post-processing, audio sent is bad.
         raise HTTPException(status_code=400, detail="Audio is empty")

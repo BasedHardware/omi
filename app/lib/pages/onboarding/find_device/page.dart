@@ -122,7 +122,6 @@ class _FindDevicesPageState extends State<FindDevicesPage> {
                       fontWeight: FontWeight.w400,
                       fontSize: 16,
                       color: Colors.white,
-                      // decoration: TextDecoration.underline,
                     ),
                   ),
                 ),

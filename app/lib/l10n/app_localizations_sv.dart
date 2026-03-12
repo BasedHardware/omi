@@ -1015,7 +1015,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get vocabularyHint => 'Omi, Callie, OpenAI';
 
   @override
-  String get connect => 'Connect';
+  String get connect => 'Anslut';
 
   @override
   String get comingSoon => 'Kommer snart';
@@ -2269,7 +2269,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get folderName => 'Mappnamn';
 
   @override
-  String get descriptionOptional => 'Description (optional)';
+  String get descriptionOptional => 'Beskrivning (valfritt)';
 
   @override
   String get failedToDeleteFolder => 'Det gick inte att ta bort mappen';
@@ -2676,7 +2676,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get showAll => 'Visa alla →';
 
   @override
-  String get noTasksForToday => 'Inga uppgifter för idag.\\nFråga Omi om fler uppgifter eller skapa manuellt.';
+  String get noTasksForToday => 'Inga uppgifter för idag.\nFråga Omi om fler uppgifter eller skapa manuellt.';
 
   @override
   String get dailyScore => 'DAGLIG POÄNG';
@@ -7995,36 +7995,36 @@ class AppLocalizationsSv extends AppLocalizations {
   String get couldNotOpenUrl => 'Det gick inte att öppna URL:en. Försök igen.';
 
   @override
-  String get newTask => 'New Task';
+  String get newTask => 'Ny uppgift';
 
   @override
-  String get viewAll => 'View All';
+  String get viewAll => 'Visa alla';
 
   @override
-  String get addTask => 'Add Task';
+  String get addTask => 'Lägg till uppgift';
 
   @override
-  String get addMcpServer => 'Add MCP Server';
+  String get addMcpServer => 'Lägg till MCP-server';
 
   @override
-  String get connectExternalAiTools => 'Connect external AI tools';
+  String get connectExternalAiTools => 'Anslut externa AI-verktyg';
 
   @override
   String get mcpServerUrl => 'MCP Server URL';
 
   @override
   String mcpServerConnected(int count) {
-    return '$count tools connected successfully';
+    return '$count verktyg anslutna';
   }
 
   @override
-  String get mcpConnectionFailed => 'Failed to connect to MCP server';
+  String get mcpConnectionFailed => 'Kunde inte ansluta till MCP-server';
 
   @override
-  String get authorizingMcpServer => 'Authorizing...';
+  String get authorizingMcpServer => 'Auktoriserar...';
 
   @override
-  String get whereDidYouHearAboutOmi => 'How did you find us?';
+  String get whereDidYouHearAboutOmi => 'Hur hittade du oss?';
 
   @override
   String get tiktok => 'TikTok';
@@ -8042,19 +8042,19 @@ class AppLocalizationsSv extends AppLocalizations {
   String get reddit => 'Reddit';
 
   @override
-  String get friendWordOfMouth => 'Friend';
+  String get friendWordOfMouth => 'Vän';
 
   @override
-  String get otherSource => 'Other';
+  String get otherSource => 'Övrigt';
 
   @override
-  String get pleaseSpecify => 'Please specify';
+  String get pleaseSpecify => 'Vänligen specificera';
 
   @override
-  String get event => 'Event';
+  String get event => 'Evenemang';
 
   @override
-  String get coworker => 'Coworker';
+  String get coworker => 'Kollega';
 
   @override
   String get linkedIn => 'LinkedIn';
@@ -8070,4 +8070,491 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get audioPlaybackFailed => 'Kan inte spela upp ljud. Filen kan vara skadad eller saknas.';
+
+  @override
+  String get connectionGuide => 'Anslutningsguide';
+
+  @override
+  String get iveDoneThis => 'Jag har gjort detta';
+
+  @override
+  String get pairNewDevice => 'Parkoppla ny enhet';
+
+  @override
+  String get dontSeeYourDevice => 'Ser du inte din enhet?';
+
+  @override
+  String get reportAnIssue => 'Rapportera ett problem';
+
+  @override
+  String get pairingTitleOmi => 'Slå på Omi';
+
+  @override
+  String get pairingDescOmi => 'Tryck och håll enheten tills den vibrerar för att slå på den.';
+
+  @override
+  String get pairingTitleOmiDevkit => 'Sätt Omi DevKit i parkopplingsläge';
+
+  @override
+  String get pairingDescOmiDevkit => 'Tryck på knappen en gång för att slå på. LED:en blinkar lila i parkopplingsläge.';
+
+  @override
+  String get pairingTitleOmiGlass => 'Slå på Omi Glass';
+
+  @override
+  String get pairingDescOmiGlass => 'Tryck och håll sidoknappen i 3 sekunder för att slå på.';
+
+  @override
+  String get pairingTitlePlaudNote => 'Sätt Plaud Note i parkopplingsläge';
+
+  @override
+  String get pairingDescPlaudNote =>
+      'Tryck och håll sidoknappen i 2 sekunder. Den röda LED:en blinkar när den är redo att parkoppla.';
+
+  @override
+  String get pairingTitleBee => 'Sätt Bee i parkopplingsläge';
+
+  @override
+  String get pairingDescBee => 'Tryck på knappen 5 gånger i rad. Ljuset börjar blinka blått och grönt.';
+
+  @override
+  String get pairingTitleLimitless => 'Sätt Limitless i parkopplingsläge';
+
+  @override
+  String get pairingDescLimitless =>
+      'När en lampa lyser, tryck en gång och tryck sedan och håll tills enheten visar ett rosa ljus, släpp sedan.';
+
+  @override
+  String get pairingTitleFriendPendant => 'Sätt Friend Pendant i parkopplingsläge';
+
+  @override
+  String get pairingDescFriendPendant =>
+      'Tryck på knappen på hänget för att slå på det. Det går automatiskt till parkopplingsläge.';
+
+  @override
+  String get pairingTitleFieldy => 'Sätt Fieldy i parkopplingsläge';
+
+  @override
+  String get pairingDescFieldy => 'Tryck och håll enheten tills ljuset visas för att slå på den.';
+
+  @override
+  String get pairingTitleAppleWatch => 'Anslut Apple Watch';
+
+  @override
+  String get pairingDescAppleWatch =>
+      'Installera och öppna Omi-appen på din Apple Watch, tryck sedan på Anslut i appen.';
+
+  @override
+  String get pairingTitleNeoOne => 'Sätt Neo One i parkopplingsläge';
+
+  @override
+  String get pairingDescNeoOne => 'Tryck och håll strömknappen tills LED:en blinkar. Enheten kommer att vara synlig.';
+
+  @override
+  String get downloadingFromDevice => 'Laddar ner från enhet';
+
+  @override
+  String get reconnectingToInternet => 'Återansluter till internet...';
+
+  @override
+  String uploadingToCloud(int current, int total) {
+    return 'Laddar upp $current av $total';
+  }
+
+  @override
+  String get processedStatus => 'Bearbetad';
+
+  @override
+  String get corruptedStatus => 'Skadad';
+
+  @override
+  String nPending(int count) {
+    return '$count väntande';
+  }
+
+  @override
+  String nProcessed(int count) {
+    return '$count bearbetade';
+  }
+
+  @override
+  String get synced => 'Synkroniserad';
+
+  @override
+  String get noPendingRecordings => 'Inga väntande inspelningar';
+
+  @override
+  String get noProcessedRecordings => 'Inga bearbetade inspelningar ännu';
+
+  @override
+  String get pending => 'Väntande';
+
+  @override
+  String whatsNewInVersion(String version) {
+    return 'Nyheter i $version';
+  }
+
+  @override
+  String get addToYourTaskList => 'Lägg till i din uppgiftslista?';
+
+  @override
+  String get failedToCreateShareLink => 'Kunde inte skapa delningslänk';
+
+  @override
+  String get deleteGoal => 'Ta bort mål';
+
+  @override
+  String get deviceUpToDate => 'Din enhet är uppdaterad';
+
+  @override
+  String get wifiConfiguration => 'WiFi-konfiguration';
+
+  @override
+  String get wifiConfigurationSubtitle => 'Ange dina WiFi-uppgifter så att enheten kan ladda ner firmware.';
+
+  @override
+  String get networkNameSsid => 'Nätverksnamn (SSID)';
+
+  @override
+  String get enterWifiNetworkName => 'Ange WiFi-nätverksnamn';
+
+  @override
+  String get enterWifiPassword => 'Ange WiFi-lösenord';
+
+  @override
+  String get appIconLabel => 'App Icon';
+
+  @override
+  String get onboardingWhatIKnowAboutYouTitle => 'Här är vad jag vet om dig';
+
+  @override
+  String get onboardingWhatIKnowAboutYouDescription => 'Denna karta uppdateras när Omi lär sig från dina samtal.';
+
+  @override
+  String get apiEnvironment => 'API-miljö';
+
+  @override
+  String get apiEnvironmentDescription => 'Välj vilken server att ansluta till';
+
+  @override
+  String get production => 'Produktion';
+
+  @override
+  String get staging => 'Testmiljö';
+
+  @override
+  String get switchRequiresRestart => 'Byte kräver omstart av appen';
+
+  @override
+  String get switchApiConfirmTitle => 'Byt API-miljö';
+
+  @override
+  String switchApiConfirmBody(String environment) {
+    return 'Byta till $environment? Du behöver stänga och öppna appen igen för att ändringarna ska börja gälla.';
+  }
+
+  @override
+  String get switchAndRestart => 'Byt';
+
+  @override
+  String get stagingDisclaimer =>
+      'Testmiljön kan vara instabil, ha inkonsekvent prestanda och data kan gå förlorad. Endast för testning.';
+
+  @override
+  String get apiEnvSavedRestartRequired => 'Sparat. Stäng och öppna appen igen för att tillämpa ändringarna.';
+
+  @override
+  String get shared => 'Delad';
+
+  @override
+  String get onlyYouCanSeeConversation => 'Bara du kan se den här konversationen';
+
+  @override
+  String get anyoneWithLinkCanView => 'Alla med länken kan visa';
+
+  @override
+  String get tasksCleanTodayTitle => 'Rensa dagens uppgifter?';
+
+  @override
+  String get tasksCleanTodayMessage => 'Detta tar bara bort deadlines';
+
+  @override
+  String get tasksOverdue => 'Försenade';
+
+  @override
+  String get phoneCallsWithOmi => 'Samtal med Omi';
+
+  @override
+  String get phoneCallsSubtitle => 'Ring med realtidstranskription';
+
+  @override
+  String get phoneSetupStep1Title => 'Verifiera ditt telefonnummer';
+
+  @override
+  String get phoneSetupStep1Subtitle => 'Vi ringer dig for att bekrafta';
+
+  @override
+  String get phoneSetupStep2Title => 'Ange en verifieringskod';
+
+  @override
+  String get phoneSetupStep2Subtitle => 'En kort kod du anger under samtalet';
+
+  @override
+  String get phoneSetupStep3Title => 'Borja ringa dina kontakter';
+
+  @override
+  String get phoneSetupStep3Subtitle => 'Med inbyggd livetranskription';
+
+  @override
+  String get phoneGetStarted => 'Kom igang';
+
+  @override
+  String get callRecordingConsentDisclaimer => 'Samtalsinspelning kan krava samtycke i din jurisdiktion';
+
+  @override
+  String get enterYourNumber => 'Ange ditt nummer';
+
+  @override
+  String get phoneNumberCallerIdHint => 'Efter verifiering blir detta ditt nummervisnings-ID';
+
+  @override
+  String get phoneNumberHint => 'Telefonnummer';
+
+  @override
+  String get failedToStartVerification => 'Kunde inte starta verifieringen';
+
+  @override
+  String get phoneContinue => 'Fortsatt';
+
+  @override
+  String get verifyYourNumber => 'Verifiera ditt nummer';
+
+  @override
+  String get answerTheCallFrom => 'Svara pa samtalet fran';
+
+  @override
+  String get onTheCallEnterThisCode => 'Under samtalet, ange denna kod';
+
+  @override
+  String get followTheVoiceInstructions => 'Folj rostinstruktionerna';
+
+  @override
+  String get statusCalling => 'Ringer...';
+
+  @override
+  String get statusCallInProgress => 'Samtal pagar';
+
+  @override
+  String get statusVerifiedLabel => 'Verifierad';
+
+  @override
+  String get statusCallMissed => 'Missat samtal';
+
+  @override
+  String get statusTimedOut => 'Tidsgrans';
+
+  @override
+  String get phoneTryAgain => 'Forsok igen';
+
+  @override
+  String get phonePageTitle => 'Telefon';
+
+  @override
+  String get phoneContactsTab => 'Kontakter';
+
+  @override
+  String get phoneKeypadTab => 'Knappsats';
+
+  @override
+  String get grantContactsAccess => 'Ge tillgang till dina kontakter';
+
+  @override
+  String get phoneAllow => 'Tillat';
+
+  @override
+  String get phoneSearchHint => 'Sok';
+
+  @override
+  String get phoneNoContactsFound => 'Inga kontakter hittades';
+
+  @override
+  String get phoneEnterNumber => 'Ange nummer';
+
+  @override
+  String get failedToStartCall => 'Kunde inte starta samtalet';
+
+  @override
+  String get callStateConnecting => 'Ansluter...';
+
+  @override
+  String get callStateRinging => 'Ringer...';
+
+  @override
+  String get callStateEnded => 'Samtal avslutat';
+
+  @override
+  String get callStateFailed => 'Samtal misslyckades';
+
+  @override
+  String get transcriptPlaceholder => 'Transkription visas har...';
+
+  @override
+  String get phoneUnmute => 'Sla pa ljud';
+
+  @override
+  String get phoneMute => 'Ljud av';
+
+  @override
+  String get phoneSpeaker => 'Hogtalare';
+
+  @override
+  String get phoneEndCall => 'Avsluta';
+
+  @override
+  String get phoneCallSettingsTitle => 'Samtalsinstellningar';
+
+  @override
+  String get yourVerifiedNumbers => 'Dina verifierade nummer';
+
+  @override
+  String get verifiedNumbersDescription => 'Nar du ringer nagon ser de detta nummer';
+
+  @override
+  String get noVerifiedNumbers => 'Inga verifierade nummer';
+
+  @override
+  String deletePhoneNumberConfirm(String phoneNumber) {
+    return 'Ta bort $phoneNumber?';
+  }
+
+  @override
+  String get deletePhoneNumberWarning => 'Du maste verifiera igen for att ringa';
+
+  @override
+  String get phoneDeleteButton => 'Ta bort';
+
+  @override
+  String verifiedMinutesAgo(int minutes) {
+    return 'Verifierad for ${minutes}min sedan';
+  }
+
+  @override
+  String verifiedHoursAgo(int hours) {
+    return 'Verifierad for ${hours}t sedan';
+  }
+
+  @override
+  String verifiedDaysAgo(int days) {
+    return 'Verifierad for ${days}d sedan';
+  }
+
+  @override
+  String verifiedOnDate(String date) {
+    return 'Verifierad $date';
+  }
+
+  @override
+  String get verifiedFallback => 'Verifierad';
+
+  @override
+  String get callAlreadyInProgress => 'Ett samtal pagar redan';
+
+  @override
+  String get failedToGetCallToken => 'Kunde inte hamta token. Verifiera ditt nummer forst.';
+
+  @override
+  String get failedToInitializeCallService => 'Kunde inte initiera samtalstjansten';
+
+  @override
+  String get speakerLabelYou => 'Du';
+
+  @override
+  String get speakerLabelUnknown => 'Okand';
+
+  @override
+  String get showDailyScoreOnHomepage => 'Visa dagligt poäng på hemsidan';
+
+  @override
+  String get showTasksOnHomepage => 'Visa uppgifter på hemsidan';
+
+  @override
+  String get phoneCallsUnlimitedOnly => 'Telefonsamtal via Omi';
+
+  @override
+  String get phoneCallsUpsellSubtitle =>
+      'Ring via Omi och få transkription i realtid, automatiska sammanfattningar och mer.';
+
+  @override
+  String get phoneCallsUpsellFeature1 => 'Transkription i realtid av varje samtal';
+
+  @override
+  String get phoneCallsUpsellFeature2 => 'Automatiska samtalssammanfattningar och uppgifter';
+
+  @override
+  String get phoneCallsUpsellFeature3 => 'Mottagare ser ditt riktiga nummer, inte ett slumpmässigt';
+
+  @override
+  String get phoneCallsUpsellFeature4 => 'Dina samtal förblir privata och säkra';
+
+  @override
+  String get phoneCallsUpgradeButton => 'Uppgradera till Obegränsad';
+
+  @override
+  String get phoneCallsMaybeLater => 'Kanske senare';
+
+  @override
+  String get deleteSynced => 'Ta bort synkroniserade';
+
+  @override
+  String get deleteSyncedFiles => 'Radera synkroniserade inspelningar';
+
+  @override
+  String get deleteSyncedFilesMessage =>
+      'Dessa inspelningar har redan synkroniserats med din telefon. Detta kan inte ångras.';
+
+  @override
+  String get syncedFilesDeleted => 'Synkroniserade inspelningar raderade';
+
+  @override
+  String get deletePending => 'Ta bort väntande';
+
+  @override
+  String get deletePendingFiles => 'Radera väntande inspelningar';
+
+  @override
+  String get deletePendingFilesWarning =>
+      'Dessa inspelningar har INTE synkroniserats med din telefon och kommer att förloras permanent. Detta kan inte ångras.';
+
+  @override
+  String get pendingFilesDeleted => 'Väntande inspelningar raderade';
+
+  @override
+  String get deleteAllFiles => 'Radera alla inspelningar';
+
+  @override
+  String get deleteAll => 'Ta bort alla';
+
+  @override
+  String get deleteAllFilesWarning =>
+      'Detta raderar synkroniserade och väntande inspelningar. Väntande inspelningar har INTE synkroniserats och kommer att förloras permanent.';
+
+  @override
+  String get allFilesDeleted => 'Alla inspelningar raderade';
+
+  @override
+  String nFiles(int count) {
+    return '$count inspelningar';
+  }
+
+  @override
+  String get manageStorage => 'Hantera lagring';
+
+  @override
+  String get safelyBackedUp => 'Säkerhetskopierat till din telefon';
+
+  @override
+  String get notYetSynced => 'Inte synkroniserat med din telefon ännu';
+
+  @override
+  String get clearAll => 'Rensa allt';
 }

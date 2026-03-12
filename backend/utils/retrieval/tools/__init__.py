@@ -49,6 +49,10 @@ from .notification_settings_tools import (
 from .chart_tools import (
     create_chart_tool,
 )
+from .screen_activity_tools import (
+    get_screen_activity_tool,
+    search_screen_activity_tool,
+)
 
 __all__ = [
     'get_conversations_tool',
@@ -73,4 +77,6 @@ __all__ = [
     'search_files_tool',
     'manage_daily_summary_tool',
     'create_chart_tool',
+    'get_screen_activity_tool',
+    'search_screen_activity_tool',
 ]

@@ -1,13 +1,17 @@
 import asyncio
 import threading
+import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from typing import Optional, List
 from datetime import datetime, timezone
 
 import database.action_items as action_items_db
+import database.redis_db as redis_db
+from utils.users import get_user_display_name
 from utils.other import endpoints as auth
 from utils.notifications import (
+    send_notification,
     send_action_item_data_message,
     send_action_item_update_message,
     send_action_item_deletion_message,
@@ -35,6 +39,8 @@ class UpdateActionItemRequest(BaseModel):
     exported: Optional[bool] = Field(default=None, description="Whether the item has been exported")
     export_date: Optional[datetime] = Field(default=None, description="When the item was exported")
     export_platform: Optional[str] = Field(default=None, description="Platform the item was exported to")
+    sort_order: Optional[int] = Field(default=None, description="Manual sort order within category")
+    indent_level: Optional[int] = Field(default=None, ge=0, le=3, description="Indentation level (0-3)")
 
 
 class ActionItemResponse(BaseModel):
@@ -50,6 +56,8 @@ class ActionItemResponse(BaseModel):
     exported: bool = False
     export_date: Optional[datetime] = None
     export_platform: Optional[str] = None
+    sort_order: int = 0
+    indent_level: int = 0
 
 
 def _get_valid_action_item(uid: str, action_item_id: str) -> dict:
@@ -61,6 +69,28 @@ def _get_valid_action_item(uid: str, action_item_id: str) -> dict:
         raise HTTPException(status_code=402, detail="Unlimited Plan Required to access this action item.")
 
     return action_item
+
+
+# *****************************
+# ******* BATCH OPERATIONS ****
+# *****************************
+
+
+class BatchUpdateActionItemEntry(BaseModel):
+    id: str
+    sort_order: Optional[int] = None
+    indent_level: Optional[int] = Field(default=None, ge=0, le=3)
+
+
+class BatchUpdateActionItemsRequest(BaseModel):
+    items: List[BatchUpdateActionItemEntry] = Field(..., max_length=500)
+
+
+@router.patch("/v1/action-items/batch", tags=['action-items'])
+def batch_update_action_items(request: BatchUpdateActionItemsRequest, uid: str = Depends(auth.get_current_user_uid)):
+    """Batch update sort_order and indent_level for multiple action items."""
+    action_items_db.batch_update_action_items(uid, request.items)
+    return {"status": "ok", "updated_count": len(request.items)}
 
 
 # *****************************
@@ -196,6 +226,10 @@ def update_action_item(
         update_data['export_date'] = request.export_date
     if request.export_platform is not None:
         update_data['export_platform'] = request.export_platform
+    if request.sort_order is not None:
+        update_data['sort_order'] = request.sort_order
+    if request.indent_level is not None:
+        update_data['indent_level'] = request.indent_level
 
     # Update the action item
     success = action_items_db.update_action_item(uid, action_item_id, update_data)
@@ -236,6 +270,21 @@ def toggle_action_item_completion(
 
     # Return updated action item
     updated_item = action_items_db.get_action_item(uid, action_item_id)
+
+    # Notify sender if this was a shared task that just got completed
+    if completed and existing_item.get('shared_from'):
+        shared_from = existing_item['shared_from']
+        sender_uid = shared_from.get('sender_uid')
+        if sender_uid:
+            recipient_name = get_user_display_name(uid)
+            desc = existing_item.get('description', '')
+            description = (desc[:57] + '...') if len(desc) > 60 else desc
+            send_notification(
+                sender_uid,
+                "Task completed",
+                f"{recipient_name} completed: {description}",
+            )
+
     return ActionItemResponse(**updated_item)
 
 
@@ -273,11 +322,6 @@ def delete_conversation_action_items(conversation_id: str, uid: str = Depends(au
     deleted_count = action_items_db.delete_action_items_for_conversation(uid, conversation_id)
 
     return {"status": "Ok", "deleted_count": deleted_count}
-
-
-# *****************************
-# ******* BATCH OPERATIONS ****
-# *****************************
 
 
 @router.post("/v1/action-items/batch", tags=['action-items'])
@@ -319,3 +363,111 @@ def create_action_items_batch(
                 )
 
     return {"action_items": created_items, "created_count": len(created_items)}
+
+
+# *****************************
+# ******* TASK SHARING ********
+# *****************************
+
+
+class ShareTasksRequest(BaseModel):
+    task_ids: List[str] = Field(description="IDs of action items to share", min_length=1, max_length=20)
+
+
+class AcceptSharedTasksRequest(BaseModel):
+    token: str = Field(description="Share token from the shared URL")
+
+
+@router.post("/v1/action-items/share", tags=['action-items'])
+def share_action_items(request: ShareTasksRequest, uid: str = Depends(auth.get_current_user_uid)):
+    """Create a shareable link for selected action items."""
+    # Validate all task_ids belong to user
+    for task_id in request.task_ids:
+        item = action_items_db.get_action_item(uid, task_id)
+        if not item:
+            raise HTTPException(status_code=404, detail=f"Action item {task_id} not found")
+
+    # Get sender display name
+    display_name = get_user_display_name(uid)
+
+    # Generate token and store in Redis
+    token = uuid.uuid4().hex
+    result = redis_db.store_task_share(token, uid, display_name, request.task_ids)
+    if result is None:
+        raise HTTPException(status_code=500, detail="Failed to create share link")
+
+    return {"url": f"https://h.omi.me/tasks/{token}", "token": token}
+
+
+@router.get("/v1/action-items/shared/{token}", tags=['action-items'])
+def get_shared_action_items(token: str):
+    """Public endpoint — get shared task preview (no auth required)."""
+    share_data = redis_db.get_task_share(token)
+    if not share_data:
+        raise HTTPException(status_code=404, detail="Share link expired or not found")
+
+    sender_uid = share_data['uid']
+    task_ids = share_data['task_ids']
+
+    # Fetch tasks — only expose description + due_at
+    tasks = []
+    for task_id in task_ids:
+        item = action_items_db.get_action_item(sender_uid, task_id)
+        if item:
+            tasks.append(
+                {
+                    "description": item.get('description', ''),
+                    "due_at": item.get('due_at'),
+                }
+            )
+
+    return {
+        "sender_name": share_data['display_name'],
+        "tasks": tasks,
+        "count": len(tasks),
+    }
+
+
+@router.post("/v1/action-items/accept", tags=['action-items'])
+def accept_shared_action_items(request: AcceptSharedTasksRequest, uid: str = Depends(auth.get_current_user_uid)):
+    """Save shared tasks to the recipient's task list."""
+    share_data = redis_db.get_task_share(request.token)
+    if not share_data:
+        raise HTTPException(status_code=404, detail="Share link expired or not found")
+
+    # Prevent self-accept
+    if share_data['uid'] == uid:
+        raise HTTPException(status_code=400, detail="Cannot accept your own shared tasks")
+
+    # Atomically check and mark acceptance to prevent duplicates
+    accepted = redis_db.try_accept_task_share(request.token, uid)
+    if accepted is None:
+        raise HTTPException(status_code=503, detail="Service temporarily unavailable")
+    if not accepted:
+        raise HTTPException(status_code=409, detail="You have already accepted this share")
+
+    sender_uid = share_data['uid']
+    task_ids = share_data['task_ids']
+
+    # Copy each task to recipient's list
+    created_ids = []
+    for task_id in task_ids:
+        original = action_items_db.get_action_item(sender_uid, task_id)
+        if not original:
+            continue
+
+        new_item = {
+            'description': original.get('description', ''),
+            'completed': False,
+            'due_at': original.get('due_at'),
+            'shared_from': {
+                'token': request.token,
+                'sender_uid': sender_uid,
+                'sender_name': share_data['display_name'],
+                'original_task_id': task_id,
+            },
+        }
+        new_id = action_items_db.create_action_item(uid, new_item)
+        created_ids.append(new_id)
+
+    return {"created": created_ids, "count": len(created_ids)}

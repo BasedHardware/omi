@@ -238,7 +238,7 @@ Future<bool> assignBulkConversationTranscriptSegments(
 
 Future<bool> setConversationVisibility(String conversationId, {String visibility = 'shared'}) async {
   var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/conversations/$conversationId/visibility?value=$visibility&visibility=$visibility',
+    url: '${Env.apiBaseUrl}v1/conversations/$conversationId/visibility?value=$visibility',
     headers: {},
     method: 'PATCH',
     body: '',
@@ -377,13 +377,18 @@ Future<SyncLocalFilesResponse> syncLocalFiles(List<File> files) async {
     if (response.statusCode == 200) {
       Logger.debug('syncLocalFile Response body: ${jsonDecode(response.body)}');
       return SyncLocalFilesResponse.fromJson(jsonDecode(response.body));
+    } else if (response.statusCode == 400) {
+      throw Exception('Audio file could not be processed by server');
+    } else if (response.statusCode == 413) {
+      throw Exception('Audio file is too large to upload');
+    } else if (response.statusCode >= 500) {
+      throw Exception('Server is temporarily unavailable');
     } else {
-      Logger.debug('Failed to upload sample. Status code: ${response.statusCode}');
-      throw Exception('Failed to upload sample. Status code: ${response.statusCode}');
+      throw Exception('Upload failed unexpectedly');
     }
   } catch (e) {
-    Logger.debug('An error occurred uploadSample: $e');
-    throw Exception('An error occurred uploadSample: $e');
+    Logger.debug('syncLocalFiles error: $e');
+    rethrow;
   }
 }
 

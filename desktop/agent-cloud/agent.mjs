@@ -1,0 +1,1436 @@
+#!/usr/bin/env node
+import { query, tool, createSdkMcpServer } from "@anthropic-ai/claude-agent-sdk";
+import Database from "better-sqlite3";
+import { z } from "zod";
+import { dirname, join } from "path";
+import { fileURLToPath } from "url";
+import { createServer } from "http";
+import { WebSocketServer } from "ws";
+import { existsSync, mkdirSync, createWriteStream, statSync, renameSync, unlinkSync, writeFileSync } from "fs";
+import { createInflateRaw, createGunzip } from "zlib";
+import { homedir } from "os";
+
+// --- Global error handlers: prevent SDK abort errors from crashing the process ---
+process.on('unhandledRejection', (err) => {
+  // Claude Agent SDK throws "Operation aborted" when we abort a query (e.g. client disconnect).
+  // This surfaces as an unhandled rejection from internal async paths. Safe to ignore.
+  const msg = err?.message || String(err);
+  if (msg.includes('Operation aborted') || msg.includes('aborted')) {
+    console.log(`[server] Suppressed abort error: ${msg}`);
+    return;
+  }
+  console.error(`[server] Unhandled rejection:`, err);
+});
+
+process.on('uncaughtException', (err) => {
+  const msg = err?.message || String(err);
+  if (msg.includes('Operation aborted') || msg.includes('aborted')) {
+    console.log(`[server] Suppressed uncaught abort error: ${msg}`);
+    return;
+  }
+  console.error(`[server] Uncaught exception:`, err);
+  // For non-abort errors, exit so systemd can restart us
+  process.exit(1);
+});
+
+// --- Async message queue for persistent session streaming input ---
+class AsyncMessageQueue {
+  constructor() {
+    this._queue = [];
+    this._resolve = null;
+    this._done = false;
+  }
+  push(msg) {
+    if (this._resolve) {
+      this._resolve({ value: msg, done: false });
+      this._resolve = null;
+    } else {
+      this._queue.push(msg);
+    }
+  }
+  end() {
+    this._done = true;
+    if (this._resolve) {
+      this._resolve({ value: undefined, done: true });
+      this._resolve = null;
+    }
+  }
+  [Symbol.asyncIterator]() { return this; }
+  next() {
+    if (this._queue.length > 0)
+      return Promise.resolve({ value: this._queue.shift(), done: false });
+    if (this._done)
+      return Promise.resolve({ value: undefined, done: true });
+    return new Promise(r => { this._resolve = r; });
+  }
+}
+
+// --- Configuration ---
+const DB_PATH = process.env.DB_PATH || join(homedir(), "omi-agent/data/omi.db");
+const GCS_BASE = "https://storage.googleapis.com/based-hardware-agent";
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+const AUTH_TOKEN = process.env.AUTH_TOKEN;
+const BACKEND_URL = process.env.BACKEND_URL || "https://api.omi.me";
+const PORT = parseInt(process.env.PORT || "8080", 10);
+const EMBEDDING_DIM = 3072;
+// Max upload size: 10GB
+const MAX_UPLOAD_BYTES = 10 * 1024 * 1024 * 1024;
+
+// --- Idle auto-stop ---
+const IDLE_TIMEOUT_MS = 30 * 60 * 1000;   // 30 minutes
+const IDLE_CHECK_INTERVAL_MS = 5 * 60 * 1000; // check every 5 minutes
+let lastActivityAt = Date.now();
+
+// Tables allowed for incremental sync from desktop
+const SYNC_TABLES = new Set([
+  "screenshots", "action_items", "transcription_sessions",
+  "transcription_segments", "memories", "staged_tasks",
+  "focus_sessions", "observations", "live_notes",
+  "ai_user_profiles", "task_dedup_log",
+]);
+
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const playwrightCli = join(__dirname, "node_modules", "@playwright", "mcp", "cli.js");
+
+// --- Firebase token (passed from desktop app for backend API calls) ---
+let userFirebaseToken = null;
+let backendTools = [];
+
+// --- Database Setup (lazy — opened on first use or after upload) ---
+let db = null;
+let defaultSystemPrompt = null;
+let omiServer = null;
+
+function openDatabase() {
+  if (db) {
+    try { db.close(); } catch {}
+    db = null;
+  }
+  if (!existsSync(DB_PATH)) {
+    return false;
+  }
+  db = Database(DB_PATH);  // writable for /sync inserts; agent tool still blocks non-SELECT
+  db.pragma("journal_mode = WAL");
+
+  // Ensure performance indexes exist (incremental sync doesn't transfer indexes)
+  try {
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_screenshots_date_local ON screenshots(date(timestamp, 'localtime'))`);
+  } catch (e) {
+    console.log(`[db] Index creation skipped: ${e.message}`);
+  }
+
+  // Rebuild schema + system prompt + MCP server
+  const schema = getSchema();
+  defaultSystemPrompt = `You are an AI assistant with access to the user's OMI desktop database and their connected services.
+This database contains their screen history (screenshots with OCR text), tasks, transcriptions, memories, and focus sessions.
+
+DATABASE SCHEMA:
+${schema}
+
+TOOLS:
+- **execute_sql**: Run SQL queries on the database. SELECT auto-limits to 200 rows. Use for structured queries (app usage, time ranges, task management, aggregations).
+- **semantic_search**: Vector similarity search on screenshot OCR text. Use for fuzzy/conceptual queries where exact keywords won't work.
+- **get_daily_recap**: Pre-formatted activity recap (apps, conversations, tasks) for a given time range. Use for "what did I do today/yesterday/this week" — single tool call, much faster than multiple SQL queries.
+- **Playwright browser tools**: You can navigate websites, click elements, fill forms, take screenshots, etc. Use when the user asks you to do something on the web.
+- **Backend tools** (calendar, gmail, health, conversations, memories, action items, web search, etc.): Use these when the user asks about their calendar events, emails, health data, past conversations, or wants to search the web. These tools connect to the user's real accounts.
+
+GUIDELINES:
+- For "what did I do today/yesterday/this week" queries, use get_daily_recap — it's a single tool call that returns a formatted summary of apps, conversations, and tasks. Much faster than multiple execute_sql calls.
+- Only use get_conversations_tool when the user asks about specific conversation transcripts or content details. For activity summaries, get_daily_recap is faster.
+- For time-filtered queries on screenshots, prefer range comparisons: WHERE timestamp >= datetime('now', 'start of day', '-1 day', 'localtime') AND timestamp < datetime('now', 'start of day', 'localtime'). Avoid wrapping the column in date() or strftime() in WHERE clauses — it's slower on large tables.
+- Screenshots have: timestamp, appName, windowTitle, ocrText, embedding (600K+ rows — always filter by timestamp range)
+- Action items have: description, completed, deleted, priority, category, source, dueAt, createdAt
+- Transcription sessions have: title, overview, startedAt, finishedAt, source
+- For task queries, use action_items table
+- For conversation queries, use transcription_sessions + transcription_segments
+- For calendar, email, health data — use the backend tools (get_calendar_events_tool, get_gmail_messages_tool, etc.)
+- Be concise and helpful. Format results clearly.`;
+
+  rebuildMcpServer();
+
+  console.log(`[db] Database opened: ${DB_PATH}`);
+  return true;
+}
+
+function isDatabaseReady() {
+  return db !== null;
+}
+
+function getSchema() {
+  const tables = db
+    .prepare(
+      "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE 'grdb_%' ORDER BY name"
+    )
+    .all();
+
+  let schema = "";
+  for (const { name } of tables) {
+    const cols = db.prepare(`PRAGMA table_info('${name}')`).all();
+    const colDefs = cols.map((c) => `  ${c.name} ${c.type}`).join("\n");
+    schema += `\n${name}:\n${colDefs}\n`;
+    const count = db.prepare(`SELECT COUNT(*) as n FROM "${name}"`).get();
+    schema += `  (${count.n} rows)\n`;
+  }
+  return schema;
+}
+
+// --- SQL Execution Logic ---
+const BLOCKED_KEYWORDS = ["DROP", "ALTER", "CREATE", "PRAGMA", "ATTACH", "DETACH", "VACUUM"];
+
+function executeSqlQuery(sqlQuery) {
+  if (!db) return JSON.stringify({ error: "Database not loaded. Upload omi.db first." });
+  const upper = sqlQuery.toUpperCase();
+  for (const kw of BLOCKED_KEYWORDS) {
+    if (new RegExp(`\\b${kw}\\b`).test(upper)) {
+      return JSON.stringify({ error: `Blocked: ${kw} statements not allowed` });
+    }
+  }
+  if (/;\s*\S/.test(sqlQuery)) {
+    return JSON.stringify({ error: "Multi-statement queries not allowed" });
+  }
+  const trimmed = upper.trim();
+  if ((trimmed.startsWith("UPDATE") || trimmed.startsWith("DELETE")) && !upper.includes("WHERE")) {
+    return JSON.stringify({ error: "UPDATE/DELETE require a WHERE clause" });
+  }
+  try {
+    if (trimmed.startsWith("SELECT")) {
+      let execQuery = sqlQuery;
+      if (!/\bLIMIT\b/i.test(sqlQuery)) {
+        execQuery = sqlQuery.replace(/;?\s*$/, " LIMIT 200");
+      }
+      const rows = db.prepare(execQuery).all();
+      return JSON.stringify({ rows, count: rows.length });
+    } else {
+      return JSON.stringify({ error: "Database is in read-only mode (cloud copy)" });
+    }
+  } catch (err) {
+    return JSON.stringify({ error: err.message });
+  }
+}
+
+// --- Semantic Search Logic ---
+async function embedQueryText(text) {
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:embedContent?key=${GEMINI_API_KEY}`;
+  const body = {
+    model: "models/gemini-embedding-001",
+    content: { parts: [{ text }] },
+    taskType: "RETRIEVAL_QUERY",
+  };
+  const resp = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const json = await resp.json();
+  if (!json.embedding?.values) {
+    throw new Error(`Embedding API error: ${JSON.stringify(json.error || json)}`);
+  }
+  const raw = json.embedding.values.map(Number);
+  let norm = 0;
+  for (const v of raw) norm += v * v;
+  norm = Math.sqrt(norm);
+  return norm > 0 ? raw.map((v) => v / norm) : raw;
+}
+
+function readEmbeddingFromBlob(buffer) {
+  if (buffer.byteLength !== EMBEDDING_DIM * 4) return null;
+  return new Float32Array(buffer.buffer, buffer.byteOffset, EMBEDDING_DIM);
+}
+
+async function performSemanticSearch(searchQuery, days = 7, appFilter = null) {
+  if (!db) return JSON.stringify({ error: "Database not loaded. Upload omi.db first." });
+  if (!GEMINI_API_KEY) {
+    return JSON.stringify({ error: "GEMINI_API_KEY not set" });
+  }
+  const queryEmbedding = await embedQueryText(searchQuery);
+  const startDate = new Date();
+  startDate.setDate(startDate.getDate() - days);
+  const startStr = startDate.toISOString().replace("T", " ").slice(0, 19);
+
+  let sql = `SELECT id, timestamp, appName, windowTitle, substr(ocrText, 1, 300) as ocrPreview, embedding
+             FROM screenshots WHERE embedding IS NOT NULL AND timestamp >= ?`;
+  const params = [startStr];
+  if (appFilter) {
+    sql += " AND appName = ?";
+    params.push(appFilter);
+  }
+  sql += " ORDER BY timestamp DESC";
+
+  const rows = db.prepare(sql).all(...params);
+  const results = [];
+  for (const row of rows) {
+    const stored = readEmbeddingFromBlob(row.embedding);
+    if (!stored) continue;
+    let dot = 0;
+    for (let i = 0; i < queryEmbedding.length; i++) dot += queryEmbedding[i] * stored[i];
+    if (dot > 0.3) {
+      results.push({
+        screenshotId: row.id,
+        similarity: Math.round(dot * 1000) / 1000,
+        timestamp: row.timestamp,
+        appName: row.appName,
+        windowTitle: row.windowTitle,
+        ocrPreview: row.ocrPreview,
+      });
+    }
+  }
+  results.sort((a, b) => b.similarity - a.similarity);
+  return JSON.stringify({
+    query: searchQuery,
+    days,
+    totalScanned: rows.length,
+    matchesAboveThreshold: results.length,
+    results: results.slice(0, 15),
+  });
+}
+
+// --- Define MCP Tools using Agent SDK ---
+
+const executeSqlTool = tool(
+  "execute_sql",
+  `Run SQL on the user's omi.db SQLite database.
+Supports: SELECT, INSERT, UPDATE, DELETE.
+SELECT auto-limits to 200 rows. UPDATE/DELETE require WHERE. DROP/ALTER/CREATE blocked.
+Use for: app usage stats, time queries, task management, aggregations, anything structured.`,
+  { query: z.string().describe("SQL query to execute") },
+  async ({ query }) => {
+    const result = executeSqlQuery(query);
+    return { content: [{ type: "text", text: result }] };
+  }
+);
+
+const semanticSearchTool = tool(
+  "semantic_search",
+  `Vector similarity search on screen history.
+Use for: fuzzy conceptual queries where exact SQL keywords won't work.
+e.g. "reading about machine learning", "working on design mockups"`,
+  {
+    query: z.string().describe("Natural language search query"),
+    days: z.number().optional().default(7).describe("Number of days to search back (default: 7)"),
+    app_filter: z.string().optional().describe("Filter results to a specific app name"),
+  },
+  async ({ query, days, app_filter }) => {
+    const result = await performSemanticSearch(query, days, app_filter);
+    return { content: [{ type: "text", text: result }] };
+  }
+);
+
+const getDailyRecapTool = tool(
+  "get_daily_recap",
+  `Get a pre-formatted daily activity recap from the local database.
+Use for: "what did I do today/yesterday/this week", activity summaries, daily reviews.
+Runs app usage, conversations, and action items queries in one call — much faster than multiple execute_sql calls.`,
+  {
+    days_ago: z.number().optional().default(1).describe("0=today, 1=yesterday, 7=past week"),
+  },
+  async ({ days_ago }) => {
+    if (!db) return { content: [{ type: "text", text: "Database not loaded." }] };
+
+    const n = Math.max(0, Math.floor(days_ago));
+    const dateLabel = n === 0 ? "Today" : n === 1 ? "Yesterday" : `Past ${n} days`;
+    // For today (n=0), upper bound is now; for past days, upper bound is start of today
+    const upperBound = n === 0
+      ? "datetime('now', 'localtime')"
+      : "datetime('now', 'start of day', 'localtime')";
+
+    // App usage
+    const apps = db.prepare(`
+      SELECT appName, COUNT(*) as screenshots, ROUND(COUNT(*) * 10.0 / 60, 1) as minutes,
+        MIN(time(timestamp, 'localtime')) as first_seen, MAX(time(timestamp, 'localtime')) as last_seen
+      FROM screenshots
+      WHERE timestamp >= datetime('now', 'start of day', '-${n} day', 'localtime')
+        AND timestamp < ${upperBound}
+        AND appName IS NOT NULL AND appName != ''
+      GROUP BY appName ORDER BY screenshots DESC
+    `).all();
+
+    // Conversations
+    const convos = db.prepare(`
+      SELECT title, overview, emoji, category, startedAt, finishedAt,
+        ROUND((julianday(finishedAt) - julianday(startedAt)) * 1440, 1) as duration_min
+      FROM transcription_sessions
+      WHERE startedAt >= datetime('now', 'start of day', '-${n} day', 'localtime')
+        AND startedAt < ${upperBound}
+        AND deleted = 0 AND discarded = 0
+      ORDER BY startedAt DESC
+    `).all();
+
+    // Action items
+    const tasks = db.prepare(`
+      SELECT description, completed, priority, createdAt FROM action_items
+      WHERE createdAt >= datetime('now', 'start of day', '-${n} day', 'localtime')
+        AND createdAt < ${upperBound}
+        AND deleted = 0
+      ORDER BY createdAt DESC
+    `).all();
+
+    // Format compact markdown
+    let out = `# ${dateLabel} Recap\n\n`;
+
+    out += `## Apps (${apps.length} apps)\n`;
+    if (apps.length === 0) {
+      out += "No screen activity recorded.\n";
+    } else {
+      for (const a of apps.slice(0, 20)) {
+        out += `- **${a.appName}**: ${a.minutes} min (${a.screenshots} captures, ${a.first_seen}–${a.last_seen})\n`;
+      }
+      if (apps.length > 20) out += `- ...and ${apps.length - 20} more apps\n`;
+    }
+
+    out += `\n## Conversations (${convos.length})\n`;
+    if (convos.length === 0) {
+      out += "No conversations recorded.\n";
+    } else {
+      for (const c of convos) {
+        const dur = c.duration_min > 0 ? ` (${c.duration_min} min)` : "";
+        const emoji = c.emoji || "";
+        out += `- ${emoji} **${c.title || "Untitled"}**${dur}: ${c.overview || "No summary"}\n`;
+      }
+    }
+
+    out += `\n## Tasks (${tasks.length})\n`;
+    if (tasks.length === 0) {
+      out += "No tasks created.\n";
+    } else {
+      for (const t of tasks) {
+        const check = t.completed ? "[x]" : "[ ]";
+        const pri = t.priority ? ` (${t.priority})` : "";
+        out += `- ${check} ${t.description}${pri}\n`;
+      }
+    }
+
+    return { content: [{ type: "text", text: out }] };
+  }
+);
+
+// --- JSON Schema → Zod converter for backend tools ---
+
+function jsonSchemaToZod(schema) {
+  const props = schema.properties || {};
+  const required = new Set(schema.required || []);
+  const shape = {};
+
+  for (const [name, prop] of Object.entries(props)) {
+    if (name === "config") continue; // internal LangChain param
+
+    let zodType;
+    // Handle anyOf (Optional fields from Pydantic)
+    const rawType = prop.type || (prop.anyOf ? prop.anyOf.find(t => t.type && t.type !== "null")?.type : "string");
+
+    switch (rawType) {
+      case "integer":
+      case "number":
+        zodType = z.number();
+        break;
+      case "boolean":
+        zodType = z.boolean();
+        break;
+      case "array":
+        zodType = z.array(z.any());
+        break;
+      default:
+        zodType = z.string();
+    }
+
+    if (prop.description) zodType = zodType.describe(prop.description);
+
+    if (!required.has(name)) {
+      zodType = zodType.optional();
+      if (prop.default !== undefined) zodType = zodType.default(prop.default);
+    }
+
+    shape[name] = zodType;
+  }
+
+  return shape;
+}
+
+// --- Fetch and register backend tools from Python API ---
+
+async function fetchAndRegisterBackendTools() {
+  if (!userFirebaseToken) {
+    console.log("[backend-tools] No Firebase token, skipping tool fetch");
+    return;
+  }
+
+  try {
+    const resp = await fetch(`${BACKEND_URL}/v1/agent/tools`, {
+      headers: { Authorization: `Bearer ${userFirebaseToken}` },
+    });
+    if (!resp.ok) {
+      console.log(`[backend-tools] Failed to fetch tools: HTTP ${resp.status}`);
+      return;
+    }
+
+    const data = await resp.json();
+    const toolDefs = data.tools || [];
+    console.log(`[backend-tools] Fetched ${toolDefs.length} tools from Python backend`);
+
+    backendTools = toolDefs.map((def) => {
+      const zodShape = jsonSchemaToZod(def.parameters || {});
+      return tool(
+        def.name,
+        def.description || `Backend tool: ${def.name}`,
+        zodShape,
+        async (params) => {
+          try {
+            const execResp = await fetch(`${BACKEND_URL}/v1/agent/execute-tool`, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${userFirebaseToken}`,
+              },
+              body: JSON.stringify({ tool_name: def.name, params }),
+            });
+            const result = await execResp.json();
+            if (result.error) {
+              return { content: [{ type: "text", text: `Error: ${result.error}` }] };
+            }
+            return { content: [{ type: "text", text: result.result || JSON.stringify(result) }] };
+          } catch (err) {
+            return { content: [{ type: "text", text: `Error calling ${def.name}: ${err.message}` }] };
+          }
+        }
+      );
+    });
+
+    // Rebuild MCP server with all tools
+    rebuildMcpServer();
+    console.log(`[backend-tools] Registered ${backendTools.length} backend tools`);
+  } catch (err) {
+    console.log(`[backend-tools] Error fetching tools: ${err.message}`);
+  }
+}
+
+function rebuildMcpServer() {
+  const allTools = [executeSqlTool, semanticSearchTool, getDailyRecapTool, ...backendTools];
+  omiServer = createSdkMcpServer({
+    name: "omi-tools",
+    tools: allTools,
+  });
+  console.log(`[mcp] Rebuilt MCP server with ${allTools.length} tools`);
+}
+
+// --- Shared Agent Query Handler ---
+
+async function handleQuery({ prompt, systemPrompt, cwd, send, abortController }) {
+  if (!isDatabaseReady()) {
+    send({ type: "error", message: "Database not available. Upload omi.db first." });
+    return { text: "", sessionId: "", costUsd: 0 };
+  }
+
+  let sessionId = "";
+  let fullText = "";
+  let costUsd = 0;
+  const pendingTools = [];
+
+  const options = {
+    model: "claude-opus-4-6",
+    abortController,
+    systemPrompt: systemPrompt || defaultSystemPrompt,
+    allowedTools: [
+      "Read",
+      "Write",
+      "Edit",
+      "Bash",
+      "Glob",
+      "Grep",
+      "WebSearch",
+      "WebFetch",
+    ],
+    permissionMode: "bypassPermissions",
+    allowDangerouslySkipPermissions: true,
+    maxTurns: undefined,
+    cwd: cwd || process.env.HOME || "/",
+    mcpServers: {
+      "omi-tools": omiServer,
+      "playwright": {
+        command: process.execPath,
+        args: [
+          playwrightCli,
+          "--user-data-dir", join(__dirname, "chrome-profile"),
+          "--headless",
+          "--no-sandbox",
+        ],
+      },
+    },
+  };
+
+  const q = query({ prompt, options });
+
+  for await (const message of q) {
+    if (abortController.signal.aborted) break;
+
+    switch (message.type) {
+      case "system":
+        if ("session_id" in message) {
+          sessionId = message.session_id;
+          send({ type: "init", sessionId });
+        }
+        break;
+
+      case "stream_event": {
+        const event = message.event;
+
+        if (event?.type === "content_block_start" && event.content_block?.type === "tool_use") {
+          const name = event.content_block.name;
+          pendingTools.push(name);
+          send({ type: "tool_activity", name, status: "started" });
+        }
+
+        if (event?.type === "content_block_delta" && event.delta?.type === "text_delta") {
+          if (pendingTools.length > 0) {
+            for (const name of pendingTools) {
+              send({ type: "tool_activity", name, status: "completed" });
+            }
+            pendingTools.length = 0;
+          }
+          const text = event.delta.text;
+          fullText += text;
+          send({ type: "text_delta", text });
+        }
+        break;
+      }
+
+      case "assistant": {
+        // Fallback: if streaming didn't capture text (e.g. after tool calls),
+        // extract it from the complete assistant message
+        const content = message.message?.content;
+        if (Array.isArray(content)) {
+          for (const block of content) {
+            if (block.type === "text" && typeof block.text === "string") {
+              // Check if this text was already sent via stream_event deltas
+              if (!fullText.includes(block.text)) {
+                fullText += block.text;
+                send({ type: "text_delta", text: block.text });
+              }
+            }
+          }
+        }
+        break;
+      }
+
+      case "result": {
+        for (const name of pendingTools) {
+          send({ type: "tool_activity", name, status: "completed" });
+        }
+        pendingTools.length = 0;
+
+        if (message.subtype === "success") {
+          costUsd = message.total_cost_usd || 0;
+          // Send any final text that wasn't captured during streaming
+          if (message.result) {
+            const remaining = message.result.replace(fullText, "").trim();
+            if (remaining) {
+              send({ type: "text_delta", text: remaining });
+              fullText += remaining;
+            }
+          }
+        } else {
+          const errors = message.errors || [];
+          send({ type: "error", message: `Agent error (${message.subtype}): ${errors.join(", ")}` });
+        }
+        break;
+      }
+    }
+  }
+
+  return { text: fullText, sessionId, costUsd };
+}
+
+// --- Persistent Session (streaming input mode) ---
+
+function startPersistentSession(send, log) {
+  if (!isDatabaseReady()) {
+    log("Cannot start persistent session: database not ready");
+    return null;
+  }
+
+  const sessionAbort = new AbortController();
+
+  const options = {
+    model: "claude-sonnet-4-6",
+    abortController: sessionAbort,
+    systemPrompt: defaultSystemPrompt,
+    allowedTools: ["Read", "Write", "Edit", "Bash", "Glob", "Grep", "WebSearch", "WebFetch"],
+    permissionMode: "bypassPermissions",
+    allowDangerouslySkipPermissions: true,
+    maxTurns: undefined,
+    cwd: process.env.HOME || "/",
+    mcpServers: {
+      "omi-tools": omiServer,
+      "playwright": {
+        command: process.execPath,
+        args: [playwrightCli, "--user-data-dir", join(__dirname, "chrome-profile"), "--headless", "--no-sandbox"],
+      },
+    },
+  };
+
+  // Queue for all messages — used as the prompt (async iterable)
+  const messageQueue = new AsyncMessageQueue();
+
+  // Push the prewarm message to boot the Claude process
+  messageQueue.push({
+    type: "user",
+    message: { role: "user", content: "ready" },
+    parent_tool_use_id: null,
+    session_id: "",
+  });
+
+  log(`Starting persistent session with model: ${options.model}`);
+  const q = query({ prompt: messageQueue, options });
+
+  // Session state
+  let sessionId = null;
+  let sessionIdResolve = null;
+  const sessionIdReady = new Promise(r => { sessionIdResolve = r; });
+
+  // Per-turn state
+  let fullText = "";
+  let pendingTools = [];
+  let turnActive = false;
+  let isPrewarmTurn = true; // First turn is prewarm, suppress output
+  let turnStartedAt = null; // timestamp when query was pushed
+  let firstEventSent = false; // tracks if we've sent the first stream event for this turn
+
+  // Background message processing loop — runs for entire WS lifetime
+  const loopPromise = (async () => {
+    try {
+      for await (const message of q) {
+        switch (message.type) {
+          case "system":
+            if ("session_id" in message) {
+              sessionId = message.session_id;
+              sessionIdResolve?.();
+              sessionIdResolve = null;
+              log(`Persistent session started: ${sessionId}`);
+            }
+            break;
+
+          case "stream_event": {
+            if (isPrewarmTurn) break; // Suppress prewarm output
+            const event = message.event;
+            // Emit thinking_done on first content block (text or tool_use)
+            if (!firstEventSent && event?.type === "content_block_start") {
+              firstEventSent = true;
+              const thinkingMs = turnStartedAt ? Date.now() - turnStartedAt : 0;
+              log(`[TIMING] thinking done in ${thinkingMs}ms, first block: ${event.content_block?.type}`);
+              send({ type: "thinking_done", thinkingMs });
+            }
+            if (event?.type === "content_block_start" && event.content_block?.type === "tool_use") {
+              const name = event.content_block.name;
+              const elapsed = turnStartedAt ? Date.now() - turnStartedAt : 0;
+              log(`[TIMING] tool_use ${name} started at +${elapsed}ms`);
+              pendingTools.push(name);
+              send({ type: "tool_activity", name, status: "started" });
+            }
+            if (event?.type === "content_block_delta" && event.delta?.type === "text_delta") {
+              if (pendingTools.length > 0) {
+                for (const name of pendingTools) {
+                  const elapsed = turnStartedAt ? Date.now() - turnStartedAt : 0;
+                  log(`[TIMING] tool ${name} completed at +${elapsed}ms`);
+                  send({ type: "tool_activity", name, status: "completed" });
+                }
+                pendingTools.length = 0;
+              }
+              fullText += event.delta.text;
+              send({ type: "text_delta", text: event.delta.text });
+            }
+            break;
+          }
+
+          case "assistant": {
+            if (isPrewarmTurn) break; // Suppress prewarm output
+            const content = message.message?.content;
+            if (Array.isArray(content)) {
+              for (const block of content) {
+                if (block.type === "tool_use") {
+                  const inputStr = JSON.stringify(block.input);
+                  log(`[TOOL_CALL] ${block.name} input=${inputStr.length > 500 ? inputStr.slice(0, 500) + '...' : inputStr}`);
+                  send({ type: "tool_activity", name: block.name, status: "started" });
+                  pendingTools.push(block.name);
+                }
+                // Text is already streamed via stream_event handler — don't send again here
+              }
+            }
+            break;
+          }
+
+          case "tool_result": {
+            if (isPrewarmTurn) break;
+            const toolName = message.tool_name || "unknown";
+            const resultStr = typeof message.content === "string" ? message.content : JSON.stringify(message.content);
+            const elapsed = turnStartedAt ? Date.now() - turnStartedAt : 0;
+            log(`[TOOL_RESULT] +${elapsed}ms ${toolName} (${resultStr.length} chars) ${resultStr.length > 300 ? resultStr.slice(0, 300) + '...' : resultStr}`);
+            break;
+          }
+
+          case "result": {
+            for (const name of pendingTools) send({ type: "tool_activity", name, status: "completed" });
+            pendingTools.length = 0;
+
+            if (isPrewarmTurn) {
+              isPrewarmTurn = false;
+              fullText = "";
+              pendingTools = [];
+              turnActive = false;
+              log("Prewarm turn completed, session ready for queries");
+              break;
+            }
+
+            if (message.subtype === "success") {
+              const costUsd = message.total_cost_usd || 0;
+              const totalMs = turnStartedAt ? Date.now() - turnStartedAt : 0;
+              log(`[TIMING] result at +${totalMs}ms, cost=$${costUsd.toFixed(4)}`);
+              if (message.result) {
+                const remaining = message.result.replace(fullText, "").trim();
+                if (remaining) {
+                  send({ type: "text_delta", text: remaining });
+                  fullText += remaining;
+                }
+              }
+              send({ type: "result", text: fullText, sessionId, costUsd });
+            } else {
+              send({ type: "error", message: `Agent error (${message.subtype}): ${(message.errors || []).join(", ")}` });
+            }
+            // Reset per-turn state
+            fullText = "";
+            pendingTools = [];
+            turnActive = false;
+            turnStartedAt = null;
+            firstEventSent = false;
+            break;
+          }
+        }
+      }
+    } catch (err) {
+      log(`Persistent session loop error: ${err.message}`);
+    }
+    log("Persistent session ended");
+  })();
+
+  return {
+    query: q,
+    messageQueue,
+    sessionAbort,
+    sessionIdReady,
+    loopPromise,
+    getSessionId: () => sessionId,
+    isTurnActive: () => turnActive,
+    setTurnActive: (v) => { turnActive = v; },
+    startTurnTimer: () => { turnStartedAt = Date.now(); firstEventSent = false; },
+  };
+}
+
+// --- Mode: CLI ---
+
+async function runCli(userMessage) {
+  if (!openDatabase()) {
+    console.error(`ERROR: Database not found at ${DB_PATH}`);
+    process.exit(1);
+  }
+
+  console.log(`\n${"=".repeat(60)}`);
+  console.log(`User: ${userMessage}`);
+  console.log("=".repeat(60));
+
+  const abortController = new AbortController();
+  const send = (msg) => {
+    switch (msg.type) {
+      case "init":
+        console.log(`[Session: ${msg.sessionId}]`);
+        break;
+      case "text_delta":
+        process.stdout.write(msg.text);
+        break;
+      case "tool_activity":
+        console.log(`\n[Tool ${msg.status}: ${msg.name}]`);
+        break;
+      case "error":
+        console.error(`\n[Error: ${msg.message}]`);
+        break;
+    }
+  };
+
+  const result = await handleQuery({ prompt: userMessage, send, abortController });
+  console.log(`\n\n[Done — cost: $${result.costUsd.toFixed(4)}]`);
+  db.close();
+}
+
+// --- Auth helper for HTTP endpoints ---
+
+function verifyAuth(req) {
+  const authHeader = req.headers["authorization"];
+  const url = new URL(req.url, `http://${req.headers.host}`);
+  const tokenParam = url.searchParams.get("token");
+  const token = authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : tokenParam;
+  return token === AUTH_TOKEN;
+}
+
+// --- Mode: WebSocket Server ---
+
+// --- Idle auto-stop: shut down VM after 30 min of no activity ---
+
+async function checkIdleAndStop() {
+  const idleMs = Date.now() - lastActivityAt;
+  if (idleMs < IDLE_TIMEOUT_MS) return;
+
+  console.log(`[server] Idle for ${Math.round(idleMs / 60000)} minutes — shutting down VM...`);
+
+  // Try GCE API first, fall back to sudo shutdown
+  let stopped = false;
+  try {
+    const metaHeaders = { "Metadata-Flavor": "Google" };
+    const name = await fetch(
+      "http://metadata.google.internal/computeMetadata/v1/instance/name",
+      { headers: metaHeaders },
+    ).then((r) => r.text());
+    const zonePath = await fetch(
+      "http://metadata.google.internal/computeMetadata/v1/instance/zone",
+      { headers: metaHeaders },
+    ).then((r) => r.text());
+    const tokenResp = await fetch(
+      "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token",
+      { headers: metaHeaders },
+    );
+    if (tokenResp.ok) {
+      const token = (await tokenResp.json()).access_token;
+      const stopUrl = `https://compute.googleapis.com/compute/v1/${zonePath}/instances/${name}/stop`;
+      const resp = await fetch(stopUrl, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      console.log(`[server] Stop request for ${name}: HTTP ${resp.status}`);
+      if (resp.ok) stopped = true;
+    } else {
+      console.log(`[server] No service account token (HTTP ${tokenResp.status}), using shutdown`);
+    }
+  } catch (err) {
+    console.log(`[server] GCE API failed: ${err.message}`);
+  }
+
+  if (!stopped) {
+    console.log(`[server] Falling back to sudo shutdown...`);
+    const { execSync } = await import("child_process");
+    try {
+      execSync("sudo shutdown -h now");
+    } catch (e) {
+      console.log(`[server] Shutdown command failed: ${e.message}`);
+    }
+  }
+}
+
+// --- Hot-reload: check GCS for new version every 10 minutes ---
+
+let currentVersion = null;
+
+async function checkAndApplyUpdate(log) {
+  try {
+    const resp = await fetch(`${GCS_BASE}/version.txt`);
+    if (!resp.ok) return;
+    const version = (await resp.text()).trim();
+    if (currentVersion === null) {
+      currentVersion = version;
+      log(`Running version: ${version}`);
+      return;
+    }
+    if (version === currentVersion) return;
+    log(`Update available: ${version} (current: ${currentVersion}), downloading...`);
+    const agentResp = await fetch(`${GCS_BASE}/agent.mjs`);
+    if (!agentResp.ok) {
+      log(`Update download failed: HTTP ${agentResp.status}`);
+      return;
+    }
+    const newCode = await agentResp.text();
+    writeFileSync(join(__dirname, "agent.mjs"), newCode);
+    log(`Update applied (${version}), restarting in 3s...`);
+    setTimeout(() => process.exit(0), 3000);
+  } catch (e) {
+    log(`Update check failed: ${e.message}`);
+  }
+}
+
+function startServer() {
+  const log = (msg) => console.log(`[server] ${msg}`);
+
+  if (!AUTH_TOKEN) {
+    console.error("ERROR: AUTH_TOKEN environment variable is required for server mode.");
+    process.exit(1);
+  }
+
+  // Try to open DB if it exists (may not exist yet for fresh VMs)
+  if (openDatabase()) {
+    log("Database loaded at startup");
+  } else {
+    log(`Database not found at ${DB_PATH} — waiting for upload`);
+  }
+
+  // Ensure data directory exists for uploads
+  const dataDir = dirname(DB_PATH);
+  if (!existsSync(dataDir)) {
+    mkdirSync(dataDir, { recursive: true });
+  }
+
+  // Clean up any stale upload temp file left by a previous crashed upload
+  const uploadTmpPath = DB_PATH + ".uploading";
+  if (existsSync(uploadTmpPath)) {
+    try {
+      unlinkSync(uploadTmpPath);
+      log("Cleaned up stale upload temp file");
+    } catch (e) {
+      log(`Warning: could not remove stale upload temp file: ${e.message}`);
+    }
+  }
+
+  const httpServer = createServer((req, res) => {
+    // Health check endpoint (no auth)
+    if (req.url === "/health" && req.method === "GET") {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({
+        status: "ok",
+        uptime: Math.round(process.uptime()),
+        databaseReady: isDatabaseReady(),
+      }));
+      return;
+    }
+
+    // Database upload endpoint
+    if (req.url?.startsWith("/upload") && req.method === "POST") {
+      if (!verifyAuth(req)) {
+        res.writeHead(401, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: "Unauthorized" }));
+        return;
+      }
+
+      const contentLength = parseInt(req.headers["content-length"] || "0", 10);
+      if (contentLength > MAX_UPLOAD_BYTES) {
+        res.writeHead(413, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: "File too large", maxBytes: MAX_UPLOAD_BYTES }));
+        return;
+      }
+
+      const encoding = (req.headers["content-encoding"] || "").toLowerCase();
+      const isCompressed = encoding === "gzip" || encoding === "deflate" || encoding === "zlib";
+      log(`Upload started (${(contentLength / 1024 / 1024).toFixed(1)} MB${isCompressed ? ", " + encoding + " compressed" : ""})`);
+
+      // Write to temp file first, then rename (atomic)
+      const tmpPath = DB_PATH + ".uploading";
+      const stream = createWriteStream(tmpPath);
+      let bytesReceived = 0;
+      let aborted = false;
+
+      // If compressed, pipe through decompressor
+      let decompressor = null;
+      if (encoding === "gzip") {
+        decompressor = createGunzip();
+      } else if (encoding === "deflate" || encoding === "zlib") {
+        decompressor = createInflateRaw();
+      }
+
+      const writeTarget = decompressor || stream;
+
+      if (decompressor) {
+        decompressor.pipe(stream);
+        decompressor.on("error", (err) => {
+          log(`Upload decompression error: ${err.message}`);
+          aborted = true;
+          stream.destroy();
+          try { unlinkSync(tmpPath); } catch {}
+        });
+      }
+
+      stream.on("error", (err) => {
+        log(`Upload stream error: ${err.message}`);
+        aborted = true;
+        try { unlinkSync(tmpPath); } catch {}
+      });
+
+      req.on("data", (chunk) => {
+        if (aborted) return;
+        bytesReceived += chunk.length;
+        if (decompressor) {
+          decompressor.write(chunk);
+        } else {
+          stream.write(chunk);
+        }
+      });
+
+      const finalize = () => {
+        // Close existing DB connection before replacing the file
+        if (db) {
+          try { db.close(); } catch {}
+          db = null;
+        }
+
+        // Remove WAL/SHM files if they exist (stale from previous DB)
+        try { unlinkSync(DB_PATH + "-wal"); } catch {}
+        try { unlinkSync(DB_PATH + "-shm"); } catch {}
+
+        // Atomic rename
+        renameSync(tmpPath, DB_PATH);
+
+        const finalSize = statSync(DB_PATH).size;
+        lastActivityAt = Date.now();
+        log(`Upload complete: ${(bytesReceived / 1024 / 1024).toFixed(1)} MB received → ${(finalSize / 1024 / 1024).toFixed(1)} MB on disk`);
+
+        // Re-open the database
+        if (openDatabase()) {
+          log("Database loaded after upload");
+          res.writeHead(200, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({
+            status: "ok",
+            bytesReceived,
+            finalSize,
+            databaseReady: true,
+          }));
+        } else {
+          log("ERROR: Failed to open database after upload");
+          res.writeHead(500, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ error: "Failed to open uploaded database" }));
+        }
+      };
+
+      req.on("end", () => {
+        if (aborted) return;
+        if (decompressor) {
+          // End the decompressor; stream.end is called via pipe when decompressor finishes
+          decompressor.end();
+          stream.on("finish", finalize);
+        } else {
+          stream.end(finalize);
+        }
+      });
+
+      req.on("error", (err) => {
+        log(`Upload error: ${err.message}`);
+        aborted = true;
+        if (decompressor) decompressor.destroy();
+        stream.destroy();
+        try { unlinkSync(tmpPath); } catch {}
+        if (!res.headersSent) {
+          res.writeHead(500, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ error: err.message }));
+        }
+      });
+
+      req.on("aborted", () => {
+        log("Upload aborted by client");
+        aborted = true;
+        stream.destroy();
+        try { unlinkSync(tmpPath); } catch {}
+      });
+
+      return;
+    }
+
+    // Auth endpoint — receives Firebase token from desktop app
+    if (req.url?.startsWith("/auth") && req.method === "POST") {
+      if (!verifyAuth(req)) {
+        res.writeHead(401, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: "Unauthorized" }));
+        return;
+      }
+
+      let body = "";
+      req.on("data", (chunk) => { body += chunk.toString(); });
+      req.on("end", async () => {
+        try {
+          const payload = JSON.parse(body);
+          const { firebaseToken } = payload;
+          if (!firebaseToken) {
+            res.writeHead(400, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ error: "Missing firebaseToken" }));
+            return;
+          }
+
+          const isFirst = userFirebaseToken === null;
+          userFirebaseToken = firebaseToken;
+          lastActivityAt = Date.now();
+          log(`Firebase token ${isFirst ? "received" : "refreshed"}`);
+
+          // On first token, fetch backend tools
+          if (isFirst) {
+            await fetchAndRegisterBackendTools();
+          }
+
+          res.writeHead(200, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ status: "ok", toolsRegistered: backendTools.length }));
+        } catch (err) {
+          log(`Auth error: ${err.message}`);
+          res.writeHead(500, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ error: err.message }));
+        }
+      });
+      return;
+    }
+
+    // Keepalive ping — resets idle timer so VM doesn't auto-stop
+    if (req.url?.startsWith("/ping") && req.method === "POST") {
+      if (!verifyAuth(req)) {
+        res.writeHead(401, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: "Unauthorized" }));
+        return;
+      }
+      lastActivityAt = Date.now();
+      log("Keepalive ping received");
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ status: "ok" }));
+      return;
+    }
+
+    // Incremental sync endpoint — desktop pushes new/changed rows
+    if (req.url?.startsWith("/sync") && req.method === "POST") {
+      if (!verifyAuth(req)) {
+        res.writeHead(401, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: "Unauthorized" }));
+        return;
+      }
+      if (!db) {
+        res.writeHead(503, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: "Database not loaded. Upload omi.db first." }));
+        return;
+      }
+
+      let body = "";
+      req.on("data", (chunk) => { body += chunk.toString(); });
+      req.on("end", () => {
+        try {
+          const payload = JSON.parse(body);
+          const { table, rows } = payload;
+          if (!table || !Array.isArray(rows) || rows.length === 0) {
+            res.writeHead(400, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ error: "Required: { table: string, rows: [{...}, ...] }" }));
+            return;
+          }
+          if (!SYNC_TABLES.has(table)) {
+            res.writeHead(400, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ error: `Table '${table}' not in sync whitelist` }));
+            return;
+          }
+
+          const cols = Object.keys(rows[0]);
+
+          // Auto-add any columns missing from the table (handles schema migrations
+          // where the VM has an older database than the desktop app).
+          const existingCols = new Set(
+            db.prepare(`PRAGMA table_info("${table}")`).all().map(r => r.name)
+          );
+          for (const col of cols) {
+            if (!existingCols.has(col)) {
+              log(`Sync: adding missing column "${col}" to ${table}`);
+              db.prepare(`ALTER TABLE "${table}" ADD COLUMN "${col}"`).run();
+            }
+          }
+
+          const placeholders = cols.map(() => "?").join(", ");
+          const sql = `INSERT OR REPLACE INTO "${table}" (${cols.map(c => `"${c}"`).join(", ")}) VALUES (${placeholders})`;
+
+          const stmt = db.prepare(sql);
+          const insertMany = db.transaction((rowList) => {
+            for (const row of rowList) {
+              const values = cols.map((col) => {
+                const val = row[col];
+                // Decode base64 embedding columns back to Buffer
+                if (col === "embedding" && typeof val === "string" && val.length > 0) {
+                  return Buffer.from(val, "base64");
+                }
+                if (val === null || val === undefined) return null;
+                return val;
+              });
+              stmt.run(...values);
+            }
+          });
+
+          insertMany(rows);
+
+          // FTS is kept in sync by triggers on the content tables.
+          // INSERT OR REPLACE fires DELETE then INSERT triggers, which update FTS automatically.
+
+          lastActivityAt = Date.now();
+          log(`Sync: ${rows.length} rows → ${table}`);
+          res.writeHead(200, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ applied: rows.length, table }));
+        } catch (err) {
+          log(`Sync error: ${err.message}`);
+          res.writeHead(500, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ error: err.message }));
+        }
+      });
+      return;
+    }
+
+    res.writeHead(404);
+    res.end();
+  });
+
+  const wss = new WebSocketServer({
+    server: httpServer,
+    path: "/ws",
+    verifyClient: ({ req }, done) => {
+      if (!verifyAuth(req)) {
+        log("Rejected connection: invalid token");
+        done(false, 401, "Unauthorized");
+        return;
+      }
+      done(true);
+    },
+  });
+
+  wss.on("connection", (ws) => {
+    log("Client connected");
+    let session = null; // persistent session for this WS connection
+
+    const send = (msg) => {
+      if (ws.readyState === ws.OPEN) {
+        ws.send(JSON.stringify(msg));
+      }
+    };
+
+    ws.on("message", async (data) => {
+      let msg;
+      try {
+        msg = JSON.parse(data.toString());
+      } catch {
+        send({ type: "error", message: "Invalid JSON" });
+        return;
+      }
+
+      switch (msg.type) {
+        case "prewarm": {
+          if (session) {
+            log("Prewarm: session already active");
+            send({ type: "prewarm_ack", success: true });
+            break;
+          }
+          log("Prewarm: starting persistent session...");
+          session = startPersistentSession(send, log);
+          if (!session) {
+            send({ type: "prewarm_ack", success: false });
+            break;
+          }
+          session.sessionIdReady.then(() => {
+            send({ type: "prewarm_ack", success: true });
+            log("Prewarm: session ready");
+          }).catch(() => {
+            send({ type: "prewarm_ack", success: false });
+          });
+          break;
+        }
+
+        case "query": {
+          lastActivityAt = Date.now();
+          const prompt = msg.prompt;
+          log(`Query: ${prompt?.slice(0, 100)}`);
+
+          // Start session if not started yet
+          if (!session) {
+            log("No active session, starting on first query...");
+            session = startPersistentSession(send, log);
+            if (!session) {
+              send({ type: "error", message: "Database not available" });
+              break;
+            }
+          }
+
+          // Wait for session_id
+          await session.sessionIdReady;
+          const sid = session.getSessionId();
+          if (!sid) {
+            send({ type: "error", message: "Session failed to initialize" });
+            session = null;
+            break;
+          }
+
+          // If a turn is still active, interrupt first
+          if (session.isTurnActive()) {
+            log("Interrupting active turn for new query");
+            try { await session.query.interrupt(); } catch (e) { log(`Interrupt error: ${e.message}`); }
+          }
+
+          session.setTurnActive(true);
+          session.startTurnTimer();
+          send({ type: "status", message: "Processing..." });
+
+          // Push user message into the persistent session via streamInput
+          session.messageQueue.push({
+            type: "user",
+            message: { role: "user", content: prompt },
+            parent_tool_use_id: null,
+            session_id: sid,
+          });
+          break;
+        }
+
+        case "stop": {
+          log("Stop requested");
+          if (session?.isTurnActive()) {
+            try { await session.query.interrupt(); } catch (e) { log(`Interrupt error: ${e.message}`); }
+          }
+          break;
+        }
+
+        default:
+          send({ type: "error", message: `Unknown message type: ${msg.type}` });
+      }
+    });
+
+    ws.on("close", () => {
+      log("Client disconnected");
+      if (session) {
+        session.messageQueue.end();
+        session.query.close();
+        session.sessionAbort.abort();
+        session = null;
+      }
+    });
+
+    ws.on("error", (err) => {
+      log(`WebSocket error: ${err.message}`);
+    });
+
+    // Signal readiness
+    send({ type: "init", sessionId: "" });
+  });
+
+  httpServer.listen(PORT, () => {
+    log(`Listening on port ${PORT}`);
+    log(`WebSocket: ws://0.0.0.0:${PORT}/ws`);
+    log(`Health check: http://0.0.0.0:${PORT}/health`);
+    log(`Upload: POST http://0.0.0.0:${PORT}/upload`);
+    log(`Auth:   POST http://0.0.0.0:${PORT}/auth`);
+    log(`Sync:   POST http://0.0.0.0:${PORT}/sync`);
+    log(`Backend URL: ${BACKEND_URL}`);
+    log(`Idle auto-stop: ${IDLE_TIMEOUT_MS / 60000} min timeout, checking every ${IDLE_CHECK_INTERVAL_MS / 60000} min`);
+  });
+
+  // Start idle auto-stop checker
+  setInterval(checkIdleAndStop, IDLE_CHECK_INTERVAL_MS);
+
+  // Start hot-reload version checker
+  const UPDATE_INTERVAL_MS = 10 * 60 * 1000; // 10 minutes
+  checkAndApplyUpdate(log);
+  setInterval(() => checkAndApplyUpdate(log), UPDATE_INTERVAL_MS);
+}
+
+// --- Main ---
+
+const args = process.argv.slice(2);
+
+if (args[0] === "--serve") {
+  startServer();
+} else if (args.length > 0) {
+  // CLI mode
+  await runCli(args.join(" "));
+} else {
+  console.log("Usage:");
+  console.log('  node agent.mjs "What did I do today?"     # CLI mode');
+  console.log("  node agent.mjs --serve                     # WebSocket server mode");
+  console.log("");
+  console.log("Environment variables:");
+  console.log("  DB_PATH       Path to omi.db (default: ~/omi-agent/data/omi.db)");
+  console.log("  GEMINI_API_KEY  For semantic search embeddings");
+  console.log("  AUTH_TOKEN    Required for server mode (bearer token for WebSocket auth)");
+  console.log("  PORT          Server port (default: 8080)");
+  process.exit(0);
+}

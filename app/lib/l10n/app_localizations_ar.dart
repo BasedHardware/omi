@@ -885,7 +885,7 @@ class AppLocalizationsAr extends AppLocalizations {
   String get useMcpApiKey => 'استخدم مفتاح MCP API الخاص بك';
 
   @override
-  String get webhooks => 'Webhooks';
+  String get webhooks => 'ويب هوكس';
 
   @override
   String get conversationEvents => 'أحداث المحادثة';
@@ -1006,7 +1006,7 @@ class AppLocalizationsAr extends AppLocalizations {
   String get vocabularyHint => 'Omi، Callie، OpenAI';
 
   @override
-  String get connect => 'Connect';
+  String get connect => 'اتصال';
 
   @override
   String get comingSoon => 'قريباً';
@@ -2249,7 +2249,7 @@ class AppLocalizationsAr extends AppLocalizations {
   String get folderName => 'اسم المجلد';
 
   @override
-  String get descriptionOptional => 'Description (optional)';
+  String get descriptionOptional => 'الوصف (اختياري)';
 
   @override
   String get failedToDeleteFolder => 'فشل حذف المجلد';
@@ -2654,7 +2654,7 @@ class AppLocalizationsAr extends AppLocalizations {
   String get showAll => 'عرض الكل ←';
 
   @override
-  String get noTasksForToday => 'لا توجد مهام لليوم.\\nاسأل Omi عن المزيد من المهام أو أنشئها يدويًا.';
+  String get noTasksForToday => 'لا توجد مهام لليوم.\nاسأل Omi عن المزيد من المهام أو أنشئها يدويًا.';
 
   @override
   String get dailyScore => 'النتيجة اليومية';
@@ -3118,7 +3118,7 @@ class AppLocalizationsAr extends AppLocalizations {
   String get report => 'إبلاغ';
 
   @override
-  String get microphonePermissionRequired => 'مطلوب إذن الميكروفون للتسجيل الصوتي.';
+  String get microphonePermissionRequired => 'إذن الميكروفون مطلوب لإجراء المكالمات';
 
   @override
   String get microphonePermissionDenied =>
@@ -5118,7 +5118,7 @@ class AppLocalizationsAr extends AppLocalizations {
   String get analyzing => 'جاري التحليل...';
 
   @override
-  String get searchCountries => 'البحث عن البلدان...';
+  String get searchCountries => 'البحث عن البلدان';
 
   @override
   String get checkingAppleWatch => 'جاري فحص Apple Watch...';
@@ -7934,36 +7934,36 @@ class AppLocalizationsAr extends AppLocalizations {
   String get couldNotOpenUrl => 'تعذر فتح الرابط. يرجى المحاولة مرة أخرى.';
 
   @override
-  String get newTask => 'New Task';
+  String get newTask => 'مهمة جديدة';
 
   @override
-  String get viewAll => 'View All';
+  String get viewAll => 'عرض الكل';
 
   @override
-  String get addTask => 'Add Task';
+  String get addTask => 'إضافة مهمة';
 
   @override
-  String get addMcpServer => 'Add MCP Server';
+  String get addMcpServer => 'إضافة خادم MCP';
 
   @override
-  String get connectExternalAiTools => 'Connect external AI tools';
+  String get connectExternalAiTools => 'ربط أدوات الذكاء الاصطناعي الخارجية';
 
   @override
   String get mcpServerUrl => 'MCP Server URL';
 
   @override
   String mcpServerConnected(int count) {
-    return '$count tools connected successfully';
+    return 'تم توصيل $count أدوات بنجاح';
   }
 
   @override
-  String get mcpConnectionFailed => 'Failed to connect to MCP server';
+  String get mcpConnectionFailed => 'فشل الاتصال بخادم MCP';
 
   @override
-  String get authorizingMcpServer => 'Authorizing...';
+  String get authorizingMcpServer => 'جارٍ التصريح...';
 
   @override
-  String get whereDidYouHearAboutOmi => 'How did you find us?';
+  String get whereDidYouHearAboutOmi => 'كيف وجدتنا؟';
 
   @override
   String get tiktok => 'TikTok';
@@ -7981,19 +7981,19 @@ class AppLocalizationsAr extends AppLocalizations {
   String get reddit => 'Reddit';
 
   @override
-  String get friendWordOfMouth => 'Friend';
+  String get friendWordOfMouth => 'صديق';
 
   @override
-  String get otherSource => 'Other';
+  String get otherSource => 'أخرى';
 
   @override
-  String get pleaseSpecify => 'Please specify';
+  String get pleaseSpecify => 'يرجى التحديد';
 
   @override
-  String get event => 'Event';
+  String get event => 'حدث';
 
   @override
-  String get coworker => 'Coworker';
+  String get coworker => 'زميل عمل';
 
   @override
   String get linkedIn => 'LinkedIn';
@@ -8009,4 +8009,489 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get audioPlaybackFailed => 'تعذر تشغيل الصوت. قد يكون الملف تالفًا أو مفقودًا.';
+
+  @override
+  String get connectionGuide => 'دليل الاتصال';
+
+  @override
+  String get iveDoneThis => 'لقد فعلت هذا';
+
+  @override
+  String get pairNewDevice => 'إقران جهاز جديد';
+
+  @override
+  String get dontSeeYourDevice => 'لا ترى جهازك؟';
+
+  @override
+  String get reportAnIssue => 'الإبلاغ عن مشكلة';
+
+  @override
+  String get pairingTitleOmi => 'تشغيل Omi';
+
+  @override
+  String get pairingDescOmi => 'اضغط مع الاستمرار على الجهاز حتى يهتز لتشغيله.';
+
+  @override
+  String get pairingTitleOmiDevkit => 'ضع Omi DevKit في وضع الإقران';
+
+  @override
+  String get pairingDescOmiDevkit => 'اضغط على الزر مرة واحدة للتشغيل. سيومض مؤشر LED باللون الأرجواني في وضع الإقران.';
+
+  @override
+  String get pairingTitleOmiGlass => 'تشغيل Omi Glass';
+
+  @override
+  String get pairingDescOmiGlass => 'اضغط مع الاستمرار على الزر الجانبي لمدة 3 ثوانٍ لتشغيل الجهاز.';
+
+  @override
+  String get pairingTitlePlaudNote => 'ضع Plaud Note في وضع الإقران';
+
+  @override
+  String get pairingDescPlaudNote =>
+      'اضغط مع الاستمرار على الزر الجانبي لمدة ثانيتين. سيومض مؤشر LED الأحمر عندما يكون جاهزًا للإقران.';
+
+  @override
+  String get pairingTitleBee => 'ضع Bee في وضع الإقران';
+
+  @override
+  String get pairingDescBee => 'اضغط على الزر 5 مرات متتالية. سيبدأ الضوء بالوميض بالأزرق والأخضر.';
+
+  @override
+  String get pairingTitleLimitless => 'ضع Limitless في وضع الإقران';
+
+  @override
+  String get pairingDescLimitless =>
+      'عندما يكون أي ضوء مرئيًا، اضغط مرة واحدة ثم اضغط مع الاستمرار حتى يظهر الجهاز ضوءًا ورديًا، ثم حرر.';
+
+  @override
+  String get pairingTitleFriendPendant => 'ضع Friend Pendant في وضع الإقران';
+
+  @override
+  String get pairingDescFriendPendant => 'اضغط على الزر الموجود على القلادة لتشغيلها. ستدخل وضع الإقران تلقائيًا.';
+
+  @override
+  String get pairingTitleFieldy => 'ضع Fieldy في وضع الإقران';
+
+  @override
+  String get pairingDescFieldy => 'اضغط مع الاستمرار على الجهاز حتى يظهر الضوء لتشغيله.';
+
+  @override
+  String get pairingTitleAppleWatch => 'توصيل Apple Watch';
+
+  @override
+  String get pairingDescAppleWatch =>
+      'قم بتثبيت وفتح تطبيق Omi على Apple Watch الخاص بك، ثم اضغط على اتصال في التطبيق.';
+
+  @override
+  String get pairingTitleNeoOne => 'ضع Neo One في وضع الإقران';
+
+  @override
+  String get pairingDescNeoOne => 'اضغط مع الاستمرار على زر الطاقة حتى يومض مؤشر LED. سيكون الجهاز قابلاً للاكتشاف.';
+
+  @override
+  String get downloadingFromDevice => 'جارٍ التنزيل من الجهاز';
+
+  @override
+  String get reconnectingToInternet => 'جارٍ إعادة الاتصال بالإنترنت...';
+
+  @override
+  String uploadingToCloud(int current, int total) {
+    return 'جارٍ رفع $current من $total';
+  }
+
+  @override
+  String get processedStatus => 'تمت المعالجة';
+
+  @override
+  String get corruptedStatus => 'تالف';
+
+  @override
+  String nPending(int count) {
+    return '$count قيد الانتظار';
+  }
+
+  @override
+  String nProcessed(int count) {
+    return '$count تمت معالجتها';
+  }
+
+  @override
+  String get synced => 'تمت المزامنة';
+
+  @override
+  String get noPendingRecordings => 'لا توجد تسجيلات قيد الانتظار';
+
+  @override
+  String get noProcessedRecordings => 'لا توجد تسجيلات معالجة بعد';
+
+  @override
+  String get pending => 'قيد الانتظار';
+
+  @override
+  String whatsNewInVersion(String version) {
+    return 'ما الجديد في $version';
+  }
+
+  @override
+  String get addToYourTaskList => 'إضافة إلى قائمة مهامك؟';
+
+  @override
+  String get failedToCreateShareLink => 'فشل إنشاء رابط المشاركة';
+
+  @override
+  String get deleteGoal => 'حذف الهدف';
+
+  @override
+  String get deviceUpToDate => 'جهازك محدّث';
+
+  @override
+  String get wifiConfiguration => 'إعدادات الواي فاي';
+
+  @override
+  String get wifiConfigurationSubtitle => 'أدخل بيانات الواي فاي للسماح للجهاز بتنزيل البرنامج الثابت.';
+
+  @override
+  String get networkNameSsid => 'اسم الشبكة (SSID)';
+
+  @override
+  String get enterWifiNetworkName => 'أدخل اسم شبكة الواي فاي';
+
+  @override
+  String get enterWifiPassword => 'أدخل كلمة مرور الواي فاي';
+
+  @override
+  String get appIconLabel => 'App Icon';
+
+  @override
+  String get onboardingWhatIKnowAboutYouTitle => 'هذا ما أعرفه عنك';
+
+  @override
+  String get onboardingWhatIKnowAboutYouDescription => 'تتحدث هذه الخريطة كلما تعلم Omi من محادثاتك.';
+
+  @override
+  String get apiEnvironment => 'بيئة API';
+
+  @override
+  String get apiEnvironmentDescription => 'اختر الخادم الخلفي للاتصال به';
+
+  @override
+  String get production => 'إنتاج';
+
+  @override
+  String get staging => 'تجريبي';
+
+  @override
+  String get switchRequiresRestart => 'يتطلب التبديل إعادة تشغيل التطبيق';
+
+  @override
+  String get switchApiConfirmTitle => 'تبديل بيئة API';
+
+  @override
+  String switchApiConfirmBody(String environment) {
+    return 'التبديل إلى $environment؟ ستحتاج إلى إغلاق التطبيق وإعادة فتحه لتطبيق التغييرات.';
+  }
+
+  @override
+  String get switchAndRestart => 'تبديل';
+
+  @override
+  String get stagingDisclaimer =>
+      'قد تكون البيئة التجريبية غير مستقرة وذات أداء متقلب، وقد تُفقد البيانات. للاختبار فقط.';
+
+  @override
+  String get apiEnvSavedRestartRequired => 'تم الحفظ. أغلق التطبيق وأعد فتحه لتطبيق التغييرات.';
+
+  @override
+  String get shared => 'مشترك';
+
+  @override
+  String get onlyYouCanSeeConversation => 'أنت فقط من يمكنه رؤية هذه المحادثة';
+
+  @override
+  String get anyoneWithLinkCanView => 'يمكن لأي شخص لديه الرابط العرض';
+
+  @override
+  String get tasksCleanTodayTitle => 'تنظيف مهام اليوم؟';
+
+  @override
+  String get tasksCleanTodayMessage => 'سيؤدي هذا فقط إلى إزالة المواعيد النهائية';
+
+  @override
+  String get tasksOverdue => 'متأخرة';
+
+  @override
+  String get phoneCallsWithOmi => 'المكالمات الهاتفية مع Omi';
+
+  @override
+  String get phoneCallsSubtitle => 'إجراء مكالمات مع النسخ الفوري';
+
+  @override
+  String get phoneSetupStep1Title => 'تحقق من رقم هاتفك';
+
+  @override
+  String get phoneSetupStep1Subtitle => 'سنتصل بك لتأكيد أنه رقمك';
+
+  @override
+  String get phoneSetupStep2Title => 'أدخل رمز التحقق';
+
+  @override
+  String get phoneSetupStep2Subtitle => 'رمز قصير ستدخله أثناء المكالمة';
+
+  @override
+  String get phoneSetupStep3Title => 'ابدأ الاتصال بجهات اتصالك';
+
+  @override
+  String get phoneSetupStep3Subtitle => 'مع النسخ المباشر المدمج';
+
+  @override
+  String get phoneGetStarted => 'ابدأ الآن';
+
+  @override
+  String get callRecordingConsentDisclaimer => 'قد يتطلب تسجيل المكالمات موافقة في منطقتك';
+
+  @override
+  String get enterYourNumber => 'أدخل رقمك';
+
+  @override
+  String get phoneNumberCallerIdHint => 'بمجرد التحقق، سيصبح هذا هو معرف المتصل الخاص بك';
+
+  @override
+  String get phoneNumberHint => 'رقم الهاتف';
+
+  @override
+  String get failedToStartVerification => 'فشل بدء التحقق';
+
+  @override
+  String get phoneContinue => 'متابعة';
+
+  @override
+  String get verifyYourNumber => 'تحقق من رقمك';
+
+  @override
+  String get answerTheCallFrom => 'أجب على المكالمة من';
+
+  @override
+  String get onTheCallEnterThisCode => 'أثناء المكالمة، أدخل هذا الرمز';
+
+  @override
+  String get followTheVoiceInstructions => 'اتبع التعليمات الصوتية';
+
+  @override
+  String get statusCalling => 'جاري الاتصال...';
+
+  @override
+  String get statusCallInProgress => 'المكالمة جارية';
+
+  @override
+  String get statusVerifiedLabel => 'تم التحقق';
+
+  @override
+  String get statusCallMissed => 'مكالمة فائتة';
+
+  @override
+  String get statusTimedOut => 'انتهت المهلة';
+
+  @override
+  String get phoneTryAgain => 'حاول مرة أخرى';
+
+  @override
+  String get phonePageTitle => 'الهاتف';
+
+  @override
+  String get phoneContactsTab => 'جهات الاتصال';
+
+  @override
+  String get phoneKeypadTab => 'لوحة المفاتيح';
+
+  @override
+  String get grantContactsAccess => 'منح الوصول إلى جهات اتصالك';
+
+  @override
+  String get phoneAllow => 'السماح';
+
+  @override
+  String get phoneSearchHint => 'بحث';
+
+  @override
+  String get phoneNoContactsFound => 'لم يتم العثور على جهات اتصال';
+
+  @override
+  String get phoneEnterNumber => 'أدخل الرقم';
+
+  @override
+  String get failedToStartCall => 'فشل بدء المكالمة';
+
+  @override
+  String get callStateConnecting => 'جاري الاتصال...';
+
+  @override
+  String get callStateRinging => 'جاري الرنين...';
+
+  @override
+  String get callStateEnded => 'انتهت المكالمة';
+
+  @override
+  String get callStateFailed => 'فشلت المكالمة';
+
+  @override
+  String get transcriptPlaceholder => 'سيظهر النص هنا...';
+
+  @override
+  String get phoneUnmute => 'إلغاء كتم الصوت';
+
+  @override
+  String get phoneMute => 'كتم الصوت';
+
+  @override
+  String get phoneSpeaker => 'مكبر الصوت';
+
+  @override
+  String get phoneEndCall => 'إنهاء';
+
+  @override
+  String get phoneCallSettingsTitle => 'إعدادات المكالمات الهاتفية';
+
+  @override
+  String get yourVerifiedNumbers => 'أرقامك المتحقق منها';
+
+  @override
+  String get verifiedNumbersDescription => 'عند الاتصال بشخص ما، سيرى هذا الرقم على هاتفه';
+
+  @override
+  String get noVerifiedNumbers => 'لا توجد أرقام متحقق منها';
+
+  @override
+  String deletePhoneNumberConfirm(String phoneNumber) {
+    return 'حذف $phoneNumber؟';
+  }
+
+  @override
+  String get deletePhoneNumberWarning => 'ستحتاج إلى التحقق مرة أخرى لإجراء المكالمات';
+
+  @override
+  String get phoneDeleteButton => 'حذف';
+
+  @override
+  String verifiedMinutesAgo(int minutes) {
+    return 'تم التحقق منذ $minutes دقيقة';
+  }
+
+  @override
+  String verifiedHoursAgo(int hours) {
+    return 'تم التحقق منذ $hours ساعة';
+  }
+
+  @override
+  String verifiedDaysAgo(int days) {
+    return 'تم التحقق منذ $days يوم';
+  }
+
+  @override
+  String verifiedOnDate(String date) {
+    return 'تم التحقق في $date';
+  }
+
+  @override
+  String get verifiedFallback => 'تم التحقق';
+
+  @override
+  String get callAlreadyInProgress => 'هناك مكالمة جارية بالفعل';
+
+  @override
+  String get failedToGetCallToken => 'فشل الحصول على رمز المكالمة. تحقق من رقم هاتفك أولاً.';
+
+  @override
+  String get failedToInitializeCallService => 'فشل تهيئة خدمة المكالمات';
+
+  @override
+  String get speakerLabelYou => 'أنت';
+
+  @override
+  String get speakerLabelUnknown => 'غير معروف';
+
+  @override
+  String get showDailyScoreOnHomepage => 'عرض النتيجة اليومية على الصفحة الرئيسية';
+
+  @override
+  String get showTasksOnHomepage => 'عرض المهام على الصفحة الرئيسية';
+
+  @override
+  String get phoneCallsUnlimitedOnly => 'مكالمات هاتفية عبر Omi';
+
+  @override
+  String get phoneCallsUpsellSubtitle =>
+      'قم بإجراء مكالمات عبر Omi واحصل على نسخ نصي فوري وملخصات تلقائية والمزيد. متاح حصرياً لمشتركي خطة غير محدود.';
+
+  @override
+  String get phoneCallsUpsellFeature1 => 'نسخ نصي فوري لكل مكالمة';
+
+  @override
+  String get phoneCallsUpsellFeature2 => 'ملخصات تلقائية للمكالمات وعناصر العمل';
+
+  @override
+  String get phoneCallsUpsellFeature3 => 'يرى المتلقون رقمك الحقيقي، وليس رقماً عشوائياً';
+
+  @override
+  String get phoneCallsUpsellFeature4 => 'مكالماتك تبقى خاصة وآمنة';
+
+  @override
+  String get phoneCallsUpgradeButton => 'ترقية إلى غير محدود';
+
+  @override
+  String get phoneCallsMaybeLater => 'ربما لاحقاً';
+
+  @override
+  String get deleteSynced => 'حذف المتزامن';
+
+  @override
+  String get deleteSyncedFiles => 'حذف التسجيلات المتزامنة';
+
+  @override
+  String get deleteSyncedFilesMessage => 'تم مزامنة هذه التسجيلات مع هاتفك بالفعل. لا يمكن التراجع عن هذا.';
+
+  @override
+  String get syncedFilesDeleted => 'تم حذف التسجيلات المتزامنة';
+
+  @override
+  String get deletePending => 'حذف المعلق';
+
+  @override
+  String get deletePendingFiles => 'حذف التسجيلات المعلقة';
+
+  @override
+  String get deletePendingFilesWarning =>
+      'لم تتم مزامنة هذه التسجيلات مع هاتفك وستفقد نهائياً. لا يمكن التراجع عن هذا.';
+
+  @override
+  String get pendingFilesDeleted => 'تم حذف التسجيلات المعلقة';
+
+  @override
+  String get deleteAllFiles => 'حذف جميع التسجيلات';
+
+  @override
+  String get deleteAll => 'حذف الكل';
+
+  @override
+  String get deleteAllFilesWarning =>
+      'سيؤدي هذا إلى حذف التسجيلات المتزامنة والمعلقة. التسجيلات المعلقة لم تتم مزامنتها وستفقد نهائياً. لا يمكن التراجع عن هذا.';
+
+  @override
+  String get allFilesDeleted => 'تم حذف جميع التسجيلات';
+
+  @override
+  String nFiles(int count) {
+    return '$count تسجيل';
+  }
+
+  @override
+  String get manageStorage => 'إدارة التخزين';
+
+  @override
+  String get safelyBackedUp => 'تم النسخ الاحتياطي بأمان إلى هاتفك';
+
+  @override
+  String get notYetSynced => 'لم تتم المزامنة بعد مع هاتفك';
+
+  @override
+  String get clearAll => 'مسح الكل';
 }

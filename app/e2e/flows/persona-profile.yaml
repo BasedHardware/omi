@@ -1,0 +1,54 @@
+# E2E Flow: Persona/Clone Profile — view, edit, social links
+# Tests: persona profile access via Developer Settings, name edit, social connections
+# NOTE: No public entry point — only accessible via Developer Settings > Persona Section
+
+name: persona-profile
+description: Persona profile — avatar, name edit, share link, social connections (Twitter/X), public toggle
+covers:
+  - app/lib/pages/persona/persona_profile.dart
+  - app/lib/pages/persona/persona_provider.dart
+  - app/lib/pages/persona/twitter/social_profile.dart
+  - app/lib/pages/settings/developer.dart
+prerequisites:
+  - auth_ready  # User completed real sign-in (Google/Apple) and onboarding. Android: `bash setup.sh android`. iOS: `bash setup.sh ios`. App must show home screen.
+  - developer_settings_enabled  # In-app: Settings drawer → scroll down → tap Developer Settings. Visible to all users, no hidden toggle.
+setup:
+  requires: developer_settings_enabled
+
+steps:
+  - name: Navigate to Developer Settings
+    press: { type: gesture, hint: "settings gear icon top-right" }
+    screenshot: settings-open
+
+  - name: Open Developer Settings
+    scroll: down
+    press: { type: gesture, hint: "Developer Settings row in settings" }
+    screenshot: developer-settings
+
+  - name: Open Persona Section
+    press: { type: gesture, hint: "Persona Section row in developer settings" }
+    screenshot: persona-entry
+
+  - name: Verify persona profile page
+    assert:
+      interactive_count: { min: 5, hint: "avatar, name, share button, toggle, social links" }
+    note: >
+      Profile image (100x100), name with verified badge,
+      "Share Public Link" button, Make Public toggle,
+      Social link rows (omi, Twitter active; others Coming Soon).
+    screenshot: persona-profile
+
+  - name: Check social links
+    scroll: down
+    assert:
+      interactive_count: { min: 3, hint: "social link rows with connect status" }
+    screenshot: persona-social-links
+
+  - name: Back to developer settings
+    back: true
+
+  - name: Back to settings
+    back: true
+
+  - name: Back to home
+    back: true

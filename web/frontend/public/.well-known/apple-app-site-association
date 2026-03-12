@@ -20,6 +20,10 @@
             {
               "/":"/wrapped",
               "comment":"Matches any URL with a path that starts with /wrapped."
+            },
+            {
+              "/":"/tasks/*",
+              "comment":"Matches any URL with a path that starts with /tasks/."
             }
           ]
         }

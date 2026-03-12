@@ -138,6 +138,7 @@ description: "Create and retrieve conversations via the Developer API"
             "id": "seg_001",
             "text": "Let's discuss the new feature",
             "speaker_id": 0,
+            "speaker_name": "John",
             "start": 0.0,
             "end": 2.5
           },
@@ -145,6 +146,7 @@ description: "Create and retrieve conversations via the Developer API"
             "id": "seg_002",
             "text": "I think we should focus on the user interface first",
             "speaker_id": 1,
+            "speaker_name": "Speaker 1",
             "start": 2.5,
             "end": 5.8
           }
@@ -172,6 +174,16 @@ description: "Create and retrieve conversations via the Developer API"
     | `structured` | object | AI-generated structured data |
     | `transcript_segments` | array | Transcript segments (if `include_transcript=true`) |
     | `geolocation` | object | Location where conversation occurred (if available) |
+  </Accordion>
+  <Accordion title="Transcript Segment Fields" icon="waveform-lines">
+    | Field | Type | Description |
+    |-------|------|-------------|
+    | `id` | string | Segment identifier (optional) |
+    | `text` | string | The transcribed text |
+    | `speaker_id` | integer | Numeric speaker identifier (optional) |
+    | `speaker_name` | string | Human-readable speaker name. Resolved from user profiles or the People database. Falls back to a generic name like "Speaker 1" if unidentified. (optional) |
+    | `start` | float | Start timestamp in seconds |
+    | `end` | float | End timestamp in seconds |
   </Accordion>
   <Accordion title="Geolocation Object Fields" icon="location-dot">
     | Field | Type | Description |

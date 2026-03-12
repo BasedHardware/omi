@@ -1,0 +1,192 @@
+name: Test macOS Installation
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'Release tag to test (e.g., v0.0.10+10-macos)'
+        required: false
+        default: 'latest'
+  repository_dispatch:
+    types: [test-release]
+
+jobs:
+  test-install:
+    runs-on: macos-15
+    timeout-minutes: 15
+
+    steps:
+      - name: System Info
+        run: |
+          echo "## System Information" >> $GITHUB_STEP_SUMMARY
+          echo "| Property | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|----------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| macOS Version | $(sw_vers -productVersion) |" >> $GITHUB_STEP_SUMMARY
+          echo "| Build | $(sw_vers -buildVersion) |" >> $GITHUB_STEP_SUMMARY
+          echo "| Architecture | $(uname -m) |" >> $GITHUB_STEP_SUMMARY
+          echo "| Gatekeeper | $(spctl --status 2>&1 || echo 'unknown') |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+      - name: Download DMG from GitHub Release
+        id: download
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          echo "=== Downloading DMG ==="
+
+          # Get release tag from various sources
+          TAG="${{ github.event.inputs.release_tag }}"
+          if [ -z "$TAG" ] || [ "$TAG" = "latest" ]; then
+            TAG="${{ github.event.client_payload.release_tag }}"
+          fi
+          if [ -z "$TAG" ] || [ "$TAG" = "latest" ]; then
+            TAG=$(gh release list --repo BasedHardware/omi --limit 1 --json tagName --jq '.[0].tagName')
+          fi
+          echo "Testing release: $TAG"
+          echo "release_tag=$TAG" >> $GITHUB_OUTPUT
+
+          # Download DMG
+          gh release download "$TAG" \
+            --repo BasedHardware/omi \
+            --pattern "Omi.Beta.dmg" \
+            --dir .
+
+          echo "## Release Under Test" >> $GITHUB_STEP_SUMMARY
+          echo "**Tag:** \`$TAG\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          # Add quarantine attribute to simulate browser download
+          xattr -w com.apple.quarantine "0083;$(printf '%x' $(date +%s));Safari;$(uuidgen)" Omi.Beta.dmg
+
+      - name: Mount DMG and Install
+        run: |
+          hdiutil attach Omi.Beta.dmg -nobrowse -quiet
+          VOLUME=$(ls -d /Volumes/Omi* | head -1)
+          echo "Volume: $VOLUME"
+
+          # Use ditto to preserve extended attributes
+          ditto "$VOLUME/Omi Beta.app" "/Applications/Omi Beta.app"
+
+          echo "App installed to /Applications"
+
+      - name: Verify Code Signature
+        id: codesign
+        run: |
+          echo "## Code Signature" >> $GITHUB_STEP_SUMMARY
+
+          # Get signing info
+          SIGNING_INFO=$(codesign -dv --verbose=2 "/Applications/Omi Beta.app" 2>&1)
+          AUTHORITY=$(echo "$SIGNING_INFO" | grep "Authority=" | head -1 | cut -d= -f2)
+          TEAM=$(echo "$SIGNING_INFO" | grep "TeamIdentifier=" | cut -d= -f2)
+
+          echo "| Check | Result |" >> $GITHUB_STEP_SUMMARY
+          echo "|-------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Signing Authority | $AUTHORITY |" >> $GITHUB_STEP_SUMMARY
+          echo "| Team ID | $TEAM |" >> $GITHUB_STEP_SUMMARY
+
+          # Deep verification (MUST pass)
+          if codesign --verify --deep --strict --verbose=2 "/Applications/Omi Beta.app" 2>&1; then
+            echo "| Deep Verification | ✅ Pass |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "| Deep Verification | ❌ FAIL |" >> $GITHUB_STEP_SUMMARY
+            echo "::error::Code signature deep verification failed"
+            exit 1
+          fi
+
+      - name: Verify Gatekeeper Assessment
+        id: gatekeeper
+        run: |
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Gatekeeper Assessment" >> $GITHUB_STEP_SUMMARY
+          echo "| Check | Result |" >> $GITHUB_STEP_SUMMARY
+          echo "|-------|--------|" >> $GITHUB_STEP_SUMMARY
+
+          # Gatekeeper assessment (MUST pass)
+          GK_RESULT=$(spctl --assess --verbose=4 "/Applications/Omi Beta.app" 2>&1)
+          if echo "$GK_RESULT" | grep -q "accepted"; then
+            SOURCE=$(echo "$GK_RESULT" | grep "source=" | cut -d= -f2)
+            echo "| Assessment | ✅ Accepted |" >> $GITHUB_STEP_SUMMARY
+            echo "| Source | $SOURCE |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "| Assessment | ❌ REJECTED |" >> $GITHUB_STEP_SUMMARY
+            echo "::error::Gatekeeper rejected the app: $GK_RESULT"
+            exit 1
+          fi
+
+      - name: Verify Notarization Stapling
+        id: stapling
+        run: |
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Notarization Stapling" >> $GITHUB_STEP_SUMMARY
+          echo "| Check | Result |" >> $GITHUB_STEP_SUMMARY
+          echo "|-------|--------|" >> $GITHUB_STEP_SUMMARY
+
+          # Stapler validation (MUST pass - this was the bug!)
+          if xcrun stapler validate "/Applications/Omi Beta.app" 2>&1 | grep -q "valid"; then
+            echo "| Stapled Ticket | ✅ Present |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "| Stapled Ticket | ❌ MISSING |" >> $GITHUB_STEP_SUMMARY
+            echo "::error::Notarization ticket is NOT stapled to the app. Users may have issues launching the app offline or with slow internet."
+            exit 1
+          fi
+
+      - name: Test App Launch
+        id: launch
+        run: |
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## App Launch Test" >> $GITHUB_STEP_SUMMARY
+          echo "| Check | Result |" >> $GITHUB_STEP_SUMMARY
+          echo "|-------|--------|" >> $GITHUB_STEP_SUMMARY
+
+          # Clear quarantine (simulates user clicking "Open" in Gatekeeper dialog)
+          xattr -cr "/Applications/Omi Beta.app"
+
+          # Register with LaunchServices
+          /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "/Applications/Omi Beta.app"
+
+          # Launch the app
+          open "/Applications/Omi Beta.app"
+
+          # Wait for app to start
+          sleep 5
+
+          # Check if running
+          if pgrep -x "Omi Computer" > /dev/null; then
+            echo "| Process Running | ✅ Yes |" >> $GITHUB_STEP_SUMMARY
+            PID=$(pgrep -x "Omi Computer")
+            echo "| PID | $PID |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "| Process Running | ⚠️ No (may need UI interaction) |" >> $GITHUB_STEP_SUMMARY
+            # Don't fail - headless CI may not support GUI apps fully
+          fi
+
+          # Check for crash reports
+          if ls ~/Library/Logs/DiagnosticReports/*Omi* 2>/dev/null; then
+            echo "| Crash Reports | ❌ Found |" >> $GITHUB_STEP_SUMMARY
+            echo "::error::Crash report found!"
+            cat ~/Library/Logs/DiagnosticReports/*Omi*.crash | head -100
+            exit 1
+          else
+            echo "| Crash Reports | ✅ None |" >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Final Summary
+        if: always()
+        run: |
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "---" >> $GITHUB_STEP_SUMMARY
+          echo "## Test Result" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ job.status }}" = "success" ]; then
+            echo "### ✅ All checks passed" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "### ❌ Some checks failed" >> $GITHUB_STEP_SUMMARY
+            echo "See individual step results above for details." >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Cleanup
+        if: always()
+        run: |
+          pkill -9 "Omi Computer" 2>/dev/null || true
+          hdiutil detach "/Volumes/Omi Beta" -quiet 2>/dev/null || true
+          hdiutil detach /Volumes/Omi* -quiet 2>/dev/null || true
+          rm -rf "/Applications/Omi Beta.app"

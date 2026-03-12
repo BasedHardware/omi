@@ -72,6 +72,8 @@ from utils.notifications import send_action_item_data_message
 from utils.task_sync import auto_sync_action_items_batch
 from utils.other.storage import precache_conversation_audio
 
+logger = logging.getLogger(__name__)
+
 
 def _get_structured(
     uid: str,
@@ -89,7 +91,7 @@ def _get_structured(
             two_days_ago = datetime.now(timezone.utc) - timedelta(days=2)
             existing_action_items = action_items_db.get_action_items(uid=uid, start_date=two_days_ago, limit=50)
         except Exception as e:
-            print(f"Error fetching existing action items for deduplication: {e}")
+            logger.error(f"Error fetching existing action items for deduplication: {e}")
 
         # Extract calendar context from external_data
         calendar_context = None
@@ -162,9 +164,14 @@ def _get_structured(
                 )
             return structured, False
 
+        # Compute conversation duration for discard heuristics
+        duration_seconds = None
+        if conversation.started_at and conversation.finished_at:
+            duration_seconds = max(0, (conversation.finished_at - conversation.started_at).total_seconds())
+
         # Determine whether to discard the conversation based on its content (transcript and/or photos).
         with track_usage(uid, Features.CONVERSATION_DISCARD):
-            discarded = should_discard_conversation(transcript_text, conversation.photos)
+            discarded = should_discard_conversation(transcript_text, conversation.photos, duration_seconds)
         if discarded:
             return Structured(emoji=random.choice(['🧠', '🎉'])), True
 
@@ -190,7 +197,7 @@ def _get_structured(
             )
         return structured, False
     except Exception as e:
-        print(e)
+        logger.error(e)
         raise HTTPException(status_code=500, detail="Error processing conversation, please try again later")
 
 
@@ -308,27 +315,27 @@ def _trigger_apps(
         preferred_app_id = redis_db.get_user_preferred_app(uid)
         if preferred_app_id and preferred_app_id in all_apps_dict:
             app_to_run = all_apps_dict.get(preferred_app_id)
-            print(f"Using user's preferred app: {app_to_run.name} (id: {preferred_app_id})")
+            logger.info(f"Using user's preferred app: {app_to_run.name} (id: {preferred_app_id})")
         else:
             # Only run suggestion LLM call when no preferred app is set
             if not conversation.suggested_summarization_apps:
                 with track_usage(uid, Features.CONVERSATION_APPS):
                     suggested_apps, reasoning = get_suggested_apps_for_conversation(conversation, all_suggestion_apps)
                 conversation.suggested_summarization_apps = suggested_apps
-                print(f"Generated suggested apps for conversation {conversation.id}: {suggested_apps}")
+                logger.info(f"Generated suggested apps for conversation {conversation.id}: {suggested_apps}")
 
             if conversation.suggested_summarization_apps:
                 first_suggested_app_id = conversation.suggested_summarization_apps[0]
                 app_to_run = all_apps_dict.get(first_suggested_app_id)
                 if app_to_run:
-                    print(f"Using first suggested app: {app_to_run.name}")
+                    logger.info(f"Using first suggested app: {app_to_run.name}")
                 else:
-                    print(f"First suggested app '{first_suggested_app_id}' not found in apps.")
+                    logger.warning(f"First suggested app '{first_suggested_app_id}' not found in apps.")
 
     filtered_apps = [app_to_run] if app_to_run else []
 
     if not filtered_apps:
-        print(f"No summarization app selected for conversation {conversation.id}", uid)
+        logger.info(f"No summarization app selected for conversation {conversation.id} {uid}")
 
     # Clear existing app results
     conversation.apps_results = []
@@ -368,7 +375,7 @@ def _update_goal_progress(uid: str, conversation: Conversation):
         with track_usage(uid, Features.GOALS):
             extract_and_update_goal_progress(uid, text)
     except Exception as e:
-        print(f"[GOAL] Error updating progress: {e}")
+        logger.error(f"[GOAL] Error updating progress: {e}")
 
 
 def _extract_memories(uid: str, conversation: Conversation):
@@ -384,6 +391,7 @@ def _extract_memories_inner(uid: str, conversation: Conversation):
         delete_memory_vector(uid, memory_id)
     memories_db.delete_memories_for_conversation(uid, conversation.id)
 
+    language = users_db.get_user_language_preference(uid)
     new_memories: List[Memory] = []
 
     # Extract memories based on conversation source
@@ -391,10 +399,10 @@ def _extract_memories_inner(uid: str, conversation: Conversation):
         text_content = conversation.external_data.get('text')
         if text_content and len(text_content) > 0:
             text_source = conversation.external_data.get('text_source', 'other')
-            new_memories = extract_memories_from_text(uid, text_content, text_source)
+            new_memories = extract_memories_from_text(uid, text_content, text_source, language=language)
     else:
         # For regular conversations with transcript segments
-        new_memories = new_memories_extractor(uid, conversation.transcript_segments)
+        new_memories = new_memories_extractor(uid, conversation.transcript_segments, language=language)
 
     is_locked = conversation.is_locked
     parsed_memories = []
@@ -419,7 +427,7 @@ def _extract_memories_inner(uid: str, conversation: Conversation):
                 )
 
         if similar_memories:
-            resolution = resolve_memory_conflict(memory.content, similar_memories)
+            resolution = resolve_memory_conflict(memory.content, similar_memories, language=language)
 
             if resolution.action == 'keep_existing':
                 continue
@@ -442,10 +450,10 @@ def _extract_memories_inner(uid: str, conversation: Conversation):
         memories_db.delete_memory(uid, memory_id)
 
     if len(parsed_memories) == 0:
-        print(f"No memories extracted for conversation {conversation.id}")
+        logger.info(f"No memories extracted for conversation {conversation.id}")
         return
 
-    print(f"Saving {len(parsed_memories)} memories for conversation {conversation.id}")
+    logger.info(f"Saving {len(parsed_memories)} memories for conversation {conversation.id}")
     memories_db.save_memories(uid, [fact.dict() for fact in parsed_memories])
 
     for memory_db_obj in parsed_memories:
@@ -522,7 +530,7 @@ def _save_action_items(uid: str, conversation: Conversation):
         action_items_db.delete_action_items_for_conversation(uid, conversation.id)
         # Save new action items
         action_item_ids = action_items_db.create_action_items_batch(uid, action_items_data)
-        print(f"Saved {len(action_item_ids)} action items for conversation {conversation.id}")
+        logger.info(f"Saved {len(action_item_ids)} action items for conversation {conversation.id}")
 
         # Send FCM data messages for action items with due dates
         for idx, action_item in enumerate(conversation.structured.action_items):
@@ -572,15 +580,15 @@ def save_structured_vector(uid: str, conversation: Conversation, update_only: bo
     metadata['created_at'] = int(conversation.created_at.timestamp())
 
     if not update_only:
-        print('save_structured_vector creating vector')
+        logger.info('save_structured_vector creating vector')
         upsert_vector2(uid, conversation, vector, metadata)
     else:
-        print('save_structured_vector updating metadata')
+        logger.info('save_structured_vector updating metadata')
         update_vector_metadata(uid, conversation.id, metadata)
 
 
 def _update_personas_async(uid: str):
-    print(f"[PERSONAS] Starting persona updates in background thread for uid={uid}")
+    logger.info(f"[PERSONAS] Starting persona updates in background thread for uid={uid}")
     personas = get_omi_personas_by_uid_db(uid)
     if personas:
         threads = []
@@ -589,7 +597,7 @@ def _update_personas_async(uid: str):
 
         [t.start() for t in threads]
         [t.join() for t in threads]
-        print(f"[PERSONAS] Finished persona updates in background thread for uid={uid}")
+        logger.info(f"[PERSONAS] Finished persona updates in background thread for uid={uid}")
 
 
 def process_conversation(
@@ -611,9 +619,11 @@ def process_conversation(
                     if not hasattr(conversation, 'external_data') or not conversation.external_data:
                         conversation.external_data = {}
                     conversation.external_data['calendar_meeting_context'] = meeting_data
-                    print(f"Retrieved meeting context for conversation {conversation.id}: {meeting_data.get('title')}")
+                    logger.info(
+                        f"Retrieved meeting context for conversation {conversation.id}: {meeting_data.get('title')}"
+                    )
             except Exception as e:
-                print(f"Error retrieving meeting context for conversation {conversation.id}: {e}")
+                logger.error(f"Error retrieving meeting context for conversation {conversation.id}: {e}")
 
     person_ids = conversation.get_person_ids()
     people = []
@@ -646,11 +656,11 @@ def process_conversation(
                 if folder_id:
                     conversation.folder_id = folder_id
                     assigned_folder_id = folder_id
-                    print(
+                    logger.info(
                         f"AI assigned conversation {conversation.id} to folder {folder_id} (confidence: {confidence:.2f}): {reasoning}"
                     )
         except Exception as e:
-            print(f"Error during folder assignment for conversation {conversation.id}: {e}")
+            logger.error(f"Error during folder assignment for conversation {conversation.id}: {e}")
 
     if not discarded:
         # Analytics tracking
@@ -710,7 +720,7 @@ def process_conversation(
                 # Pre-cache audio files in background
                 precache_conversation_audio(uid, conversation.id, [af.dict() for af in audio_files])
         except Exception as e:
-            print(f"Error creating audio files: {e}")
+            logger.error(f"Error creating audio files: {e}")
 
     conversation.status = ConversationStatus.completed
     conversations_db.upsert_conversation(uid, conversation.dict())
@@ -739,7 +749,7 @@ def process_conversation(
 
     # TODO: trigger external integrations here too
 
-    print('process_conversation completed conversation.id=', conversation.id)
+    logger.info(f'process_conversation completed conversation.id= {conversation.id}')
     return conversation
 
 
@@ -755,7 +765,7 @@ def _send_important_conversation_notification_if_needed(uid: str, conversation: 
 
     # Check if we have valid timestamps to compute duration
     if not conversation.started_at or not conversation.finished_at:
-        print(f"Cannot compute duration for conversation {conversation.id}: missing timestamps")
+        logger.error(f"Cannot compute duration for conversation {conversation.id}: missing timestamps")
         return
 
     # Calculate duration in seconds
@@ -767,21 +777,21 @@ def _send_important_conversation_notification_if_needed(uid: str, conversation: 
 
     # Check if notification was already sent for this conversation
     if redis_db.has_important_conversation_notification_been_sent(uid, conversation.id):
-        print(f"Important conversation notification already sent for {conversation.id}")
+        logger.info(f"Important conversation notification already sent for {conversation.id}")
         return
 
     # Mark as sent before sending to prevent duplicates
     redis_db.set_important_conversation_notification_sent(uid, conversation.id)
 
     # Send the notification
-    print(
+    logger.info(
         f"Sending important conversation notification for {conversation.id} (duration: {duration_seconds/60:.1f} mins)"
     )
     send_important_conversation_message(uid, conversation.id)
 
 
 def process_user_emotion(uid: str, language_code: str, conversation: Conversation, urls: [str]):
-    print('process_user_emotion conversation.id=', conversation.id)
+    logger.info(f'process_user_emotion conversation.id= {conversation.id}')
 
     # save task
     now = datetime.now()
@@ -799,12 +809,12 @@ def process_user_emotion(uid: str, language_code: str, conversation: Conversatio
     ok = get_hume().request_user_expression_mersurement(urls)
     if "error" in ok:
         err = ok["error"]
-        print(err)
+        logger.error(err)
         return
     job = ok["result"]
     request_id = job.id
     if not request_id or len(request_id) == 0:
-        print(f"Can not request users feeling. uid: {uid}")
+        logger.info(f"Can not request users feeling. uid: {uid}")
         return
 
     # update task
@@ -818,7 +828,7 @@ def process_user_emotion(uid: str, language_code: str, conversation: Conversatio
 def process_user_expression_measurement_callback(provider: str, request_id: str, callback: HumeJobCallbackModel):
     support_providers = [TaskActionProvider.HUME]
     if provider not in support_providers:
-        print(f"Provider is not supported. {provider}")
+        logger.info(f"Provider is not supported. {provider}")
         return
 
     # Get task
@@ -826,12 +836,12 @@ def process_user_expression_measurement_callback(provider: str, request_id: str,
     if provider == TaskActionProvider.HUME:
         task_action = TaskAction.HUME_MERSURE_USER_EXPRESSION
     if len(task_action) == 0:
-        print("Task action is empty")
+        logger.info("Task action is empty")
         return
 
     task_data = tasks_db.get_task_by_action_request(task_action, request_id)
     if task_data is None:
-        print(f"Task not found. Action: {task_action}, Request ID: {request_id}")
+        logger.warning(f"Task not found. Action: {task_action}, Request ID: {request_id}")
         return
 
     task = Task(**task_data)
@@ -843,12 +853,12 @@ def process_user_expression_measurement_callback(provider: str, request_id: str,
     elif callback.status == "FAILED":
         task_status = TaskStatus.ERROR
     else:
-        print(f"Not support status {callback.status}")
+        logger.info(f"Not support status {callback.status}")
         return
 
     # Not changed
     if task_status == task.status:
-        print("Task status are synced")
+        logger.info("Task status are synced")
         return
 
     task.status = task_status
@@ -857,7 +867,7 @@ def process_user_expression_measurement_callback(provider: str, request_id: str,
 
     # done or not
     if task.status != TaskStatus.DONE:
-        print(f"Task is not done yet. Uid: {task.user_uid}, task_id: {task.id}, status: {task.status}")
+        logger.info(f"Task is not done yet. Uid: {task.user_uid}, task_id: {task.id}, status: {task.status}")
         return
 
     uid = task.user_uid
@@ -871,16 +881,16 @@ def process_user_expression_measurement_callback(provider: str, request_id: str,
     # Conversation
     conversation_data = conversations_db.get_conversation(uid, task.memory_id)
     if conversation_data is None:
-        print(f"Conversation is not found. Uid: {uid}. Conversation: {task.memory_id}")
+        logger.warning(f"Conversation is not found. Uid: {uid}. Conversation: {task.memory_id}")
         return
 
     conversation = Conversation(**conversation_data)
 
     # Get prediction
     predictions = callback.predictions
-    print(predictions)
+    logger.info(predictions)
     if len(predictions) == 0 or len(predictions[0].emotions) == 0:
-        print(f"Can not predict user's expression. Uid: {uid}")
+        logger.info(f"Can not predict user's expression. Uid: {uid}")
         return
 
     # Filter users emotions only
@@ -890,18 +900,18 @@ def process_user_expression_measurement_callback(provider: str, request_id: str,
     # print(users_frames)
 
     if len(users_frames) == 0:
-        print(f"User time frames are empty. Uid: {uid}")
+        logger.info(f"User time frames are empty. Uid: {uid}")
         return
 
     users_predictions = []
     for prediction in predictions:
         for uf in users_frames:
-            print(uf, prediction.time)
+            logger.info(f"{uf} {prediction.time}")
             if uf[0] <= prediction.time[0] and prediction.time[1] <= uf[1]:
                 users_predictions.append(prediction)
                 break
     if len(users_predictions) == 0:
-        print(f"Predictions are filtered by user transcript segments. Uid: {uid}")
+        logger.info(f"Predictions are filtered by user transcript segments. Uid: {uid}")
         return
 
     # Top emotions
@@ -914,11 +924,11 @@ def process_user_expression_measurement_callback(provider: str, request_id: str,
     if len(emotion_filters) > 0:
         emotions = filter(lambda emotion: emotion in emotion_filters, emotions)
     if len(emotions) == 0:
-        print(f"Can not extract users emmotion. uid: {uid}")
+        logger.info(f"Can not extract users emmotion. uid: {uid}")
         return
 
     emotion = ','.join(emotions)
-    print(f"Emotion Uid: {uid} {emotion}")
+    logger.info(f"Emotion Uid: {uid} {emotion}")
 
     # Ask llms about notification content
     title = "omi"

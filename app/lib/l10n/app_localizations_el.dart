@@ -1019,7 +1019,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get vocabularyHint => 'Omi, Callie, OpenAI';
 
   @override
-  String get connect => 'Connect';
+  String get connect => 'Σύνδεση';
 
   @override
   String get comingSoon => 'Σύντομα Διαθέσιμο';
@@ -2285,7 +2285,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get folderName => 'Όνομα φακέλου';
 
   @override
-  String get descriptionOptional => 'Description (optional)';
+  String get descriptionOptional => 'Περιγραφή (προαιρετική)';
 
   @override
   String get failedToDeleteFolder => 'Αποτυχία διαγραφής φακέλου';
@@ -2694,7 +2694,7 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get noTasksForToday =>
-      'Δεν υπάρχουν εργασίες για σήμερα.\\nΡωτήστε το Omi για περισσότερες εργασίες ή δημιουργήστε χειροκίνητα.';
+      'Δεν υπάρχουν εργασίες για σήμερα.\nΡωτήστε το Omi για περισσότερες εργασίες ή δημιουργήστε χειροκίνητα.';
 
   @override
   String get dailyScore => 'ΗΜΕΡΗΣΙΟ ΣΚΟΡ';
@@ -8047,36 +8047,36 @@ class AppLocalizationsEl extends AppLocalizations {
   String get couldNotOpenUrl => 'Δεν ήταν δυνατό το άνοιγμα του URL. Παρακαλώ δοκιμάστε ξανά.';
 
   @override
-  String get newTask => 'New Task';
+  String get newTask => 'Νέα εργασία';
 
   @override
-  String get viewAll => 'View All';
+  String get viewAll => 'Προβολή όλων';
 
   @override
-  String get addTask => 'Add Task';
+  String get addTask => 'Προσθήκη εργασίας';
 
   @override
-  String get addMcpServer => 'Add MCP Server';
+  String get addMcpServer => 'Προσθήκη διακομιστή MCP';
 
   @override
-  String get connectExternalAiTools => 'Connect external AI tools';
+  String get connectExternalAiTools => 'Σύνδεση εξωτερικών εργαλείων AI';
 
   @override
   String get mcpServerUrl => 'MCP Server URL';
 
   @override
   String mcpServerConnected(int count) {
-    return '$count tools connected successfully';
+    return '$count εργαλεία συνδέθηκαν επιτυχώς';
   }
 
   @override
-  String get mcpConnectionFailed => 'Failed to connect to MCP server';
+  String get mcpConnectionFailed => 'Αποτυχία σύνδεσης με τον διακομιστή MCP';
 
   @override
-  String get authorizingMcpServer => 'Authorizing...';
+  String get authorizingMcpServer => 'Εξουσιοδότηση...';
 
   @override
-  String get whereDidYouHearAboutOmi => 'How did you find us?';
+  String get whereDidYouHearAboutOmi => 'Πώς μας βρήκατε;';
 
   @override
   String get tiktok => 'TikTok';
@@ -8094,19 +8094,19 @@ class AppLocalizationsEl extends AppLocalizations {
   String get reddit => 'Reddit';
 
   @override
-  String get friendWordOfMouth => 'Friend';
+  String get friendWordOfMouth => 'Φίλος';
 
   @override
-  String get otherSource => 'Other';
+  String get otherSource => 'Άλλο';
 
   @override
-  String get pleaseSpecify => 'Please specify';
+  String get pleaseSpecify => 'Παρακαλώ διευκρινίστε';
 
   @override
-  String get event => 'Event';
+  String get event => 'Εκδήλωση';
 
   @override
-  String get coworker => 'Coworker';
+  String get coworker => 'Συνάδελφος';
 
   @override
   String get linkedIn => 'LinkedIn';
@@ -8123,4 +8123,498 @@ class AppLocalizationsEl extends AppLocalizations {
   @override
   String get audioPlaybackFailed =>
       'Δεν είναι δυνατή η αναπαραγωγή ήχου. Το αρχείο μπορεί να είναι κατεστραμμένο ή να λείπει.';
+
+  @override
+  String get connectionGuide => 'Οδηγός σύνδεσης';
+
+  @override
+  String get iveDoneThis => 'Το έκανα';
+
+  @override
+  String get pairNewDevice => 'Σύζευξη νέας συσκευής';
+
+  @override
+  String get dontSeeYourDevice => 'Δεν βλέπετε τη συσκευή σας;';
+
+  @override
+  String get reportAnIssue => 'Αναφορά προβλήματος';
+
+  @override
+  String get pairingTitleOmi => 'Ενεργοποιήστε το Omi';
+
+  @override
+  String get pairingDescOmi => 'Πατήστε παρατεταμένα τη συσκευή μέχρι να δονηθεί για να την ενεργοποιήσετε.';
+
+  @override
+  String get pairingTitleOmiDevkit => 'Θέστε το Omi DevKit σε λειτουργία σύζευξης';
+
+  @override
+  String get pairingDescOmiDevkit =>
+      'Πατήστε το κουμπί μία φορά για ενεργοποίηση. Το LED θα αναβοσβήνει μωβ στη λειτουργία σύζευξης.';
+
+  @override
+  String get pairingTitleOmiGlass => 'Ενεργοποιήστε το Omi Glass';
+
+  @override
+  String get pairingDescOmiGlass => 'Πατήστε παρατεταμένα το πλαϊνό κουμπί για 3 δευτερόλεπτα για ενεργοποίηση.';
+
+  @override
+  String get pairingTitlePlaudNote => 'Θέστε το Plaud Note σε λειτουργία σύζευξης';
+
+  @override
+  String get pairingDescPlaudNote =>
+      'Πατήστε παρατεταμένα το πλαϊνό κουμπί για 2 δευτερόλεπτα. Το κόκκινο LED θα αναβοσβήνει όταν είναι έτοιμο για σύζευξη.';
+
+  @override
+  String get pairingTitleBee => 'Θέστε το Bee σε λειτουργία σύζευξης';
+
+  @override
+  String get pairingDescBee =>
+      'Πατήστε το κουμπί 5 φορές συνεχόμενα. Το φως θα αρχίσει να αναβοσβήνει μπλε και πράσινο.';
+
+  @override
+  String get pairingTitleLimitless => 'Θέστε το Limitless σε λειτουργία σύζευξης';
+
+  @override
+  String get pairingDescLimitless =>
+      'Όταν είναι ορατό οποιοδήποτε φως, πατήστε μία φορά και μετά πατήστε παρατεταμένα μέχρι η συσκευή να δείξει ροζ φως, μετά αφήστε.';
+
+  @override
+  String get pairingTitleFriendPendant => 'Θέστε το Friend Pendant σε λειτουργία σύζευξης';
+
+  @override
+  String get pairingDescFriendPendant =>
+      'Πατήστε το κουμπί στο μενταγιόν για να το ενεργοποιήσετε. Θα εισέλθει αυτόματα σε λειτουργία σύζευξης.';
+
+  @override
+  String get pairingTitleFieldy => 'Θέστε το Fieldy σε λειτουργία σύζευξης';
+
+  @override
+  String get pairingDescFieldy =>
+      'Πατήστε παρατεταμένα τη συσκευή μέχρι να εμφανιστεί το φως για να την ενεργοποιήσετε.';
+
+  @override
+  String get pairingTitleAppleWatch => 'Συνδέστε το Apple Watch';
+
+  @override
+  String get pairingDescAppleWatch =>
+      'Εγκαταστήστε και ανοίξτε την εφαρμογή Omi στο Apple Watch σας, μετά πατήστε Σύνδεση στην εφαρμογή.';
+
+  @override
+  String get pairingTitleNeoOne => 'Θέστε το Neo One σε λειτουργία σύζευξης';
+
+  @override
+  String get pairingDescNeoOne =>
+      'Πατήστε παρατεταμένα το κουμπί τροφοδοσίας μέχρι να αναβοσβήσει το LED. Η συσκευή θα είναι ανιχνεύσιμη.';
+
+  @override
+  String get downloadingFromDevice => 'Λήψη από τη συσκευή';
+
+  @override
+  String get reconnectingToInternet => 'Επανασύνδεση στο διαδίκτυο...';
+
+  @override
+  String uploadingToCloud(int current, int total) {
+    return 'Μεταφόρτωση $current από $total';
+  }
+
+  @override
+  String get processedStatus => 'Επεξεργασμένο';
+
+  @override
+  String get corruptedStatus => 'Κατεστραμμένο';
+
+  @override
+  String nPending(int count) {
+    return '$count σε αναμονή';
+  }
+
+  @override
+  String nProcessed(int count) {
+    return '$count επεξεργασμένα';
+  }
+
+  @override
+  String get synced => 'Συγχρονισμένο';
+
+  @override
+  String get noPendingRecordings => 'Δεν υπάρχουν εκκρεμείς εγγραφές';
+
+  @override
+  String get noProcessedRecordings => 'Δεν υπάρχουν επεξεργασμένες εγγραφές ακόμα';
+
+  @override
+  String get pending => 'Εκκρεμεί';
+
+  @override
+  String whatsNewInVersion(String version) {
+    return 'Τι νέο υπάρχει στο $version';
+  }
+
+  @override
+  String get addToYourTaskList => 'Προσθήκη στη λίστα εργασιών σας;';
+
+  @override
+  String get failedToCreateShareLink => 'Αποτυχία δημιουργίας συνδέσμου κοινοποίησης';
+
+  @override
+  String get deleteGoal => 'Διαγραφή στόχου';
+
+  @override
+  String get deviceUpToDate => 'Η συσκευή σας είναι ενημερωμένη';
+
+  @override
+  String get wifiConfiguration => 'Ρύθμιση WiFi';
+
+  @override
+  String get wifiConfigurationSubtitle =>
+      'Εισαγάγετε τα στοιχεία WiFi για να επιτρέψετε στη συσκευή να κατεβάσει το firmware.';
+
+  @override
+  String get networkNameSsid => 'Όνομα δικτύου (SSID)';
+
+  @override
+  String get enterWifiNetworkName => 'Εισαγάγετε το όνομα δικτύου WiFi';
+
+  @override
+  String get enterWifiPassword => 'Εισαγάγετε τον κωδικό WiFi';
+
+  @override
+  String get appIconLabel => 'App Icon';
+
+  @override
+  String get onboardingWhatIKnowAboutYouTitle => 'Αυτά γνωρίζω για εσένα';
+
+  @override
+  String get onboardingWhatIKnowAboutYouDescription =>
+      'Αυτός ο χάρτης ενημερώνεται καθώς το Omi μαθαίνει από τις συνομιλίες σας.';
+
+  @override
+  String get apiEnvironment => 'Περιβάλλον API';
+
+  @override
+  String get apiEnvironmentDescription => 'Επιλέξτε σε ποιον διακομιστή θα συνδεθείτε';
+
+  @override
+  String get production => 'Παραγωγή';
+
+  @override
+  String get staging => 'Δοκιμαστικό';
+
+  @override
+  String get switchRequiresRestart => 'Η εναλλαγή απαιτεί επανεκκίνηση της εφαρμογής';
+
+  @override
+  String get switchApiConfirmTitle => 'Εναλλαγή περιβάλλοντος API';
+
+  @override
+  String switchApiConfirmBody(String environment) {
+    return 'Εναλλαγή σε $environment; Θα πρέπει να κλείσετε και να ανοίξετε ξανά την εφαρμογή για να εφαρμοστούν οι αλλαγές.';
+  }
+
+  @override
+  String get switchAndRestart => 'Εναλλαγή';
+
+  @override
+  String get stagingDisclaimer =>
+      'Το δοκιμαστικό περιβάλλον μπορεί να είναι ασταθές, με ασυνεπή απόδοση και τα δεδομένα μπορεί να χαθούν. Μόνο για δοκιμές.';
+
+  @override
+  String get apiEnvSavedRestartRequired =>
+      'Αποθηκεύτηκε. Κλείστε και ανοίξτε ξανά την εφαρμογή για να εφαρμοστούν οι αλλαγές.';
+
+  @override
+  String get shared => 'Κοινόχρηστο';
+
+  @override
+  String get onlyYouCanSeeConversation => 'Μόνο εσείς μπορείτε να δείτε αυτή τη συνομιλία';
+
+  @override
+  String get anyoneWithLinkCanView => 'Οποιοσδήποτε έχει τον σύνδεσμο μπορεί να δει';
+
+  @override
+  String get tasksCleanTodayTitle => 'Να καθαριστούν οι σημερινές εργασίες;';
+
+  @override
+  String get tasksCleanTodayMessage => 'Αυτό θα αφαιρέσει μόνο τις προθεσμίες';
+
+  @override
+  String get tasksOverdue => 'Εκπρόθεσμα';
+
+  @override
+  String get phoneCallsWithOmi => 'Κλήσεις με Omi';
+
+  @override
+  String get phoneCallsSubtitle => 'Κάντε κλήσεις με μεταγραφή σε πραγματικό χρόνο';
+
+  @override
+  String get phoneSetupStep1Title => 'Επαληθεύστε τον αριθμό τηλεφώνου σας';
+
+  @override
+  String get phoneSetupStep1Subtitle => 'Θα σας καλέσουμε για επιβεβαίωση';
+
+  @override
+  String get phoneSetupStep2Title => 'Εισάγετε κωδικό επαλήθευσης';
+
+  @override
+  String get phoneSetupStep2Subtitle => 'Ένας σύντομος κωδικός που θα πληκτρολογήσετε στην κλήση';
+
+  @override
+  String get phoneSetupStep3Title => 'Ξεκινήστε να καλείτε τις επαφές σας';
+
+  @override
+  String get phoneSetupStep3Subtitle => 'Με ενσωματωμένη ζωντανή μεταγραφή';
+
+  @override
+  String get phoneGetStarted => 'Ξεκινήστε';
+
+  @override
+  String get callRecordingConsentDisclaimer => 'Η εγγραφή κλήσεων μπορεί να απαιτεί συγκατάθεση στη δικαιοδοσία σας';
+
+  @override
+  String get enterYourNumber => 'Εισάγετε τον αριθμό σας';
+
+  @override
+  String get phoneNumberCallerIdHint => 'Μετά την επαλήθευση, αυτό γίνεται η ταυτότητα κλήσης σας';
+
+  @override
+  String get phoneNumberHint => 'Αριθμός τηλεφώνου';
+
+  @override
+  String get failedToStartVerification => 'Αποτυχία έναρξης επαλήθευσης';
+
+  @override
+  String get phoneContinue => 'Συνέχεια';
+
+  @override
+  String get verifyYourNumber => 'Επαληθεύστε τον αριθμό σας';
+
+  @override
+  String get answerTheCallFrom => 'Απαντήστε στην κλήση από';
+
+  @override
+  String get onTheCallEnterThisCode => 'Στην κλήση, εισάγετε αυτόν τον κωδικό';
+
+  @override
+  String get followTheVoiceInstructions => 'Ακολουθήστε τις φωνητικές οδηγίες';
+
+  @override
+  String get statusCalling => 'Κλήση...';
+
+  @override
+  String get statusCallInProgress => 'Κλήση σε εξέλιξη';
+
+  @override
+  String get statusVerifiedLabel => 'Επαληθευμένο';
+
+  @override
+  String get statusCallMissed => 'Αναπάντητη κλήση';
+
+  @override
+  String get statusTimedOut => 'Λήξη χρόνου';
+
+  @override
+  String get phoneTryAgain => 'Δοκιμάστε ξανά';
+
+  @override
+  String get phonePageTitle => 'Τηλέφωνο';
+
+  @override
+  String get phoneContactsTab => 'Επαφές';
+
+  @override
+  String get phoneKeypadTab => 'Πληκτρολόγιο';
+
+  @override
+  String get grantContactsAccess => 'Δώστε πρόσβαση στις επαφές σας';
+
+  @override
+  String get phoneAllow => 'Επιτρέπω';
+
+  @override
+  String get phoneSearchHint => 'Αναζήτηση';
+
+  @override
+  String get phoneNoContactsFound => 'Δεν βρέθηκαν επαφές';
+
+  @override
+  String get phoneEnterNumber => 'Εισάγετε αριθμό';
+
+  @override
+  String get failedToStartCall => 'Αποτυχία έναρξης κλήσης';
+
+  @override
+  String get callStateConnecting => 'Σύνδεση...';
+
+  @override
+  String get callStateRinging => 'Κουδουνίζει...';
+
+  @override
+  String get callStateEnded => 'Κλήση τερματίστηκε';
+
+  @override
+  String get callStateFailed => 'Κλήση απέτυχε';
+
+  @override
+  String get transcriptPlaceholder => 'Η μεταγραφή θα εμφανιστεί εδώ...';
+
+  @override
+  String get phoneUnmute => 'Κατάργηση σίγασης';
+
+  @override
+  String get phoneMute => 'Σίγαση';
+
+  @override
+  String get phoneSpeaker => 'Ηχείο';
+
+  @override
+  String get phoneEndCall => 'Τέλος';
+
+  @override
+  String get phoneCallSettingsTitle => 'Ρυθμίσεις κλήσεων';
+
+  @override
+  String get yourVerifiedNumbers => 'Οι επαληθευμένοι αριθμοί σας';
+
+  @override
+  String get verifiedNumbersDescription => 'Όταν καλείτε κάποιον, θα βλέπει αυτόν τον αριθμό';
+
+  @override
+  String get noVerifiedNumbers => 'Κανένας επαληθευμένος αριθμός';
+
+  @override
+  String deletePhoneNumberConfirm(String phoneNumber) {
+    return 'Διαγραφή $phoneNumber;';
+  }
+
+  @override
+  String get deletePhoneNumberWarning => 'Θα χρειαστεί να επαληθεύσετε ξανά για κλήσεις';
+
+  @override
+  String get phoneDeleteButton => 'Διαγραφή';
+
+  @override
+  String verifiedMinutesAgo(int minutes) {
+    return 'Επαληθεύτηκε πριν $minutesλ';
+  }
+
+  @override
+  String verifiedHoursAgo(int hours) {
+    return 'Επαληθεύτηκε πριν $hoursω';
+  }
+
+  @override
+  String verifiedDaysAgo(int days) {
+    return 'Επαληθεύτηκε πριν $daysμ';
+  }
+
+  @override
+  String verifiedOnDate(String date) {
+    return 'Επαληθεύτηκε στις $date';
+  }
+
+  @override
+  String get verifiedFallback => 'Επαληθευμένο';
+
+  @override
+  String get callAlreadyInProgress => 'Μια κλήση είναι ήδη σε εξέλιξη';
+
+  @override
+  String get failedToGetCallToken => 'Αποτυχία λήψης token. Επαληθεύστε πρώτα τον αριθμό σας.';
+
+  @override
+  String get failedToInitializeCallService => 'Αποτυχία αρχικοποίησης υπηρεσίας κλήσεων';
+
+  @override
+  String get speakerLabelYou => 'Εσείς';
+
+  @override
+  String get speakerLabelUnknown => 'Άγνωστος';
+
+  @override
+  String get showDailyScoreOnHomepage => 'Εμφάνιση ημερήσιας βαθμολογίας στην αρχική σελίδα';
+
+  @override
+  String get showTasksOnHomepage => 'Εμφάνιση εργασιών στην αρχική σελίδα';
+
+  @override
+  String get phoneCallsUnlimitedOnly => 'Τηλεφωνικές κλήσεις μέσω Omi';
+
+  @override
+  String get phoneCallsUpsellSubtitle =>
+      'Κάντε κλήσεις μέσω Omi και λάβετε μεταγραφή σε πραγματικό χρόνο, αυτόματες περιλήψεις και πολλά άλλα.';
+
+  @override
+  String get phoneCallsUpsellFeature1 => 'Μεταγραφή σε πραγματικό χρόνο κάθε κλήσης';
+
+  @override
+  String get phoneCallsUpsellFeature2 => 'Αυτόματες περιλήψεις κλήσεων και ενέργειες';
+
+  @override
+  String get phoneCallsUpsellFeature3 => 'Οι παραλήπτες βλέπουν τον πραγματικό σας αριθμό, όχι τυχαίο';
+
+  @override
+  String get phoneCallsUpsellFeature4 => 'Οι κλήσεις σας παραμένουν ιδιωτικές και ασφαλείς';
+
+  @override
+  String get phoneCallsUpgradeButton => 'Αναβάθμιση σε Απεριόριστο';
+
+  @override
+  String get phoneCallsMaybeLater => 'Ίσως αργότερα';
+
+  @override
+  String get deleteSynced => 'Διαγραφή συγχρονισμένων';
+
+  @override
+  String get deleteSyncedFiles => 'Διαγραφή συγχρονισμένων ηχογραφήσεων';
+
+  @override
+  String get deleteSyncedFilesMessage =>
+      'Αυτές οι ηχογραφήσεις έχουν ήδη συγχρονιστεί με το τηλέφωνό σας. Δεν μπορεί να αναιρεθεί.';
+
+  @override
+  String get syncedFilesDeleted => 'Οι συγχρονισμένες ηχογραφήσεις διαγράφηκαν';
+
+  @override
+  String get deletePending => 'Διαγραφή εκκρεμών';
+
+  @override
+  String get deletePendingFiles => 'Διαγραφή εκκρεμών ηχογραφήσεων';
+
+  @override
+  String get deletePendingFilesWarning =>
+      'Αυτές οι ηχογραφήσεις ΔΕΝ έχουν συγχρονιστεί με το τηλέφωνό σας και θα χαθούν μόνιμα. Δεν μπορεί να αναιρεθεί.';
+
+  @override
+  String get pendingFilesDeleted => 'Οι εκκρεμείς ηχογραφήσεις διαγράφηκαν';
+
+  @override
+  String get deleteAllFiles => 'Διαγραφή όλων των ηχογραφήσεων';
+
+  @override
+  String get deleteAll => 'Διαγραφή όλων';
+
+  @override
+  String get deleteAllFilesWarning =>
+      'Αυτό θα διαγράψει συγχρονισμένες και εκκρεμείς ηχογραφήσεις. Οι εκκρεμείς ηχογραφήσεις ΔΕΝ έχουν συγχρονιστεί και θα χαθούν μόνιμα.';
+
+  @override
+  String get allFilesDeleted => 'Όλες οι ηχογραφήσεις διαγράφηκαν';
+
+  @override
+  String nFiles(int count) {
+    return '$count ηχογραφήσεις';
+  }
+
+  @override
+  String get manageStorage => 'Διαχείριση αποθήκευσης';
+
+  @override
+  String get safelyBackedUp => 'Αποθηκεύτηκε με ασφάλεια στο τηλέφωνό σας';
+
+  @override
+  String get notYetSynced => 'Δεν έχει συγχρονιστεί ακόμα με το τηλέφωνό σας';
+
+  @override
+  String get clearAll => 'Εκκαθάριση όλων';
 }

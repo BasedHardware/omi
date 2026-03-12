@@ -1,0 +1,96 @@
+# E2E Flow: Settings → Profile — user information management
+# Tests: settings drawer, profile navigation, name change, language, vocabulary, speech profile
+
+name: settings-profile
+description: Settings drawer → Profile page — view/edit name, email, language, custom vocabulary, speech profile, payment, privacy
+covers:
+  - app/lib/pages/settings/settings_drawer.dart
+  - app/lib/pages/settings/profile.dart
+  - app/lib/pages/settings/language_settings_page.dart
+  - app/lib/pages/settings/custom_vocabulary_page.dart
+  - app/lib/pages/speech_profile/page.dart
+  - app/lib/pages/settings/conversation_display_settings.dart
+  - app/lib/pages/settings/data_privacy_page.dart
+  - app/lib/pages/settings/delete_account.dart
+prerequisites:
+  - auth_ready  # User completed real sign-in (Google/Apple) and onboarding. Android: `bash setup.sh android`. iOS: `bash setup.sh ios`. App must show home screen.
+setup: normal
+
+steps:
+  - name: Open settings drawer
+    press: { type: button, position: rightmost, hint: "IconButton — gear icon, rightmost in top bar" }
+    screenshot: settings-drawer
+
+  - name: Verify settings drawer
+    assert:
+      interactive_count: { min: 8, hint: "multiple settings rows" }
+    note: >
+      Settings drawer (bottom sheet) shows sections:
+      Profile & Notifications: Profile, Notifications, Plan & Usage, Offline Sync, Device Settings, Integrations, Phone Calls
+      Support: Feedback, Help Center, Developer Settings, What's New
+      Share & Get: Get Omi for Mac, Referral Program
+      Sign Out at bottom.
+
+  - name: Open Profile
+    press: { type: gesture, hint: "first wide settings row — Profile, y≈150-200" }
+    screenshot: profile-page
+
+  - name: Verify profile page
+    assert:
+      interactive_count: { min: 6 }
+    note: >
+      Your Information: Name (chip), Email (chip), Language, Custom Vocabulary
+      Voice & People: Speech Profile, Identifying Others
+      Payment & Privacy: Payment Methods, Conversation Display, Data Privacy
+      Account: User ID (copy), Delete Account
+
+  - name: Tap Name to edit
+    press: { type: gesture, hint: "Name row — shows ChangeNameWidget dialog" }
+    screenshot: change-name
+
+  - name: Close name dialog
+    back: true
+
+  - name: Open Language settings
+    press: { type: gesture, hint: "Language row in profile" }
+    screenshot: language-settings
+
+  - name: Back from language
+    back: true
+
+  - name: Open Custom Vocabulary
+    press: { type: gesture, hint: "Custom Vocabulary row in profile" }
+    screenshot: custom-vocabulary
+
+  - name: Back from vocabulary
+    back: true
+
+  - name: Scroll profile to more options
+    scroll: down
+    screenshot: profile-scrolled
+
+  - name: Open Speech Profile
+    press: { type: gesture, hint: "Speech Profile row in Voice & People section" }
+    screenshot: speech-profile
+
+  - name: Back from speech profile
+    back: true
+
+  - name: Scroll to account section
+    scroll: down
+    screenshot: profile-account
+
+  - name: Open Data Privacy
+    press: { type: gesture, hint: "Data Privacy row" }
+    screenshot: data-privacy
+
+  - name: Back from data privacy
+    back: true
+
+  - name: Back to settings drawer
+    back: true
+
+  - name: Close settings drawer
+    back: true
+    assert:
+      bottom_nav_tabs: { min: 4 }

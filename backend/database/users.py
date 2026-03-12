@@ -7,6 +7,9 @@ from google.cloud.firestore_v1 import FieldFilter, transactional
 from ._client import db, document_id_from_seed
 from models.users import Subscription, PlanLimits, PlanType, SubscriptionStatus
 from utils.subscription import get_default_basic_subscription
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 def is_exists_user(uid: str):
@@ -57,14 +60,22 @@ def create_person(uid: str, data: dict):
 
 def get_person(uid: str, person_id: str):
     person_ref = db.collection('users').document(uid).collection('people').document(person_id)
-    person_data = person_ref.get().to_dict()
+    person_doc = person_ref.get()
+    if not person_doc.exists:
+        return None
+    person_data = person_doc.to_dict()
+    person_data.setdefault('id', person_doc.id)
     return person_data
 
 
 def get_people(uid: str):
     people_ref = db.collection('users').document(uid).collection('people')
-    people = people_ref.stream()
-    return [person.to_dict() for person in people]
+    result = []
+    for person in people_ref.stream():
+        data = person.to_dict()
+        data.setdefault('id', person.id)
+        result.append(data)
+    return result
 
 
 def get_person_by_name(uid: str, name: str):
@@ -72,21 +83,30 @@ def get_person_by_name(uid: str, name: str):
     query = people_ref.where(filter=FieldFilter('name', '==', name)).limit(1)
     docs = list(query.stream())
     if docs:
-        return docs[0].to_dict()
+        data = docs[0].to_dict()
+        data.setdefault('id', docs[0].id)
+        return data
     return None
 
 
 def get_people_by_ids(uid: str, person_ids: list[str]):
+    """Fetch people docs by ID using db.get_all().
+
+    Note: db.get_all() returns results in arbitrary order (Firestore behavior).
+    Callers must not assume the result order matches person_ids order.
+    """
     if not person_ids:
         return []
     people_ref = db.collection('users').document(uid).collection('people')
-    # Firestore 'in' query supports up to 30 items.
+    # Use document ID fetches instead of where("id", "in", ...) to handle
+    # legacy docs that may not have a stored 'id' field.
+    doc_refs = [people_ref.document(pid) for pid in person_ids]
     all_people = []
-    for i in range(0, len(person_ids), 30):
-        chunk_ids = person_ids[i : i + 30]
-        people_query = people_ref.where("id", 'in', chunk_ids)
-        people = people_query.stream()
-        all_people.extend([person.to_dict() for person in people])
+    for doc in db.get_all(doc_refs):
+        if doc.exists:
+            data = doc.to_dict()
+            data.setdefault('id', doc.id)
+            all_people.append(data)
     return all_people
 
 
@@ -416,7 +436,7 @@ def delete_user_data(uid: str):
     batch_size = 450
 
     for cname in subcollections_to_delete:
-        print(f"Deleting subcollection: {cname} for user {uid}")
+        logger.info(f"Deleting subcollection: {cname} for user {uid}")
         collection_ref = user_ref.collection(cname)
 
         while True:
@@ -425,21 +445,21 @@ def delete_user_data(uid: str):
 
             if not docs:
                 # docs might not exists, try using {parent path / id}
-                print(f"No more documents to delete in {collection_ref.parent.path}/{collection_ref.id}")
+                logger.info(f"No more documents to delete in {collection_ref.parent.path}/{collection_ref.id}")
                 break
 
             batch = db.batch()
             for doc in docs:
-                print(f"Deleting document: {doc.reference.path}")
+                logger.info(f"Deleting document: {doc.reference.path}")
                 batch.delete(doc.reference)
             batch.commit()
 
             if len(docs) < batch_size:
-                print(f"Processed all documents in {collection_ref.path}")
+                logger.info(f"Processed all documents in {collection_ref.path}")
                 break
 
     # delete the user document itself
-    print(f"Deleting user document: {uid}")
+    logger.info(f"Deleting user document: {uid}")
     user_ref.delete()
     return {'status': 'ok', 'message': 'Account deleted successfully'}
 
@@ -991,6 +1011,22 @@ def get_user_transcription_preferences(uid: str) -> dict:
         }
 
     return {'single_language_mode': False, 'vocabulary': []}
+
+
+def get_agent_vm(uid: str) -> Optional[dict]:
+    """Get the user's agent VM info from Firestore.
+
+    Returns:
+        Dict with VM details (ip, auth_token, status, etc.) or None if no VM.
+    """
+    user_ref = db.collection('users').document(uid)
+    user_doc = user_ref.get()
+
+    if user_doc.exists:
+        user_data = user_doc.to_dict()
+        return user_data.get('agentVm')
+
+    return None
 
 
 def set_user_transcription_preferences(uid: str, single_language_mode: bool = None, vocabulary: list = None) -> None:

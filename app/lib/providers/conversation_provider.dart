@@ -156,16 +156,11 @@ class ConversationProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  void onConversationTap(int idx) {
-    if (idx < 0 || idx > conversations.length - 1) {
-      return;
-    }
-    var changed = false;
+  void onConversationTap(String conversationId) {
+    final idx = conversations.indexWhere((c) => c.id == conversationId);
+    if (idx == -1) return;
     if (conversations[idx].isNew) {
       conversations[idx].isNew = false;
-      changed = true;
-    }
-    if (changed) {
       groupConversationsByDate();
     }
   }
@@ -483,7 +478,11 @@ class ConversationProvider extends ChangeNotifier {
   }
 
   void groupConversationsByDate() {
-    _groupConversationsByDateWithoutNotify();
+    if (previousQuery.isNotEmpty) {
+      _groupSearchConvosByDateWithoutNotify();
+    } else {
+      _groupConversationsByDateWithoutNotify();
+    }
     notifyListeners();
   }
 
@@ -614,7 +613,15 @@ class ConversationProvider extends ChangeNotifier {
       }
     }
     conversations.sort((a, b) => (b.startedAt ?? b.createdAt).compareTo(a.startedAt ?? a.createdAt));
-    _groupConversationsByDateWithoutNotify();
+    if (previousQuery.isNotEmpty) {
+      int si = searchedConversations.indexWhere((element) => element.id == conversation.id);
+      if (si != -1) {
+        searchedConversations[si] = conversation;
+      }
+      _groupSearchConvosByDateWithoutNotify();
+    } else {
+      _groupConversationsByDateWithoutNotify();
+    }
     notifyListeners();
   }
 
@@ -694,11 +701,11 @@ class ConversationProvider extends ChangeNotifier {
 
   /////////////////////////////////////////////////////////////////
 
-  void deleteConversation(ServerConversation conversation, int index) {
+  void deleteConversation(ServerConversation conversation) {
     conversations.removeWhere((element) => element.id == conversation.id);
+    searchedConversations.removeWhere((element) => element.id == conversation.id);
     deleteConversationServer(conversation.id);
-    _groupConversationsByDateWithoutNotify();
-    notifyListeners();
+    groupConversationsByDate();
   }
 
   @override

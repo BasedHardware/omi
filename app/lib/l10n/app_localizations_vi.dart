@@ -894,7 +894,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get useMcpApiKey => 'Sử dụng API key MCP của bạn';
 
   @override
-  String get webhooks => 'Webhooks';
+  String get webhooks => 'Webhook';
 
   @override
   String get conversationEvents => 'Sự kiện cuộc trò chuyện';
@@ -1015,7 +1015,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get vocabularyHint => 'Omi, Callie, OpenAI';
 
   @override
-  String get connect => 'Connect';
+  String get connect => 'Kết nối';
 
   @override
   String get comingSoon => 'Sắp ra mắt';
@@ -2270,7 +2270,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get folderName => 'Tên thư mục';
 
   @override
-  String get descriptionOptional => 'Description (optional)';
+  String get descriptionOptional => 'Mô tả (tùy chọn)';
 
   @override
   String get failedToDeleteFolder => 'Xóa thư mục thất bại';
@@ -2677,7 +2677,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get showAll => 'Hiển thị tất cả →';
 
   @override
-  String get noTasksForToday => 'Không có nhiệm vụ cho hôm nay.\\nHỏi Omi để có thêm nhiệm vụ hoặc tạo thủ công.';
+  String get noTasksForToday => 'Không có nhiệm vụ cho hôm nay.\nHỏi Omi để có thêm nhiệm vụ hoặc tạo thủ công.';
 
   @override
   String get dailyScore => 'ĐIỂM HÀNG NGÀY';
@@ -7992,36 +7992,36 @@ class AppLocalizationsVi extends AppLocalizations {
   String get couldNotOpenUrl => 'Không thể mở URL. Vui lòng thử lại.';
 
   @override
-  String get newTask => 'New Task';
+  String get newTask => 'Nhiệm vụ mới';
 
   @override
-  String get viewAll => 'View All';
+  String get viewAll => 'Xem tất cả';
 
   @override
-  String get addTask => 'Add Task';
+  String get addTask => 'Thêm nhiệm vụ';
 
   @override
-  String get addMcpServer => 'Add MCP Server';
+  String get addMcpServer => 'Thêm máy chủ MCP';
 
   @override
-  String get connectExternalAiTools => 'Connect external AI tools';
+  String get connectExternalAiTools => 'Kết nối công cụ AI bên ngoài';
 
   @override
   String get mcpServerUrl => 'MCP Server URL';
 
   @override
   String mcpServerConnected(int count) {
-    return '$count tools connected successfully';
+    return 'Đã kết nối thành công $count công cụ';
   }
 
   @override
-  String get mcpConnectionFailed => 'Failed to connect to MCP server';
+  String get mcpConnectionFailed => 'Không thể kết nối đến máy chủ MCP';
 
   @override
-  String get authorizingMcpServer => 'Authorizing...';
+  String get authorizingMcpServer => 'Đang xác thực...';
 
   @override
-  String get whereDidYouHearAboutOmi => 'How did you find us?';
+  String get whereDidYouHearAboutOmi => 'Bạn biết đến chúng tôi qua đâu?';
 
   @override
   String get tiktok => 'TikTok';
@@ -8039,19 +8039,19 @@ class AppLocalizationsVi extends AppLocalizations {
   String get reddit => 'Reddit';
 
   @override
-  String get friendWordOfMouth => 'Friend';
+  String get friendWordOfMouth => 'Bạn bè';
 
   @override
-  String get otherSource => 'Other';
+  String get otherSource => 'Khác';
 
   @override
-  String get pleaseSpecify => 'Please specify';
+  String get pleaseSpecify => 'Vui lòng cho biết';
 
   @override
-  String get event => 'Event';
+  String get event => 'Sự kiện';
 
   @override
-  String get coworker => 'Coworker';
+  String get coworker => 'Đồng nghiệp';
 
   @override
   String get linkedIn => 'LinkedIn';
@@ -8067,4 +8067,493 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get audioPlaybackFailed => 'Không thể phát âm thanh. Tệp có thể bị hỏng hoặc bị thiếu.';
+
+  @override
+  String get connectionGuide => 'Hướng dẫn kết nối';
+
+  @override
+  String get iveDoneThis => 'Tôi đã làm xong';
+
+  @override
+  String get pairNewDevice => 'Ghép nối thiết bị mới';
+
+  @override
+  String get dontSeeYourDevice => 'Không thấy thiết bị của bạn?';
+
+  @override
+  String get reportAnIssue => 'Báo cáo sự cố';
+
+  @override
+  String get pairingTitleOmi => 'Bật Omi';
+
+  @override
+  String get pairingDescOmi => 'Nhấn và giữ thiết bị cho đến khi rung để bật nguồn.';
+
+  @override
+  String get pairingTitleOmiDevkit => 'Đặt Omi DevKit vào chế độ ghép nối';
+
+  @override
+  String get pairingDescOmiDevkit =>
+      'Nhấn nút một lần để bật nguồn. Đèn LED sẽ nhấp nháy màu tím khi ở chế độ ghép nối.';
+
+  @override
+  String get pairingTitleOmiGlass => 'Bật Omi Glass';
+
+  @override
+  String get pairingDescOmiGlass => 'Nhấn và giữ nút bên cạnh trong 3 giây để bật nguồn.';
+
+  @override
+  String get pairingTitlePlaudNote => 'Đặt Plaud Note vào chế độ ghép nối';
+
+  @override
+  String get pairingDescPlaudNote =>
+      'Nhấn và giữ nút bên cạnh trong 2 giây. Đèn LED đỏ sẽ nhấp nháy khi sẵn sàng ghép nối.';
+
+  @override
+  String get pairingTitleBee => 'Đặt Bee vào chế độ ghép nối';
+
+  @override
+  String get pairingDescBee => 'Nhấn nút 5 lần liên tiếp. Đèn sẽ bắt đầu nhấp nháy xanh dương và xanh lá.';
+
+  @override
+  String get pairingTitleLimitless => 'Đặt Limitless vào chế độ ghép nối';
+
+  @override
+  String get pairingDescLimitless =>
+      'Khi có đèn sáng, nhấn một lần rồi nhấn và giữ cho đến khi thiết bị hiện đèn hồng, sau đó thả ra.';
+
+  @override
+  String get pairingTitleFriendPendant => 'Đặt Friend Pendant vào chế độ ghép nối';
+
+  @override
+  String get pairingDescFriendPendant =>
+      'Nhấn nút trên mặt dây chuyền để bật nguồn. Thiết bị sẽ tự động vào chế độ ghép nối.';
+
+  @override
+  String get pairingTitleFieldy => 'Đặt Fieldy vào chế độ ghép nối';
+
+  @override
+  String get pairingDescFieldy => 'Nhấn và giữ thiết bị cho đến khi đèn sáng để bật nguồn.';
+
+  @override
+  String get pairingTitleAppleWatch => 'Kết nối Apple Watch';
+
+  @override
+  String get pairingDescAppleWatch =>
+      'Cài đặt và mở ứng dụng Omi trên Apple Watch của bạn, sau đó nhấn Kết nối trong ứng dụng.';
+
+  @override
+  String get pairingTitleNeoOne => 'Đặt Neo One vào chế độ ghép nối';
+
+  @override
+  String get pairingDescNeoOne =>
+      'Nhấn và giữ nút nguồn cho đến khi đèn LED nhấp nháy. Thiết bị sẽ có thể được phát hiện.';
+
+  @override
+  String get downloadingFromDevice => 'Đang tải xuống từ thiết bị';
+
+  @override
+  String get reconnectingToInternet => 'Đang kết nối lại internet...';
+
+  @override
+  String uploadingToCloud(int current, int total) {
+    return 'Đang tải lên $current/$total';
+  }
+
+  @override
+  String get processedStatus => 'Đã xử lý';
+
+  @override
+  String get corruptedStatus => 'Bị hỏng';
+
+  @override
+  String nPending(int count) {
+    return '$count đang chờ';
+  }
+
+  @override
+  String nProcessed(int count) {
+    return '$count đã xử lý';
+  }
+
+  @override
+  String get synced => 'Đã đồng bộ';
+
+  @override
+  String get noPendingRecordings => 'Không có bản ghi đang chờ';
+
+  @override
+  String get noProcessedRecordings => 'Chưa có bản ghi nào được xử lý';
+
+  @override
+  String get pending => 'Đang chờ';
+
+  @override
+  String whatsNewInVersion(String version) {
+    return 'Có gì mới trong $version';
+  }
+
+  @override
+  String get addToYourTaskList => 'Thêm vào danh sách công việc?';
+
+  @override
+  String get failedToCreateShareLink => 'Không thể tạo liên kết chia sẻ';
+
+  @override
+  String get deleteGoal => 'Xóa mục tiêu';
+
+  @override
+  String get deviceUpToDate => 'Thiết bị của bạn đã được cập nhật';
+
+  @override
+  String get wifiConfiguration => 'Cấu hình WiFi';
+
+  @override
+  String get wifiConfigurationSubtitle => 'Nhập thông tin WiFi để thiết bị có thể tải xuống firmware.';
+
+  @override
+  String get networkNameSsid => 'Tên mạng (SSID)';
+
+  @override
+  String get enterWifiNetworkName => 'Nhập tên mạng WiFi';
+
+  @override
+  String get enterWifiPassword => 'Nhập mật khẩu WiFi';
+
+  @override
+  String get appIconLabel => 'App Icon';
+
+  @override
+  String get onboardingWhatIKnowAboutYouTitle => 'Đây là những gì tôi biết về bạn';
+
+  @override
+  String get onboardingWhatIKnowAboutYouDescription =>
+      'Bản đồ này được cập nhật khi Omi học hỏi từ các cuộc trò chuyện của bạn.';
+
+  @override
+  String get apiEnvironment => 'Môi trường API';
+
+  @override
+  String get apiEnvironmentDescription => 'Chọn máy chủ để kết nối';
+
+  @override
+  String get production => 'Sản xuất';
+
+  @override
+  String get staging => 'Thử nghiệm';
+
+  @override
+  String get switchRequiresRestart => 'Chuyển đổi yêu cầu khởi động lại ứng dụng';
+
+  @override
+  String get switchApiConfirmTitle => 'Chuyển đổi môi trường API';
+
+  @override
+  String switchApiConfirmBody(String environment) {
+    return 'Chuyển sang $environment? Bạn sẽ cần đóng và mở lại ứng dụng để các thay đổi có hiệu lực.';
+  }
+
+  @override
+  String get switchAndRestart => 'Chuyển';
+
+  @override
+  String get stagingDisclaimer =>
+      'Môi trường thử nghiệm có thể không ổn định, hiệu suất không nhất quán và dữ liệu có thể bị mất. Chỉ dùng để thử nghiệm.';
+
+  @override
+  String get apiEnvSavedRestartRequired => 'Đã lưu. Đóng và mở lại ứng dụng để áp dụng thay đổi.';
+
+  @override
+  String get shared => 'Đã chia sẻ';
+
+  @override
+  String get onlyYouCanSeeConversation => 'Chỉ bạn mới có thể xem cuộc trò chuyện này';
+
+  @override
+  String get anyoneWithLinkCanView => 'Bất kỳ ai có liên kết đều có thể xem';
+
+  @override
+  String get tasksCleanTodayTitle => 'Dọn các nhiệm vụ hôm nay?';
+
+  @override
+  String get tasksCleanTodayMessage => 'Thao tác này chỉ xóa thời hạn';
+
+  @override
+  String get tasksOverdue => 'Quá hạn';
+
+  @override
+  String get phoneCallsWithOmi => 'Cuộc gọi với Omi';
+
+  @override
+  String get phoneCallsSubtitle => 'Gọi điện với phiên âm thời gian thực';
+
+  @override
+  String get phoneSetupStep1Title => 'Xác minh số điện thoại của bạn';
+
+  @override
+  String get phoneSetupStep1Subtitle => 'Chúng tôi sẽ gọi cho bạn để xác nhận';
+
+  @override
+  String get phoneSetupStep2Title => 'Nhập mã xác minh';
+
+  @override
+  String get phoneSetupStep2Subtitle => 'Một mã ngắn bạn sẽ nhập trong cuộc gọi';
+
+  @override
+  String get phoneSetupStep3Title => 'Bắt đầu gọi danh bạ của bạn';
+
+  @override
+  String get phoneSetupStep3Subtitle => 'Với phiên âm trực tiếp tích hợp';
+
+  @override
+  String get phoneGetStarted => 'Bắt đầu';
+
+  @override
+  String get callRecordingConsentDisclaimer => 'Ghi âm cuộc gọi có thể yêu cầu sự đồng ý trong khu vực pháp lý của bạn';
+
+  @override
+  String get enterYourNumber => 'Nhập số của bạn';
+
+  @override
+  String get phoneNumberCallerIdHint => 'Sau khi xác minh, đây sẽ là ID người gọi của bạn';
+
+  @override
+  String get phoneNumberHint => 'Số điện thoại';
+
+  @override
+  String get failedToStartVerification => 'Không thể bắt đầu xác minh';
+
+  @override
+  String get phoneContinue => 'Tiếp tục';
+
+  @override
+  String get verifyYourNumber => 'Xác minh số của bạn';
+
+  @override
+  String get answerTheCallFrom => 'Trả lời cuộc gọi từ';
+
+  @override
+  String get onTheCallEnterThisCode => 'Trong cuộc gọi, nhập mã này';
+
+  @override
+  String get followTheVoiceInstructions => 'Làm theo hướng dẫn bằng giọng nói';
+
+  @override
+  String get statusCalling => 'Đang gọi...';
+
+  @override
+  String get statusCallInProgress => 'Cuộc gọi đang diễn ra';
+
+  @override
+  String get statusVerifiedLabel => 'Đã xác minh';
+
+  @override
+  String get statusCallMissed => 'Cuộc gọi nhỡ';
+
+  @override
+  String get statusTimedOut => 'Hết thời gian';
+
+  @override
+  String get phoneTryAgain => 'Thử lại';
+
+  @override
+  String get phonePageTitle => 'Điện thoại';
+
+  @override
+  String get phoneContactsTab => 'Danh bạ';
+
+  @override
+  String get phoneKeypadTab => 'Bàn phím';
+
+  @override
+  String get grantContactsAccess => 'Cấp quyền truy cập danh bạ';
+
+  @override
+  String get phoneAllow => 'Cho phép';
+
+  @override
+  String get phoneSearchHint => 'Tìm kiếm';
+
+  @override
+  String get phoneNoContactsFound => 'Không tìm thấy danh bạ';
+
+  @override
+  String get phoneEnterNumber => 'Nhập số';
+
+  @override
+  String get failedToStartCall => 'Không thể bắt đầu cuộc gọi';
+
+  @override
+  String get callStateConnecting => 'Đang kết nối...';
+
+  @override
+  String get callStateRinging => 'Đang đổ chuông...';
+
+  @override
+  String get callStateEnded => 'Cuộc gọi kết thúc';
+
+  @override
+  String get callStateFailed => 'Cuộc gọi thất bại';
+
+  @override
+  String get transcriptPlaceholder => 'Phiên âm sẽ xuất hiện ở đây...';
+
+  @override
+  String get phoneUnmute => 'Bật tiếng';
+
+  @override
+  String get phoneMute => 'Tắt tiếng';
+
+  @override
+  String get phoneSpeaker => 'Loa';
+
+  @override
+  String get phoneEndCall => 'Kết thúc';
+
+  @override
+  String get phoneCallSettingsTitle => 'Cài đặt cuộc gọi';
+
+  @override
+  String get yourVerifiedNumbers => 'Số đã xác minh của bạn';
+
+  @override
+  String get verifiedNumbersDescription => 'Khi bạn gọi cho ai đó, họ sẽ thấy số này';
+
+  @override
+  String get noVerifiedNumbers => 'Không có số đã xác minh';
+
+  @override
+  String deletePhoneNumberConfirm(String phoneNumber) {
+    return 'Xóa $phoneNumber?';
+  }
+
+  @override
+  String get deletePhoneNumberWarning => 'Bạn cần xác minh lại để gọi điện';
+
+  @override
+  String get phoneDeleteButton => 'Xóa';
+
+  @override
+  String verifiedMinutesAgo(int minutes) {
+    return 'Đã xác minh ${minutes}phút trước';
+  }
+
+  @override
+  String verifiedHoursAgo(int hours) {
+    return 'Đã xác minh ${hours}giờ trước';
+  }
+
+  @override
+  String verifiedDaysAgo(int days) {
+    return 'Đã xác minh ${days}ngày trước';
+  }
+
+  @override
+  String verifiedOnDate(String date) {
+    return 'Đã xác minh vào $date';
+  }
+
+  @override
+  String get verifiedFallback => 'Đã xác minh';
+
+  @override
+  String get callAlreadyInProgress => 'Một cuộc gọi đang diễn ra';
+
+  @override
+  String get failedToGetCallToken => 'Không thể lấy token. Xác minh số của bạn trước.';
+
+  @override
+  String get failedToInitializeCallService => 'Không thể khởi tạo dịch vụ cuộc gọi';
+
+  @override
+  String get speakerLabelYou => 'Bạn';
+
+  @override
+  String get speakerLabelUnknown => 'Không xác định';
+
+  @override
+  String get showDailyScoreOnHomepage => 'Hiển thị Điểm hàng ngày trên trang chủ';
+
+  @override
+  String get showTasksOnHomepage => 'Hiển thị Nhiệm vụ trên trang chủ';
+
+  @override
+  String get phoneCallsUnlimitedOnly => 'Cuộc gọi điện thoại qua Omi';
+
+  @override
+  String get phoneCallsUpsellSubtitle =>
+      'Gọi điện qua Omi và nhận phiên âm thời gian thực, tóm tắt tự động và nhiều hơn nữa.';
+
+  @override
+  String get phoneCallsUpsellFeature1 => 'Phiên âm thời gian thực mọi cuộc gọi';
+
+  @override
+  String get phoneCallsUpsellFeature2 => 'Tóm tắt cuộc gọi tự động và danh sách hành động';
+
+  @override
+  String get phoneCallsUpsellFeature3 => 'Người nhận thấy số thật của bạn, không phải số ngẫu nhiên';
+
+  @override
+  String get phoneCallsUpsellFeature4 => 'Cuộc gọi của bạn luôn riêng tư và an toàn';
+
+  @override
+  String get phoneCallsUpgradeButton => 'Nâng cấp lên Không giới hạn';
+
+  @override
+  String get phoneCallsMaybeLater => 'Để sau';
+
+  @override
+  String get deleteSynced => 'Xóa đã đồng bộ';
+
+  @override
+  String get deleteSyncedFiles => 'Xóa bản ghi đã đồng bộ';
+
+  @override
+  String get deleteSyncedFilesMessage => 'Các bản ghi này đã được đồng bộ với điện thoại của bạn. Không thể hoàn tác.';
+
+  @override
+  String get syncedFilesDeleted => 'Đã xóa bản ghi đồng bộ';
+
+  @override
+  String get deletePending => 'Xóa đang chờ';
+
+  @override
+  String get deletePendingFiles => 'Xóa bản ghi đang chờ';
+
+  @override
+  String get deletePendingFilesWarning =>
+      'Các bản ghi này CHƯA được đồng bộ với điện thoại của bạn và sẽ bị mất vĩnh viễn. Không thể hoàn tác.';
+
+  @override
+  String get pendingFilesDeleted => 'Đã xóa bản ghi đang chờ';
+
+  @override
+  String get deleteAllFiles => 'Xóa tất cả bản ghi';
+
+  @override
+  String get deleteAll => 'Xóa tất cả';
+
+  @override
+  String get deleteAllFilesWarning =>
+      'Thao tác này sẽ xóa các bản ghi đã đồng bộ và đang chờ. Bản ghi đang chờ CHƯA được đồng bộ và sẽ bị mất vĩnh viễn.';
+
+  @override
+  String get allFilesDeleted => 'Đã xóa tất cả bản ghi';
+
+  @override
+  String nFiles(int count) {
+    return '$count bản ghi';
+  }
+
+  @override
+  String get manageStorage => 'Quản lý lưu trữ';
+
+  @override
+  String get safelyBackedUp => 'Đã sao lưu an toàn vào điện thoại';
+
+  @override
+  String get notYetSynced => 'Chưa đồng bộ với điện thoại của bạn';
+
+  @override
+  String get clearAll => 'Xóa tất cả';
 }

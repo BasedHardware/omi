@@ -1014,7 +1014,7 @@ class AppLocalizationsDa extends AppLocalizations {
   String get vocabularyHint => 'Ordforråd';
 
   @override
-  String get connect => 'Connect';
+  String get connect => 'Forbind';
 
   @override
   String get comingSoon => 'Kommer snart';
@@ -2248,7 +2248,7 @@ class AppLocalizationsDa extends AppLocalizations {
   String get folderName => 'Mappenavn';
 
   @override
-  String get descriptionOptional => 'Description (optional)';
+  String get descriptionOptional => 'Beskrivelse (valgfri)';
 
   @override
   String get failedToDeleteFolder => 'Kunne ikke slette mappe';
@@ -2654,7 +2654,7 @@ class AppLocalizationsDa extends AppLocalizations {
   String get showAll => 'Vis alle →';
 
   @override
-  String get noTasksForToday => 'Ingen opgaver for i dag.\\nSpørg Omi om flere opgaver eller opret manuelt.';
+  String get noTasksForToday => 'Ingen opgaver for i dag.\nSpørg Omi om flere opgaver eller opret manuelt.';
 
   @override
   String get dailyScore => 'DAGLIG SCORE';
@@ -6955,7 +6955,7 @@ class AppLocalizationsDa extends AppLocalizations {
   }
 
   @override
-  String get chatsLowercase => 'chats';
+  String get chatsLowercase => 'samtaler';
 
   @override
   String get dataLowercase => 'data';
@@ -7974,36 +7974,36 @@ class AppLocalizationsDa extends AppLocalizations {
   String get couldNotOpenUrl => 'Kunne ikke åbne URL. Prøv venligst igen.';
 
   @override
-  String get newTask => 'New Task';
+  String get newTask => 'Ny opgave';
 
   @override
-  String get viewAll => 'View All';
+  String get viewAll => 'Vis alle';
 
   @override
-  String get addTask => 'Add Task';
+  String get addTask => 'Tilføj opgave';
 
   @override
-  String get addMcpServer => 'Add MCP Server';
+  String get addMcpServer => 'Tilføj MCP-server';
 
   @override
-  String get connectExternalAiTools => 'Connect external AI tools';
+  String get connectExternalAiTools => 'Forbind eksterne AI-værktøjer';
 
   @override
   String get mcpServerUrl => 'MCP Server URL';
 
   @override
   String mcpServerConnected(int count) {
-    return '$count tools connected successfully';
+    return '$count værktøjer forbundet';
   }
 
   @override
-  String get mcpConnectionFailed => 'Failed to connect to MCP server';
+  String get mcpConnectionFailed => 'Kunne ikke oprette forbindelse til MCP-server';
 
   @override
-  String get authorizingMcpServer => 'Authorizing...';
+  String get authorizingMcpServer => 'Autoriserer...';
 
   @override
-  String get whereDidYouHearAboutOmi => 'How did you find us?';
+  String get whereDidYouHearAboutOmi => 'Hvordan fandt du os?';
 
   @override
   String get tiktok => 'TikTok';
@@ -8021,19 +8021,19 @@ class AppLocalizationsDa extends AppLocalizations {
   String get reddit => 'Reddit';
 
   @override
-  String get friendWordOfMouth => 'Friend';
+  String get friendWordOfMouth => 'Ven';
 
   @override
-  String get otherSource => 'Other';
+  String get otherSource => 'Andet';
 
   @override
-  String get pleaseSpecify => 'Please specify';
+  String get pleaseSpecify => 'Angiv venligst';
 
   @override
-  String get event => 'Event';
+  String get event => 'Begivenhed';
 
   @override
-  String get coworker => 'Coworker';
+  String get coworker => 'Kollega';
 
   @override
   String get linkedIn => 'LinkedIn';
@@ -8049,4 +8049,492 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get audioPlaybackFailed => 'Kan ikke afspille lyd. Filen kan være beskadiget eller manglende.';
+
+  @override
+  String get connectionGuide => 'Tilslutningsguide';
+
+  @override
+  String get iveDoneThis => 'Det har jeg gjort';
+
+  @override
+  String get pairNewDevice => 'Par ny enhed';
+
+  @override
+  String get dontSeeYourDevice => 'Kan du ikke se din enhed?';
+
+  @override
+  String get reportAnIssue => 'Rapportér et problem';
+
+  @override
+  String get pairingTitleOmi => 'Tænd Omi';
+
+  @override
+  String get pairingDescOmi => 'Tryk og hold på enheden, indtil den vibrerer, for at tænde den.';
+
+  @override
+  String get pairingTitleOmiDevkit => 'Sæt Omi DevKit i parringstilstand';
+
+  @override
+  String get pairingDescOmiDevkit => 'Tryk på knappen én gang for at tænde. LED\'en blinker lilla i parringstilstand.';
+
+  @override
+  String get pairingTitleOmiGlass => 'Tænd Omi Glass';
+
+  @override
+  String get pairingDescOmiGlass => 'Tryk og hold sideknappen i 3 sekunder for at tænde.';
+
+  @override
+  String get pairingTitlePlaudNote => 'Sæt Plaud Note i parringstilstand';
+
+  @override
+  String get pairingDescPlaudNote =>
+      'Tryk og hold sideknappen i 2 sekunder. Den røde LED blinker, når den er klar til parring.';
+
+  @override
+  String get pairingTitleBee => 'Sæt Bee i parringstilstand';
+
+  @override
+  String get pairingDescBee => 'Tryk på knappen 5 gange i træk. Lyset begynder at blinke blåt og grønt.';
+
+  @override
+  String get pairingTitleLimitless => 'Sæt Limitless i parringstilstand';
+
+  @override
+  String get pairingDescLimitless =>
+      'Når et lys er synligt, tryk én gang og tryk derefter og hold, indtil enheden viser et pink lys, slip derefter.';
+
+  @override
+  String get pairingTitleFriendPendant => 'Sæt Friend Pendant i parringstilstand';
+
+  @override
+  String get pairingDescFriendPendant =>
+      'Tryk på knappen på vedhænget for at tænde det. Det går automatisk i parringstilstand.';
+
+  @override
+  String get pairingTitleFieldy => 'Sæt Fieldy i parringstilstand';
+
+  @override
+  String get pairingDescFieldy => 'Tryk og hold på enheden, indtil lyset vises, for at tænde den.';
+
+  @override
+  String get pairingTitleAppleWatch => 'Tilslut Apple Watch';
+
+  @override
+  String get pairingDescAppleWatch =>
+      'Installer og åbn Omi-appen på dit Apple Watch, tryk derefter på Tilslut i appen.';
+
+  @override
+  String get pairingTitleNeoOne => 'Sæt Neo One i parringstilstand';
+
+  @override
+  String get pairingDescNeoOne => 'Tryk og hold tænd/sluk-knappen, indtil LED\'en blinker. Enheden vil være synlig.';
+
+  @override
+  String get downloadingFromDevice => 'Downloader fra enhed';
+
+  @override
+  String get reconnectingToInternet => 'Genopretter forbindelse til internet...';
+
+  @override
+  String uploadingToCloud(int current, int total) {
+    return 'Uploader $current af $total';
+  }
+
+  @override
+  String get processedStatus => 'Behandlet';
+
+  @override
+  String get corruptedStatus => 'Beskadiget';
+
+  @override
+  String nPending(int count) {
+    return '$count afventende';
+  }
+
+  @override
+  String nProcessed(int count) {
+    return '$count behandlede';
+  }
+
+  @override
+  String get synced => 'Synkroniseret';
+
+  @override
+  String get noPendingRecordings => 'Ingen afventende optagelser';
+
+  @override
+  String get noProcessedRecordings => 'Ingen behandlede optagelser endnu';
+
+  @override
+  String get pending => 'Afventende';
+
+  @override
+  String whatsNewInVersion(String version) {
+    return 'Nyheder i $version';
+  }
+
+  @override
+  String get addToYourTaskList => 'Tilføj til din opgaveliste?';
+
+  @override
+  String get failedToCreateShareLink => 'Kunne ikke oprette delingslink';
+
+  @override
+  String get deleteGoal => 'Slet mål';
+
+  @override
+  String get deviceUpToDate => 'Din enhed er opdateret';
+
+  @override
+  String get wifiConfiguration => 'WiFi-konfiguration';
+
+  @override
+  String get wifiConfigurationSubtitle => 'Indtast dine WiFi-oplysninger, så enheden kan downloade firmwaren.';
+
+  @override
+  String get networkNameSsid => 'Netværksnavn (SSID)';
+
+  @override
+  String get enterWifiNetworkName => 'Indtast WiFi-netværksnavn';
+
+  @override
+  String get enterWifiPassword => 'Indtast WiFi-adgangskode';
+
+  @override
+  String get appIconLabel => 'App Icon';
+
+  @override
+  String get onboardingWhatIKnowAboutYouTitle => 'Her er hvad jeg ved om dig';
+
+  @override
+  String get onboardingWhatIKnowAboutYouDescription =>
+      'Dette kort opdateres, efterhånden som Omi lærer fra dine samtaler.';
+
+  @override
+  String get apiEnvironment => 'API-miljø';
+
+  @override
+  String get apiEnvironmentDescription => 'Vælg hvilken server der skal forbindes til';
+
+  @override
+  String get production => 'Produktion';
+
+  @override
+  String get staging => 'Testmiljø';
+
+  @override
+  String get switchRequiresRestart => 'Skift kræver genstart af appen';
+
+  @override
+  String get switchApiConfirmTitle => 'Skift API-miljø';
+
+  @override
+  String switchApiConfirmBody(String environment) {
+    return 'Skift til $environment? Du skal lukke og genåbne appen for at ændringerne træder i kraft.';
+  }
+
+  @override
+  String get switchAndRestart => 'Skift';
+
+  @override
+  String get stagingDisclaimer =>
+      'Testmiljøet kan være ustabilt, have inkonsistent ydeevne, og data kan gå tabt. Kun til test.';
+
+  @override
+  String get apiEnvSavedRestartRequired => 'Gemt. Luk og genåbn appen for at anvende ændringerne.';
+
+  @override
+  String get shared => 'Delt';
+
+  @override
+  String get onlyYouCanSeeConversation => 'Kun du kan se denne samtale';
+
+  @override
+  String get anyoneWithLinkCanView => 'Alle med linket kan se';
+
+  @override
+  String get tasksCleanTodayTitle => 'Ryd dagens opgaver?';
+
+  @override
+  String get tasksCleanTodayMessage => 'Dette fjerner kun deadlines';
+
+  @override
+  String get tasksOverdue => 'Forfaldne';
+
+  @override
+  String get phoneCallsWithOmi => 'Opkald med Omi';
+
+  @override
+  String get phoneCallsSubtitle => 'Foretag opkald med realtidstranskription';
+
+  @override
+  String get phoneSetupStep1Title => 'Verificer dit telefonnummer';
+
+  @override
+  String get phoneSetupStep1Subtitle => 'Vi ringer dig for at bekraefte';
+
+  @override
+  String get phoneSetupStep2Title => 'Indtast en verificeringskode';
+
+  @override
+  String get phoneSetupStep2Subtitle => 'En kort kode du indtaster under opkaldet';
+
+  @override
+  String get phoneSetupStep3Title => 'Begynd at ringe til dine kontakter';
+
+  @override
+  String get phoneSetupStep3Subtitle => 'Med indbygget live transkription';
+
+  @override
+  String get phoneGetStarted => 'Kom i gang';
+
+  @override
+  String get callRecordingConsentDisclaimer => 'Optagelse af opkald kan kraeve samtykke i din jurisdiktion';
+
+  @override
+  String get enterYourNumber => 'Indtast dit nummer';
+
+  @override
+  String get phoneNumberCallerIdHint => 'Nar det er verificeret, bliver dette dit opkalds-ID';
+
+  @override
+  String get phoneNumberHint => 'Telefonnummer';
+
+  @override
+  String get failedToStartVerification => 'Kunne ikke starte verificering';
+
+  @override
+  String get phoneContinue => 'Fortsaet';
+
+  @override
+  String get verifyYourNumber => 'Verificer dit nummer';
+
+  @override
+  String get answerTheCallFrom => 'Besvar opkaldet fra';
+
+  @override
+  String get onTheCallEnterThisCode => 'Indtast denne kode under opkaldet';
+
+  @override
+  String get followTheVoiceInstructions => 'Folg stemmeinstruktionerne';
+
+  @override
+  String get statusCalling => 'Ringer...';
+
+  @override
+  String get statusCallInProgress => 'Opkald i gang';
+
+  @override
+  String get statusVerifiedLabel => 'Verificeret';
+
+  @override
+  String get statusCallMissed => 'Mistet opkald';
+
+  @override
+  String get statusTimedOut => 'Tid udlobet';
+
+  @override
+  String get phoneTryAgain => 'Prov igen';
+
+  @override
+  String get phonePageTitle => 'Telefon';
+
+  @override
+  String get phoneContactsTab => 'Kontakter';
+
+  @override
+  String get phoneKeypadTab => 'Tastatur';
+
+  @override
+  String get grantContactsAccess => 'Giv adgang til dine kontakter';
+
+  @override
+  String get phoneAllow => 'Tillad';
+
+  @override
+  String get phoneSearchHint => 'Sog';
+
+  @override
+  String get phoneNoContactsFound => 'Ingen kontakter fundet';
+
+  @override
+  String get phoneEnterNumber => 'Indtast nummer';
+
+  @override
+  String get failedToStartCall => 'Kunne ikke starte opkald';
+
+  @override
+  String get callStateConnecting => 'Forbinder...';
+
+  @override
+  String get callStateRinging => 'Ringer...';
+
+  @override
+  String get callStateEnded => 'Opkald afsluttet';
+
+  @override
+  String get callStateFailed => 'Opkald mislykkedes';
+
+  @override
+  String get transcriptPlaceholder => 'Transkription vises her...';
+
+  @override
+  String get phoneUnmute => 'Sla lyd til';
+
+  @override
+  String get phoneMute => 'Lydlos';
+
+  @override
+  String get phoneSpeaker => 'Hojtaler';
+
+  @override
+  String get phoneEndCall => 'Afslut';
+
+  @override
+  String get phoneCallSettingsTitle => 'Opkaldsindstillinger';
+
+  @override
+  String get yourVerifiedNumbers => 'Dine verificerede numre';
+
+  @override
+  String get verifiedNumbersDescription => 'Nar du ringer til nogen, vil de se dette nummer';
+
+  @override
+  String get noVerifiedNumbers => 'Ingen verificerede numre';
+
+  @override
+  String deletePhoneNumberConfirm(String phoneNumber) {
+    return 'Slet $phoneNumber?';
+  }
+
+  @override
+  String get deletePhoneNumberWarning => 'Du skal verificere igen for at foretage opkald';
+
+  @override
+  String get phoneDeleteButton => 'Slet';
+
+  @override
+  String verifiedMinutesAgo(int minutes) {
+    return 'Verificeret for ${minutes}m siden';
+  }
+
+  @override
+  String verifiedHoursAgo(int hours) {
+    return 'Verificeret for ${hours}t siden';
+  }
+
+  @override
+  String verifiedDaysAgo(int days) {
+    return 'Verificeret for ${days}d siden';
+  }
+
+  @override
+  String verifiedOnDate(String date) {
+    return 'Verificeret den $date';
+  }
+
+  @override
+  String get verifiedFallback => 'Verificeret';
+
+  @override
+  String get callAlreadyInProgress => 'Et opkald er allerede i gang';
+
+  @override
+  String get failedToGetCallToken => 'Kunne ikke hente opkaldstoken. Verificer dit nummer forst.';
+
+  @override
+  String get failedToInitializeCallService => 'Kunne ikke initialisere opkaldstjenesten';
+
+  @override
+  String get speakerLabelYou => 'Dig';
+
+  @override
+  String get speakerLabelUnknown => 'Ukendt';
+
+  @override
+  String get showDailyScoreOnHomepage => 'Vis daglig score på hjemmesiden';
+
+  @override
+  String get showTasksOnHomepage => 'Vis opgaver på hjemmesiden';
+
+  @override
+  String get phoneCallsUnlimitedOnly => 'Telefonopkald via Omi';
+
+  @override
+  String get phoneCallsUpsellSubtitle =>
+      'Foretag opkald via Omi og få transskription i realtid, automatiske resuméer og mere.';
+
+  @override
+  String get phoneCallsUpsellFeature1 => 'Transskription i realtid af hvert opkald';
+
+  @override
+  String get phoneCallsUpsellFeature2 => 'Automatiske opkaldsresuméer og handlingspunkter';
+
+  @override
+  String get phoneCallsUpsellFeature3 => 'Modtagere ser dit rigtige nummer, ikke et tilfældigt';
+
+  @override
+  String get phoneCallsUpsellFeature4 => 'Dine opkald forbliver private og sikre';
+
+  @override
+  String get phoneCallsUpgradeButton => 'Opgrader til Ubegrænset';
+
+  @override
+  String get phoneCallsMaybeLater => 'Måske senere';
+
+  @override
+  String get deleteSynced => 'Slet synkroniserede';
+
+  @override
+  String get deleteSyncedFiles => 'Slet synkroniserede optagelser';
+
+  @override
+  String get deleteSyncedFilesMessage =>
+      'Disse optagelser er allerede synkroniseret med din telefon. Dette kan ikke fortrydes.';
+
+  @override
+  String get syncedFilesDeleted => 'Synkroniserede optagelser slettet';
+
+  @override
+  String get deletePending => 'Slet ventende';
+
+  @override
+  String get deletePendingFiles => 'Slet ventende optagelser';
+
+  @override
+  String get deletePendingFilesWarning =>
+      'Disse optagelser er IKKE synkroniseret med din telefon og vil gå permanent tabt. Dette kan ikke fortrydes.';
+
+  @override
+  String get pendingFilesDeleted => 'Ventende optagelser slettet';
+
+  @override
+  String get deleteAllFiles => 'Slet alle optagelser';
+
+  @override
+  String get deleteAll => 'Slet alle';
+
+  @override
+  String get deleteAllFilesWarning =>
+      'Dette sletter synkroniserede og ventende optagelser. Ventende optagelser er IKKE synkroniseret og vil gå permanent tabt.';
+
+  @override
+  String get allFilesDeleted => 'Alle optagelser slettet';
+
+  @override
+  String nFiles(int count) {
+    return '$count optagelser';
+  }
+
+  @override
+  String get manageStorage => 'Administrer lager';
+
+  @override
+  String get safelyBackedUp => 'Sikkert sikkerhedskopieret til din telefon';
+
+  @override
+  String get notYetSynced => 'Endnu ikke synkroniseret med din telefon';
+
+  @override
+  String get clearAll => 'Ryd alt';
 }

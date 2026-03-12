@@ -28,12 +28,7 @@ Future<ActionItemsResponse> getActionItems({
     url += '&end_date=${endDate.toUtc().toIso8601String()}';
   }
 
-  var response = await makeApiCall(
-    url: url,
-    headers: {},
-    method: 'GET',
-    body: '',
-  );
+  var response = await makeApiCall(url: url, headers: {}, method: 'GET', body: '');
 
   if (response == null) return ActionItemsResponse(actionItems: [], hasMore: false);
 
@@ -71,10 +66,7 @@ Future<ActionItemWithMetadata?> createActionItem({
   String? conversationId,
   bool completed = false,
 }) async {
-  var requestBody = {
-    'description': description,
-    'completed': completed,
-  };
+  var requestBody = {'description': description, 'completed': completed};
 
   if (dueAt != null) {
     requestBody['due_at'] = dueAt.toUtc().toIso8601String();
@@ -110,6 +102,8 @@ Future<ActionItemWithMetadata?> updateActionItem(
   bool? exported,
   DateTime? exportDate,
   String? exportPlatform,
+  int? sortOrder,
+  int? indentLevel,
 }) async {
   var requestBody = <String, dynamic>{};
 
@@ -134,6 +128,12 @@ Future<ActionItemWithMetadata?> updateActionItem(
   if (exportPlatform != null) {
     requestBody['export_platform'] = exportPlatform;
   }
+  if (sortOrder != null) {
+    requestBody['sort_order'] = sortOrder;
+  }
+  if (indentLevel != null) {
+    requestBody['indent_level'] = indentLevel;
+  }
 
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/action-items/$actionItemId',
@@ -153,10 +153,7 @@ Future<ActionItemWithMetadata?> updateActionItem(
   }
 }
 
-Future<ActionItemWithMetadata?> toggleActionItemCompletion(
-  String actionItemId,
-  bool completed,
-) async {
+Future<ActionItemWithMetadata?> toggleActionItemCompletion(String actionItemId, bool completed) async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/action-items/$actionItemId/completed?completed=$completed',
     headers: {},
@@ -203,8 +200,9 @@ Future<ActionItemsResponse> getConversationActionItems(String conversationId) as
     var body = utf8.decode(response.bodyBytes);
     var data = jsonDecode(body);
     return ActionItemsResponse(
-      actionItems:
-          (data['action_items'] as List<dynamic>).map((item) => ActionItemWithMetadata.fromJson(item)).toList(),
+      actionItems: (data['action_items'] as List<dynamic>)
+          .map((item) => ActionItemWithMetadata.fromJson(item))
+          .toList(),
       hasMore: false, // Conversation-specific calls don't have pagination
     );
   } else {
@@ -226,10 +224,85 @@ Future<bool> deleteConversationActionItems(String conversationId) async {
   return response.statusCode == 204;
 }
 
+// Task sharing
+Future<Map<String, dynamic>?> shareActionItems(List<String> taskIds) async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/action-items/share',
+    headers: {},
+    method: 'POST',
+    body: jsonEncode({'task_ids': taskIds}),
+  );
+
+  if (response == null) return null;
+
+  if (response.statusCode == 200) {
+    var body = utf8.decode(response.bodyBytes);
+    return jsonDecode(body) as Map<String, dynamic>;
+  } else {
+    Logger.debug('shareActionItems error ${response.statusCode}');
+    return null;
+  }
+}
+
+Future<Map<String, dynamic>?> getSharedActionItems(String token) async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/action-items/shared/$token',
+    headers: {},
+    method: 'GET',
+    body: '',
+  );
+
+  if (response == null) return null;
+
+  if (response.statusCode == 200) {
+    var body = utf8.decode(response.bodyBytes);
+    return jsonDecode(body) as Map<String, dynamic>;
+  } else {
+    Logger.debug('getSharedActionItems error ${response.statusCode}');
+    return null;
+  }
+}
+
+Future<Map<String, dynamic>?> acceptSharedActionItems(String token) async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/action-items/accept',
+    headers: {},
+    method: 'POST',
+    body: jsonEncode({'token': token}),
+  );
+
+  if (response == null) return null;
+
+  if (response.statusCode == 200) {
+    var body = utf8.decode(response.bodyBytes);
+    return jsonDecode(body) as Map<String, dynamic>;
+  } else {
+    Logger.debug('acceptSharedActionItems error ${response.statusCode}');
+    return null;
+  }
+}
+
+// Batch update sort_order/indent_level
+Future<bool> batchUpdateActionItems(List<Map<String, dynamic>> items) async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/action-items/batch',
+    headers: {},
+    method: 'PATCH',
+    body: jsonEncode({'items': items}),
+  );
+
+  if (response == null) return false;
+
+  if (response.statusCode == 200) {
+    return true;
+  } else {
+    Logger.debug('batchUpdateActionItems error ${response.statusCode}');
+    return false;
+  }
+}
+
 // Batch operations
-Future<List<ActionItemWithMetadata>> createActionItemsBatch(
-  List<Map<String, dynamic>> actionItems,
-) async {
+Future<List<ActionItemWithMetadata>> createActionItemsBatch(List<Map<String, dynamic>> actionItems) async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/action-items/batch',
     headers: {},

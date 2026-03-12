@@ -28,7 +28,8 @@ import 'package:omi/backend/http/api/announcements.dart';
 import 'package:omi/pages/announcements/changelog_sheet.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'device_settings.dart';
-import 'package:omi/pages/conversations/sync_page.dart';
+import 'phone_call_settings_page.dart';
+import '../conversations/sync_page.dart';
 
 enum SettingsMode {
   no_device,
@@ -432,6 +433,28 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
                   );
                 },
               ),
+              Consumer<UsageProvider>(
+                builder: (context, usageProvider, child) {
+                  final isUnlimited = usageProvider.subscription?.subscription.plan == PlanType.unlimited;
+                  if (!isUnlimited) return const SizedBox.shrink();
+                  return Column(
+                    children: [
+                      const Divider(height: 1, color: Color(0xFF3C3C43)),
+                      _buildSettingsItem(
+                        title: 'Phone Calls',
+                        icon: const FaIcon(FontAwesomeIcons.phone, color: Color(0xFF8E8E93), size: 20),
+                        onTap: () {
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (context) => const PhoneCallSettingsPage(),
+                            ),
+                          );
+                        },
+                      ),
+                    ],
+                  );
+                },
+              ),
             ],
           ),
           const SizedBox(height: 32),
@@ -476,7 +499,7 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
               ),
               const Divider(height: 1, color: Color(0xFF3C3C43)),
               _buildSettingsItem(
-                title: "What's New",
+                title: context.l10n.whatsNew,
                 icon: const FaIcon(FontAwesomeIcons.solidStar, color: Color(0xFF8E8E93), size: 20),
                 onTap: () {
                   MixpanelManager().whatsNewOpened();

@@ -11,10 +11,14 @@ from utils.other.storage import (
     get_user_people_ids,
     get_user_person_speech_samples,
 )
+from utils.log_sanitizer import sanitize
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 def get_speech_profile_matching_predictions(uid: str, audio_file_path: str, segments: List) -> List[dict]:
-    print('get_speech_profile_matching_predictions')
+    logger.info('get_speech_profile_matching_predictions')
     files = [
         ('audio_file', (os.path.basename(audio_file_path), open(audio_file_path, 'rb'), 'audio/wav')),
     ]
@@ -24,17 +28,17 @@ def get_speech_profile_matching_predictions(uid: str, audio_file_path: str, segm
     default = [{'is_user': False, 'person_id': None}] * len(segments)
 
     if response.status_code != 200:
-        print('get_speech_profile_matching_predictions', response.text)
+        logger.info(f'get_speech_profile_matching_predictions {sanitize(response.text)}')
         return default
     try:
         result = response.json()
-        print('get_speech_profile_matching_predictions', result)
+        logger.info(f'get_speech_profile_matching_predictions {sanitize(result)}')
         if isinstance(result[0], bool):
             return [{'is_user': r, 'person_id': None} for r in result]
 
         return result
     except Exception as e:
-        print('get_speech_profile_matching_predictions', str(e))
+        logger.info(f'get_speech_profile_matching_predictions {str(e)}')
         return default
 
 

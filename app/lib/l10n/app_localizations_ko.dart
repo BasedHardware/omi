@@ -1000,7 +1000,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get vocabularyHint => 'Omi, Callie, OpenAI';
 
   @override
-  String get connect => 'Connect';
+  String get connect => '연결';
 
   @override
   String get comingSoon => '곧 출시';
@@ -2225,7 +2225,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get folderName => '폴더 이름';
 
   @override
-  String get descriptionOptional => 'Description (optional)';
+  String get descriptionOptional => '설명 (선택 사항)';
 
   @override
   String get failedToDeleteFolder => '폴더 삭제 실패';
@@ -2630,7 +2630,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get showAll => '모두 표시 →';
 
   @override
-  String get noTasksForToday => '오늘의 작업이 없습니다.\\nOmi에게 더 많은 작업을 요청하거나 수동으로 생성하세요.';
+  String get noTasksForToday => '오늘의 작업이 없습니다.\nOmi에게 더 많은 작업을 요청하거나 수동으로 생성하세요.';
 
   @override
   String get dailyScore => '일일 점수';
@@ -7858,36 +7858,36 @@ class AppLocalizationsKo extends AppLocalizations {
   String get couldNotOpenUrl => 'URL을 열 수 없습니다. 다시 시도해 주세요.';
 
   @override
-  String get newTask => 'New Task';
+  String get newTask => '새 작업';
 
   @override
-  String get viewAll => 'View All';
+  String get viewAll => '모두 보기';
 
   @override
-  String get addTask => 'Add Task';
+  String get addTask => '작업 추가';
 
   @override
-  String get addMcpServer => 'Add MCP Server';
+  String get addMcpServer => 'MCP 서버 추가';
 
   @override
-  String get connectExternalAiTools => 'Connect external AI tools';
+  String get connectExternalAiTools => '외부 AI 도구 연결';
 
   @override
   String get mcpServerUrl => 'MCP Server URL';
 
   @override
   String mcpServerConnected(int count) {
-    return '$count tools connected successfully';
+    return '$count개 도구가 성공적으로 연결되었습니다';
   }
 
   @override
-  String get mcpConnectionFailed => 'Failed to connect to MCP server';
+  String get mcpConnectionFailed => 'MCP 서버 연결에 실패했습니다';
 
   @override
-  String get authorizingMcpServer => 'Authorizing...';
+  String get authorizingMcpServer => '인증 중...';
 
   @override
-  String get whereDidYouHearAboutOmi => 'How did you find us?';
+  String get whereDidYouHearAboutOmi => '어떻게 알게 되셨나요?';
 
   @override
   String get tiktok => 'TikTok';
@@ -7905,19 +7905,19 @@ class AppLocalizationsKo extends AppLocalizations {
   String get reddit => 'Reddit';
 
   @override
-  String get friendWordOfMouth => 'Friend';
+  String get friendWordOfMouth => '친구';
 
   @override
-  String get otherSource => 'Other';
+  String get otherSource => '기타';
 
   @override
-  String get pleaseSpecify => 'Please specify';
+  String get pleaseSpecify => '구체적으로 알려주세요';
 
   @override
-  String get event => 'Event';
+  String get event => '이벤트';
 
   @override
-  String get coworker => 'Coworker';
+  String get coworker => '동료';
 
   @override
   String get linkedIn => 'LinkedIn';
@@ -7933,4 +7933,482 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get audioPlaybackFailed => '오디오를 재생할 수 없습니다. 파일이 손상되었거나 없을 수 있습니다.';
+
+  @override
+  String get connectionGuide => '연결 가이드';
+
+  @override
+  String get iveDoneThis => '완료했습니다';
+
+  @override
+  String get pairNewDevice => '새 기기 페어링';
+
+  @override
+  String get dontSeeYourDevice => '기기가 보이지 않나요?';
+
+  @override
+  String get reportAnIssue => '문제 신고';
+
+  @override
+  String get pairingTitleOmi => 'Omi 전원 켜기';
+
+  @override
+  String get pairingDescOmi => '기기가 진동할 때까지 길게 눌러 전원을 켜세요.';
+
+  @override
+  String get pairingTitleOmiDevkit => 'Omi DevKit를 페어링 모드로 전환';
+
+  @override
+  String get pairingDescOmiDevkit => '버튼을 한 번 눌러 전원을 켜세요. 페어링 모드에서 LED가 보라색으로 깜빡입니다.';
+
+  @override
+  String get pairingTitleOmiGlass => 'Omi Glass 전원 켜기';
+
+  @override
+  String get pairingDescOmiGlass => '측면 버튼을 3초간 길게 눌러 전원을 켜세요.';
+
+  @override
+  String get pairingTitlePlaudNote => 'Plaud Note를 페어링 모드로 전환';
+
+  @override
+  String get pairingDescPlaudNote => '측면 버튼을 2초간 길게 누르세요. 페어링 준비가 되면 빨간 LED가 깜빡입니다.';
+
+  @override
+  String get pairingTitleBee => 'Bee를 페어링 모드로 전환';
+
+  @override
+  String get pairingDescBee => '버튼을 연속으로 5번 누르세요. 표시등이 파란색과 녹색으로 깜빡이기 시작합니다.';
+
+  @override
+  String get pairingTitleLimitless => 'Limitless를 페어링 모드로 전환';
+
+  @override
+  String get pairingDescLimitless => '표시등이 켜져 있을 때 한 번 누른 다음 기기가 분홍색 빛을 보일 때까지 길게 누른 후 놓으세요.';
+
+  @override
+  String get pairingTitleFriendPendant => 'Friend Pendant를 페어링 모드로 전환';
+
+  @override
+  String get pairingDescFriendPendant => '펜던트의 버튼을 눌러 전원을 켜세요. 자동으로 페어링 모드로 전환됩니다.';
+
+  @override
+  String get pairingTitleFieldy => 'Fieldy를 페어링 모드로 전환';
+
+  @override
+  String get pairingDescFieldy => '표시등이 나타날 때까지 기기를 길게 눌러 전원을 켜세요.';
+
+  @override
+  String get pairingTitleAppleWatch => 'Apple Watch 연결';
+
+  @override
+  String get pairingDescAppleWatch => 'Apple Watch에 Omi 앱을 설치하고 열어서 앱에서 연결을 탭하세요.';
+
+  @override
+  String get pairingTitleNeoOne => 'Neo One를 페어링 모드로 전환';
+
+  @override
+  String get pairingDescNeoOne => '전원 버튼을 LED가 깜빡일 때까지 길게 누르세요. 기기가 검색 가능해집니다.';
+
+  @override
+  String get downloadingFromDevice => '기기에서 다운로드 중';
+
+  @override
+  String get reconnectingToInternet => '인터넷에 다시 연결 중...';
+
+  @override
+  String uploadingToCloud(int current, int total) {
+    return '$current/$total 업로드 중';
+  }
+
+  @override
+  String get processedStatus => '처리됨';
+
+  @override
+  String get corruptedStatus => '손상됨';
+
+  @override
+  String nPending(int count) {
+    return '$count개 대기 중';
+  }
+
+  @override
+  String nProcessed(int count) {
+    return '$count개 처리됨';
+  }
+
+  @override
+  String get synced => '동기화됨';
+
+  @override
+  String get noPendingRecordings => '대기 중인 녹음이 없습니다';
+
+  @override
+  String get noProcessedRecordings => '아직 처리된 녹음이 없습니다';
+
+  @override
+  String get pending => '대기 중';
+
+  @override
+  String whatsNewInVersion(String version) {
+    return '$version의 새로운 기능';
+  }
+
+  @override
+  String get addToYourTaskList => '작업 목록에 추가하시겠습니까?';
+
+  @override
+  String get failedToCreateShareLink => '공유 링크 생성에 실패했습니다';
+
+  @override
+  String get deleteGoal => '목표 삭제';
+
+  @override
+  String get deviceUpToDate => '기기가 최신 상태입니다';
+
+  @override
+  String get wifiConfiguration => 'WiFi 설정';
+
+  @override
+  String get wifiConfigurationSubtitle => '기기가 펌웨어를 다운로드할 수 있도록 WiFi 자격 증명을 입력하세요.';
+
+  @override
+  String get networkNameSsid => '네트워크 이름 (SSID)';
+
+  @override
+  String get enterWifiNetworkName => 'WiFi 네트워크 이름을 입력하세요';
+
+  @override
+  String get enterWifiPassword => 'WiFi 비밀번호를 입력하세요';
+
+  @override
+  String get appIconLabel => 'App Icon';
+
+  @override
+  String get onboardingWhatIKnowAboutYouTitle => '당신에 대해 알고 있는 것';
+
+  @override
+  String get onboardingWhatIKnowAboutYouDescription => '이 지도는 Omi가 대화에서 배우면서 업데이트됩니다.';
+
+  @override
+  String get apiEnvironment => 'API 환경';
+
+  @override
+  String get apiEnvironmentDescription => '연결할 서버를 선택하세요';
+
+  @override
+  String get production => '프로덕션';
+
+  @override
+  String get staging => '스테이징';
+
+  @override
+  String get switchRequiresRestart => '전환하려면 앱을 다시 시작해야 합니다';
+
+  @override
+  String get switchApiConfirmTitle => 'API 환경 전환';
+
+  @override
+  String switchApiConfirmBody(String environment) {
+    return '$environment(으)로 전환하시겠습니까? 변경 사항을 적용하려면 앱을 닫고 다시 열어야 합니다.';
+  }
+
+  @override
+  String get switchAndRestart => '전환';
+
+  @override
+  String get stagingDisclaimer => '스테이징 환경은 불안정하고 성능이 일정하지 않으며 데이터가 손실될 수 있습니다. 테스트 전용입니다.';
+
+  @override
+  String get apiEnvSavedRestartRequired => '저장되었습니다. 변경 사항을 적용하려면 앱을 닫고 다시 여세요.';
+
+  @override
+  String get shared => '공유됨';
+
+  @override
+  String get onlyYouCanSeeConversation => '이 대화는 본인만 볼 수 있습니다';
+
+  @override
+  String get anyoneWithLinkCanView => '링크가 있는 사람은 누구나 볼 수 있습니다';
+
+  @override
+  String get tasksCleanTodayTitle => '오늘 할 일을 정리할까요?';
+
+  @override
+  String get tasksCleanTodayMessage => '마감일만 제거됩니다';
+
+  @override
+  String get tasksOverdue => '기한 초과';
+
+  @override
+  String get phoneCallsWithOmi => 'Omi로 통화';
+
+  @override
+  String get phoneCallsSubtitle => '실시간 전사와 함께 전화하기';
+
+  @override
+  String get phoneSetupStep1Title => '전화번호를 인증하세요';
+
+  @override
+  String get phoneSetupStep1Subtitle => '확인을 위해 전화드리겠습니다';
+
+  @override
+  String get phoneSetupStep2Title => '인증 코드 입력';
+
+  @override
+  String get phoneSetupStep2Subtitle => '통화 중 입력할 짧은 코드';
+
+  @override
+  String get phoneSetupStep3Title => '연락처에 전화 시작';
+
+  @override
+  String get phoneSetupStep3Subtitle => '실시간 전사 기능 내장';
+
+  @override
+  String get phoneGetStarted => '시작하기';
+
+  @override
+  String get callRecordingConsentDisclaimer => '통화 녹음은 관할 지역에서 동의가 필요할 수 있습니다';
+
+  @override
+  String get enterYourNumber => '번호를 입력하세요';
+
+  @override
+  String get phoneNumberCallerIdHint => '인증 후 이것이 발신자 ID가 됩니다';
+
+  @override
+  String get phoneNumberHint => '전화번호';
+
+  @override
+  String get failedToStartVerification => '인증을 시작하지 못했습니다';
+
+  @override
+  String get phoneContinue => '계속';
+
+  @override
+  String get verifyYourNumber => '번호 인증';
+
+  @override
+  String get answerTheCallFrom => '이 번호의 전화를 받으세요';
+
+  @override
+  String get onTheCallEnterThisCode => '통화 중 이 코드를 입력하세요';
+
+  @override
+  String get followTheVoiceInstructions => '음성 안내를 따르세요';
+
+  @override
+  String get statusCalling => '전화 중...';
+
+  @override
+  String get statusCallInProgress => '통화 진행 중';
+
+  @override
+  String get statusVerifiedLabel => '인증됨';
+
+  @override
+  String get statusCallMissed => '부재중 전화';
+
+  @override
+  String get statusTimedOut => '시간 초과';
+
+  @override
+  String get phoneTryAgain => '다시 시도';
+
+  @override
+  String get phonePageTitle => '전화';
+
+  @override
+  String get phoneContactsTab => '연락처';
+
+  @override
+  String get phoneKeypadTab => '키패드';
+
+  @override
+  String get grantContactsAccess => '연락처 접근 권한을 부여하세요';
+
+  @override
+  String get phoneAllow => '허용';
+
+  @override
+  String get phoneSearchHint => '검색';
+
+  @override
+  String get phoneNoContactsFound => '연락처를 찾을 수 없습니다';
+
+  @override
+  String get phoneEnterNumber => '번호 입력';
+
+  @override
+  String get failedToStartCall => '통화를 시작하지 못했습니다';
+
+  @override
+  String get callStateConnecting => '연결 중...';
+
+  @override
+  String get callStateRinging => '벨 울리는 중...';
+
+  @override
+  String get callStateEnded => '통화 종료';
+
+  @override
+  String get callStateFailed => '통화 실패';
+
+  @override
+  String get transcriptPlaceholder => '전사가 여기에 표시됩니다...';
+
+  @override
+  String get phoneUnmute => '음소거 해제';
+
+  @override
+  String get phoneMute => '음소거';
+
+  @override
+  String get phoneSpeaker => '스피커';
+
+  @override
+  String get phoneEndCall => '종료';
+
+  @override
+  String get phoneCallSettingsTitle => '통화 설정';
+
+  @override
+  String get yourVerifiedNumbers => '인증된 번호';
+
+  @override
+  String get verifiedNumbersDescription => '전화를 걸면 상대방에게 이 번호가 표시됩니다';
+
+  @override
+  String get noVerifiedNumbers => '인증된 번호 없음';
+
+  @override
+  String deletePhoneNumberConfirm(String phoneNumber) {
+    return '$phoneNumber 삭제하시겠습니까?';
+  }
+
+  @override
+  String get deletePhoneNumberWarning => '전화를 걸려면 다시 인증해야 합니다';
+
+  @override
+  String get phoneDeleteButton => '삭제';
+
+  @override
+  String verifiedMinutesAgo(int minutes) {
+    return '$minutes분 전 인증됨';
+  }
+
+  @override
+  String verifiedHoursAgo(int hours) {
+    return '$hours시간 전 인증됨';
+  }
+
+  @override
+  String verifiedDaysAgo(int days) {
+    return '$days일 전 인증됨';
+  }
+
+  @override
+  String verifiedOnDate(String date) {
+    return '$date에 인증됨';
+  }
+
+  @override
+  String get verifiedFallback => '인증됨';
+
+  @override
+  String get callAlreadyInProgress => '통화가 이미 진행 중입니다';
+
+  @override
+  String get failedToGetCallToken => '토큰을 가져오지 못했습니다. 먼저 번호를 인증하세요.';
+
+  @override
+  String get failedToInitializeCallService => '통화 서비스를 초기화하지 못했습니다';
+
+  @override
+  String get speakerLabelYou => '나';
+
+  @override
+  String get speakerLabelUnknown => '알 수 없음';
+
+  @override
+  String get showDailyScoreOnHomepage => '홈페이지에 일일 점수 표시';
+
+  @override
+  String get showTasksOnHomepage => '홈페이지에 작업 표시';
+
+  @override
+  String get phoneCallsUnlimitedOnly => 'Omi를 통한 전화 통화';
+
+  @override
+  String get phoneCallsUpsellSubtitle => 'Omi를 통해 전화를 걸고 실시간 텍스트 변환, 자동 요약 등을 받으세요.';
+
+  @override
+  String get phoneCallsUpsellFeature1 => '모든 통화의 실시간 텍스트 변환';
+
+  @override
+  String get phoneCallsUpsellFeature2 => '자동 통화 요약 및 액션 아이템';
+
+  @override
+  String get phoneCallsUpsellFeature3 => '수신자는 임의 번호가 아닌 실제 번호를 봅니다';
+
+  @override
+  String get phoneCallsUpsellFeature4 => '통화는 비공개이고 안전합니다';
+
+  @override
+  String get phoneCallsUpgradeButton => 'Unlimited로 업그레이드';
+
+  @override
+  String get phoneCallsMaybeLater => '나중에';
+
+  @override
+  String get deleteSynced => '동기화된 항목 삭제';
+
+  @override
+  String get deleteSyncedFiles => '동기화된 녹음 삭제';
+
+  @override
+  String get deleteSyncedFilesMessage => '이 녹음은 이미 휴대폰에 동기화되었습니다. 이 작업은 취소할 수 없습니다.';
+
+  @override
+  String get syncedFilesDeleted => '동기화된 녹음 삭제됨';
+
+  @override
+  String get deletePending => '대기 중인 항목 삭제';
+
+  @override
+  String get deletePendingFiles => '대기 중인 녹음 삭제';
+
+  @override
+  String get deletePendingFilesWarning => '이 녹음은 휴대폰에 동기화되지 않았으며 영구적으로 손실됩니다. 이 작업은 취소할 수 없습니다.';
+
+  @override
+  String get pendingFilesDeleted => '대기 중인 녹음 삭제됨';
+
+  @override
+  String get deleteAllFiles => '모든 녹음 삭제';
+
+  @override
+  String get deleteAll => '모두 삭제';
+
+  @override
+  String get deleteAllFilesWarning => '동기화된 녹음과 대기 중인 녹음이 모두 삭제됩니다. 대기 중인 녹음은 동기화되지 않았으며 영구적으로 손실됩니다.';
+
+  @override
+  String get allFilesDeleted => '모든 녹음 삭제됨';
+
+  @override
+  String nFiles(int count) {
+    return '$count개 녹음';
+  }
+
+  @override
+  String get manageStorage => '저장소 관리';
+
+  @override
+  String get safelyBackedUp => '휴대폰에 안전하게 백업됨';
+
+  @override
+  String get notYetSynced => '아직 휴대폰에 동기화되지 않음';
+
+  @override
+  String get clearAll => '모두 지우기';
 }

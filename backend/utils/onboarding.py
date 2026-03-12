@@ -4,6 +4,9 @@ import uuid
 from typing import Callable, Dict, List, Optional
 
 from utils.llm.clients import llm_mini
+import logging
+
+logger = logging.getLogger(__name__)
 
 ONBOARDING_QUESTIONS = [
     {'question': "How old are you?", 'category': 'age'},
@@ -86,10 +89,7 @@ class OnboardingHandler:
         self.update_segment_timing(segments)
 
         # Accumulate transcript for current question (ignore Omi segments)
-        new_text = ' '.join(
-            s.get('text', '') for s in segments
-            if s.get('speaker_id') != self.OMI_SPEAKER_ID
-        ).strip()
+        new_text = ' '.join(s.get('text', '') for s in segments if s.get('speaker_id') != self.OMI_SPEAKER_ID).strip()
         if new_text:
             if self.current_transcript:
                 self.current_transcript += ' ' + new_text
@@ -214,7 +214,7 @@ Reply with only "yes" or "no"."""
             response = await asyncio.to_thread(llm_mini.invoke, prompt)
             return 'yes' in response.content.lower()
         except Exception as e:
-            print(f"AI check error: {e}")
+            logger.error(f"AI check error: {e}")
             # Fallback: 2+ words is an answer
             return len(transcript.split()) >= 2
 

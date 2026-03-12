@@ -95,9 +95,9 @@ class ChatTool(BaseModel):
     method: str = "POST"  # HTTP method (GET, POST, etc.)
     parameters: Optional[dict] = None  # JSON schema for parameters (optional)
     auth_required: bool = True  # Whether to include user auth in request
-    status_message: Optional[
-        str
-    ] = None  # Optional status message shown to user when tool is called (e.g., "Searching Slack")
+    status_message: Optional[str] = (
+        None  # Optional status message shown to user when tool is called (e.g., "Searching Slack")
+    )
     is_mcp: bool = False  # Whether this tool comes from an MCP server
     transport: str = "streamable_http"  # MCP transport: "streamable_http" or "sse"
 

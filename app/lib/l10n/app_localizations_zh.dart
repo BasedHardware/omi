@@ -878,7 +878,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get useMcpApiKey => '使用您的 MCP API 密钥';
 
   @override
-  String get webhooks => 'Webhooks';
+  String get webhooks => 'Webhook';
 
   @override
   String get conversationEvents => '对话事件';
@@ -999,7 +999,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get vocabularyHint => 'Omi, Callie, OpenAI';
 
   @override
-  String get connect => 'Connect';
+  String get connect => '连接';
 
   @override
   String get comingSoon => '即将推出';
@@ -2221,7 +2221,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get folderName => '文件夹名称';
 
   @override
-  String get descriptionOptional => 'Description (optional)';
+  String get descriptionOptional => '描述（可选）';
 
   @override
   String get failedToDeleteFolder => '删除文件夹失败';
@@ -2625,7 +2625,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get showAll => '显示全部 →';
 
   @override
-  String get noTasksForToday => '今天没有任务。\\n向Omi询问更多任务或手动创建。';
+  String get noTasksForToday => '今天没有任务。\n向Omi询问更多任务或手动创建。';
 
   @override
   String get dailyScore => '每日评分';
@@ -5815,7 +5815,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String conversationsCreated(int count) {
-    return '$count conversations created';
+    return '已创建 $count 个对话';
   }
 
   @override
@@ -7846,36 +7846,36 @@ class AppLocalizationsZh extends AppLocalizations {
   String get couldNotOpenUrl => '无法打开链接，请重试。';
 
   @override
-  String get newTask => 'New Task';
+  String get newTask => '新任务';
 
   @override
-  String get viewAll => 'View All';
+  String get viewAll => '查看全部';
 
   @override
-  String get addTask => 'Add Task';
+  String get addTask => '添加任务';
 
   @override
-  String get addMcpServer => 'Add MCP Server';
+  String get addMcpServer => '添加 MCP 服务器';
 
   @override
-  String get connectExternalAiTools => 'Connect external AI tools';
+  String get connectExternalAiTools => '连接外部 AI 工具';
 
   @override
   String get mcpServerUrl => 'MCP Server URL';
 
   @override
   String mcpServerConnected(int count) {
-    return '$count tools connected successfully';
+    return '已成功连接 $count 个工具';
   }
 
   @override
-  String get mcpConnectionFailed => 'Failed to connect to MCP server';
+  String get mcpConnectionFailed => '连接 MCP 服务器失败';
 
   @override
-  String get authorizingMcpServer => 'Authorizing...';
+  String get authorizingMcpServer => '正在授权...';
 
   @override
-  String get whereDidYouHearAboutOmi => 'How did you find us?';
+  String get whereDidYouHearAboutOmi => '你是怎么知道我们的？';
 
   @override
   String get tiktok => 'TikTok';
@@ -7893,19 +7893,19 @@ class AppLocalizationsZh extends AppLocalizations {
   String get reddit => 'Reddit';
 
   @override
-  String get friendWordOfMouth => 'Friend';
+  String get friendWordOfMouth => '朋友';
 
   @override
-  String get otherSource => 'Other';
+  String get otherSource => '其他';
 
   @override
-  String get pleaseSpecify => 'Please specify';
+  String get pleaseSpecify => '请说明';
 
   @override
-  String get event => 'Event';
+  String get event => '活动';
 
   @override
-  String get coworker => 'Coworker';
+  String get coworker => '同事';
 
   @override
   String get linkedIn => 'LinkedIn';
@@ -7921,4 +7921,482 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get audioPlaybackFailed => '无法播放音频。文件可能已损坏或丢失。';
+
+  @override
+  String get connectionGuide => '连接指南';
+
+  @override
+  String get iveDoneThis => '我已完成';
+
+  @override
+  String get pairNewDevice => '配对新设备';
+
+  @override
+  String get dontSeeYourDevice => '看不到你的设备？';
+
+  @override
+  String get reportAnIssue => '报告问题';
+
+  @override
+  String get pairingTitleOmi => '开启Omi';
+
+  @override
+  String get pairingDescOmi => '按住设备直到振动以开机。';
+
+  @override
+  String get pairingTitleOmiDevkit => '将Omi DevKit设置为配对模式';
+
+  @override
+  String get pairingDescOmiDevkit => '按一次按钮开机。配对模式下LED将闪烁紫色。';
+
+  @override
+  String get pairingTitleOmiGlass => '开启Omi Glass';
+
+  @override
+  String get pairingDescOmiGlass => '按住侧面按钮3秒以开机。';
+
+  @override
+  String get pairingTitlePlaudNote => '将Plaud Note设置为配对模式';
+
+  @override
+  String get pairingDescPlaudNote => '按住侧面按钮2秒。准备好配对时红色LED将闪烁。';
+
+  @override
+  String get pairingTitleBee => '将Bee设置为配对模式';
+
+  @override
+  String get pairingDescBee => '连续按下按钮5次。指示灯将开始闪烁蓝色和绿色。';
+
+  @override
+  String get pairingTitleLimitless => '将Limitless设置为配对模式';
+
+  @override
+  String get pairingDescLimitless => '当有灯亮时，按一次然后按住直到设备显示粉色灯光，然后松开。';
+
+  @override
+  String get pairingTitleFriendPendant => '将Friend Pendant设置为配对模式';
+
+  @override
+  String get pairingDescFriendPendant => '按下吊坠上的按钮以开机。设备将自动进入配对模式。';
+
+  @override
+  String get pairingTitleFieldy => '将Fieldy设置为配对模式';
+
+  @override
+  String get pairingDescFieldy => '按住设备直到灯亮以开机。';
+
+  @override
+  String get pairingTitleAppleWatch => '连接Apple Watch';
+
+  @override
+  String get pairingDescAppleWatch => '在Apple Watch上安装并打开Omi应用，然后在应用中点击连接。';
+
+  @override
+  String get pairingTitleNeoOne => '将Neo One设置为配对模式';
+
+  @override
+  String get pairingDescNeoOne => '按住电源按钮直到LED闪烁。设备将变为可发现状态。';
+
+  @override
+  String get downloadingFromDevice => '正在从设备下载';
+
+  @override
+  String get reconnectingToInternet => '正在重新连接互联网...';
+
+  @override
+  String uploadingToCloud(int current, int total) {
+    return '正在上传 $current/$total';
+  }
+
+  @override
+  String get processedStatus => '已处理';
+
+  @override
+  String get corruptedStatus => '已损坏';
+
+  @override
+  String nPending(int count) {
+    return '$count 个待处理';
+  }
+
+  @override
+  String nProcessed(int count) {
+    return '$count 个已处理';
+  }
+
+  @override
+  String get synced => '已同步';
+
+  @override
+  String get noPendingRecordings => '没有待处理的录音';
+
+  @override
+  String get noProcessedRecordings => '暂无已处理的录音';
+
+  @override
+  String get pending => '待处理';
+
+  @override
+  String whatsNewInVersion(String version) {
+    return '$version 的新功能';
+  }
+
+  @override
+  String get addToYourTaskList => '添加到您的任务列表？';
+
+  @override
+  String get failedToCreateShareLink => '无法创建分享链接';
+
+  @override
+  String get deleteGoal => '删除目标';
+
+  @override
+  String get deviceUpToDate => '您的设备已是最新版本';
+
+  @override
+  String get wifiConfiguration => 'WiFi 配置';
+
+  @override
+  String get wifiConfigurationSubtitle => '输入您的WiFi凭据以允许设备下载固件。';
+
+  @override
+  String get networkNameSsid => '网络名称 (SSID)';
+
+  @override
+  String get enterWifiNetworkName => '输入WiFi网络名称';
+
+  @override
+  String get enterWifiPassword => '输入WiFi密码';
+
+  @override
+  String get appIconLabel => 'App Icon';
+
+  @override
+  String get onboardingWhatIKnowAboutYouTitle => '这是我了解到的关于你的信息';
+
+  @override
+  String get onboardingWhatIKnowAboutYouDescription => '这张地图会随着 Omi 从你的对话中学习而更新。';
+
+  @override
+  String get apiEnvironment => 'API 环境';
+
+  @override
+  String get apiEnvironmentDescription => '选择要连接的服务器';
+
+  @override
+  String get production => '生产环境';
+
+  @override
+  String get staging => '测试环境';
+
+  @override
+  String get switchRequiresRestart => '切换需要重启应用';
+
+  @override
+  String get switchApiConfirmTitle => '切换 API 环境';
+
+  @override
+  String switchApiConfirmBody(String environment) {
+    return '切换到$environment？您需要关闭并重新打开应用，更改才能生效。';
+  }
+
+  @override
+  String get switchAndRestart => '切换';
+
+  @override
+  String get stagingDisclaimer => '测试环境可能不稳定，性能不一致，数据可能丢失。仅供测试使用。';
+
+  @override
+  String get apiEnvSavedRestartRequired => '已保存。请关闭并重新打开应用以应用更改。';
+
+  @override
+  String get shared => '已共享';
+
+  @override
+  String get onlyYouCanSeeConversation => '只有您可以看到此对话';
+
+  @override
+  String get anyoneWithLinkCanView => '任何拥有链接的人都可以查看';
+
+  @override
+  String get tasksCleanTodayTitle => '清理今天的任务？';
+
+  @override
+  String get tasksCleanTodayMessage => '这只会移除截止日期';
+
+  @override
+  String get tasksOverdue => '逾期';
+
+  @override
+  String get phoneCallsWithOmi => '使用 Omi 通话';
+
+  @override
+  String get phoneCallsSubtitle => '实时转录通话';
+
+  @override
+  String get phoneSetupStep1Title => '验证您的电话号码';
+
+  @override
+  String get phoneSetupStep1Subtitle => '我们将致电您进行确认';
+
+  @override
+  String get phoneSetupStep2Title => '输入验证码';
+
+  @override
+  String get phoneSetupStep2Subtitle => '通话中输入的短代码';
+
+  @override
+  String get phoneSetupStep3Title => '开始拨打您的联系人';
+
+  @override
+  String get phoneSetupStep3Subtitle => '内置实时转录';
+
+  @override
+  String get phoneGetStarted => '开始';
+
+  @override
+  String get callRecordingConsentDisclaimer => '通话录音可能需要在您的管辖区获得同意';
+
+  @override
+  String get enterYourNumber => '输入您的号码';
+
+  @override
+  String get phoneNumberCallerIdHint => '验证后，这将成为您的来电显示';
+
+  @override
+  String get phoneNumberHint => '电话号码';
+
+  @override
+  String get failedToStartVerification => '无法开始验证';
+
+  @override
+  String get phoneContinue => '继续';
+
+  @override
+  String get verifyYourNumber => '验证您的号码';
+
+  @override
+  String get answerTheCallFrom => '接听来自以下号码的电话';
+
+  @override
+  String get onTheCallEnterThisCode => '通话中输入此代码';
+
+  @override
+  String get followTheVoiceInstructions => '请按照语音指示操作';
+
+  @override
+  String get statusCalling => '拨号中...';
+
+  @override
+  String get statusCallInProgress => '通话中';
+
+  @override
+  String get statusVerifiedLabel => '已验证';
+
+  @override
+  String get statusCallMissed => '未接来电';
+
+  @override
+  String get statusTimedOut => '超时';
+
+  @override
+  String get phoneTryAgain => '重试';
+
+  @override
+  String get phonePageTitle => '电话';
+
+  @override
+  String get phoneContactsTab => '通讯录';
+
+  @override
+  String get phoneKeypadTab => '键盘';
+
+  @override
+  String get grantContactsAccess => '授予通讯录访问权限';
+
+  @override
+  String get phoneAllow => '允许';
+
+  @override
+  String get phoneSearchHint => '搜索';
+
+  @override
+  String get phoneNoContactsFound => '未找到联系人';
+
+  @override
+  String get phoneEnterNumber => '输入号码';
+
+  @override
+  String get failedToStartCall => '无法开始通话';
+
+  @override
+  String get callStateConnecting => '连接中...';
+
+  @override
+  String get callStateRinging => '响铃中...';
+
+  @override
+  String get callStateEnded => '通话结束';
+
+  @override
+  String get callStateFailed => '通话失败';
+
+  @override
+  String get transcriptPlaceholder => '转录将在此显示...';
+
+  @override
+  String get phoneUnmute => '取消静音';
+
+  @override
+  String get phoneMute => '静音';
+
+  @override
+  String get phoneSpeaker => '扬声器';
+
+  @override
+  String get phoneEndCall => '结束';
+
+  @override
+  String get phoneCallSettingsTitle => '通话设置';
+
+  @override
+  String get yourVerifiedNumbers => '您已验证的号码';
+
+  @override
+  String get verifiedNumbersDescription => '当您拨打电话时，对方将看到此号码';
+
+  @override
+  String get noVerifiedNumbers => '没有已验证的号码';
+
+  @override
+  String deletePhoneNumberConfirm(String phoneNumber) {
+    return '删除 $phoneNumber？';
+  }
+
+  @override
+  String get deletePhoneNumberWarning => '您需要重新验证才能拨打电话';
+
+  @override
+  String get phoneDeleteButton => '删除';
+
+  @override
+  String verifiedMinutesAgo(int minutes) {
+    return '$minutes分钟前验证';
+  }
+
+  @override
+  String verifiedHoursAgo(int hours) {
+    return '$hours小时前验证';
+  }
+
+  @override
+  String verifiedDaysAgo(int days) {
+    return '$days天前验证';
+  }
+
+  @override
+  String verifiedOnDate(String date) {
+    return '验证于 $date';
+  }
+
+  @override
+  String get verifiedFallback => '已验证';
+
+  @override
+  String get callAlreadyInProgress => '通话已在进行中';
+
+  @override
+  String get failedToGetCallToken => '获取令牌失败。请先验证您的号码。';
+
+  @override
+  String get failedToInitializeCallService => '无法初始化通话服务';
+
+  @override
+  String get speakerLabelYou => '您';
+
+  @override
+  String get speakerLabelUnknown => '未知';
+
+  @override
+  String get showDailyScoreOnHomepage => '在首页显示每日评分';
+
+  @override
+  String get showTasksOnHomepage => '在首页显示任务';
+
+  @override
+  String get phoneCallsUnlimitedOnly => '通过 Omi 拨打电话';
+
+  @override
+  String get phoneCallsUpsellSubtitle => '通过 Omi 拨打电话，获取实时转录、自动摘要等功能。';
+
+  @override
+  String get phoneCallsUpsellFeature1 => '每次通话的实时转录';
+
+  @override
+  String get phoneCallsUpsellFeature2 => '自动通话摘要和待办事项';
+
+  @override
+  String get phoneCallsUpsellFeature3 => '接收方看到的是您的真实号码，而非随机号码';
+
+  @override
+  String get phoneCallsUpsellFeature4 => '您的通话保持私密和安全';
+
+  @override
+  String get phoneCallsUpgradeButton => '升级到无限计划';
+
+  @override
+  String get phoneCallsMaybeLater => '以后再说';
+
+  @override
+  String get deleteSynced => '删除已同步';
+
+  @override
+  String get deleteSyncedFiles => '删除已同步录音';
+
+  @override
+  String get deleteSyncedFilesMessage => '这些录音已同步到您的手机。此操作无法撤销。';
+
+  @override
+  String get syncedFilesDeleted => '已同步录音已删除';
+
+  @override
+  String get deletePending => '删除待处理';
+
+  @override
+  String get deletePendingFiles => '删除待处理录音';
+
+  @override
+  String get deletePendingFilesWarning => '这些录音尚未同步到您的手机，将永久丢失。此操作无法撤销。';
+
+  @override
+  String get pendingFilesDeleted => '待处理录音已删除';
+
+  @override
+  String get deleteAllFiles => '删除所有录音';
+
+  @override
+  String get deleteAll => '全部删除';
+
+  @override
+  String get deleteAllFilesWarning => '这将删除已同步和待处理的录音。待处理录音尚未同步，将永久丢失。';
+
+  @override
+  String get allFilesDeleted => '所有录音已删除';
+
+  @override
+  String nFiles(int count) {
+    return '$count个录音';
+  }
+
+  @override
+  String get manageStorage => '管理存储';
+
+  @override
+  String get safelyBackedUp => '已安全备份到您的手机';
+
+  @override
+  String get notYetSynced => '尚未同步到您的手机';
+
+  @override
+  String get clearAll => '全部清除';
 }

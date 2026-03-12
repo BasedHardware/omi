@@ -76,6 +76,11 @@ ingress:
   #      - chart-example.local
 
 env:
+  - name: GEMINI_API_KEY
+    valueFrom:
+      secretKeyRef:
+        name: prod-omi-backend-secrets
+        key: GEMINI_API_KEY
   - name: BUCKET_SPEECH_PROFILES
     value: "speech-profiles"
   - name: GITHUB_TOKEN
@@ -272,6 +277,33 @@ env:
     value: "2025-08-21"
   - name: BUCKET_PRIVATE_CLOUD_SYNC
     value: "omi-private-cloud-sync"
+  - name: TWILIO_ACCOUNT_SID
+    valueFrom:
+      secretKeyRef:
+        name: prod-omi-backend-secrets
+        key: TWILIO_ACCOUNT_SID
+  - name: TWILIO_AUTH_TOKEN
+    valueFrom:
+      secretKeyRef:
+        name: prod-omi-backend-secrets
+        key: TWILIO_AUTH_TOKEN
+  - name: TWILIO_API_KEY_SID
+    valueFrom:
+      secretKeyRef:
+        name: prod-omi-backend-secrets
+        key: TWILIO_API_KEY_SID
+  - name: TWILIO_API_KEY_SECRET
+    valueFrom:
+      secretKeyRef:
+        name: prod-omi-backend-secrets
+        key: TWILIO_API_KEY_SECRET
+  - name: TWILIO_TWIML_APP_SID
+    valueFrom:
+      secretKeyRef:
+        name: prod-omi-backend-secrets
+        key: TWILIO_TWIML_APP_SID
+  - name: VAD_GATE_MODE
+    value: "active"
 
 resources:
   # We usually recommend not to specify default resources and to leave this as a conscious
@@ -308,7 +340,7 @@ startupProbe:
 autoscaling:
   enabled: true
   minReplicas: 26
-  maxReplicas: 60
+  maxReplicas: 50
   behavior:
     scaleDown:
       stabilizationWindowSeconds: 600
@@ -316,8 +348,12 @@ autoscaling:
       - type: Percent
         value: 20
         periodSeconds: 300
+      - type: Pods
+        value: 1
+        periodSeconds: 60
+      selectPolicy: Min
     scaleUp:
-      stabilizationWindowSeconds: 0
+      stabilizationWindowSeconds: 30
       policies:
       - type: Percent
         value: 100
@@ -328,8 +364,24 @@ autoscaling:
       selectPolicy: Max
   # targetCPUUtilizationPercentage: 70
   # targetMemoryUtilizationPercentage: 70
-  requestsPerPod: 8
-  failedResponseCode: 10
+  requestsPerPod: 10
+  # failedResponseCode: 10
+
+podDisruptionBudget:
+  minAvailable: "80%"
+  # maxUnavailable: "20%"
+
+strategy:
+  type: RollingUpdate
+  rollingUpdate:
+    maxUnavailable: 1
+    maxSurge: 2
+
+terminationGracePeriodSeconds: 120
+lifecycle:
+  preStop:
+    exec:
+      command: ["sh", "-c", "sleep 15"]
 
 # Additional volumes on the output Deployment definition.
 volumes: []

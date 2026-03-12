@@ -1013,7 +1013,7 @@ class AppLocalizationsLt extends AppLocalizations {
   String get vocabularyHint => 'Omi, Callie, OpenAI';
 
   @override
-  String get connect => 'Connect';
+  String get connect => 'Prisijungti';
 
   @override
   String get comingSoon => 'Greitai';
@@ -2265,7 +2265,7 @@ class AppLocalizationsLt extends AppLocalizations {
   String get folderName => 'Aplanko pavadinimas';
 
   @override
-  String get descriptionOptional => 'Description (optional)';
+  String get descriptionOptional => 'Aprašymas (nebūtinas)';
 
   @override
   String get failedToDeleteFolder => 'Nepavyko ištrinti aplanko';
@@ -2673,7 +2673,7 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get noTasksForToday =>
-      'Šiandien nėra užduočių.\\nPaprašykite Omi daugiau užduočių arba sukurkite rankiniu būdu.';
+      'Šiandien nėra užduočių.\nPaprašykite Omi daugiau užduočių arba sukurkite rankiniu būdu.';
 
   @override
   String get dailyScore => 'DIENOS BALAS';
@@ -6752,7 +6752,7 @@ class AppLocalizationsLt extends AppLocalizations {
   String get storageLocationPhone => 'Telefonas';
 
   @override
-  String get storageLocationPhoneMemory => 'Phone (Memory)';
+  String get storageLocationPhoneMemory => 'Telefonas (atmintis)';
 
   @override
   String storedOnDevice(String deviceName) {
@@ -6980,7 +6980,7 @@ class AppLocalizationsLt extends AppLocalizations {
   String get dataLowercase => 'duomenys';
 
   @override
-  String get fallNotificationTitle => 'Ouch';
+  String get fallNotificationTitle => 'Oi';
 
   @override
   String get fallNotificationBody => 'Ar jūs nukritote?';
@@ -7995,36 +7995,36 @@ class AppLocalizationsLt extends AppLocalizations {
   String get couldNotOpenUrl => 'Nepavyko atidaryti URL. Bandykite dar kartą.';
 
   @override
-  String get newTask => 'New Task';
+  String get newTask => 'Nauja užduotis';
 
   @override
-  String get viewAll => 'View All';
+  String get viewAll => 'Peržiūrėti viską';
 
   @override
-  String get addTask => 'Add Task';
+  String get addTask => 'Pridėti užduotį';
 
   @override
-  String get addMcpServer => 'Add MCP Server';
+  String get addMcpServer => 'Pridėti MCP serverį';
 
   @override
-  String get connectExternalAiTools => 'Connect external AI tools';
+  String get connectExternalAiTools => 'Prijungti išorinius AI įrankius';
 
   @override
   String get mcpServerUrl => 'MCP Server URL';
 
   @override
   String mcpServerConnected(int count) {
-    return '$count tools connected successfully';
+    return 'Sėkmingai prijungta $count įrankių';
   }
 
   @override
-  String get mcpConnectionFailed => 'Failed to connect to MCP server';
+  String get mcpConnectionFailed => 'Nepavyko prisijungti prie MCP serverio';
 
   @override
-  String get authorizingMcpServer => 'Authorizing...';
+  String get authorizingMcpServer => 'Autorizuojama...';
 
   @override
-  String get whereDidYouHearAboutOmi => 'How did you find us?';
+  String get whereDidYouHearAboutOmi => 'Kaip mus radote?';
 
   @override
   String get tiktok => 'TikTok';
@@ -8042,19 +8042,19 @@ class AppLocalizationsLt extends AppLocalizations {
   String get reddit => 'Reddit';
 
   @override
-  String get friendWordOfMouth => 'Friend';
+  String get friendWordOfMouth => 'Draugas';
 
   @override
-  String get otherSource => 'Other';
+  String get otherSource => 'Kita';
 
   @override
-  String get pleaseSpecify => 'Please specify';
+  String get pleaseSpecify => 'Prašome patikslinti';
 
   @override
-  String get event => 'Event';
+  String get event => 'Renginys';
 
   @override
-  String get coworker => 'Coworker';
+  String get coworker => 'Bendradarbis';
 
   @override
   String get linkedIn => 'LinkedIn';
@@ -8070,4 +8070,494 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get audioPlaybackFailed => 'Nepavyksta atkurti garso. Failas gali būti pažeistas arba trūkstamas.';
+
+  @override
+  String get connectionGuide => 'Prisijungimo vadovas';
+
+  @override
+  String get iveDoneThis => 'Tai padariau';
+
+  @override
+  String get pairNewDevice => 'Susieti naują įrenginį';
+
+  @override
+  String get dontSeeYourDevice => 'Nematote savo įrenginio?';
+
+  @override
+  String get reportAnIssue => 'Pranešti apie problemą';
+
+  @override
+  String get pairingTitleOmi => 'Įjunkite Omi';
+
+  @override
+  String get pairingDescOmi => 'Paspauskite ir palaikykite įrenginį, kol jis suvibruos, kad įjungtumėte.';
+
+  @override
+  String get pairingTitleOmiDevkit => 'Įjunkite Omi DevKit susiejimo režimą';
+
+  @override
+  String get pairingDescOmiDevkit =>
+      'Paspauskite mygtuką vieną kartą, kad įjungtumėte. LED mirksės violetine spalva susiejimo režimu.';
+
+  @override
+  String get pairingTitleOmiGlass => 'Įjunkite Omi Glass';
+
+  @override
+  String get pairingDescOmiGlass => 'Paspauskite ir palaikykite šoninį mygtuką 3 sekundes, kad įjungtumėte.';
+
+  @override
+  String get pairingTitlePlaudNote => 'Įjunkite Plaud Note susiejimo režimą';
+
+  @override
+  String get pairingDescPlaudNote =>
+      'Paspauskite ir palaikykite šoninį mygtuką 2 sekundes. Raudonas LED mirksės, kai bus paruoštas susiejimui.';
+
+  @override
+  String get pairingTitleBee => 'Įjunkite Bee susiejimo režimą';
+
+  @override
+  String get pairingDescBee => 'Paspauskite mygtuką 5 kartus iš eilės. Šviesa pradės mirksėti mėlynai ir žaliai.';
+
+  @override
+  String get pairingTitleLimitless => 'Įjunkite Limitless susiejimo režimą';
+
+  @override
+  String get pairingDescLimitless =>
+      'Kai matoma bet kokia šviesa, paspauskite vieną kartą, tada paspauskite ir palaikykite, kol įrenginys parodys rožinę šviesą, tada atleiskite.';
+
+  @override
+  String get pairingTitleFriendPendant => 'Įjunkite Friend Pendant susiejimo režimą';
+
+  @override
+  String get pairingDescFriendPendant =>
+      'Paspauskite mygtuką ant pakabuko, kad jį įjungtumėte. Jis automatiškai persijungs į susiejimo režimą.';
+
+  @override
+  String get pairingTitleFieldy => 'Įjunkite Fieldy susiejimo režimą';
+
+  @override
+  String get pairingDescFieldy => 'Paspauskite ir palaikykite įrenginį, kol pasirodys šviesa, kad jį įjungtumėte.';
+
+  @override
+  String get pairingTitleAppleWatch => 'Prijunkite Apple Watch';
+
+  @override
+  String get pairingDescAppleWatch =>
+      'Įdiekite ir atidarykite Omi programėlę savo Apple Watch, tada bakstelėkite Prisijungti programėlėje.';
+
+  @override
+  String get pairingTitleNeoOne => 'Įjunkite Neo One susiejimo režimą';
+
+  @override
+  String get pairingDescNeoOne =>
+      'Paspauskite ir palaikykite maitinimo mygtuką, kol LED pradės mirksėti. Įrenginys bus aptinkamas.';
+
+  @override
+  String get downloadingFromDevice => 'Atsisiunčiama iš įrenginio';
+
+  @override
+  String get reconnectingToInternet => 'Jungiamasi prie interneto iš naujo...';
+
+  @override
+  String uploadingToCloud(int current, int total) {
+    return 'Įkeliama $current iš $total';
+  }
+
+  @override
+  String get processedStatus => 'Apdorota';
+
+  @override
+  String get corruptedStatus => 'Sugadinta';
+
+  @override
+  String nPending(int count) {
+    return '$count laukiančių';
+  }
+
+  @override
+  String nProcessed(int count) {
+    return '$count apdorotų';
+  }
+
+  @override
+  String get synced => 'Sinchronizuota';
+
+  @override
+  String get noPendingRecordings => 'Nėra laukiančių įrašų';
+
+  @override
+  String get noProcessedRecordings => 'Dar nėra apdorotų įrašų';
+
+  @override
+  String get pending => 'Laukiama';
+
+  @override
+  String whatsNewInVersion(String version) {
+    return 'Kas naujo $version';
+  }
+
+  @override
+  String get addToYourTaskList => 'Pridėti prie užduočių sąrašo?';
+
+  @override
+  String get failedToCreateShareLink => 'Nepavyko sukurti bendrinimo nuorodos';
+
+  @override
+  String get deleteGoal => 'Ištrinti tikslą';
+
+  @override
+  String get deviceUpToDate => 'Jūsų įrenginys yra atnaujintas';
+
+  @override
+  String get wifiConfiguration => 'WiFi konfigūracija';
+
+  @override
+  String get wifiConfigurationSubtitle =>
+      'Įveskite WiFi prisijungimo duomenis, kad įrenginys galėtų atsisiųsti programinę įrangą.';
+
+  @override
+  String get networkNameSsid => 'Tinklo pavadinimas (SSID)';
+
+  @override
+  String get enterWifiNetworkName => 'Įveskite WiFi tinklo pavadinimą';
+
+  @override
+  String get enterWifiPassword => 'Įveskite WiFi slaptažodį';
+
+  @override
+  String get appIconLabel => 'App Icon';
+
+  @override
+  String get onboardingWhatIKnowAboutYouTitle => 'Štai ką žinau apie tave';
+
+  @override
+  String get onboardingWhatIKnowAboutYouDescription => 'Šis žemėlapis atnaujinamas, kai Omi mokosi iš jūsų pokalbių.';
+
+  @override
+  String get apiEnvironment => 'API aplinka';
+
+  @override
+  String get apiEnvironmentDescription => 'Pasirinkite, prie kurio serverio prisijungti';
+
+  @override
+  String get production => 'Gamyba';
+
+  @override
+  String get staging => 'Testavimo aplinka';
+
+  @override
+  String get switchRequiresRestart => 'Perjungimui reikia iš naujo paleisti programėlę';
+
+  @override
+  String get switchApiConfirmTitle => 'Perjungti API aplinką';
+
+  @override
+  String switchApiConfirmBody(String environment) {
+    return 'Perjungti į $environment? Turėsite uždaryti ir vėl atidaryti programėlę, kad pakeitimai įsigaliotų.';
+  }
+
+  @override
+  String get switchAndRestart => 'Perjungti';
+
+  @override
+  String get stagingDisclaimer =>
+      'Testavimo aplinka gali būti nestabili, turėti nenuoseklų veikimą ir duomenys gali būti prarasti. Tik testavimui.';
+
+  @override
+  String get apiEnvSavedRestartRequired =>
+      'Išsaugota. Uždarykite ir vėl atidarykite programėlę, kad pritaikytumėte pakeitimus.';
+
+  @override
+  String get shared => 'Bendrinamas';
+
+  @override
+  String get onlyYouCanSeeConversation => 'Tik jūs galite matyti šį pokalbį';
+
+  @override
+  String get anyoneWithLinkCanView => 'Bet kas, turintis nuorodą, gali peržiūrėti';
+
+  @override
+  String get tasksCleanTodayTitle => 'Išvalyti šiandienos užduotis?';
+
+  @override
+  String get tasksCleanTodayMessage => 'Bus pašalinti tik terminai';
+
+  @override
+  String get tasksOverdue => 'Vėluojančios';
+
+  @override
+  String get phoneCallsWithOmi => 'Skambuciai su Omi';
+
+  @override
+  String get phoneCallsSubtitle => 'Skambinkite su transkripcija realiu laiku';
+
+  @override
+  String get phoneSetupStep1Title => 'Patvirtinkite savo telefono numeri';
+
+  @override
+  String get phoneSetupStep1Subtitle => 'Paskambinsime jums patvirtinti';
+
+  @override
+  String get phoneSetupStep2Title => 'Iveskite patvirtinimo koda';
+
+  @override
+  String get phoneSetupStep2Subtitle => 'Trumpas kodas, kuri ivesite skambuchio metu';
+
+  @override
+  String get phoneSetupStep3Title => 'Pradekite skambinti savo kontaktams';
+
+  @override
+  String get phoneSetupStep3Subtitle => 'Su integruota tiesioginee transkripcija';
+
+  @override
+  String get phoneGetStarted => 'Pradeti';
+
+  @override
+  String get callRecordingConsentDisclaimer => 'Skambuciu irasymas gali reikalauti sutikimo jusu jurisdikcijoje';
+
+  @override
+  String get enterYourNumber => 'Iveskite savo numeri';
+
+  @override
+  String get phoneNumberCallerIdHint => 'Po patvirtinimo tai taps jusu skambintojo ID';
+
+  @override
+  String get phoneNumberHint => 'Telefono numeris';
+
+  @override
+  String get failedToStartVerification => 'Nepavyko pradeti patvirtinimo';
+
+  @override
+  String get phoneContinue => 'Testi';
+
+  @override
+  String get verifyYourNumber => 'Patvirtinkite savo numeri';
+
+  @override
+  String get answerTheCallFrom => 'Atsiliepkite i skambutai is';
+
+  @override
+  String get onTheCallEnterThisCode => 'Skambuchio metu iveskite si koda';
+
+  @override
+  String get followTheVoiceInstructions => 'Sekite balso instrukcijas';
+
+  @override
+  String get statusCalling => 'Skambinama...';
+
+  @override
+  String get statusCallInProgress => 'Skambutis vyksta';
+
+  @override
+  String get statusVerifiedLabel => 'Patvirtinta';
+
+  @override
+  String get statusCallMissed => 'Praleistas skambutis';
+
+  @override
+  String get statusTimedOut => 'Laikas baigesi';
+
+  @override
+  String get phoneTryAgain => 'Bandyti dar karta';
+
+  @override
+  String get phonePageTitle => 'Telefonas';
+
+  @override
+  String get phoneContactsTab => 'Kontaktai';
+
+  @override
+  String get phoneKeypadTab => 'Klaviatura';
+
+  @override
+  String get grantContactsAccess => 'Suteikite prieiga prie kontaktu';
+
+  @override
+  String get phoneAllow => 'Leisti';
+
+  @override
+  String get phoneSearchHint => 'Ieskoti';
+
+  @override
+  String get phoneNoContactsFound => 'Kontaktu nerasta';
+
+  @override
+  String get phoneEnterNumber => 'Iveskite numeri';
+
+  @override
+  String get failedToStartCall => 'Nepavyko pradeti skambutai';
+
+  @override
+  String get callStateConnecting => 'Jungiamasi...';
+
+  @override
+  String get callStateRinging => 'Skamba...';
+
+  @override
+  String get callStateEnded => 'Skambutis baigtas';
+
+  @override
+  String get callStateFailed => 'Skambutis nepavyko';
+
+  @override
+  String get transcriptPlaceholder => 'Transkripcija bus rodoma cia...';
+
+  @override
+  String get phoneUnmute => 'Ijungti garsa';
+
+  @override
+  String get phoneMute => 'Nutildyti';
+
+  @override
+  String get phoneSpeaker => 'Garsiakalbis';
+
+  @override
+  String get phoneEndCall => 'Baigti';
+
+  @override
+  String get phoneCallSettingsTitle => 'Skambuciu nustatymai';
+
+  @override
+  String get yourVerifiedNumbers => 'Jusu patvirtinti numeriai';
+
+  @override
+  String get verifiedNumbersDescription => 'Kai skambinate kam nors, jie matys si numeri';
+
+  @override
+  String get noVerifiedNumbers => 'Nera patvirtintu numeriu';
+
+  @override
+  String deletePhoneNumberConfirm(String phoneNumber) {
+    return 'Istrinti $phoneNumber?';
+  }
+
+  @override
+  String get deletePhoneNumberWarning => 'Turesite patvirtinti is naujo, kad galetumete skambinti';
+
+  @override
+  String get phoneDeleteButton => 'Istrinti';
+
+  @override
+  String verifiedMinutesAgo(int minutes) {
+    return 'Patvirtinta pries ${minutes}min';
+  }
+
+  @override
+  String verifiedHoursAgo(int hours) {
+    return 'Patvirtinta pries ${hours}val';
+  }
+
+  @override
+  String verifiedDaysAgo(int days) {
+    return 'Patvirtinta pries ${days}d';
+  }
+
+  @override
+  String verifiedOnDate(String date) {
+    return 'Patvirtinta $date';
+  }
+
+  @override
+  String get verifiedFallback => 'Patvirtinta';
+
+  @override
+  String get callAlreadyInProgress => 'Skambutis jau vyksta';
+
+  @override
+  String get failedToGetCallToken => 'Nepavyko gauti zymeklio. Pirma patvirtinkite savo numeri.';
+
+  @override
+  String get failedToInitializeCallService => 'Nepavyko inicializuoti skambuciu paslaugos';
+
+  @override
+  String get speakerLabelYou => 'Jus';
+
+  @override
+  String get speakerLabelUnknown => 'Nezinomas';
+
+  @override
+  String get showDailyScoreOnHomepage => 'Rodyti dienos balą pagrindiniame puslapyje';
+
+  @override
+  String get showTasksOnHomepage => 'Rodyti užduotis pagrindiniame puslapyje';
+
+  @override
+  String get phoneCallsUnlimitedOnly => 'Telefono skambučiai per Omi';
+
+  @override
+  String get phoneCallsUpsellSubtitle =>
+      'Skambinkite per Omi ir gaukite transkripcijas realiu laiku, automatinius santraukas ir daugiau.';
+
+  @override
+  String get phoneCallsUpsellFeature1 => 'Kiekvieno skambučio transkripcija realiu laiku';
+
+  @override
+  String get phoneCallsUpsellFeature2 => 'Automatinės skambučių santraukos ir veiksmai';
+
+  @override
+  String get phoneCallsUpsellFeature3 => 'Gavėjai mato jūsų tikrąjį numerį, ne atsitiktinį';
+
+  @override
+  String get phoneCallsUpsellFeature4 => 'Jūsų skambučiai lieka privatūs ir saugūs';
+
+  @override
+  String get phoneCallsUpgradeButton => 'Atnaujinti iki Neriboto';
+
+  @override
+  String get phoneCallsMaybeLater => 'Gal vėliau';
+
+  @override
+  String get deleteSynced => 'Ištrinti sinchronizuotus';
+
+  @override
+  String get deleteSyncedFiles => 'Ištrinti sinchronizuotus įrašus';
+
+  @override
+  String get deleteSyncedFilesMessage => 'Šie įrašai jau sinchronizuoti su jūsų telefonu. To atšaukti negalima.';
+
+  @override
+  String get syncedFilesDeleted => 'Sinchronizuoti įrašai ištrinti';
+
+  @override
+  String get deletePending => 'Ištrinti laukiančius';
+
+  @override
+  String get deletePendingFiles => 'Ištrinti laukiančius įrašus';
+
+  @override
+  String get deletePendingFilesWarning =>
+      'Šie įrašai NĖRA sinchronizuoti su jūsų telefonu ir bus visam laikui prarasti. To atšaukti negalima.';
+
+  @override
+  String get pendingFilesDeleted => 'Laukiantys įrašai ištrinti';
+
+  @override
+  String get deleteAllFiles => 'Ištrinti visus įrašus';
+
+  @override
+  String get deleteAll => 'Ištrinti viską';
+
+  @override
+  String get deleteAllFilesWarning =>
+      'Tai ištrins sinchronizuotus ir laukiančius įrašus. Laukiantys įrašai NĖRA sinchronizuoti ir bus visam laikui prarasti.';
+
+  @override
+  String get allFilesDeleted => 'Visi įrašai ištrinti';
+
+  @override
+  String nFiles(int count) {
+    return '$count įrašų';
+  }
+
+  @override
+  String get manageStorage => 'Tvarkyti saugyklą';
+
+  @override
+  String get safelyBackedUp => 'Saugiai nukopijuota į jūsų telefoną';
+
+  @override
+  String get notYetSynced => 'Dar nesinchronizuota su jūsų telefonu';
+
+  @override
+  String get clearAll => 'Išvalyti viską';
 }

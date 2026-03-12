@@ -1,0 +1,42 @@
+# E2E Flow: App Detail page — reviews, install, capabilities
+# Tests: app detail view, reviews, install/enable, scroll
+# Discovered by: flow-walker run10 depth-2 from apps tab
+
+name: app-detail
+description: Apps → App Detail — view app info, reviews, capabilities, install/enable toggle
+covers:
+  - app/lib/pages/apps/app_detail/app_detail.dart
+  - app/lib/pages/apps/app_detail/reviews_list_page.dart
+  - app/lib/pages/apps/page.dart
+prerequisites:
+  - auth_ready  # User completed real sign-in (Google/Apple) and onboarding. Android: `bash setup.sh android`. iOS: `bash setup.sh ios`. App must show home screen.
+setup: normal
+
+steps:
+  - name: Navigate to Apps tab
+    press: { bottom_nav_tab: 3 }
+    screenshot: apps-tab
+
+  - name: Tap first app in list
+    press: { type: gesture, hint: "app item — first visible app card" }
+    screenshot: app-detail
+
+  - name: Verify app detail page
+    assert:
+      interactive_count: { min: 5 }
+    note: >
+      Shows: app icon, name, author, description, install/enable button,
+      capabilities card, reviews section, info section.
+
+  - name: Scroll to reviews
+    scroll: down
+    screenshot: app-reviews
+
+  - name: Scroll to capabilities
+    scroll: down
+    screenshot: app-capabilities
+
+  - name: Back to apps
+    back: true
+    assert:
+      bottom_nav_tabs: { min: 4 }

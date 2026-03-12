@@ -52,6 +52,11 @@
 
 -keep class com.pravera.flutter_foreground_task.service.** { *; }
 
+# Twilio Voice SDK + bundled WebRTC
+-keep class com.twilio.** { *; }
+-keep class tvo.webrtc.** { *; }
+-dontwarn tvo.webrtc.**
+
 # Lombok annotations
 -dontwarn lombok.Generated
 -dontwarn lombok.**
