@@ -8555,6 +8555,18 @@ class AppLocalizationsVi extends AppLocalizations {
   String get notYetSynced => 'Chưa đồng bộ với điện thoại của bạn';
 
   @override
+  String get renameDevice => 'Rename Device';
+
+  @override
+  String get enterDeviceName => 'Enter device name';
+
+  @override
+  String get deviceNameCannotBeEmpty => 'Device name cannot be empty';
+
+  @override
+  String get deviceNameUpdated => 'Device name updated';
+
+  @override
   String get clearAll => 'Xóa tất cả';
 
   @override

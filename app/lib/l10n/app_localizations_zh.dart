@@ -8398,6 +8398,18 @@ class AppLocalizationsZh extends AppLocalizations {
   String get notYetSynced => '尚未同步到您的手机';
 
   @override
+  String get renameDevice => 'Rename Device';
+
+  @override
+  String get enterDeviceName => 'Enter device name';
+
+  @override
+  String get deviceNameCannotBeEmpty => 'Device name cannot be empty';
+
+  @override
+  String get deviceNameUpdated => 'Device name updated';
+
+  @override
   String get clearAll => '全部清除';
 
   @override

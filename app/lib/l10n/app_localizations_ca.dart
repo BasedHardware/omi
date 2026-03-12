@@ -8604,6 +8604,18 @@ class AppLocalizationsCa extends AppLocalizations {
   String get notYetSynced => 'Encara no sincronitzat amb el vostre telèfon';
 
   @override
+  String get renameDevice => 'Rename Device';
+
+  @override
+  String get enterDeviceName => 'Enter device name';
+
+  @override
+  String get deviceNameCannotBeEmpty => 'Device name cannot be empty';
+
+  @override
+  String get deviceNameUpdated => 'Device name updated';
+
+  @override
   String get clearAll => 'Esborrar tot';
 
   @override

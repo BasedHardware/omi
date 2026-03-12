@@ -8595,6 +8595,18 @@ class AppLocalizationsRo extends AppLocalizations {
   String get notYetSynced => 'Nu a fost încă sincronizat cu telefonul dvs.';
 
   @override
+  String get renameDevice => 'Rename Device';
+
+  @override
+  String get enterDeviceName => 'Enter device name';
+
+  @override
+  String get deviceNameCannotBeEmpty => 'Device name cannot be empty';
+
+  @override
+  String get deviceNameUpdated => 'Device name updated';
+
+  @override
   String get clearAll => 'Șterge tot';
 
   @override

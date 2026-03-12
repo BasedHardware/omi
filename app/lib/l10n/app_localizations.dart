@@ -15975,6 +15975,30 @@ abstract class AppLocalizations {
   /// **'Not yet synced to your phone'**
   String get notYetSynced;
 
+  /// Button title for renaming the connected device
+  ///
+  /// In en, this message translates to:
+  /// **'Rename Device'**
+  String get renameDevice;
+
+  /// Placeholder when entering a new device name
+  ///
+  /// In en, this message translates to:
+  /// **'Enter device name'**
+  String get enterDeviceName;
+
+  /// Validation error when user submits empty device name
+  ///
+  /// In en, this message translates to:
+  /// **'Device name cannot be empty'**
+  String get deviceNameCannotBeEmpty;
+
+  /// Snackbar after successful device rename
+  ///
+  /// In en, this message translates to:
+  /// **'Device name updated'**
+  String get deviceNameUpdated;
+
   /// Button label to clear all files
   ///
   /// In en, this message translates to:
