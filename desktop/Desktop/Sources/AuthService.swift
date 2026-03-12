@@ -43,18 +43,17 @@ class AuthService {
     private var appleSignInDelegate: AppleSignInDelegate?
 
     // API Configuration
-    // Auth backend URL from AUTH_BACKEND_URL env var.
-    // Dev builds fall back to localhost; prod builds log error and disable auth.
+    // Auth backend URL from AUTH_BACKEND_URL env var (use getenv to pick up setenv from .env loading).
+    // Dev builds fall back to localhost; prod builds log error.
     private var apiBaseURL: String {
-        if let url = ProcessInfo.processInfo.environment["AUTH_BACKEND_URL"], !url.isEmpty {
+        if let cString = getenv("AUTH_BACKEND_URL"), let url = String(validatingUTF8: cString), !url.isEmpty {
             return url.hasSuffix("/") ? url : url + "/"
         }
         let isDev = Bundle.main.bundleIdentifier?.hasSuffix("-dev") == true
-        if isDev {
-            return "http://localhost:8080/"
+        if !isDev {
+            NSLog("OMI AUTH ERROR: AUTH_BACKEND_URL not set in production build")
         }
-        NSLog("OMI AUTH ERROR: AUTH_BACKEND_URL not set in production build")
-        return "http://localhost:8080/"  // Will fail to connect — surfaces as auth error
+        return "http://localhost:8080/"
     }
     private var redirectURI: String {
         return "\(urlScheme)://auth/callback"
@@ -85,10 +84,10 @@ class AuthService {
     private let kAuthTokenExpiry = "auth_tokenExpiry"
     private let kAuthTokenUserId = "auth_tokenUserId"  // User ID that owns the stored token
 
-    // Firebase Web API key from FIREBASE_API_KEY env var (set in .env).
+    // Firebase Web API key from FIREBASE_API_KEY env var (use getenv to pick up setenv from .env loading).
     // Returns empty string if missing — callers surface auth errors to user.
     private var firebaseApiKey: String {
-        if let apiKey = ProcessInfo.processInfo.environment["FIREBASE_API_KEY"], !apiKey.isEmpty {
+        if let cString = getenv("FIREBASE_API_KEY"), let apiKey = String(validatingUTF8: cString), !apiKey.isEmpty {
             return apiKey
         }
         NSLog("OMI AUTH ERROR: FIREBASE_API_KEY environment variable not set — auth will fail")
