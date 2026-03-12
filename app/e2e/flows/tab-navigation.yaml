@@ -12,27 +12,33 @@ setup: normal
 steps:
   - name: Verify home tab and nav bar
     assert:
-      interactive_count: { min: 20, verified: "flow-walker run10: 24 elements on home" }
+      text_visible: ["Today"]
       bottom_nav_tabs: { min: 4 }
     screenshot: tab-home
 
-  - name: Switch to tab 2
+  - name: Switch to Conversations tab
     press: { bottom_nav_tab: 1 }
-    screenshot: tab-2
+    assert:
+      text_visible: ["Conversations"]
+    screenshot: tab-conversations
 
-  - name: Switch to tab 3
+  - name: Switch to Memories tab
     press: { bottom_nav_tab: 2 }
-    screenshot: tab-3
+    assert:
+      text_visible: ["Search memories..."]
+    screenshot: tab-memories
 
   - name: Scroll in current tab
     scroll: down
 
-  - name: Switch to tab 4
+  - name: Switch to Apps tab
     press: { bottom_nav_tab: 3 }
-    screenshot: tab-4
+    assert:
+      text_visible: ["Featured"]
+    screenshot: tab-apps
 
   - name: Return to home tab
     press: { bottom_nav_tab: 0 }
     assert:
-      interactive_count: { min: 20 }
+      text_visible: ["Today"]
     screenshot: final
