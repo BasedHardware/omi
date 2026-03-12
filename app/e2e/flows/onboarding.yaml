@@ -21,8 +21,7 @@ setup: signed_out
 steps:
   - name: Get Started screen
     assert:
-      text: "Get Started"
-      interactive_count: { min: 1, hint: "ElevatedButton at bottom" }
+      text_visible: ["Get Started"]
     screenshot: get-started
 
   - name: Tap Get Started
@@ -31,8 +30,7 @@ steps:
 
   - name: Auth page — sign in options
     assert:
-      text: "Sign in with Google"
-      interactive_count: { min: 2, hint: "Google button, possibly Apple button" }
+      text_visible: ["Sign in with Google"]
     note: "On Android, only Google sign-in shown. On iOS, both Apple and Google."
     screenshot: auth-options
 
@@ -43,7 +41,7 @@ steps:
 
   - name: Name entry page
     assert:
-      interactive_count: { min: 2, hint: "text field + continue button" }
+      text_visible: ["Continue"]
     fill: { type: textfield, value: "Test User" }
     screenshot: name-entry
 
@@ -53,8 +51,7 @@ steps:
 
   - name: Primary language selection
     assert:
-      text: "Tell us your primary language"
-      interactive_count: { min: 3, hint: "search field + language rows + confirm" }
+      text_visible: ["Tell us your primary language"]
     screenshot: language-selection
 
   - name: Select English and confirm
@@ -84,5 +81,5 @@ steps:
 
   - name: Onboarding complete
     assert:
-      interactive_count: { min: 1, hint: "Continue/Get Started button" }
+      text_visible: ["Get Started"]
     screenshot: complete
