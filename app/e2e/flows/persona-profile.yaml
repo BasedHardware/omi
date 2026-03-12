@@ -9,6 +9,9 @@ covers:
   - app/lib/pages/persona/persona_provider.dart
   - app/lib/pages/persona/twitter/social_profile.dart
   - app/lib/pages/settings/developer.dart
+prerequisites:
+  - auth_ready  # User completed real sign-in (Google/Apple) and onboarding. Android: `bash setup.sh android`. iOS: `bash setup.sh ios`. App must show home screen.
+  - developer_settings_enabled  # In-app: Settings drawer → scroll down → tap Developer Settings. Visible to all users, no hidden toggle.
 setup:
   requires: developer_settings_enabled
 
