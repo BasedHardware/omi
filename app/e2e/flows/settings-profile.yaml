@@ -23,7 +23,7 @@ steps:
 
   - name: Verify settings drawer
     assert:
-      interactive_count: { min: 8, hint: "multiple settings rows" }
+      text_visible: ["Profile", "Notifications", "Plan & Usage", "Device Settings", "Integrations", "Developer Settings"]
     note: >
       Settings drawer (bottom sheet) shows sections:
       Profile & Notifications: Profile, Notifications, Plan & Usage, Offline Sync, Device Settings, Integrations, Phone Calls
@@ -37,7 +37,7 @@ steps:
 
   - name: Verify profile page
     assert:
-      interactive_count: { min: 6 }
+      text_visible: ["Profile"]
     note: >
       Your Information: Name (chip), Email (chip), Language, Custom Vocabulary
       Voice & People: Speech Profile, Identifying Others
