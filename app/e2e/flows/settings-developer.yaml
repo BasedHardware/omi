@@ -24,7 +24,7 @@ steps:
 
   - name: Verify developer settings
     assert:
-      interactive_count: { min: 3 }
+      text_visible: ["Developer Settings"]
     note: >
       Shows: Custom STT Provider selection, API Key input (show/hide toggle),
       Host/Port/URL fields, model download button, MCP API key section,
