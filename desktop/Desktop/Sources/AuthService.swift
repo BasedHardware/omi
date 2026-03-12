@@ -401,13 +401,12 @@ class AuthService {
             }
             NSLog("OMI AUTH: Received valid authorization code")
 
-            // Step 6: Exchange code for custom token and user info
-            NSLog("OMI AUTH: Exchanging code for Firebase token...")
+            // Step 6: Exchange code for Firebase tokens (backend handles signInWithIdp)
+            NSLog("OMI AUTH: Exchanging code for Firebase tokens...")
             let tokenResult = try await exchangeCodeForToken(code: code)
-            NSLog("OMI AUTH: Got Firebase custom token")
+            NSLog("OMI AUTH: Got Firebase tokens directly from backend")
 
-            // Save user info from OAuth response immediately (before Firebase sign-in)
-            // This ensures we have the name even if Firebase session doesn't persist
+            // Save user info from OAuth response
             if let extractedGivenName = tokenResult.givenName, !extractedGivenName.isEmpty {
                 givenName = extractedGivenName
                 familyName = tokenResult.familyName ?? ""
@@ -417,28 +416,13 @@ class AuthService {
                 AuthState.shared.userEmail = extractedEmail
             }
 
-            // Step 7: Exchange custom token for ID token via REST API
-            // This bypasses keychain issues with Firebase SDK on dev builds
-            NSLog("OMI AUTH: Exchanging custom token for ID token via REST API...")
-            let firebaseTokens = try await exchangeCustomTokenForIdToken(customToken: tokenResult.customToken)
-            NSLog("OMI AUTH: Got Firebase ID token via REST API")
-
-            // Store tokens for API calls (include userId to validate token ownership on retrieval)
-            saveTokens(idToken: firebaseTokens.idToken, refreshToken: firebaseTokens.refreshToken, expiresIn: firebaseTokens.expiresIn, userId: firebaseTokens.localId)
-
-            // Also try Firebase SDK sign-in (best effort for other Firebase features)
-            do {
-                let authResult = try await Auth.auth().signIn(withCustomToken: tokenResult.customToken)
-                NSLog("OMI AUTH: Firebase SDK sign-in SUCCESS - uid: %@", authResult.user.uid)
-            } catch let firebaseError as NSError {
-                // Keychain errors are expected on dev builds - we have REST API tokens as fallback
-                NSLog("OMI AUTH: Firebase SDK sign-in failed (using REST API tokens): %@", firebaseError.localizedDescription)
-            }
+            // Store Firebase tokens for API calls (returned directly by backend, no extra exchange needed)
+            let userId = tokenResult.firebaseUid
+            saveTokens(idToken: tokenResult.firebaseIdToken, refreshToken: tokenResult.refreshToken, expiresIn: 3600, userId: userId)
 
             isSignedIn = true
 
             // Save auth state immediately
-            let userId = firebaseTokens.localId
             saveAuthState(isSignedIn: true, email: tokenResult.email, userId: userId)
             await RewindDatabase.shared.configure(userId: userId)
 
@@ -553,9 +537,11 @@ class AuthService {
 
     // MARK: - Token Exchange
 
-    /// Response from token exchange containing custom token and user info
+    /// Response from token exchange — backend returns Firebase tokens directly
     struct TokenExchangeResult {
-        let customToken: String
+        let firebaseIdToken: String
+        let refreshToken: String
+        let firebaseUid: String
         let givenName: String?
         let familyName: String?
         let email: String?
@@ -573,8 +559,7 @@ class AuthService {
         let bodyParams = [
             "grant_type": "authorization_code",
             "code": code,
-            "redirect_uri": redirectURI,
-            "use_custom_token": "true"
+            "redirect_uri": redirectURI
         ]
 
         let bodyString = bodyParams
@@ -598,18 +583,19 @@ class AuthService {
             throw AuthError.tokenExchangeFailed(httpResponse.statusCode)
         }
 
-        // Parse response
+        // Parse response — backend returns Firebase tokens directly
         guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
             throw AuthError.invalidResponse
         }
 
-        // Get custom token
-        guard let customToken = json["custom_token"] as? String else {
-            NSLog("OMI AUTH: No custom_token in response")
-            throw AuthError.missingCustomToken
+        guard let firebaseIdToken = json["firebase_id_token"] as? String,
+              let refreshToken = json["refresh_token"] as? String,
+              let firebaseUid = json["firebase_uid"] as? String else {
+            NSLog("OMI AUTH: Missing firebase tokens in response")
+            throw AuthError.invalidResponse
         }
 
-        // Extract user info from id_token (JWT)
+        // Extract user info from provider id_token (JWT)
         var extractedGivenName: String?
         var extractedFamilyName: String?
         var extractedEmail: String?
@@ -620,7 +606,6 @@ class AuthService {
                 extractedFamilyName = userInfo["family_name"] as? String
                 extractedEmail = userInfo["email"] as? String
 
-                // Fall back to "name" field if given_name not available
                 if extractedGivenName == nil, let fullName = userInfo["name"] as? String {
                     let parts = fullName.split(separator: " ", maxSplits: 1)
                     extractedGivenName = parts.first.map(String.init)
@@ -635,7 +620,9 @@ class AuthService {
         }
 
         return TokenExchangeResult(
-            customToken: customToken,
+            firebaseIdToken: firebaseIdToken,
+            refreshToken: refreshToken,
+            firebaseUid: firebaseUid,
             givenName: extractedGivenName,
             familyName: extractedFamilyName,
             email: extractedEmail
@@ -798,66 +785,6 @@ class AuthService {
         let refreshToken: String
         let expiresIn: Int
         let localId: String
-    }
-
-    /// Exchange custom token for ID token using Firebase REST API
-    private func exchangeCustomTokenForIdToken(customToken: String) async throws -> FirebaseTokenResult {
-        let url = URL(string: "https://identitytoolkit.googleapis.com/v1/accounts:signInWithCustomToken?key=\(firebaseApiKey)")!
-
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.httpBody = try JSONSerialization.data(withJSONObject: [
-            "token": customToken,
-            "returnSecureToken": true
-        ])
-
-        let (data, response) = try await URLSession.shared.data(for: request)
-
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw AuthError.invalidResponse
-        }
-
-        guard httpResponse.statusCode == 200 else {
-            let errorBody = String(data: data, encoding: .utf8) ?? "unknown"
-            NSLog("OMI AUTH: Firebase REST API error: %@", errorBody)
-            throw AuthError.tokenExchangeFailed(httpResponse.statusCode)
-        }
-
-        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let idToken = json["idToken"] as? String,
-              let refreshToken = json["refreshToken"] as? String else {
-            NSLog("OMI AUTH: Failed to parse Firebase response: %@", String(data: data, encoding: .utf8) ?? "nil")
-            throw AuthError.invalidResponse
-        }
-
-        // expiresIn can be String or Int
-        let expiresIn: Int
-        if let expiresInStr = json["expiresIn"] as? String {
-            expiresIn = Int(expiresInStr) ?? 3600
-        } else if let expiresInInt = json["expiresIn"] as? Int {
-            expiresIn = expiresInInt
-        } else {
-            expiresIn = 3600
-        }
-
-        // localId might be missing from REST API response - extract from JWT if needed
-        var localId = json["localId"] as? String ?? ""
-        if localId.isEmpty {
-            // Extract user_id from the JWT token payload
-            if let payload = decodeJWT(idToken),
-               let userId = payload["user_id"] as? String ?? payload["sub"] as? String {
-                localId = userId
-                NSLog("OMI AUTH: Extracted user_id from JWT: %@", localId)
-            }
-        }
-
-        return FirebaseTokenResult(
-            idToken: idToken,
-            refreshToken: refreshToken,
-            expiresIn: expiresIn,
-            localId: localId
-        )
     }
 
     /// Refresh the ID token using the refresh token
@@ -1265,7 +1192,6 @@ enum AuthError: LocalizedError {
     case missingCodeOrState
     case invalidResponse
     case tokenExchangeFailed(Int)
-    case missingCustomToken
 
     var errorDescription: String? {
         switch self {
@@ -1293,8 +1219,6 @@ enum AuthError: LocalizedError {
             return "Invalid server response"
         case .tokenExchangeFailed(let code):
             return "Token exchange failed with status \(code)"
-        case .missingCustomToken:
-            return "Server did not return authentication token"
         }
     }
 }
