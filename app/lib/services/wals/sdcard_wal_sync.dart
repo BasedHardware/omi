@@ -447,7 +447,7 @@ class SDCardWalSyncImpl implements SDCardWalSync {
 
     List<List<int>> bytesData = [];
     var bytesLeft = 0;
-    var chunkSize = sdcardChunkSizeSecs * 2 * wal.codec.getFramesPerSecond();
+    var chunkSize = sdcardChunkSizeSecs * wal.codec.getFramesPerSecond();
     List<MapEntry<int, int>> timestampMarkers = [];
     await _storageStream?.cancel();
     final completer = Completer<bool>();
@@ -1179,7 +1179,7 @@ class SDCardWalSyncImpl implements SDCardWalSync {
       List<List<int>> bytesData = [];
       var bytesLeft = 0;
       final bool useMarkers = _supportsTimestampMarkers();
-      var chunkSize = useMarkers ? sdcardChunkSizeSecs * 2 * wal.codec.getFramesPerSecond() : sdcardChunkSizeSecs * 100;
+      var chunkSize = useMarkers ? sdcardChunkSizeSecs * wal.codec.getFramesPerSecond() : sdcardChunkSizeSecs * 100;
       var timerStart = wal.timerStart;
       List<MapEntry<int, int>> timestampMarkers = [];
 
