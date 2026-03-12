@@ -8,6 +8,9 @@ covers:
   - app/lib/pages/settings/profile.dart
   - app/lib/pages/settings/language_settings_page.dart
   - app/lib/pages/settings/language_selection_dialog.dart
+prerequisites:
+  - auth_ready  # User completed real sign-in (Google/Apple) and onboarding. Android: `bash setup.sh android`. iOS: `bash setup.sh ios`. App must show home screen.
+  - adb_access  # Android only: debug build + `adb` in PATH for SharedPreferences locale manipulation. iOS: use `xcrun simctl` for simulator.
 setup: normal
 
 steps:
