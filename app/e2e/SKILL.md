@@ -377,7 +377,7 @@ For flow-walker compatibility — maps auto-generated fingerprint names to seman
 
 ## Known Flows
 
-34 reference flows in `app/e2e/flows/*.yaml` — consolidated from 25 manual flows + flow-walker run11 discoveries. Each flow lists `covers:` (source files), `prerequisites:`, and `steps:` (actions + assertions). Element counts verified against live app where available.
+38 reference flows in `app/e2e/flows/*.yaml` — covering core features prioritized by the feature vector (`app/e2e/feature-vector.md`). Each flow lists `covers:` (source files), `prerequisites:`, and `steps:` (actions + assertions). Element counts verified against flow-walker run11 where available.
 
 | Flow | Prerequisites | What it describes |
 |------|--------------|-------------------|
@@ -388,10 +388,11 @@ For flow-walker compatibility — maps auto-generated fingerprint names to seman
 | `flows/onboarding.yaml` | signed_out | Full 11-step onboarding: auth → name → language → permissions → complete |
 | **Main Tabs** | | |
 | `flows/conversations.yaml` | auth_ready | Conversations list, folder tabs, starred filter, daily score |
-| `flows/conversation-detail.yaml` | auth_ready | Conversation detail — transcript/summary/action items tabs, edit title, share |
+| `flows/conversation-detail.yaml` | auth_ready | Conversation detail — transcript/summary/action items tabs, edit title, share link |
 | `flows/conversation-capturing.yaml` | auth_ready, microphone_permission | Active recording — live transcript, waveform, stop, Ask Omi during capture |
 | `flows/action-items.yaml` | auth_ready | Task creation, categories, checkbox toggle, goal linking |
-| `flows/memories.yaml` | auth_ready | Memory search, graph view, category filter, add/edit memory |
+| `flows/memories.yaml` | auth_ready | Memory search, graph view, category filter, add memory with content, edit via sheet |
+| `flows/memory-review.yaml` | auth_ready | Memory review — browse list, quick edit sheet, category management, filtered review |
 | `flows/memory-graph.yaml` | auth_ready | Knowledge graph visualization, node exploration |
 | `flows/apps.yaml` | auth_ready | App explore, search, categories, create custom app |
 | `flows/app-detail.yaml` | auth_ready | App detail — reviews, capabilities, install/enable |
@@ -405,6 +406,9 @@ For flow-walker compatibility — maps auto-generated fingerprint names to seman
 | `flows/payments.yaml` | auth_ready | Payment methods, Stripe/PayPal setup |
 | `flows/referral-program.yaml` | auth_ready | Referral link, share, stats |
 | `flows/daily-summary.yaml` | auth_ready | Daily summary preferences and detail |
+| `flows/goals-tracking.yaml` | auth_ready | Goals — create from daily score, fill title/target, progress slider, edit/delete |
+| `flows/custom-vocabulary.yaml` | auth_ready | Custom Vocabulary — add comma-separated words, view chips, delete words |
+| `flows/speaker-identification.yaml` | auth_ready | Identifying Others (People) — add person, manage speech samples |
 | **Settings** | | |
 | `flows/settings-profile.yaml` | auth_ready | Profile: name, language, vocabulary, speech profile, privacy |
 | `flows/settings-notifications.yaml` | auth_ready | Frequency slider, daily summary toggle, time picker |
@@ -421,6 +425,24 @@ For flow-walker compatibility — maps auto-generated fingerprint names to seman
 | `flows/delete-account.yaml` | auth_ready | Delete Account — confirmation checkbox and safety gate |
 
 When you modify a Dart file, check if any flow's `covers:` includes it. If so, that flow describes the user journey your change affects — use it to understand context and verify your work.
+
+## Feature Vector
+
+See `app/e2e/feature-vector.md` for the full prioritized feature map. Scores each feature by `layer_weight × session_frequency` (from Omi Issue Triage Guide layers: capture=5, understand=4, memory=4, intelligence=3, retrieval-action=3) plus a walker automability score (0-3).
+
+**Top 7 coverage gaps** (core features not yet fully automatable):
+
+| Rank | Feature | Priority | Gap Reason |
+|------|---------|----------|------------|
+| 1 | Memory review/approval | 12 | Needs existing auto-created memories |
+| 2 | Custom vocabulary | 8 | Needs scroll in Profile (now has flow) |
+| 3 | Add/edit memory | 8 | Needs text input in dialog (now has flow) |
+| 4 | Speaker identification | 8 | Needs scroll in Profile (now has flow) |
+| 5 | Goals tracking | 6 | Now has dedicated flow |
+| 6 | Conversation sharing | 6 | Now covered in conversation-detail flow |
+| 7 | Conversation folders | 6 | Already covered in conversations flow |
+
+**Next unlock for flow-walker**: scroll capability (unlocks 8-12 settings screens below fold + profile sub-pages).
 
 ## Verification & Evidence
 
