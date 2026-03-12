@@ -6,6 +6,8 @@ description: Settings → Offline Sync — view sync status, local storage, reco
 covers:
   - app/lib/pages/settings/settings_drawer.dart
   - app/lib/pages/conversations/sync_page.dart
+prerequisites:
+  - auth_ready  # User completed real sign-in (Google/Apple) and onboarding. Android: `bash setup.sh android`. iOS: `bash setup.sh ios`. App must show home screen.
 setup: normal
 
 steps:
