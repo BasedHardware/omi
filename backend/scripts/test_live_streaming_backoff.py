@@ -121,20 +121,28 @@ async def stream_audio_test(host: str, port: int, chunks: list, label: str, uid_
                         elapsed = time.time() - t_start
                         try:
                             data = json.loads(msg)
-                            if 'segments' in data and data['segments']:
-                                metrics['segments_received'] += len(data['segments'])
-                                words = sum(len(s.get('text', '').split()) for s in data['segments'])
+                            # Backend sends segments as a plain JSON array, or as
+                            # {"segments": [...]} in some code paths, or {"type": ...} events
+                            segments = None
+                            if isinstance(data, list) and data:
+                                segments = data
+                            elif isinstance(data, dict) and 'segments' in data and data['segments']:
+                                segments = data['segments']
+
+                            if segments:
+                                metrics['segments_received'] += len(segments)
+                                words = sum(len(s.get('text', '').split()) for s in segments)
                                 metrics['transcript_words'] += words
                                 if metrics['first_segment_latency_s'] is None:
                                     metrics['first_segment_latency_s'] = elapsed
                                 logger.info(
-                                    f"  [{label}] [{elapsed:.1f}s] {len(data['segments'])} segments, "
+                                    f"  [{label}] [{elapsed:.1f}s] {len(segments)} segments, "
                                     f"{words} words (total: {metrics['segments_received']} segs, "
                                     f"{metrics['transcript_words']} words)"
                                 )
-                            elif 'status' in data:
+                            elif isinstance(data, dict) and 'status' in data:
                                 metrics['status_messages'] += 1
-                            # else: other messages (ping etc)
+                            # else: other messages (ping, events etc)
                         except json.JSONDecodeError:
                             pass  # ping frames
                 except websockets.exceptions.ConnectionClosed:
