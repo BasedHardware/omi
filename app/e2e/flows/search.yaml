@@ -5,6 +5,8 @@ name: search
 description: Tap search icon from home, enter query, view results, clear and return
 covers:
   - app/lib/pages/home/page.dart
+prerequisites:
+  - auth_ready  # User completed real sign-in (Google/Apple) and onboarding. Android: `bash setup.sh android`. iOS: `bash setup.sh ios`. App must show home screen.
 setup: normal
 
 steps:
