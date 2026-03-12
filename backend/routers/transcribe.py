@@ -852,7 +852,13 @@ async def _stream_handler(
                     callback = make_multi_channel_callback(ch_config)
                     if stt_service == STTService.deepgram:
                         stt_sockets_multi[i] = await process_audio_dg(
-                            callback, stt_language, TARGET_SAMPLE_RATE, 1, preseconds=0, model=stt_model
+                            callback,
+                            stt_language,
+                            TARGET_SAMPLE_RATE,
+                            1,
+                            preseconds=0,
+                            model=stt_model,
+                            is_active=lambda: websocket_active,
                         )
                     elif stt_service == STTService.soniox:
                         stt_sockets_multi[i] = await process_audio_soniox(
@@ -933,6 +939,7 @@ async def _stream_handler(
                     model=stt_model,
                     keywords=vocabulary[:100] if vocabulary else None,
                     vad_gate=vad_gate,
+                    is_active=lambda: websocket_active,
                 )
                 if has_speech_profile:
                     deepgram_profile_socket = await process_audio_dg(
@@ -942,6 +949,7 @@ async def _stream_handler(
                         1,
                         model=stt_model,
                         keywords=vocabulary[:100] if vocabulary else None,
+                        is_active=lambda: websocket_active,
                     )
 
             # SONIOX
