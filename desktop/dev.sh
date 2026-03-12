@@ -8,15 +8,10 @@ BUILD_DIR="build"
 APP_BUNDLE="$BUILD_DIR/$APP_NAME.app"
 BACKEND_DIR="$(dirname "$0")/Backend"
 BACKEND_PID=""
-TUNNEL_PID=""
-TUNNEL_URL="https://omi-dev.m13v.com"
+BACKEND_URL="http://localhost:8080"
 
-# Cleanup function to stop backend and tunnel on exit
+# Cleanup function to stop backend on exit
 cleanup() {
-    if [ -n "$TUNNEL_PID" ] && kill -0 "$TUNNEL_PID" 2>/dev/null; then
-        echo "Stopping tunnel (PID: $TUNNEL_PID)..."
-        kill "$TUNNEL_PID" 2>/dev/null || true
-    fi
     if [ -n "$BACKEND_PID" ] && kill -0 "$BACKEND_PID" 2>/dev/null; then
         echo "Stopping backend (PID: $BACKEND_PID)..."
         kill "$BACKEND_PID" 2>/dev/null || true
@@ -26,14 +21,7 @@ trap cleanup EXIT
 
 # Kill existing instances
 pkill "$BINARY_NAME" 2>/dev/null || true
-pkill -f "cloudflared.*omi-computer-dev" 2>/dev/null || true
 lsof -ti:8080 | xargs kill -9 2>/dev/null || true
-
-# Start Cloudflare tunnel
-echo "Starting Cloudflare tunnel..."
-cloudflared tunnel run omi-computer-dev &
-TUNNEL_PID=$!
-sleep 2
 
 # Start backend
 echo "Starting backend..."
@@ -97,19 +85,24 @@ else
     echo "Warning: Resource bundle not found at $SWIFT_BUILD_DIR/Omi Computer_Omi Computer.bundle"
 fi
 
-# Copy .env.app (app runtime secrets only) and add API URL
+# Copy .env.app (app runtime secrets only) and set backend URLs
 if [ -f ".env.app" ]; then
     cp .env.app "$APP_BUNDLE/Contents/Resources/.env"
 else
     touch "$APP_BUNDLE/Contents/Resources/.env"
 fi
-# Set API URL to tunnel for development (overrides production default)
+# Ensure OMI_API_URL points to the local Rust desktop backend
 if grep -q "^OMI_API_URL=" "$APP_BUNDLE/Contents/Resources/.env"; then
-    sed -i '' "s|^OMI_API_URL=.*|OMI_API_URL=$TUNNEL_URL|" "$APP_BUNDLE/Contents/Resources/.env"
+    sed -i '' "s|^OMI_API_URL=.*|OMI_API_URL=$BACKEND_URL|" "$APP_BUNDLE/Contents/Resources/.env"
 else
-    echo "OMI_API_URL=$TUNNEL_URL" >> "$APP_BUNDLE/Contents/Resources/.env"
+    echo "OMI_API_URL=$BACKEND_URL" >> "$APP_BUNDLE/Contents/Resources/.env"
 fi
-echo "Using backend: $TUNNEL_URL"
+# Ensure AUTH_BACKEND_URL points to the local Rust desktop backend
+if grep -q "^AUTH_BACKEND_URL=" "$APP_BUNDLE/Contents/Resources/.env"; then
+    sed -i '' "s|^AUTH_BACKEND_URL=.*|AUTH_BACKEND_URL=$BACKEND_URL|" "$APP_BUNDLE/Contents/Resources/.env"
+else
+    echo "AUTH_BACKEND_URL=$BACKEND_URL" >> "$APP_BUNDLE/Contents/Resources/.env"
+fi
 
 # Copy app icon
 cp -f omi_icon.icns "$APP_BUNDLE/Contents/Resources/OmiIcon.icns"
@@ -143,8 +136,7 @@ fi
 echo "Dev build complete: $APP_BUNDLE"
 echo ""
 echo "=== Services Running ==="
-echo "Backend:  http://localhost:8080 (PID: $BACKEND_PID)"
-echo "Tunnel:   $TUNNEL_URL (PID: $TUNNEL_PID)"
+echo "Backend:  $BACKEND_URL (PID: $BACKEND_PID)"
 echo "========================"
 echo ""
 open "$APP_BUNDLE"
