@@ -6,6 +6,8 @@ description: Settings → Notifications — adjust frequency slider, toggle dail
 covers:
   - app/lib/pages/settings/settings_drawer.dart
   - app/lib/pages/settings/notifications_settings_page.dart
+prerequisites:
+  - auth_ready  # User completed real sign-in (Google/Apple) and onboarding. Android: `bash setup.sh android`. iOS: `bash setup.sh ios`. App must show home screen.
 setup: normal
 
 steps:
@@ -18,7 +20,7 @@ steps:
 
   - name: Verify notifications page
     assert:
-      interactive_count: { min: 4 }
+      interactive_count: { min: 12, verified: "flow-walker run10: 14 elements (10 gesture, 1 icon, 1 inkwell, 1 switch, 1 textbutton)" }
     note: >
       Notification Frequency: Slider (0-5) with labels Off/Minimal/Low/Balanced/High/Maximum
       Daily Summary: Toggle switch + time picker button
