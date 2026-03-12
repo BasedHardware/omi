@@ -37,18 +37,13 @@ APP_BUNDLE="$BUILD_DIR/$APP_NAME.app"
 APP_PATH="/Applications/$APP_NAME.app"
 SIGN_IDENTITY="${OMI_SIGN_IDENTITY:-}"
 
-# Backend configuration (Rust)
+# Backend configuration (Rust desktop backend on localhost)
 BACKEND_DIR="$(dirname "$0")/Backend-Rust"
 BACKEND_PID=""
-TUNNEL_PID=""
-TUNNEL_URL="https://omi-dev.m13v.com"
+BACKEND_URL="http://localhost:8080"
 
-# Cleanup function to stop backend and tunnel on exit
+# Cleanup function to stop backend on exit
 cleanup() {
-    if [ -n "$TUNNEL_PID" ] && kill -0 "$TUNNEL_PID" 2>/dev/null; then
-        echo "Stopping tunnel (PID: $TUNNEL_PID)..."
-        kill "$TUNNEL_PID" 2>/dev/null || true
-    fi
     if [ -n "$BACKEND_PID" ] && kill -0 "$BACKEND_PID" 2>/dev/null; then
         echo "Stopping backend (PID: $BACKEND_PID)..."
         kill "$BACKEND_PID" 2>/dev/null || true
@@ -66,7 +61,6 @@ auth_debug "BEFORE pkill: auth_isSignedIn=$(defaults read "$BUNDLE_ID" auth_isSi
 auth_debug "BEFORE pkill: ALL_KEYS=$(defaults read "$BUNDLE_ID" 2>&1 | grep -E 'auth_|hasCompleted|hasLaunched|currentTier|userShow' || true)"
 # Only kill the dev app — never touch Omi Beta (production)
 pkill -f "$APP_NAME.app" 2>/dev/null || true
-pkill -f "cloudflared.*omi-computer-dev" 2>/dev/null || true
 # Kill only the Rust backend on port 8080 (not other apps that might use it)
 lsof -ti:8080 -sTCP:LISTEN 2>/dev/null | while read pid; do
     if ps -p "$pid" -o command= 2>/dev/null | grep -q "omi-backend\|Backend-Rust\|target/"; then
@@ -105,12 +99,7 @@ find "$HOME" -maxdepth 4 -name "Omi Dev.app" -type d -not -path "$APP_BUNDLE" -n
     rm -rf "$stale"
 done
 
-step "Starting Cloudflare tunnel..."
-cloudflared tunnel run omi-computer-dev &
-TUNNEL_PID=$!
-sleep 2
-
-step "Starting Rust backend..."
+step "Starting Rust desktop backend..."
 cd "$BACKEND_DIR"
 
 # Copy .env if not present
@@ -267,10 +256,17 @@ elif [ -f ".env.app" ]; then
 else
     touch "$APP_BUNDLE/Contents/Resources/.env"
 fi
+# Ensure OMI_API_URL points to the local Rust desktop backend
 if grep -q "^OMI_API_URL=" "$APP_BUNDLE/Contents/Resources/.env"; then
-    sed -i '' "s|^OMI_API_URL=.*|OMI_API_URL=$TUNNEL_URL|" "$APP_BUNDLE/Contents/Resources/.env"
+    sed -i '' "s|^OMI_API_URL=.*|OMI_API_URL=$BACKEND_URL|" "$APP_BUNDLE/Contents/Resources/.env"
 else
-    echo "OMI_API_URL=$TUNNEL_URL" >> "$APP_BUNDLE/Contents/Resources/.env"
+    echo "OMI_API_URL=$BACKEND_URL" >> "$APP_BUNDLE/Contents/Resources/.env"
+fi
+# Ensure AUTH_BACKEND_URL points to the local Rust desktop backend
+if grep -q "^AUTH_BACKEND_URL=" "$APP_BUNDLE/Contents/Resources/.env"; then
+    sed -i '' "s|^AUTH_BACKEND_URL=.*|AUTH_BACKEND_URL=$BACKEND_URL|" "$APP_BUNDLE/Contents/Resources/.env"
+else
+    echo "AUTH_BACKEND_URL=$BACKEND_URL" >> "$APP_BUNDLE/Contents/Resources/.env"
 fi
 
 substep "Copying app icon"
@@ -395,10 +391,8 @@ TOTAL_TIME=$(echo "$NOW - $SCRIPT_START_TIME" | bc)
 printf "  └─ done (%.2fs)\n" "$(echo "$NOW - $STEP_START_TIME" | bc)"
 echo ""
 echo "=== Services Running (total: ${TOTAL_TIME%.*}s) ==="
-echo "Backend:  http://localhost:8080 (PID: $BACKEND_PID)"
-echo "Tunnel:   $TUNNEL_URL (PID: $TUNNEL_PID)"
+echo "Backend:  $BACKEND_URL (PID: $BACKEND_PID)"
 echo "App:      $APP_PATH (installed from $APP_BUNDLE)"
-echo "Using backend: $TUNNEL_URL"
 echo "========================================"
 echo ""
 
