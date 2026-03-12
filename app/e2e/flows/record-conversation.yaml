@@ -7,6 +7,9 @@ covers:
   - app/lib/pages/home/page.dart
   - app/lib/pages/conversation_capturing/page.dart
   - app/lib/widgets/bottom_nav_bar.dart
+prerequisites:
+  - auth_ready  # User completed real sign-in (Google/Apple) and onboarding. Android: `bash setup.sh android`. iOS: `bash setup.sh ios`. App must show home screen.
+  - microphone_permission  # Grant when app prompts. Android pre-grant: `adb shell pm grant com.friend.ios.dev android.permission.RECORD_AUDIO`. iOS: tap Allow on permission dialog.
 setup: normal
 
 steps:
