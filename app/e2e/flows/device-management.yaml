@@ -7,6 +7,10 @@ covers:
   - app/lib/pages/home/device.dart
   - app/lib/pages/home/firmware_update.dart
   - app/lib/pages/sdcard/about_sdcard_sync.dart
+prerequisites:
+  - auth_ready  # User completed real sign-in (Google/Apple) and onboarding. Android: `bash setup.sh android`. iOS: `bash setup.sh ios`. App must show home screen.
+  - ble_on  # Bluetooth enabled in device Settings. Emulators/simulators have no BLE — requires physical Android or iPhone.
+  - omi_device_connected  # Physical Omi hardware powered on within BLE range. App auto-discovers on home screen → tap Connect. Physical device only.
 setup:
   requires: omi_device_connected
 
