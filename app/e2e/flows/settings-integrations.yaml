@@ -6,6 +6,8 @@ description: Settings → Integrations — view available integrations (Google C
 covers:
   - app/lib/pages/settings/settings_drawer.dart
   - app/lib/pages/settings/integrations_page.dart
+prerequisites:
+  - auth_ready  # User completed real sign-in (Google/Apple) and onboarding. Android: `bash setup.sh android`. iOS: `bash setup.sh ios`. App must show home screen.
 setup: normal
 
 steps:
