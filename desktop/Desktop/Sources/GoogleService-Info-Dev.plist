@@ -3,23 +3,23 @@
 <plist version="1.0">
 <dict>
 	<key>CLIENT_ID</key>
-	<string>208440318997-68pb7d72igtvl7jgr1ep6d3m6qn4pnbo.apps.googleusercontent.com</string>
+	<string>1031333818730-dusn243nct6i5rgfpfkj5mchuj1qnmde.apps.googleusercontent.com</string>
 	<key>REVERSED_CLIENT_ID</key>
-	<string>com.googleusercontent.apps.208440318997-68pb7d72igtvl7jgr1ep6d3m6qn4pnbo</string>
+	<string>com.googleusercontent.apps.1031333818730-dusn243nct6i5rgfpfkj5mchuj1qnmde</string>
 	<key>ANDROID_CLIENT_ID</key>
-	<string>208440318997-1ek8tj5oa9ljmnh8tgehk27nqpivivbf.apps.googleusercontent.com</string>
+	<string>1031333818730-1cgqp3jc5p8n2rk467pl4t56qc4lnnbr.apps.googleusercontent.com</string>
 	<key>API_KEY</key>
-	<string>AIzaSyD9dzBdglc7IO9pPDIOvqnCoTis_xKkkC8</string>
+	<string>AIzaSyBK-G7KmEoC72mR10gmQyb2NFBbZyDvcqM</string>
 	<key>GCM_SENDER_ID</key>
-	<string>208440318997</string>
+	<string>1031333818730</string>
 	<key>PLIST_VERSION</key>
 	<string>1</string>
 	<key>BUNDLE_ID</key>
 	<string>com.omi.desktop-dev</string>
 	<key>PROJECT_ID</key>
-	<string>based-hardware</string>
+	<string>based-hardware-dev</string>
 	<key>STORAGE_BUCKET</key>
-	<string>based-hardware.firebasestorage.app</string>
+	<string>based-hardware-dev.firebasestorage.app</string>
 	<key>IS_ADS_ENABLED</key>
 	<false></false>
 	<key>IS_ANALYTICS_ENABLED</key>
@@ -31,6 +31,8 @@
 	<key>IS_SIGNIN_ENABLED</key>
 	<true></true>
 	<key>GOOGLE_APP_ID</key>
-	<string>1:208440318997:ios:a1906bb92fe244810e421c</string>
+	<string>1:1031333818730:ios:3bea63d8e4f41dbfafb513</string>
+	<key>AUTH_BACKEND_URL</key>
+	<string>http://localhost:8080</string>
 </dict>
 </plist>
