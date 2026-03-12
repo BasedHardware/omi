@@ -97,10 +97,10 @@ if grep -q "^OMI_API_URL=" "$APP_BUNDLE/Contents/Resources/.env"; then
 else
     echo "OMI_API_URL=$BACKEND_URL" >> "$APP_BUNDLE/Contents/Resources/.env"
 fi
-# Ensure AUTH_BACKEND_URL is set (prod: api.omi.me, local dev: same Rust backend)
-if grep -q "^AUTH_BACKEND_URL=" "$APP_BUNDLE/Contents/Resources/.env"; then
-    sed -i '' "s|^AUTH_BACKEND_URL=.*|AUTH_BACKEND_URL=$BACKEND_URL|" "$APP_BUNDLE/Contents/Resources/.env"
-else
+# AUTH_BACKEND_URL: only set a default if not already in .env.app
+# Do NOT force localhost — local Rust backend cannot produce custom tokens.
+# Set AUTH_BACKEND_URL in .env.app to point to api.omi.me or a local Python backend.
+if ! grep -q "^AUTH_BACKEND_URL=" "$APP_BUNDLE/Contents/Resources/.env"; then
     echo "AUTH_BACKEND_URL=$BACKEND_URL" >> "$APP_BUNDLE/Contents/Resources/.env"
 fi
 
