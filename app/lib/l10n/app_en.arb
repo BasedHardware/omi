@@ -10291,6 +10291,22 @@
   "@notYetSynced": {
     "description": "Description for pending files in manage storage sheet"
   },
+  "renameDevice": "Rename Device",
+  "@renameDevice": {
+    "description": "Button title for renaming the connected device"
+  },
+  "enterDeviceName": "Enter device name",
+  "@enterDeviceName": {
+    "description": "Placeholder when entering a new device name"
+  },
+  "deviceNameCannotBeEmpty": "Device name cannot be empty",
+  "@deviceNameCannotBeEmpty": {
+    "description": "Validation error when user submits empty device name"
+  },
+  "deviceNameUpdated": "Device name updated",
+  "@deviceNameUpdated": {
+    "description": "Snackbar after successful device rename"
+  },
   "clearAll": "Clear All",
   "@clearAll": {
     "description": "Button label to clear all files"
