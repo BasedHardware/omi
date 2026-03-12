@@ -301,7 +301,7 @@ Each step can use these action keys (map to agent-flutter commands):
 
 ## Navigation Graph (flow-walker verified)
 
-Real navigation edges verified by flow-walker run10 on Pixel 7a (24 screens, 39 edges, depth 2). Screen names mapped from fingerprint IDs to semantic names.
+Real navigation edges verified by flow-walker run11 on Pixel 7a (26 screens, 44 edges, depth 3). Screen names mapped from fingerprint IDs to semantic names.
 
 ```
 Home (24 elements: 17 gesture, 3 icon, 4 inkwell)
@@ -312,6 +312,8 @@ Home (24 elements: 17 gesture, 3 icon, 4 inkwell)
 │   │   ├── Language Settings (13 el: 10 gesture, 1 icon, 1 switch, 1 textbutton)
 │   │   │   ├── Sub-detail (5 el: 4 gesture, 1 icon)
 │   │   │   ├── Sub-settings (7 el: 1 elevated, 5 gesture, 1 icon)
+│   │   │   │   ├── Settings Confirmation (3 el: 1 gesture, 2 textbutton)
+│   │   │   │   └── Settings Form (16 el: 1 elevated, 9 gesture, 3 icon, 1 inkwell, 2 textfield)
 │   │   │   └── Filter Sheet (13 el: 6 gesture, 5 inkwell, 2 textbutton)
 │   │   └── Back → Home
 │   ├── Sub-detail (2 el: gesture, icon)
@@ -370,10 +372,12 @@ For flow-walker compatibility — maps auto-generated fingerprint names to seman
 | `485a8ce57ebc` | 9 | Memory Detail | memories |
 | `a6983264d893` | 7 | Category Page | memories |
 | `4450e0d3044e` | 18 | Memory Search | memories |
+| `35c0d8ed0daa` | 3 | Settings Confirmation | settings-profile |
+| `a864d8b70edf` | 16 | Settings Form | settings-profile |
 
 ## Known Flows
 
-34 reference flows in `app/e2e/flows/*.yaml` — consolidated from 25 manual flows + flow-walker run10 discoveries. Each flow lists `covers:` (source files), `prerequisites:`, and `steps:` (actions + assertions). Element counts verified against live app where available.
+34 reference flows in `app/e2e/flows/*.yaml` — consolidated from 25 manual flows + flow-walker run11 discoveries. Each flow lists `covers:` (source files), `prerequisites:`, and `steps:` (actions + assertions). Element counts verified against live app where available.
 
 | Flow | Prerequisites | What it describes |
 |------|--------------|-------------------|
