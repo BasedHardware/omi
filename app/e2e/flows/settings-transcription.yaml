@@ -5,6 +5,8 @@ name: settings-transcription
 description: Transcription settings — Omi Cloud vs Custom STT toggle, provider selection, API key management
 covers:
   - app/lib/pages/settings/transcription_settings_page.dart
+prerequisites:
+  - auth_ready  # User completed real sign-in (Google/Apple) and onboarding. Android: `bash setup.sh android`. iOS: `bash setup.sh ios`. App must show home screen.
 setup: normal
 
 steps:
