@@ -558,3 +558,104 @@ class TestDownloadAudioChunksMergeBatchAware:
 
         mock_encryption.decrypt_audio_file.assert_called_once_with(encrypted_data, 'uid')
         assert result == decrypted_data
+
+
+class TestCopyAudioChunksForMergeBatchAware:
+    """Tests for _copy_audio_chunks_for_merge preserving batch blob filenames."""
+
+    @classmethod
+    def setup_class(cls):
+        """Mock heavy transitive imports before loading merge_conversations."""
+        for mod_name in [
+            'openai', 'openai.resources', 'openai._client',
+            'utils.llm', 'utils.llm.clients', 'utils.apps',
+            'database.apps', 'database.memories', 'database.tasks',
+            'database.plugins', 'database.notifications',
+        ]:
+            sys.modules.setdefault(mod_name, MagicMock())
+
+    @patch('utils.conversations.merge_conversations.conversations_db')
+    @patch('utils.conversations.merge_conversations.list_audio_chunks')
+    @patch('utils.conversations.merge_conversations.storage_client')
+    def test_copy_preserves_batch_filename(self, mock_storage_client, mock_list, mock_conv_db):
+        """Batch blob filenames are preserved during copy (not renamed to single-timestamp)."""
+        from utils.conversations.merge_conversations import _copy_audio_chunks_for_merge
+
+        mock_bucket = MagicMock()
+        mock_storage_client.bucket.return_value = mock_bucket
+
+        mock_list.return_value = [
+            {
+                'timestamp': 1000.000,
+                'path': 'chunks/uid/conv-old/1000.000-1060.000.batch.bin',
+                'size': 960000,
+                'is_batch': True,
+            }
+        ]
+        mock_conv_db.create_audio_files_from_chunks.return_value = []
+
+        _copy_audio_chunks_for_merge('uid', [{'id': 'conv-old'}], 'conv-new')
+
+        # Verify the copy preserved the batch filename
+        copy_call = mock_bucket.copy_blob.call_args
+        new_path = copy_call[0][2]  # third positional arg is new_name
+        assert new_path == 'chunks/uid/conv-new/1000.000-1060.000.batch.bin'
+
+    @patch('utils.conversations.merge_conversations.conversations_db')
+    @patch('utils.conversations.merge_conversations.list_audio_chunks')
+    @patch('utils.conversations.merge_conversations.storage_client')
+    def test_copy_preserves_single_chunk_filename(self, mock_storage_client, mock_list, mock_conv_db):
+        """Single-chunk filenames are also preserved during copy."""
+        from utils.conversations.merge_conversations import _copy_audio_chunks_for_merge
+
+        mock_bucket = MagicMock()
+        mock_storage_client.bucket.return_value = mock_bucket
+
+        mock_list.return_value = [
+            {
+                'timestamp': 1000.000,
+                'path': 'chunks/uid/conv-old/1000.000.bin',
+                'size': 80000,
+                'is_batch': False,
+            }
+        ]
+        mock_conv_db.create_audio_files_from_chunks.return_value = []
+
+        _copy_audio_chunks_for_merge('uid', [{'id': 'conv-old'}], 'conv-new')
+
+        copy_call = mock_bucket.copy_blob.call_args
+        new_path = copy_call[0][2]
+        assert new_path == 'chunks/uid/conv-new/1000.000.bin'
+
+    @patch('utils.conversations.merge_conversations.conversations_db')
+    @patch('utils.conversations.merge_conversations.list_audio_chunks')
+    @patch('utils.conversations.merge_conversations.storage_client')
+    def test_copy_mixed_single_and_batch(self, mock_storage_client, mock_list, mock_conv_db):
+        """Mixed single + batch blobs are all copied with original filenames."""
+        from utils.conversations.merge_conversations import _copy_audio_chunks_for_merge
+
+        mock_bucket = MagicMock()
+        mock_storage_client.bucket.return_value = mock_bucket
+
+        mock_list.return_value = [
+            {
+                'timestamp': 1000.000,
+                'path': 'chunks/uid/conv-old/1000.000.enc',
+                'size': 80000,
+                'is_batch': False,
+            },
+            {
+                'timestamp': 1010.000,
+                'path': 'chunks/uid/conv-old/1010.000-1070.000.batch.enc',
+                'size': 960000,
+                'is_batch': True,
+            },
+        ]
+        mock_conv_db.create_audio_files_from_chunks.return_value = []
+
+        _copy_audio_chunks_for_merge('uid', [{'id': 'conv-old'}], 'conv-new')
+
+        assert mock_bucket.copy_blob.call_count == 2
+        paths = [call[0][2] for call in mock_bucket.copy_blob.call_args_list]
+        assert 'chunks/uid/conv-new/1000.000.enc' in paths
+        assert 'chunks/uid/conv-new/1010.000-1070.000.batch.enc' in paths
