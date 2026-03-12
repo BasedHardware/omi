@@ -14,6 +14,8 @@ covers:
   - app/lib/pages/onboarding/speech_profile_widget.dart
   - app/lib/pages/onboarding/knowledge_graph_step.dart
   - app/lib/pages/onboarding/complete_screen.dart
+prerequisites:
+  - signed_out  # Fresh app state. Android: uninstall or clear data (Settings → Apps → Omi → Clear Data). iOS: delete and reinstall app. Must show Get Started screen.
 setup: signed_out
 
 steps:
