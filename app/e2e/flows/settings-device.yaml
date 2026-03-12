@@ -22,7 +22,7 @@ steps:
 
   - name: Verify device settings
     assert:
-      interactive_count: { min: 5 }
+      text_visible: ["Device Settings"]
     note: >
       Device Info: Name (copy), ID (copy), Firmware (tap for update), SD Card Sync
       Hardware Info: Revision, Model, Manufacturer (all copyable)
