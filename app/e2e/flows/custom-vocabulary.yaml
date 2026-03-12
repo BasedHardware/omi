@@ -1,0 +1,61 @@
+# E2E Flow: Custom Vocabulary — add/delete words for transcription
+# Tests: navigate to vocab page, add word via text input, delete word chip
+# Source: feature vector gap #2 (priority 8, understand layer)
+
+name: custom-vocabulary
+description: Custom Vocabulary — add comma-separated words, view word chips, delete words for transcription accuracy
+covers:
+  - app/lib/pages/settings/custom_vocabulary_page.dart
+  - app/lib/pages/settings/profile.dart
+prerequisites:
+  - auth_ready  # User completed real sign-in (Google/Apple) and onboarding. Android: `bash setup.sh android`. iOS: `bash setup.sh ios`. App must show home screen.
+setup: normal
+
+steps:
+  - name: Open settings drawer
+    press: { type: button, position: rightmost, hint: "IconButton — gear icon, rightmost in top bar" }
+    screenshot: settings-drawer
+
+  - name: Open Profile
+    press: { type: gesture, hint: "first wide settings row — Profile, y≈150-200" }
+    screenshot: profile-page
+
+  - name: Open Custom Vocabulary
+    press: { type: gesture, hint: "Custom Vocabulary row in Your Information section" }
+    screenshot: custom-vocabulary-page
+
+  - name: Verify custom vocabulary page
+    assert:
+      interactive_count: { min: 2, hint: "text input field + add button" }
+    note: >
+      Page has: back button, title "Custom Vocabulary", card with book icon,
+      "Add Words" header with word count badge, TextField with hint text,
+      plus (+) button to add, word chips displayed below divider.
+
+  - name: Type a word to add
+    fill: { type: textfield, value: "Omi, transcription, neural" }
+    screenshot: vocabulary-input-filled
+
+  - name: Tap add button
+    press: { type: gesture, hint: "plus icon button next to text input" }
+    screenshot: words-added
+
+  - name: Verify word chips appear
+    note: "Words display as chips with X (close) button for deletion. Comma-separated input creates multiple chips."
+    screenshot: word-chips
+
+  - name: Delete a word chip (if any exist)
+    press: { type: gesture, hint: "close/X icon on a word chip" }
+    note: "Deletion is debounced (1s batch). Chip dims while pending deletion."
+    screenshot: word-deleted
+
+  - name: Back to profile
+    back: true
+
+  - name: Back to settings
+    back: true
+
+  - name: Close settings drawer
+    back: true
+    assert:
+      bottom_nav_tabs: { min: 4 }
