@@ -42,7 +42,6 @@ class ConversationListItem extends StatefulWidget {
 class _ConversationListItemState extends State<ConversationListItem> {
   Timer? _conversationNewStatusResetTimer;
   bool isNew = false;
-  DeleteConversationOptions? _deleteOptions;
 
   @override
   void dispose() {
@@ -209,24 +208,13 @@ class _ConversationListItemState extends State<ConversationListItem> {
                             return false;
                           }
 
-                          final result = await showDeleteConversationDialog(context);
-                          if (result != null) {
-                            _deleteOptions = result;
-                            return true;
-                          }
-                          return false;
+                          return await showDeleteConversationDialog(context);
                         },
                         onDismissed: (direction) async {
                           var conversation = widget.conversation;
                           var conversationIdx = widget.conversationIdx;
                           MixpanelManager().conversationSwipedToDelete(conversation);
-                          provider.deleteConversationLocally(
-                            conversation,
-                            conversationIdx,
-                            widget.date,
-                            deleteAssociatedData: _deleteOptions?.deleteAssociatedData ?? false,
-                          );
-                          _deleteOptions = null;
+                          provider.deleteConversationLocally(conversation, conversationIdx, widget.date);
                         },
                         child: Padding(
                           padding: PlatformService.isMobile
