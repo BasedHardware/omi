@@ -13,13 +13,13 @@ setup: normal
 steps:
   - name: Verify home screen
     assert:
-      text_visible: ["Today"]
+      text_visible: ["Conversations"]
     screenshot: home
 
   - name: Press settings gear (rightmost button in top bar)
     press: { type: button, position: rightmost }
     assert:
-      text_visible: ["Profile", "Notifications", "Device Settings"]
+      text_visible: ["Profile", "Notifications", "Plan & Usage"]
     screenshot: settings
 
   - name: Scroll down in settings
@@ -31,5 +31,5 @@ steps:
   - name: Back to home
     back: true
     assert:
-      text_visible: ["Today"]
+      text_visible: ["Conversations"]
     screenshot: final
