@@ -10,7 +10,7 @@ import 'package:omi/utils/l10n_extensions.dart';
 // TODO(atlas): Move these to ARB l10n files
 const _kEnableE2ee = 'Enable E2EE';
 const _kRecoveryKey = 'Recovery Key';
-const _kSaveKeyMessage = 'Save this key somewhere safe. You will need it to recover your data if you switch devices.';
+const _kSaveKeyMessage = 'Save this key somewhere safe. You will need it to recover your encrypted memories if you switch devices. Without this key, E2E encrypted data is unrecoverable.';
 const _kCopyToClipboard = 'Copy to Clipboard';
 const _kSavedMyKey = "I've Saved My Key";
 const _kShowRecoveryKey = 'Show Recovery Key';
@@ -60,13 +60,19 @@ class _DataProtectionSectionState extends State<DataProtectionSection> {
           text: TextSpan(
             style: TextStyle(color: Colors.white.withOpacity(0.8), height: 1.5, fontSize: 15),
             children: [
-              TextSpan(text: '${context.l10n.e2eeDescription}\n\n'),
-              TextSpan(
-                text: '${context.l10n.importantTradeoffs}\n',
-                style: const TextStyle(fontWeight: FontWeight.bold),
+              const TextSpan(text: 'End-to-end encryption provides the highest level of data protection:\n\n'),
+              const TextSpan(
+                text: '🔒 Memories: ',
+                style: TextStyle(fontWeight: FontWeight.bold),
               ),
-              TextSpan(text: '${context.l10n.e2eeTradeoff1}\n'),
-              TextSpan(text: '${context.l10n.e2eeTradeoff2}\n\n'),
+              const TextSpan(text: 'Encrypted on your device before reaching the server. Only you can read them.\n\n'),
+              const TextSpan(
+                text: '🔐 Conversations, chat & other data: ',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+              const TextSpan(
+                  text:
+                      'Encrypted at rest on the server. The server processes audio for transcription but stored data is encrypted and cannot be read at rest.\n\n'),
               TextSpan(
                 text: '$_kKeyWarning\n',
                 style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.orangeAccent),
@@ -437,7 +443,7 @@ class _DataProtectionSectionState extends State<DataProtectionSection> {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    context.l10n.e2eeCardDescription,
+                    'Maximum protection — memories encrypted on-device, all other data encrypted at rest',
                     style: TextStyle(color: Colors.grey.shade400, fontSize: 14, height: 1.4),
                   ),
                 ],

@@ -29,6 +29,12 @@ class E2eeMiddleware {
   /// Decrypt [data] if E2EE is enabled; otherwise return as-is.
   static Future<String> decryptIfEnabled(String data) async {
     if (!isE2eeEnabled() || data.isEmpty) return data;
-    return _service.decrypt(data);
+    try {
+      return await _service.decrypt(data);
+    } catch (e) {
+      // Surface decryption errors — don't silently show ciphertext
+      print('[E2EE Middleware] Decryption error: $e');
+      return '[Encrypted — unable to decrypt. Check your recovery key.]';
+    }
   }
 }

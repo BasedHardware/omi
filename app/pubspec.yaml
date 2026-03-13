@@ -78,6 +78,7 @@ dependencies:
   flutter_contacts: ^1.1.9+2
   intl_phone_field: ^3.2.0
   share_plus: 11.0.0
+  flutter_secure_storage: ^9.2.4
   shared_preferences: 2.5.3
   url_launcher: ^6.3.0
   wav: ^1.4.0
