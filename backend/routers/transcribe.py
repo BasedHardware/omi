@@ -2610,6 +2610,10 @@ async def _stream_handler(
                 if modulate_socket:
                     try:
                         await modulate_socket.send("")  # EOS signal for final utterances
+                        # Modulate returns transcripts only after EOS processing;
+                        # wait briefly so the on_message task can receive them
+                        # before the close frame terminates the connection.
+                        await asyncio.sleep(5)
                     except Exception:
                         pass
                     await modulate_socket.close()
