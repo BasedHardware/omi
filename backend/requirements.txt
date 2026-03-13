@@ -135,6 +135,7 @@ openai==1.104.2
 optuna==3.6.1
 opuslib==3.0.1
 orjson==3.10.6
+prometheus-client==0.21.1
 packaging==24.2
 pandas==2.2.2
 parso==0.8.4
