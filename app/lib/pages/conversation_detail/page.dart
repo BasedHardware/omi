@@ -368,14 +368,11 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
     HapticFeedback.mediumImpact();
     final connectivityProvider = Provider.of<ConnectivityProvider>(context, listen: false);
     if (connectivityProvider.isConnected) {
-      final result = await showDeleteConversationDialog(context);
-      if (result != null) {
+      final confirmed = await showDeleteConversationDialog(context);
+      if (confirmed) {
         if (!context.mounted) return;
         final convoProvider = context.read<ConversationProvider>();
-        convoProvider.deleteConversation(
-          provider.conversation,
-          deleteAssociatedData: result.deleteAssociatedData,
-        );
+        convoProvider.deleteConversation(provider.conversation);
         Navigator.pop(context, {'deleted': true});
       }
     } else {
