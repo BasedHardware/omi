@@ -12,15 +12,15 @@ setup: normal
 steps:
   - name: Verify home tab and nav bar
     assert:
-      text_visible: ["Today"]
+      text_visible: ["Conversations"]
       bottom_nav_tabs: { min: 4 }
     screenshot: tab-home
 
-  - name: Switch to Conversations tab
+  - name: Switch to Action Items tab
     press: { bottom_nav_tab: 1 }
     assert:
-      text_visible: ["Conversations"]
-    screenshot: tab-conversations
+      text_visible: ["No Tasks Yet"]
+    screenshot: tab-action-items
 
   - name: Switch to Memories tab
     press: { bottom_nav_tab: 2 }
@@ -40,5 +40,5 @@ steps:
   - name: Return to home tab
     press: { bottom_nav_tab: 0 }
     assert:
-      text_visible: ["Today"]
+      text_visible: ["Conversations"]
     screenshot: final
