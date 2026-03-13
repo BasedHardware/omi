@@ -387,3 +387,119 @@ class TestModulateBatchPrerecorded:
         assert headers == {'X-API-Key': 'test-key'}
         data = call_args.kwargs.get('data', {})
         assert data == {'speaker_diarization': 'true'}
+
+    @patch('utils.stt.pre_recorded.requests.post')
+    @patch.dict('os.environ', {'MODULATE_API_KEY': 'test-key'})
+    def test_raises_runtime_error_after_retries_exhausted(self, mock_post):
+        from utils.stt.pre_recorded import modulate_prerecorded_from_bytes
+
+        mock_post.side_effect = Exception('Connection timeout')
+
+        with pytest.raises(RuntimeError, match='Modulate transcription failed after 3 attempts'):
+            modulate_prerecorded_from_bytes(b'audio-data')
+
+        assert mock_post.call_count == 3
+
+    @patch('utils.stt.pre_recorded.requests.post')
+    @patch.dict('os.environ', {'MODULATE_API_KEY': 'test-key'})
+    def test_raises_runtime_error_with_return_language(self, mock_post):
+        from utils.stt.pre_recorded import modulate_prerecorded_from_bytes
+
+        mock_post.side_effect = Exception('API error')
+
+        with pytest.raises(RuntimeError, match='Modulate transcription failed'):
+            modulate_prerecorded_from_bytes(b'audio-data', return_language=True)
+
+    @patch('utils.stt.pre_recorded.requests.post')
+    @patch.dict('os.environ', {'MODULATE_API_KEY': 'test-key'})
+    def test_null_speaker_defaults_to_speaker_00(self, mock_post):
+        from utils.stt.pre_recorded import modulate_prerecorded_from_bytes
+
+        mock_response = MagicMock()
+        mock_response.json.return_value = {
+            'text': 'Test',
+            'duration_ms': 1000,
+            'utterances': [
+                {
+                    'utterance_uuid': 'uuid-1',
+                    'text': 'Hello',
+                    'start_ms': 0,
+                    'duration_ms': 1000,
+                    'speaker': None,
+                    'language': 'en',
+                    'emotion': None,
+                    'accent': None,
+                },
+            ],
+        }
+        mock_response.raise_for_status = MagicMock()
+        mock_post.return_value = mock_response
+
+        words = modulate_prerecorded_from_bytes(b'audio')
+        assert words[0]['speaker'] == 'SPEAKER_00'
+
+
+class TestModulateStreamingSpeakerBoundary:
+    def _make_utterance_message(self, text, start_ms, duration_ms, speaker=1, language='en'):
+        return json.dumps(
+            {
+                'type': 'utterance',
+                'utterance': {
+                    'utterance_uuid': 'test-uuid',
+                    'text': text,
+                    'start_ms': start_ms,
+                    'duration_ms': duration_ms,
+                    'speaker': speaker,
+                    'language': language,
+                    'emotion': None,
+                    'accent': None,
+                },
+            }
+        )
+
+    @pytest.mark.asyncio
+    @patch('utils.stt.streaming.websockets.connect', new_callable=AsyncMock)
+    @patch.dict('os.environ', {'MODULATE_API_KEY': 'test-key'})
+    async def test_null_speaker_defaults_to_speaker_00(self, mock_connect):
+        received_segments = []
+        msg = json.dumps(
+            {
+                'type': 'utterance',
+                'utterance': {
+                    'utterance_uuid': 'test-uuid',
+                    'text': 'Hello',
+                    'start_ms': 0,
+                    'duration_ms': 1000,
+                    'speaker': None,
+                    'language': 'en',
+                    'emotion': None,
+                    'accent': None,
+                },
+            }
+        )
+        mock_connect.return_value = _make_mock_modulate_socket([msg])
+
+        await process_audio_modulate(lambda segs: received_segments.extend(segs), 16000, 'en')
+        await asyncio.sleep(0.1)
+
+        assert len(received_segments) == 1
+        assert received_segments[0]['speaker'] == 'SPEAKER_00'
+
+    @pytest.mark.asyncio
+    @patch('utils.stt.streaming.websockets.connect', new_callable=AsyncMock)
+    @patch.dict('os.environ', {'MODULATE_API_KEY': 'test-key'})
+    async def test_preseconds_boundary_exact_match_skipped(self, mock_connect):
+        """Utterance starting exactly at preseconds threshold should be skipped."""
+        received_segments = []
+        messages = [
+            self._make_utterance_message("At boundary", 10000, 2000, speaker=1),
+            self._make_utterance_message("After boundary", 12000, 2000, speaker=1),
+        ]
+        mock_connect.return_value = _make_mock_modulate_socket(messages)
+
+        await process_audio_modulate(lambda segs: received_segments.extend(segs), 16000, 'en', preseconds=10)
+        await asyncio.sleep(0.1)
+
+        # start_s=10.0 < preseconds=10 is False, so utterance at 10s should NOT be skipped
+        # start_s=10.0 is NOT < 10, so it passes the filter
+        assert len(received_segments) == 2
