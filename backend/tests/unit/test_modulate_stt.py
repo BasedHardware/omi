@@ -40,6 +40,29 @@ from utils.stt.streaming import (
     modulate_languages,
     process_audio_modulate,
 )
+from utils.stt.streaming import _build_wav_header
+
+
+class TestWavHeader:
+    def test_wav_header_structure(self):
+        header = _build_wav_header(16000)
+        assert len(header) == 44
+        assert header[:4] == b'RIFF'
+        assert header[8:12] == b'WAVE'
+        assert header[12:16] == b'fmt '
+        assert header[36:40] == b'data'
+
+    def test_wav_header_sample_rate(self):
+        import struct
+
+        header = _build_wav_header(8000)
+        # Sample rate at offset 24 (4 bytes, little-endian)
+        sr = struct.unpack_from('<I', header, 24)[0]
+        assert sr == 8000
+
+        header = _build_wav_header(16000)
+        sr = struct.unpack_from('<I', header, 24)[0]
+        assert sr == 16000
 
 
 class TestSTTServiceEnum:
@@ -140,6 +163,48 @@ class TestProcessAudioModulateConnection:
         assert 'api_key=test-key-123' in call_uri
         assert 'speaker_diarization=true' in call_uri
         assert 'sample_rate=16000' in call_uri
+
+    @pytest.mark.asyncio
+    @patch('utils.stt.streaming.websockets.connect', new_callable=AsyncMock)
+    @patch.dict('os.environ', {'MODULATE_API_KEY': 'test-key-123'})
+    async def test_sends_wav_header_with_first_audio(self, mock_connect):
+        """Modulate streaming prepends WAV header to the first audio chunk."""
+        mock_socket = _make_mock_modulate_socket()
+        mock_connect.return_value = mock_socket
+
+        wrapper = await process_audio_modulate(lambda x: None, 16000, 'en')
+
+        # Send first audio chunk through wrapper
+        test_audio = b'\x00\x01' * 100
+        await wrapper.send(test_audio)
+
+        # The underlying socket should receive WAV header + audio in one frame
+        assert mock_socket.send.call_count >= 1
+        first_frame = mock_socket.send.call_args_list[0][0][0]
+        assert first_frame[:4] == b'RIFF'
+        assert first_frame[8:12] == b'WAVE'
+        assert len(first_frame) == 44 + len(test_audio)  # header + audio
+
+    @pytest.mark.asyncio
+    @patch('utils.stt.streaming.websockets.connect', new_callable=AsyncMock)
+    @patch.dict('os.environ', {'MODULATE_API_KEY': 'test-key-123'})
+    async def test_wav_header_only_on_first_send(self, mock_connect):
+        """WAV header is only prepended to the first send, not subsequent ones."""
+        mock_socket = _make_mock_modulate_socket()
+        mock_connect.return_value = mock_socket
+
+        wrapper = await process_audio_modulate(lambda x: None, 16000, 'en')
+
+        chunk1 = b'\x00\x01' * 50
+        chunk2 = b'\x02\x03' * 50
+        await wrapper.send(chunk1)
+        await wrapper.send(chunk2)
+
+        # First frame has header, second does not
+        first_frame = mock_socket.send.call_args_list[0][0][0]
+        second_frame = mock_socket.send.call_args_list[1][0][0]
+        assert first_frame[:4] == b'RIFF'
+        assert second_frame == chunk2  # no header
 
 
 class TestModulateMessageParsing:
