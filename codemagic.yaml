@@ -14,6 +14,7 @@ workflows:
         provisioning_profiles:
           - codemagic_v7
           - codemagic_watchos_v7
+          - codemagic_widget_v7
         certificates:
           - codemagic_v7
       groups:
@@ -363,6 +364,7 @@ workflows:
         provisioning_profiles:
           - codemagic_v7
           - codemagic_watchos_v7
+          - codemagic_widget_v7
         certificates:
           - codemagic_v7
       groups:
@@ -914,6 +916,7 @@ workflows:
         provisioning_profiles:
           - codemagic_v7
           - codemagic_watchos_v7
+          - codemagic_widget_v7
         certificates:
           - codemagic_v7
       groups:
