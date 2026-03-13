@@ -4,6 +4,7 @@ from io import BytesIO
 from typing import List, Optional, Tuple, Union
 
 import fal_client
+import requests
 from deepgram import DeepgramClient, DeepgramClientOptions
 
 from models.transcript_segment import TranscriptSegment
@@ -283,6 +284,83 @@ def deepgram_prerecorded_from_bytes(
         if attempts < 2:
             return deepgram_prerecorded_from_bytes(audio_bytes, sample_rate, diarize, attempts + 1)
         raise RuntimeError(f'Deepgram transcription failed after {attempts + 1} attempts: {e}')
+
+
+@timeit
+def modulate_prerecorded_from_bytes(
+    audio_bytes: bytes,
+    sample_rate: int = 16000,
+    diarize: bool = True,
+    attempts: int = 0,
+    return_language: bool = False,
+) -> Union[List[dict], Tuple[List[dict], str]]:
+    """
+    Transcribe audio bytes using Modulate's batch API.
+
+    Args:
+        audio_bytes: Audio bytes (WAV format recommended)
+        sample_rate: Audio sample rate in Hz
+        diarize: If True, enable speaker diarization
+        attempts: Current retry attempt number
+        return_language: If True, returns (words, language) tuple
+
+    Returns:
+        List of word dicts with format: {'timestamp': [start, end], 'speaker': 'SPEAKER_XX', 'text': 'word'}
+        Or tuple of (words, language) if return_language=True
+    """
+    api_key = os.getenv('MODULATE_API_KEY')
+    if not api_key:
+        raise ValueError("MODULATE_API_KEY environment variable is not set.")
+
+    logger.info(f'modulate_prerecorded_from_bytes bytes_len={len(audio_bytes)} {sample_rate} {diarize} {attempts}')
+
+    try:
+        url = 'https://modulate-developer-apis.com/api/velma-2-stt-batch'
+        headers = {'X-API-Key': api_key}
+        files = {'upload_file': ('audio.wav', BytesIO(audio_bytes), 'audio/wav')}
+        data = {'speaker_diarization': str(diarize).lower()}
+
+        response = requests.post(url, headers=headers, files=files, data=data, timeout=300)
+        response.raise_for_status()
+        result = response.json()
+
+        utterances = result.get('utterances', [])
+        if not utterances:
+            if return_language:
+                return [], 'en'
+            return []
+
+        # Convert Modulate utterance format to word-compatible format
+        # Modulate gives utterance-level (not word-level), so each utterance becomes one "word" entry
+        words = []
+        detected_language = 'en'
+        for utt in utterances:
+            start_s = utt.get('start_ms', 0) / 1000.0
+            duration_s = utt.get('duration_ms', 0) / 1000.0
+            end_s = start_s + duration_s
+            # Modulate speakers are 1-indexed, convert to 0-indexed for SPEAKER_XX format
+            speaker_id = utt.get('speaker', 1) - 1
+            detected_language = utt.get('language', detected_language)
+
+            words.append(
+                {
+                    'timestamp': [start_s, end_s],
+                    'speaker': f"SPEAKER_{speaker_id:02d}",
+                    'text': utt.get('text', ''),
+                }
+            )
+
+        if return_language:
+            return words, detected_language
+        return words
+
+    except Exception as e:
+        logger.error(f'Modulate prerecorded error: {e}')
+        if attempts < 2:
+            return modulate_prerecorded_from_bytes(audio_bytes, sample_rate, diarize, attempts + 1, return_language)
+        if return_language:
+            return [], 'en'
+        return []
 
 
 @timeit
