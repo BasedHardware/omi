@@ -18,15 +18,51 @@ users/{uid}/daily_summaries/{summary_id}
     └── overall_sentiment: str
 """
 
+import copy
 from typing import List, Optional
 from datetime import datetime
 from google.cloud.firestore_v1.base_query import FieldFilter
 from google.cloud import firestore
 from ._client import db
+from database.helpers import set_data_protection_level, prepare_for_write, prepare_for_read
+from utils import encryption
 
 DAILY_SUMMARIES_COLLECTION = 'daily_summaries'
 
+# Sensitive text fields to encrypt at rest
+_ENCRYPTED_FIELDS = ('headline', 'overview', 'tomorrow_focus')
 
+
+# ************************************************
+# *********** ENCRYPTION HELPERS *****************
+# ************************************************
+
+
+def _prepare_summary_for_write(data: dict, uid: str, level: str) -> dict:
+    """Encrypt sensitive fields if data protection level is enhanced or e2ee."""
+    data = copy.deepcopy(data)
+    if level in ('enhanced', 'e2ee'):
+        for field in _ENCRYPTED_FIELDS:
+            if field in data and data[field]:
+                data[field] = encryption.encrypt(data[field], uid)
+    return data
+
+
+def _prepare_summary_for_read(data: dict, uid: str) -> dict:
+    """Decrypt sensitive fields if data protection level is enhanced or e2ee."""
+    if not data:
+        return data
+    data = copy.deepcopy(data)
+    level = data.get('data_protection_level')
+    if level in ('enhanced', 'e2ee'):
+        for field in _ENCRYPTED_FIELDS:
+            if field in data and data[field]:
+                data[field] = encryption.decrypt(data[field], uid)
+    return data
+
+
+@set_data_protection_level(data_arg_name='summary_data')
+@prepare_for_write(data_arg_name='summary_data', prepare_func=_prepare_summary_for_write)
 def create_daily_summary(uid: str, summary_data: dict) -> str:
     """
     Create a new daily summary document.
@@ -44,6 +80,7 @@ def create_daily_summary(uid: str, summary_data: dict) -> str:
     return summary_data['id']
 
 
+@prepare_for_read(decrypt_func=_prepare_summary_for_read)
 def get_daily_summary(uid: str, summary_id: str) -> Optional[dict]:
     """
     Get a single daily summary by ID.
@@ -64,6 +101,7 @@ def get_daily_summary(uid: str, summary_id: str) -> Optional[dict]:
     return None
 
 
+@prepare_for_read(decrypt_func=_prepare_summary_for_read)
 def get_daily_summary_by_date(uid: str, date: str) -> Optional[dict]:
     """
     Get a daily summary by date (YYYY-MM-DD format).
@@ -84,6 +122,7 @@ def get_daily_summary_by_date(uid: str, date: str) -> Optional[dict]:
     return None
 
 
+@prepare_for_read(decrypt_func=_prepare_summary_for_read)
 def get_daily_summaries(
     uid: str,
     limit: int = 30,

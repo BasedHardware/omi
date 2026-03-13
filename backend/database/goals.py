@@ -3,6 +3,7 @@ Goal tracking database operations for user goals.
 Stores user goals in Firestore under users/{uid}/goals collection.
 """
 
+import copy
 from datetime import datetime, timezone
 from typing import List, Optional, Dict, Any
 
@@ -10,12 +11,46 @@ from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
 from ._client import db
+from database.helpers import set_data_protection_level, prepare_for_write, prepare_for_read
+from utils import encryption
 
 goals_collection = 'goals'
 goal_history_collection = 'goal_history'
 users_collection = 'users'
 
+# Sensitive text field on goals
+_ENCRYPTED_FIELDS = ('title',)
 
+
+# ************************************************
+# *********** ENCRYPTION HELPERS *****************
+# ************************************************
+
+
+def _prepare_goal_for_write(data: dict, uid: str, level: str) -> dict:
+    """Encrypt sensitive goal fields if data protection level is enhanced or e2ee."""
+    data = copy.deepcopy(data)
+    if level in ('enhanced', 'e2ee'):
+        for field in _ENCRYPTED_FIELDS:
+            if field in data and data[field]:
+                data[field] = encryption.encrypt(data[field], uid)
+    return data
+
+
+def _prepare_goal_for_read(data: dict, uid: str) -> dict:
+    """Decrypt sensitive goal fields if data protection level is enhanced or e2ee."""
+    if not data:
+        return data
+    data = copy.deepcopy(data)
+    level = data.get('data_protection_level')
+    if level in ('enhanced', 'e2ee'):
+        for field in _ENCRYPTED_FIELDS:
+            if field in data and data[field]:
+                data[field] = encryption.decrypt(data[field], uid)
+    return data
+
+
+@prepare_for_read(decrypt_func=_prepare_goal_for_read)
 def get_user_goal(uid: str) -> Optional[Dict[str, Any]]:
     """Get the current active goal for a user (backward compatibility - returns first active goal)."""
     user_ref = db.collection(users_collection).document(uid)
@@ -30,6 +65,7 @@ def get_user_goal(uid: str) -> Optional[Dict[str, Any]]:
     return None
 
 
+@prepare_for_read(decrypt_func=_prepare_goal_for_read)
 def get_user_goals(uid: str, limit: int = 3) -> List[Dict[str, Any]]:
     """Get all active goals for a user (up to limit)."""
     user_ref = db.collection(users_collection).document(uid)
@@ -46,6 +82,8 @@ def get_user_goals(uid: str, limit: int = 3) -> List[Dict[str, Any]]:
     return goals
 
 
+@set_data_protection_level(data_arg_name='goal_data')
+@prepare_for_write(data_arg_name='goal_data', prepare_func=_prepare_goal_for_write)
 def create_goal(uid: str, goal_data: Dict[str, Any], max_goals: int = 3) -> Dict[str, Any]:
     """Create a new goal for a user. Supports up to max_goals active goals."""
     user_ref = db.collection(users_collection).document(uid)
@@ -75,6 +113,8 @@ def create_goal(uid: str, goal_data: Dict[str, Any], max_goals: int = 3) -> Dict
     return goal_data
 
 
+@set_data_protection_level(data_arg_name='updates')
+@prepare_for_write(data_arg_name='updates', prepare_func=_prepare_goal_for_write)
 def update_goal(uid: str, goal_id: str, updates: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     """Update an existing goal."""
     user_ref = db.collection(users_collection).document(uid)
@@ -88,7 +128,8 @@ def update_goal(uid: str, goal_id: str, updates: Dict[str, Any]) -> Optional[Dic
     updates['updated_at'] = datetime.now(timezone.utc)
     goal_ref.update(updates)
 
-    return goal_ref.get().to_dict()
+    updated_doc = goal_ref.get().to_dict()
+    return _prepare_goal_for_read(updated_doc, uid)
 
 
 def update_goal_progress(uid: str, goal_id: str, current_value: float) -> Optional[Dict[str, Any]]:
@@ -135,6 +176,7 @@ def get_goal_history(uid: str, goal_id: str, days: int = 30) -> List[Dict[str, A
     return history
 
 
+@prepare_for_read(decrypt_func=_prepare_goal_for_read)
 def get_all_goals(uid: str, include_inactive: bool = False) -> List[Dict[str, Any]]:
     """Get all goals for a user."""
     user_ref = db.collection(users_collection).document(uid)

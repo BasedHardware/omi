@@ -1,9 +1,12 @@
+import copy
 from datetime import datetime, timezone
 from typing import List, Dict, Any, Optional
 
 from google.cloud import firestore
 
 from ._client import db
+from database.users import get_data_protection_level
+from utils import encryption
 import logging
 
 logger = logging.getLogger(__name__)
@@ -11,12 +14,38 @@ logger = logging.getLogger(__name__)
 SCREEN_ACTIVITY_COLLECTION = 'screen_activity'
 USERS_COLLECTION = 'users'
 
+# Sensitive fields to encrypt (appName stays plaintext for grouping/queries)
+_ENCRYPTED_FIELDS = ('windowTitle', 'ocrText')
+
+
+def _encrypt_screen_row(doc_data: dict, uid: str, level: str) -> dict:
+    """Encrypt sensitive fields in a screen activity row."""
+    if level in ('enhanced', 'e2ee'):
+        for field in _ENCRYPTED_FIELDS:
+            if field in doc_data and doc_data[field]:
+                doc_data[field] = encryption.encrypt(doc_data[field], uid)
+    return doc_data
+
+
+def _decrypt_screen_row(doc_data: dict, uid: str) -> dict:
+    """Decrypt sensitive fields in a screen activity row."""
+    if not doc_data:
+        return doc_data
+    doc_data = copy.deepcopy(doc_data)
+    level = doc_data.get('data_protection_level')
+    if level in ('enhanced', 'e2ee'):
+        for field in _ENCRYPTED_FIELDS:
+            if field in doc_data and doc_data[field]:
+                doc_data[field] = encryption.decrypt(doc_data[field], uid)
+    return doc_data
+
 
 def upsert_screen_activity(uid: str, rows: List[Dict[str, Any]]) -> int:
     """Batch write screen activity rows to Firestore users/{uid}/screen_activity/{id}."""
     if not rows:
         return 0
 
+    level = get_data_protection_level(uid)
     collection_ref = db.collection(USERS_COLLECTION).document(uid).collection(SCREEN_ACTIVITY_COLLECTION)
     written = 0
 
@@ -31,7 +60,9 @@ def upsert_screen_activity(uid: str, rows: List[Dict[str, Any]]) -> int:
                 'appName': row.get('appName', ''),
                 'windowTitle': row.get('windowTitle', ''),
                 'ocrText': (row.get('ocrText') or '')[:1000],
+                'data_protection_level': level,
             }
+            doc_data = _encrypt_screen_row(doc_data, uid, level)
             batch.set(collection_ref.document(doc_id), doc_data)
         batch.commit()
         written += len(chunk)
@@ -67,6 +98,7 @@ def get_screen_activity(
     for doc in query.stream():
         data = doc.to_dict()
         data['id'] = doc.id
+        data = _decrypt_screen_row(data, uid)
         results.append(data)
 
     return results

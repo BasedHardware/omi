@@ -21,9 +21,9 @@ def _hash_phone_number(phone_number: str) -> str:
 
 
 def _prepare_phone_number_for_write(data: dict, uid: str, level: str) -> dict:
-    """Encrypt phone_number field if data protection level is enhanced."""
+    """Encrypt phone_number field if data protection level is enhanced or e2ee."""
     data = copy.deepcopy(data)
-    if level == 'enhanced' and 'phone_number' in data:
+    if level in ('enhanced', 'e2ee') and 'phone_number' in data:
         # Store hash for lookup queries
         data['phone_number_hash'] = _hash_phone_number(data['phone_number'])
         # Encrypt the actual phone number
@@ -32,12 +32,12 @@ def _prepare_phone_number_for_write(data: dict, uid: str, level: str) -> dict:
 
 
 def _prepare_phone_number_for_read(data: dict, uid: str) -> dict:
-    """Decrypt phone_number field if data protection level is enhanced."""
+    """Decrypt phone_number field if data protection level is enhanced or e2ee."""
     if not data:
         return data
     data = copy.deepcopy(data)
     level = data.get('data_protection_level')
-    if level == 'enhanced' and 'phone_number' in data:
+    if level in ('enhanced', 'e2ee') and 'phone_number' in data:
         data['phone_number'] = encryption.decrypt(data['phone_number'], uid)
     return data
 

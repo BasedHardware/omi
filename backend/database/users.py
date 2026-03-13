@@ -1,3 +1,4 @@
+import copy
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -7,9 +8,31 @@ from google.cloud.firestore_v1 import FieldFilter, transactional
 from ._client import db, document_id_from_seed
 from models.users import Subscription, PlanLimits, PlanType, SubscriptionStatus
 from utils.subscription import get_default_basic_subscription
+from utils import encryption
 import logging
 
 logger = logging.getLogger(__name__)
+
+
+def _encrypt_transcripts(transcripts: list, uid: str) -> list:
+    """Encrypt a list of speech sample transcripts."""
+    return [encryption.encrypt(t, uid) if t else t for t in transcripts]
+
+
+def _decrypt_transcripts(transcripts: list, uid: str) -> list:
+    """Decrypt a list of speech sample transcripts."""
+    return [encryption.decrypt(t, uid) if t else t for t in transcripts]
+
+
+def _decrypt_person_data(data: dict, uid: str) -> dict:
+    """Decrypt speech_sample_transcripts on a person document if encrypted."""
+    if not data:
+        return data
+    level = data.get('data_protection_level')
+    if level in ('enhanced', 'e2ee') and 'speech_sample_transcripts' in data:
+        data = copy.deepcopy(data)
+        data['speech_sample_transcripts'] = _decrypt_transcripts(data['speech_sample_transcripts'], uid)
+    return data
 
 
 def is_exists_user(uid: str):
@@ -65,7 +88,7 @@ def get_person(uid: str, person_id: str):
         return None
     person_data = person_doc.to_dict()
     person_data.setdefault('id', person_doc.id)
-    return person_data
+    return _decrypt_person_data(person_data, uid)
 
 
 def get_people(uid: str):
@@ -74,7 +97,7 @@ def get_people(uid: str):
     for person in people_ref.stream():
         data = person.to_dict()
         data.setdefault('id', person.id)
-        result.append(data)
+        result.append(_decrypt_person_data(data, uid))
     return result
 
 
@@ -85,7 +108,7 @@ def get_person_by_name(uid: str, name: str):
     if docs:
         data = docs[0].to_dict()
         data.setdefault('id', docs[0].id)
-        return data
+        return _decrypt_person_data(data, uid)
     return None
 
 
@@ -106,7 +129,7 @@ def get_people_by_ids(uid: str, person_ids: list[str]):
         if doc.exists:
             data = doc.to_dict()
             data.setdefault('id', doc.id)
-            all_people.append(data)
+            all_people.append(_decrypt_person_data(data, uid))
     return all_people
 
 
@@ -121,7 +144,7 @@ def delete_person(uid: str, person_id: str):
 
 
 @transactional
-def _add_sample_transaction(transaction, person_ref, sample_path, transcript, max_samples):
+def _add_sample_transaction(transaction, person_ref, sample_path, transcript, max_samples, uid=None, level=None):
     """Transaction to atomically add sample and transcript."""
     snapshot = person_ref.get(transaction=transaction)
     if not snapshot.exists:
@@ -148,9 +171,17 @@ def _add_sample_transaction(transaction, person_ref, sample_path, transcript, ma
         if len(transcripts) < existing_sample_count:
             # Pad with empty strings for each existing sample without a transcript
             transcripts.extend([''] * (existing_sample_count - len(transcripts)))
-        transcripts.append(transcript)
+        # Encrypt transcript if protection level requires it
+        if level in ('enhanced', 'e2ee') and uid and transcript:
+            transcripts.append(encryption.encrypt(transcript, uid))
+        else:
+            transcripts.append(transcript)
         update_data['speech_sample_transcripts'] = transcripts
         update_data['speech_samples_version'] = 3
+
+    # Store data_protection_level on the person document
+    if level:
+        update_data['data_protection_level'] = level
 
     transaction.update(person_ref, update_data)
     return True
@@ -177,8 +208,9 @@ def add_person_speech_sample(
         True if sample was added, False if limit reached or person not found
     """
     person_ref = db.collection('users').document(uid).collection('people').document(person_id)
+    level = get_data_protection_level(uid)
     transaction = db.transaction()
-    return _add_sample_transaction(transaction, person_ref, sample_path, transcript, max_samples)
+    return _add_sample_transaction(transaction, person_ref, sample_path, transcript, max_samples, uid=uid, level=level)
 
 
 def get_person_speech_samples_count(uid: str, person_id: str) -> int:
@@ -316,14 +348,21 @@ def set_person_speech_sample_transcript(uid: str, person_id: str, sample_index: 
     while len(transcripts) < len(samples):
         transcripts.append('')
 
-    transcripts[sample_index] = transcript
+    # Encrypt transcript if protection level requires it
+    level = get_data_protection_level(uid)
+    if level in ('enhanced', 'e2ee') and transcript:
+        transcripts[sample_index] = encryption.encrypt(transcript, uid)
+    else:
+        transcripts[sample_index] = transcript
 
-    person_ref.update(
-        {
-            'speech_sample_transcripts': transcripts,
-            'updated_at': datetime.now(timezone.utc),
-        }
-    )
+    update_data = {
+        'speech_sample_transcripts': transcripts,
+        'updated_at': datetime.now(timezone.utc),
+    }
+    if level:
+        update_data['data_protection_level'] = level
+
+    person_ref.update(update_data)
     return True
 
 

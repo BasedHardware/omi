@@ -1,9 +1,12 @@
+import copy
 from datetime import datetime, timezone
 from typing import Optional, List
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
 from ._client import db
+from database.helpers import set_data_protection_level, prepare_for_write, prepare_for_read
+from utils import encryption
 import logging
 
 logger = logging.getLogger(__name__)
@@ -13,8 +16,15 @@ logger = logging.getLogger(__name__)
 action_items_collection = 'action_items'
 
 
-def _prepare_action_item_for_write(action_item_data: dict) -> dict:
-    """Prepare action item data for writing to database"""
+# ************************************************
+# *********** ENCRYPTION HELPERS *****************
+# ************************************************
+
+
+def _prepare_action_item_for_write(action_item_data: dict, uid: str, level: str) -> dict:
+    """Prepare action item data for writing to database, encrypting sensitive fields."""
+    action_item_data = copy.deepcopy(action_item_data)
+
     # Ensure timestamps are properly formatted
     if 'created_at' in action_item_data and action_item_data['created_at']:
         if isinstance(action_item_data['created_at'], str):
@@ -38,15 +48,29 @@ def _prepare_action_item_for_write(action_item_data: dict) -> dict:
                 action_item_data['completed_at'].replace('Z', '+00:00')
             )
 
+    # Encrypt sensitive fields
+    if level in ('enhanced', 'e2ee') and 'description' in action_item_data and action_item_data['description']:
+        action_item_data['description'] = encryption.encrypt(action_item_data['description'], uid)
+
     return action_item_data
 
 
-def _prepare_action_item_for_read(action_item_data: dict) -> dict:
-    """Prepare action item data for reading from database"""
+def _prepare_action_item_for_read(action_item_data: dict, uid: str) -> dict:
+    """Prepare action item data for reading from database, decrypting sensitive fields."""
+    if not action_item_data:
+        return action_item_data
+    action_item_data = copy.deepcopy(action_item_data)
+
     for field in ['created_at', 'updated_at', 'due_at', 'completed_at']:
         if field in action_item_data and action_item_data[field]:
             if hasattr(action_item_data[field], 'timestamp'):
                 action_item_data[field] = datetime.fromtimestamp(action_item_data[field].timestamp(), tz=timezone.utc)
+
+    # Decrypt sensitive fields
+    level = action_item_data.get('data_protection_level')
+    if level in ('enhanced', 'e2ee') and 'description' in action_item_data and action_item_data['description']:
+        action_item_data['description'] = encryption.decrypt(action_item_data['description'], uid)
+
     return action_item_data
 
 
@@ -55,6 +79,8 @@ def _prepare_action_item_for_read(action_item_data: dict) -> dict:
 # *****************************
 
 
+@set_data_protection_level(data_arg_name='action_item_data')
+@prepare_for_write(data_arg_name='action_item_data', prepare_func=_prepare_action_item_for_write)
 def create_action_item(uid: str, action_item_data: dict) -> str:
     """
     Create a new action item for a user.
@@ -66,8 +92,6 @@ def create_action_item(uid: str, action_item_data: dict) -> str:
     Returns:
         The ID of the created action item
     """
-    action_item_data = _prepare_action_item_for_write(action_item_data)
-
     user_ref = db.collection('users').document(uid)
     action_items_ref = user_ref.collection(action_items_collection)
 
@@ -85,6 +109,8 @@ def create_action_item(uid: str, action_item_data: dict) -> str:
     return doc_ref.id
 
 
+@set_data_protection_level(data_arg_name='action_items_data')
+@prepare_for_write(data_arg_name='action_items_data', prepare_func=_prepare_action_item_for_write)
 def create_action_items_batch(uid: str, action_items_data: List[dict]) -> List[str]:
     """
     Create multiple action items in a batch operation.
@@ -106,8 +132,6 @@ def create_action_items_batch(uid: str, action_items_data: List[dict]) -> List[s
     doc_refs = []
 
     for action_item_data in action_items_data:
-        action_item_data = _prepare_action_item_for_write(action_item_data)
-
         if 'created_at' not in action_item_data:
             action_item_data['created_at'] = datetime.now(timezone.utc)
         if 'updated_at' not in action_item_data:
@@ -132,6 +156,7 @@ def create_action_items_batch(uid: str, action_items_data: List[dict]) -> List[s
 # *****************************
 
 
+@prepare_for_read(decrypt_func=_prepare_action_item_for_read)
 def get_action_item(uid: str, action_item_id: str) -> Optional[dict]:
     """
     Get a single action item by ID.
@@ -152,9 +177,10 @@ def get_action_item(uid: str, action_item_id: str) -> Optional[dict]:
 
     data = doc.to_dict()
     data['id'] = doc.id
-    return _prepare_action_item_for_read(data)
+    return data
 
 
+@prepare_for_read(decrypt_func=_prepare_action_item_for_read)
 def get_action_items(
     uid: str,
     conversation_id: Optional[str] = None,
@@ -231,8 +257,7 @@ def get_action_items(
     for doc in docs:
         data = doc.to_dict()
         data['id'] = doc.id
-        action_item = _prepare_action_item_for_read(data)
-        action_items.append(action_item)
+        action_items.append(data)
 
     # Sort results by due_at first (items without due_at come last), then by created_at
     action_items.sort(
@@ -260,6 +285,7 @@ def get_action_items_by_conversation(uid: str, conversation_id: str) -> List[dic
     return get_action_items(uid, conversation_id=conversation_id)
 
 
+@prepare_for_read(decrypt_func=_prepare_action_item_for_read)
 def get_action_items_by_ids(uid: str, action_item_ids: List[str]) -> List[dict]:
     """
     Get multiple action items by their IDs in a single batch operation.
@@ -287,8 +313,7 @@ def get_action_items_by_ids(uid: str, action_item_ids: List[str]) -> List[dict]:
         if doc.exists:
             data = doc.to_dict()
             data['id'] = doc.id
-            action_item = _prepare_action_item_for_read(data)
-            action_items_map[doc.id] = action_item
+            action_items_map[doc.id] = data
 
     # Return in the same order as input IDs
     action_items = []
@@ -304,6 +329,8 @@ def get_action_items_by_ids(uid: str, action_item_ids: List[str]) -> List[dict]:
 # *****************************
 
 
+@set_data_protection_level(data_arg_name='update_data')
+@prepare_for_write(data_arg_name='update_data', prepare_func=_prepare_action_item_for_write)
 def update_action_item(uid: str, action_item_id: str, update_data: dict) -> bool:
     """
     Update an action item.
@@ -316,9 +343,6 @@ def update_action_item(uid: str, action_item_id: str, update_data: dict) -> bool
     Returns:
         True if updated successfully, False otherwise
     """
-    # Prepare data
-    update_data = _prepare_action_item_for_write(update_data)
-
     user_ref = db.collection('users').document(uid)
     action_item_ref = user_ref.collection(action_items_collection).document(action_item_id)
 

@@ -1,3 +1,5 @@
+import copy
+import json
 from datetime import datetime, timezone
 from typing import List, Optional, Dict, Any
 import uuid
@@ -6,10 +8,68 @@ from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
 from ._client import db
+from database.users import get_data_protection_level
+from utils import encryption
 
 users_collection = 'users'
 knowledge_nodes_collection = 'knowledge_nodes'
 knowledge_edges_collection = 'knowledge_edges'
+
+
+# ************************************************
+# *********** ENCRYPTION HELPERS *****************
+# ************************************************
+
+
+def _encrypt_node_data(data: dict, uid: str, level: str) -> dict:
+    """Encrypt sensitive fields on a knowledge node.
+
+    NOTE: `label` and `label_lower` are NOT encrypted because they are required for
+    deduplication queries (find_node_by_label_or_alias). `aliases_lower` is also kept
+    plaintext for the same reason. Only `aliases` (the display-cased list) is encrypted.
+    Edge `label` describes relationships and IS encrypted.
+    """
+    data = copy.deepcopy(data)
+    if level in ('enhanced', 'e2ee'):
+        if 'aliases' in data and data['aliases']:
+            data['aliases'] = encryption.encrypt(json.dumps(data['aliases']), uid)
+    return data
+
+
+def _decrypt_node_data(data: dict, uid: str) -> dict:
+    """Decrypt sensitive fields on a knowledge node."""
+    if not data:
+        return data
+    data = copy.deepcopy(data)
+    level = data.get('data_protection_level')
+    if level in ('enhanced', 'e2ee'):
+        if 'aliases' in data and isinstance(data['aliases'], str):
+            try:
+                data['aliases'] = json.loads(encryption.decrypt(data['aliases'], uid))
+            except (json.JSONDecodeError, Exception):
+                data['aliases'] = []
+    return data
+
+
+def _encrypt_edge_data(data: dict, uid: str, level: str) -> dict:
+    """Encrypt the relationship label on a knowledge edge."""
+    data = copy.deepcopy(data)
+    if level in ('enhanced', 'e2ee'):
+        if 'label' in data and data['label']:
+            data['label'] = encryption.encrypt(data['label'], uid)
+    return data
+
+
+def _decrypt_edge_data(data: dict, uid: str) -> dict:
+    """Decrypt the relationship label on a knowledge edge."""
+    if not data:
+        return data
+    data = copy.deepcopy(data)
+    level = data.get('data_protection_level')
+    if level in ('enhanced', 'e2ee'):
+        if 'label' in data and data['label']:
+            data['label'] = encryption.decrypt(data['label'], uid)
+    return data
 
 
 class KnowledgeNode:
@@ -99,17 +159,18 @@ class KnowledgeEdge:
 def get_knowledge_nodes(uid: str) -> List[Dict[str, Any]]:
     user_ref = db.collection(users_collection).document(uid)
     nodes_ref = user_ref.collection(knowledge_nodes_collection)
-    return [doc.to_dict() for doc in nodes_ref.stream()]
+    return [_decrypt_node_data(doc.to_dict(), uid) for doc in nodes_ref.stream()]
 
 
 def get_knowledge_node(uid: str, node_id: str) -> Optional[Dict[str, Any]]:
     user_ref = db.collection(users_collection).document(uid)
     node_ref = user_ref.collection(knowledge_nodes_collection).document(node_id)
     doc = node_ref.get()
-    return doc.to_dict() if doc.exists else None
+    return _decrypt_node_data(doc.to_dict(), uid) if doc.exists else None
 
 
 def upsert_knowledge_node(uid: str, node_data: Dict[str, Any]) -> Dict[str, Any]:
+    level = get_data_protection_level(uid)
     user_ref = db.collection(users_collection).document(uid)
     nodes_ref = user_ref.collection(knowledge_nodes_collection)
 
@@ -136,6 +197,8 @@ def upsert_knowledge_node(uid: str, node_data: Dict[str, Any]) -> Dict[str, Any]
 
     if existing.exists:
         existing_data = existing.to_dict()
+        # Decrypt existing aliases before merging if they were encrypted
+        existing_data = _decrypt_node_data(existing_data, uid)
         existing_memory_ids = set(existing_data.get('memory_ids', []))
         new_memory_ids = set(node_data.get('memory_ids', []))
         merged_memory_ids = list(existing_memory_ids | new_memory_ids)
@@ -156,8 +219,14 @@ def upsert_knowledge_node(uid: str, node_data: Dict[str, Any]) -> Dict[str, Any]
         node_data['label_lower'] = node_data.get('label', '').lower()
         node_data['aliases_lower'] = [a.lower() for a in node_data.get('aliases', [])]
 
-    node_ref.set(node_data)
-    return node_data
+    # Keep an unencrypted copy to return to the caller
+    result_data = copy.deepcopy(node_data)
+
+    # Encrypt and store
+    node_data['data_protection_level'] = level
+    write_data = _encrypt_node_data(node_data, uid, level)
+    node_ref.set(write_data)
+    return result_data
 
 
 def find_node_by_label_or_alias(uid: str, label: str) -> Optional[Dict[str, Any]]:
@@ -183,10 +252,11 @@ def find_node_by_label_or_alias(uid: str, label: str) -> Optional[Dict[str, Any]
 def get_knowledge_edges(uid: str) -> List[Dict[str, Any]]:
     user_ref = db.collection(users_collection).document(uid)
     edges_ref = user_ref.collection(knowledge_edges_collection)
-    return [doc.to_dict() for doc in edges_ref.stream()]
+    return [_decrypt_edge_data(doc.to_dict(), uid) for doc in edges_ref.stream()]
 
 
 def upsert_knowledge_edge(uid: str, edge_data: Dict[str, Any]) -> Dict[str, Any]:
+    level = get_data_protection_level(uid)
     user_ref = db.collection(users_collection).document(uid)
     edges_ref = user_ref.collection(knowledge_edges_collection)
 
@@ -209,8 +279,14 @@ def upsert_knowledge_edge(uid: str, edge_data: Dict[str, Any]) -> Dict[str, Any]
     else:
         edge_data['created_at'] = datetime.now(timezone.utc)
 
-    edge_ref.set(edge_data)
-    return edge_data
+    # Keep an unencrypted copy to return to the caller
+    result_data = copy.deepcopy(edge_data)
+
+    # Encrypt and store
+    edge_data['data_protection_level'] = level
+    write_data = _encrypt_edge_data(edge_data, uid, level)
+    edge_ref.set(write_data)
+    return result_data
 
 
 def get_knowledge_graph(uid: str) -> Dict[str, Any]:
