@@ -2466,6 +2466,12 @@ class AppState: ObservableObject {
     nonisolated func resetOnboardingAndRestart() {
         log("Resetting onboarding state for current app...")
 
+        // Update live @AppStorage state in the current app instance before touching
+        // raw UserDefaults so SwiftUI doesn't write stale onboarding values back.
+        DispatchQueue.main.async {
+            NotificationCenter.default.post(name: .resetOnboardingRequested, object: nil)
+        }
+
         // Clear onboarding-related UserDefaults keys (thread-safe, do first)
         let onboardingKeys = [
             "hasCompletedOnboarding",
@@ -2503,6 +2509,7 @@ class AppState: ObservableObject {
 
         // Restart off the main thread to avoid blocking the menu action path.
         DispatchQueue.global(qos: .utility).async { [self] in
+            Thread.sleep(forTimeInterval: 0.15)
             // Keep onboarding reset scoped to the current app instance.
             // It must not mutate production defaults, shared local data, or TCC permissions.
             self.restartApp()
@@ -2773,6 +2780,8 @@ class AppState: ObservableObject {
 // MARK: - System Event Notification Names
 
 extension Notification.Name {
+    /// Posted when the current app instance should fully clear its own onboarding state.
+    static let resetOnboardingRequested = Notification.Name("resetOnboardingRequested")
     /// Posted when the system wakes from sleep
     static let systemDidWake = Notification.Name("systemDidWake")
     /// Posted when the screen is locked

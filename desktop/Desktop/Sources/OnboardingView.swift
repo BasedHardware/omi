@@ -63,6 +63,10 @@ struct OnboardingView: View {
             // Pre-warm the ACP bridge before the chat step starts.
             await chatProvider.warmupBridge()
         }
+        .onReceive(NotificationCenter.default.publisher(for: .resetOnboardingRequested)) { _ in
+            log("OnboardingView: resetOnboardingRequested — returning to chat step for current app")
+            currentStep = 0
+        }
     }
 
     private var onboardingContent: some View {
