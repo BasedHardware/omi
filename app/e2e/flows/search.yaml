@@ -12,7 +12,7 @@ setup: normal
 steps:
   - name: Verify home with search icon
     assert:
-      text_visible: ["Today"]
+      text_visible: ["Conversations"]
     note: >
       Top bar has 3 IconButtons after Connect Device:
       search (leftmost), history (middle), settings (rightmost).
@@ -31,5 +31,5 @@ steps:
 
   - name: Verify return to home
     assert:
-      text_visible: ["Today"]
+      text_visible: ["Conversations"]
       bottom_nav_tabs: { min: 4 }
