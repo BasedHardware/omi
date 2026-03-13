@@ -8,7 +8,7 @@
 const E2EE_KEY_STORAGE = 'omi_e2ee_key';
 
 export async function importKey(base64Key: string): Promise<CryptoKey> {
-  const keyBytes = Uint8Array.from(atob(base64Key), c => c.charCodeAt(0));
+  const keyBytes = Uint8Array.from(atob(base64Key), (c) => c.charCodeAt(0));
   if (keyBytes.length !== 32) {
     throw new Error('Invalid key length. Expected 32 bytes.');
   }
@@ -17,7 +17,7 @@ export async function importKey(base64Key: string): Promise<CryptoKey> {
     keyBytes,
     { name: 'AES-GCM', length: 256 },
     false,
-    ['decrypt']
+    ['decrypt'],
   );
 }
 
@@ -26,7 +26,7 @@ export async function decrypt(encrypted: string, key: CryptoKey): Promise<string
 
   let payload: Uint8Array;
   try {
-    payload = Uint8Array.from(atob(encrypted), c => c.charCodeAt(0));
+    payload = Uint8Array.from(atob(encrypted), (c) => c.charCodeAt(0));
   } catch {
     // Not valid base64 — likely plaintext
     return encrypted;
@@ -44,7 +44,7 @@ export async function decrypt(encrypted: string, key: CryptoKey): Promise<string
     const decrypted = await crypto.subtle.decrypt(
       { name: 'AES-GCM', iv: nonce, tagLength: 128 },
       key,
-      ciphertext
+      ciphertext,
     );
     return new TextDecoder().decode(decrypted);
   } catch {

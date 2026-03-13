@@ -17,18 +17,21 @@ export default function E2eeUnlock({ onUnlocked, onClose }: E2eeUnlockProps) {
   const streamRef = useRef<MediaStream | null>(null);
   const scannerRef = useRef<number | null>(null);
 
-  const handleKey = useCallback(async (base64Key: string) => {
-    try {
-      await importKey(base64Key); // Validate
-      storeKey(base64Key);
-      setSuccess(true);
-      setTimeout(() => {
-        onUnlocked();
-      }, 1500);
-    } catch {
-      setError('Invalid key. Please try again.');
-    }
-  }, [onUnlocked]);
+  const handleKey = useCallback(
+    async (base64Key: string) => {
+      try {
+        await importKey(base64Key); // Validate
+        storeKey(base64Key);
+        setSuccess(true);
+        setTimeout(() => {
+          onUnlocked();
+        }, 1500);
+      } catch {
+        setError('Invalid key. Please try again.');
+      }
+    },
+    [onUnlocked],
+  );
 
   const stopScanning = useCallback(() => {
     if (scannerRef.current) {
@@ -36,7 +39,7 @@ export default function E2eeUnlock({ onUnlocked, onClose }: E2eeUnlockProps) {
       scannerRef.current = null;
     }
     if (streamRef.current) {
-      streamRef.current.getTracks().forEach(t => t.stop());
+      streamRef.current.getTracks().forEach((t) => t.stop());
       streamRef.current = null;
     }
   }, []);
@@ -45,13 +48,15 @@ export default function E2eeUnlock({ onUnlocked, onClose }: E2eeUnlockProps) {
     try {
       // Check if BarcodeDetector is available
       if (!('BarcodeDetector' in window)) {
-        setError('QR scanning not supported in this browser. Please paste your recovery key instead.');
+        setError(
+          'QR scanning not supported in this browser. Please paste your recovery key instead.',
+        );
         setMode('paste');
         return;
       }
 
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'environment' }
+        video: { facingMode: 'environment' },
       });
       streamRef.current = stream;
 
@@ -108,8 +113,18 @@ export default function E2eeUnlock({ onUnlocked, onClose }: E2eeUnlockProps) {
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70">
         <div className="mx-4 w-full max-w-md rounded-2xl bg-zinc-900 p-8 text-center">
           <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-green-500/20">
-            <svg className="h-8 w-8 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+            <svg
+              className="h-8 w-8 text-green-400"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M5 13l4 4L19 7"
+              />
             </svg>
           </div>
           <h3 className="text-xl font-bold text-white">Unlocked</h3>
@@ -124,14 +139,40 @@ export default function E2eeUnlock({ onUnlocked, onClose }: E2eeUnlockProps) {
       <div className="mx-4 w-full max-w-md rounded-2xl bg-zinc-900 p-6">
         <div className="mb-6 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <svg className="h-5 w-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+            <svg
+              className="h-5 w-5 text-white"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"
+              />
             </svg>
             <h3 className="text-lg font-bold text-white">Unlock Encrypted Data</h3>
           </div>
-          <button onClick={() => { stopScanning(); onClose(); }} className="text-zinc-500 hover:text-white">
-            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+          <button
+            onClick={() => {
+              stopScanning();
+              onClose();
+            }}
+            className="text-zinc-500 hover:text-white"
+          >
+            <svg
+              className="h-5 w-5"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M6 18L18 6M6 6l12 12"
+              />
             </svg>
           </button>
         </div>
@@ -141,15 +182,22 @@ export default function E2eeUnlock({ onUnlocked, onClose }: E2eeUnlockProps) {
           <button
             onClick={() => setMode('scan')}
             className={`flex-1 rounded-md py-2 text-sm font-medium transition ${
-              mode === 'scan' ? 'bg-zinc-700 text-white' : 'text-zinc-400 hover:text-white'
+              mode === 'scan'
+                ? 'bg-zinc-700 text-white'
+                : 'text-zinc-400 hover:text-white'
             }`}
           >
             📷 Scan QR
           </button>
           <button
-            onClick={() => { stopScanning(); setMode('paste'); }}
+            onClick={() => {
+              stopScanning();
+              setMode('paste');
+            }}
             className={`flex-1 rounded-md py-2 text-sm font-medium transition ${
-              mode === 'paste' ? 'bg-zinc-700 text-white' : 'text-zinc-400 hover:text-white'
+              mode === 'paste'
+                ? 'bg-zinc-700 text-white'
+                : 'text-zinc-400 hover:text-white'
             }`}
           >
             📋 Paste Key
@@ -182,7 +230,10 @@ export default function E2eeUnlock({ onUnlocked, onClose }: E2eeUnlockProps) {
             <input
               type="password"
               value={pasteValue}
-              onChange={(e) => { setPasteValue(e.target.value); setError(''); }}
+              onChange={(e) => {
+                setPasteValue(e.target.value);
+                setError('');
+              }}
               placeholder="Paste recovery key..."
               className="w-full rounded-lg bg-zinc-800 px-4 py-3 text-white placeholder-zinc-600 outline-none focus:ring-2 focus:ring-purple-500"
             />
