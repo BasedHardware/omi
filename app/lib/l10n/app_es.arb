@@ -5,7 +5,7 @@
     "transcriptTab": "Transcripción",
     "actionItemsTab": "Acciones",
     "deleteConversationTitle": "¿Borrar conversación?",
-    "deleteConversationMessage": "¿Seguro que quieres borrar esta conversación? Esta acción no se puede deshacer.",
+    "deleteConversationMessage": "Esto también eliminará los recuerdos, tareas y archivos de audio asociados. Esta acción no se puede deshacer.",
     "confirm": "Confirmar",
     "cancel": "Cancelar",
     "ok": "Aceptar",
@@ -2748,5 +2748,6 @@
     "manageStorage": "Gestionar almacenamiento",
     "safelyBackedUp": "Respaldado en tu teléfono",
     "notYetSynced": "Aún no sincronizado con tu teléfono",
-    "clearAll": "Borrar todo"
+    "clearAll": "Borrar todo",
+    "dontShowAgain": "No mostrar de nuevo"
 }

@@ -5,7 +5,7 @@
     "transcriptTab": "Transcription",
     "actionItemsTab": "Actions à faire",
     "deleteConversationTitle": "Supprimer la conversation ?",
-    "deleteConversationMessage": "Êtes-vous sûr de vouloir supprimer cette conversation ? Cette action est irréversible.",
+    "deleteConversationMessage": "Cela supprimera également les souvenirs, tâches et fichiers audio associés. Cette action est irréversible.",
     "confirm": "Confirmer",
     "cancel": "Annuler",
     "ok": "OK",
@@ -2782,5 +2782,6 @@
     "manageStorage": "Gérer le stockage",
     "safelyBackedUp": "Sauvegardé sur votre téléphone",
     "notYetSynced": "Pas encore synchronisé avec votre téléphone",
-    "clearAll": "Tout effacer"
+    "clearAll": "Tout effacer",
+    "dontShowAgain": "Ne plus afficher"
 }

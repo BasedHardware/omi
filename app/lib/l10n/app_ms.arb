@@ -5,7 +5,7 @@
     "transcriptTab": "Transkrip",
     "actionItemsTab": "Item Tindakan",
     "deleteConversationTitle": "Padam Perbualan?",
-    "deleteConversationMessage": "Adakah anda pasti mahu memadam perbualan ini? Tindakan ini tidak boleh dibatalkan.",
+    "deleteConversationMessage": "Ini juga akan memadam kenangan, tugasan dan fail audio yang berkaitan. Tindakan ini tidak boleh dibatalkan.",
     "confirm": "Sahkan",
     "cancel": "Batal",
     "ok": "Ok",
@@ -2747,5 +2747,6 @@
     "manageStorage": "Urus storan",
     "safelyBackedUp": "Disandarkan dengan selamat ke telefon anda",
     "notYetSynced": "Belum disegerakkan ke telefon anda",
-    "clearAll": "Kosongkan semua"
+    "clearAll": "Kosongkan semua",
+    "dontShowAgain": "Jangan tunjukkan lagi"
 }

@@ -192,7 +192,7 @@ abstract class AppLocalizations {
   /// Message for delete confirmation dialog
   ///
   /// In en, this message translates to:
-  /// **'Are you sure you want to delete this conversation? This action cannot be undone.'**
+  /// **'This will also delete associated memories, tasks, and audio files. This action cannot be undone.'**
   String get deleteConversationMessage;
 
   /// Confirm button label
@@ -3348,7 +3348,7 @@ abstract class AppLocalizations {
   /// Checkbox text to prevent showing dialog again
   ///
   /// In en, this message translates to:
-  /// **'Don\'t show it again'**
+  /// **'Don\'t show again'**
   String get dontShowAgain;
 
   /// Button to acknowledge warning

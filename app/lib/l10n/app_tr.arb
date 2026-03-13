@@ -5,7 +5,7 @@
     "transcriptTab": "Transkript",
     "actionItemsTab": "Eylem Öğeleri",
     "deleteConversationTitle": "Konuşma Silinsin mi?",
-    "deleteConversationMessage": "Bu konuşmayı silmek istediğinizden emin misiniz? Bu işlem geri alınamaz.",
+    "deleteConversationMessage": "Bu işlem ilişkili anıları, görevleri ve ses dosyalarını da silecektir. Bu işlem geri alınamaz.",
     "confirm": "Onayla",
     "cancel": "İptal",
     "ok": "Tamam",
@@ -2782,5 +2782,6 @@
     "manageStorage": "Depolamayı yönet",
     "safelyBackedUp": "Telefonunuza güvenli şekilde yedeklendi",
     "notYetSynced": "Henüz telefonunuzla senkronize edilmedi",
-    "clearAll": "Tümünü temizle"
+    "clearAll": "Tümünü temizle",
+    "dontShowAgain": "Tekrar gösterme"
 }

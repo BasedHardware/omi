@@ -5,7 +5,7 @@
     "transcriptTab": "Transcrição",
     "actionItemsTab": "Ações",
     "deleteConversationTitle": "Apagar conversa?",
-    "deleteConversationMessage": "Tem certeza de que deseja apagar esta conversa? Esta ação não pode ser desfeita.",
+    "deleteConversationMessage": "Isso também excluirá as memórias, tarefas e arquivos de áudio associados. Esta ação não pode ser desfeita.",
     "confirm": "Confirmar",
     "cancel": "Cancelar",
     "ok": "OK",
@@ -2783,5 +2783,6 @@
     "manageStorage": "Gerenciar armazenamento",
     "safelyBackedUp": "Backup seguro no seu telefone",
     "notYetSynced": "Ainda não sincronizado com seu telefone",
-    "clearAll": "Limpar tudo"
+    "clearAll": "Limpar tudo",
+    "dontShowAgain": "Não mostrar novamente"
 }

@@ -5,7 +5,7 @@
     "transcriptTab": "Transkriptsioon",
     "actionItemsTab": "Tegevuspunktid",
     "deleteConversationTitle": "Kustuta vestlus?",
-    "deleteConversationMessage": "Kas olete kindel, et soovite selle vestluse kustutada? Seda toimingut ei saa tagasi võtta.",
+    "deleteConversationMessage": "See kustutab ka seotud mälestused, ülesanded ja helifailid. Seda toimingut ei saa tagasi võtta.",
     "confirm": "Kinnita",
     "cancel": "Tühista",
     "ok": "OK",
@@ -2747,5 +2747,6 @@
     "manageStorage": "Halda salvestusruumi",
     "safelyBackedUp": "Turvaliselt teie telefonile varundatud",
     "notYetSynced": "Pole veel teie telefoniga sünkroniseeritud",
-    "clearAll": "Tühjenda kõik"
+    "clearAll": "Tühjenda kõik",
+    "dontShowAgain": "Ära näita uuesti"
 }

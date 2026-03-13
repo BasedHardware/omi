@@ -5,7 +5,7 @@
     "transcriptTab": "转录",
     "actionItemsTab": "行动项",
     "deleteConversationTitle": "删除对话？",
-    "deleteConversationMessage": "您确定要删除此对话吗？此操作无法撤消。",
+    "deleteConversationMessage": "这也将删除相关的记忆、任务和音频文件。此操作无法撤消。",
     "confirm": "确认",
     "cancel": "取消",
     "ok": "确定",
@@ -2769,5 +2769,6 @@
     "manageStorage": "管理存储",
     "safelyBackedUp": "已安全备份到您的手机",
     "notYetSynced": "尚未同步到您的手机",
-    "clearAll": "全部清除"
+    "clearAll": "全部清除",
+    "dontShowAgain": "不再显示"
 }

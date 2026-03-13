@@ -5,7 +5,7 @@
     "transcriptTab": "Transcripció",
     "actionItemsTab": "Tasques",
     "deleteConversationTitle": "Eliminar conversa?",
-    "deleteConversationMessage": "Esteu segur que voleu eliminar aquesta conversa? Aquesta acció no es pot desfer.",
+    "deleteConversationMessage": "Això també eliminarà els records, tasques i fitxers d'àudio associats. Aquesta acció no es pot desfer.",
     "confirm": "Confirmar",
     "cancel": "Cancel·lar",
     "ok": "D'acord",
@@ -2716,5 +2716,6 @@
     "manageStorage": "Gestionar emmagatzematge",
     "safelyBackedUp": "Còpia de seguretat al vostre telèfon",
     "notYetSynced": "Encara no sincronitzat amb el vostre telèfon",
-    "clearAll": "Esborrar tot"
+    "clearAll": "Esborrar tot",
+    "dontShowAgain": "No ho tornis a mostrar"
 }

@@ -5,7 +5,7 @@
     "transcriptTab": "Transkripcija",
     "actionItemsTab": "Uzdevumi",
     "deleteConversationTitle": "Dzēst sarunu?",
-    "deleteConversationMessage": "Vai tiešām vēlaties dzēst šo sarunu? Šo darbību nevar atsaukt.",
+    "deleteConversationMessage": "Tas arī izdzēsīs saistītās atmiņas, uzdevumus un audio failus. Šo darbību nevar atsaukt.",
     "confirm": "Apstiprināt",
     "cancel": "Atcelt",
     "ok": "Labi",
@@ -2747,5 +2747,6 @@
     "manageStorage": "Pārvaldīt krātuvi",
     "safelyBackedUp": "Droši dublēts jūsu tālrunī",
     "notYetSynced": "Vēl nav sinhronizēts ar jūsu tālruni",
-    "clearAll": "Notīrīt visu"
+    "clearAll": "Notīrīt visu",
+    "dontShowAgain": "Nerādīt vēlreiz"
 }

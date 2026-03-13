@@ -25,7 +25,7 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get deleteConversationMessage =>
-      'Είστε βέβαιοι ότι θέλετε να διαγράψετε αυτή τη συνομιλία; Αυτή η ενέργεια δεν μπορεί να αναιρεθεί.';
+      'Αυτό θα διαγράψει επίσης τις σχετικές αναμνήσεις, εργασίες και αρχεία ήχου. Αυτή η ενέργεια δεν μπορεί να αναιρεθεί.';
 
   @override
   String get confirm => 'Επιβεβαίωση';

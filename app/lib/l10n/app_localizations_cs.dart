@@ -24,7 +24,8 @@ class AppLocalizationsCs extends AppLocalizations {
   String get deleteConversationTitle => 'Smazat konverzaci?';
 
   @override
-  String get deleteConversationMessage => 'Opravdu chcete smazat tuto konverzaci? Tuto akci nelze vrátit zpět.';
+  String get deleteConversationMessage =>
+      'Tím se také smažou související vzpomínky, úkoly a zvukové soubory. Tuto akci nelze vrátit zpět.';
 
   @override
   String get confirm => 'Potvrdit';
@@ -1727,7 +1728,7 @@ class AppLocalizationsCs extends AppLocalizations {
   }
 
   @override
-  String get dontShowAgain => 'Nezobrazovat znovu';
+  String get dontShowAgain => 'Znovu nezobrazovat';
 
   @override
   String get iUnderstand => 'Rozumím';

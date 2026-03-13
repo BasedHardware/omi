@@ -25,7 +25,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get deleteConversationMessage =>
-      'Are you sure you want to delete this conversation? This action cannot be undone.';
+      'This will also delete associated memories, tasks, and audio files. This action cannot be undone.';
 
   @override
   String get confirm => 'Confirm';
@@ -1724,7 +1724,7 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get dontShowAgain => 'Don\'t show it again';
+  String get dontShowAgain => 'Don\'t show again';
 
   @override
   String get iUnderstand => 'I Understand';

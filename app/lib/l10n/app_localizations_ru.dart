@@ -25,7 +25,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get deleteConversationMessage =>
-      'Вы уверены, что хотите удалить этот разговор? Это действие нельзя будет отменить.';
+      'Это также удалит связанные воспоминания, задачи и аудиофайлы. Это действие нельзя отменить.';
 
   @override
   String get confirm => 'Подтвердить';

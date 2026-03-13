@@ -5,7 +5,7 @@
     "transcriptTab": "Transcriptie",
     "actionItemsTab": "Actiepunten",
     "deleteConversationTitle": "Gesprek verwijderen?",
-    "deleteConversationMessage": "Weet je zeker dat je dit gesprek wilt verwijderen? Deze actie kan niet ongedaan worden gemaakt.",
+    "deleteConversationMessage": "Dit zal ook de bijbehorende herinneringen, taken en audiobestanden verwijderen. Deze actie kan niet ongedaan worden gemaakt.",
     "confirm": "Bevestigen",
     "cancel": "Annuleren",
     "ok": "OK",
@@ -2747,5 +2747,6 @@
     "manageStorage": "Opslag beheren",
     "safelyBackedUp": "Veilig opgeslagen op uw telefoon",
     "notYetSynced": "Nog niet gesynchroniseerd met uw telefoon",
-    "clearAll": "Alles wissen"
+    "clearAll": "Alles wissen",
+    "dontShowAgain": "Niet meer weergeven"
 }

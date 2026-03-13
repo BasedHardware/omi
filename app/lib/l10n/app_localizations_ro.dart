@@ -25,7 +25,7 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get deleteConversationMessage =>
-      'Ești sigur că vrei să ștergi această conversație? Această acțiune nu poate fi anulată.';
+      'Aceasta va șterge și amintirile, sarcinile și fișierele audio asociate. Această acțiune nu poate fi anulată.';
 
   @override
   String get confirm => 'Confirmă';

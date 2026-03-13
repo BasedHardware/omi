@@ -5,7 +5,7 @@
     "transcriptTab": "प्रतिलेख",
     "actionItemsTab": "कार्य",
     "deleteConversationTitle": "बातचीत हटाएं?",
-    "deleteConversationMessage": "क्या आप वाकई इस बातचीत को हटाना चाहते हैं? यह क्रिया पूर्ववत नहीं की जा सकती।",
+    "deleteConversationMessage": "इससे संबंधित यादें, कार्य और ऑडियो फ़ाइलें भी हटा दी जाएंगी। यह क्रिया पूर्ववत नहीं की जा सकती।",
     "confirm": "पुष्टि करें",
     "cancel": "रद्द करें",
     "ok": "ठीक है",
@@ -2748,5 +2748,6 @@
     "manageStorage": "स्टोरेज प्रबंधित करें",
     "safelyBackedUp": "आपके फोन पर सुरक्षित बैकअप",
     "notYetSynced": "अभी तक आपके फोन पर सिंक नहीं हुआ",
-    "clearAll": "सब हटाएं"
+    "clearAll": "सब हटाएं",
+    "dontShowAgain": "दोबारा न दिखाएं"
 }

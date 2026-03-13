@@ -5,7 +5,7 @@
     "transcriptTab": "Transkrip",
     "actionItemsTab": "Item Tindakan",
     "deleteConversationTitle": "Hapus Percakapan?",
-    "deleteConversationMessage": "Apakah Anda yakin ingin menghapus percakapan ini? Tindakan ini tidak dapat dibatalkan.",
+    "deleteConversationMessage": "Ini juga akan menghapus kenangan, tugas, dan file audio terkait. Tindakan ini tidak dapat dibatalkan.",
     "confirm": "Konfirmasi",
     "cancel": "Batal",
     "ok": "Oke",
@@ -2789,5 +2789,6 @@
     "manageStorage": "Kelola penyimpanan",
     "safelyBackedUp": "Dicadangkan dengan aman ke ponsel Anda",
     "notYetSynced": "Belum disinkronkan ke ponsel Anda",
-    "clearAll": "Hapus semua"
+    "clearAll": "Hapus semua",
+    "dontShowAgain": "Jangan tampilkan lagi"
 }

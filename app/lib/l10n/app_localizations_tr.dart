@@ -24,7 +24,8 @@ class AppLocalizationsTr extends AppLocalizations {
   String get deleteConversationTitle => 'Konuşma Silinsin mi?';
 
   @override
-  String get deleteConversationMessage => 'Bu konuşmayı silmek istediğinizden emin misiniz? Bu işlem geri alınamaz.';
+  String get deleteConversationMessage =>
+      'Bu işlem ilişkili anıları, görevleri ve ses dosyalarını da silecektir. Bu işlem geri alınamaz.';
 
   @override
   String get confirm => 'Onayla';
@@ -1731,7 +1732,7 @@ class AppLocalizationsTr extends AppLocalizations {
   }
 
   @override
-  String get dontShowAgain => 'Bir daha gösterme';
+  String get dontShowAgain => 'Tekrar gösterme';
 
   @override
   String get iUnderstand => 'Anlıyorum';

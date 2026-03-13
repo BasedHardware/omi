@@ -5,7 +5,7 @@
     "transcriptTab": "Transkript",
     "actionItemsTab": "Aufgaben",
     "deleteConversationTitle": "Unterhaltung löschen?",
-    "deleteConversationMessage": "Sind Sie sicher, dass Sie diese Unterhaltung löschen möchten? Diese Aktion kann nicht rückgängig gemacht werden.",
+    "deleteConversationMessage": "Dadurch werden auch zugehörige Erinnerungen, Aufgaben und Audiodateien gelöscht. Diese Aktion kann nicht rückgängig gemacht werden.",
     "confirm": "Bestätigen",
     "cancel": "Abbrechen",
     "ok": "OK",
@@ -2715,5 +2715,6 @@
     "manageStorage": "Speicher verwalten",
     "safelyBackedUp": "Sicher auf Ihrem Telefon gesichert",
     "notYetSynced": "Noch nicht mit Ihrem Telefon synchronisiert",
-    "clearAll": "Alles löschen"
+    "clearAll": "Alles löschen",
+    "dontShowAgain": "Nicht erneut anzeigen"
 }

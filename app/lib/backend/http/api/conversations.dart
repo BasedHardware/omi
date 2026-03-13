@@ -85,7 +85,7 @@ Future<ServerConversation?> reProcessConversationServer(String conversationId, {
 
 Future<bool> deleteConversationServer(String conversationId) async {
   var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/conversations/$conversationId',
+    url: '${Env.apiBaseUrl}v1/conversations/$conversationId?cascade=true',
     headers: {},
     method: 'DELETE',
     body: '',

@@ -25,7 +25,7 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get deleteConversationMessage =>
-      'Er du sikker på, at du vil slette denne samtale? Denne handling kan ikke fortrydes.';
+      'Dette vil også slette tilknyttede minder, opgaver og lydfiler. Denne handling kan ikke fortrydes.';
 
   @override
   String get confirm => 'Bekræft';

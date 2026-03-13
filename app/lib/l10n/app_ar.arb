@@ -5,7 +5,7 @@
     "transcriptTab": "النص المكتوب",
     "actionItemsTab": "المهام",
     "deleteConversationTitle": "حذف المحادثة؟",
-    "deleteConversationMessage": "هل أنت متأكد من رغبتك في حذف هذه المحادثة؟ لا يمكن التراجع عن هذا الإجراء.",
+    "deleteConversationMessage": "سيؤدي هذا أيضًا إلى حذف الذكريات والمهام وملفات الصوت المرتبطة. لا يمكن التراجع عن هذا الإجراء.",
     "confirm": "تأكيد",
     "cancel": "إلغاء",
     "ok": "حسناً",
@@ -2714,5 +2714,6 @@
     "manageStorage": "إدارة التخزين",
     "safelyBackedUp": "تم النسخ الاحتياطي بأمان إلى هاتفك",
     "notYetSynced": "لم تتم المزامنة بعد مع هاتفك",
-    "clearAll": "مسح الكل"
+    "clearAll": "مسح الكل",
+    "dontShowAgain": "عدم الإظهار مجدداً"
 }

@@ -5,7 +5,7 @@
     "transcriptTab": "Transcriere",
     "actionItemsTab": "Sarcini",
     "deleteConversationTitle": "Ștergi conversația?",
-    "deleteConversationMessage": "Ești sigur că vrei să ștergi această conversație? Această acțiune nu poate fi anulată.",
+    "deleteConversationMessage": "Aceasta va șterge și amintirile, sarcinile și fișierele audio asociate. Această acțiune nu poate fi anulată.",
     "confirm": "Confirmă",
     "cancel": "Anulează",
     "ok": "Ok",
@@ -2747,5 +2747,6 @@
     "manageStorage": "Gestionare stocare",
     "safelyBackedUp": "Salvat în siguranță pe telefonul dvs.",
     "notYetSynced": "Nu a fost încă sincronizat cu telefonul dvs.",
-    "clearAll": "Șterge tot"
+    "clearAll": "Șterge tot",
+    "dontShowAgain": "Nu mai afișa"
 }

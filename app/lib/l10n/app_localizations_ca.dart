@@ -25,7 +25,7 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get deleteConversationMessage =>
-      'Esteu segur que voleu eliminar aquesta conversa? Aquesta acció no es pot desfer.';
+      'Això també eliminarà els records, tasques i fitxers d\'àudio associats. Aquesta acció no es pot desfer.';
 
   @override
   String get confirm => 'Confirmar';

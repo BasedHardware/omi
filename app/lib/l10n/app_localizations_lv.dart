@@ -24,7 +24,8 @@ class AppLocalizationsLv extends AppLocalizations {
   String get deleteConversationTitle => 'Dzēst sarunu?';
 
   @override
-  String get deleteConversationMessage => 'Vai tiešām vēlaties dzēst šo sarunu? Šo darbību nevar atsaukt.';
+  String get deleteConversationMessage =>
+      'Tas arī izdzēsīs saistītās atmiņas, uzdevumus un audio failus. Šo darbību nevar atsaukt.';
 
   @override
   String get confirm => 'Apstiprināt';
@@ -1729,7 +1730,7 @@ class AppLocalizationsLv extends AppLocalizations {
   }
 
   @override
-  String get dontShowAgain => 'Vairs nerādīt';
+  String get dontShowAgain => 'Nerādīt vēlreiz';
 
   @override
   String get iUnderstand => 'Es saprotu';

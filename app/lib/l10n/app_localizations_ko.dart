@@ -24,7 +24,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get deleteConversationTitle => '대화를 삭제하시겠습니까?';
 
   @override
-  String get deleteConversationMessage => '이 대화를 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.';
+  String get deleteConversationMessage => '관련된 기억, 작업 및 오디오 파일도 삭제됩니다. 이 작업은 되돌릴 수 없습니다.';
 
   @override
   String get confirm => '확인';
@@ -1700,7 +1700,7 @@ class AppLocalizationsKo extends AppLocalizations {
   }
 
   @override
-  String get dontShowAgain => '다시 표시하지 않음';
+  String get dontShowAgain => '다시 표시하지 않기';
 
   @override
   String get iUnderstand => '이해했습니다';

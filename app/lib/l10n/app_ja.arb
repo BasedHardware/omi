@@ -5,7 +5,7 @@
     "transcriptTab": "トランスクリプト",
     "actionItemsTab": "アクションアイテム",
     "deleteConversationTitle": "会話を削除しますか？",
-    "deleteConversationMessage": "この会話を削除してもよろしいですか？この操作は元に戻せません。",
+    "deleteConversationMessage": "関連する記憶、タスク、音声ファイルも削除されます。この操作は元に戻せません。",
     "confirm": "確認",
     "cancel": "キャンセル",
     "ok": "OK",
@@ -2748,5 +2748,6 @@
     "manageStorage": "ストレージを管理",
     "safelyBackedUp": "スマホに安全にバックアップ済み",
     "notYetSynced": "まだスマホに同期されていません",
-    "clearAll": "すべて削除"
+    "clearAll": "すべて削除",
+    "dontShowAgain": "今後表示しない"
 }

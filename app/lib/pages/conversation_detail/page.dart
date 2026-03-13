@@ -374,10 +374,8 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
           context,
           () => Navigator.pop(context),
           () {
-            {
-              final convoProvider = context.read<ConversationProvider>();
-              convoProvider.deleteConversation(provider.conversation);
-            }
+            final convoProvider = context.read<ConversationProvider>();
+            convoProvider.deleteConversation(provider.conversation);
             Navigator.pop(context); // Close dialog
             Navigator.pop(context, {'deleted': true}); // Close detail page
           },

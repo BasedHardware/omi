@@ -25,7 +25,7 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get deleteConversationMessage =>
-      'Naozaj chcete odstrániť túto konverzáciu? Túto akciu nie je možné vrátiť späť.';
+      'Tým sa tiež vymažú súvisiace spomienky, úlohy a zvukové súbory. Túto akciu nie je možné vrátiť späť.';
 
   @override
   String get confirm => 'Potvrdiť';
@@ -1731,7 +1731,7 @@ class AppLocalizationsSk extends AppLocalizations {
   }
 
   @override
-  String get dontShowAgain => 'Nezobrazovať znova';
+  String get dontShowAgain => 'Znovu nezobrazovať';
 
   @override
   String get iUnderstand => 'Rozumiem';

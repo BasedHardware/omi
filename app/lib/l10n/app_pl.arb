@@ -5,7 +5,7 @@
     "transcriptTab": "Transkrypcja",
     "actionItemsTab": "Zadania",
     "deleteConversationTitle": "Usunąć rozmowę?",
-    "deleteConversationMessage": "Czy na pewno chcesz usunąć tę rozmowę? Ta czynność nie może zostać cofnięta.",
+    "deleteConversationMessage": "Spowoduje to również usunięcie powiązanych wspomnień, zadań i plików audio. Tej czynności nie można cofnąć.",
     "confirm": "Potwierdź",
     "cancel": "Anuluj",
     "ok": "OK",
@@ -2782,5 +2782,6 @@
     "manageStorage": "Zarządzaj pamięcią",
     "safelyBackedUp": "Bezpiecznie zapisane na Twoim telefonie",
     "notYetSynced": "Jeszcze nie zsynchronizowano z Twoim telefonem",
-    "clearAll": "Wyczyść wszystko"
+    "clearAll": "Wyczyść wszystko",
+    "dontShowAgain": "Nie pokazuj ponownie"
 }

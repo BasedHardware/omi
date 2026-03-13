@@ -25,7 +25,7 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get deleteConversationMessage =>
-      'Czy na pewno chcesz usunąć tę rozmowę? Ta czynność nie może zostać cofnięta.';
+      'Spowoduje to również usunięcie powiązanych wspomnień, zadań i plików audio. Tej czynności nie można cofnąć.';
 
   @override
   String get confirm => 'Potwierdź';
