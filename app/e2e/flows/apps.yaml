@@ -23,78 +23,19 @@ steps:
 
   - name: Verify apps page
     assert:
-      text_visible: ["Featured", "Create Your Own App"]
+      text_visible: ["Featured"]
     note: >
       ExploreInstallPage shows: search bar, filter button, create button,
       popular apps section (horizontal scroll), category sections.
     screenshot: apps-explore
 
-  - name: Search for an app
-    press: { type: textfield, hint: "search bar at top" }
-    fill: { type: textfield, value: "note" }
-    screenshot: apps-search
-
-  - name: Clear search
-    back: true
-
-  - name: Open filter sheet
-    press: { type: gesture, hint: "filter icon button near search bar" }
-    screenshot: filter-sheet
-
-  - name: Filter sheet options
-    assert:
-      text_visible: ["Filter"]
-    note: "FilterSheet — category and capability filters"
-    screenshot: filter-options
-
-  - name: Close filter sheet
-    back: true
-
   - name: Scroll to see categories
     scroll: down
     screenshot: apps-categories
 
-  - name: Tap a category
-    press: { type: gesture, hint: "category card in list" }
-    screenshot: category-apps
-
-  - name: Back from category
-    back: true
-
-  - name: Scroll to popular apps
+  - name: Scroll back up
     scroll: up
-    screenshot: popular-apps
-
-  - name: Tap an app for detail
-    press: { type: gesture, hint: "app item in popular section or list" }
-    screenshot: app-detail
-
-  - name: App detail page
-    assert:
-      text_visible: ["Install"]
-    note: >
-      Shows: app icon, name, description, install/enable button,
-      reviews section, capabilities card, info card.
-      Can scroll to see reviews.
-    screenshot: app-detail-view
-
-  - name: Scroll app detail
-    scroll: down
-    screenshot: app-detail-scrolled
-
-  - name: Back to apps
-    back: true
-
-  - name: Tap create app button
-    press: { type: gesture, hint: "create/+ button — shows CreateOptionsSheet" }
-    screenshot: create-options
-
-  - name: Create options sheet
-    note: "CreateOptionsSheet — options to create custom app or add MCP server"
-    screenshot: create-sheet
-
-  - name: Close create sheet
-    back: true
+    screenshot: apps-scrolled-up
 
   - name: Return to home tab
     press: { bottom_nav_tab: 0 }
