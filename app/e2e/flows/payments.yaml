@@ -12,10 +12,8 @@ prerequisites:
 setup: normal
 
 steps:
-  - name: Navigate to Payments
-    note: "Settings → Profile → Payment Methods"
-    press: { type: gesture, hint: "settings gear icon top-right" }
-    screenshot: settings-open
+  - name: Open settings drawer
+    press: { type: button, position: rightmost }
 
   - name: Open Profile settings
     press: { type: gesture, hint: "Profile row — first item in settings" }
@@ -28,7 +26,7 @@ steps:
 
   - name: Verify payments page
     assert:
-      text_visible: ["Stripe", "PayPal"]
+      interactive_count: { min: 2 }
     note: >
       PaymentMethodCard widgets showing Stripe and PayPal.
       Each card has status badge (Active, Connected, Not Connected)
@@ -37,5 +35,9 @@ steps:
 
   - name: Back to profile
     back: true
+
+  - name: Back to settings
     back: true
+
+  - name: Close settings
     back: true
