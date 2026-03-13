@@ -53,6 +53,9 @@ for submodule in [
     mod = _stub_module(f"database.{submodule}")
     setattr(database_mod, submodule, mod)
 
+users_mod = sys.modules["database.users"]
+users_mod.get_user_language_preference = MagicMock(return_value="en")
+
 vector_db_mod = sys.modules["database.vector_db"]
 for attr in [
     "find_similar_memories",
