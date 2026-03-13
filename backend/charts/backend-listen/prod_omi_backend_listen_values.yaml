@@ -353,22 +353,23 @@ autoscaling:
         periodSeconds: 300
       - type: Pods
         value: 1
-        periodSeconds: 60
+        periodSeconds: 120
       selectPolicy: Min
     scaleUp:
-      stabilizationWindowSeconds: 30
+      stabilizationWindowSeconds: 120
       policies:
       - type: Percent
-        value: 100
-        periodSeconds: 1
+        value: 30
+        periodSeconds: 60
       - type: Pods
-        value: 10
-        periodSeconds: 1
+        value: 5
+        periodSeconds: 60
       selectPolicy: Max
   # targetCPUUtilizationPercentage: 70
   # targetMemoryUtilizationPercentage: 70
-  requestsPerPod: 10
+  # requestsPerPod: 10
   # failedResponseCode: 10
+  activeConnectionsPerPod: 20
 
 podDisruptionBudget:
   minAvailable: "80%"
