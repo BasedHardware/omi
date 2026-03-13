@@ -1,0 +1,92 @@
+# Setup Flow: auth_ready — Sign in with Google as a real user
+# Automatically run by flow-walker when a flow's auth_ready prerequisite is not met.
+# Requires env vars: FLOW_WALKER_TEST_EMAIL, FLOW_WALKER_TEST_PASSWORD
+# Requires: test account added as GCP OAuth console test user (Testing mode blocks non-test-users)
+
+name: setup-auth-ready
+description: Sign in with Google and complete onboarding — full real-user flow through Chrome OAuth
+
+steps:
+  # ── Flutter: Get Started overlay ──
+  - name: Verify Get Started screen
+    assert:
+      text_visible: ["Get Started"]
+    screenshot: get-started
+
+  - name: Tap Get Started
+    press: { text: "Get Started" }
+    wait: 2
+    screenshot: auth-page
+
+  # ── Flutter: Auth page ──
+  - name: Verify auth page
+    assert:
+      text_visible: ["Sign in with Google"]
+
+  - name: Tap Sign in with Google
+    press: { text: "Sign in with Google" }
+    wait: 2
+
+  # ── Flutter: Data & Privacy consent sheet ──
+  - name: Accept Data & Privacy
+    press: { text: "Continue with Google" }
+    wait: 4
+    screenshot: chrome-opening
+
+  # ── Chrome: Google Sign-In (system UI — UIAutomator) ──
+  # Email field is auto-focused but has empty text/hint/desc in UIAutomator.
+  # Use focused: true to type directly into the active EditText.
+  - name: Enter email
+    fill: { value: "$FLOW_WALKER_TEST_EMAIL", focused: true }
+    wait: 1
+    screenshot: email-entered
+
+  - name: Tap Next after email
+    press: { text: "Next" }
+    wait: 4
+    screenshot: password-page
+
+  # ── Chrome: Password page ──
+  - name: Enter password
+    fill: { value: "$FLOW_WALKER_TEST_PASSWORD", focused: true }
+    wait: 1
+
+  - name: Tap Next to sign in
+    press: { text: "Next" }
+    wait: 6
+    screenshot: oauth-redirect
+
+  # ── Flutter: Onboarding — Name entry ──
+  # After OAuth redirect, app shows name entry or onboarding screens.
+  # Name field may be pre-filled from Google profile.
+  - name: Submit name (tap Continue/Next)
+    press: { text: "Continue" }
+    wait: 2
+    screenshot: after-name
+
+  # ── Flutter: Onboarding — Language selection ──
+  - name: Confirm language (English default)
+    press: { text: "Confirm" }
+    wait: 2
+    screenshot: after-language
+
+  # ── Flutter: Onboarding — Permissions ──
+  # System permission dialogs may appear (notifications, microphone, location).
+  # Dismiss each one — these are Android system UI, handled via UIAutomator.
+  - name: Handle notification permission
+    press: { text: "Allow" }
+    wait: 1
+
+  - name: Handle location permission (if shown)
+    press: { text: "While using the app" }
+    wait: 1
+
+  # ── Flutter: Onboarding complete → Home screen ──
+  - name: Skip remaining onboarding screens
+    press: { text: "Skip" }
+    wait: 2
+
+  - name: Verify home screen
+    assert:
+      text_visible: ["Today"]
+    screenshot: home-screen
