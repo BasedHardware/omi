@@ -184,7 +184,7 @@ class _SpeechProfileSharingPageState extends State<SpeechProfileSharingPage> {
       appBar: AppBar(
         backgroundColor: const Color(0xFF0D0D0D),
         elevation: 0,
-        title: Text(context.l10n.sharedProfiles, style: const TextStyle(color: Colors.white, fontSize: 18)),
+        title: Text(context.l10n.speechProfileSharing, style: const TextStyle(color: Colors.white, fontSize: 18)),
         centerTitle: true,
         actions: [IconButton(icon: const Icon(Icons.add), onPressed: _openShareDialog)],
       ),

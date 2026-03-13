@@ -14,8 +14,6 @@ import 'package:omi/pages/speech_profile/page.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
-import 'package:omi/backend/http/api/speech_profile.dart';
-import 'package:omi/widgets/share_speech_profile_dialog.dart';
 
 import 'package:omi/pages/settings/conversation_display_settings.dart';
 
@@ -29,23 +27,6 @@ class ProfilePage extends StatefulWidget {
 }
 
 class _ProfilePageState extends State<ProfilePage> {
-  bool? _hasProfile;
-
-  @override
-  void initState() {
-    super.initState();
-    _prefetchProfileStatus();
-  }
-
-  Future<void> _prefetchProfileStatus() async {
-    final hasProfile = await userHasSpeakerProfile();
-    if (mounted) setState(() => _hasProfile = hasProfile);
-  }
-
-  void _showSpeechProfileSharingDialog(BuildContext context) {
-    showShareSpeechProfileDialog(context, cachedHasProfile: _hasProfile);
-  }
-
   Widget _buildSectionContainer({required List<Widget> children}) {
     return Container(
       decoration: BoxDecoration(
@@ -250,13 +231,7 @@ class _ProfilePageState extends State<ProfilePage> {
                 ),
                 const Divider(height: 1, color: Color(0xFF3C3C43)),
                 _buildProfileItem(
-                  title: context.l10n.shareSpeechProfile,
-                  icon: const Icon(Icons.person_add_alt_1, color: Color(0xFF8E8E93), size: 20),
-                  onTap: () => _showSpeechProfileSharingDialog(context),
-                ),
-                const Divider(height: 1, color: Color(0xFF3C3C43)),
-                _buildProfileItem(
-                  title: context.l10n.sharedProfiles,
+                  title: context.l10n.speechProfileSharing,
                   icon: const Icon(Icons.swap_horiz, color: Color(0xFF8E8E93), size: 20),
                   onTap: () => routeToPage(context, const SpeechProfileSharingPage()),
                 ),
