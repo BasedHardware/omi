@@ -40,7 +40,7 @@ struct AskAIInputView: View {
             HStack(spacing: 6) {
                 ZStack(alignment: .topLeading) {
                     if localInput.isEmpty {
-                        Text("Ask a question...")
+                        Text("Ask Fazm...")
                             .scaledFont(size: 13)
                             .foregroundColor(.secondary)
                             .padding(.horizontal, 8)
