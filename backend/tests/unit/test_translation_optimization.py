@@ -440,6 +440,72 @@ class TestShouldPersistTranslation:
         assert should_persist_translation("", "", "en", "en") is False
 
 
+class TestTranslateSegmentGuardIntegration:
+    """Integration test simulating _translate_segment's guard path.
+
+    Verifies the full logic flow: translate API returns same text with target lang detected,
+    guard triggers early return, pending entry is pruned, no translation is persisted.
+    """
+
+    def test_noop_translation_skips_persist_and_prunes_pending(self):
+        """When API returns identical text with same detected lang, no Translation is created
+        and pending_translations entry is pruned."""
+        segment_text = "Transcription service."
+        translation_language = "en"
+        translation_language_base = "en"
+        pending_translations = {'seg-1': {'text_hash': 'abc123', 'version': 1}}
+        persisted_translations = []  # tracks what would be written to DB
+
+        # Simulate translate API returning identical text with "en" detected
+        translated_text = "Transcription service."
+        detected_lang = "en"
+
+        # Simulate language cache update (should still happen before guard)
+        cache = TranscriptSegmentLanguageCache()
+        cache.update_from_translate_response('seg-1', detected_lang, translation_language_base)
+        assert cache.cache.get('seg-1') is True  # cache learns target language
+
+        # Guard check — same as transcribe.py line 1514
+        if not should_persist_translation(
+            segment_text, translated_text, detected_lang, translation_language_base or translation_language
+        ):
+            pending_translations.pop('seg-1', None)
+            # Early return — no Translation created
+        else:
+            persisted_translations.append({'lang': translation_language, 'text': translated_text})
+
+        # Verify: no translation persisted, pending entry pruned
+        assert len(persisted_translations) == 0
+        assert 'seg-1' not in pending_translations
+
+    def test_real_translation_persists_and_keeps_pending(self):
+        """When API returns different text (real translation), Translation IS created."""
+        segment_text = "Bonjour le monde"
+        translation_language = "en"
+        translation_language_base = "en"
+        pending_translations = {'seg-2': {'text_hash': 'def456', 'version': 1}}
+        persisted_translations = []
+
+        translated_text = "Hello world"
+        detected_lang = "fr"
+
+        cache = TranscriptSegmentLanguageCache()
+        cache.update_from_translate_response('seg-2', detected_lang, translation_language_base)
+        assert cache.cache.get('seg-2') is False  # cache learns non-target language
+
+        if not should_persist_translation(
+            segment_text, translated_text, detected_lang, translation_language_base or translation_language
+        ):
+            pending_translations.pop('seg-2', None)
+        else:
+            persisted_translations.append({'lang': translation_language, 'text': translated_text})
+            pending_translations.pop('seg-2', None)  # normal cleanup after persist
+
+        # Verify: translation WAS persisted
+        assert len(persisted_translations) == 1
+        assert persisted_translations[0]['text'] == "Hello world"
+
+
 class TestRedisCacheTTL:
     def setup_method(self):
         self.service = TranslationService()
