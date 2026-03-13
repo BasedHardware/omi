@@ -128,6 +128,12 @@ Always format code after making changes. The pre-commit hook handles this automa
 - **Python (backend/)**: `black --line-length 120 --skip-string-normalization <files>`
 - **C/C++ (firmware: omi/, omiGlass/)**: `clang-format -i <files>`
 
+## Git
+
+- Never push directly to `main`.
+- Never merge directly from a local branch. Land changes through a PR only.
+- When a change should go remote, create or use a feature branch, commit there, open/update a PR, and merge via the PR.
+
 ## Documentation Maintenance
 
 - Update this file and `CLAUDE.md` in the same commit when rules change.
