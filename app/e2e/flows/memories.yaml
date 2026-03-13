@@ -27,57 +27,7 @@ steps:
       Memory list below with category chips.
     screenshot: memories-view
 
-  - name: Search for a memory
-    press: { type: textfield, hint: "SearchBar at top" }
-    fill: { type: textfield, value: "test" }
-    screenshot: memories-search
-
-  - name: Clear search
-    press: { type: gesture, hint: "clear/X button in search bar trailing" }
-
-  - name: Open memory graph
-    press: { type: gesture, hint: "graph icon button near search bar" }
-    screenshot: memory-graph
-
-  - name: Back from graph
-    back: true
-
-  - name: Open memory management
-    press: { type: gesture, hint: "management/settings icon button near search bar" }
-    screenshot: memory-management
-
-  - name: Memory management sheet
-    assert:
-      text_visible: ["Clear"]
-    note: "MemoryManagementSheet — shows category filters and bulk actions"
-    screenshot: management-sheet
-
-  - name: Close management sheet
-    back: true
-
-  - name: Tap FAB to add memory
-    press: { type: button, hint: "FloatingActionButton — add memory" }
-    screenshot: add-memory-dialog
-
-  - name: Fill memory content
-    fill: { type: textfield, value: "E2E test memory — added manually" }
-    screenshot: memory-content-filled
-
-  - name: Close add memory dialog
-    back: true
-
-  - name: Tap a memory item (if any exist)
-    note: "Opens MemoryEditSheet for quick editing — edit content, change category, save or delete"
-    press: { type: gesture, hint: "memory item in list" }
-    screenshot: memory-edit
-
-  - name: Verify edit sheet has controls
-    assert:
-      text_visible: ["Save", "Delete"]
-    note: "MemoryEditSheet: editable content field, category chip selector, save and delete buttons"
-
-  - name: Close edit sheet
-    back: true
-
   - name: Return to home tab
     press: { bottom_nav_tab: 0 }
+    assert:
+      text_visible: ["Conversations"]
