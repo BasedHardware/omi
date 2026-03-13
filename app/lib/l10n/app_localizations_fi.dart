@@ -8551,4 +8551,61 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get clearAll => 'Tyhjennä kaikki';
+
+  @override
+  String get enableE2ee => 'Enable E2EE';
+
+  @override
+  String get recoveryKey => 'Recovery Key';
+
+  @override
+  String get saveKeyMessage =>
+      'Save this key somewhere safe. You will need it to recover your encrypted memories if you switch devices. Without this key, E2E encrypted data is unrecoverable.';
+
+  @override
+  String get savedMyKey => 'I\'ve Saved My Key';
+
+  @override
+  String get showRecoveryKey => 'Show Recovery Key';
+
+  @override
+  String get e2eeKeyWarning => '⚠️ If you lose your recovery key, your data cannot be recovered.';
+
+  @override
+  String get e2eeBackupReminder => 'Make sure to back up your key after enabling.';
+
+  @override
+  String e2eeFailedToEnable(String error) {
+    return 'Failed to enable E2EE: $error';
+  }
+
+  @override
+  String get keyCopiedToClipboard => 'Key copied to clipboard';
+
+  @override
+  String get e2eeMemoriesDescription => 'Encrypted on your device before reaching the server. Only you can read them.';
+
+  @override
+  String get e2eeOtherDataDescription =>
+      'Encrypted at rest on the server. The server processes audio for transcription but stored data is encrypted and cannot be read at rest.';
+
+  @override
+  String get e2eeCardSubtitle => 'Maximum protection — memories encrypted on-device, all other data encrypted at rest';
+
+  @override
+  String get e2eeUnableToDecrypt => 'Encrypted — unable to decrypt. Check your recovery key.';
+
+  @override
+  String get pairWithWeb => 'Pair with Web';
+
+  @override
+  String get scanQrOnWeb => 'Scan this QR code on omi.me to unlock your encrypted data';
+
+  @override
+  String expiresInSeconds(int seconds) {
+    return 'Expires in ${seconds}s';
+  }
+
+  @override
+  String get onlyTrustedDevice => '⚠️ Only scan on a trusted device';
 }

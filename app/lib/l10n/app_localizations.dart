@@ -8061,10 +8061,10 @@ abstract class AppLocalizations {
   /// **'Your new key:'**
   String get yourNewKey;
 
-  /// Tooltip for copy button
+  /// Button to copy text to clipboard
   ///
   /// In en, this message translates to:
-  /// **'Copy to clipboard'**
+  /// **'Copy to Clipboard'**
   String get copyToClipboard;
 
   /// Warning to copy key immediately
@@ -15980,6 +15980,108 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Clear All'**
   String get clearAll;
+
+  /// Button to enable end-to-end encryption
+  ///
+  /// In en, this message translates to:
+  /// **'Enable E2EE'**
+  String get enableE2ee;
+
+  /// Title for recovery key dialog
+  ///
+  /// In en, this message translates to:
+  /// **'Recovery Key'**
+  String get recoveryKey;
+
+  /// Instructions for backing up E2EE recovery key
+  ///
+  /// In en, this message translates to:
+  /// **'Save this key somewhere safe. You will need it to recover your encrypted memories if you switch devices. Without this key, E2E encrypted data is unrecoverable.'**
+  String get saveKeyMessage;
+
+  /// Confirmation button after saving recovery key
+  ///
+  /// In en, this message translates to:
+  /// **'I\'ve Saved My Key'**
+  String get savedMyKey;
+
+  /// Button to display the E2EE recovery key
+  ///
+  /// In en, this message translates to:
+  /// **'Show Recovery Key'**
+  String get showRecoveryKey;
+
+  /// Warning about E2EE key loss
+  ///
+  /// In en, this message translates to:
+  /// **'⚠️ If you lose your recovery key, your data cannot be recovered.'**
+  String get e2eeKeyWarning;
+
+  /// Reminder to back up E2EE key
+  ///
+  /// In en, this message translates to:
+  /// **'Make sure to back up your key after enabling.'**
+  String get e2eeBackupReminder;
+
+  /// Error message when E2EE enabling fails
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to enable E2EE: {error}'**
+  String e2eeFailedToEnable(String error);
+
+  /// Snackbar message after copying E2EE key
+  ///
+  /// In en, this message translates to:
+  /// **'Key copied to clipboard'**
+  String get keyCopiedToClipboard;
+
+  /// Description of E2EE for memories
+  ///
+  /// In en, this message translates to:
+  /// **'Encrypted on your device before reaching the server. Only you can read them.'**
+  String get e2eeMemoriesDescription;
+
+  /// Description of server-side encryption for conversations and chat
+  ///
+  /// In en, this message translates to:
+  /// **'Encrypted at rest on the server. The server processes audio for transcription but stored data is encrypted and cannot be read at rest.'**
+  String get e2eeOtherDataDescription;
+
+  /// Subtitle for E2EE card in data protection settings
+  ///
+  /// In en, this message translates to:
+  /// **'Maximum protection — memories encrypted on-device, all other data encrypted at rest'**
+  String get e2eeCardSubtitle;
+
+  /// Error shown when E2EE decryption fails
+  ///
+  /// In en, this message translates to:
+  /// **'Encrypted — unable to decrypt. Check your recovery key.'**
+  String get e2eeUnableToDecrypt;
+
+  /// Button to pair E2EE key with web UI via QR code
+  ///
+  /// In en, this message translates to:
+  /// **'Pair with Web'**
+  String get pairWithWeb;
+
+  /// Instructions for QR pairing
+  ///
+  /// In en, this message translates to:
+  /// **'Scan this QR code on omi.me to unlock your encrypted data'**
+  String get scanQrOnWeb;
+
+  /// Timer for QR code expiry
+  ///
+  /// In en, this message translates to:
+  /// **'Expires in {seconds}s'**
+  String expiresInSeconds(int seconds);
+
+  /// Warning about scanning QR code
+  ///
+  /// In en, this message translates to:
+  /// **'⚠️ Only scan on a trusted device'**
+  String get onlyTrustedDevice;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {
