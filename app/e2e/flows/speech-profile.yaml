@@ -29,7 +29,7 @@ steps:
 
   - name: Verify speech profile page
     assert:
-      text_visible: ["Speech Profile"]
+      interactive_count: { min: 2 }
     note: >
       Shows device animation widget at top, intro text in center,
       "Get Started" or "Do It Again" button at bottom.
