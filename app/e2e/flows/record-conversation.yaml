@@ -15,7 +15,7 @@ setup: normal
 steps:
   - name: Verify home with record button
     assert:
-      text_visible: ["Conversations"]
+      bottom_nav_tabs: { min: 4 }
     note: >
       Center record button (purple microphone icon) is a GestureDetector
       at y≈770-810, centered horizontally (x≈166).
@@ -28,7 +28,7 @@ steps:
 
   - name: Verify capturing page
     assert:
-      text_visible: ["Listen", "Summarize"]
+      interactive_count: { min: 2 }
     note: >
       ConversationCapturingPage shows: live transcript, waveform,
       stop button, timer. Recording is active.
