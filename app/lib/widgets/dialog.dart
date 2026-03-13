@@ -4,63 +4,17 @@ import 'package:flutter/material.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 
-class DeleteConversationOptions {
-  final bool deleteAssociatedData;
-
-  DeleteConversationOptions({required this.deleteAssociatedData});
-}
-
-Future<DeleteConversationOptions?> showDeleteConversationDialog(BuildContext context) async {
-  bool deleteAssociatedData = false;
-
-  return showDialog<DeleteConversationOptions>(
-    context: context,
-    builder: (ctx) {
-      return StatefulBuilder(
-        builder: (context, setState) {
-          final checkbox = GestureDetector(
-            onTap: () => setState(() => deleteAssociatedData = !deleteAssociatedData),
-            child: Row(
-              children: [
-                SizedBox(
-                  width: 24,
-                  height: 24,
-                  child: Checkbox(
-                    value: deleteAssociatedData,
-                    onChanged: (v) => setState(() => deleteAssociatedData = v ?? false),
-                    activeColor: Colors.deepPurple,
-                    checkColor: Colors.white,
-                    side: const BorderSide(color: Colors.white54),
-                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Flexible(
-                  child: Text(
-                    context.l10n.deleteAssociatedData,
-                    style: const TextStyle(fontSize: 14),
-                  ),
-                ),
-              ],
-            ),
-          );
-
-          final wrappedCheckbox = Padding(
-            padding: const EdgeInsets.only(top: 16),
-            child: checkbox,
-          );
-          final content =
-              PlatformService.isApple ? Material(color: Colors.transparent, child: wrappedCheckbox) : wrappedCheckbox;
-
+Future<bool> showDeleteConversationDialog(BuildContext context) async {
+  return await showDialog<bool>(
+        context: context,
+        builder: (ctx) {
           final actions = [
             TextButton(
-              onPressed: () => Navigator.of(ctx).pop(null),
+              onPressed: () => Navigator.of(ctx).pop(false),
               child: Text(context.l10n.cancel, style: const TextStyle(color: Colors.white)),
             ),
             TextButton(
-              onPressed: () => Navigator.of(ctx).pop(
-                DeleteConversationOptions(deleteAssociatedData: deleteAssociatedData),
-              ),
+              onPressed: () => Navigator.of(ctx).pop(true),
               child: Text(context.l10n.confirm, style: const TextStyle(color: Colors.red)),
             ),
           ];
@@ -68,19 +22,18 @@ Future<DeleteConversationOptions?> showDeleteConversationDialog(BuildContext con
           if (PlatformService.isApple) {
             return CupertinoAlertDialog(
               title: Text(context.l10n.deleteConversationTitle),
-              content: content,
+              content: Text(context.l10n.deleteConversationMessage),
               actions: actions,
             );
           }
           return AlertDialog(
             title: Text(context.l10n.deleteConversationTitle),
-            content: content,
+            content: Text(context.l10n.deleteConversationMessage),
             actions: actions,
           );
         },
-      );
-    },
-  );
+      ) ??
+      false;
 }
 
 getDialog(
