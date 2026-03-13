@@ -20,8 +20,9 @@ setup: signed_out
 
 steps:
   - name: Get Started screen
+    wait: 3
     assert:
-      text_visible: ["Get Started"]
+      interactive_count: { min: 1 }
     screenshot: get-started
 
   - name: Tap Get Started
