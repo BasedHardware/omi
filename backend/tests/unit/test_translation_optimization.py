@@ -411,6 +411,34 @@ class TestShouldPersistTranslation:
         should_persist = should_persist_translation("Hello. Hola.", "Hello. Hello.", "en", "en")
         assert should_persist is True
 
+    def test_short_phrase_noop_not_persisted(self):
+        """Short phrases like 'Transcription service.' that return identical from API should not persist."""
+        assert should_persist_translation("Transcription service.", "Transcription service.", "en", "en") is False
+
+    def test_numeric_only_noop_not_persisted(self):
+        """Numeric/punctuation text like '123. 123.' returning identical should not persist."""
+        assert should_persist_translation("123. 123.", "123. 123.", "", "en") is False
+
+    def test_short_greeting_noop_not_persisted(self):
+        """Short greetings like 'Hey.' returning identical should not persist."""
+        assert should_persist_translation("Hey.", "Hey.", "en", "en") is False
+
+    def test_whitespace_difference_not_persisted(self):
+        """Whitespace-only differences should be treated as no-op."""
+        assert should_persist_translation("Hello  world", "Hello world", "en", "en") is False
+
+    def test_real_translation_persisted(self):
+        """Actual translation (text changed) should always persist."""
+        assert should_persist_translation("Bonjour", "Hello", "fr", "en") is True
+
+    def test_none_translated_text_persisted_as_change(self):
+        """None translated_text differs from source, should persist (text changed)."""
+        assert should_persist_translation("Hello", None, "en", "en") is True
+
+    def test_empty_source_and_translated_not_persisted(self):
+        """Both empty should be treated as no-op."""
+        assert should_persist_translation("", "", "en", "en") is False
+
 
 class TestRedisCacheTTL:
     def setup_method(self):
