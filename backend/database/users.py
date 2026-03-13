@@ -997,7 +997,7 @@ def get_user_transcription_preferences(uid: str) -> dict:
     Get the user's transcription preferences.
 
     Returns:
-        dict with 'single_language_mode' (bool) and 'vocabulary' (List[str])
+        dict with 'single_language_mode' (bool), 'vocabulary' (List[str]), and 'language' (str)
     """
     user_ref = db.collection('users').document(uid)
     user_doc = user_ref.get()
@@ -1008,9 +1008,10 @@ def get_user_transcription_preferences(uid: str) -> dict:
         return {
             'single_language_mode': prefs.get('single_language_mode', False),
             'vocabulary': prefs.get('vocabulary', []),
+            'language': user_data.get('language', ''),
         }
 
-    return {'single_language_mode': False, 'vocabulary': []}
+    return {'single_language_mode': False, 'vocabulary': [], 'language': ''}
 
 
 def get_agent_vm(uid: str) -> Optional[dict]:
