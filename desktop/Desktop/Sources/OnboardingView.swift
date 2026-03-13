@@ -159,6 +159,7 @@ struct OnboardingView: View {
                 // Step 1: Smart Notifications Demo
                 OnboardingNotificationStepView(
                     appState: appState,
+                    chatProvider: chatProvider,
                     onContinue: {
                         AnalyticsManager.shared.onboardingStepCompleted(step: 1, stepName: "Notifications")
                         currentStep = 2

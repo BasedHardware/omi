@@ -11,6 +11,8 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
     static let expandedBarSize = NSSize(width: 210, height: 50)
     private static let maxBarSize = NSSize(width: 1200, height: 1000)
     private static let expandedWidth: CGFloat = 430
+    private static let notificationHeight: CGFloat = 108
+    private static let notificationSpacing: CGFloat = 8
     /// Minimum window height when AI response first appears.
     private static let minResponseHeight: CGFloat = 250
     /// Base height used as the reference for 2× cap (same as current default response height).
@@ -335,6 +337,7 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
         // Allow hover resizes again after the animation settles.
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak self] in
             self?.suppressHoverResize = false
+            FloatingControlBarManager.shared.flushQueuedNotificationsIfPossible()
         }
     }
 
@@ -507,7 +510,7 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
 
     /// Resize for hover expand/collapse — anchored from center so the circle grows outward.
     func resizeForHover(expanded: Bool) {
-        guard !state.showingAIConversation, !state.isVoiceListening, !suppressHoverResize else { return }
+        guard !state.showingAIConversation, !state.isVoiceListening, !state.isShowingNotification, !suppressHoverResize else { return }
         resizeWorkItem?.cancel()
         resizeWorkItem = nil
 
@@ -547,6 +550,29 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
             ? NSSize(width: FloatingControlBarWindow.expandedWidth, height: FloatingControlBarWindow.expandedBarSize.height)
             : FloatingControlBarWindow.minBarSize
         resizeAnchored(to: size, makeResizable: false, animated: true)
+    }
+
+    func showNotification(_ notification: FloatingBarNotification, animated: Bool = true) {
+        guard !state.showingAIConversation else { return }
+        state.currentNotification = notification
+        let targetSize = NSSize(
+            width: Self.expandedWidth,
+            height: Self.expandedBarSize.height + Self.notificationSpacing + Self.notificationHeight
+        )
+        resizeAnchored(to: targetSize, makeResizable: false, animated: animated, anchorTop: true)
+    }
+
+    func dismissNotification(animated: Bool = true) {
+        guard state.currentNotification != nil else { return }
+        state.currentNotification = nil
+
+        let targetSize: NSSize
+        if state.isVoiceListening {
+            targetSize = NSSize(width: Self.expandedWidth, height: Self.expandedBarSize.height)
+        } else {
+            targetSize = frame.contains(NSEvent.mouseLocation) ? Self.expandedBarSize : Self.minBarSize
+        }
+        resizeAnchored(to: targetSize, makeResizable: false, animated: animated, anchorTop: true)
     }
 
     private func resizeToResponseHeight(animated: Bool = false) {
@@ -720,6 +746,9 @@ class FloatingControlBarManager {
     private var durationCancellable: AnyCancellable?
     private var chatCancellable: AnyCancellable?
     private var chatProvider: ChatProvider?
+    private var pendingNotifications: [FloatingBarNotification] = []
+    private var notificationDismissWorkItem: DispatchWorkItem?
+    private var notificationWasTemporarilyShown = false
 
     /// Whether the user has enabled the Ask Omi bar (persisted across launches).
     /// Defaults to true for new users.
@@ -839,6 +868,41 @@ class FloatingControlBarManager {
         guard window != nil else { return }
         log("FloatingControlBarManager: showTemporarily() — showing bar above Chrome")
         window?.makeKeyAndOrderFront(nil)
+    }
+
+    func showNotification(title: String, message: String, assistantId: String, sound: NotificationSound) {
+        let notification = FloatingBarNotification(title: title, message: message, assistantId: assistantId)
+        guard let window else {
+            log("FloatingControlBarManager: dropping notification because window is not set up")
+            return
+        }
+
+        switch sound {
+        case .focusLost, .focusRegained:
+            sound.playCustomSound()
+        case .default, .none:
+            break
+        }
+
+        if window.state.currentNotification != nil || window.state.showingAIConversation {
+            pendingNotifications.append(notification)
+            return
+        }
+
+        presentNotification(notification, in: window)
+    }
+
+    func dismissCurrentNotification() {
+        notificationDismissWorkItem?.cancel()
+        notificationDismissWorkItem = nil
+        dismissNotificationAndAdvanceQueue()
+    }
+
+    func flushQueuedNotificationsIfPossible() {
+        guard let window, window.state.currentNotification == nil, !window.state.showingAIConversation,
+              !pendingNotifications.isEmpty else { return }
+        let nextNotification = pendingNotifications.removeFirst()
+        presentNotification(nextNotification, in: window)
     }
 
     /// Cancel any in-flight chat streaming.
@@ -975,6 +1039,54 @@ class FloatingControlBarManager {
         window.state.isAILoading = true
 
         window.onSendQuery?(query)
+    }
+
+    private func presentNotification(_ notification: FloatingBarNotification, in window: FloatingControlBarWindow) {
+        if !window.isVisible {
+            notificationWasTemporarilyShown = true
+            window.orderFrontRegardless()
+        } else {
+            notificationWasTemporarilyShown = false
+        }
+
+        window.showNotification(notification)
+        AnalyticsManager.shared.notificationSent(
+            notificationId: notification.id.uuidString,
+            title: notification.title,
+            assistantId: notification.assistantId
+        )
+
+        let dismissWorkItem = DispatchWorkItem { [weak self] in
+            self?.dismissNotificationAndAdvanceQueue()
+        }
+        notificationDismissWorkItem = dismissWorkItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + 6.0, execute: dismissWorkItem)
+    }
+
+    private func dismissNotificationAndAdvanceQueue() {
+        guard let window else { return }
+
+        let dismissedNotification = window.state.currentNotification
+        window.dismissNotification()
+
+        if let dismissedNotification {
+            AnalyticsManager.shared.notificationDismissed(
+                notificationId: dismissedNotification.id.uuidString,
+                title: dismissedNotification.title,
+                assistantId: dismissedNotification.assistantId
+            )
+        }
+
+        if !pendingNotifications.isEmpty, !window.state.showingAIConversation {
+            let nextNotification = pendingNotifications.removeFirst()
+            presentNotification(nextNotification, in: window)
+            return
+        }
+
+        if notificationWasTemporarilyShown && !isEnabled && !window.state.showingAIConversation {
+            window.orderOut(nil)
+        }
+        notificationWasTemporarilyShown = false
     }
 
     /// Access the bar state for PTT updates.
