@@ -27,6 +27,7 @@ class STTService(str, Enum):
     deepgram = "deepgram"
     soniox = "soniox"
     speechmatics = "speechmatics"
+    modulate = "modulate"
 
     @staticmethod
     def get_model_name(value):
@@ -36,6 +37,8 @@ class STTService(str, Enum):
             return 'soniox_streaming'
         elif value == STTService.speechmatics:
             return 'speechmatics_streaming'
+        elif value == STTService.modulate:
+            return 'modulate_streaming'
 
 
 # Languages supported by Soniox
@@ -197,7 +200,72 @@ deepgram_nova3_languages = {
     "vi",
 }
 
-# Supported values: soniox-stt-rt,dg-nova-3,dg-nova-2
+# Languages supported by Modulate Velma-2 (70+ languages, auto-detected per utterance)
+modulate_languages = {
+    'multi',
+    'en',
+    'af',
+    'sq',
+    'ar',
+    'az',
+    'eu',
+    'be',
+    'bn',
+    'bs',
+    'bg',
+    'ca',
+    'zh',
+    'hr',
+    'cs',
+    'da',
+    'nl',
+    'et',
+    'fi',
+    'fr',
+    'gl',
+    'de',
+    'el',
+    'gu',
+    'he',
+    'hi',
+    'hu',
+    'id',
+    'it',
+    'ja',
+    'kn',
+    'kk',
+    'ko',
+    'lv',
+    'lt',
+    'mk',
+    'ms',
+    'ml',
+    'mr',
+    'no',
+    'fa',
+    'pl',
+    'pt',
+    'pa',
+    'ro',
+    'ru',
+    'sr',
+    'sk',
+    'sl',
+    'es',
+    'sw',
+    'sv',
+    'tl',
+    'ta',
+    'te',
+    'th',
+    'tr',
+    'uk',
+    'ur',
+    'vi',
+    'cy',
+}
+
+# Supported values: soniox-stt-rt,dg-nova-3,dg-nova-2,modulate-velma-2
 stt_service_models = os.getenv('STT_SERVICE_MODELS', 'dg-nova-3').split(',')
 
 
@@ -222,6 +290,10 @@ def get_stt_service_for_language(language: str, multi_lang_enabled: bool = True)
                 return STTService.deepgram, 'multi', 'nova-2-general'
             if language in deepgram_nova2_languages:
                 return STTService.deepgram, language, 'nova-2-general'
+        # Modulate Velma-2
+        elif m == 'modulate-velma-2':
+            if language in modulate_languages:
+                return STTService.modulate, language, 'velma-2'
 
     # Fallback to deepgram nova-3
     return STTService.deepgram, 'en', 'nova-3'
@@ -790,4 +862,77 @@ async def process_audio_speechmatics(stream_transcript, sample_rate: int, langua
         return socket
     except Exception as e:
         logger.error(f"Exception in process_audio_speechmatics: {e}")
+        raise
+
+
+async def process_audio_modulate(stream_transcript, sample_rate: int, language: str, preseconds: int = 0):
+    api_key = os.getenv('MODULATE_API_KEY')
+    if not api_key:
+        raise ValueError("Modulate API key is not set. Please set the MODULATE_API_KEY environment variable.")
+
+    uri = f'wss://modulate-developer-apis.com/api/velma-2-stt-streaming?api_key={api_key}&speaker_diarization=true'
+
+    try:
+        logger.info("Connecting to Modulate WebSocket...")
+        modulate_socket = await websockets.connect(uri, ping_timeout=10, ping_interval=10)
+        logger.info("Connected to Modulate WebSocket.")
+
+        async def on_message():
+            try:
+                async for message in modulate_socket:
+                    response = json.loads(message)
+
+                    if response.get('type') == 'error':
+                        error_msg = response.get('error', 'Unknown error')
+                        logger.error(f"Modulate error: {error_msg}")
+                        raise Exception(f"Modulate error: {error_msg}")
+
+                    if response.get('type') == 'done':
+                        duration_ms = response.get('duration_ms', 0)
+                        logger.info(f"Modulate transcription done, duration={duration_ms}ms")
+                        continue
+
+                    if response.get('type') == 'utterance':
+                        utterance = response.get('utterance', {})
+                        text = utterance.get('text', '').strip()
+                        if not text:
+                            continue
+
+                        start_s = utterance.get('start_ms', 0) / 1000.0
+                        duration_s = utterance.get('duration_ms', 0) / 1000.0
+                        end_s = start_s + duration_s
+                        # Modulate uses 1-indexed speakers
+                        speaker_id = utterance.get('speaker', 1)
+
+                        if preseconds > 0 and start_s < preseconds:
+                            continue
+
+                        is_user = True if speaker_id == 1 and preseconds > 0 else False
+
+                        segments = [
+                            {
+                                'speaker': f"SPEAKER_{speaker_id - 1:02d}",
+                                'start': start_s,
+                                'end': end_s,
+                                'text': text,
+                                'is_user': is_user,
+                                'person_id': None,
+                            }
+                        ]
+                        stream_transcript(segments)
+                    else:
+                        logger.warning(f"Unexpected Modulate message type: {response.get('type')}")
+            except websockets.exceptions.ConnectionClosedOK:
+                logger.info("Modulate connection closed normally.")
+            except Exception as e:
+                logger.error(f"Error receiving from Modulate: {e}")
+            finally:
+                if not modulate_socket.closed:
+                    await modulate_socket.close()
+                    logger.info("Modulate WebSocket closed in on_message.")
+
+        asyncio.create_task(on_message())
+        return modulate_socket
+    except Exception as e:
+        logger.error(f"Exception in process_audio_modulate: {e}")
         raise
