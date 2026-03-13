@@ -15,7 +15,7 @@ setup: normal
 steps:
   - name: Verify home with record button
     assert:
-      text_visible: ["Today"]
+      text_visible: ["Conversations"]
     note: >
       Center record button (purple microphone icon) is a GestureDetector
       at y≈770-810, centered horizontally (x≈166).
