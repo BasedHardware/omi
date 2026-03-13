@@ -133,6 +133,36 @@ Always format code after making changes. The pre-commit hook handles this automa
 - Update this file and `CLAUDE.md` in the same commit when rules change.
 - For architecture or core flow changes, update Mintlify docs (`docs/doc/developer/`) in the same PR.
 
+## Skills
+Available skills for Omi repo work. Use `omi-preflight` as the default entry point — it routes to the right skill.
+
+| Skill | When |
+|---|---|
+| omi-preflight | Default entry point for any Omi task |
+| omi-pr-workflow | Full issue-to-merge flow |
+| omi-issue-triage | Score and prioritize issues |
+| omi-pr-scan | Audit open PRs (stale drafts, missing tests) |
+| omi-pr-review-reviewer | Review PRs as principal engineer |
+| omi-pr-review-contributor | Fix review feedback on your PR |
+| omi-pr-review-tester | Add tests for PR changes |
+| omi-community-pr-review | Review external contributor PRs |
+| omi-pr-rescue | Rescue messy PRs (close, re-scope, restart) |
+| omi-team-delivery-pipeline | Team delivery: scope lock, queue, assign, execute, verify |
+| omi-combined-pr-verifier | Verify 2+ PRs combined in one branch |
+| omi-e2e-device-test | Full-stack validation on physical Android device |
+| omi-prod-feature-verify | Post-deploy user-facing validation |
+| omi-prod-deploy-monitor | Deployment monitoring with fixed cadence |
+| omi-dev-gke-deploy-verify | Dev GKE deploy + rollout verification |
+| omi-model-eval | A/B eval for model migrations (gpt-5.1 judge) |
+| omi-incident-detection | Detect and analyze production incidents |
+| omi-deep-rca | Deep root cause analysis with Codex consultation |
+| omi-cost-impact-verify | Verify backend cost impact (Deepgram usage) |
+| omi-deeplink-verification | Verify deep links, Universal Links, App Links |
+| omi-pr-evidence-upload | Upload PR evidence (screenshots, GIFs) to GCS |
+| add-a-new-localization-key-l10n-arb | Add l10n keys to ARB files |
+| omi-add-missing-language-keys-l10n | Localize hardcoded strings across all locales |
+| omi-l10n-weekly-audit | Weekly l10n audit and translation |
+
 ## Testing
 
 - Always run tests before committing:
