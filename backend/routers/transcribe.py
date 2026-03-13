@@ -82,6 +82,7 @@ from utils.stt.streaming import (
     STTService,
     get_stt_service_for_language,
     process_audio_dg,
+    process_audio_modulate,
     process_audio_soniox,
     process_audio_speechmatics,
     send_initial_file_path,
@@ -813,6 +814,7 @@ async def _stream_handler(
     soniox_socket = None
     soniox_profile_socket = None  # Temporary socket for speech profile phase
     speechmatics_socket = None
+    modulate_socket = None
     deepgram_socket = None
     deepgram_profile_socket = None  # Temporary socket for speech profile phase
     speech_profile_complete = asyncio.Event()  # Signals when speech profile send is done
@@ -829,6 +831,7 @@ async def _stream_handler(
         nonlocal soniox_socket
         nonlocal soniox_profile_socket
         nonlocal speechmatics_socket
+        nonlocal modulate_socket
         nonlocal deepgram_socket
         nonlocal deepgram_profile_socket
         try:
@@ -868,6 +871,10 @@ async def _stream_handler(
                         )
                     elif stt_service == STTService.speechmatics:
                         stt_sockets_multi[i] = await process_audio_speechmatics(
+                            callback, TARGET_SAMPLE_RATE, stt_language, preseconds=0
+                        )
+                    elif stt_service == STTService.modulate:
+                        stt_sockets_multi[i] = await process_audio_modulate(
                             callback, TARGET_SAMPLE_RATE, stt_language, preseconds=0
                         )
                 logger.info(
@@ -987,6 +994,12 @@ async def _stream_handler(
                     stream_transcript, sample_rate, stt_language, preseconds=speech_profile_preseconds
                 )
 
+            # MODULATE
+            elif stt_service == STTService.modulate:
+                modulate_socket = await process_audio_modulate(
+                    stream_transcript, sample_rate, stt_language, preseconds=speech_profile_preseconds
+                )
+
             # Return background task to load and send speech profile
             if has_speech_profile:
                 return _create_speech_profile_loader_task(lambda: websocket_active, sample_rate)
@@ -1039,6 +1052,14 @@ async def _stream_handler(
                     await send_initial_file_path(
                         file_path,
                         speechmatics_socket.send,
+                        is_active,
+                        sample_rate=audio_sample_rate,
+                        target_duration=SPEECH_PROFILE_FIXED_DURATION,
+                    )
+                elif stt_service == STTService.modulate and modulate_socket:
+                    await send_initial_file_path(
+                        file_path,
+                        modulate_socket.send,
                         is_active,
                         sample_rate=audio_sample_rate,
                         target_duration=SPEECH_PROFILE_FIXED_DURATION,
@@ -2183,7 +2204,9 @@ async def _stream_handler(
     elif codec == 'lc3':
         lc3_decoder = lc3.Decoder(lc3_frame_duration_us, sample_rate)
 
-    async def receive_data(dg_socket, dg_profile_socket, soniox_sock, soniox_profile_sock, speechmatics_sock):
+    async def receive_data(
+        dg_socket, dg_profile_socket, soniox_sock, soniox_profile_sock, speechmatics_sock, modulate_sock
+    ):
         nonlocal websocket_active, websocket_close_code, last_audio_received_time, last_activity_time, current_conversation_id
         nonlocal realtime_photo_buffers, speaker_to_person_map, first_audio_byte_timestamp, last_usage_record_timestamp
         nonlocal soniox_profile_socket, deepgram_profile_socket, audio_ring_buffer
@@ -2254,6 +2277,9 @@ async def _stream_handler(
 
             if speechmatics_sock is not None:
                 await speechmatics_sock.send(chunk)
+
+            if modulate_sock is not None:
+                await modulate_sock.send(chunk)
 
         try:
             while websocket_active:
@@ -2509,7 +2535,12 @@ async def _stream_handler(
         # Tasks
         data_process_task = asyncio.create_task(
             receive_data(
-                deepgram_socket, deepgram_profile_socket, soniox_socket, soniox_profile_socket, speechmatics_socket
+                deepgram_socket,
+                deepgram_profile_socket,
+                soniox_socket,
+                soniox_profile_socket,
+                speechmatics_socket,
+                modulate_socket,
             )
         )
         stream_transcript_task = asyncio.create_task(stream_transcript_process())
@@ -2576,6 +2607,8 @@ async def _stream_handler(
                     await soniox_profile_socket.close()
                 if speechmatics_socket:
                     await speechmatics_socket.close()
+                if modulate_socket:
+                    await modulate_socket.close()
         except Exception as e:
             logger.error(f"Error closing STT sockets: {e} {uid} {session_id}")
 
