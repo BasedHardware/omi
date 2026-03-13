@@ -10222,6 +10222,10 @@
     "@revokeShareConfirmation": {
         "description": "Confirmation message for revoking speech profile sharing"
     },
+    "speechProfileSharing": "Speech Profile Sharing",
+    "@speechProfileSharing": {
+        "description": "Menu title and page title for speech profile sharing management"
+    },
     "noSpeechProfileRecorded": "You need to record your speech profile before sharing",
     "@noSpeechProfileRecorded": {
         "description": "Message when user tries to share without a speech profile"
@@ -10265,9 +10269,5 @@
     "showTasksOnHomepage": "Show Tasks on homepage",
     "@showTasksOnHomepage": {
         "description": "Description for show tasks toggle in developer settings"
-    },
-    "speechProfileSharing": "Speech Profile Sharing",
-    "@speechProfileSharing": {
-        "description": "Menu title and page title for speech profile sharing management"
     }
 }
