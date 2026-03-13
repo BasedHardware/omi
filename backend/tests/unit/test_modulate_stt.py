@@ -139,6 +139,7 @@ class TestProcessAudioModulateConnection:
         assert 'modulate-developer-apis.com' in call_uri
         assert 'api_key=test-key-123' in call_uri
         assert 'speaker_diarization=true' in call_uri
+        assert 'sample_rate=16000' in call_uri
 
 
 class TestModulateMessageParsing:
