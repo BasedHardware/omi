@@ -5,7 +5,7 @@
     "transcriptTab": "Udskrift",
     "actionItemsTab": "Handlingspunkter",
     "deleteConversationTitle": "Slet samtale?",
-    "deleteConversationMessage": "Er du sikker på, at du vil slette denne samtale? Denne handling kan ikke fortrydes.",
+    "deleteConversationMessage": "Dette vil også slette tilknyttede minder, opgaver og lydfiler. Denne handling kan ikke fortrydes.",
     "confirm": "Bekræft",
     "cancel": "Annuller",
     "ok": "Ok",
@@ -2756,6 +2756,5 @@
     "manageStorage": "Administrer lager",
     "safelyBackedUp": "Sikkert sikkerhedskopieret til din telefon",
     "notYetSynced": "Endnu ikke synkroniseret med din telefon",
-    "clearAll": "Ryd alt",
-    "deleteAssociatedData": "Slet tilknyttede minder og opgaver"
+    "clearAll": "Ryd alt"
 }

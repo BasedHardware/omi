@@ -5,7 +5,7 @@
     "transcriptTab": "녹취록",
     "actionItemsTab": "할 일",
     "deleteConversationTitle": "대화를 삭제하시겠습니까?",
-    "deleteConversationMessage": "이 대화를 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.",
+    "deleteConversationMessage": "관련된 기억, 작업 및 오디오 파일도 삭제됩니다. 이 작업은 되돌릴 수 없습니다.",
     "confirm": "확인",
     "cancel": "취소",
     "ok": "확인",
@@ -2747,6 +2747,5 @@
     "manageStorage": "저장소 관리",
     "safelyBackedUp": "휴대폰에 안전하게 백업됨",
     "notYetSynced": "아직 휴대폰에 동기화되지 않음",
-    "clearAll": "모두 지우기",
-    "deleteAssociatedData": "관련 기억 및 작업 삭제"
+    "clearAll": "모두 지우기"
 }

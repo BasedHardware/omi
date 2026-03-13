@@ -650,7 +650,7 @@
     "deleteAllMemories": "Ištrinti visus atminimus",
     "deleteConversation": "Ištrinti pokalbį",
     "deleteConversationConfirmation": "Ar tikrai norite ištrinti šį pokalbį? Šio veiksmo negalima atšaukti.",
-    "deleteConversationMessage": "Ar tikrai norite ištrinti šį pokalbį? Šio veiksmo negalima atšaukti.",
+    "deleteConversationMessage": "Tai taip pat ištrins susijusius prisiminimus, užduotis ir garso failus. Šio veiksmo negalima atšaukti.",
     "deleteConversationTitle": "Ištrinti pokalbį?",
     "deleteFolder": "Ištrinti aplanką",
     "deleteGraphFailed": "Nepavyko ištrinti grafiko: {error}",
@@ -2747,6 +2747,5 @@
     "manageStorage": "Tvarkyti saugyklą",
     "safelyBackedUp": "Saugiai nukopijuota į jūsų telefoną",
     "notYetSynced": "Dar nesinchronizuota su jūsų telefonu",
-    "clearAll": "Išvalyti viską",
-    "deleteAssociatedData": "Ištrinti susijusius prisiminimus ir užduotis"
+    "clearAll": "Išvalyti viską"
 }

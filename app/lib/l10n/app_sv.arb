@@ -5,7 +5,7 @@
     "transcriptTab": "Transkription",
     "actionItemsTab": "Åtgärder",
     "deleteConversationTitle": "Ta bort konversation?",
-    "deleteConversationMessage": "Är du säker på att du vill ta bort denna konversation? Detta kan inte ångras.",
+    "deleteConversationMessage": "Detta kommer också att radera tillhörande minnen, uppgifter och ljudfiler. Denna åtgärd kan inte ångras.",
     "confirm": "Bekräfta",
     "cancel": "Avbryt",
     "ok": "OK",
@@ -2747,6 +2747,5 @@
     "manageStorage": "Hantera lagring",
     "safelyBackedUp": "Säkerhetskopierat till din telefon",
     "notYetSynced": "Inte synkroniserat med din telefon ännu",
-    "clearAll": "Rensa allt",
-    "deleteAssociatedData": "Ta bort tillhörande minnen och uppgifter"
+    "clearAll": "Rensa allt"
 }

@@ -5,7 +5,7 @@
     "transcriptTab": "Átirat",
     "actionItemsTab": "Teendők",
     "deleteConversationTitle": "Beszélgetés törlése?",
-    "deleteConversationMessage": "Biztosan törölni szeretnéd ezt a beszélgetést? Ez a művelet nem vonható vissza.",
+    "deleteConversationMessage": "Ez törli a kapcsolódó emlékeket, feladatokat és hangfájlokat is. Ez a művelet nem vonható vissza.",
     "confirm": "Megerősítés",
     "cancel": "Mégse",
     "ok": "OK",
@@ -2843,6 +2843,5 @@
     "manageStorage": "Tárhely kezelése",
     "safelyBackedUp": "Biztonságosan mentve a telefonjára",
     "notYetSynced": "Még nincs szinkronizálva a telefonjával",
-    "clearAll": "Összes törlése",
-    "deleteAssociatedData": "Kapcsolódó emlékek és feladatok törlése"
+    "clearAll": "Összes törlése"
 }

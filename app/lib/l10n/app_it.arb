@@ -5,7 +5,7 @@
     "transcriptTab": "Trascrizione",
     "actionItemsTab": "Azioni",
     "deleteConversationTitle": "Eliminare Conversazione?",
-    "deleteConversationMessage": "Sei sicuro di voler eliminare questa conversazione? Questa azione non può essere annullata.",
+    "deleteConversationMessage": "Questo eliminerà anche i ricordi, le attività e i file audio associati. Questa azione non può essere annullata.",
     "confirm": "Conferma",
     "cancel": "Annulla",
     "ok": "OK",
@@ -2747,6 +2747,5 @@
     "manageStorage": "Gestisci archivio",
     "safelyBackedUp": "Salvato sul tuo telefono",
     "notYetSynced": "Non ancora sincronizzato con il tuo telefono",
-    "clearAll": "Cancella tutto",
-    "deleteAssociatedData": "Elimina ricordi e attività associati"
+    "clearAll": "Cancella tutto"
 }

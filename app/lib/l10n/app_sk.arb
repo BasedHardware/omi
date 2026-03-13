@@ -5,7 +5,7 @@
     "transcriptTab": "Prepis",
     "actionItemsTab": "Úlohy",
     "deleteConversationTitle": "Odstrániť konverzáciu?",
-    "deleteConversationMessage": "Naozaj chcete odstrániť túto konverzáciu? Túto akciu nie je možné vrátiť späť.",
+    "deleteConversationMessage": "Tým sa tiež vymažú súvisiace spomienky, úlohy a zvukové súbory. Túto akciu nie je možné vrátiť späť.",
     "confirm": "Potvrdiť",
     "cancel": "Zrušiť",
     "ok": "OK",
@@ -2752,6 +2752,5 @@
     "manageStorage": "Spravovať úložisko",
     "safelyBackedUp": "Bezpečne zálohované na vašom telefóne",
     "notYetSynced": "Zatiaľ nesynchronizované s vaším telefónom",
-    "clearAll": "Vymazať všetko",
-    "deleteAssociatedData": "Vymazať súvisiace spomienky a úlohy"
+    "clearAll": "Vymazať všetko"
 }

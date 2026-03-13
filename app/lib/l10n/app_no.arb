@@ -5,7 +5,7 @@
     "transcriptTab": "Transkripsjon",
     "actionItemsTab": "Handlingspunkter",
     "deleteConversationTitle": "Slette samtale?",
-    "deleteConversationMessage": "Er du sikker på at du vil slette denne samtalen? Dette kan ikke angres.",
+    "deleteConversationMessage": "Dette vil også slette tilknyttede minner, oppgaver og lydfiler. Denne handlingen kan ikke angres.",
     "confirm": "Bekreft",
     "cancel": "Avbryt",
     "ok": "OK",
@@ -2747,6 +2747,5 @@
     "manageStorage": "Administrer lagring",
     "safelyBackedUp": "Sikkert sikkerhetskopiert til telefonen din",
     "notYetSynced": "Ennå ikke synkronisert med telefonen din",
-    "clearAll": "Tøm alt",
-    "deleteAssociatedData": "Slett tilknyttede minner og oppgaver"
+    "clearAll": "Tøm alt"
 }
