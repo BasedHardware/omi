@@ -3801,7 +3801,7 @@ struct SettingsContentView: View {
                             .scaledFont(size: 16, weight: .semibold)
                             .foregroundColor(OmiColors.textPrimary)
 
-                        Text("Restart setup wizard and reset permissions")
+                        Text("Restart setup wizard for this app build only")
                             .scaledFont(size: 13)
                             .foregroundColor(OmiColors.textTertiary)
                     }
@@ -3828,7 +3828,7 @@ struct SettingsContentView: View {
                     appState.resetOnboardingAndRestart()
                 }
             } message: {
-                Text("This will reset all permissions, clear chat history, and restart the app. You'll need to grant permissions again during setup.")
+                Text("This will reset onboarding for this app build only, clear onboarding chat history, and restart the app without affecting the other installed build.")
             }
         }
     }

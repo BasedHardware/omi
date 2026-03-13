@@ -22,6 +22,8 @@ struct DesktopHomeView: View {
     }()
     @State private var isSidebarCollapsed: Bool = false
     @AppStorage("currentTierLevel") private var currentTierLevel = 0
+    @AppStorage("onboardingStep") private var onboardingStep = 0
+    @AppStorage("onboardingJustCompleted") private var onboardingJustCompleted = false
 
     // Settings sidebar state
     @State private var selectedSettingsSection: SettingsContentView.SettingsSection = .general
@@ -199,6 +201,13 @@ struct DesktopHomeView: View {
                         .onReceive(NotificationCenter.default.publisher(for: .userDidSignOut)) { _ in
                             log("DesktopHomeView: userDidSignOut — resetting hasCompletedOnboarding and stopping transcription")
                             appState.hasCompletedOnboarding = false
+                            appState.stopTranscription()
+                        }
+                        .onReceive(NotificationCenter.default.publisher(for: .resetOnboardingRequested)) { _ in
+                            log("DesktopHomeView: resetOnboardingRequested — clearing live onboarding state for current app")
+                            appState.hasCompletedOnboarding = false
+                            onboardingStep = 0
+                            onboardingJustCompleted = false
                             appState.stopTranscription()
                         }
                         // Handle transcription toggle from menu bar
