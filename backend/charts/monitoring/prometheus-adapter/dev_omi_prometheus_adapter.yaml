@@ -13,7 +13,7 @@ rules:
     - name:
         as: "backend_listen_requests_per_pod"
       seriesQuery: 'stackdriver_https_lb_rule_loadbalancing_googleapis_com_https_backend_request_count{backend_target_name="dev-backend-listen"}'
-      metricsQuery: '(sum(stackdriver_https_lb_rule_loadbalancing_googleapis_com_https_backend_request_count{backend_target_name="dev-backend-listen"})/sum(kube_deployment_status_replicas{deployment="dev-omi-backend-listen"}))'
+      metricsQuery: '(sum(stackdriver_https_lb_rule_loadbalancing_googleapis_com_https_backend_request_count{backend_target_name="dev-backend-listen",response_code="101"})/sum(kube_deployment_status_replicas{deployment="dev-omi-backend-listen"}))'
       resources:
         overrides:
           namespace: { resource: "namespace" }

@@ -2677,7 +2677,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get showAll => 'Hiển thị tất cả →';
 
   @override
-  String get noTasksForToday => 'Không có nhiệm vụ cho hôm nay.\\nHỏi Omi để có thêm nhiệm vụ hoặc tạo thủ công.';
+  String get noTasksForToday => 'Không có nhiệm vụ cho hôm nay.\nHỏi Omi để có thêm nhiệm vụ hoặc tạo thủ công.';
 
   @override
   String get dailyScore => 'ĐIỂM HÀNG NGÀY';
@@ -8470,4 +8470,90 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get speakerLabelUnknown => 'Không xác định';
+
+  @override
+  String get showDailyScoreOnHomepage => 'Hiển thị Điểm hàng ngày trên trang chủ';
+
+  @override
+  String get showTasksOnHomepage => 'Hiển thị Nhiệm vụ trên trang chủ';
+
+  @override
+  String get phoneCallsUnlimitedOnly => 'Cuộc gọi điện thoại qua Omi';
+
+  @override
+  String get phoneCallsUpsellSubtitle =>
+      'Gọi điện qua Omi và nhận phiên âm thời gian thực, tóm tắt tự động và nhiều hơn nữa.';
+
+  @override
+  String get phoneCallsUpsellFeature1 => 'Phiên âm thời gian thực mọi cuộc gọi';
+
+  @override
+  String get phoneCallsUpsellFeature2 => 'Tóm tắt cuộc gọi tự động và danh sách hành động';
+
+  @override
+  String get phoneCallsUpsellFeature3 => 'Người nhận thấy số thật của bạn, không phải số ngẫu nhiên';
+
+  @override
+  String get phoneCallsUpsellFeature4 => 'Cuộc gọi của bạn luôn riêng tư và an toàn';
+
+  @override
+  String get phoneCallsUpgradeButton => 'Nâng cấp lên Không giới hạn';
+
+  @override
+  String get phoneCallsMaybeLater => 'Để sau';
+
+  @override
+  String get deleteSynced => 'Xóa đã đồng bộ';
+
+  @override
+  String get deleteSyncedFiles => 'Xóa bản ghi đã đồng bộ';
+
+  @override
+  String get deleteSyncedFilesMessage => 'Các bản ghi này đã được đồng bộ với điện thoại của bạn. Không thể hoàn tác.';
+
+  @override
+  String get syncedFilesDeleted => 'Đã xóa bản ghi đồng bộ';
+
+  @override
+  String get deletePending => 'Xóa đang chờ';
+
+  @override
+  String get deletePendingFiles => 'Xóa bản ghi đang chờ';
+
+  @override
+  String get deletePendingFilesWarning =>
+      'Các bản ghi này CHƯA được đồng bộ với điện thoại của bạn và sẽ bị mất vĩnh viễn. Không thể hoàn tác.';
+
+  @override
+  String get pendingFilesDeleted => 'Đã xóa bản ghi đang chờ';
+
+  @override
+  String get deleteAllFiles => 'Xóa tất cả bản ghi';
+
+  @override
+  String get deleteAll => 'Xóa tất cả';
+
+  @override
+  String get deleteAllFilesWarning =>
+      'Thao tác này sẽ xóa các bản ghi đã đồng bộ và đang chờ. Bản ghi đang chờ CHƯA được đồng bộ và sẽ bị mất vĩnh viễn.';
+
+  @override
+  String get allFilesDeleted => 'Đã xóa tất cả bản ghi';
+
+  @override
+  String nFiles(int count) {
+    return '$count bản ghi';
+  }
+
+  @override
+  String get manageStorage => 'Quản lý lưu trữ';
+
+  @override
+  String get safelyBackedUp => 'Đã sao lưu an toàn vào điện thoại';
+
+  @override
+  String get notYetSynced => 'Chưa đồng bộ với điện thoại của bạn';
+
+  @override
+  String get clearAll => 'Xóa tất cả';
 }

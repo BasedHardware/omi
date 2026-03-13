@@ -2677,7 +2677,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get showAll => 'Show All';
 
   @override
-  String get noTasksForToday => 'No tasks for today.\\nAsk Omi for more tasks or create manually.';
+  String get noTasksForToday => 'No tasks for today.\nAsk Omi for more tasks or create manually.';
 
   @override
   String get dailyScore => 'DAILY SCORE';
@@ -8463,4 +8463,91 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get speakerLabelUnknown => 'Unknown';
+
+  @override
+  String get showDailyScoreOnHomepage => 'Show Daily Score on homepage';
+
+  @override
+  String get showTasksOnHomepage => 'Show Tasks on homepage';
+
+  @override
+  String get phoneCallsUnlimitedOnly => 'Phone Calls via Omi';
+
+  @override
+  String get phoneCallsUpsellSubtitle =>
+      'Make calls through Omi and get real-time transcription, automatic summaries, and more. Available exclusively for Unlimited plan subscribers.';
+
+  @override
+  String get phoneCallsUpsellFeature1 => 'Real-time transcription of every call';
+
+  @override
+  String get phoneCallsUpsellFeature2 => 'Automatic call summaries and action items';
+
+  @override
+  String get phoneCallsUpsellFeature3 => 'Recipients see your real number, not a random one';
+
+  @override
+  String get phoneCallsUpsellFeature4 => 'Your calls stay private and secure';
+
+  @override
+  String get phoneCallsUpgradeButton => 'Upgrade to Unlimited';
+
+  @override
+  String get phoneCallsMaybeLater => 'Maybe later';
+
+  @override
+  String get deleteSynced => 'Delete Synced';
+
+  @override
+  String get deleteSyncedFiles => 'Delete Synced Recordings';
+
+  @override
+  String get deleteSyncedFilesMessage =>
+      'These recordings have already been synced to your phone. This cannot be undone.';
+
+  @override
+  String get syncedFilesDeleted => 'Synced recordings deleted';
+
+  @override
+  String get deletePending => 'Delete Pending';
+
+  @override
+  String get deletePendingFiles => 'Delete Pending Recordings';
+
+  @override
+  String get deletePendingFilesWarning =>
+      'These recordings have NOT been synced to your phone and will be permanently lost. This cannot be undone.';
+
+  @override
+  String get pendingFilesDeleted => 'Pending recordings deleted';
+
+  @override
+  String get deleteAllFiles => 'Delete All Recordings';
+
+  @override
+  String get deleteAll => 'Delete All';
+
+  @override
+  String get deleteAllFilesWarning =>
+      'This will delete both synced and pending recordings. Pending recordings have NOT been synced and will be permanently lost. This cannot be undone.';
+
+  @override
+  String get allFilesDeleted => 'All recordings deleted';
+
+  @override
+  String nFiles(int count) {
+    return '$count recordings';
+  }
+
+  @override
+  String get manageStorage => 'Manage Storage';
+
+  @override
+  String get safelyBackedUp => 'Safely backed up to your phone';
+
+  @override
+  String get notYetSynced => 'Not yet synced to your phone';
+
+  @override
+  String get clearAll => 'Clear All';
 }

@@ -2673,7 +2673,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get showAll => 'Kuva kõik →';
 
   @override
-  String get noTasksForToday => 'Täna pole ülesandeid.\\nKüsi Omi käest rohkem ülesandeid või loo need käsitsi.';
+  String get noTasksForToday => 'Täna pole ülesandeid.\nKüsi Omi käest rohkem ülesandeid või loo need käsitsi.';
 
   @override
   String get dailyScore => 'PÄEVA SKOOR';
@@ -8464,4 +8464,91 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get speakerLabelUnknown => 'Tundmatu';
+
+  @override
+  String get showDailyScoreOnHomepage => 'Kuva päevapunktid avalehel';
+
+  @override
+  String get showTasksOnHomepage => 'Kuva ülesanded avalehel';
+
+  @override
+  String get phoneCallsUnlimitedOnly => 'Telefonikõned Omi kaudu';
+
+  @override
+  String get phoneCallsUpsellSubtitle =>
+      'Tehke kõnesid Omi kaudu ja saage reaalajas transkriptsioon, automaatsed kokkuvõtted ja palju muud.';
+
+  @override
+  String get phoneCallsUpsellFeature1 => 'Iga kõne reaalajas transkriptsioon';
+
+  @override
+  String get phoneCallsUpsellFeature2 => 'Automaatsed kõnekokkuvõtted ja tegevusülesanded';
+
+  @override
+  String get phoneCallsUpsellFeature3 => 'Saajad näevad teie pärisnumbrit, mitte juhuslikku';
+
+  @override
+  String get phoneCallsUpsellFeature4 => 'Teie kõned jäävad privaatseks ja turvaliseks';
+
+  @override
+  String get phoneCallsUpgradeButton => 'Uuenda Piiramatuks';
+
+  @override
+  String get phoneCallsMaybeLater => 'Võib-olla hiljem';
+
+  @override
+  String get deleteSynced => 'Kustuta sünkroniseeritud';
+
+  @override
+  String get deleteSyncedFiles => 'Kustuta sünkroniseeritud salvestised';
+
+  @override
+  String get deleteSyncedFilesMessage =>
+      'Need salvestised on juba teie telefoniga sünkroniseeritud. Seda ei saa tagasi võtta.';
+
+  @override
+  String get syncedFilesDeleted => 'Sünkroniseeritud salvestised kustutatud';
+
+  @override
+  String get deletePending => 'Kustuta ootel olevad';
+
+  @override
+  String get deletePendingFiles => 'Kustuta ootel salvestised';
+
+  @override
+  String get deletePendingFilesWarning =>
+      'Neid salvestisi EI ole teie telefoniga sünkroniseeritud ja need lähevad jäädavalt kaotsi. Seda ei saa tagasi võtta.';
+
+  @override
+  String get pendingFilesDeleted => 'Ootel salvestised kustutatud';
+
+  @override
+  String get deleteAllFiles => 'Kustuta kõik salvestised';
+
+  @override
+  String get deleteAll => 'Kustuta kõik';
+
+  @override
+  String get deleteAllFilesWarning =>
+      'See kustutab sünkroniseeritud ja ootel salvestised. Ootel salvestisi EI ole sünkroniseeritud ja need lähevad jäädavalt kaotsi.';
+
+  @override
+  String get allFilesDeleted => 'Kõik salvestised kustutatud';
+
+  @override
+  String nFiles(int count) {
+    return '$count salvestist';
+  }
+
+  @override
+  String get manageStorage => 'Halda salvestusruumi';
+
+  @override
+  String get safelyBackedUp => 'Turvaliselt teie telefonile varundatud';
+
+  @override
+  String get notYetSynced => 'Pole veel teie telefoniga sünkroniseeritud';
+
+  @override
+  String get clearAll => 'Tühjenda kõik';
 }

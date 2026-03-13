@@ -2681,7 +2681,7 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get noTasksForToday =>
-      'Tidak ada tugas untuk hari ini.\\nTanyakan Omi untuk lebih banyak tugas atau buat secara manual.';
+      'Tidak ada tugas untuk hari ini.\nTanyakan Omi untuk lebih banyak tugas atau buat secara manual.';
 
   @override
   String get dailyScore => 'SKOR HARIAN';
@@ -8477,4 +8477,90 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get speakerLabelUnknown => 'Tidak dikenal';
+
+  @override
+  String get showDailyScoreOnHomepage => 'Tampilkan Skor Harian di beranda';
+
+  @override
+  String get showTasksOnHomepage => 'Tampilkan Tugas di beranda';
+
+  @override
+  String get phoneCallsUnlimitedOnly => 'Panggilan Telepon via Omi';
+
+  @override
+  String get phoneCallsUpsellSubtitle =>
+      'Lakukan panggilan melalui Omi dan dapatkan transkripsi real-time, ringkasan otomatis, dan lainnya.';
+
+  @override
+  String get phoneCallsUpsellFeature1 => 'Transkripsi real-time setiap panggilan';
+
+  @override
+  String get phoneCallsUpsellFeature2 => 'Ringkasan panggilan otomatis dan item tindakan';
+
+  @override
+  String get phoneCallsUpsellFeature3 => 'Penerima melihat nomor asli Anda, bukan nomor acak';
+
+  @override
+  String get phoneCallsUpsellFeature4 => 'Panggilan Anda tetap pribadi dan aman';
+
+  @override
+  String get phoneCallsUpgradeButton => 'Upgrade ke Unlimited';
+
+  @override
+  String get phoneCallsMaybeLater => 'Mungkin nanti';
+
+  @override
+  String get deleteSynced => 'Hapus yang disinkronkan';
+
+  @override
+  String get deleteSyncedFiles => 'Hapus rekaman tersinkronisasi';
+
+  @override
+  String get deleteSyncedFilesMessage => 'Rekaman ini sudah disinkronkan ke ponsel Anda. Ini tidak dapat dibatalkan.';
+
+  @override
+  String get syncedFilesDeleted => 'Rekaman tersinkronisasi dihapus';
+
+  @override
+  String get deletePending => 'Hapus yang tertunda';
+
+  @override
+  String get deletePendingFiles => 'Hapus rekaman tertunda';
+
+  @override
+  String get deletePendingFilesWarning =>
+      'Rekaman ini BELUM disinkronkan ke ponsel Anda dan akan hilang secara permanen. Ini tidak dapat dibatalkan.';
+
+  @override
+  String get pendingFilesDeleted => 'Rekaman tertunda dihapus';
+
+  @override
+  String get deleteAllFiles => 'Hapus semua rekaman';
+
+  @override
+  String get deleteAll => 'Hapus semua';
+
+  @override
+  String get deleteAllFilesWarning =>
+      'Ini akan menghapus rekaman tersinkronisasi dan tertunda. Rekaman tertunda BELUM disinkronkan dan akan hilang secara permanen.';
+
+  @override
+  String get allFilesDeleted => 'Semua rekaman dihapus';
+
+  @override
+  String nFiles(int count) {
+    return '$count rekaman';
+  }
+
+  @override
+  String get manageStorage => 'Kelola penyimpanan';
+
+  @override
+  String get safelyBackedUp => 'Dicadangkan dengan aman ke ponsel Anda';
+
+  @override
+  String get notYetSynced => 'Belum disinkronkan ke ponsel Anda';
+
+  @override
+  String get clearAll => 'Hapus semua';
 }

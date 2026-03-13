@@ -2670,7 +2670,7 @@ class AppLocalizationsNo extends AppLocalizations {
   String get showAll => 'Vis alle →';
 
   @override
-  String get noTasksForToday => 'Ingen oppgaver for i dag.\\nSpør Omi om flere oppgaver eller opprett manuelt.';
+  String get noTasksForToday => 'Ingen oppgaver for i dag.\nSpør Omi om flere oppgaver eller opprett manuelt.';
 
   @override
   String get dailyScore => 'DAGLIG POENGSUM';
@@ -8461,4 +8461,90 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get speakerLabelUnknown => 'Ukjent';
+
+  @override
+  String get showDailyScoreOnHomepage => 'Vis daglig poengsum på hjemmesiden';
+
+  @override
+  String get showTasksOnHomepage => 'Vis oppgaver på hjemmesiden';
+
+  @override
+  String get phoneCallsUnlimitedOnly => 'Telefonsamtaler via Omi';
+
+  @override
+  String get phoneCallsUpsellSubtitle => 'Ring via Omi og få sanntids transkripsjon, automatiske sammendrag og mer.';
+
+  @override
+  String get phoneCallsUpsellFeature1 => 'Sanntids transkripsjon av hver samtale';
+
+  @override
+  String get phoneCallsUpsellFeature2 => 'Automatiske samtalesammendrag og oppgaver';
+
+  @override
+  String get phoneCallsUpsellFeature3 => 'Mottakere ser ditt ekte nummer, ikke et tilfeldig';
+
+  @override
+  String get phoneCallsUpsellFeature4 => 'Samtalene dine forblir private og sikre';
+
+  @override
+  String get phoneCallsUpgradeButton => 'Oppgrader til Ubegrenset';
+
+  @override
+  String get phoneCallsMaybeLater => 'Kanskje senere';
+
+  @override
+  String get deleteSynced => 'Slett synkroniserte';
+
+  @override
+  String get deleteSyncedFiles => 'Slett synkroniserte opptak';
+
+  @override
+  String get deleteSyncedFilesMessage =>
+      'Disse opptakene er allerede synkronisert med telefonen din. Dette kan ikke angres.';
+
+  @override
+  String get syncedFilesDeleted => 'Synkroniserte opptak slettet';
+
+  @override
+  String get deletePending => 'Slett ventende';
+
+  @override
+  String get deletePendingFiles => 'Slett ventende opptak';
+
+  @override
+  String get deletePendingFilesWarning =>
+      'Disse opptakene er IKKE synkronisert med telefonen din og vil gå permanent tapt. Dette kan ikke angres.';
+
+  @override
+  String get pendingFilesDeleted => 'Ventende opptak slettet';
+
+  @override
+  String get deleteAllFiles => 'Slett alle opptak';
+
+  @override
+  String get deleteAll => 'Slett alle';
+
+  @override
+  String get deleteAllFilesWarning =>
+      'Dette sletter synkroniserte og ventende opptak. Ventende opptak er IKKE synkronisert og vil gå permanent tapt.';
+
+  @override
+  String get allFilesDeleted => 'Alle opptak slettet';
+
+  @override
+  String nFiles(int count) {
+    return '$count opptak';
+  }
+
+  @override
+  String get manageStorage => 'Administrer lagring';
+
+  @override
+  String get safelyBackedUp => 'Sikkert sikkerhetskopiert til telefonen din';
+
+  @override
+  String get notYetSynced => 'Ennå ikke synkronisert med telefonen din';
+
+  @override
+  String get clearAll => 'Tøm alt';
 }

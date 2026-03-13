@@ -2659,7 +2659,7 @@ class AppLocalizationsTh extends AppLocalizations {
   String get showAll => 'แสดงทั้งหมด →';
 
   @override
-  String get noTasksForToday => 'ไม่มีงานสำหรับวันนี้\\nถาม Omi เพื่อรับงานเพิ่มเติมหรือสร้างด้วยตนเอง';
+  String get noTasksForToday => 'ไม่มีงานสำหรับวันนี้\nถาม Omi เพื่อรับงานเพิ่มเติมหรือสร้างด้วยตนเอง';
 
   @override
   String get dailyScore => 'คะแนนประจำวัน';
@@ -8423,4 +8423,89 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get speakerLabelUnknown => 'ไม่ทราบ';
+
+  @override
+  String get showDailyScoreOnHomepage => 'แสดงคะแนนประจำวันบนหน้าหลัก';
+
+  @override
+  String get showTasksOnHomepage => 'แสดงงานบนหน้าหลัก';
+
+  @override
+  String get phoneCallsUnlimitedOnly => 'โทรศัพท์ผ่าน Omi';
+
+  @override
+  String get phoneCallsUpsellSubtitle => 'โทรผ่าน Omi และรับการถอดเสียงแบบเรียลไทม์ สรุปอัตโนมัติ และอื่นๆ';
+
+  @override
+  String get phoneCallsUpsellFeature1 => 'ถอดเสียงแบบเรียลไทม์ทุกสาย';
+
+  @override
+  String get phoneCallsUpsellFeature2 => 'สรุปสายอัตโนมัติและรายการดำเนินการ';
+
+  @override
+  String get phoneCallsUpsellFeature3 => 'ผู้รับเห็นหมายเลขจริงของคุณ ไม่ใช่หมายเลขสุ่ม';
+
+  @override
+  String get phoneCallsUpsellFeature4 => 'สายของคุณยังคงเป็นส่วนตัวและปลอดภัย';
+
+  @override
+  String get phoneCallsUpgradeButton => 'อัปเกรดเป็น Unlimited';
+
+  @override
+  String get phoneCallsMaybeLater => 'ไว้ทีหลัง';
+
+  @override
+  String get deleteSynced => 'ลบที่ซิงค์แล้ว';
+
+  @override
+  String get deleteSyncedFiles => 'ลบการบันทึกที่ซิงค์แล้ว';
+
+  @override
+  String get deleteSyncedFilesMessage => 'การบันทึกเหล่านี้ซิงค์กับโทรศัพท์ของคุณแล้ว ไม่สามารถย้อนกลับได้';
+
+  @override
+  String get syncedFilesDeleted => 'ลบการบันทึกที่ซิงค์แล้ว';
+
+  @override
+  String get deletePending => 'ลบที่รอดำเนินการ';
+
+  @override
+  String get deletePendingFiles => 'ลบการบันทึกที่รอดำเนินการ';
+
+  @override
+  String get deletePendingFilesWarning =>
+      'การบันทึกเหล่านี้ยังไม่ได้ซิงค์กับโทรศัพท์ของคุณและจะสูญหายถาวร ไม่สามารถย้อนกลับได้';
+
+  @override
+  String get pendingFilesDeleted => 'ลบการบันทึกที่รอดำเนินการแล้ว';
+
+  @override
+  String get deleteAllFiles => 'ลบการบันทึกทั้งหมด';
+
+  @override
+  String get deleteAll => 'ลบทั้งหมด';
+
+  @override
+  String get deleteAllFilesWarning =>
+      'การดำเนินการนี้จะลบการบันทึกที่ซิงค์แล้วและที่รอดำเนินการ การบันทึกที่รอดำเนินการยังไม่ได้ซิงค์และจะสูญหายถาวร';
+
+  @override
+  String get allFilesDeleted => 'ลบการบันทึกทั้งหมดแล้ว';
+
+  @override
+  String nFiles(int count) {
+    return '$count การบันทึก';
+  }
+
+  @override
+  String get manageStorage => 'จัดการพื้นที่จัดเก็บ';
+
+  @override
+  String get safelyBackedUp => 'สำรองข้อมูลไว้ในโทรศัพท์อย่างปลอดภัย';
+
+  @override
+  String get notYetSynced => 'ยังไม่ได้ซิงค์กับโทรศัพท์ของคุณ';
+
+  @override
+  String get clearAll => 'ล้างทั้งหมด';
 }

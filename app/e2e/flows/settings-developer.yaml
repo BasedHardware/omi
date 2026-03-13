@@ -1,0 +1,45 @@
+# E2E Flow: Settings → Developer Settings — API keys and debug tools
+# Tests: deep navigation, developer toggles, API key management
+
+name: settings-developer
+description: Settings → Developer Settings — custom STT provider, API key management, MCP keys, data protection
+covers:
+  - app/lib/pages/settings/settings_drawer.dart
+  - app/lib/pages/settings/developer.dart
+prerequisites:
+  - auth_ready  # User completed real sign-in (Google/Apple) and onboarding. Android: `bash setup.sh android`. iOS: `bash setup.sh ios`. App must show home screen.
+setup: normal
+
+steps:
+  - name: Open settings drawer
+    press: { type: button, position: rightmost }
+
+  - name: Scroll to find Developer Settings
+    scroll: down
+    screenshot: settings-scrolled
+
+  - name: Open Developer Settings
+    press: { type: gesture, hint: "Developer Settings row — in Support section after scrolling" }
+    screenshot: developer-settings
+
+  - name: Verify developer settings
+    assert:
+      interactive_count: { min: 3 }
+    note: >
+      Shows: Custom STT Provider selection, API Key input (show/hide toggle),
+      Host/Port/URL fields, model download button, MCP API key section,
+      data protection section, import history button.
+
+  - name: Scroll developer settings
+    scroll: down
+    screenshot: developer-scrolled
+
+  - name: Scroll more
+    scroll: down
+    screenshot: developer-scrolled-2
+
+  - name: Back to settings
+    back: true
+
+  - name: Close settings
+    back: true

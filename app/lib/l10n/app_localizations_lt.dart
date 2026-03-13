@@ -2673,7 +2673,7 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get noTasksForToday =>
-      'Šiandien nėra užduočių.\\nPaprašykite Omi daugiau užduočių arba sukurkite rankiniu būdu.';
+      'Šiandien nėra užduočių.\nPaprašykite Omi daugiau užduočių arba sukurkite rankiniu būdu.';
 
   @override
   String get dailyScore => 'DIENOS BALAS';
@@ -8474,4 +8474,90 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get speakerLabelUnknown => 'Nezinomas';
+
+  @override
+  String get showDailyScoreOnHomepage => 'Rodyti dienos balą pagrindiniame puslapyje';
+
+  @override
+  String get showTasksOnHomepage => 'Rodyti užduotis pagrindiniame puslapyje';
+
+  @override
+  String get phoneCallsUnlimitedOnly => 'Telefono skambučiai per Omi';
+
+  @override
+  String get phoneCallsUpsellSubtitle =>
+      'Skambinkite per Omi ir gaukite transkripcijas realiu laiku, automatinius santraukas ir daugiau.';
+
+  @override
+  String get phoneCallsUpsellFeature1 => 'Kiekvieno skambučio transkripcija realiu laiku';
+
+  @override
+  String get phoneCallsUpsellFeature2 => 'Automatinės skambučių santraukos ir veiksmai';
+
+  @override
+  String get phoneCallsUpsellFeature3 => 'Gavėjai mato jūsų tikrąjį numerį, ne atsitiktinį';
+
+  @override
+  String get phoneCallsUpsellFeature4 => 'Jūsų skambučiai lieka privatūs ir saugūs';
+
+  @override
+  String get phoneCallsUpgradeButton => 'Atnaujinti iki Neriboto';
+
+  @override
+  String get phoneCallsMaybeLater => 'Gal vėliau';
+
+  @override
+  String get deleteSynced => 'Ištrinti sinchronizuotus';
+
+  @override
+  String get deleteSyncedFiles => 'Ištrinti sinchronizuotus įrašus';
+
+  @override
+  String get deleteSyncedFilesMessage => 'Šie įrašai jau sinchronizuoti su jūsų telefonu. To atšaukti negalima.';
+
+  @override
+  String get syncedFilesDeleted => 'Sinchronizuoti įrašai ištrinti';
+
+  @override
+  String get deletePending => 'Ištrinti laukiančius';
+
+  @override
+  String get deletePendingFiles => 'Ištrinti laukiančius įrašus';
+
+  @override
+  String get deletePendingFilesWarning =>
+      'Šie įrašai NĖRA sinchronizuoti su jūsų telefonu ir bus visam laikui prarasti. To atšaukti negalima.';
+
+  @override
+  String get pendingFilesDeleted => 'Laukiantys įrašai ištrinti';
+
+  @override
+  String get deleteAllFiles => 'Ištrinti visus įrašus';
+
+  @override
+  String get deleteAll => 'Ištrinti viską';
+
+  @override
+  String get deleteAllFilesWarning =>
+      'Tai ištrins sinchronizuotus ir laukiančius įrašus. Laukiantys įrašai NĖRA sinchronizuoti ir bus visam laikui prarasti.';
+
+  @override
+  String get allFilesDeleted => 'Visi įrašai ištrinti';
+
+  @override
+  String nFiles(int count) {
+    return '$count įrašų';
+  }
+
+  @override
+  String get manageStorage => 'Tvarkyti saugyklą';
+
+  @override
+  String get safelyBackedUp => 'Saugiai nukopijuota į jūsų telefoną';
+
+  @override
+  String get notYetSynced => 'Dar nesinchronizuota su jūsų telefonu';
+
+  @override
+  String get clearAll => 'Išvalyti viską';
 }

@@ -348,6 +348,10 @@ autoscaling:
       - type: Percent
         value: 20
         periodSeconds: 300
+      - type: Pods
+        value: 1
+        periodSeconds: 60
+      selectPolicy: Min
     scaleUp:
       stabilizationWindowSeconds: 30
       policies:
@@ -362,6 +366,22 @@ autoscaling:
   # targetMemoryUtilizationPercentage: 70
   requestsPerPod: 10
   # failedResponseCode: 10
+
+podDisruptionBudget:
+  minAvailable: "80%"
+  # maxUnavailable: "20%"
+
+strategy:
+  type: RollingUpdate
+  rollingUpdate:
+    maxUnavailable: 1
+    maxSurge: 2
+
+terminationGracePeriodSeconds: 120
+lifecycle:
+  preStop:
+    exec:
+      command: ["sh", "-c", "sleep 15"]
 
 # Additional volumes on the output Deployment definition.
 volumes: []

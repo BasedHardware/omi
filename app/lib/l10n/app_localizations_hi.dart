@@ -2646,8 +2646,7 @@ class AppLocalizationsHi extends AppLocalizations {
   String get showAll => 'सभी दिखाएं →';
 
   @override
-  String get noTasksForToday =>
-      'आज के लिए कोई कार्य नहीं।\\nअधिक कार्यों के लिए Omi से पूछें या मैन्युअल रूप से बनाएं।';
+  String get noTasksForToday => 'आज के लिए कोई कार्य नहीं।\nअधिक कार्यों के लिए Omi से पूछें या मैन्युअल रूप से बनाएं।';
 
   @override
   String get dailyScore => 'दैनिक स्कोर';
@@ -8447,4 +8446,91 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get speakerLabelUnknown => 'अज्ञात';
+
+  @override
+  String get showDailyScoreOnHomepage => 'होमपेज पर दैनिक स्कोर दिखाएं';
+
+  @override
+  String get showTasksOnHomepage => 'होमपेज पर कार्य दिखाएं';
+
+  @override
+  String get phoneCallsUnlimitedOnly => 'Omi से फ़ोन कॉल';
+
+  @override
+  String get phoneCallsUpsellSubtitle =>
+      'Omi से कॉल करें और रियल-टाइम ट्रांसक्रिप्शन, स्वचालित सारांश और बहुत कुछ पाएं।';
+
+  @override
+  String get phoneCallsUpsellFeature1 => 'हर कॉल की रियल-टाइम ट्रांसक्रिप्शन';
+
+  @override
+  String get phoneCallsUpsellFeature2 => 'स्वचालित कॉल सारांश और कार्य सूची';
+
+  @override
+  String get phoneCallsUpsellFeature3 => 'प्राप्तकर्ता आपका असली नंबर देखते हैं, कोई रैंडम नंबर नहीं';
+
+  @override
+  String get phoneCallsUpsellFeature4 => 'आपकी कॉल निजी और सुरक्षित रहती हैं';
+
+  @override
+  String get phoneCallsUpgradeButton => 'अनलिमिटेड में अपग्रेड करें';
+
+  @override
+  String get phoneCallsMaybeLater => 'शायद बाद में';
+
+  @override
+  String get deleteSynced => 'सिंक किए गए हटाएं';
+
+  @override
+  String get deleteSyncedFiles => 'सिंक की गई रिकॉर्डिंग हटाएं';
+
+  @override
+  String get deleteSyncedFilesMessage =>
+      'ये रिकॉर्डिंग पहले से आपके फोन पर सिंक हो चुकी हैं। यह पूर्ववत नहीं किया जा सकता।';
+
+  @override
+  String get syncedFilesDeleted => 'सिंक की गई रिकॉर्डिंग हटाई गईं';
+
+  @override
+  String get deletePending => 'लंबित हटाएं';
+
+  @override
+  String get deletePendingFiles => 'लंबित रिकॉर्डिंग हटाएं';
+
+  @override
+  String get deletePendingFilesWarning =>
+      'ये रिकॉर्डिंग आपके फोन पर सिंक नहीं हुई हैं और स्थायी रूप से खो जाएंगी। यह पूर्ववत नहीं किया जा सकता।';
+
+  @override
+  String get pendingFilesDeleted => 'लंबित रिकॉर्डिंग हटाई गईं';
+
+  @override
+  String get deleteAllFiles => 'सभी रिकॉर्डिंग हटाएं';
+
+  @override
+  String get deleteAll => 'सब हटाएं';
+
+  @override
+  String get deleteAllFilesWarning =>
+      'यह सिंक की गई और लंबित दोनों रिकॉर्डिंग हटा देगा। लंबित रिकॉर्डिंग सिंक नहीं हुई हैं और स्थायी रूप से खो जाएंगी।';
+
+  @override
+  String get allFilesDeleted => 'सभी रिकॉर्डिंग हटाई गईं';
+
+  @override
+  String nFiles(int count) {
+    return '$count रिकॉर्डिंग';
+  }
+
+  @override
+  String get manageStorage => 'स्टोरेज प्रबंधित करें';
+
+  @override
+  String get safelyBackedUp => 'आपके फोन पर सुरक्षित बैकअप';
+
+  @override
+  String get notYetSynced => 'अभी तक आपके फोन पर सिंक नहीं हुआ';
+
+  @override
+  String get clearAll => 'सब हटाएं';
 }

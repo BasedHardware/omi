@@ -1,0 +1,35 @@
+# E2E Flow: Search — global search from home
+# Tests: search icon, search input, results
+
+name: search
+description: Tap search icon from home, enter query, view results, clear and return
+covers:
+  - app/lib/pages/home/page.dart
+prerequisites:
+  - auth_ready  # User completed real sign-in (Google/Apple) and onboarding. Android: `bash setup.sh android`. iOS: `bash setup.sh ios`. App must show home screen.
+setup: normal
+
+steps:
+  - name: Verify home with search icon
+    assert:
+      interactive_count: { min: 8 }
+    note: >
+      Top bar has 3 IconButtons after Connect Device:
+      search (leftmost), history (middle), settings (rightmost).
+    screenshot: home-search-icon
+
+  - name: Tap search icon
+    press: { type: button, hint: "IconButton — search icon, first of 3 top-right buttons" }
+    screenshot: search-opened
+
+  - name: Search input
+    fill: { type: textfield, value: "meeting" }
+    screenshot: search-results
+
+  - name: Clear search
+    back: true
+
+  - name: Verify return to home
+    assert:
+      interactive_count: { min: 8, hint: "home screen with bottom nav" }
+      bottom_nav_tabs: { min: 4 }

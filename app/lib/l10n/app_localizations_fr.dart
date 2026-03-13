@@ -2695,7 +2695,7 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get noTasksForToday =>
-      'Aucune tâche pour aujourd\'hui.\\nDemandez à Omi plus de tâches ou créez-les manuellement.';
+      'Aucune tâche pour aujourd\'hui.\nDemandez à Omi plus de tâches ou créez-les manuellement.';
 
   @override
   String get dailyScore => 'SCORE QUOTIDIEN';
@@ -8545,4 +8545,91 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get speakerLabelUnknown => 'Inconnu';
+
+  @override
+  String get showDailyScoreOnHomepage => 'Afficher le score quotidien sur la page d\'accueil';
+
+  @override
+  String get showTasksOnHomepage => 'Afficher les tâches sur la page d\'accueil';
+
+  @override
+  String get phoneCallsUnlimitedOnly => 'Appels téléphoniques via Omi';
+
+  @override
+  String get phoneCallsUpsellSubtitle =>
+      'Passez des appels via Omi et obtenez une transcription en temps réel, des résumés automatiques et plus encore.';
+
+  @override
+  String get phoneCallsUpsellFeature1 => 'Transcription en temps réel de chaque appel';
+
+  @override
+  String get phoneCallsUpsellFeature2 => 'Résumés automatiques des appels et actions à suivre';
+
+  @override
+  String get phoneCallsUpsellFeature3 => 'Les destinataires voient votre vrai numéro, pas un aléatoire';
+
+  @override
+  String get phoneCallsUpsellFeature4 => 'Vos appels restent privés et sécurisés';
+
+  @override
+  String get phoneCallsUpgradeButton => 'Passer à Illimité';
+
+  @override
+  String get phoneCallsMaybeLater => 'Peut-être plus tard';
+
+  @override
+  String get deleteSynced => 'Supprimer les synchronisés';
+
+  @override
+  String get deleteSyncedFiles => 'Supprimer les enregistrements synchronisés';
+
+  @override
+  String get deleteSyncedFilesMessage =>
+      'Ces enregistrements ont déjà été synchronisés avec votre téléphone. Cette action est irréversible.';
+
+  @override
+  String get syncedFilesDeleted => 'Enregistrements synchronisés supprimés';
+
+  @override
+  String get deletePending => 'Supprimer les en attente';
+
+  @override
+  String get deletePendingFiles => 'Supprimer les enregistrements en attente';
+
+  @override
+  String get deletePendingFilesWarning =>
+      'Ces enregistrements ne sont PAS synchronisés avec votre téléphone et seront définitivement perdus. Cette action est irréversible.';
+
+  @override
+  String get pendingFilesDeleted => 'Enregistrements en attente supprimés';
+
+  @override
+  String get deleteAllFiles => 'Supprimer tous les enregistrements';
+
+  @override
+  String get deleteAll => 'Tout supprimer';
+
+  @override
+  String get deleteAllFilesWarning =>
+      'Cela supprimera les enregistrements synchronisés et en attente. Les enregistrements en attente ne sont PAS synchronisés et seront définitivement perdus.';
+
+  @override
+  String get allFilesDeleted => 'Tous les enregistrements supprimés';
+
+  @override
+  String nFiles(int count) {
+    return '$count enregistrements';
+  }
+
+  @override
+  String get manageStorage => 'Gérer le stockage';
+
+  @override
+  String get safelyBackedUp => 'Sauvegardé sur votre téléphone';
+
+  @override
+  String get notYetSynced => 'Pas encore synchronisé avec votre téléphone';
+
+  @override
+  String get clearAll => 'Tout effacer';
 }

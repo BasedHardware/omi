@@ -220,21 +220,29 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
               builder: (context, homeProvider, _) {
                 final isSearchActive = homeProvider.showConvoSearchBar || convoProvider.previousQuery.isNotEmpty;
                 final hasCalendarFilter = convoProvider.selectedDate != null;
-                if (!SharedPreferencesUtil().showGoalTrackerEnabled ||
-                    convoProvider.showDailySummaries ||
-                    isSearchActive ||
-                    hasCalendarFilter) {
+                final prefs = SharedPreferencesUtil();
+                if (convoProvider.showDailySummaries || isSearchActive || hasCalendarFilter) {
+                  return const SliverToBoxAdapter(child: SizedBox.shrink());
+                }
+                final showDailyScore = prefs.showDailyScoreEnabled;
+                final showTasks = prefs.showTasksEnabled;
+                final showGoals = prefs.showGoalTrackerEnabled;
+                if (!showDailyScore && !showTasks && !showGoals) {
                   return const SliverToBoxAdapter(child: SizedBox.shrink());
                 }
                 return SliverToBoxAdapter(
                   child: Column(
                     children: [
-                      Padding(
-                        padding: const EdgeInsets.only(left: 16, right: 16, top: 16),
-                        child: DailyScoreWidget(key: _dailyScoreWidgetKey, goalsWidgetKey: _goalsWidgetKey),
-                      ),
-                      const TodayTasksWidget(),
-                      GoalsWidget(key: _goalsWidgetKey, onRefresh: _refreshGoals),
+                      if (showDailyScore)
+                        Padding(
+                          padding: const EdgeInsets.only(left: 16, right: 16, top: 16),
+                          child: DailyScoreWidget(
+                            key: _dailyScoreWidgetKey,
+                            goalsWidgetKey: showGoals ? _goalsWidgetKey : null,
+                          ),
+                        ),
+                      if (showTasks) const TodayTasksWidget(),
+                      if (showGoals) GoalsWidget(key: _goalsWidgetKey, onRefresh: _refreshGoals),
                     ],
                   ),
                 );
@@ -334,6 +342,7 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                         children: [
                           if (index == 0) const SizedBox(height: 10),
                           ConversationsGroupWidget(
+                            key: ValueKey(date),
                             isFirst: index == 0,
                             conversations: memoriesForDate,
                             date: date,

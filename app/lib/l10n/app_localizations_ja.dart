@@ -2630,7 +2630,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get showAll => 'すべて表示 →';
 
   @override
-  String get noTasksForToday => '今日のタスクはありません。\\nOmiに他のタスクを尋ねるか、手動で作成してください。';
+  String get noTasksForToday => '今日のタスクはありません。\nOmiに他のタスクを尋ねるか、手動で作成してください。';
 
   @override
   String get dailyScore => 'デイリースコア';
@@ -8326,4 +8326,87 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get speakerLabelUnknown => '不明';
+
+  @override
+  String get showDailyScoreOnHomepage => 'ホームページにデイリースコアを表示';
+
+  @override
+  String get showTasksOnHomepage => 'ホームページにタスクを表示';
+
+  @override
+  String get phoneCallsUnlimitedOnly => 'Omiで電話をかける';
+
+  @override
+  String get phoneCallsUpsellSubtitle => 'Omiで通話し、リアルタイム文字起こし、自動要約などを取得。';
+
+  @override
+  String get phoneCallsUpsellFeature1 => 'すべての通話のリアルタイム文字起こし';
+
+  @override
+  String get phoneCallsUpsellFeature2 => '通話の自動要約とアクションアイテム';
+
+  @override
+  String get phoneCallsUpsellFeature3 => '受信者にはあなたの実際の番号が表示されます';
+
+  @override
+  String get phoneCallsUpsellFeature4 => '通話はプライベートで安全';
+
+  @override
+  String get phoneCallsUpgradeButton => 'Unlimitedにアップグレード';
+
+  @override
+  String get phoneCallsMaybeLater => 'また後で';
+
+  @override
+  String get deleteSynced => '同期済みを削除';
+
+  @override
+  String get deleteSyncedFiles => '同期済み録音を削除';
+
+  @override
+  String get deleteSyncedFilesMessage => 'これらの録音はすでにスマホに同期されています。この操作は取り消せません。';
+
+  @override
+  String get syncedFilesDeleted => '同期済み録音を削除しました';
+
+  @override
+  String get deletePending => '保留中を削除';
+
+  @override
+  String get deletePendingFiles => '保留中の録音を削除';
+
+  @override
+  String get deletePendingFilesWarning => 'これらの録音はスマホに同期されておらず、完全に失われます。この操作は取り消せません。';
+
+  @override
+  String get pendingFilesDeleted => '保留中の録音を削除しました';
+
+  @override
+  String get deleteAllFiles => 'すべての録音を削除';
+
+  @override
+  String get deleteAll => 'すべて削除';
+
+  @override
+  String get deleteAllFilesWarning => '同期済みと保留中の録音がすべて削除されます。保留中の録音は同期されておらず、完全に失われます。';
+
+  @override
+  String get allFilesDeleted => 'すべての録音を削除しました';
+
+  @override
+  String nFiles(int count) {
+    return '$count件の録音';
+  }
+
+  @override
+  String get manageStorage => 'ストレージを管理';
+
+  @override
+  String get safelyBackedUp => 'スマホに安全にバックアップ済み';
+
+  @override
+  String get notYetSynced => 'まだスマホに同期されていません';
+
+  @override
+  String get clearAll => 'すべて削除';
 }

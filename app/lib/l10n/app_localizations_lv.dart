@@ -2678,7 +2678,7 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get noTasksForToday =>
-      'Šodien nav uzdevumu.\\nJautājiet Omi par vairāk uzdevumiem vai izveidojiet tos manuāli.';
+      'Šodien nav uzdevumu.\nJautājiet Omi par vairāk uzdevumiem vai izveidojiet tos manuāli.';
 
   @override
   String get dailyScore => 'DIENAS REZULTĀTS';
@@ -8484,4 +8484,90 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get speakerLabelUnknown => 'Nezinams';
+
+  @override
+  String get showDailyScoreOnHomepage => 'Rādīt dienas rezultātu sākumlapā';
+
+  @override
+  String get showTasksOnHomepage => 'Rādīt uzdevumus sākumlapā';
+
+  @override
+  String get phoneCallsUnlimitedOnly => 'Tālruņa zvani caur Omi';
+
+  @override
+  String get phoneCallsUpsellSubtitle =>
+      'Veiciet zvanus caur Omi un saņemiet reāllaika transkripciju, automātiskus kopsavilkumus un daudz ko citu.';
+
+  @override
+  String get phoneCallsUpsellFeature1 => 'Katra zvana reāllaika transkripcija';
+
+  @override
+  String get phoneCallsUpsellFeature2 => 'Automātiski zvanu kopsavilkumi un uzdevumi';
+
+  @override
+  String get phoneCallsUpsellFeature3 => 'Saņēmēji redz jūsu īsto numuru, nevis nejaušu';
+
+  @override
+  String get phoneCallsUpsellFeature4 => 'Jūsu zvani paliek privāti un droši';
+
+  @override
+  String get phoneCallsUpgradeButton => 'Jaunināt uz Neierobežoto';
+
+  @override
+  String get phoneCallsMaybeLater => 'Varbūt vēlāk';
+
+  @override
+  String get deleteSynced => 'Dzēst sinhronizētos';
+
+  @override
+  String get deleteSyncedFiles => 'Dzēst sinhronizētos ierakstus';
+
+  @override
+  String get deleteSyncedFilesMessage => 'Šie ieraksti jau ir sinhronizēti ar jūsu tālruni. To nevar atsaukt.';
+
+  @override
+  String get syncedFilesDeleted => 'Sinhronizētie ieraksti dzēsti';
+
+  @override
+  String get deletePending => 'Dzēst gaidošos';
+
+  @override
+  String get deletePendingFiles => 'Dzēst gaidošos ierakstus';
+
+  @override
+  String get deletePendingFilesWarning =>
+      'Šie ieraksti NAV sinhronizēti ar jūsu tālruni un tiks neatgriezeniski zaudēti. To nevar atsaukt.';
+
+  @override
+  String get pendingFilesDeleted => 'Gaidošie ieraksti dzēsti';
+
+  @override
+  String get deleteAllFiles => 'Dzēst visus ierakstus';
+
+  @override
+  String get deleteAll => 'Dzēst visu';
+
+  @override
+  String get deleteAllFilesWarning =>
+      'Tas dzēsīs sinhronizētos un gaidošos ierakstus. Gaidošie ieraksti NAV sinhronizēti un tiks neatgriezeniski zaudēti.';
+
+  @override
+  String get allFilesDeleted => 'Visi ieraksti dzēsti';
+
+  @override
+  String nFiles(int count) {
+    return '$count ierakstu';
+  }
+
+  @override
+  String get manageStorage => 'Pārvaldīt krātuvi';
+
+  @override
+  String get safelyBackedUp => 'Droši dublēts jūsu tālrunī';
+
+  @override
+  String get notYetSynced => 'Vēl nav sinhronizēts ar jūsu tālruni';
+
+  @override
+  String get clearAll => 'Notīrīt visu';
 }

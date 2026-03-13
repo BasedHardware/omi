@@ -2657,7 +2657,7 @@ class AppLocalizationsEs extends AppLocalizations {
   String get showAll => 'Mostrar todo →';
 
   @override
-  String get noTasksForToday => 'No hay tareas para hoy.\\nPregúntale a Omi por más tareas o créalas manualmente.';
+  String get noTasksForToday => 'No hay tareas para hoy.\nPregúntale a Omi por más tareas o créalas manualmente.';
 
   @override
   String get dailyScore => 'PUNTUACIÓN DIARIA';
@@ -8484,4 +8484,91 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get speakerLabelUnknown => 'Desconocido';
+
+  @override
+  String get showDailyScoreOnHomepage => 'Mostrar puntuación diaria en la página de inicio';
+
+  @override
+  String get showTasksOnHomepage => 'Mostrar tareas en la página de inicio';
+
+  @override
+  String get phoneCallsUnlimitedOnly => 'Llamadas telefónicas vía Omi';
+
+  @override
+  String get phoneCallsUpsellSubtitle =>
+      'Realiza llamadas a través de Omi y obtén transcripción en tiempo real, resúmenes automáticos y más.';
+
+  @override
+  String get phoneCallsUpsellFeature1 => 'Transcripción en tiempo real de cada llamada';
+
+  @override
+  String get phoneCallsUpsellFeature2 => 'Resúmenes automáticos de llamadas y tareas';
+
+  @override
+  String get phoneCallsUpsellFeature3 => 'Los destinatarios ven tu número real, no uno aleatorio';
+
+  @override
+  String get phoneCallsUpsellFeature4 => 'Tus llamadas se mantienen privadas y seguras';
+
+  @override
+  String get phoneCallsUpgradeButton => 'Actualizar a Ilimitado';
+
+  @override
+  String get phoneCallsMaybeLater => 'Quizás más tarde';
+
+  @override
+  String get deleteSynced => 'Eliminar sincronizados';
+
+  @override
+  String get deleteSyncedFiles => 'Eliminar grabaciones sincronizadas';
+
+  @override
+  String get deleteSyncedFilesMessage =>
+      'Estas grabaciones ya se sincronizaron con tu teléfono. Esto no se puede deshacer.';
+
+  @override
+  String get syncedFilesDeleted => 'Grabaciones sincronizadas eliminadas';
+
+  @override
+  String get deletePending => 'Eliminar pendientes';
+
+  @override
+  String get deletePendingFiles => 'Eliminar grabaciones pendientes';
+
+  @override
+  String get deletePendingFilesWarning =>
+      'Estas grabaciones NO se han sincronizado con tu teléfono y se perderán permanentemente. Esto no se puede deshacer.';
+
+  @override
+  String get pendingFilesDeleted => 'Grabaciones pendientes eliminadas';
+
+  @override
+  String get deleteAllFiles => 'Eliminar todas las grabaciones';
+
+  @override
+  String get deleteAll => 'Eliminar todo';
+
+  @override
+  String get deleteAllFilesWarning =>
+      'Esto eliminará grabaciones sincronizadas y pendientes. Las grabaciones pendientes NO se han sincronizado y se perderán permanentemente.';
+
+  @override
+  String get allFilesDeleted => 'Todas las grabaciones eliminadas';
+
+  @override
+  String nFiles(int count) {
+    return '$count grabaciones';
+  }
+
+  @override
+  String get manageStorage => 'Gestionar almacenamiento';
+
+  @override
+  String get safelyBackedUp => 'Respaldado en tu teléfono';
+
+  @override
+  String get notYetSynced => 'Aún no sincronizado con tu teléfono';
+
+  @override
+  String get clearAll => 'Borrar todo';
 }

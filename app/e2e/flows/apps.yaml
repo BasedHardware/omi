@@ -1,0 +1,98 @@
+# E2E Flow: Apps tab — explore, search, install, app detail
+# Tests: app browsing, categories, search, detail view, reviews
+
+name: apps
+description: Apps tab — explore apps, search, filter by category/capability, view app detail with reviews
+covers:
+  - app/lib/pages/apps/page.dart
+  - app/lib/pages/apps/explore_install_page.dart
+  - app/lib/pages/apps/app_detail/app_detail.dart
+  - app/lib/pages/apps/app_detail/reviews_list_page.dart
+  - app/lib/pages/apps/widgets/category_apps_page.dart
+  - app/lib/pages/apps/widgets/filter_sheet.dart
+prerequisites:
+  - auth_ready  # User completed real sign-in (Google/Apple) and onboarding. Android: `bash setup.sh android`. iOS: `bash setup.sh ios`. App must show home screen.
+setup: normal
+
+steps:
+  - name: Navigate to Apps tab
+    press: { bottom_nav_tab: 3 }
+    screenshot: apps-tab
+
+  - name: Verify apps page
+    assert:
+      interactive_count: { min: 15, verified: "flow-walker run10: 19 elements (2 elevated, 1 FAB, 9 gesture, 1 icon, 5 inkwell, 1 textfield)" }
+    note: >
+      ExploreInstallPage shows: search bar, filter button, create button,
+      popular apps section (horizontal scroll), category sections.
+    screenshot: apps-explore
+
+  - name: Search for an app
+    press: { type: textfield, hint: "search bar at top" }
+    fill: { type: textfield, value: "note" }
+    screenshot: apps-search
+
+  - name: Clear search
+    back: true
+
+  - name: Open filter sheet
+    press: { type: gesture, hint: "filter icon button near search bar" }
+    screenshot: filter-sheet
+
+  - name: Filter sheet options
+    assert:
+      interactive_count: { min: 3, hint: "filter categories and apply button" }
+    note: "FilterSheet — category and capability filters"
+    screenshot: filter-options
+
+  - name: Close filter sheet
+    back: true
+
+  - name: Scroll to see categories
+    scroll: down
+    screenshot: apps-categories
+
+  - name: Tap a category
+    press: { type: gesture, hint: "category card in list" }
+    screenshot: category-apps
+
+  - name: Back from category
+    back: true
+
+  - name: Scroll to popular apps
+    scroll: up
+    screenshot: popular-apps
+
+  - name: Tap an app for detail
+    press: { type: gesture, hint: "app item in popular section or list" }
+    screenshot: app-detail
+
+  - name: App detail page
+    assert:
+      interactive_count: { min: 3 }
+    note: >
+      Shows: app icon, name, description, install/enable button,
+      reviews section, capabilities card, info card.
+      Can scroll to see reviews.
+    screenshot: app-detail-view
+
+  - name: Scroll app detail
+    scroll: down
+    screenshot: app-detail-scrolled
+
+  - name: Back to apps
+    back: true
+
+  - name: Tap create app button
+    press: { type: gesture, hint: "create/+ button — shows CreateOptionsSheet" }
+    screenshot: create-options
+
+  - name: Create options sheet
+    note: "CreateOptionsSheet — options to create custom app or add MCP server"
+    screenshot: create-sheet
+
+  - name: Close create sheet
+    back: true
+
+  - name: Return to home tab
+    press: { bottom_nav_tab: 0 }

@@ -6,18 +6,20 @@ description: Home screen snapshot, settings gear press, scroll in settings, back
 covers:
   - app/lib/pages/home/page.dart
   - app/lib/pages/settings/settings_drawer.dart
+prerequisites:
+  - auth_ready  # User completed real sign-in (Google/Apple) and onboarding. Android: `bash setup.sh android`. iOS: `bash setup.sh ios`. App must show home screen.
 setup: normal
 
 steps:
   - name: Snapshot home screen
     assert:
-      interactive_count: { min: 5 }
+      interactive_count: { min: 20, verified: "flow-walker run10: 24 elements (17 gesture, 3 icon, 4 inkwell)" }
     screenshot: home
 
   - name: Press settings gear (rightmost button in top bar)
     press: { type: button, position: rightmost }
     assert:
-      interactive_count: { min: 5 }
+      interactive_count: { min: 10 }
     screenshot: settings
 
   - name: Scroll down in settings

@@ -6,7 +6,6 @@ import 'package:flutter/services.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:provider/provider.dart';
-import 'package:pull_down_button/pull_down_button.dart';
 
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/models/sync_state.dart';
@@ -534,22 +533,69 @@ class _SyncPageState extends State<SyncPage> {
     }
   }
 
-  void _showDeleteProcessedDialog(BuildContext context, SyncProvider provider) async {
-    final confirmed = await OmiConfirmDialog.show(
-      context,
-      title: context.l10n.deleteProcessedFiles,
-      message: context.l10n.thisCannotBeUndone,
-      confirmLabel: context.l10n.delete,
-      confirmColor: Colors.red,
+  void _showManageStorageSheet(BuildContext context, SyncProvider provider) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (sheetContext) => _ManageStorageSheet(
+        provider: provider,
+        onClearSynced: () async {
+          Navigator.of(sheetContext).pop();
+          final confirmed = await OmiConfirmDialog.show(
+            context,
+            title: context.l10n.deleteSyncedFiles,
+            message: context.l10n.deleteSyncedFilesMessage,
+            confirmLabel: context.l10n.clear,
+            confirmColor: Colors.red,
+          );
+          if (confirmed == true && context.mounted) {
+            await provider.deleteAllSyncedWals();
+            if (context.mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text(context.l10n.syncedFilesDeleted), backgroundColor: Colors.green),
+              );
+            }
+          }
+        },
+        onClearPending: () async {
+          Navigator.of(sheetContext).pop();
+          final confirmed = await OmiConfirmDialog.show(
+            context,
+            title: context.l10n.deletePendingFiles,
+            message: context.l10n.deletePendingFilesWarning,
+            confirmLabel: context.l10n.clear,
+            confirmColor: Colors.red,
+          );
+          if (confirmed == true && context.mounted) {
+            await provider.deleteAllPendingWals();
+            if (context.mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text(context.l10n.pendingFilesDeleted), backgroundColor: Colors.green),
+              );
+            }
+          }
+        },
+        onClearAll: () async {
+          Navigator.of(sheetContext).pop();
+          final confirmed = await OmiConfirmDialog.show(
+            context,
+            title: context.l10n.deleteAllFiles,
+            message: context.l10n.deleteAllFilesWarning,
+            confirmLabel: context.l10n.clearAll,
+            confirmColor: Colors.red,
+          );
+          if (confirmed == true && context.mounted) {
+            await provider.deleteAllSyncedWals();
+            await provider.deleteAllPendingWals();
+            if (context.mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text(context.l10n.allFilesDeleted), backgroundColor: Colors.green),
+              );
+            }
+          }
+        },
+      ),
     );
-    if (confirmed == true && context.mounted) {
-      await provider.deleteAllSyncedWals();
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(context.l10n.processedFilesDeleted), backgroundColor: Colors.green),
-        );
-      }
-    }
   }
 
   void _handleSyncWals(BuildContext context, SyncProvider syncProvider) async {
@@ -1213,31 +1259,21 @@ class _SyncPageState extends State<SyncPage> {
                 style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600)),
             centerTitle: true,
             actions: [
-              PullDownButton(
-                itemBuilder: (context) => [
-                  PullDownMenuItem(
-                    title: context.l10n.deleteProcessed,
-                    iconWidget: _buildFaIcon(FontAwesomeIcons.trash, size: 16, color: Colors.red),
-                    isDestructive: true,
-                    onTap: () => _showDeleteProcessedDialog(context, syncProvider),
+              GestureDetector(
+                onTap: () {
+                  HapticFeedback.mediumImpact();
+                  _showManageStorageSheet(context, syncProvider);
+                },
+                child: Container(
+                  width: 36,
+                  height: 36,
+                  margin: const EdgeInsets.only(right: 8),
+                  decoration: BoxDecoration(
+                    color: Colors.grey.withValues(alpha: 0.3),
+                    shape: BoxShape.circle,
                   ),
-                ],
-                buttonBuilder: (context, showMenu) => GestureDetector(
-                  onTap: () {
-                    HapticFeedback.mediumImpact();
-                    showMenu();
-                  },
-                  child: Container(
-                    width: 36,
-                    height: 36,
-                    margin: const EdgeInsets.only(right: 8),
-                    decoration: BoxDecoration(
-                      color: Colors.grey.withValues(alpha: 0.3),
-                      shape: BoxShape.circle,
-                    ),
-                    child: Center(
-                      child: _buildFaIcon(FontAwesomeIcons.ellipsisVertical, size: 16, color: Colors.white),
-                    ),
+                  child: Center(
+                    child: _buildFaIcon(FontAwesomeIcons.ellipsisVertical, size: 16, color: Colors.white),
                   ),
                 ),
               ),
@@ -1400,4 +1436,190 @@ class _PendingListItem {
         icon = null,
         color = null,
         count = null;
+}
+
+class _ManageStorageSheet extends StatelessWidget {
+  final SyncProvider provider;
+  final VoidCallback onClearSynced;
+  final VoidCallback onClearPending;
+  final VoidCallback onClearAll;
+
+  const _ManageStorageSheet({
+    required this.provider,
+    required this.onClearSynced,
+    required this.onClearPending,
+    required this.onClearAll,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final syncedCount = provider.syncedWals.length;
+    final pendingCount = provider.pendingWals.length;
+    final totalCount = provider.allWals.length;
+
+    return Container(
+      decoration: const BoxDecoration(
+        color: Color(0xFF1C1C1E),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      child: SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(24, 12, 24, 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Drag handle
+              Container(
+                width: 36,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade700,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              const SizedBox(height: 20),
+              // Title
+              Text(
+                context.l10n.manageStorage,
+                style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
+              ),
+              const SizedBox(height: 24),
+              // Synced row
+              _StorageRow(
+                icon: FontAwesomeIcons.circleCheck,
+                iconColor: Colors.green,
+                title: context.l10n.synced,
+                subtitle: context.l10n.safelyBackedUp,
+                count: syncedCount,
+                onClear: syncedCount > 0 ? onClearSynced : null,
+                clearLabel: context.l10n.clear,
+              ),
+              const SizedBox(height: 12),
+              // Pending row
+              _StorageRow(
+                icon: FontAwesomeIcons.clockRotateLeft,
+                iconColor: Colors.orange,
+                title: context.l10n.pending,
+                subtitle: context.l10n.notYetSynced,
+                count: pendingCount,
+                onClear: pendingCount > 0 ? onClearPending : null,
+                clearLabel: context.l10n.clear,
+                isWarning: true,
+              ),
+              if (totalCount > 0) ...[
+                const SizedBox(height: 20),
+                SizedBox(
+                  width: double.infinity,
+                  child: TextButton(
+                    onPressed: onClearAll,
+                    style: TextButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        side: BorderSide(color: Colors.red.withValues(alpha: 0.3)),
+                      ),
+                    ),
+                    child: Text(
+                      context.l10n.clearAll,
+                      style: TextStyle(color: Colors.red.shade300, fontSize: 15, fontWeight: FontWeight.w500),
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _StorageRow extends StatelessWidget {
+  final IconData icon;
+  final Color iconColor;
+  final String title;
+  final String subtitle;
+  final int count;
+  final VoidCallback? onClear;
+  final String clearLabel;
+  final bool isWarning;
+
+  const _StorageRow({
+    required this.icon,
+    required this.iconColor,
+    required this.title,
+    required this.subtitle,
+    required this.count,
+    required this.onClear,
+    required this.clearLabel,
+    this.isWarning = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFF2A2A2E),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 36,
+            height: 36,
+            decoration: BoxDecoration(
+              color: iconColor.withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Center(child: FaIcon(icon, size: 16, color: iconColor)),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Text(title, style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w500)),
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.08),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text('$count', style: TextStyle(color: Colors.grey.shade400, fontSize: 12)),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 3),
+                Text(subtitle, style: TextStyle(color: Colors.grey.shade600, fontSize: 12)),
+              ],
+            ),
+          ),
+          if (onClear != null)
+            GestureDetector(
+              onTap: onClear,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                decoration: BoxDecoration(
+                  color: (isWarning ? Colors.orange : Colors.red).withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(100),
+                ),
+                child: Text(
+                  clearLabel,
+                  style: TextStyle(
+                    color: isWarning ? Colors.orange.shade300 : Colors.red.shade300,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
 }

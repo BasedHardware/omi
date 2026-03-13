@@ -249,7 +249,7 @@ abstract class AppLocalizations {
   /// **'Close'**
   String get close;
 
-  /// Clear button
+  /// Button label to clear files
   ///
   /// In en, this message translates to:
   /// **'Clear'**
@@ -5142,7 +5142,7 @@ abstract class AppLocalizations {
   /// Message shown when there are no tasks due today
   ///
   /// In en, this message translates to:
-  /// **'No tasks for today.\\nAsk Omi for more tasks or create manually.'**
+  /// **'No tasks for today.\nAsk Omi for more tasks or create manually.'**
   String get noTasksForToday;
 
   /// Header for daily score widget
@@ -15818,6 +15818,168 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Unknown'**
   String get speakerLabelUnknown;
+
+  /// Description for show daily score toggle in developer settings
+  ///
+  /// In en, this message translates to:
+  /// **'Show Daily Score on homepage'**
+  String get showDailyScoreOnHomepage;
+
+  /// Description for show tasks toggle in developer settings
+  ///
+  /// In en, this message translates to:
+  /// **'Show Tasks on homepage'**
+  String get showTasksOnHomepage;
+
+  /// Title for the phone calls upsell sheet shown to non-unlimited users
+  ///
+  /// In en, this message translates to:
+  /// **'Phone Calls via Omi'**
+  String get phoneCallsUnlimitedOnly;
+
+  /// Subtitle explaining phone calls feature on upsell sheet
+  ///
+  /// In en, this message translates to:
+  /// **'Make calls through Omi and get real-time transcription, automatic summaries, and more. Available exclusively for Unlimited plan subscribers.'**
+  String get phoneCallsUpsellSubtitle;
+
+  /// Phone calls upsell feature 1
+  ///
+  /// In en, this message translates to:
+  /// **'Real-time transcription of every call'**
+  String get phoneCallsUpsellFeature1;
+
+  /// Phone calls upsell feature 2
+  ///
+  /// In en, this message translates to:
+  /// **'Automatic call summaries and action items'**
+  String get phoneCallsUpsellFeature2;
+
+  /// Phone calls upsell feature 3
+  ///
+  /// In en, this message translates to:
+  /// **'Recipients see your real number, not a random one'**
+  String get phoneCallsUpsellFeature3;
+
+  /// Phone calls upsell feature 4
+  ///
+  /// In en, this message translates to:
+  /// **'Your calls stay private and secure'**
+  String get phoneCallsUpsellFeature4;
+
+  /// Button text to upgrade to unlimited plan from phone calls upsell
+  ///
+  /// In en, this message translates to:
+  /// **'Upgrade to Unlimited'**
+  String get phoneCallsUpgradeButton;
+
+  /// Dismiss button text on phone calls upsell sheet
+  ///
+  /// In en, this message translates to:
+  /// **'Maybe later'**
+  String get phoneCallsMaybeLater;
+
+  /// Menu option to delete synced recordings
+  ///
+  /// In en, this message translates to:
+  /// **'Delete Synced'**
+  String get deleteSynced;
+
+  /// Dialog title for deleting synced files
+  ///
+  /// In en, this message translates to:
+  /// **'Delete Synced Recordings'**
+  String get deleteSyncedFiles;
+
+  /// Confirmation message for deleting synced files
+  ///
+  /// In en, this message translates to:
+  /// **'These recordings have already been synced to your phone. This cannot be undone.'**
+  String get deleteSyncedFilesMessage;
+
+  /// Snackbar message after synced files deleted
+  ///
+  /// In en, this message translates to:
+  /// **'Synced recordings deleted'**
+  String get syncedFilesDeleted;
+
+  /// Menu option to delete pending recordings
+  ///
+  /// In en, this message translates to:
+  /// **'Delete Pending'**
+  String get deletePending;
+
+  /// Dialog title for deleting pending files
+  ///
+  /// In en, this message translates to:
+  /// **'Delete Pending Recordings'**
+  String get deletePendingFiles;
+
+  /// Warning message for deleting pending files
+  ///
+  /// In en, this message translates to:
+  /// **'These recordings have NOT been synced to your phone and will be permanently lost. This cannot be undone.'**
+  String get deletePendingFilesWarning;
+
+  /// Snackbar message after pending files deleted
+  ///
+  /// In en, this message translates to:
+  /// **'Pending recordings deleted'**
+  String get pendingFilesDeleted;
+
+  /// Dialog title for deleting all files
+  ///
+  /// In en, this message translates to:
+  /// **'Delete All Recordings'**
+  String get deleteAllFiles;
+
+  /// Menu option to delete all recordings
+  ///
+  /// In en, this message translates to:
+  /// **'Delete All'**
+  String get deleteAll;
+
+  /// Warning message for deleting all files
+  ///
+  /// In en, this message translates to:
+  /// **'This will delete both synced and pending recordings. Pending recordings have NOT been synced and will be permanently lost. This cannot be undone.'**
+  String get deleteAllFilesWarning;
+
+  /// Snackbar message after all files deleted
+  ///
+  /// In en, this message translates to:
+  /// **'All recordings deleted'**
+  String get allFilesDeleted;
+
+  /// Count of files
+  ///
+  /// In en, this message translates to:
+  /// **'{count} recordings'**
+  String nFiles(int count);
+
+  /// Menu option and sheet title for managing recording storage
+  ///
+  /// In en, this message translates to:
+  /// **'Manage Storage'**
+  String get manageStorage;
+
+  /// Description for synced files in manage storage sheet
+  ///
+  /// In en, this message translates to:
+  /// **'Safely backed up to your phone'**
+  String get safelyBackedUp;
+
+  /// Description for pending files in manage storage sheet
+  ///
+  /// In en, this message translates to:
+  /// **'Not yet synced to your phone'**
+  String get notYetSynced;
+
+  /// Button label to clear all files
+  ///
+  /// In en, this message translates to:
+  /// **'Clear All'**
+  String get clearAll;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

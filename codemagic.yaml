@@ -2307,6 +2307,7 @@ workflows:
             --hide-extension "$APP_NAME.app" \
             --app-drop-link 155 175 \
             --no-internet-enable \
+            --skip-jenkins \
             $BG_ARGS \
             "$DMG_PATH" \
             "$STAGING_DIR/$APP_NAME.app"

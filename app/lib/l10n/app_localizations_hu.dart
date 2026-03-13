@@ -2689,7 +2689,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get showAll => 'Összes megjelenítése →';
 
   @override
-  String get noTasksForToday => 'Nincs feladat mára.\\nKérdezzen Omit több feladatért, vagy hozzon létre manuálisan.';
+  String get noTasksForToday => 'Nincs feladat mára.\nKérdezzen Omit több feladatért, vagy hozzon létre manuálisan.';
 
   @override
   String get dailyScore => 'NAPI PONTSZÁM';
@@ -8504,4 +8504,91 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get speakerLabelUnknown => 'Ismeretlen';
+
+  @override
+  String get showDailyScoreOnHomepage => 'Napi pontszám megjelenítése a főoldalon';
+
+  @override
+  String get showTasksOnHomepage => 'Feladatok megjelenítése a főoldalon';
+
+  @override
+  String get phoneCallsUnlimitedOnly => 'Telefonhívások az Omi-n keresztül';
+
+  @override
+  String get phoneCallsUpsellSubtitle =>
+      'Hívjon az Omi-n keresztül, és kapjon valós idejű átírást, automatikus összefoglalókat és még többet.';
+
+  @override
+  String get phoneCallsUpsellFeature1 => 'Minden hívás valós idejű átírása';
+
+  @override
+  String get phoneCallsUpsellFeature2 => 'Automatikus hívás-összefoglalók és tennivalók';
+
+  @override
+  String get phoneCallsUpsellFeature3 => 'A címzettek a valódi számodat látják, nem egy véletlent';
+
+  @override
+  String get phoneCallsUpsellFeature4 => 'Hívásai privátok és biztonságosak maradnak';
+
+  @override
+  String get phoneCallsUpgradeButton => 'Váltás Korlátlanra';
+
+  @override
+  String get phoneCallsMaybeLater => 'Talán később';
+
+  @override
+  String get deleteSynced => 'Szinkronizáltak törlése';
+
+  @override
+  String get deleteSyncedFiles => 'Szinkronizált felvételek törlése';
+
+  @override
+  String get deleteSyncedFilesMessage =>
+      'Ezek a felvételek már szinkronizálva vannak a telefonjával. Ez nem vonható vissza.';
+
+  @override
+  String get syncedFilesDeleted => 'Szinkronizált felvételek törölve';
+
+  @override
+  String get deletePending => 'Függőben lévők törlése';
+
+  @override
+  String get deletePendingFiles => 'Függő felvételek törlése';
+
+  @override
+  String get deletePendingFilesWarning =>
+      'Ezek a felvételek NINCSENEK szinkronizálva a telefonjával és véglegesen elvesznek. Ez nem vonható vissza.';
+
+  @override
+  String get pendingFilesDeleted => 'Függő felvételek törölve';
+
+  @override
+  String get deleteAllFiles => 'Összes felvétel törlése';
+
+  @override
+  String get deleteAll => 'Összes törlése';
+
+  @override
+  String get deleteAllFilesWarning =>
+      'Ez törli a szinkronizált és függő felvételeket. A függő felvételek NINCSENEK szinkronizálva és véglegesen elvesznek.';
+
+  @override
+  String get allFilesDeleted => 'Összes felvétel törölve';
+
+  @override
+  String nFiles(int count) {
+    return '$count felvétel';
+  }
+
+  @override
+  String get manageStorage => 'Tárhely kezelése';
+
+  @override
+  String get safelyBackedUp => 'Biztonságosan mentve a telefonjára';
+
+  @override
+  String get notYetSynced => 'Még nincs szinkronizálva a telefonjával';
+
+  @override
+  String get clearAll => 'Összes törlése';
 }

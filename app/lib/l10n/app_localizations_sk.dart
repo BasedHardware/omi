@@ -2678,7 +2678,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get showAll => 'Zobraziť všetko →';
 
   @override
-  String get noTasksForToday => 'Žiadne úlohy na dnes.\\nSpýtajte sa Omi na ďalšie úlohy alebo ich vytvorte manuálne.';
+  String get noTasksForToday => 'Žiadne úlohy na dnes.\nSpýtajte sa Omi na ďalšie úlohy alebo ich vytvorte manuálne.';
 
   @override
   String get dailyScore => 'DENNÉ SKÓRE';
@@ -8456,4 +8456,91 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get speakerLabelUnknown => 'Neznamy';
+
+  @override
+  String get showDailyScoreOnHomepage => 'Zobraziť denné skóre na domovskej stránke';
+
+  @override
+  String get showTasksOnHomepage => 'Zobraziť úlohy na domovskej stránke';
+
+  @override
+  String get phoneCallsUnlimitedOnly => 'Telefonáty cez Omi';
+
+  @override
+  String get phoneCallsUpsellSubtitle =>
+      'Telefonujte cez Omi a získajte prepis v reálnom čase, automatické zhrnutia a ďalšie.';
+
+  @override
+  String get phoneCallsUpsellFeature1 => 'Prepis každého hovoru v reálnom čase';
+
+  @override
+  String get phoneCallsUpsellFeature2 => 'Automatické zhrnutia hovorov a úlohy';
+
+  @override
+  String get phoneCallsUpsellFeature3 => 'Príjemcovia vidia vaše skutočné číslo, nie náhodné';
+
+  @override
+  String get phoneCallsUpsellFeature4 => 'Vaše hovory zostávajú súkromné a bezpečné';
+
+  @override
+  String get phoneCallsUpgradeButton => 'Prejsť na Neobmedzený';
+
+  @override
+  String get phoneCallsMaybeLater => 'Možno neskôr';
+
+  @override
+  String get deleteSynced => 'Vymazať synchronizované';
+
+  @override
+  String get deleteSyncedFiles => 'Zmazať synchronizované nahrávky';
+
+  @override
+  String get deleteSyncedFilesMessage =>
+      'Tieto nahrávky sú už synchronizované s vaším telefónom. Toto sa nedá vrátiť späť.';
+
+  @override
+  String get syncedFilesDeleted => 'Synchronizované nahrávky zmazané';
+
+  @override
+  String get deletePending => 'Vymazať čakajúce';
+
+  @override
+  String get deletePendingFiles => 'Zmazať čakajúce nahrávky';
+
+  @override
+  String get deletePendingFilesWarning =>
+      'Tieto nahrávky NIE sú synchronizované s vaším telefónom a budú trvalo stratené. Toto sa nedá vrátiť späť.';
+
+  @override
+  String get pendingFilesDeleted => 'Čakajúce nahrávky zmazané';
+
+  @override
+  String get deleteAllFiles => 'Zmazať všetky nahrávky';
+
+  @override
+  String get deleteAll => 'Vymazať všetko';
+
+  @override
+  String get deleteAllFilesWarning =>
+      'Toto zmaže synchronizované aj čakajúce nahrávky. Čakajúce nahrávky NIE sú synchronizované a budú trvalo stratené.';
+
+  @override
+  String get allFilesDeleted => 'Všetky nahrávky zmazané';
+
+  @override
+  String nFiles(int count) {
+    return '$count nahrávok';
+  }
+
+  @override
+  String get manageStorage => 'Spravovať úložisko';
+
+  @override
+  String get safelyBackedUp => 'Bezpečne zálohované na vašom telefóne';
+
+  @override
+  String get notYetSynced => 'Zatiaľ nesynchronizované s vaším telefónom';
+
+  @override
+  String get clearAll => 'Vymazať všetko';
 }

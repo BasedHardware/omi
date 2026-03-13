@@ -2630,7 +2630,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get showAll => '모두 표시 →';
 
   @override
-  String get noTasksForToday => '오늘의 작업이 없습니다.\\nOmi에게 더 많은 작업을 요청하거나 수동으로 생성하세요.';
+  String get noTasksForToday => '오늘의 작업이 없습니다.\nOmi에게 더 많은 작업을 요청하거나 수동으로 생성하세요.';
 
   @override
   String get dailyScore => '일일 점수';
@@ -8328,4 +8328,87 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get speakerLabelUnknown => '알 수 없음';
+
+  @override
+  String get showDailyScoreOnHomepage => '홈페이지에 일일 점수 표시';
+
+  @override
+  String get showTasksOnHomepage => '홈페이지에 작업 표시';
+
+  @override
+  String get phoneCallsUnlimitedOnly => 'Omi를 통한 전화 통화';
+
+  @override
+  String get phoneCallsUpsellSubtitle => 'Omi를 통해 전화를 걸고 실시간 텍스트 변환, 자동 요약 등을 받으세요.';
+
+  @override
+  String get phoneCallsUpsellFeature1 => '모든 통화의 실시간 텍스트 변환';
+
+  @override
+  String get phoneCallsUpsellFeature2 => '자동 통화 요약 및 액션 아이템';
+
+  @override
+  String get phoneCallsUpsellFeature3 => '수신자는 임의 번호가 아닌 실제 번호를 봅니다';
+
+  @override
+  String get phoneCallsUpsellFeature4 => '통화는 비공개이고 안전합니다';
+
+  @override
+  String get phoneCallsUpgradeButton => 'Unlimited로 업그레이드';
+
+  @override
+  String get phoneCallsMaybeLater => '나중에';
+
+  @override
+  String get deleteSynced => '동기화된 항목 삭제';
+
+  @override
+  String get deleteSyncedFiles => '동기화된 녹음 삭제';
+
+  @override
+  String get deleteSyncedFilesMessage => '이 녹음은 이미 휴대폰에 동기화되었습니다. 이 작업은 취소할 수 없습니다.';
+
+  @override
+  String get syncedFilesDeleted => '동기화된 녹음 삭제됨';
+
+  @override
+  String get deletePending => '대기 중인 항목 삭제';
+
+  @override
+  String get deletePendingFiles => '대기 중인 녹음 삭제';
+
+  @override
+  String get deletePendingFilesWarning => '이 녹음은 휴대폰에 동기화되지 않았으며 영구적으로 손실됩니다. 이 작업은 취소할 수 없습니다.';
+
+  @override
+  String get pendingFilesDeleted => '대기 중인 녹음 삭제됨';
+
+  @override
+  String get deleteAllFiles => '모든 녹음 삭제';
+
+  @override
+  String get deleteAll => '모두 삭제';
+
+  @override
+  String get deleteAllFilesWarning => '동기화된 녹음과 대기 중인 녹음이 모두 삭제됩니다. 대기 중인 녹음은 동기화되지 않았으며 영구적으로 손실됩니다.';
+
+  @override
+  String get allFilesDeleted => '모든 녹음 삭제됨';
+
+  @override
+  String nFiles(int count) {
+    return '$count개 녹음';
+  }
+
+  @override
+  String get manageStorage => '저장소 관리';
+
+  @override
+  String get safelyBackedUp => '휴대폰에 안전하게 백업됨';
+
+  @override
+  String get notYetSynced => '아직 휴대폰에 동기화되지 않음';
+
+  @override
+  String get clearAll => '모두 지우기';
 }

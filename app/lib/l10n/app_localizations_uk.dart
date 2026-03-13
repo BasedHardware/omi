@@ -2677,7 +2677,7 @@ class AppLocalizationsUk extends AppLocalizations {
   String get showAll => 'Показати все →';
 
   @override
-  String get noTasksForToday => 'Немає завдань на сьогодні.\\nЗапитайте Omi про більше завдань або створіть вручну.';
+  String get noTasksForToday => 'Немає завдань на сьогодні.\nЗапитайте Omi про більше завдань або створіть вручну.';
 
   @override
   String get dailyScore => 'ДЕННИЙ РАХУНОК';
@@ -8479,4 +8479,90 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get speakerLabelUnknown => 'Невідомий';
+
+  @override
+  String get showDailyScoreOnHomepage => 'Показати щоденний рахунок на головній сторінці';
+
+  @override
+  String get showTasksOnHomepage => 'Показати завдання на головній сторінці';
+
+  @override
+  String get phoneCallsUnlimitedOnly => 'Телефонні дзвінки через Omi';
+
+  @override
+  String get phoneCallsUpsellSubtitle =>
+      'Здійснюйте дзвінки через Omi та отримуйте транскрипцію в реальному часі, автоматичні зведення та багато іншого.';
+
+  @override
+  String get phoneCallsUpsellFeature1 => 'Транскрипція кожного дзвінка в реальному часі';
+
+  @override
+  String get phoneCallsUpsellFeature2 => 'Автоматичні зведення дзвінків та завдання';
+
+  @override
+  String get phoneCallsUpsellFeature3 => 'Одержувачі бачать ваш справжній номер, а не випадковий';
+
+  @override
+  String get phoneCallsUpsellFeature4 => 'Ваші дзвінки залишаються приватними та захищеними';
+
+  @override
+  String get phoneCallsUpgradeButton => 'Перейти на Безлімітний';
+
+  @override
+  String get phoneCallsMaybeLater => 'Можливо пізніше';
+
+  @override
+  String get deleteSynced => 'Видалити синхронізовані';
+
+  @override
+  String get deleteSyncedFiles => 'Видалити синхронізовані записи';
+
+  @override
+  String get deleteSyncedFilesMessage => 'Ці записи вже синхронізовані з вашим телефоном. Це не можна скасувати.';
+
+  @override
+  String get syncedFilesDeleted => 'Синхронізовані записи видалено';
+
+  @override
+  String get deletePending => 'Видалити очікувані';
+
+  @override
+  String get deletePendingFiles => 'Видалити очікувані записи';
+
+  @override
+  String get deletePendingFilesWarning =>
+      'Ці записи НЕ синхронізовані з вашим телефоном і будуть безповоротно втрачені. Це не можна скасувати.';
+
+  @override
+  String get pendingFilesDeleted => 'Очікувані записи видалено';
+
+  @override
+  String get deleteAllFiles => 'Видалити всі записи';
+
+  @override
+  String get deleteAll => 'Видалити все';
+
+  @override
+  String get deleteAllFilesWarning =>
+      'Це видалить синхронізовані та очікувані записи. Очікувані записи НЕ синхронізовані і будуть безповоротно втрачені.';
+
+  @override
+  String get allFilesDeleted => 'Всі записи видалено';
+
+  @override
+  String nFiles(int count) {
+    return '$count записів';
+  }
+
+  @override
+  String get manageStorage => 'Керування сховищем';
+
+  @override
+  String get safelyBackedUp => 'Безпечно збережено на вашому телефоні';
+
+  @override
+  String get notYetSynced => 'Ще не синхронізовано з вашим телефоном';
+
+  @override
+  String get clearAll => 'Очистити все';
 }
