@@ -244,7 +244,7 @@ def edit_memory(uid: str, memory_id: str, value: str):
 
     doc_level = doc_snapshot.to_dict().get('data_protection_level', 'standard')
     content = value
-    if doc_level == 'enhanced':
+    if doc_level in ('enhanced', 'e2ee'):
         content = encryption.encrypt(content, uid)
 
     memory_ref.update({'content': content, 'edited': True, 'updated_at': datetime.now(timezone.utc)})
