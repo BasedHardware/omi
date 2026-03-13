@@ -440,6 +440,37 @@ class TestShouldPersistTranslation:
         assert should_persist_translation("", "", "en", "en") is False
 
 
+class TestTranslateSegmentGuardWired:
+    """Regression test: verify should_persist_translation is wired into transcribe.py.
+
+    _translate_segment is a closure inside _stream_handler and cannot be imported directly.
+    This test reads the source to verify the guard call is present — catches accidental removal.
+    """
+
+    def test_transcribe_imports_should_persist_translation(self):
+        """transcribe.py must import should_persist_translation from translation_cache."""
+        import inspect
+        import importlib
+
+        # Read transcribe module source to verify import
+        transcribe_path = os.path.join(os.path.dirname(__file__), '..', '..', 'routers', 'transcribe.py')
+        with open(transcribe_path) as f:
+            source = f.read()
+        assert 'from utils.translation_cache import' in source
+        assert 'should_persist_translation' in source
+
+    def test_transcribe_calls_should_persist_translation_before_translation_creation(self):
+        """Guard must appear before Translation object creation in _translate_segment."""
+        transcribe_path = os.path.join(os.path.dirname(__file__), '..', '..', 'routers', 'transcribe.py')
+        with open(transcribe_path) as f:
+            source = f.read()
+        guard_pos = source.find('should_persist_translation(')
+        translation_create_pos = source.find('trans = Translation(lang=translation_language')
+        assert guard_pos > 0, "should_persist_translation call not found in transcribe.py"
+        assert translation_create_pos > 0, "Translation creation not found in transcribe.py"
+        assert guard_pos < translation_create_pos, "Guard must appear before Translation creation"
+
+
 class TestTranslateSegmentGuardIntegration:
     """Integration test simulating _translate_segment's guard path.
 
