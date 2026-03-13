@@ -483,6 +483,65 @@ def upload_audio_chunk(
     return path
 
 
+def upload_audio_chunks_batch(
+    chunks: List[dict],
+    uid: str,
+    conversation_id: str,
+    data_protection_level: str = None,
+) -> List[str]:
+    """
+    Upload multiple audio chunks to GCS in a single streaming write.
+
+    Concatenates all chunk data into one GCS object (1 write op instead of N).
+
+    Args:
+        chunks: List of dicts with 'data' (bytes) and 'timestamp' (float).
+        uid: User ID.
+        conversation_id: Conversation ID.
+        data_protection_level: Optional cached protection level. When provided,
+            skips the Firestore read. Falls back to DB read when None.
+
+    Returns:
+        List of GCS paths for the uploaded batch.
+    """
+    if not chunks:
+        return []
+
+    # Sort by timestamp for consistent ordering
+    sorted_chunks = sorted(chunks, key=lambda c: c['timestamp'])
+
+    # Resolve protection level once for the entire batch
+    protection_level = (
+        data_protection_level if data_protection_level is not None else users_db.get_data_protection_level(uid)
+    )
+
+    bucket = storage_client.bucket(private_cloud_sync_bucket)
+
+    # Build batch filename from first and last timestamps
+    first_ts = f'{sorted_chunks[0]["timestamp"]:.3f}'
+    last_ts = f'{sorted_chunks[-1]["timestamp"]:.3f}'
+    batch_name = f'{first_ts}-{last_ts}' if len(sorted_chunks) > 1 else first_ts
+
+    if protection_level == 'enhanced':
+        # Encrypt each chunk individually (length-prefixed), stream to GCS
+        path = f'chunks/{uid}/{conversation_id}/{batch_name}.batch.enc'
+        blob = bucket.blob(path)
+        with blob.open('wb', content_type='application/octet-stream') as f:
+            for chunk in sorted_chunks:
+                encrypted_chunk = encryption.encrypt_audio_chunk(chunk['data'], uid)
+                f.write(encrypted_chunk)
+                del encrypted_chunk
+    else:
+        # Standard — stream raw PCM data to GCS
+        path = f'chunks/{uid}/{conversation_id}/{batch_name}.batch.bin'
+        blob = bucket.blob(path)
+        with blob.open('wb', content_type='application/octet-stream') as f:
+            for chunk in sorted_chunks:
+                f.write(chunk['data'])
+
+    return [path]
+
+
 def delete_audio_chunks(uid: str, conversation_id: str, timestamps: List[float]) -> None:
     """Delete audio chunks after they've been merged.
 
@@ -504,6 +563,17 @@ def delete_audio_chunks(uid: str, conversation_id: str, timestamps: List[float])
             blob = bucket.blob(chunk_path)
             if blob.exists():
                 blob.delete()
+    # Also delete any batch files with timestamp ranges that start with any of the given timestamps
+    prefix = f'chunks/{uid}/{conversation_id}/'
+    for blob in bucket.list_blobs(prefix=prefix):
+        filename = blob.name.split('/')[-1]
+        if '.batch.' not in filename:
+            continue
+        batch_start = filename.split('.batch.')[0].split('-')[0]
+        for timestamp in timestamps:
+            if batch_start == f'{timestamp:.3f}':
+                blob.delete()
+                break
 
         # Try batch blobs: exact single-timestamp batch (e.g. "1000.000.batch.bin")
         for batch_ext in ('.batch.enc', '.batch.bin'):

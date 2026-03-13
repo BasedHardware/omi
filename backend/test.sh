@@ -39,9 +39,11 @@ pytest tests/unit/test_translation_optimization.py -v
 pytest tests/unit/test_conversation_source_unknown.py -v
 pytest tests/unit/test_transcribe_conversation_cache.py -v
 pytest tests/unit/test_pusher_private_cloud_data_protection.py -v
+pytest tests/unit/test_pusher_batch_upload.py -v
 pytest tests/unit/test_storage_upload_audio_chunk_data_protection.py -v
 pytest tests/unit/test_storage_opus_encoding.py -v
 pytest tests/unit/test_people_conversations_500s.py -v
 pytest tests/unit/test_firestore_read_ops_cache.py -v
 pytest tests/unit/test_ws_auth_handshake.py -v
 pytest tests/unit/test_streaming_deepgram_backoff.py -v
+pytest tests/unit/test_batch_upload_storage.py -v
