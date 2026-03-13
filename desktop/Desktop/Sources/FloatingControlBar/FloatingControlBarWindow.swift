@@ -338,6 +338,30 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
 
     }
 
+    /// Open the AI conversation view pre-populated with history and a follow-up input.
+    /// Used when there's an existing conversation to resume.
+    func showAIConversationWithHistory() {
+        preChatCenter = NSPoint(x: frame.midX, y: frame.midY)
+
+        // Go directly to response view size since we're showing history
+        resizeToResponseHeight(animated: true)
+
+        withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+            state.showingAIConversation = true
+            state.showingAIResponse = true
+            state.isAILoading = false
+            state.displayedQuery = ""
+            state.currentAIMessage = nil
+        }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in
+            self?.makeKeyAndOrderFront(nil)
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in
+            self?.focusInputField()
+        }
+    }
+
     private func setupInputHeightObserver() {
         inputHeightCancellable?.cancel()
         inputHeightCancellable = state.$inputViewHeight
@@ -709,10 +733,9 @@ class FloatingControlBarManager {
             appState.toggleTranscription()
         }
 
-        // Ask AI opens the input panel
-        barWindow.onAskAI = { [weak barWindow] in
-            barWindow?.showAIConversation()
-            barWindow?.makeKeyAndOrderFront(nil)
+        // Ask AI opens the input panel (routes through manager to load history)
+        barWindow.onAskAI = { [weak self] in
+            self?.openAIInput()
         }
 
         // Hide persists the preference so bar stays hidden across restarts
@@ -832,10 +855,26 @@ class FloatingControlBarManager {
             window.state.loadHistory(from: provider.messages)
         }
 
+        // Re-wire onSendQuery for the shared provider
+        if let provider = self.chatProvider {
+            window.onSendQuery = { [weak self, weak window, weak provider] message in
+                guard let self = self, let window = window, let provider = provider else { return }
+                Task { @MainActor in
+                    await self.sendAIQuery(message, barWindow: window, provider: provider)
+                }
+            }
+        }
+
         if !window.isVisible {
             show()
         }
-        window.showAIConversation()
+
+        // If there's existing conversation history, show response view with history + input
+        if !window.state.chatHistory.isEmpty {
+            window.showAIConversationWithHistory()
+        } else {
+            window.showAIConversation()
+        }
         window.orderFrontRegardless()
     }
 
