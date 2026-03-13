@@ -873,9 +873,9 @@ class FloatingControlBarManager {
     func openAIInput() {
         guard let window = window else { return }
 
-        // Activate the app so the window can become key and accept keyboard input.
-        // Without this, makeFirstResponder silently fails when triggered from a global shortcut.
-        NSApp.activate(ignoringOtherApps: true)
+        // Activate only the app process so the floating bar can accept keyboard input
+        // without pulling the main Omi window in front of the current app.
+        NSRunningApplication.current.activate(options: [.activateIgnoringOtherApps])
 
         // If a conversation is already showing, just focus the follow-up input
         if window.state.showingAIConversation && window.state.showingAIResponse {
