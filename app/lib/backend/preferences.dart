@@ -391,7 +391,14 @@ class SharedPreferencesUtil {
   int get enabledAppsIntegrationsCount =>
       appsList.where((element) => element.enabled && element.worksExternally()).length;
 
-  bool get showConversationDeleteConfirmation => getBool('showConversationDeleteConfirmation', defaultValue: true);
+  bool get showConversationDeleteConfirmation {
+    if (!getBool('conversationDeleteCascadeMigrated')) {
+      saveBool('conversationDeleteCascadeMigrated', true);
+      saveBool('showConversationDeleteConfirmation', true);
+      return true;
+    }
+    return getBool('showConversationDeleteConfirmation', defaultValue: true);
+  }
 
   set showConversationDeleteConfirmation(bool value) => saveBool("showConversationDeleteConfirmation", value);
 
