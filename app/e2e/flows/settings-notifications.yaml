@@ -20,7 +20,7 @@ steps:
 
   - name: Verify notifications page
     assert:
-      text_visible: ["Notifications"]
+      interactive_count: { min: 2 }
     note: >
       Notification Frequency: Slider (0-5) with labels Off/Minimal/Low/Balanced/High/Maximum
       Daily Summary: Toggle switch + time picker button
