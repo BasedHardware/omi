@@ -2747,5 +2747,83 @@
     "manageStorage": "Hantera lagring",
     "safelyBackedUp": "Säkerhetskopierat till din telefon",
     "notYetSynced": "Inte synkroniserat med din telefon ännu",
-    "clearAll": "Rensa allt"
+    "clearAll": "Rensa allt",
+    "enableE2ee": "Aktivera E2EE",
+    "@enableE2ee": {
+        "description": "Button to enable end-to-end encryption"
+    },
+    "recoveryKey": "Återställningsnyckel",
+    "@recoveryKey": {
+        "description": "Title for recovery key dialog"
+    },
+    "saveKeyMessage": "Spara denna nyckel på en säker plats. Du behöver den för att återställa krypterade minnen om du byter enhet.",
+    "@saveKeyMessage": {
+        "description": "Instructions for backing up E2EE recovery key"
+    },
+    "savedMyKey": "Jag har sparat min nyckel",
+    "@savedMyKey": {
+        "description": "Confirmation button after saving recovery key"
+    },
+    "showRecoveryKey": "Visa återställningsnyckel",
+    "@showRecoveryKey": {
+        "description": "Button to display the E2EE recovery key"
+    },
+    "e2eeKeyWarning": "⚠️ Om du tappar din återställningsnyckel kan dina data inte återställas.",
+    "@e2eeKeyWarning": {
+        "description": "Warning about E2EE key loss"
+    },
+    "e2eeBackupReminder": "Säkerhetskopiera din nyckel efter aktivering.",
+    "@e2eeBackupReminder": {
+        "description": "Reminder to back up E2EE key"
+    },
+    "e2eeFailedToEnable": "Kunde inte aktivera E2EE: {error}",
+    "@e2eeFailedToEnable": {
+        "description": "Error message when E2EE enabling fails",
+        "placeholders": {
+            "error": {
+                "type": "String"
+            }
+        }
+    },
+    "keyCopiedToClipboard": "Nyckel kopierad till urklipp",
+    "@keyCopiedToClipboard": {
+        "description": "Snackbar message after copying E2EE key"
+    },
+    "e2eeMemoriesDescription": "Krypteras på din enhet innan det når servern. Bara du kan läsa dem.",
+    "@e2eeMemoriesDescription": {
+        "description": "Description of E2EE for memories"
+    },
+    "e2eeOtherDataDescription": "Krypteras i vila på servern. Servern bearbetar ljud för transkription men lagrad data är krypterad.",
+    "@e2eeOtherDataDescription": {
+        "description": "Description of server-side encryption"
+    },
+    "e2eeCardSubtitle": "Maximalt skydd — minnen krypterade på enheten, all annan data krypterad i vila",
+    "@e2eeCardSubtitle": {
+        "description": "Subtitle for E2EE card"
+    },
+    "e2eeUnableToDecrypt": "Krypterat — kan inte dekrypteras. Kontrollera din återställningsnyckel.",
+    "@e2eeUnableToDecrypt": {
+        "description": "Error shown when E2EE decryption fails"
+    },
+    "pairWithWeb": "Koppla till webb",
+    "@pairWithWeb": {
+        "description": "Button to pair E2EE key with web UI via QR code"
+    },
+    "scanQrOnWeb": "Skanna denna QR-kod på omi.me för att låsa upp dina krypterade data",
+    "@scanQrOnWeb": {
+        "description": "Instructions for QR pairing"
+    },
+    "expiresInSeconds": "Upphör om {seconds}s",
+    "@expiresInSeconds": {
+        "description": "Timer for QR code expiry",
+        "placeholders": {
+            "seconds": {
+                "type": "int"
+            }
+        }
+    },
+    "onlyTrustedDevice": "⚠️ Skanna bara på en betrodd enhet",
+    "@onlyTrustedDevice": {
+        "description": "Warning about scanning QR code"
+    }
 }

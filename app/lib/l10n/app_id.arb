@@ -2789,5 +2789,83 @@
     "manageStorage": "Kelola penyimpanan",
     "safelyBackedUp": "Dicadangkan dengan aman ke ponsel Anda",
     "notYetSynced": "Belum disinkronkan ke ponsel Anda",
-    "clearAll": "Hapus semua"
+    "clearAll": "Hapus semua",
+    "enableE2ee": "Aktifkan E2EE",
+    "@enableE2ee": {
+        "description": "Button to enable end-to-end encryption"
+    },
+    "recoveryKey": "Kunci pemulihan",
+    "@recoveryKey": {
+        "description": "Title for recovery key dialog"
+    },
+    "saveKeyMessage": "Simpan kunci ini di tempat yang aman. Anda akan membutuhkannya untuk memulihkan kenangan terenkripsi jika berganti perangkat.",
+    "@saveKeyMessage": {
+        "description": "Instructions for backing up E2EE recovery key"
+    },
+    "savedMyKey": "Saya sudah menyimpan kunci saya",
+    "@savedMyKey": {
+        "description": "Confirmation button after saving recovery key"
+    },
+    "showRecoveryKey": "Tampilkan kunci pemulihan",
+    "@showRecoveryKey": {
+        "description": "Button to display the E2EE recovery key"
+    },
+    "e2eeKeyWarning": "⚠️ Jika Anda kehilangan kunci pemulihan, data Anda tidak dapat dipulihkan.",
+    "@e2eeKeyWarning": {
+        "description": "Warning about E2EE key loss"
+    },
+    "e2eeBackupReminder": "Pastikan untuk mencadangkan kunci Anda setelah mengaktifkan.",
+    "@e2eeBackupReminder": {
+        "description": "Reminder to back up E2EE key"
+    },
+    "e2eeFailedToEnable": "Gagal mengaktifkan E2EE: {error}",
+    "@e2eeFailedToEnable": {
+        "description": "Error message when E2EE enabling fails",
+        "placeholders": {
+            "error": {
+                "type": "String"
+            }
+        }
+    },
+    "keyCopiedToClipboard": "Kunci disalin ke papan klip",
+    "@keyCopiedToClipboard": {
+        "description": "Snackbar message after copying E2EE key"
+    },
+    "e2eeMemoriesDescription": "Dienkripsi di perangkat Anda sebelum mencapai server. Hanya Anda yang dapat membacanya.",
+    "@e2eeMemoriesDescription": {
+        "description": "Description of E2EE for memories"
+    },
+    "e2eeOtherDataDescription": "Dienkripsi saat istirahat di server. Server memproses audio untuk transkripsi tetapi data yang disimpan dienkripsi.",
+    "@e2eeOtherDataDescription": {
+        "description": "Description of server-side encryption"
+    },
+    "e2eeCardSubtitle": "Perlindungan maksimal — kenangan dienkripsi di perangkat, semua data lain dienkripsi saat istirahat",
+    "@e2eeCardSubtitle": {
+        "description": "Subtitle for E2EE card"
+    },
+    "e2eeUnableToDecrypt": "Terenkripsi — tidak dapat mendekripsi. Periksa kunci pemulihan Anda.",
+    "@e2eeUnableToDecrypt": {
+        "description": "Error shown when E2EE decryption fails"
+    },
+    "pairWithWeb": "Pasangkan dengan web",
+    "@pairWithWeb": {
+        "description": "Button to pair E2EE key with web UI via QR code"
+    },
+    "scanQrOnWeb": "Pindai kode QR ini di omi.me untuk membuka data terenkripsi Anda",
+    "@scanQrOnWeb": {
+        "description": "Instructions for QR pairing"
+    },
+    "expiresInSeconds": "Kedaluwarsa dalam {seconds}d",
+    "@expiresInSeconds": {
+        "description": "Timer for QR code expiry",
+        "placeholders": {
+            "seconds": {
+                "type": "int"
+            }
+        }
+    },
+    "onlyTrustedDevice": "⚠️ Pindai hanya di perangkat tepercaya",
+    "@onlyTrustedDevice": {
+        "description": "Warning about scanning QR code"
+    }
 }

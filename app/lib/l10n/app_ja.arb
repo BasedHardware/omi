@@ -2748,5 +2748,83 @@
     "manageStorage": "ストレージを管理",
     "safelyBackedUp": "スマホに安全にバックアップ済み",
     "notYetSynced": "まだスマホに同期されていません",
-    "clearAll": "すべて削除"
+    "clearAll": "すべて削除",
+    "enableE2ee": "E2EEを有効化",
+    "@enableE2ee": {
+        "description": "Button to enable end-to-end encryption"
+    },
+    "recoveryKey": "回復キー",
+    "@recoveryKey": {
+        "description": "Title for recovery key dialog"
+    },
+    "saveKeyMessage": "このキーを安全な場所に保存してください。デバイスを変更した場合、暗号化されたメモリを復元するために必要です。",
+    "@saveKeyMessage": {
+        "description": "Instructions for backing up E2EE recovery key"
+    },
+    "savedMyKey": "キーを保存しました",
+    "@savedMyKey": {
+        "description": "Confirmation button after saving recovery key"
+    },
+    "showRecoveryKey": "回復キーを表示",
+    "@showRecoveryKey": {
+        "description": "Button to display the E2EE recovery key"
+    },
+    "e2eeKeyWarning": "⚠️ 回復キーを紛失すると、データは復元できません。",
+    "@e2eeKeyWarning": {
+        "description": "Warning about E2EE key loss"
+    },
+    "e2eeBackupReminder": "有効化後、キーのバックアップを取ってください。",
+    "@e2eeBackupReminder": {
+        "description": "Reminder to back up E2EE key"
+    },
+    "e2eeFailedToEnable": "E2EEの有効化に失敗: {error}",
+    "@e2eeFailedToEnable": {
+        "description": "Error message when E2EE enabling fails",
+        "placeholders": {
+            "error": {
+                "type": "String"
+            }
+        }
+    },
+    "keyCopiedToClipboard": "キーをクリップボードにコピーしました",
+    "@keyCopiedToClipboard": {
+        "description": "Snackbar message after copying E2EE key"
+    },
+    "e2eeMemoriesDescription": "サーバーに到達する前にデバイス上で暗号化されます。読めるのはあなただけです。",
+    "@e2eeMemoriesDescription": {
+        "description": "Description of E2EE for memories"
+    },
+    "e2eeOtherDataDescription": "サーバー上で保存時に暗号化されます。サーバーは文字起こしのために音声を処理しますが、保存データは暗号化されています。",
+    "@e2eeOtherDataDescription": {
+        "description": "Description of server-side encryption"
+    },
+    "e2eeCardSubtitle": "最大限の保護 — メモリはデバイスで暗号化、その他のデータは保存時に暗号化",
+    "@e2eeCardSubtitle": {
+        "description": "Subtitle for E2EE card"
+    },
+    "e2eeUnableToDecrypt": "暗号化済み — 復号できません。回復キーを確認してください。",
+    "@e2eeUnableToDecrypt": {
+        "description": "Error shown when E2EE decryption fails"
+    },
+    "pairWithWeb": "Webとペアリング",
+    "@pairWithWeb": {
+        "description": "Button to pair E2EE key with web UI via QR code"
+    },
+    "scanQrOnWeb": "omi.meでこのQRコードをスキャンして暗号化データをロック解除",
+    "@scanQrOnWeb": {
+        "description": "Instructions for QR pairing"
+    },
+    "expiresInSeconds": "{seconds}秒で期限切れ",
+    "@expiresInSeconds": {
+        "description": "Timer for QR code expiry",
+        "placeholders": {
+            "seconds": {
+                "type": "int"
+            }
+        }
+    },
+    "onlyTrustedDevice": "⚠️ 信頼できるデバイスでのみスキャン",
+    "@onlyTrustedDevice": {
+        "description": "Warning about scanning QR code"
+    }
 }

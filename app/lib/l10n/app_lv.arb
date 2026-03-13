@@ -2747,5 +2747,83 @@
     "manageStorage": "Pārvaldīt krātuvi",
     "safelyBackedUp": "Droši dublēts jūsu tālrunī",
     "notYetSynced": "Vēl nav sinhronizēts ar jūsu tālruni",
-    "clearAll": "Notīrīt visu"
+    "clearAll": "Notīrīt visu",
+    "enableE2ee": "Iespējot E2EE",
+    "@enableE2ee": {
+        "description": "Button to enable end-to-end encryption"
+    },
+    "recoveryKey": "Atjaunošanas atslēga",
+    "@recoveryKey": {
+        "description": "Title for recovery key dialog"
+    },
+    "saveKeyMessage": "Saglabājiet šo atslēgu drošā vietā. Tā būs nepieciešama šifrētu atmiņu atjaunošanai, mainot ierīci.",
+    "@saveKeyMessage": {
+        "description": "Instructions for backing up E2EE recovery key"
+    },
+    "savedMyKey": "Esmu saglabājis savu atslēgu",
+    "@savedMyKey": {
+        "description": "Confirmation button after saving recovery key"
+    },
+    "showRecoveryKey": "Rādīt atjaunošanas atslēgu",
+    "@showRecoveryKey": {
+        "description": "Button to display the E2EE recovery key"
+    },
+    "e2eeKeyWarning": "⚠️ Ja pazaudēsiet atjaunošanas atslēgu, jūsu datus nevarēs atjaunot.",
+    "@e2eeKeyWarning": {
+        "description": "Warning about E2EE key loss"
+    },
+    "e2eeBackupReminder": "Pēc iespējošanas izveidojiet atslēgas dublējumkopiju.",
+    "@e2eeBackupReminder": {
+        "description": "Reminder to back up E2EE key"
+    },
+    "e2eeFailedToEnable": "Neizdevās iespējot E2EE: {error}",
+    "@e2eeFailedToEnable": {
+        "description": "Error message when E2EE enabling fails",
+        "placeholders": {
+            "error": {
+                "type": "String"
+            }
+        }
+    },
+    "keyCopiedToClipboard": "Atslēga nokopēta starpliktuvē",
+    "@keyCopiedToClipboard": {
+        "description": "Snackbar message after copying E2EE key"
+    },
+    "e2eeMemoriesDescription": "Šifrēts jūsu ierīcē pirms nonākšanas serverī.",
+    "@e2eeMemoriesDescription": {
+        "description": "Description of E2EE for memories"
+    },
+    "e2eeOtherDataDescription": "Šifrēts miera stāvoklī serverī.",
+    "@e2eeOtherDataDescription": {
+        "description": "Description of server-side encryption"
+    },
+    "e2eeCardSubtitle": "Maksimālā aizsardzība — atmiņas šifrētas ierīcē",
+    "@e2eeCardSubtitle": {
+        "description": "Subtitle for E2EE card"
+    },
+    "e2eeUnableToDecrypt": "Šifrēts — nevar atšifrēt. Pārbaudiet atjaunošanas atslēgu.",
+    "@e2eeUnableToDecrypt": {
+        "description": "Error shown when E2EE decryption fails"
+    },
+    "pairWithWeb": "Savienot ar tīmekli",
+    "@pairWithWeb": {
+        "description": "Button to pair E2EE key with web UI via QR code"
+    },
+    "scanQrOnWeb": "Skenējiet šo QR kodu vietnē omi.me",
+    "@scanQrOnWeb": {
+        "description": "Instructions for QR pairing"
+    },
+    "expiresInSeconds": "Derīgums beidzas pēc {seconds}s",
+    "@expiresInSeconds": {
+        "description": "Timer for QR code expiry",
+        "placeholders": {
+            "seconds": {
+                "type": "int"
+            }
+        }
+    },
+    "onlyTrustedDevice": "⚠️ Skenējiet tikai uzticamā ierīcē",
+    "@onlyTrustedDevice": {
+        "description": "Warning about scanning QR code"
+    }
 }

@@ -2716,5 +2716,83 @@
     "manageStorage": "Gestionar emmagatzematge",
     "safelyBackedUp": "Còpia de seguretat al vostre telèfon",
     "notYetSynced": "Encara no sincronitzat amb el vostre telèfon",
-    "clearAll": "Esborrar tot"
+    "clearAll": "Esborrar tot",
+    "enableE2ee": "Activar E2EE",
+    "@enableE2ee": {
+        "description": "Button to enable end-to-end encryption"
+    },
+    "recoveryKey": "Clau de recuperació",
+    "@recoveryKey": {
+        "description": "Title for recovery key dialog"
+    },
+    "saveKeyMessage": "Deseu aquesta clau en un lloc segur. La necessitareu per recuperar els records xifrats si canvieu de dispositiu. Sense aquesta clau, les dades xifrades no es poden recuperar.",
+    "@saveKeyMessage": {
+        "description": "Instructions for backing up E2EE recovery key"
+    },
+    "savedMyKey": "He desat la meva clau",
+    "@savedMyKey": {
+        "description": "Confirmation button after saving recovery key"
+    },
+    "showRecoveryKey": "Mostrar clau de recuperació",
+    "@showRecoveryKey": {
+        "description": "Button to display the E2EE recovery key"
+    },
+    "e2eeKeyWarning": "⚠️ Si perdeu la clau de recuperació, les vostres dades no es poden recuperar.",
+    "@e2eeKeyWarning": {
+        "description": "Warning about E2EE key loss"
+    },
+    "e2eeBackupReminder": "Feu una còpia de seguretat de la clau després d'activar.",
+    "@e2eeBackupReminder": {
+        "description": "Reminder to back up E2EE key"
+    },
+    "e2eeFailedToEnable": "Error en activar E2EE: {error}",
+    "@e2eeFailedToEnable": {
+        "description": "Error message when E2EE enabling fails",
+        "placeholders": {
+            "error": {
+                "type": "String"
+            }
+        }
+    },
+    "keyCopiedToClipboard": "Clau copiada al porta-retalls",
+    "@keyCopiedToClipboard": {
+        "description": "Snackbar message after copying E2EE key"
+    },
+    "e2eeMemoriesDescription": "Xifrats al vostre dispositiu abans d'arribar al servidor. Només vós podeu llegir-los.",
+    "@e2eeMemoriesDescription": {
+        "description": "Description of E2EE for memories"
+    },
+    "e2eeOtherDataDescription": "Xifrats en repòs al servidor. El servidor processa l'àudio per a la transcripció però les dades emmagatzemades estan xifrades.",
+    "@e2eeOtherDataDescription": {
+        "description": "Description of server-side encryption"
+    },
+    "e2eeCardSubtitle": "Protecció màxima — records xifrats al dispositiu, totes les altres dades xifrades en repòs",
+    "@e2eeCardSubtitle": {
+        "description": "Subtitle for E2EE card"
+    },
+    "e2eeUnableToDecrypt": "Xifrat — no es pot desxifrar. Comproveu la clau de recuperació.",
+    "@e2eeUnableToDecrypt": {
+        "description": "Error shown when E2EE decryption fails"
+    },
+    "pairWithWeb": "Vincular amb web",
+    "@pairWithWeb": {
+        "description": "Button to pair E2EE key with web UI via QR code"
+    },
+    "scanQrOnWeb": "Escanegeu aquest codi QR a omi.me per desbloquejar les vostres dades xifrades",
+    "@scanQrOnWeb": {
+        "description": "Instructions for QR pairing"
+    },
+    "expiresInSeconds": "Caduca en {seconds}s",
+    "@expiresInSeconds": {
+        "description": "Timer for QR code expiry",
+        "placeholders": {
+            "seconds": {
+                "type": "int"
+            }
+        }
+    },
+    "onlyTrustedDevice": "⚠️ Escanegeu només en un dispositiu de confiança",
+    "@onlyTrustedDevice": {
+        "description": "Warning about scanning QR code"
+    }
 }

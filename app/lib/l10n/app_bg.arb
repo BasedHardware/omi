@@ -2716,5 +2716,83 @@
     "manageStorage": "Управление на хранилището",
     "safelyBackedUp": "Безопасно запазено на телефона ви",
     "notYetSynced": "Все още не е синхронизирано с телефона ви",
-    "clearAll": "Изчисти всичко"
+    "clearAll": "Изчисти всичко",
+    "enableE2ee": "Активиране на E2EE",
+    "@enableE2ee": {
+        "description": "Button to enable end-to-end encryption"
+    },
+    "recoveryKey": "Ключ за възстановяване",
+    "@recoveryKey": {
+        "description": "Title for recovery key dialog"
+    },
+    "saveKeyMessage": "Запазете този ключ на сигурно място. Ще ви е необходим за възстановяване на криптираните спомени при смяна на устройство. Без този ключ данните не могат да бъдат възстановени.",
+    "@saveKeyMessage": {
+        "description": "Instructions for backing up E2EE recovery key"
+    },
+    "savedMyKey": "Запазих ключа си",
+    "@savedMyKey": {
+        "description": "Confirmation button after saving recovery key"
+    },
+    "showRecoveryKey": "Показване на ключ за възстановяване",
+    "@showRecoveryKey": {
+        "description": "Button to display the E2EE recovery key"
+    },
+    "e2eeKeyWarning": "⚠️ Ако загубите ключа си за възстановяване, данните ви не могат да бъдат възстановени.",
+    "@e2eeKeyWarning": {
+        "description": "Warning about E2EE key loss"
+    },
+    "e2eeBackupReminder": "Направете резервно копие на ключа след активиране.",
+    "@e2eeBackupReminder": {
+        "description": "Reminder to back up E2EE key"
+    },
+    "e2eeFailedToEnable": "Неуспешно активиране на E2EE: {error}",
+    "@e2eeFailedToEnable": {
+        "description": "Error message when E2EE enabling fails",
+        "placeholders": {
+            "error": {
+                "type": "String"
+            }
+        }
+    },
+    "keyCopiedToClipboard": "Ключът е копиран в клипборда",
+    "@keyCopiedToClipboard": {
+        "description": "Snackbar message after copying E2EE key"
+    },
+    "e2eeMemoriesDescription": "Криптирани на вашето устройство преди да достигнат сървъра. Само вие можете да ги четете.",
+    "@e2eeMemoriesDescription": {
+        "description": "Description of E2EE for memories"
+    },
+    "e2eeOtherDataDescription": "Криптирани в покой на сървъра. Сървърът обработва аудио за транскрипция, но съхранените данни са криптирани.",
+    "@e2eeOtherDataDescription": {
+        "description": "Description of server-side encryption"
+    },
+    "e2eeCardSubtitle": "Максимална защита — спомените са криптирани на устройството, всички други данни са криптирани в покой",
+    "@e2eeCardSubtitle": {
+        "description": "Subtitle for E2EE card"
+    },
+    "e2eeUnableToDecrypt": "Криптирано — неуспешно декриптиране. Проверете ключа за възстановяване.",
+    "@e2eeUnableToDecrypt": {
+        "description": "Error shown when E2EE decryption fails"
+    },
+    "pairWithWeb": "Свързване с уеб",
+    "@pairWithWeb": {
+        "description": "Button to pair E2EE key with web UI via QR code"
+    },
+    "scanQrOnWeb": "Сканирайте този QR код на omi.me, за да отключите криптираните си данни",
+    "@scanQrOnWeb": {
+        "description": "Instructions for QR pairing"
+    },
+    "expiresInSeconds": "Изтича след {seconds}с",
+    "@expiresInSeconds": {
+        "description": "Timer for QR code expiry",
+        "placeholders": {
+            "seconds": {
+                "type": "int"
+            }
+        }
+    },
+    "onlyTrustedDevice": "⚠️ Сканирайте само на доверено устройство",
+    "@onlyTrustedDevice": {
+        "description": "Warning about scanning QR code"
+    }
 }

@@ -2747,5 +2747,83 @@
     "manageStorage": "Opslag beheren",
     "safelyBackedUp": "Veilig opgeslagen op uw telefoon",
     "notYetSynced": "Nog niet gesynchroniseerd met uw telefoon",
-    "clearAll": "Alles wissen"
+    "clearAll": "Alles wissen",
+    "enableE2ee": "E2EE inschakelen",
+    "@enableE2ee": {
+        "description": "Button to enable end-to-end encryption"
+    },
+    "recoveryKey": "Herstelsleutel",
+    "@recoveryKey": {
+        "description": "Title for recovery key dialog"
+    },
+    "saveKeyMessage": "Bewaar deze sleutel op een veilige plek. Je hebt hem nodig om versleutelde herinneringen te herstellen als je van apparaat wisselt.",
+    "@saveKeyMessage": {
+        "description": "Instructions for backing up E2EE recovery key"
+    },
+    "savedMyKey": "Ik heb mijn sleutel opgeslagen",
+    "@savedMyKey": {
+        "description": "Confirmation button after saving recovery key"
+    },
+    "showRecoveryKey": "Herstelsleutel tonen",
+    "@showRecoveryKey": {
+        "description": "Button to display the E2EE recovery key"
+    },
+    "e2eeKeyWarning": "⚠️ Als je je herstelsleutel kwijtraakt, kunnen je gegevens niet worden hersteld.",
+    "@e2eeKeyWarning": {
+        "description": "Warning about E2EE key loss"
+    },
+    "e2eeBackupReminder": "Maak een back-up van je sleutel na het inschakelen.",
+    "@e2eeBackupReminder": {
+        "description": "Reminder to back up E2EE key"
+    },
+    "e2eeFailedToEnable": "E2EE inschakelen mislukt: {error}",
+    "@e2eeFailedToEnable": {
+        "description": "Error message when E2EE enabling fails",
+        "placeholders": {
+            "error": {
+                "type": "String"
+            }
+        }
+    },
+    "keyCopiedToClipboard": "Sleutel gekopieerd naar klembord",
+    "@keyCopiedToClipboard": {
+        "description": "Snackbar message after copying E2EE key"
+    },
+    "e2eeMemoriesDescription": "Versleuteld op je apparaat voordat het de server bereikt. Alleen jij kunt ze lezen.",
+    "@e2eeMemoriesDescription": {
+        "description": "Description of E2EE for memories"
+    },
+    "e2eeOtherDataDescription": "Versleuteld in rust op de server. De server verwerkt audio voor transcriptie maar opgeslagen gegevens zijn versleuteld.",
+    "@e2eeOtherDataDescription": {
+        "description": "Description of server-side encryption"
+    },
+    "e2eeCardSubtitle": "Maximale bescherming — herinneringen versleuteld op apparaat, alle andere gegevens versleuteld in rust",
+    "@e2eeCardSubtitle": {
+        "description": "Subtitle for E2EE card"
+    },
+    "e2eeUnableToDecrypt": "Versleuteld — kan niet ontsleutelen. Controleer je herstelsleutel.",
+    "@e2eeUnableToDecrypt": {
+        "description": "Error shown when E2EE decryption fails"
+    },
+    "pairWithWeb": "Koppelen met web",
+    "@pairWithWeb": {
+        "description": "Button to pair E2EE key with web UI via QR code"
+    },
+    "scanQrOnWeb": "Scan deze QR-code op omi.me om je versleutelde gegevens te ontgrendelen",
+    "@scanQrOnWeb": {
+        "description": "Instructions for QR pairing"
+    },
+    "expiresInSeconds": "Verloopt over {seconds}s",
+    "@expiresInSeconds": {
+        "description": "Timer for QR code expiry",
+        "placeholders": {
+            "seconds": {
+                "type": "int"
+            }
+        }
+    },
+    "onlyTrustedDevice": "⚠️ Scan alleen op een vertrouwd apparaat",
+    "@onlyTrustedDevice": {
+        "description": "Warning about scanning QR code"
+    }
 }

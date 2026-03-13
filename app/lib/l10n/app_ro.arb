@@ -2747,5 +2747,83 @@
     "manageStorage": "Gestionare stocare",
     "safelyBackedUp": "Salvat în siguranță pe telefonul dvs.",
     "notYetSynced": "Nu a fost încă sincronizat cu telefonul dvs.",
-    "clearAll": "Șterge tot"
+    "clearAll": "Șterge tot",
+    "enableE2ee": "Activare E2EE",
+    "@enableE2ee": {
+        "description": "Button to enable end-to-end encryption"
+    },
+    "recoveryKey": "Cheie de recuperare",
+    "@recoveryKey": {
+        "description": "Title for recovery key dialog"
+    },
+    "saveKeyMessage": "Salvați această cheie într-un loc sigur. Veți avea nevoie de ea pentru a recupera amintirile criptate dacă schimbați dispozitivul.",
+    "@saveKeyMessage": {
+        "description": "Instructions for backing up E2EE recovery key"
+    },
+    "savedMyKey": "Am salvat cheia mea",
+    "@savedMyKey": {
+        "description": "Confirmation button after saving recovery key"
+    },
+    "showRecoveryKey": "Afișează cheia de recuperare",
+    "@showRecoveryKey": {
+        "description": "Button to display the E2EE recovery key"
+    },
+    "e2eeKeyWarning": "⚠️ Dacă pierdeți cheia de recuperare, datele nu pot fi recuperate.",
+    "@e2eeKeyWarning": {
+        "description": "Warning about E2EE key loss"
+    },
+    "e2eeBackupReminder": "Faceți o copie de siguranță a cheii după activare.",
+    "@e2eeBackupReminder": {
+        "description": "Reminder to back up E2EE key"
+    },
+    "e2eeFailedToEnable": "Activarea E2EE a eșuat: {error}",
+    "@e2eeFailedToEnable": {
+        "description": "Error message when E2EE enabling fails",
+        "placeholders": {
+            "error": {
+                "type": "String"
+            }
+        }
+    },
+    "keyCopiedToClipboard": "Cheia a fost copiată în clipboard",
+    "@keyCopiedToClipboard": {
+        "description": "Snackbar message after copying E2EE key"
+    },
+    "e2eeMemoriesDescription": "Criptate pe dispozitivul dvs. înainte de a ajunge la server. Doar dvs. le puteți citi.",
+    "@e2eeMemoriesDescription": {
+        "description": "Description of E2EE for memories"
+    },
+    "e2eeOtherDataDescription": "Criptate în repaus pe server. Serverul procesează audio pentru transcriere, dar datele stocate sunt criptate.",
+    "@e2eeOtherDataDescription": {
+        "description": "Description of server-side encryption"
+    },
+    "e2eeCardSubtitle": "Protecție maximă — amintiri criptate pe dispozitiv, toate celelalte date criptate în repaus",
+    "@e2eeCardSubtitle": {
+        "description": "Subtitle for E2EE card"
+    },
+    "e2eeUnableToDecrypt": "Criptat — nu se poate decripta. Verificați cheia de recuperare.",
+    "@e2eeUnableToDecrypt": {
+        "description": "Error shown when E2EE decryption fails"
+    },
+    "pairWithWeb": "Asociere cu web",
+    "@pairWithWeb": {
+        "description": "Button to pair E2EE key with web UI via QR code"
+    },
+    "scanQrOnWeb": "Scanați acest cod QR pe omi.me pentru a debloca datele criptate",
+    "@scanQrOnWeb": {
+        "description": "Instructions for QR pairing"
+    },
+    "expiresInSeconds": "Expiră în {seconds}s",
+    "@expiresInSeconds": {
+        "description": "Timer for QR code expiry",
+        "placeholders": {
+            "seconds": {
+                "type": "int"
+            }
+        }
+    },
+    "onlyTrustedDevice": "⚠️ Scanați doar pe un dispozitiv de încredere",
+    "@onlyTrustedDevice": {
+        "description": "Warning about scanning QR code"
+    }
 }

@@ -2716,5 +2716,83 @@
     "manageStorage": "Správa úložiště",
     "safelyBackedUp": "Bezpečně zálohováno na vašem telefonu",
     "notYetSynced": "Zatím nesynchronizováno s vaším telefonem",
-    "clearAll": "Vymazat vše"
+    "clearAll": "Vymazat vše",
+    "enableE2ee": "Povolit E2EE",
+    "@enableE2ee": {
+        "description": "Button to enable end-to-end encryption"
+    },
+    "recoveryKey": "Obnovovací klíč",
+    "@recoveryKey": {
+        "description": "Title for recovery key dialog"
+    },
+    "saveKeyMessage": "Uložte tento klíč na bezpečné místo. Budete ho potřebovat k obnovení šifrovaných vzpomínek při změně zařízení. Bez tohoto klíče nelze data obnovit.",
+    "@saveKeyMessage": {
+        "description": "Instructions for backing up E2EE recovery key"
+    },
+    "savedMyKey": "Uložil jsem svůj klíč",
+    "@savedMyKey": {
+        "description": "Confirmation button after saving recovery key"
+    },
+    "showRecoveryKey": "Zobrazit obnovovací klíč",
+    "@showRecoveryKey": {
+        "description": "Button to display the E2EE recovery key"
+    },
+    "e2eeKeyWarning": "⚠️ Pokud ztratíte obnovovací klíč, vaše data nelze obnovit.",
+    "@e2eeKeyWarning": {
+        "description": "Warning about E2EE key loss"
+    },
+    "e2eeBackupReminder": "Po aktivaci si klíč zálohujte.",
+    "@e2eeBackupReminder": {
+        "description": "Reminder to back up E2EE key"
+    },
+    "e2eeFailedToEnable": "Aktivace E2EE selhala: {error}",
+    "@e2eeFailedToEnable": {
+        "description": "Error message when E2EE enabling fails",
+        "placeholders": {
+            "error": {
+                "type": "String"
+            }
+        }
+    },
+    "keyCopiedToClipboard": "Klíč zkopírován do schránky",
+    "@keyCopiedToClipboard": {
+        "description": "Snackbar message after copying E2EE key"
+    },
+    "e2eeMemoriesDescription": "Šifrováno na vašem zařízení před odesláním na server. Pouze vy je můžete číst.",
+    "@e2eeMemoriesDescription": {
+        "description": "Description of E2EE for memories"
+    },
+    "e2eeOtherDataDescription": "Šifrováno v klidu na serveru. Server zpracovává zvuk pro přepis, ale uložená data jsou šifrována.",
+    "@e2eeOtherDataDescription": {
+        "description": "Description of server-side encryption"
+    },
+    "e2eeCardSubtitle": "Maximální ochrana — vzpomínky šifrovány na zařízení, ostatní data šifrována v klidu",
+    "@e2eeCardSubtitle": {
+        "description": "Subtitle for E2EE card"
+    },
+    "e2eeUnableToDecrypt": "Šifrováno — nelze dešifrovat. Zkontrolujte obnovovací klíč.",
+    "@e2eeUnableToDecrypt": {
+        "description": "Error shown when E2EE decryption fails"
+    },
+    "pairWithWeb": "Spárovat s webem",
+    "@pairWithWeb": {
+        "description": "Button to pair E2EE key with web UI via QR code"
+    },
+    "scanQrOnWeb": "Naskenujte tento QR kód na omi.me pro odemčení šifrovaných dat",
+    "@scanQrOnWeb": {
+        "description": "Instructions for QR pairing"
+    },
+    "expiresInSeconds": "Vyprší za {seconds}s",
+    "@expiresInSeconds": {
+        "description": "Timer for QR code expiry",
+        "placeholders": {
+            "seconds": {
+                "type": "int"
+            }
+        }
+    },
+    "onlyTrustedDevice": "⚠️ Skenujte pouze na důvěryhodném zařízení",
+    "@onlyTrustedDevice": {
+        "description": "Warning about scanning QR code"
+    }
 }

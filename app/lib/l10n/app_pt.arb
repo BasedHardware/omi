@@ -2783,5 +2783,83 @@
     "manageStorage": "Gerenciar armazenamento",
     "safelyBackedUp": "Backup seguro no seu telefone",
     "notYetSynced": "Ainda não sincronizado com seu telefone",
-    "clearAll": "Limpar tudo"
+    "clearAll": "Limpar tudo",
+    "enableE2ee": "Ativar E2EE",
+    "@enableE2ee": {
+        "description": "Button to enable end-to-end encryption"
+    },
+    "recoveryKey": "Chave de recuperação",
+    "@recoveryKey": {
+        "description": "Title for recovery key dialog"
+    },
+    "saveKeyMessage": "Guarde esta chave num local seguro. Vai precisar dela para recuperar memórias encriptadas se trocar de dispositivo.",
+    "@saveKeyMessage": {
+        "description": "Instructions for backing up E2EE recovery key"
+    },
+    "savedMyKey": "Guardei a minha chave",
+    "@savedMyKey": {
+        "description": "Confirmation button after saving recovery key"
+    },
+    "showRecoveryKey": "Mostrar chave de recuperação",
+    "@showRecoveryKey": {
+        "description": "Button to display the E2EE recovery key"
+    },
+    "e2eeKeyWarning": "⚠️ Se perder a chave de recuperação, os seus dados não podem ser recuperados.",
+    "@e2eeKeyWarning": {
+        "description": "Warning about E2EE key loss"
+    },
+    "e2eeBackupReminder": "Faça backup da sua chave após ativar.",
+    "@e2eeBackupReminder": {
+        "description": "Reminder to back up E2EE key"
+    },
+    "e2eeFailedToEnable": "Falha ao ativar E2EE: {error}",
+    "@e2eeFailedToEnable": {
+        "description": "Error message when E2EE enabling fails",
+        "placeholders": {
+            "error": {
+                "type": "String"
+            }
+        }
+    },
+    "keyCopiedToClipboard": "Chave copiada para a área de transferência",
+    "@keyCopiedToClipboard": {
+        "description": "Snackbar message after copying E2EE key"
+    },
+    "e2eeMemoriesDescription": "Encriptados no seu dispositivo antes de chegarem ao servidor. Só você pode lê-los.",
+    "@e2eeMemoriesDescription": {
+        "description": "Description of E2EE for memories"
+    },
+    "e2eeOtherDataDescription": "Encriptados em repouso no servidor. O servidor processa áudio para transcrição mas os dados armazenados estão encriptados.",
+    "@e2eeOtherDataDescription": {
+        "description": "Description of server-side encryption"
+    },
+    "e2eeCardSubtitle": "Proteção máxima — memórias encriptadas no dispositivo, todos os outros dados encriptados em repouso",
+    "@e2eeCardSubtitle": {
+        "description": "Subtitle for E2EE card"
+    },
+    "e2eeUnableToDecrypt": "Encriptado — não foi possível desencriptar. Verifique a chave de recuperação.",
+    "@e2eeUnableToDecrypt": {
+        "description": "Error shown when E2EE decryption fails"
+    },
+    "pairWithWeb": "Associar ao web",
+    "@pairWithWeb": {
+        "description": "Button to pair E2EE key with web UI via QR code"
+    },
+    "scanQrOnWeb": "Digitalize este código QR em omi.me para desbloquear os seus dados encriptados",
+    "@scanQrOnWeb": {
+        "description": "Instructions for QR pairing"
+    },
+    "expiresInSeconds": "Expira em {seconds}s",
+    "@expiresInSeconds": {
+        "description": "Timer for QR code expiry",
+        "placeholders": {
+            "seconds": {
+                "type": "int"
+            }
+        }
+    },
+    "onlyTrustedDevice": "⚠️ Digitalize apenas num dispositivo de confiança",
+    "@onlyTrustedDevice": {
+        "description": "Warning about scanning QR code"
+    }
 }

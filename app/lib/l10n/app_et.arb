@@ -2747,5 +2747,83 @@
     "manageStorage": "Halda salvestusruumi",
     "safelyBackedUp": "Turvaliselt teie telefonile varundatud",
     "notYetSynced": "Pole veel teie telefoniga sünkroniseeritud",
-    "clearAll": "Tühjenda kõik"
+    "clearAll": "Tühjenda kõik",
+    "enableE2ee": "Luba E2EE",
+    "@enableE2ee": {
+        "description": "Button to enable end-to-end encryption"
+    },
+    "recoveryKey": "Taastevõti",
+    "@recoveryKey": {
+        "description": "Title for recovery key dialog"
+    },
+    "saveKeyMessage": "Salvestage see võti turvalisse kohta. Vajate seda krüpteeritud mälestuste taastamiseks seadme vahetamisel.",
+    "@saveKeyMessage": {
+        "description": "Instructions for backing up E2EE recovery key"
+    },
+    "savedMyKey": "Salvestasin oma võtme",
+    "@savedMyKey": {
+        "description": "Confirmation button after saving recovery key"
+    },
+    "showRecoveryKey": "Näita taastevõtit",
+    "@showRecoveryKey": {
+        "description": "Button to display the E2EE recovery key"
+    },
+    "e2eeKeyWarning": "⚠️ Kui kaotate taastevõtme, ei saa teie andmeid taastada.",
+    "@e2eeKeyWarning": {
+        "description": "Warning about E2EE key loss"
+    },
+    "e2eeBackupReminder": "Varundage oma võti pärast lubamist.",
+    "@e2eeBackupReminder": {
+        "description": "Reminder to back up E2EE key"
+    },
+    "e2eeFailedToEnable": "E2EE lubamine ebaõnnestus: {error}",
+    "@e2eeFailedToEnable": {
+        "description": "Error message when E2EE enabling fails",
+        "placeholders": {
+            "error": {
+                "type": "String"
+            }
+        }
+    },
+    "keyCopiedToClipboard": "Võti kopeeritud lõikelauale",
+    "@keyCopiedToClipboard": {
+        "description": "Snackbar message after copying E2EE key"
+    },
+    "e2eeMemoriesDescription": "Krüpteeritud teie seadmes enne serverisse jõudmist. Ainult teie saate neid lugeda.",
+    "@e2eeMemoriesDescription": {
+        "description": "Description of E2EE for memories"
+    },
+    "e2eeOtherDataDescription": "Krüpteeritud puhkeolekus serveris. Server töötleb heli transkriptsiooni jaoks, kuid salvestatud andmed on krüpteeritud.",
+    "@e2eeOtherDataDescription": {
+        "description": "Description of server-side encryption"
+    },
+    "e2eeCardSubtitle": "Maksimaalne kaitse — mälestused krüpteeritud seadmes, kõik muud andmed krüpteeritud puhkeolekus",
+    "@e2eeCardSubtitle": {
+        "description": "Subtitle for E2EE card"
+    },
+    "e2eeUnableToDecrypt": "Krüpteeritud — dekrüpteerimine ebaõnnestus. Kontrollige taastevõtit.",
+    "@e2eeUnableToDecrypt": {
+        "description": "Error shown when E2EE decryption fails"
+    },
+    "pairWithWeb": "Seo veebiga",
+    "@pairWithWeb": {
+        "description": "Button to pair E2EE key with web UI via QR code"
+    },
+    "scanQrOnWeb": "Skannige see QR-kood aadressil omi.me krüpteeritud andmete avamiseks",
+    "@scanQrOnWeb": {
+        "description": "Instructions for QR pairing"
+    },
+    "expiresInSeconds": "Aegub {seconds}s pärast",
+    "@expiresInSeconds": {
+        "description": "Timer for QR code expiry",
+        "placeholders": {
+            "seconds": {
+                "type": "int"
+            }
+        }
+    },
+    "onlyTrustedDevice": "⚠️ Skannige ainult usaldusväärsel seadmel",
+    "@onlyTrustedDevice": {
+        "description": "Warning about scanning QR code"
+    }
 }

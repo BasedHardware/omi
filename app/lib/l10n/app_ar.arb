@@ -2714,5 +2714,83 @@
     "manageStorage": "إدارة التخزين",
     "safelyBackedUp": "تم النسخ الاحتياطي بأمان إلى هاتفك",
     "notYetSynced": "لم تتم المزامنة بعد مع هاتفك",
-    "clearAll": "مسح الكل"
+    "clearAll": "مسح الكل",
+    "enableE2ee": "تفعيل E2EE",
+    "@enableE2ee": {
+        "description": "Button to enable end-to-end encryption"
+    },
+    "recoveryKey": "مفتاح الاسترداد",
+    "@recoveryKey": {
+        "description": "Title for recovery key dialog"
+    },
+    "saveKeyMessage": "احفظ هذا المفتاح في مكان آمن. ستحتاجه لاستعادة ذكرياتك المشفرة إذا غيّرت جهازك. بدون هذا المفتاح، لا يمكن استعادة البيانات المشفرة.",
+    "@saveKeyMessage": {
+        "description": "Instructions for backing up E2EE recovery key"
+    },
+    "savedMyKey": "لقد حفظت مفتاحي",
+    "@savedMyKey": {
+        "description": "Confirmation button after saving recovery key"
+    },
+    "showRecoveryKey": "عرض مفتاح الاسترداد",
+    "@showRecoveryKey": {
+        "description": "Button to display the E2EE recovery key"
+    },
+    "e2eeKeyWarning": "⚠️ إذا فقدت مفتاح الاسترداد، لا يمكن استعادة بياناتك.",
+    "@e2eeKeyWarning": {
+        "description": "Warning about E2EE key loss"
+    },
+    "e2eeBackupReminder": "تأكد من عمل نسخة احتياطية لمفتاحك بعد التفعيل.",
+    "@e2eeBackupReminder": {
+        "description": "Reminder to back up E2EE key"
+    },
+    "e2eeFailedToEnable": "فشل تفعيل E2EE: {error}",
+    "@e2eeFailedToEnable": {
+        "description": "Error message when E2EE enabling fails",
+        "placeholders": {
+            "error": {
+                "type": "String"
+            }
+        }
+    },
+    "keyCopiedToClipboard": "تم نسخ المفتاح إلى الحافظة",
+    "@keyCopiedToClipboard": {
+        "description": "Snackbar message after copying E2EE key"
+    },
+    "e2eeMemoriesDescription": "مشفرة على جهازك قبل الوصول إلى الخادم. أنت فقط من يمكنه قراءتها.",
+    "@e2eeMemoriesDescription": {
+        "description": "Description of E2EE for memories"
+    },
+    "e2eeOtherDataDescription": "مشفرة في حالة السكون على الخادم. يعالج الخادم الصوت للنسخ لكن البيانات المخزنة مشفرة.",
+    "@e2eeOtherDataDescription": {
+        "description": "Description of server-side encryption"
+    },
+    "e2eeCardSubtitle": "حماية قصوى — الذكريات مشفرة على الجهاز، جميع البيانات الأخرى مشفرة في حالة السكون",
+    "@e2eeCardSubtitle": {
+        "description": "Subtitle for E2EE card"
+    },
+    "e2eeUnableToDecrypt": "مشفر — تعذر فك التشفير. تحقق من مفتاح الاسترداد.",
+    "@e2eeUnableToDecrypt": {
+        "description": "Error shown when E2EE decryption fails"
+    },
+    "pairWithWeb": "الاقتران مع الويب",
+    "@pairWithWeb": {
+        "description": "Button to pair E2EE key with web UI via QR code"
+    },
+    "scanQrOnWeb": "امسح رمز QR هذا على omi.me لفتح بياناتك المشفرة",
+    "@scanQrOnWeb": {
+        "description": "Instructions for QR pairing"
+    },
+    "expiresInSeconds": "ينتهي خلال {seconds} ثانية",
+    "@expiresInSeconds": {
+        "description": "Timer for QR code expiry",
+        "placeholders": {
+            "seconds": {
+                "type": "int"
+            }
+        }
+    },
+    "onlyTrustedDevice": "⚠️ امسح فقط على جهاز موثوق",
+    "@onlyTrustedDevice": {
+        "description": "Warning about scanning QR code"
+    }
 }

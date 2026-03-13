@@ -2843,5 +2843,83 @@
     "manageStorage": "Tárhely kezelése",
     "safelyBackedUp": "Biztonságosan mentve a telefonjára",
     "notYetSynced": "Még nincs szinkronizálva a telefonjával",
-    "clearAll": "Összes törlése"
+    "clearAll": "Összes törlése",
+    "enableE2ee": "E2EE engedélyezése",
+    "@enableE2ee": {
+        "description": "Button to enable end-to-end encryption"
+    },
+    "recoveryKey": "Helyreállítási kulcs",
+    "@recoveryKey": {
+        "description": "Title for recovery key dialog"
+    },
+    "saveKeyMessage": "Mentse el ezt a kulcsot biztonságos helyre. Szüksége lesz rá a titkosított emlékek helyreállításához, ha eszközt vált.",
+    "@saveKeyMessage": {
+        "description": "Instructions for backing up E2EE recovery key"
+    },
+    "savedMyKey": "Elmentettem a kulcsomat",
+    "@savedMyKey": {
+        "description": "Confirmation button after saving recovery key"
+    },
+    "showRecoveryKey": "Helyreállítási kulcs mutatása",
+    "@showRecoveryKey": {
+        "description": "Button to display the E2EE recovery key"
+    },
+    "e2eeKeyWarning": "⚠️ Ha elveszíti a helyreállítási kulcsot, adatai nem állíthatók helyre.",
+    "@e2eeKeyWarning": {
+        "description": "Warning about E2EE key loss"
+    },
+    "e2eeBackupReminder": "Készítsen biztonsági másolatot a kulcsról az engedélyezés után.",
+    "@e2eeBackupReminder": {
+        "description": "Reminder to back up E2EE key"
+    },
+    "e2eeFailedToEnable": "Az E2EE engedélyezése sikertelen: {error}",
+    "@e2eeFailedToEnable": {
+        "description": "Error message when E2EE enabling fails",
+        "placeholders": {
+            "error": {
+                "type": "String"
+            }
+        }
+    },
+    "keyCopiedToClipboard": "Kulcs a vágólapra másolva",
+    "@keyCopiedToClipboard": {
+        "description": "Snackbar message after copying E2EE key"
+    },
+    "e2eeMemoriesDescription": "Az eszközén titkosítva, mielőtt eléri a szervert. Csak Ön tudja olvasni.",
+    "@e2eeMemoriesDescription": {
+        "description": "Description of E2EE for memories"
+    },
+    "e2eeOtherDataDescription": "Nyugalmi állapotban titkosítva a szerveren. A szerver feldolgozza a hangot átíráshoz, de a tárolt adatok titkosítottak.",
+    "@e2eeOtherDataDescription": {
+        "description": "Description of server-side encryption"
+    },
+    "e2eeCardSubtitle": "Maximális védelem — emlékek az eszközön titkosítva, minden más adat nyugalmi állapotban titkosítva",
+    "@e2eeCardSubtitle": {
+        "description": "Subtitle for E2EE card"
+    },
+    "e2eeUnableToDecrypt": "Titkosított — nem sikerült visszafejteni. Ellenőrizze a helyreállítási kulcsot.",
+    "@e2eeUnableToDecrypt": {
+        "description": "Error shown when E2EE decryption fails"
+    },
+    "pairWithWeb": "Párosítás a webbel",
+    "@pairWithWeb": {
+        "description": "Button to pair E2EE key with web UI via QR code"
+    },
+    "scanQrOnWeb": "Olvassa be ezt a QR-kódot az omi.me oldalon a titkosított adatok feloldásához",
+    "@scanQrOnWeb": {
+        "description": "Instructions for QR pairing"
+    },
+    "expiresInSeconds": "Lejár {seconds} mp múlva",
+    "@expiresInSeconds": {
+        "description": "Timer for QR code expiry",
+        "placeholders": {
+            "seconds": {
+                "type": "int"
+            }
+        }
+    },
+    "onlyTrustedDevice": "⚠️ Csak megbízható eszközön olvassa be",
+    "@onlyTrustedDevice": {
+        "description": "Warning about scanning QR code"
+    }
 }

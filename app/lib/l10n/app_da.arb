@@ -2756,5 +2756,83 @@
     "manageStorage": "Administrer lager",
     "safelyBackedUp": "Sikkert sikkerhedskopieret til din telefon",
     "notYetSynced": "Endnu ikke synkroniseret med din telefon",
-    "clearAll": "Ryd alt"
+    "clearAll": "Ryd alt",
+    "enableE2ee": "Aktiver E2EE",
+    "@enableE2ee": {
+        "description": "Button to enable end-to-end encryption"
+    },
+    "recoveryKey": "Gendannelsesnøgle",
+    "@recoveryKey": {
+        "description": "Title for recovery key dialog"
+    },
+    "saveKeyMessage": "Gem denne nøgle et sikkert sted. Du skal bruge den til at gendanne dine krypterede minder, hvis du skifter enhed. Uden denne nøgle kan data ikke gendannes.",
+    "@saveKeyMessage": {
+        "description": "Instructions for backing up E2EE recovery key"
+    },
+    "savedMyKey": "Jeg har gemt min nøgle",
+    "@savedMyKey": {
+        "description": "Confirmation button after saving recovery key"
+    },
+    "showRecoveryKey": "Vis gendannelsesnøgle",
+    "@showRecoveryKey": {
+        "description": "Button to display the E2EE recovery key"
+    },
+    "e2eeKeyWarning": "⚠️ Hvis du mister din gendannelsesnøgle, kan dine data ikke gendannes.",
+    "@e2eeKeyWarning": {
+        "description": "Warning about E2EE key loss"
+    },
+    "e2eeBackupReminder": "Husk at sikkerhedskopiere din nøgle efter aktivering.",
+    "@e2eeBackupReminder": {
+        "description": "Reminder to back up E2EE key"
+    },
+    "e2eeFailedToEnable": "Kunne ikke aktivere E2EE: {error}",
+    "@e2eeFailedToEnable": {
+        "description": "Error message when E2EE enabling fails",
+        "placeholders": {
+            "error": {
+                "type": "String"
+            }
+        }
+    },
+    "keyCopiedToClipboard": "Nøgle kopieret til udklipsholder",
+    "@keyCopiedToClipboard": {
+        "description": "Snackbar message after copying E2EE key"
+    },
+    "e2eeMemoriesDescription": "Krypteret på din enhed, inden det når serveren. Kun du kan læse dem.",
+    "@e2eeMemoriesDescription": {
+        "description": "Description of E2EE for memories"
+    },
+    "e2eeOtherDataDescription": "Krypteret i hvile på serveren. Serveren behandler lyd til transskription, men gemte data er krypterede.",
+    "@e2eeOtherDataDescription": {
+        "description": "Description of server-side encryption"
+    },
+    "e2eeCardSubtitle": "Maksimal beskyttelse — minder krypteret på enheden, alle andre data krypteret i hvile",
+    "@e2eeCardSubtitle": {
+        "description": "Subtitle for E2EE card"
+    },
+    "e2eeUnableToDecrypt": "Krypteret — kan ikke dekrypteres. Tjek din gendannelsesnøgle.",
+    "@e2eeUnableToDecrypt": {
+        "description": "Error shown when E2EE decryption fails"
+    },
+    "pairWithWeb": "Par med web",
+    "@pairWithWeb": {
+        "description": "Button to pair E2EE key with web UI via QR code"
+    },
+    "scanQrOnWeb": "Scan denne QR-kode på omi.me for at låse dine krypterede data op",
+    "@scanQrOnWeb": {
+        "description": "Instructions for QR pairing"
+    },
+    "expiresInSeconds": "Udløber om {seconds}s",
+    "@expiresInSeconds": {
+        "description": "Timer for QR code expiry",
+        "placeholders": {
+            "seconds": {
+                "type": "int"
+            }
+        }
+    },
+    "onlyTrustedDevice": "⚠️ Scan kun på en pålidelig enhed",
+    "@onlyTrustedDevice": {
+        "description": "Warning about scanning QR code"
+    }
 }

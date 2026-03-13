@@ -2747,5 +2747,83 @@
     "manageStorage": "저장소 관리",
     "safelyBackedUp": "휴대폰에 안전하게 백업됨",
     "notYetSynced": "아직 휴대폰에 동기화되지 않음",
-    "clearAll": "모두 지우기"
+    "clearAll": "모두 지우기",
+    "enableE2ee": "E2EE 활성화",
+    "@enableE2ee": {
+        "description": "Button to enable end-to-end encryption"
+    },
+    "recoveryKey": "복구 키",
+    "@recoveryKey": {
+        "description": "Title for recovery key dialog"
+    },
+    "saveKeyMessage": "이 키를 안전한 곳에 저장하세요. 기기를 변경할 때 암호화된 기억을 복구하는 데 필요합니다.",
+    "@saveKeyMessage": {
+        "description": "Instructions for backing up E2EE recovery key"
+    },
+    "savedMyKey": "키를 저장했습니다",
+    "@savedMyKey": {
+        "description": "Confirmation button after saving recovery key"
+    },
+    "showRecoveryKey": "복구 키 표시",
+    "@showRecoveryKey": {
+        "description": "Button to display the E2EE recovery key"
+    },
+    "e2eeKeyWarning": "⚠️ 복구 키를 잃어버리면 데이터를 복구할 수 없습니다.",
+    "@e2eeKeyWarning": {
+        "description": "Warning about E2EE key loss"
+    },
+    "e2eeBackupReminder": "활성화 후 키를 백업하세요.",
+    "@e2eeBackupReminder": {
+        "description": "Reminder to back up E2EE key"
+    },
+    "e2eeFailedToEnable": "E2EE 활성화 실패: {error}",
+    "@e2eeFailedToEnable": {
+        "description": "Error message when E2EE enabling fails",
+        "placeholders": {
+            "error": {
+                "type": "String"
+            }
+        }
+    },
+    "keyCopiedToClipboard": "키가 클립보드에 복사되었습니다",
+    "@keyCopiedToClipboard": {
+        "description": "Snackbar message after copying E2EE key"
+    },
+    "e2eeMemoriesDescription": "서버에 도달하기 전에 기기에서 암호화됩니다. 본인만 읽을 수 있습니다.",
+    "@e2eeMemoriesDescription": {
+        "description": "Description of E2EE for memories"
+    },
+    "e2eeOtherDataDescription": "서버에서 저장 시 암호화됩니다. 서버는 전사를 위해 오디오를 처리하지만 저장된 데이터는 암호화됩니다.",
+    "@e2eeOtherDataDescription": {
+        "description": "Description of server-side encryption"
+    },
+    "e2eeCardSubtitle": "최대 보호 — 기억은 기기에서 암호화, 기타 데이터는 저장 시 암호화",
+    "@e2eeCardSubtitle": {
+        "description": "Subtitle for E2EE card"
+    },
+    "e2eeUnableToDecrypt": "암호화됨 — 복호화 불가. 복구 키를 확인하세요.",
+    "@e2eeUnableToDecrypt": {
+        "description": "Error shown when E2EE decryption fails"
+    },
+    "pairWithWeb": "웹과 페어링",
+    "@pairWithWeb": {
+        "description": "Button to pair E2EE key with web UI via QR code"
+    },
+    "scanQrOnWeb": "omi.me에서 이 QR 코드를 스캔하여 암호화된 데이터를 잠금 해제하세요",
+    "@scanQrOnWeb": {
+        "description": "Instructions for QR pairing"
+    },
+    "expiresInSeconds": "{seconds}초 후 만료",
+    "@expiresInSeconds": {
+        "description": "Timer for QR code expiry",
+        "placeholders": {
+            "seconds": {
+                "type": "int"
+            }
+        }
+    },
+    "onlyTrustedDevice": "⚠️ 신뢰할 수 있는 기기에서만 스캔",
+    "@onlyTrustedDevice": {
+        "description": "Warning about scanning QR code"
+    }
 }

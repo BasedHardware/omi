@@ -2769,5 +2769,83 @@
     "manageStorage": "管理存储",
     "safelyBackedUp": "已安全备份到您的手机",
     "notYetSynced": "尚未同步到您的手机",
-    "clearAll": "全部清除"
+    "clearAll": "全部清除",
+    "enableE2ee": "启用 E2EE",
+    "@enableE2ee": {
+        "description": "Button to enable end-to-end encryption"
+    },
+    "recoveryKey": "恢复密钥",
+    "@recoveryKey": {
+        "description": "Title for recovery key dialog"
+    },
+    "saveKeyMessage": "请将此密钥保存在安全的地方。更换设备时，您将需要它来恢复加密的记忆。没有此密钥，加密数据将无法恢复。",
+    "@saveKeyMessage": {
+        "description": "Instructions for backing up E2EE recovery key"
+    },
+    "savedMyKey": "我已保存密钥",
+    "@savedMyKey": {
+        "description": "Confirmation button after saving recovery key"
+    },
+    "showRecoveryKey": "显示恢复密钥",
+    "@showRecoveryKey": {
+        "description": "Button to display the E2EE recovery key"
+    },
+    "e2eeKeyWarning": "⚠️ 如果丢失恢复密钥，您的数据将无法恢复。",
+    "@e2eeKeyWarning": {
+        "description": "Warning about E2EE key loss"
+    },
+    "e2eeBackupReminder": "启用后请务必备份您的密钥。",
+    "@e2eeBackupReminder": {
+        "description": "Reminder to back up E2EE key"
+    },
+    "e2eeFailedToEnable": "启用 E2EE 失败：{error}",
+    "@e2eeFailedToEnable": {
+        "description": "Error message when E2EE enabling fails",
+        "placeholders": {
+            "error": {
+                "type": "String"
+            }
+        }
+    },
+    "keyCopiedToClipboard": "密钥已复制到剪贴板",
+    "@keyCopiedToClipboard": {
+        "description": "Snackbar message after copying E2EE key"
+    },
+    "e2eeMemoriesDescription": "在到达服务器之前在您的设备上加密。只有您能读取。",
+    "@e2eeMemoriesDescription": {
+        "description": "Description of E2EE for memories"
+    },
+    "e2eeOtherDataDescription": "在服务器上静态加密。服务器处理音频进行转录，但存储的数据是加密的。",
+    "@e2eeOtherDataDescription": {
+        "description": "Description of server-side encryption"
+    },
+    "e2eeCardSubtitle": "最高保护 — 记忆在设备上加密，所有其他数据在静态时加密",
+    "@e2eeCardSubtitle": {
+        "description": "Subtitle for E2EE card"
+    },
+    "e2eeUnableToDecrypt": "已加密 — 无法解密。请检查您的恢复密钥。",
+    "@e2eeUnableToDecrypt": {
+        "description": "Error shown when E2EE decryption fails"
+    },
+    "pairWithWeb": "与网页配对",
+    "@pairWithWeb": {
+        "description": "Button to pair E2EE key with web UI via QR code"
+    },
+    "scanQrOnWeb": "在 omi.me 上扫描此二维码以解锁您的加密数据",
+    "@scanQrOnWeb": {
+        "description": "Instructions for QR pairing"
+    },
+    "expiresInSeconds": "{seconds}秒后过期",
+    "@expiresInSeconds": {
+        "description": "Timer for QR code expiry",
+        "placeholders": {
+            "seconds": {
+                "type": "int"
+            }
+        }
+    },
+    "onlyTrustedDevice": "⚠️ 仅在受信任的设备上扫描",
+    "@onlyTrustedDevice": {
+        "description": "Warning about scanning QR code"
+    }
 }

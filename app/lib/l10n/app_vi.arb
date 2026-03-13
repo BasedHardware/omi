@@ -2752,5 +2752,83 @@
     "manageStorage": "Quản lý lưu trữ",
     "safelyBackedUp": "Đã sao lưu an toàn vào điện thoại",
     "notYetSynced": "Chưa đồng bộ với điện thoại của bạn",
-    "clearAll": "Xóa tất cả"
+    "clearAll": "Xóa tất cả",
+    "enableE2ee": "Bật E2EE",
+    "@enableE2ee": {
+        "description": "Button to enable end-to-end encryption"
+    },
+    "recoveryKey": "Khóa khôi phục",
+    "@recoveryKey": {
+        "description": "Title for recovery key dialog"
+    },
+    "saveKeyMessage": "Lưu khóa này ở nơi an toàn. Bạn sẽ cần nó để khôi phục ký ức được mã hóa khi đổi thiết bị.",
+    "@saveKeyMessage": {
+        "description": "Instructions for backing up E2EE recovery key"
+    },
+    "savedMyKey": "Tôi đã lưu khóa",
+    "@savedMyKey": {
+        "description": "Confirmation button after saving recovery key"
+    },
+    "showRecoveryKey": "Hiện khóa khôi phục",
+    "@showRecoveryKey": {
+        "description": "Button to display the E2EE recovery key"
+    },
+    "e2eeKeyWarning": "⚠️ Nếu mất khóa khôi phục, dữ liệu của bạn không thể được khôi phục.",
+    "@e2eeKeyWarning": {
+        "description": "Warning about E2EE key loss"
+    },
+    "e2eeBackupReminder": "Hãy sao lưu khóa sau khi bật.",
+    "@e2eeBackupReminder": {
+        "description": "Reminder to back up E2EE key"
+    },
+    "e2eeFailedToEnable": "Không thể bật E2EE: {error}",
+    "@e2eeFailedToEnable": {
+        "description": "Error message when E2EE enabling fails",
+        "placeholders": {
+            "error": {
+                "type": "String"
+            }
+        }
+    },
+    "keyCopiedToClipboard": "Đã sao chép khóa vào bộ nhớ tạm",
+    "@keyCopiedToClipboard": {
+        "description": "Snackbar message after copying E2EE key"
+    },
+    "e2eeMemoriesDescription": "Được mã hóa trên thiết bị trước khi gửi đến máy chủ. Chỉ bạn mới có thể đọc.",
+    "@e2eeMemoriesDescription": {
+        "description": "Description of E2EE for memories"
+    },
+    "e2eeOtherDataDescription": "Được mã hóa khi lưu trữ trên máy chủ. Máy chủ xử lý âm thanh để phiên âm nhưng dữ liệu lưu trữ được mã hóa.",
+    "@e2eeOtherDataDescription": {
+        "description": "Description of server-side encryption"
+    },
+    "e2eeCardSubtitle": "Bảo vệ tối đa — ký ức mã hóa trên thiết bị, dữ liệu khác mã hóa khi lưu trữ",
+    "@e2eeCardSubtitle": {
+        "description": "Subtitle for E2EE card"
+    },
+    "e2eeUnableToDecrypt": "Đã mã hóa — không thể giải mã. Kiểm tra khóa khôi phục.",
+    "@e2eeUnableToDecrypt": {
+        "description": "Error shown when E2EE decryption fails"
+    },
+    "pairWithWeb": "Ghép nối với web",
+    "@pairWithWeb": {
+        "description": "Button to pair E2EE key with web UI via QR code"
+    },
+    "scanQrOnWeb": "Quét mã QR này tại omi.me để mở khóa dữ liệu mã hóa",
+    "@scanQrOnWeb": {
+        "description": "Instructions for QR pairing"
+    },
+    "expiresInSeconds": "Hết hạn sau {seconds}s",
+    "@expiresInSeconds": {
+        "description": "Timer for QR code expiry",
+        "placeholders": {
+            "seconds": {
+                "type": "int"
+            }
+        }
+    },
+    "onlyTrustedDevice": "⚠️ Chỉ quét trên thiết bị đáng tin cậy",
+    "@onlyTrustedDevice": {
+        "description": "Warning about scanning QR code"
+    }
 }

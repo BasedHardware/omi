@@ -2747,5 +2747,83 @@
     "manageStorage": "Керування сховищем",
     "safelyBackedUp": "Безпечно збережено на вашому телефоні",
     "notYetSynced": "Ще не синхронізовано з вашим телефоном",
-    "clearAll": "Очистити все"
+    "clearAll": "Очистити все",
+    "enableE2ee": "Увімкнути E2EE",
+    "@enableE2ee": {
+        "description": "Button to enable end-to-end encryption"
+    },
+    "recoveryKey": "Ключ відновлення",
+    "@recoveryKey": {
+        "description": "Title for recovery key dialog"
+    },
+    "saveKeyMessage": "Збережіть цей ключ у безпечному місці. Він знадобиться для відновлення зашифрованих спогадів при зміні пристрою.",
+    "@saveKeyMessage": {
+        "description": "Instructions for backing up E2EE recovery key"
+    },
+    "savedMyKey": "Я зберіг свій ключ",
+    "@savedMyKey": {
+        "description": "Confirmation button after saving recovery key"
+    },
+    "showRecoveryKey": "Показати ключ відновлення",
+    "@showRecoveryKey": {
+        "description": "Button to display the E2EE recovery key"
+    },
+    "e2eeKeyWarning": "⚠️ Якщо ви втратите ключ відновлення, ваші дані неможливо буде відновити.",
+    "@e2eeKeyWarning": {
+        "description": "Warning about E2EE key loss"
+    },
+    "e2eeBackupReminder": "Створіть резервну копію ключа після увімкнення.",
+    "@e2eeBackupReminder": {
+        "description": "Reminder to back up E2EE key"
+    },
+    "e2eeFailedToEnable": "Не вдалося увімкнути E2EE: {error}",
+    "@e2eeFailedToEnable": {
+        "description": "Error message when E2EE enabling fails",
+        "placeholders": {
+            "error": {
+                "type": "String"
+            }
+        }
+    },
+    "keyCopiedToClipboard": "Ключ скопійовано в буфер обміну",
+    "@keyCopiedToClipboard": {
+        "description": "Snackbar message after copying E2EE key"
+    },
+    "e2eeMemoriesDescription": "Зашифровано на вашому пристрої до відправки на сервер. Тільки ви можете їх прочитати.",
+    "@e2eeMemoriesDescription": {
+        "description": "Description of E2EE for memories"
+    },
+    "e2eeOtherDataDescription": "Зашифровано у стані спокою на сервері. Сервер обробляє аудіо для транскрипції, але збережені дані зашифровані.",
+    "@e2eeOtherDataDescription": {
+        "description": "Description of server-side encryption"
+    },
+    "e2eeCardSubtitle": "Максимальний захист — спогади зашифровані на пристрої, всі інші дані зашифровані у спокої",
+    "@e2eeCardSubtitle": {
+        "description": "Subtitle for E2EE card"
+    },
+    "e2eeUnableToDecrypt": "Зашифровано — не вдалося розшифрувати. Перевірте ключ відновлення.",
+    "@e2eeUnableToDecrypt": {
+        "description": "Error shown when E2EE decryption fails"
+    },
+    "pairWithWeb": "З'єднати з вебом",
+    "@pairWithWeb": {
+        "description": "Button to pair E2EE key with web UI via QR code"
+    },
+    "scanQrOnWeb": "Відскануйте цей QR-код на omi.me, щоб розблокувати зашифровані дані",
+    "@scanQrOnWeb": {
+        "description": "Instructions for QR pairing"
+    },
+    "expiresInSeconds": "Закінчується через {seconds}с",
+    "@expiresInSeconds": {
+        "description": "Timer for QR code expiry",
+        "placeholders": {
+            "seconds": {
+                "type": "int"
+            }
+        }
+    },
+    "onlyTrustedDevice": "⚠️ Скануйте лише на довіреному пристрої",
+    "@onlyTrustedDevice": {
+        "description": "Warning about scanning QR code"
+    }
 }

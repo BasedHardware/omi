@@ -2782,5 +2782,83 @@
     "manageStorage": "Depolamayı yönet",
     "safelyBackedUp": "Telefonunuza güvenli şekilde yedeklendi",
     "notYetSynced": "Henüz telefonunuzla senkronize edilmedi",
-    "clearAll": "Tümünü temizle"
+    "clearAll": "Tümünü temizle",
+    "enableE2ee": "E2EE'yi Etkinleştir",
+    "@enableE2ee": {
+        "description": "Button to enable end-to-end encryption"
+    },
+    "recoveryKey": "Kurtarma Anahtarı",
+    "@recoveryKey": {
+        "description": "Title for recovery key dialog"
+    },
+    "saveKeyMessage": "Bu anahtarı güvenli bir yerde saklayın. Cihaz değiştirdiğinizde şifrelenmiş anılarınızı kurtarmak için gerekecektir.",
+    "@saveKeyMessage": {
+        "description": "Instructions for backing up E2EE recovery key"
+    },
+    "savedMyKey": "Anahtarımı Kaydettim",
+    "@savedMyKey": {
+        "description": "Confirmation button after saving recovery key"
+    },
+    "showRecoveryKey": "Kurtarma Anahtarını Göster",
+    "@showRecoveryKey": {
+        "description": "Button to display the E2EE recovery key"
+    },
+    "e2eeKeyWarning": "⚠️ Kurtarma anahtarınızı kaybederseniz verileriniz kurtarılamaz.",
+    "@e2eeKeyWarning": {
+        "description": "Warning about E2EE key loss"
+    },
+    "e2eeBackupReminder": "Etkinleştirdikten sonra anahtarınızı yedekleyin.",
+    "@e2eeBackupReminder": {
+        "description": "Reminder to back up E2EE key"
+    },
+    "e2eeFailedToEnable": "E2EE etkinleştirilemedi: {error}",
+    "@e2eeFailedToEnable": {
+        "description": "Error message when E2EE enabling fails",
+        "placeholders": {
+            "error": {
+                "type": "String"
+            }
+        }
+    },
+    "keyCopiedToClipboard": "Anahtar panoya kopyalandı",
+    "@keyCopiedToClipboard": {
+        "description": "Snackbar message after copying E2EE key"
+    },
+    "e2eeMemoriesDescription": "Sunucuya ulaşmadan önce cihazınızda şifrelenir. Yalnızca siz okuyabilirsiniz.",
+    "@e2eeMemoriesDescription": {
+        "description": "Description of E2EE for memories"
+    },
+    "e2eeOtherDataDescription": "Sunucuda beklemede şifrelenir. Sunucu transkripsiyon için sesi işler ancak depolanan veriler şifrelidir.",
+    "@e2eeOtherDataDescription": {
+        "description": "Description of server-side encryption"
+    },
+    "e2eeCardSubtitle": "Maksimum koruma — anılar cihazda şifrelenir, diğer tüm veriler beklemede şifrelenir",
+    "@e2eeCardSubtitle": {
+        "description": "Subtitle for E2EE card"
+    },
+    "e2eeUnableToDecrypt": "Şifrelenmiş — şifre çözülemedi. Kurtarma anahtarınızı kontrol edin.",
+    "@e2eeUnableToDecrypt": {
+        "description": "Error shown when E2EE decryption fails"
+    },
+    "pairWithWeb": "Web ile Eşleştir",
+    "@pairWithWeb": {
+        "description": "Button to pair E2EE key with web UI via QR code"
+    },
+    "scanQrOnWeb": "Şifrelenmiş verilerinizin kilidini açmak için omi.me'de bu QR kodunu tarayın",
+    "@scanQrOnWeb": {
+        "description": "Instructions for QR pairing"
+    },
+    "expiresInSeconds": "{seconds}sn içinde sona erer",
+    "@expiresInSeconds": {
+        "description": "Timer for QR code expiry",
+        "placeholders": {
+            "seconds": {
+                "type": "int"
+            }
+        }
+    },
+    "onlyTrustedDevice": "⚠️ Yalnızca güvenilir bir cihazda tarayın",
+    "@onlyTrustedDevice": {
+        "description": "Warning about scanning QR code"
+    }
 }

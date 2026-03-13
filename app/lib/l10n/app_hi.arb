@@ -2748,5 +2748,83 @@
     "manageStorage": "स्टोरेज प्रबंधित करें",
     "safelyBackedUp": "आपके फोन पर सुरक्षित बैकअप",
     "notYetSynced": "अभी तक आपके फोन पर सिंक नहीं हुआ",
-    "clearAll": "सब हटाएं"
+    "clearAll": "सब हटाएं",
+    "enableE2ee": "E2EE सक्रिय करें",
+    "@enableE2ee": {
+        "description": "Button to enable end-to-end encryption"
+    },
+    "recoveryKey": "रिकवरी कुंजी",
+    "@recoveryKey": {
+        "description": "Title for recovery key dialog"
+    },
+    "saveKeyMessage": "इस कुंजी को सुरक्षित स्थान पर सहेजें। डिवाइस बदलने पर अपनी एन्क्रिप्टेड यादों को पुनर्प्राप्त करने के लिए आपको इसकी आवश्यकता होगी।",
+    "@saveKeyMessage": {
+        "description": "Instructions for backing up E2EE recovery key"
+    },
+    "savedMyKey": "मैंने अपनी कुंजी सहेज ली",
+    "@savedMyKey": {
+        "description": "Confirmation button after saving recovery key"
+    },
+    "showRecoveryKey": "रिकवरी कुंजी दिखाएं",
+    "@showRecoveryKey": {
+        "description": "Button to display the E2EE recovery key"
+    },
+    "e2eeKeyWarning": "⚠️ यदि आप अपनी रिकवरी कुंजी खो देते हैं, तो आपका डेटा पुनर्प्राप्त नहीं किया जा सकता।",
+    "@e2eeKeyWarning": {
+        "description": "Warning about E2EE key loss"
+    },
+    "e2eeBackupReminder": "सक्रिय करने के बाद अपनी कुंजी का बैकअप लें।",
+    "@e2eeBackupReminder": {
+        "description": "Reminder to back up E2EE key"
+    },
+    "e2eeFailedToEnable": "E2EE सक्रिय करने में विफल: {error}",
+    "@e2eeFailedToEnable": {
+        "description": "Error message when E2EE enabling fails",
+        "placeholders": {
+            "error": {
+                "type": "String"
+            }
+        }
+    },
+    "keyCopiedToClipboard": "कुंजी क्लिपबोर्ड पर कॉपी की गई",
+    "@keyCopiedToClipboard": {
+        "description": "Snackbar message after copying E2EE key"
+    },
+    "e2eeMemoriesDescription": "सर्वर तक पहुंचने से पहले आपके डिवाइस पर एन्क्रिप्ट किया गया। केवल आप ही उन्हें पढ़ सकते हैं।",
+    "@e2eeMemoriesDescription": {
+        "description": "Description of E2EE for memories"
+    },
+    "e2eeOtherDataDescription": "सर्वर पर विश्राम में एन्क्रिप्टेड। सर्वर ट्रांसक्रिप्शन के लिए ऑडियो प्रोसेस करता है लेकिन संग्रहीत डेटा एन्क्रिप्टेड है।",
+    "@e2eeOtherDataDescription": {
+        "description": "Description of server-side encryption"
+    },
+    "e2eeCardSubtitle": "अधिकतम सुरक्षा — यादें डिवाइस पर एन्क्रिप्टेड, अन्य सभी डेटा विश्राम में एन्क्रिप्टेड",
+    "@e2eeCardSubtitle": {
+        "description": "Subtitle for E2EE card"
+    },
+    "e2eeUnableToDecrypt": "एन्क्रिप्टेड — डिक्रिप्ट नहीं हो सका। अपनी रिकवरी कुंजी जांचें।",
+    "@e2eeUnableToDecrypt": {
+        "description": "Error shown when E2EE decryption fails"
+    },
+    "pairWithWeb": "वेब से जोड़ें",
+    "@pairWithWeb": {
+        "description": "Button to pair E2EE key with web UI via QR code"
+    },
+    "scanQrOnWeb": "अपना एन्क्रिप्टेड डेटा अनलॉक करने के लिए omi.me पर यह QR कोड स्कैन करें",
+    "@scanQrOnWeb": {
+        "description": "Instructions for QR pairing"
+    },
+    "expiresInSeconds": "{seconds}s में समाप्त",
+    "@expiresInSeconds": {
+        "description": "Timer for QR code expiry",
+        "placeholders": {
+            "seconds": {
+                "type": "int"
+            }
+        }
+    },
+    "onlyTrustedDevice": "⚠️ केवल विश्वसनीय डिवाइस पर स्कैन करें",
+    "@onlyTrustedDevice": {
+        "description": "Warning about scanning QR code"
+    }
 }

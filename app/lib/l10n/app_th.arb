@@ -2747,5 +2747,83 @@
     "manageStorage": "จัดการพื้นที่จัดเก็บ",
     "safelyBackedUp": "สำรองข้อมูลไว้ในโทรศัพท์อย่างปลอดภัย",
     "notYetSynced": "ยังไม่ได้ซิงค์กับโทรศัพท์ของคุณ",
-    "clearAll": "ล้างทั้งหมด"
+    "clearAll": "ล้างทั้งหมด",
+    "enableE2ee": "เปิดใช้ E2EE",
+    "@enableE2ee": {
+        "description": "Button to enable end-to-end encryption"
+    },
+    "recoveryKey": "คีย์กู้คืน",
+    "@recoveryKey": {
+        "description": "Title for recovery key dialog"
+    },
+    "saveKeyMessage": "เก็บคีย์นี้ไว้ในที่ปลอดภัย คุณจะต้องใช้เพื่อกู้คืนความทรงจำที่เข้ารหัสเมื่อเปลี่ยนอุปกรณ์",
+    "@saveKeyMessage": {
+        "description": "Instructions for backing up E2EE recovery key"
+    },
+    "savedMyKey": "ฉันบันทึกคีย์แล้ว",
+    "@savedMyKey": {
+        "description": "Confirmation button after saving recovery key"
+    },
+    "showRecoveryKey": "แสดงคีย์กู้คืน",
+    "@showRecoveryKey": {
+        "description": "Button to display the E2EE recovery key"
+    },
+    "e2eeKeyWarning": "⚠️ หากสูญเสียคีย์กู้คืน ข้อมูลของคุณจะไม่สามารถกู้คืนได้",
+    "@e2eeKeyWarning": {
+        "description": "Warning about E2EE key loss"
+    },
+    "e2eeBackupReminder": "สำรองข้อมูลคีย์หลังจากเปิดใช้งาน",
+    "@e2eeBackupReminder": {
+        "description": "Reminder to back up E2EE key"
+    },
+    "e2eeFailedToEnable": "เปิดใช้ E2EE ไม่สำเร็จ: {error}",
+    "@e2eeFailedToEnable": {
+        "description": "Error message when E2EE enabling fails",
+        "placeholders": {
+            "error": {
+                "type": "String"
+            }
+        }
+    },
+    "keyCopiedToClipboard": "คัดลอกคีย์ไปยังคลิปบอร์ดแล้ว",
+    "@keyCopiedToClipboard": {
+        "description": "Snackbar message after copying E2EE key"
+    },
+    "e2eeMemoriesDescription": "เข้ารหัสบนอุปกรณ์ของคุณก่อนถึงเซิร์ฟเวอร์",
+    "@e2eeMemoriesDescription": {
+        "description": "Description of E2EE for memories"
+    },
+    "e2eeOtherDataDescription": "เข้ารหัสขณะพักบนเซิร์ฟเวอร์",
+    "@e2eeOtherDataDescription": {
+        "description": "Description of server-side encryption"
+    },
+    "e2eeCardSubtitle": "การป้องกันสูงสุด — ความทรงจำเข้ารหัสบนอุปกรณ์",
+    "@e2eeCardSubtitle": {
+        "description": "Subtitle for E2EE card"
+    },
+    "e2eeUnableToDecrypt": "เข้ารหัสแล้ว — ไม่สามารถถอดรหัสได้",
+    "@e2eeUnableToDecrypt": {
+        "description": "Error shown when E2EE decryption fails"
+    },
+    "pairWithWeb": "จับคู่กับเว็บ",
+    "@pairWithWeb": {
+        "description": "Button to pair E2EE key with web UI via QR code"
+    },
+    "scanQrOnWeb": "สแกนรหัส QR นี้ที่ omi.me",
+    "@scanQrOnWeb": {
+        "description": "Instructions for QR pairing"
+    },
+    "expiresInSeconds": "หมดอายุใน {seconds} วินาที",
+    "@expiresInSeconds": {
+        "description": "Timer for QR code expiry",
+        "placeholders": {
+            "seconds": {
+                "type": "int"
+            }
+        }
+    },
+    "onlyTrustedDevice": "⚠️ สแกนเฉพาะบนอุปกรณ์ที่เชื่อถือได้เท่านั้น",
+    "@onlyTrustedDevice": {
+        "description": "Warning about scanning QR code"
+    }
 }
