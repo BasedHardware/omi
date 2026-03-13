@@ -209,7 +209,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
                               ),
                             );
                           } else {
-                            showDialog(
+                            return showDialog(
                               builder: (c) => getDialog(
                                 context,
                                 () => Navigator.pop(context),
@@ -221,7 +221,6 @@ class _ConversationListItemState extends State<ConversationListItem> {
                               ),
                               context: context,
                             );
-                            return false;
                           }
                         },
                         onDismissed: (direction) async {
