@@ -1,8 +1,11 @@
 import copy
 import json
+import logging
 from datetime import datetime, timezone
 from typing import List, Optional, Dict, Any
 import uuid
+
+logger = logging.getLogger(__name__)
 
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
@@ -45,8 +48,13 @@ def _decrypt_node_data(data: dict, uid: str) -> dict:
     if level in ('enhanced', 'e2ee'):
         if 'aliases' in data and isinstance(data['aliases'], str):
             try:
-                data['aliases'] = json.loads(encryption.decrypt(data['aliases'], uid))
-            except (json.JSONDecodeError, Exception):
+                decrypted = encryption.decrypt(data['aliases'], uid)
+                data['aliases'] = json.loads(decrypted)
+            except json.JSONDecodeError:
+                logger.warning(f"Failed to parse aliases JSON for node in user {uid}")
+                data['aliases'] = []
+            except Exception as e:
+                logger.error(f"Failed to decrypt aliases for node in user {uid}: {e}")
                 data['aliases'] = []
     return data
 

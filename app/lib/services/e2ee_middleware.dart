@@ -9,6 +9,7 @@
 
 import 'package:omi/services/e2ee_service.dart';
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/utils/logger.dart';
 
 class E2eeMiddleware {
   static final E2eeService _service = E2eeService();
@@ -33,7 +34,7 @@ class E2eeMiddleware {
       return await _service.decrypt(data);
     } catch (e) {
       // Surface decryption errors — don't silently show ciphertext
-      print('[E2EE Middleware] Decryption error: $e');
+      Logger.error('[E2EE Middleware] Decryption error: $e');
       return '[Encrypted — unable to decrypt. Check your recovery key.]';
     }
   }

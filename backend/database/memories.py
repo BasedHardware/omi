@@ -244,8 +244,10 @@ def edit_memory(uid: str, memory_id: str, value: str):
 
     doc_level = doc_snapshot.to_dict().get('data_protection_level', 'standard')
     content = value
-    if doc_level in ('enhanced', 'e2ee'):
+    if doc_level == 'enhanced':
+        # Server-side encryption for enhanced level
         content = encryption.encrypt(content, uid)
+    # For 'e2ee': content arrives pre-encrypted from the client middleware — store as-is
 
     memory_ref.update({'content': content, 'edited': True, 'updated_at': datetime.now(timezone.utc)})
 

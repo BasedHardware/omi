@@ -19,6 +19,8 @@ import 'dart:typed_data';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:pointycastle/export.dart';
 
+import 'package:omi/utils/logger.dart';
+
 class E2eeService {
   static final E2eeService _instance = E2eeService._internal();
   factory E2eeService() => _instance;
@@ -148,7 +150,7 @@ class E2eeService {
     } catch (e) {
       // GCM authentication failed — wrong key or corrupted data
       // This is a real error for E2EE data, not a graceful fallback case
-      print('[E2EE] Decryption failed — possible key mismatch or data corruption: $e');
+      Logger.error('[E2EE] Decryption failed — possible key mismatch or data corruption: $e');
       throw StateError('E2EE decryption failed. Your recovery key may not match. Error: $e');
     }
   }
