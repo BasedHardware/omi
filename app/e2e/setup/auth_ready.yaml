@@ -36,15 +36,14 @@ steps:
   # ── Chrome: Google Sign-In (system UI — UIAutomator) ──
   # Email field is auto-focused but has empty text/hint/desc in UIAutomator.
   # Use focused: true to type directly into the active EditText.
+  # NOTE: No screenshots on credential entry steps — credentials must not appear in reports
   - name: Enter email
     fill: { value: "$FLOW_WALKER_TEST_EMAIL", focused: true }
     wait: 1
-    screenshot: email-entered
 
   - name: Tap Next after email
     press: { text: "Next" }
     wait: 4
-    screenshot: password-page
 
   # ── Chrome: Password page ──
   - name: Enter password
