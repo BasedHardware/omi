@@ -206,27 +206,23 @@ def get_conversation_transcripts_by_models(conversation_id: str, uid: str = Depe
 def delete_conversation(
     conversation_id: str,
     background_tasks: BackgroundTasks,
-    delete_memories: bool = Query(False),
-    delete_action_items: bool = Query(False),
     uid: str = Depends(auth.get_current_user_uid),
 ):
-    logger.info(
-        f'delete_conversation {conversation_id} {uid} delete_memories={delete_memories} delete_action_items={delete_action_items}'
-    )
+    logger.info(f'delete_conversation {conversation_id} {uid}')
     conversations_db.delete_conversation(uid, conversation_id)
     delete_vector(uid, conversation_id)
 
     # Always delete audio files
     background_tasks.add_task(delete_conversation_audio_files, uid, conversation_id)
 
-    if delete_memories:
-        memory_ids = memories_db.get_memory_ids_for_conversation(uid, conversation_id)
-        memories_db.delete_memories_for_conversation(uid, conversation_id)
-        for memory_id in memory_ids:
-            background_tasks.add_task(delete_memory_vector, uid, memory_id)
+    # Always delete associated memories and their vectors
+    memory_ids = memories_db.get_memory_ids_for_conversation(uid, conversation_id)
+    memories_db.delete_memories_for_conversation(uid, conversation_id)
+    for memory_id in memory_ids:
+        background_tasks.add_task(delete_memory_vector, uid, memory_id)
 
-    if delete_action_items:
-        action_items_db.delete_action_items_for_conversation(uid, conversation_id)
+    # Always delete associated action items
+    action_items_db.delete_action_items_for_conversation(uid, conversation_id)
 
     return {"status": "Ok"}
 
