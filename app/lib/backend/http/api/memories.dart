@@ -92,8 +92,10 @@ Future<bool> deleteAllMemoriesServer() async {
 }
 
 Future<bool> editMemoryServer(String memoryId, String value) async {
+  // E2EE: encrypt memory content before sending to server
+  final encryptedValue = await E2eeMiddleware.encryptIfEnabled(value);
   var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v3/memories/$memoryId?value=$value',
+    url: '${Env.apiBaseUrl}v3/memories/$memoryId?value=${Uri.encodeComponent(encryptedValue)}',
     headers: {},
     method: 'PATCH',
     body: '',
