@@ -37,7 +37,7 @@ steps:
 
   - name: Verify profile page
     assert:
-      text_visible: ["Profile"]
+      interactive_count: { min: 3 }
     note: >
       Your Information: Name (chip), Email (chip), Language, Custom Vocabulary
       Voice & People: Speech Profile, Identifying Others
