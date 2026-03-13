@@ -44,4 +44,4 @@ steps:
   - name: Back to home
     back: true
     assert:
-      text_visible: ["Today"]
+      text_visible: ["Conversations"]
