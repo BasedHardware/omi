@@ -563,17 +563,6 @@ def delete_audio_chunks(uid: str, conversation_id: str, timestamps: List[float])
             blob = bucket.blob(chunk_path)
             if blob.exists():
                 blob.delete()
-    # Also delete any batch files with timestamp ranges that start with any of the given timestamps
-    prefix = f'chunks/{uid}/{conversation_id}/'
-    for blob in bucket.list_blobs(prefix=prefix):
-        filename = blob.name.split('/')[-1]
-        if '.batch.' not in filename:
-            continue
-        batch_start = filename.split('.batch.')[0].split('-')[0]
-        for timestamp in timestamps:
-            if batch_start == f'{timestamp:.3f}':
-                blob.delete()
-                break
 
         # Try batch blobs: exact single-timestamp batch (e.g. "1000.000.batch.bin")
         for batch_ext in ('.batch.enc', '.batch.bin'):
