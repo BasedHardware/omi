@@ -13,7 +13,7 @@ setup: normal
 steps:
   - name: Verify home screen with Ask Omi button
     assert:
-      text_visible: ["Today"]
+      text_visible: ["Conversations"]
     note: >
       Ask Omi button is a GestureDetector at y≈740-770, x>200.
       It's a purple pill-shaped button above the record button.
