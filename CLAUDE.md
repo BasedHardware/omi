@@ -201,6 +201,9 @@ clang-format -i <files>
 
 ### Rules
 - Always commit to the current branch — never switch branches.
+- Never push directly to `main`.
+- Never merge directly from a local branch. Land changes through a PR only.
+- When a change should go remote, create or use a feature branch, commit there, open/update a PR, and merge via the PR.
 - Never squash merge PRs — use regular merge.
 - Make individual commits per file, not bulk commits.
 - The pre-commit hook auto-formats staged code — no need to format manually before committing.

@@ -2461,12 +2461,10 @@ class AppState: ObservableObject {
         }
     }
 
-    /// Reset onboarding state and all TCC permissions, then restart the app
-    /// This clears UserDefaults onboarding keys and resets permissions so the user
-    /// can go through onboarding again with fresh permission prompts.
-    /// Performs thorough cleanup matching reset-and-run.sh behavior.
+    /// Reset onboarding state for the current app only, then restart.
+    /// This clears onboarding state without touching production data or system permissions.
     nonisolated func resetOnboardingAndRestart() {
-        log("Resetting onboarding (full cleanup)...")
+        log("Resetting onboarding state for current app...")
 
         // Clear onboarding-related UserDefaults keys (thread-safe, do first)
         let onboardingKeys = [
@@ -2503,92 +2501,10 @@ class AppState: ObservableObject {
             }
         }
 
-        // Clear all local user data: database, screenshots, videos, knowledge graph, etc.
-        let dataKeys = [
-            "omi.focus.sessions",
-            "omi.advice.history",
-            "TasksSavedFilterViews",
-        ]
-        for key in dataKeys {
-            UserDefaults.standard.removeObject(forKey: key)
-        }
-        log("Cleared local data UserDefaults keys")
-
-        // Close database and delete entire user data directory
-        Task {
-            await RewindDatabase.shared.close()
-            await RewindStorage.shared.reset()
-            await KnowledgeGraphStorage.shared.invalidateCache()
-
-            let fileManager = FileManager.default
-            let appSupport = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-            let userId = UserDefaults.standard.string(forKey: "auth_userId") ?? "anonymous"
-            let userDir = appSupport
-                .appendingPathComponent("Omi", isDirectory: true)
-                .appendingPathComponent("users", isDirectory: true)
-                .appendingPathComponent(userId, isDirectory: true)
-
-            if fileManager.fileExists(atPath: userDir.path) {
-                do {
-                    try fileManager.removeItem(at: userDir)
-                    log("Deleted user data directory: \(userDir.path)")
-                } catch {
-                    log("Failed to delete user data directory: \(error)")
-                }
-            }
-        }
-
-        // Also clear UserDefaults for both bundle IDs
-        let allKeys = onboardingKeys + dataKeys
-        if let prodDefaults = UserDefaults(suiteName: "com.omi.computer-macos") {
-            for key in allKeys {
-                prodDefaults.removeObject(forKey: key)
-            }
-        }
-        if let devDefaults = UserDefaults(suiteName: "com.omi.desktop-dev") {
-            for key in allKeys {
-                devDefaults.removeObject(forKey: key)
-            }
-        }
-
-        // Run all blocking Process calls on a background thread
+        // Restart off the main thread to avoid blocking the menu action path.
         DispatchQueue.global(qos: .utility).async { [self] in
-            // 1. Clean conflicting app bundles from Trash, DerivedData, DMG staging
-            cleanConflictingAppBundles()
-
-            // 2. Eject any mounted Omi DMG volumes
-            ejectMountedDMGVolumes()
-
-            // 3. Reset Launch Services database to clear stale registrations
-            resetLaunchServicesDatabase()
-
-            // 4. Ensure this app is the authoritative version in Launch Services
-            ScreenCaptureService.ensureLaunchServicesRegistration()
-
-            // 5. Reset ALL TCC permissions using tccutil for BOTH bundle IDs
-            let bundleIds = [
-                "com.omi.computer-macos",       // Production
-                "com.omi.desktop-dev"           // Development
-            ]
-
-            for id in bundleIds {
-                let process = Process()
-                process.executableURL = URL(fileURLWithPath: "/usr/bin/tccutil")
-                process.arguments = ["reset", "All", id]
-
-                do {
-                    try process.run()
-                    process.waitUntilExit()
-                    log("tccutil reset All for \(id) completed with exit code: \(process.terminationStatus)")
-                } catch {
-                    log("Failed to run tccutil for \(id): \(error)")
-                }
-            }
-
-            // 6. Also clean user TCC database directly via sqlite3
-            self.cleanUserTCCDatabase()
-
-            // 7. Restart the app
+            // Keep onboarding reset scoped to the current app instance.
+            // It must not mutate production defaults, shared local data, or TCC permissions.
             self.restartApp()
         }
     }
