@@ -319,18 +319,19 @@ def create_audio_files_from_chunks(
     if not chunks:
         return []
 
-    # Group chunks based on 30-second gap rule
+    # Group chunks based on gap rule (90s threshold accommodates both 5s and 60s chunk durations)
     audio_files = []
     current_group = []
+    gap_threshold = 90  # seconds — must exceed max chunk duration (60s) to avoid false splits
 
     for i, chunk in enumerate(chunks):
         if not current_group:
             current_group.append(chunk)
         else:
-            # Check if there's a gap > 30 seconds between chunks
+            # Check if there's a gap between chunks exceeding the threshold
             prev_chunk = current_group[-1]
             time_gap = chunk['timestamp'] - prev_chunk['timestamp']
-            if time_gap > 30:
+            if time_gap > gap_threshold:
                 # Gap detected, finalize current group
                 audio_file = _finalize_audio_file_group(uid, conversation_id, current_group, audio_files)
                 if audio_file:
@@ -372,11 +373,13 @@ def _finalize_audio_file_group(
     # Extract timestamps
     timestamps = [chunk['timestamp'] for chunk in chunk_group]
 
-    # Calculate started_at and duration from timestamps
+    # Calculate started_at and duration from timestamps and blob sizes
     started_at = datetime.fromtimestamp(chunk_group[0]['timestamp'], tz=timezone.utc)
     last_chunk_start = datetime.fromtimestamp(chunk_group[-1]['timestamp'], tz=timezone.utc)
-    # Add 5 seconds for the last chunk's duration
-    duration = (last_chunk_start - started_at).total_seconds() + 5.0
+    # Estimate last chunk duration from blob size (PCM16 mono at 8kHz = 16000 bytes/sec)
+    last_chunk_size = chunk_group[-1].get('size', 0)
+    last_chunk_duration = last_chunk_size / 16000.0 if last_chunk_size > 0 else 5.0
+    duration = (last_chunk_start - started_at).total_seconds() + last_chunk_duration
 
     return AudioFile(
         id=file_id,
