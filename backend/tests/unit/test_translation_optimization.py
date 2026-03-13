@@ -439,6 +439,25 @@ class TestShouldPersistTranslation:
         """Both empty should be treated as no-op."""
         assert should_persist_translation("", "", "en", "en") is False
 
+    def test_long_english_correctly_detected_not_persisted(self):
+        """Long English text (correctly detected by langdetect) returning identical should not persist."""
+        assert should_persist_translation("Two three four five.", "Two three four five.", "en", "en") is False
+
+    def test_question_english_not_persisted(self):
+        """English questions returning identical should not persist."""
+        assert (
+            should_persist_translation("Hello? Can you hear? Yes? No?", "Hello? Can you hear? Yes? No?", "en", "en")
+            is False
+        )
+
+    def test_case_variant_locale_tags_not_persisted(self):
+        """Case/locale variants like EN-us vs en-US should normalize and match."""
+        assert should_persist_translation("Hello world", "Hello world", "EN-us", "en-US") is False
+
+    def test_unchanged_text_mismatched_detected_lang_not_persisted(self):
+        """Unchanged text with detected 'fr' should still not persist (conservative: text unchanged = no-op)."""
+        assert should_persist_translation("Transcription service.", "Transcription service.", "fr", "en") is False
+
 
 class TestTranslateSegmentGuardWired:
     """Regression test: verify should_persist_translation is wired into transcribe.py.
