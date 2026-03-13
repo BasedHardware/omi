@@ -11,14 +11,12 @@ struct OnboardingFloatingBarDemoView: View {
 
     @State private var barActivated = false
     @State private var showContinue = false
-    @State private var pulseAnimation = false
-    @State private var keyMonitor: Any?
 
     var body: some View {
         VStack(spacing: 0) {
             // Header
             HStack {
-                Text("Ask omi anything")
+                Text("Ask omi which Mac fits you")
                     .font(.system(size: 18, weight: .semibold))
                     .foregroundColor(OmiColors.textPrimary)
 
@@ -40,38 +38,21 @@ struct OnboardingFloatingBarDemoView: View {
             Spacer()
 
             // Content
-            VStack(spacing: 28) {
-                // Icon with glow
-                ZStack {
-                    Circle()
-                        .fill(OmiColors.purplePrimary.opacity(0.12))
-                        .frame(width: 96, height: 96)
-                        .blur(radius: 18)
-                        .scaleEffect(pulseAnimation ? 1.15 : 1.0)
-                        .animation(.easeInOut(duration: 2).repeatForever(autoreverses: true), value: pulseAnimation)
+            VStack(spacing: 24) {
+                MacLineupPreview()
+                    .frame(maxWidth: 980)
 
-                    Image(systemName: "rectangle.and.text.magnifyingglass")
-                        .font(.system(size: 40))
-                        .foregroundStyle(
-                            LinearGradient(
-                                colors: [OmiColors.purplePrimary, OmiColors.purpleSecondary],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            )
-                        )
-                }
-                .onAppear { pulseAnimation = true }
-
-                VStack(spacing: 10) {
+                VStack(spacing: 12) {
                     Text("The Floating Bar")
                         .font(.system(size: 24, weight: .bold))
                         .foregroundColor(OmiColors.textPrimary)
 
-                    Text("Ask anything and it responds using\neverything it knows about you.")
+                    Text("Try asking: Which computer suits me best?")
                         .font(.system(size: 14))
                         .foregroundColor(OmiColors.textSecondary)
                         .multilineTextAlignment(.center)
                         .lineSpacing(4)
+                        .frame(maxWidth: 560)
                 }
 
                 if !barActivated {
@@ -100,6 +81,7 @@ struct OnboardingFloatingBarDemoView: View {
                         .transition(.opacity)
                 }
             }
+            .padding(.top, 88)
             .padding(.horizontal, 40)
 
             Spacer()
@@ -125,22 +107,26 @@ struct OnboardingFloatingBarDemoView: View {
         .onAppear {
             // Set up the real floating bar (creates the window if needed)
             FloatingControlBarManager.shared.setup(appState: appState, chatProvider: chatProvider)
-            // Unregister global shortcuts so we handle Cmd+Enter ourselves
-            GlobalShortcutManager.shared.unregisterShortcuts()
-            installKeyMonitor()
+            // Use the same global shortcut flow as the normal app so onboarding
+            // behaves like production when the user presses Cmd+Enter.
+            GlobalShortcutManager.shared.registerShortcuts()
         }
         .onDisappear {
-            removeKeyMonitor()
             // Close the AI conversation panel on the floating bar so the next step starts clean
             if FloatingControlBarManager.shared.barState?.showingAIConversation == true {
                 FloatingControlBarManager.shared.toggleAIInput()
             }
-            // Re-register global shortcuts for subsequent steps and normal use
-            GlobalShortcutManager.shared.registerShortcuts()
         }
         .onChange(of: barActivated) { _, activated in
             if activated {
                 Task { await waitForResponse() }
+            }
+        }
+        .onReceive(Timer.publish(every: 0.25, on: .main, in: .common).autoconnect()) { _ in
+            guard !barActivated,
+                  FloatingControlBarManager.shared.barState?.showingAIConversation == true else { return }
+            withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+                barActivated = true
             }
         }
     }
@@ -169,32 +155,6 @@ struct OnboardingFloatingBarDemoView: View {
         }
     }
 
-    // MARK: - Key Monitor
-
-    private func installKeyMonitor() {
-        keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
-            let mods = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
-            if mods == .command && event.keyCode == 36 { // 36 = Return
-                if !barActivated {
-                    // Activate the real floating bar's AI input
-                    FloatingControlBarManager.shared.openAIInput()
-                    withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
-                        barActivated = true
-                    }
-                    return nil
-                }
-            }
-            return event
-        }
-    }
-
-    private func removeKeyMonitor() {
-        if let monitor = keyMonitor {
-            NSEvent.removeMonitor(monitor)
-            keyMonitor = nil
-        }
-    }
-
     // MARK: - Key Cap
 
     private func keyCap(_ key: String) -> some View {
@@ -212,5 +172,33 @@ struct OnboardingFloatingBarDemoView: View {
                     )
                     .shadow(color: .black.opacity(0.2), radius: 1, x: 0, y: 1)
             )
+    }
+}
+
+private struct MacLineupPreview: View {
+    private static let lineupImage: NSImage? = {
+        guard let url = Bundle.resourceBundle.url(forResource: "onboarding_mac_lineup", withExtension: "png") else { return nil }
+        return NSImage(contentsOf: url)
+    }()
+
+    var body: some View {
+        Group {
+            if let nsImage = Self.lineupImage {
+                Image(nsImage: nsImage)
+                    .resizable()
+                    .interpolation(.high)
+                    .scaledToFit()
+                    .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+            } else {
+                RoundedRectangle(cornerRadius: 24)
+                    .fill(Color.white.opacity(0.06))
+                    .frame(height: 280)
+                    .overlay(
+                        Text("Mac lineup image unavailable")
+                            .font(.system(size: 14, weight: .medium))
+                            .foregroundColor(OmiColors.textTertiary)
+                    )
+            }
+        }
     }
 }
