@@ -70,9 +70,9 @@ class _DataProtectionSectionState extends State<DataProtectionSection> {
                 text: '${context.l10n.e2eeKeyWarning}\n',
                 style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.orangeAccent),
               ),
-              const TextSpan(
+              TextSpan(
                 text: context.l10n.e2eeBackupReminder,
-                style: TextStyle(fontStyle: FontStyle.italic),
+                style: const TextStyle(fontStyle: FontStyle.italic),
               ),
             ],
           ),
@@ -121,11 +121,11 @@ class _DataProtectionSectionState extends State<DataProtectionSection> {
       builder: (ctx) => AlertDialog(
         backgroundColor: const Color(0xFF2c2c2e),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-        title: const Row(
+        title: Row(
           children: [
-            Icon(Icons.key, color: Colors.orangeAccent),
-            SizedBox(width: 10),
-            Text(context.l10n.recoveryKey, style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+            const Icon(Icons.key, color: Colors.orangeAccent),
+            const SizedBox(width: 10),
+            Text(context.l10n.recoveryKey, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
           ],
         ),
         content: Column(
