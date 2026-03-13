@@ -458,6 +458,49 @@ class TestShouldPersistTranslation:
         """Unchanged text with detected 'fr' should still not persist (conservative: text unchanged = no-op)."""
         assert should_persist_translation("Transcription service.", "Transcription service.", "fr", "en") is False
 
+    def test_short_foreign_word_translated_to_english_persisted(self):
+        """Short foreign word like 'Bonjour.' translated to 'Hello.' must persist (real translation)."""
+        assert should_persist_translation("Bonjour.", "Hello.", "fr", "en") is True
+        assert should_persist_translation("Hola.", "Hello.", "es", "en") is True
+        assert should_persist_translation("Danke.", "Thank you.", "de", "en") is True
+        assert should_persist_translation("Merci.", "Thank you.", "fr", "en") is True
+
+    def test_multiple_short_foreign_sentences_translated_persisted(self):
+        """Multiple short foreign sentences in one segment must persist when translated."""
+        assert should_persist_translation("Bonjour. Comment allez-vous?", "Hello. How are you?", "fr", "en") is True
+        assert should_persist_translation("Hola. Gracias. Adiós.", "Hello. Thank you. Goodbye.", "es", "en") is True
+        assert should_persist_translation("Oui. Non. Merci.", "Yes. No. Thank you.", "fr", "en") is True
+
+
+class TestShortForeignTextLangdetectPreFilter:
+    """Verify that langdetect does NOT misdetect short foreign words as English (target).
+
+    If langdetect detected foreign text as English, is_in_target_language() would return True
+    and the segment would be skipped entirely (never sent to API). These tests verify that
+    short foreign words are NOT skipped by the pre-filter.
+    """
+
+    def test_short_foreign_words_not_detected_as_english(self):
+        """Short foreign words should not be detected as 'en' by langdetect."""
+        cache = TranscriptSegmentLanguageCache()
+        foreign_words = [
+            ("Bonjour.", "seg-fr"),
+            ("Hola.", "seg-es"),
+            ("Danke.", "seg-de"),
+            ("Gracias.", "seg-es2"),
+        ]
+        for text, seg_id in foreign_words:
+            result = cache.is_in_target_language(seg_id, text, "en")
+            assert result is False, f"'{text}' was incorrectly detected as English — would skip translation"
+
+    def test_multiple_short_foreign_sentences_not_detected_as_english(self):
+        """Multiple short foreign sentences should not be detected as 'en'."""
+        cache = TranscriptSegmentLanguageCache()
+        result = cache.is_in_target_language("seg-multi-fr", "Bonjour. Merci. Au revoir.", "en")
+        assert result is False, "Multiple French sentences incorrectly detected as English"
+        result = cache.is_in_target_language("seg-multi-es", "Hola. Gracias. Adiós.", "en")
+        assert result is False, "Multiple Spanish sentences incorrectly detected as English"
+
 
 class TestTranslateSegmentGuardWired:
     """Regression test: verify should_persist_translation is wired into transcribe.py.
