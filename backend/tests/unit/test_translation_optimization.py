@@ -70,7 +70,7 @@ from utils.translation import (
     TRANSLATION_CACHE_TTL,
     MAX_BATCH_SIZE,
 )
-from utils.translation_cache import TranscriptSegmentLanguageCache
+from utils.translation_cache import TranscriptSegmentLanguageCache, should_persist_translation
 
 
 class TestSplitIntoSentences:
@@ -393,6 +393,23 @@ class TestTranscriptSegmentLanguageCache:
         cache.cache["seg1"] = True
         cache.delete_cache("seg1")
         assert "seg1" not in cache.cache
+
+
+class TestShouldPersistTranslation:
+    def test_noop_target_language_translation_not_persisted(self):
+        """If text is unchanged and detected language matches target, don't persist translation."""
+        should_persist = should_persist_translation("Hello world", "Hello world", "en", "en-US")
+        assert should_persist is False
+
+    def test_unchanged_text_without_detection_not_persisted(self):
+        """If text is unchanged and detection is missing, still treat as no-op."""
+        should_persist = should_persist_translation("Hello world", "Hello world", "", "en")
+        assert should_persist is False
+
+    def test_mixed_language_translation_still_persisted(self):
+        """Even with dominant detected target language, changed text must be persisted."""
+        should_persist = should_persist_translation("Hello. Hola.", "Hello. Hello.", "en", "en")
+        assert should_persist is True
 
 
 class TestRedisCacheTTL:
