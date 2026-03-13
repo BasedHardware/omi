@@ -4,38 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 
-Future<bool> showDeleteConversationDialog(BuildContext context) async {
-  return await showDialog<bool>(
-        context: context,
-        builder: (ctx) {
-          final actions = [
-            TextButton(
-              onPressed: () => Navigator.of(ctx).pop(false),
-              child: Text(context.l10n.cancel, style: const TextStyle(color: Colors.white)),
-            ),
-            TextButton(
-              onPressed: () => Navigator.of(ctx).pop(true),
-              child: Text(context.l10n.confirm, style: const TextStyle(color: Colors.red)),
-            ),
-          ];
-
-          if (PlatformService.isApple) {
-            return CupertinoAlertDialog(
-              title: Text(context.l10n.deleteConversationTitle),
-              content: Text(context.l10n.deleteConversationMessage),
-              actions: actions,
-            );
-          }
-          return AlertDialog(
-            title: Text(context.l10n.deleteConversationTitle),
-            content: Text(context.l10n.deleteConversationMessage),
-            actions: actions,
-          );
-        },
-      ) ??
-      false;
-}
-
 getDialog(
   BuildContext context,
   Function onCancel,
