@@ -85,12 +85,12 @@ def _prepare_conversation_for_write(data: Dict[str, Any], uid: str, level: str) 
         compressed_segments_bytes = zlib.compress(segments_json.encode('utf-8'))
         data['transcript_segments_compressed'] = True
 
-        if level == 'enhanced':
+        if level in ('enhanced', 'e2ee'):
+            # For both 'enhanced' and 'e2ee': server-side encrypt transcript segments.
+            # Conversations are transcribed server-side (Deepgram), so the server already
+            # sees plaintext. We encrypt at rest for both levels.
             encrypted_segments = encryption.encrypt(compressed_segments_bytes.hex(), uid)
             data['transcript_segments'] = encrypted_segments
-        elif level == 'e2ee':
-            # E2EE: compress but don't server-encrypt — client handles encryption
-            data['transcript_segments'] = compressed_segments_bytes
         else:
             data['transcript_segments'] = compressed_segments_bytes
     return data
@@ -103,11 +103,10 @@ def _prepare_conversation_for_read(conversation_data: Optional[Dict[str, Any]], 
     data = copy.deepcopy(conversation_data)
     level = data.get('data_protection_level')
 
-    if level == 'enhanced':
+    if level in ('enhanced', 'e2ee'):
+        # Both levels use server-side encryption for conversations
+        # (server sees plaintext during Deepgram transcription anyway)
         return _decrypt_conversation_data(data, uid)
-
-    # E2EE: data is client-encrypted — decompress if needed but don't server-decrypt
-    # The client will handle decryption of individual segment text fields
 
     # Handle standard level with potential compression
     if data.get('transcript_segments_compressed'):

@@ -7,6 +7,16 @@ import 'package:omi/providers/user_provider.dart';
 import 'package:omi/services/e2ee_service.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
+// TODO(atlas): Move these to ARB l10n files
+const _kEnableE2ee = 'Enable E2EE';
+const _kRecoveryKey = 'Recovery Key';
+const _kSaveKeyMessage = 'Save this key somewhere safe. You will need it to recover your data if you switch devices.';
+const _kCopyToClipboard = 'Copy to Clipboard';
+const _kSavedMyKey = "I've Saved My Key";
+const _kShowRecoveryKey = 'Show Recovery Key';
+const _kKeyWarning = '⚠️ If you lose your recovery key, your data cannot be recovered.';
+const _kBackupReminder = 'Make sure to back up your key after enabling.';
+
 extension StringExtension on String {
   String capitalize() {
     if (isEmpty) {
@@ -57,12 +67,12 @@ class _DataProtectionSectionState extends State<DataProtectionSection> {
               ),
               TextSpan(text: '${context.l10n.e2eeTradeoff1}\n'),
               TextSpan(text: '${context.l10n.e2eeTradeoff2}\n\n'),
-              const TextSpan(
-                text: '⚠️ If you lose your recovery key, your data cannot be recovered.\n',
-                style: TextStyle(fontWeight: FontWeight.bold, color: Colors.orangeAccent),
+              TextSpan(
+                text: '$_kKeyWarning\n',
+                style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.orangeAccent),
               ),
               const TextSpan(
-                text: 'Make sure to back up your key after enabling.',
+                text: _kBackupReminder,
                 style: TextStyle(fontStyle: FontStyle.italic),
               ),
             ],
@@ -83,7 +93,7 @@ class _DataProtectionSectionState extends State<DataProtectionSection> {
               backgroundColor: Colors.deepPurple,
               foregroundColor: Colors.white,
             ),
-            child: const Text('Enable E2EE'),
+            child: const Text(_kEnableE2ee),
           ),
         ],
       ),
@@ -116,7 +126,7 @@ class _DataProtectionSectionState extends State<DataProtectionSection> {
           children: [
             Icon(Icons.key, color: Colors.orangeAccent),
             SizedBox(width: 10),
-            Text('Recovery Key', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+            Text(_kRecoveryKey, style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
           ],
         ),
         content: Column(
@@ -124,7 +134,7 @@ class _DataProtectionSectionState extends State<DataProtectionSection> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Save this key somewhere safe. You will need it to recover your data if you switch devices.',
+              _kSaveKeyMessage,
               style: TextStyle(color: Colors.white.withOpacity(0.8), height: 1.4),
             ),
             const SizedBox(height: 16),
@@ -155,7 +165,7 @@ class _DataProtectionSectionState extends State<DataProtectionSection> {
                   );
                 },
                 icon: const Icon(Icons.copy, size: 16, color: Colors.deepPurple),
-                label: const Text('Copy to Clipboard', style: TextStyle(color: Colors.deepPurple)),
+                label: const Text(_kCopyToClipboard, style: TextStyle(color: Colors.deepPurple)),
               ),
             ),
           ],
@@ -167,7 +177,7 @@ class _DataProtectionSectionState extends State<DataProtectionSection> {
               backgroundColor: Colors.deepPurple,
               foregroundColor: Colors.white,
             ),
-            child: const Text('I\'ve Saved My Key'),
+            child: const Text(_kSavedMyKey),
           ),
         ],
       ),
@@ -447,7 +457,7 @@ class _DataProtectionSectionState extends State<DataProtectionSection> {
           TextButton.icon(
             onPressed: () => _showExportKeyDialog(context),
             icon: const Icon(Icons.key, size: 16, color: Colors.deepPurple),
-            label: const Text('Show Recovery Key', style: TextStyle(color: Colors.deepPurple, fontSize: 13)),
+            label: const Text(_kShowRecoveryKey, style: TextStyle(color: Colors.deepPurple, fontSize: 13)),
           ),
         ],
       ),

@@ -24,6 +24,10 @@ class E2eeService {
   factory E2eeService() => _instance;
   E2eeService._internal();
 
+  // TODO(security): Migrate key storage to flutter_secure_storage (iOS Keychain / Android Keystore)
+  // for protection against rooted device extraction. SharedPreferences relies on OS app sandbox
+  // encryption which is sufficient for non-rooted devices but not for high-threat models.
+  // Tracked as a follow-up security hardening task.
   static const String _keyPrefKey = 'e2ee_encryption_key';
 
   Uint8List? _cachedKey;
@@ -133,7 +137,8 @@ class E2eeService {
       return utf8.decode(decrypted);
     } catch (e) {
       // Decryption failed — data may not be encrypted or key mismatch
-      // Return original to avoid data loss
+      // Log for debugging but return original to avoid data loss
+      print('[E2EE] Decryption failed: $e');
       return encrypted;
     }
   }

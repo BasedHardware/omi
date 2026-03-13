@@ -8,7 +8,8 @@ import os
 import pytz
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
+import re
 
 from database import (
     conversations as conversations_db,
@@ -37,6 +38,7 @@ from database.users import (
     get_user_transcription_preferences,
     set_user_transcription_preferences,
 )
+from database.users import set_e2ee_key_hash, get_e2ee_key_hash
 from utils.stt.streaming import deepgram_nova3_multi_languages
 from database.users import *
 from models.conversation import Geolocation, Conversation
@@ -636,23 +638,28 @@ def finalize_migration_request(request: MigrationTargetRequest, uid: str = Depen
 class E2eeKeyHashRequest(BaseModel):
     key_hash: str
 
+    @field_validator('key_hash')
+    @classmethod
+    def must_be_sha256_hex(cls, v: str) -> str:
+        if not re.fullmatch(r'[0-9a-f]{64}', v):
+            raise ValueError('key_hash must be a 64-character lowercase hex SHA-256 digest')
+        return v
+
 
 @router.post('/v1/users/e2ee/key-hash', tags=['v1'])
-def store_e2ee_key_hash(request: E2eeKeyHashRequest, uid: str = Depends(auth.get_current_user_uid)):
+def store_e2ee_key_hash_endpoint(request: E2eeKeyHashRequest, uid: str = Depends(auth.get_current_user_uid)):
     """Store a hash of the user's E2EE public key for verification purposes.
 
     The server never sees the actual encryption key — only a SHA-256 hash
     so the client can verify it has the correct key on a new device.
     """
-    from database.users import set_e2ee_key_hash
     set_e2ee_key_hash(uid, request.key_hash)
     return {'status': 'ok'}
 
 
 @router.get('/v1/users/e2ee/key-hash', tags=['v1'])
-def get_e2ee_key_hash(uid: str = Depends(auth.get_current_user_uid)):
+def get_e2ee_key_hash_endpoint(uid: str = Depends(auth.get_current_user_uid)):
     """Retrieve the stored E2EE key hash for verification."""
-    from database.users import get_e2ee_key_hash
     key_hash = get_e2ee_key_hash(uid)
     return {'key_hash': key_hash}
 

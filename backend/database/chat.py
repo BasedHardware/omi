@@ -42,9 +42,11 @@ def _decrypt_chat_data(chat_data: Dict[str, Any], uid: str) -> Dict[str, Any]:
 
 
 def _prepare_data_for_write(data: Dict[str, Any], uid: str, level: str) -> Dict[str, Any]:
-    if level == 'enhanced':
+    if level in ('enhanced', 'e2ee'):
+        # For both 'enhanced' and 'e2ee': server-side encrypt chat messages.
+        # Chat messages are processed by the LLM server-side, so the server already
+        # sees plaintext. We encrypt at rest for both levels.
         return _encrypt_chat_data(data, uid)
-    # E2EE: data arrives pre-encrypted from the client — store as-is
     return data
 
 
@@ -53,9 +55,9 @@ def _prepare_message_for_read(message_data: Optional[Dict[str, Any]], uid: str) 
         return None
 
     level = message_data.get('data_protection_level')
-    if level == 'enhanced':
+    if level in ('enhanced', 'e2ee'):
+        # Both levels use server-side encryption for chat (LLM sees plaintext anyway)
         return _decrypt_chat_data(message_data, uid)
-    # E2EE: data is client-encrypted — return as-is for client to decrypt
     return message_data
 
 

@@ -9,6 +9,13 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+# E2EE Architecture Notes:
+# - For memories: true client-side E2EE. Content encrypted on-device before API call.
+# - For conversations & chat: hybrid model. Server processes plaintext (Deepgram transcription,
+#   LLM chat) then encrypts at rest using server-side encryption even at 'e2ee' level.
+#   This is an acknowledged security boundary — the server sees plaintext during processing
+#   but stored data is encrypted. Future: on-device transcription would enable true E2EE.
+
 # Load the master secret from environment variables. This must be a securely managed 32-byte key.
 ENCRYPTION_SECRET = os.getenv('ENCRYPTION_SECRET', '').encode('utf-8')
 if not ENCRYPTION_SECRET or len(ENCRYPTION_SECRET) < 32:
@@ -28,19 +35,6 @@ def derive_key(uid: str) -> bytes:
         info=b'user-data-encryption',
     )
     return hkdf.derive(ENCRYPTION_SECRET)
-
-
-def is_e2ee_level(uid: str) -> bool:
-    """Check if the user's protection level is 'e2ee'.
-
-    When E2EE is active, the server should NOT encrypt/decrypt data —
-    it arrives pre-encrypted from the client and is stored as-is.
-    """
-    try:
-        from database.users import get_data_protection_level
-        return get_data_protection_level(uid) == 'e2ee'
-    except Exception:
-        return False
 
 
 def encrypt(data: str, uid: str) -> str:
