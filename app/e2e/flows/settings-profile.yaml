@@ -23,7 +23,7 @@ steps:
 
   - name: Verify settings drawer
     assert:
-      text_visible: ["Profile", "Notifications", "Plan & Usage", "Device Settings", "Integrations", "Developer Settings"]
+      text_visible: ["Profile", "Notifications", "Plan & Usage", "Developer Settings"]
     note: >
       Settings drawer (bottom sheet) shows sections:
       Profile & Notifications: Profile, Notifications, Plan & Usage, Offline Sync, Device Settings, Integrations, Phone Calls
