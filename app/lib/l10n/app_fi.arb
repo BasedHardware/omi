@@ -2748,6 +2748,10 @@
     "safelyBackedUp": "Turvallisesti varmuuskopioitu puhelimeesi",
     "notYetSynced": "Ei vielä synkronoitu puhelimeesi",
     "clearAll": "Tyhjennä kaikki",
+    "renameDevice": "Nimeä laite uudelleen",
+    "enterDeviceName": "Anna laitteen nimi",
+    "deviceNameCannotBeEmpty": "Laitteen nimi ei voi olla tyhjä",
+    "deviceNameUpdated": "Laitteen nimi päivitetty",
     "phoneKeypad": "Näppäimistö",
     "phoneHideKeypad": "Piilota näppäimistö"
 }

@@ -8551,16 +8551,16 @@ class AppLocalizationsFi extends AppLocalizations {
   String get notYetSynced => 'Ei vielä synkronoitu puhelimeesi';
 
   @override
-  String get renameDevice => 'Rename Device';
+  String get renameDevice => 'Nimeä laite uudelleen';
 
   @override
-  String get enterDeviceName => 'Enter device name';
+  String get enterDeviceName => 'Anna laitteen nimi';
 
   @override
-  String get deviceNameCannotBeEmpty => 'Device name cannot be empty';
+  String get deviceNameCannotBeEmpty => 'Laitteen nimi ei voi olla tyhjä';
 
   @override
-  String get deviceNameUpdated => 'Device name updated';
+  String get deviceNameUpdated => 'Laitteen nimi päivitetty';
 
   @override
   String get clearAll => 'Tyhjennä kaikki';

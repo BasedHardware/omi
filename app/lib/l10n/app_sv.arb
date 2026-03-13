@@ -2748,6 +2748,10 @@
     "safelyBackedUp": "Säkerhetskopierat till din telefon",
     "notYetSynced": "Inte synkroniserat med din telefon ännu",
     "clearAll": "Rensa allt",
+    "renameDevice": "Byt namn på enhet",
+    "enterDeviceName": "Ange enhetsnamn",
+    "deviceNameCannotBeEmpty": "Enhetsnamn kan inte vara tomt",
+    "deviceNameUpdated": "Enhetsnamn uppdaterat",
     "phoneKeypad": "Knappsats",
     "phoneHideKeypad": "Dölj knappsats"
 }

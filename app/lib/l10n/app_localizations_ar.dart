@@ -8494,16 +8494,16 @@ class AppLocalizationsAr extends AppLocalizations {
   String get notYetSynced => 'لم تتم المزامنة بعد مع هاتفك';
 
   @override
-  String get renameDevice => 'Rename Device';
+  String get renameDevice => 'إعادة تسمية الجهاز';
 
   @override
-  String get enterDeviceName => 'Enter device name';
+  String get enterDeviceName => 'أدخل اسم الجهاز';
 
   @override
-  String get deviceNameCannotBeEmpty => 'Device name cannot be empty';
+  String get deviceNameCannotBeEmpty => 'لا يمكن أن يكون اسم الجهاز فارغًا';
 
   @override
-  String get deviceNameUpdated => 'Device name updated';
+  String get deviceNameUpdated => 'تم تحديث اسم الجهاز';
 
   @override
   String get clearAll => 'مسح الكل';

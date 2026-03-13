@@ -2748,6 +2748,10 @@
     "safelyBackedUp": "Veilig opgeslagen op uw telefoon",
     "notYetSynced": "Nog niet gesynchroniseerd met uw telefoon",
     "clearAll": "Alles wissen",
+    "renameDevice": "Apparaat hernoemen",
+    "enterDeviceName": "Voer apparaatnaam in",
+    "deviceNameCannotBeEmpty": "Apparaatnaam mag niet leeg zijn",
+    "deviceNameUpdated": "Apparaatnaam bijgewerkt",
     "phoneKeypad": "Toetsenbord",
     "phoneHideKeypad": "Toetsenbord verbergen"
 }

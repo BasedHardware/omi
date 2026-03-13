@@ -8580,16 +8580,16 @@ class AppLocalizationsNl extends AppLocalizations {
   String get notYetSynced => 'Nog niet gesynchroniseerd met uw telefoon';
 
   @override
-  String get renameDevice => 'Rename Device';
+  String get renameDevice => 'Apparaat hernoemen';
 
   @override
-  String get enterDeviceName => 'Enter device name';
+  String get enterDeviceName => 'Voer apparaatnaam in';
 
   @override
-  String get deviceNameCannotBeEmpty => 'Device name cannot be empty';
+  String get deviceNameCannotBeEmpty => 'Apparaatnaam mag niet leeg zijn';
 
   @override
-  String get deviceNameUpdated => 'Device name updated';
+  String get deviceNameUpdated => 'Apparaatnaam bijgewerkt';
 
   @override
   String get clearAll => 'Alles wissen';

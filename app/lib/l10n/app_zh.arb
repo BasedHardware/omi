@@ -2770,6 +2770,10 @@
     "safelyBackedUp": "已安全备份到您的手机",
     "notYetSynced": "尚未同步到您的手机",
     "clearAll": "全部清除",
+    "renameDevice": "重命名设备",
+    "enterDeviceName": "输入设备名称",
+    "deviceNameCannotBeEmpty": "设备名称不能为空",
+    "deviceNameUpdated": "设备名称已更新",
     "phoneKeypad": "键盘",
     "phoneHideKeypad": "隐藏键盘"
 }

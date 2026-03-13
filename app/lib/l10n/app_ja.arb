@@ -2749,6 +2749,10 @@
     "safelyBackedUp": "スマホに安全にバックアップ済み",
     "notYetSynced": "まだスマホに同期されていません",
     "clearAll": "すべて削除",
+    "renameDevice": "デバイス名を変更",
+    "enterDeviceName": "デバイス名を入力",
+    "deviceNameCannotBeEmpty": "デバイス名は空にできません",
+    "deviceNameUpdated": "デバイス名を更新しました",
     "phoneKeypad": "キーパッド",
     "phoneHideKeypad": "キーパッドを隠す"
 }

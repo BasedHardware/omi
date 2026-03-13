@@ -8556,16 +8556,16 @@ class AppLocalizationsSv extends AppLocalizations {
   String get notYetSynced => 'Inte synkroniserat med din telefon ännu';
 
   @override
-  String get renameDevice => 'Rename Device';
+  String get renameDevice => 'Byt namn på enhet';
 
   @override
-  String get enterDeviceName => 'Enter device name';
+  String get enterDeviceName => 'Ange enhetsnamn';
 
   @override
-  String get deviceNameCannotBeEmpty => 'Device name cannot be empty';
+  String get deviceNameCannotBeEmpty => 'Enhetsnamn kan inte vara tomt';
 
   @override
-  String get deviceNameUpdated => 'Device name updated';
+  String get deviceNameUpdated => 'Enhetsnamn uppdaterat';
 
   @override
   String get clearAll => 'Rensa allt';

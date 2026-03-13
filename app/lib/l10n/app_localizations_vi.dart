@@ -8555,16 +8555,16 @@ class AppLocalizationsVi extends AppLocalizations {
   String get notYetSynced => 'Chưa đồng bộ với điện thoại của bạn';
 
   @override
-  String get renameDevice => 'Rename Device';
+  String get renameDevice => 'Đổi tên thiết bị';
 
   @override
-  String get enterDeviceName => 'Enter device name';
+  String get enterDeviceName => 'Nhập tên thiết bị';
 
   @override
-  String get deviceNameCannotBeEmpty => 'Device name cannot be empty';
+  String get deviceNameCannotBeEmpty => 'Tên thiết bị không được để trống';
 
   @override
-  String get deviceNameUpdated => 'Device name updated';
+  String get deviceNameUpdated => 'Đã cập nhật tên thiết bị';
 
   @override
   String get clearAll => 'Xóa tất cả';

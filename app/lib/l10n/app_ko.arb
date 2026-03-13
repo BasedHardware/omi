@@ -2748,6 +2748,10 @@
     "safelyBackedUp": "휴대폰에 안전하게 백업됨",
     "notYetSynced": "아직 휴대폰에 동기화되지 않음",
     "clearAll": "모두 지우기",
+    "renameDevice": "기기 이름 변경",
+    "enterDeviceName": "기기 이름 입력",
+    "deviceNameCannotBeEmpty": "기기 이름은 비워둘 수 없습니다",
+    "deviceNameUpdated": "기기 이름이 업데이트되었습니다",
     "phoneKeypad": "키패드",
     "phoneHideKeypad": "키패드 숨기기"
 }

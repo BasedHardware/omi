@@ -2748,6 +2748,10 @@
     "safelyBackedUp": "Saugiai nukopijuota į jūsų telefoną",
     "notYetSynced": "Dar nesinchronizuota su jūsų telefonu",
     "clearAll": "Išvalyti viską",
+    "renameDevice": "Pervadinti įrenginį",
+    "enterDeviceName": "Įveskite įrenginio pavadinimą",
+    "deviceNameCannotBeEmpty": "Įrenginio pavadinimas negali būti tuščias",
+    "deviceNameUpdated": "Įrenginio pavadinimas atnaujintas",
     "phoneKeypad": "Klaviatūra",
     "phoneHideKeypad": "Slėpti klaviatūrą"
 }

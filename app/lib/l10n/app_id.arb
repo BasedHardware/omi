@@ -2790,6 +2790,10 @@
     "safelyBackedUp": "Dicadangkan dengan aman ke ponsel Anda",
     "notYetSynced": "Belum disinkronkan ke ponsel Anda",
     "clearAll": "Hapus semua",
+    "renameDevice": "Ganti nama perangkat",
+    "enterDeviceName": "Masukkan nama perangkat",
+    "deviceNameCannotBeEmpty": "Nama perangkat tidak boleh kosong",
+    "deviceNameUpdated": "Nama perangkat diperbarui",
     "phoneKeypad": "Keypad",
     "phoneHideKeypad": "Sembunyikan keypad"
 }

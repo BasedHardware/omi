@@ -2748,6 +2748,10 @@
     "safelyBackedUp": "Droši dublēts jūsu tālrunī",
     "notYetSynced": "Vēl nav sinhronizēts ar jūsu tālruni",
     "clearAll": "Notīrīt visu",
+    "renameDevice": "Pārdēvēt ierīci",
+    "enterDeviceName": "Ievadiet ierīces nosaukumu",
+    "deviceNameCannotBeEmpty": "Ierīces nosaukums nevar būt tukšs",
+    "deviceNameUpdated": "Ierīces nosaukums atjaunināts",
     "phoneKeypad": "Tastatūra",
     "phoneHideKeypad": "Paslēpt tastatūru"
 }

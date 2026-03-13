@@ -2716,6 +2716,10 @@
     "safelyBackedUp": "Sicher auf Ihrem Telefon gesichert",
     "notYetSynced": "Noch nicht mit Ihrem Telefon synchronisiert",
     "clearAll": "Alles löschen",
+    "renameDevice": "Gerät umbenennen",
+    "enterDeviceName": "Gerätenamen eingeben",
+    "deviceNameCannotBeEmpty": "Der Gerätename darf nicht leer sein",
+    "deviceNameUpdated": "Gerätename aktualisiert",
     "phoneKeypad": "Tastatur",
     "phoneHideKeypad": "Tastatur ausblenden"
 }

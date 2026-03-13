@@ -2753,6 +2753,10 @@
     "safelyBackedUp": "Bezpečne zálohované na vašom telefóne",
     "notYetSynced": "Zatiaľ nesynchronizované s vaším telefónom",
     "clearAll": "Vymazať všetko",
+    "renameDevice": "Premenovať zariadenie",
+    "enterDeviceName": "Zadajte názov zariadenia",
+    "deviceNameCannotBeEmpty": "Názov zariadenia nemôže byť prázdny",
+    "deviceNameUpdated": "Názov zariadenia bol aktualizovaný",
     "phoneKeypad": "Klávesnica",
     "phoneHideKeypad": "Skryť klávesnicu"
 }

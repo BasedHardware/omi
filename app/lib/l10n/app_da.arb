@@ -2757,6 +2757,10 @@
     "safelyBackedUp": "Sikkert sikkerhedskopieret til din telefon",
     "notYetSynced": "Endnu ikke synkroniseret med din telefon",
     "clearAll": "Ryd alt",
+    "renameDevice": "Omdøb enhed",
+    "enterDeviceName": "Indtast enhedsnavn",
+    "deviceNameCannotBeEmpty": "Enhedsnavn må ikke være tomt",
+    "deviceNameUpdated": "Enhedsnavn opdateret",
     "phoneKeypad": "Tastatur",
     "phoneHideKeypad": "Skjul tastatur"
 }

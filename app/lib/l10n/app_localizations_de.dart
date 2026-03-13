@@ -8624,16 +8624,16 @@ class AppLocalizationsDe extends AppLocalizations {
   String get notYetSynced => 'Noch nicht mit Ihrem Telefon synchronisiert';
 
   @override
-  String get renameDevice => 'Rename Device';
+  String get renameDevice => 'Gerät umbenennen';
 
   @override
-  String get enterDeviceName => 'Enter device name';
+  String get enterDeviceName => 'Gerätenamen eingeben';
 
   @override
-  String get deviceNameCannotBeEmpty => 'Device name cannot be empty';
+  String get deviceNameCannotBeEmpty => 'Der Gerätename darf nicht leer sein';
 
   @override
-  String get deviceNameUpdated => 'Device name updated';
+  String get deviceNameUpdated => 'Gerätename aktualisiert';
 
   @override
   String get clearAll => 'Alles löschen';

@@ -2783,6 +2783,10 @@
     "safelyBackedUp": "Bezpiecznie zapisane na Twoim telefonie",
     "notYetSynced": "Jeszcze nie zsynchronizowano z Twoim telefonem",
     "clearAll": "Wyczyść wszystko",
+    "renameDevice": "Zmień nazwę urządzenia",
+    "enterDeviceName": "Wprowadź nazwę urządzenia",
+    "deviceNameCannotBeEmpty": "Nazwa urządzenia nie może być pusta",
+    "deviceNameUpdated": "Nazwa urządzenia zaktualizowana",
     "phoneKeypad": "Klawiatura",
     "phoneHideKeypad": "Ukryj klawiaturę"
 }

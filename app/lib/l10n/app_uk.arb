@@ -2748,6 +2748,10 @@
     "safelyBackedUp": "Безпечно збережено на вашому телефоні",
     "notYetSynced": "Ще не синхронізовано з вашим телефоном",
     "clearAll": "Очистити все",
+    "renameDevice": "Перейменувати пристрій",
+    "enterDeviceName": "Введіть назву пристрою",
+    "deviceNameCannotBeEmpty": "Назва пристрою не може бути порожньою",
+    "deviceNameUpdated": "Назву пристрою оновлено",
     "phoneKeypad": "Клавіатура",
     "phoneHideKeypad": "Сховати клавіатуру"
 }

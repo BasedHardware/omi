@@ -8550,16 +8550,16 @@ class AppLocalizationsEt extends AppLocalizations {
   String get notYetSynced => 'Pole veel teie telefoniga sünkroniseeritud';
 
   @override
-  String get renameDevice => 'Rename Device';
+  String get renameDevice => 'Nimeta seade ümber';
 
   @override
-  String get enterDeviceName => 'Enter device name';
+  String get enterDeviceName => 'Sisesta seadme nimi';
 
   @override
-  String get deviceNameCannotBeEmpty => 'Device name cannot be empty';
+  String get deviceNameCannotBeEmpty => 'Seadme nimi ei tohi olla tühi';
 
   @override
-  String get deviceNameUpdated => 'Device name updated';
+  String get deviceNameUpdated => 'Seadme nimi on uuendatud';
 
   @override
   String get clearAll => 'Tühjenda kõik';

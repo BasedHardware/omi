@@ -8547,16 +8547,16 @@ class AppLocalizationsNo extends AppLocalizations {
   String get notYetSynced => 'Ennå ikke synkronisert med telefonen din';
 
   @override
-  String get renameDevice => 'Rename Device';
+  String get renameDevice => 'Gi enheten nytt navn';
 
   @override
-  String get enterDeviceName => 'Enter device name';
+  String get enterDeviceName => 'Skriv inn enhetsnavn';
 
   @override
-  String get deviceNameCannotBeEmpty => 'Device name cannot be empty';
+  String get deviceNameCannotBeEmpty => 'Enhetsnavn kan ikke være tomt';
 
   @override
-  String get deviceNameUpdated => 'Device name updated';
+  String get deviceNameUpdated => 'Enhetsnavn oppdatert';
 
   @override
   String get clearAll => 'Tøm alt';

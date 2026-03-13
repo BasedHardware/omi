@@ -8590,16 +8590,16 @@ class AppLocalizationsHu extends AppLocalizations {
   String get notYetSynced => 'Még nincs szinkronizálva a telefonjával';
 
   @override
-  String get renameDevice => 'Rename Device';
+  String get renameDevice => 'Eszköz átnevezése';
 
   @override
-  String get enterDeviceName => 'Enter device name';
+  String get enterDeviceName => 'Adja meg az eszköz nevét';
 
   @override
-  String get deviceNameCannotBeEmpty => 'Device name cannot be empty';
+  String get deviceNameCannotBeEmpty => 'Az eszköz neve nem lehet üres';
 
   @override
-  String get deviceNameUpdated => 'Device name updated';
+  String get deviceNameUpdated => 'Eszköz neve frissítve';
 
   @override
   String get clearAll => 'Összes törlése';

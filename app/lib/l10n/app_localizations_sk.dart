@@ -8542,16 +8542,16 @@ class AppLocalizationsSk extends AppLocalizations {
   String get notYetSynced => 'Zatiaľ nesynchronizované s vaším telefónom';
 
   @override
-  String get renameDevice => 'Rename Device';
+  String get renameDevice => 'Premenovať zariadenie';
 
   @override
-  String get enterDeviceName => 'Enter device name';
+  String get enterDeviceName => 'Zadajte názov zariadenia';
 
   @override
-  String get deviceNameCannotBeEmpty => 'Device name cannot be empty';
+  String get deviceNameCannotBeEmpty => 'Názov zariadenia nemôže byť prázdny';
 
   @override
-  String get deviceNameUpdated => 'Device name updated';
+  String get deviceNameUpdated => 'Názov zariadenia bol aktualizovaný';
 
   @override
   String get clearAll => 'Vymazať všetko';

@@ -2717,6 +2717,10 @@
     "safelyBackedUp": "Bezpečně zálohováno na vašem telefonu",
     "notYetSynced": "Zatím nesynchronizováno s vaším telefonem",
     "clearAll": "Vymazat vše",
+    "renameDevice": "Přejmenovat zařízení",
+    "enterDeviceName": "Zadejte název zařízení",
+    "deviceNameCannotBeEmpty": "Název zařízení nemůže být prázdný",
+    "deviceNameUpdated": "Název zařízení byl aktualizován",
     "phoneKeypad": "Klávesnice",
     "phoneHideKeypad": "Skrýt klávesnici"
 }

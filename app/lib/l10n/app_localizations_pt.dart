@@ -8555,16 +8555,16 @@ class AppLocalizationsPt extends AppLocalizations {
   String get notYetSynced => 'Ainda não sincronizado com seu telefone';
 
   @override
-  String get renameDevice => 'Rename Device';
+  String get renameDevice => 'Renomear dispositivo';
 
   @override
-  String get enterDeviceName => 'Enter device name';
+  String get enterDeviceName => 'Digite o nome do dispositivo';
 
   @override
-  String get deviceNameCannotBeEmpty => 'Device name cannot be empty';
+  String get deviceNameCannotBeEmpty => 'O nome do dispositivo não pode estar vazio';
 
   @override
-  String get deviceNameUpdated => 'Device name updated';
+  String get deviceNameUpdated => 'Nome do dispositivo atualizado';
 
   @override
   String get clearAll => 'Limpar tudo';

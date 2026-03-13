@@ -2844,6 +2844,10 @@
     "safelyBackedUp": "Biztonságosan mentve a telefonjára",
     "notYetSynced": "Még nincs szinkronizálva a telefonjával",
     "clearAll": "Összes törlése",
+    "renameDevice": "Eszköz átnevezése",
+    "enterDeviceName": "Adja meg az eszköz nevét",
+    "deviceNameCannotBeEmpty": "Az eszköz neve nem lehet üres",
+    "deviceNameUpdated": "Eszköz neve frissítve",
     "phoneKeypad": "Billentyűzet",
     "phoneHideKeypad": "Billentyűzet elrejtése"
 }

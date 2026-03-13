@@ -2748,6 +2748,10 @@
     "safelyBackedUp": "Sikkert sikkerhetskopiert til telefonen din",
     "notYetSynced": "Ennå ikke synkronisert med telefonen din",
     "clearAll": "Tøm alt",
+    "renameDevice": "Gi enheten nytt navn",
+    "enterDeviceName": "Skriv inn enhetsnavn",
+    "deviceNameCannotBeEmpty": "Enhetsnavn kan ikke være tomt",
+    "deviceNameUpdated": "Enhetsnavn oppdatert",
     "phoneKeypad": "Tastatur",
     "phoneHideKeypad": "Skjul tastatur"
 }

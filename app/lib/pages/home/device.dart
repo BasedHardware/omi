@@ -361,9 +361,15 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
           GestureDetector(
             onTap: () async {
               await SharedPreferencesUtil().btDeviceSet(BtDevice(id: '', name: '', type: DeviceType.omi, rssi: 0));
-              if (provider.connectedDevice != null) {
+
+              // Offline path uses this same row as "Unpair Device"; clear custom-name metadata as well.
+              if (provider.connectedDevice == null) {
+                SharedPreferencesUtil().deviceName = '';
+                SharedPreferencesUtil().deviceNameDeviceId = '';
+              } else {
                 await _bleDisconnectDevice(provider.connectedDevice!);
               }
+
               if (context.mounted) {
                 context.read<DeviceProvider>().setIsConnected(false);
                 context.read<DeviceProvider>().setConnectedDevice(null);

@@ -8532,16 +8532,16 @@ class AppLocalizationsHi extends AppLocalizations {
   String get notYetSynced => 'अभी तक आपके फोन पर सिंक नहीं हुआ';
 
   @override
-  String get renameDevice => 'Rename Device';
+  String get renameDevice => 'डिवाइस का नाम बदलें';
 
   @override
-  String get enterDeviceName => 'Enter device name';
+  String get enterDeviceName => 'डिवाइस का नाम दर्ज करें';
 
   @override
-  String get deviceNameCannotBeEmpty => 'Device name cannot be empty';
+  String get deviceNameCannotBeEmpty => 'डिवाइस का नाम खाली नहीं हो सकता';
 
   @override
-  String get deviceNameUpdated => 'Device name updated';
+  String get deviceNameUpdated => 'डिवाइस का नाम अपडेट हो गया';
 
   @override
   String get clearAll => 'सब हटाएं';

@@ -2783,6 +2783,10 @@
     "safelyBackedUp": "Безопасно сохранено на вашем телефоне",
     "notYetSynced": "Ещё не синхронизировано с вашим телефоном",
     "clearAll": "Очистить всё",
+    "renameDevice": "Переименовать устройство",
+    "enterDeviceName": "Введите имя устройства",
+    "deviceNameCannotBeEmpty": "Имя устройства не может быть пустым",
+    "deviceNameUpdated": "Имя устройства обновлено",
     "phoneKeypad": "Клавиатура",
     "phoneHideKeypad": "Скрыть клавиатуру"
 }

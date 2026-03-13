@@ -2783,6 +2783,10 @@
     "safelyBackedUp": "Telefonunuza güvenli şekilde yedeklendi",
     "notYetSynced": "Henüz telefonunuzla senkronize edilmedi",
     "clearAll": "Tümünü temizle",
+    "renameDevice": "Cihazı yeniden adlandır",
+    "enterDeviceName": "Cihaz adını girin",
+    "deviceNameCannotBeEmpty": "Cihaz adı boş olamaz",
+    "deviceNameUpdated": "Cihaz adı güncellendi",
     "phoneKeypad": "Tuş takımı",
     "phoneHideKeypad": "Tuş takımını gizle"
 }

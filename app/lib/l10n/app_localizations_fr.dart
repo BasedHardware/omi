@@ -8631,16 +8631,16 @@ class AppLocalizationsFr extends AppLocalizations {
   String get notYetSynced => 'Pas encore synchronisé avec votre téléphone';
 
   @override
-  String get renameDevice => 'Rename Device';
+  String get renameDevice => 'Renommer l’appareil';
 
   @override
-  String get enterDeviceName => 'Enter device name';
+  String get enterDeviceName => 'Entrez le nom de l’appareil';
 
   @override
-  String get deviceNameCannotBeEmpty => 'Device name cannot be empty';
+  String get deviceNameCannotBeEmpty => 'Le nom de l’appareil ne peut pas être vide';
 
   @override
-  String get deviceNameUpdated => 'Device name updated';
+  String get deviceNameUpdated => 'Nom de l’appareil mis à jour';
 
   @override
   String get clearAll => 'Tout effacer';

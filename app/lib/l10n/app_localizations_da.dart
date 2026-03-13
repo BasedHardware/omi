@@ -8536,16 +8536,16 @@ class AppLocalizationsDa extends AppLocalizations {
   String get notYetSynced => 'Endnu ikke synkroniseret med din telefon';
 
   @override
-  String get renameDevice => 'Rename Device';
+  String get renameDevice => 'Omdøb enhed';
 
   @override
-  String get enterDeviceName => 'Enter device name';
+  String get enterDeviceName => 'Indtast enhedsnavn';
 
   @override
-  String get deviceNameCannotBeEmpty => 'Device name cannot be empty';
+  String get deviceNameCannotBeEmpty => 'Enhedsnavn må ikke være tomt';
 
   @override
-  String get deviceNameUpdated => 'Device name updated';
+  String get deviceNameUpdated => 'Enhedsnavn opdateret';
 
   @override
   String get clearAll => 'Ryd alt';

@@ -8562,16 +8562,16 @@ class AppLocalizationsId extends AppLocalizations {
   String get notYetSynced => 'Belum disinkronkan ke ponsel Anda';
 
   @override
-  String get renameDevice => 'Rename Device';
+  String get renameDevice => 'Ganti nama perangkat';
 
   @override
-  String get enterDeviceName => 'Enter device name';
+  String get enterDeviceName => 'Masukkan nama perangkat';
 
   @override
-  String get deviceNameCannotBeEmpty => 'Device name cannot be empty';
+  String get deviceNameCannotBeEmpty => 'Nama perangkat tidak boleh kosong';
 
   @override
-  String get deviceNameUpdated => 'Device name updated';
+  String get deviceNameUpdated => 'Nama perangkat diperbarui';
 
   @override
   String get clearAll => 'Hapus semua';

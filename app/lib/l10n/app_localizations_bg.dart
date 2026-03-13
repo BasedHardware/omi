@@ -8588,16 +8588,16 @@ class AppLocalizationsBg extends AppLocalizations {
   String get notYetSynced => 'Все още не е синхронизирано с телефона ви';
 
   @override
-  String get renameDevice => 'Rename Device';
+  String get renameDevice => 'Преименувай устройството';
 
   @override
-  String get enterDeviceName => 'Enter device name';
+  String get enterDeviceName => 'Въведете име на устройството';
 
   @override
-  String get deviceNameCannotBeEmpty => 'Device name cannot be empty';
+  String get deviceNameCannotBeEmpty => 'Името на устройството не може да е празно';
 
   @override
-  String get deviceNameUpdated => 'Device name updated';
+  String get deviceNameUpdated => 'Името на устройството е актуализирано';
 
   @override
   String get clearAll => 'Изчисти всичко';

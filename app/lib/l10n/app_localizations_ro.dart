@@ -8595,16 +8595,16 @@ class AppLocalizationsRo extends AppLocalizations {
   String get notYetSynced => 'Nu a fost încă sincronizat cu telefonul dvs.';
 
   @override
-  String get renameDevice => 'Rename Device';
+  String get renameDevice => 'Redenumește dispozitivul';
 
   @override
-  String get enterDeviceName => 'Enter device name';
+  String get enterDeviceName => 'Introdu numele dispozitivului';
 
   @override
-  String get deviceNameCannotBeEmpty => 'Device name cannot be empty';
+  String get deviceNameCannotBeEmpty => 'Numele dispozitivului nu poate fi gol';
 
   @override
-  String get deviceNameUpdated => 'Device name updated';
+  String get deviceNameUpdated => 'Numele dispozitivului a fost actualizat';
 
   @override
   String get clearAll => 'Șterge tot';

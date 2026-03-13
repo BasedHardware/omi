@@ -8549,16 +8549,16 @@ class AppLocalizationsCs extends AppLocalizations {
   String get notYetSynced => 'Zatím nesynchronizováno s vaším telefonem';
 
   @override
-  String get renameDevice => 'Rename Device';
+  String get renameDevice => 'Přejmenovat zařízení';
 
   @override
-  String get enterDeviceName => 'Enter device name';
+  String get enterDeviceName => 'Zadejte název zařízení';
 
   @override
-  String get deviceNameCannotBeEmpty => 'Device name cannot be empty';
+  String get deviceNameCannotBeEmpty => 'Název zařízení nemůže být prázdný';
 
   @override
-  String get deviceNameUpdated => 'Device name updated';
+  String get deviceNameUpdated => 'Název zařízení byl aktualizován';
 
   @override
   String get clearAll => 'Vymazat vše';

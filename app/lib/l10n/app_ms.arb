@@ -2748,6 +2748,10 @@
     "safelyBackedUp": "Disandarkan dengan selamat ke telefon anda",
     "notYetSynced": "Belum disegerakkan ke telefon anda",
     "clearAll": "Kosongkan semua",
+    "renameDevice": "Namakan semula peranti",
+    "enterDeviceName": "Masukkan nama peranti",
+    "deviceNameCannotBeEmpty": "Nama peranti tidak boleh kosong",
+    "deviceNameUpdated": "Nama peranti dikemas kini",
     "phoneKeypad": "Pad kekunci",
     "phoneHideKeypad": "Sembunyikan pad kekunci"
 }

@@ -8570,16 +8570,16 @@ class AppLocalizationsEs extends AppLocalizations {
   String get notYetSynced => 'Aún no sincronizado con tu teléfono';
 
   @override
-  String get renameDevice => 'Rename Device';
+  String get renameDevice => 'Cambiar nombre del dispositivo';
 
   @override
-  String get enterDeviceName => 'Enter device name';
+  String get enterDeviceName => 'Introduce el nombre del dispositivo';
 
   @override
-  String get deviceNameCannotBeEmpty => 'Device name cannot be empty';
+  String get deviceNameCannotBeEmpty => 'El nombre del dispositivo no puede estar vacío';
 
   @override
-  String get deviceNameUpdated => 'Device name updated';
+  String get deviceNameUpdated => 'Nombre del dispositivo actualizado';
 
   @override
   String get clearAll => 'Borrar todo';

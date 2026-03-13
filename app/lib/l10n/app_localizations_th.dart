@@ -8508,16 +8508,16 @@ class AppLocalizationsTh extends AppLocalizations {
   String get notYetSynced => 'ยังไม่ได้ซิงค์กับโทรศัพท์ของคุณ';
 
   @override
-  String get renameDevice => 'Rename Device';
+  String get renameDevice => 'เปลี่ยนชื่ออุปกรณ์';
 
   @override
-  String get enterDeviceName => 'Enter device name';
+  String get enterDeviceName => 'กรอกชื่ออุปกรณ์';
 
   @override
-  String get deviceNameCannotBeEmpty => 'Device name cannot be empty';
+  String get deviceNameCannotBeEmpty => 'ชื่ออุปกรณ์ต้องไม่ว่างเปล่า';
 
   @override
-  String get deviceNameUpdated => 'Device name updated';
+  String get deviceNameUpdated => 'อัปเดตชื่ออุปกรณ์แล้ว';
 
   @override
   String get clearAll => 'ล้างทั้งหมด';

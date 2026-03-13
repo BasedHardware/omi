@@ -8576,16 +8576,16 @@ class AppLocalizationsMs extends AppLocalizations {
   String get notYetSynced => 'Belum disegerakkan ke telefon anda';
 
   @override
-  String get renameDevice => 'Rename Device';
+  String get renameDevice => 'Namakan semula peranti';
 
   @override
-  String get enterDeviceName => 'Enter device name';
+  String get enterDeviceName => 'Masukkan nama peranti';
 
   @override
-  String get deviceNameCannotBeEmpty => 'Device name cannot be empty';
+  String get deviceNameCannotBeEmpty => 'Nama peranti tidak boleh kosong';
 
   @override
-  String get deviceNameUpdated => 'Device name updated';
+  String get deviceNameUpdated => 'Nama peranti dikemas kini';
 
   @override
   String get clearAll => 'Kosongkan semua';

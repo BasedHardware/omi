@@ -8408,16 +8408,16 @@ class AppLocalizationsJa extends AppLocalizations {
   String get notYetSynced => 'まだスマホに同期されていません';
 
   @override
-  String get renameDevice => 'Rename Device';
+  String get renameDevice => 'デバイス名を変更';
 
   @override
-  String get enterDeviceName => 'Enter device name';
+  String get enterDeviceName => 'デバイス名を入力';
 
   @override
-  String get deviceNameCannotBeEmpty => 'Device name cannot be empty';
+  String get deviceNameCannotBeEmpty => 'デバイス名は空にできません';
 
   @override
-  String get deviceNameUpdated => 'Device name updated';
+  String get deviceNameUpdated => 'デバイス名を更新しました';
 
   @override
   String get clearAll => 'すべて削除';

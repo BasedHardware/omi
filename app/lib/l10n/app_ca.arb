@@ -2717,6 +2717,10 @@
     "safelyBackedUp": "Còpia de seguretat al vostre telèfon",
     "notYetSynced": "Encara no sincronitzat amb el vostre telèfon",
     "clearAll": "Esborrar tot",
+    "renameDevice": "Canvia el nom del dispositiu",
+    "enterDeviceName": "Introdueix el nom del dispositiu",
+    "deviceNameCannotBeEmpty": "El nom del dispositiu no pot estar buit",
+    "deviceNameUpdated": "Nom del dispositiu actualitzat",
     "phoneKeypad": "Teclat",
     "phoneHideKeypad": "Amaga el teclat"
 }

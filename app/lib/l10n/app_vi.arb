@@ -2753,6 +2753,10 @@
     "safelyBackedUp": "Đã sao lưu an toàn vào điện thoại",
     "notYetSynced": "Chưa đồng bộ với điện thoại của bạn",
     "clearAll": "Xóa tất cả",
+    "renameDevice": "Đổi tên thiết bị",
+    "enterDeviceName": "Nhập tên thiết bị",
+    "deviceNameCannotBeEmpty": "Tên thiết bị không được để trống",
+    "deviceNameUpdated": "Đã cập nhật tên thiết bị",
     "phoneKeypad": "Bàn phím",
     "phoneHideKeypad": "Ẩn bàn phím"
 }

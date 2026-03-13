@@ -8580,16 +8580,16 @@ class AppLocalizationsRu extends AppLocalizations {
   String get notYetSynced => 'Ещё не синхронизировано с вашим телефоном';
 
   @override
-  String get renameDevice => 'Rename Device';
+  String get renameDevice => 'Переименовать устройство';
 
   @override
-  String get enterDeviceName => 'Enter device name';
+  String get enterDeviceName => 'Введите имя устройства';
 
   @override
-  String get deviceNameCannotBeEmpty => 'Device name cannot be empty';
+  String get deviceNameCannotBeEmpty => 'Имя устройства не может быть пустым';
 
   @override
-  String get deviceNameUpdated => 'Device name updated';
+  String get deviceNameUpdated => 'Имя устройства обновлено';
 
   @override
   String get clearAll => 'Очистить всё';

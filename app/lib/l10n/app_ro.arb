@@ -2748,6 +2748,10 @@
     "safelyBackedUp": "Salvat în siguranță pe telefonul dvs.",
     "notYetSynced": "Nu a fost încă sincronizat cu telefonul dvs.",
     "clearAll": "Șterge tot",
+    "renameDevice": "Redenumește dispozitivul",
+    "enterDeviceName": "Introdu numele dispozitivului",
+    "deviceNameCannotBeEmpty": "Numele dispozitivului nu poate fi gol",
+    "deviceNameUpdated": "Numele dispozitivului a fost actualizat",
     "phoneKeypad": "Tastatură",
     "phoneHideKeypad": "Ascunde tastatura"
 }

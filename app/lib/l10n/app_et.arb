@@ -2748,6 +2748,10 @@
     "safelyBackedUp": "Turvaliselt teie telefonile varundatud",
     "notYetSynced": "Pole veel teie telefoniga sünkroniseeritud",
     "clearAll": "Tühjenda kõik",
+    "renameDevice": "Nimeta seade ümber",
+    "enterDeviceName": "Sisesta seadme nimi",
+    "deviceNameCannotBeEmpty": "Seadme nimi ei tohi olla tühi",
+    "deviceNameUpdated": "Seadme nimi on uuendatud",
     "phoneKeypad": "Klahvistik",
     "phoneHideKeypad": "Peida klahvistik"
 }

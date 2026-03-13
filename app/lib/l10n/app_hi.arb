@@ -2749,6 +2749,10 @@
     "safelyBackedUp": "आपके फोन पर सुरक्षित बैकअप",
     "notYetSynced": "अभी तक आपके फोन पर सिंक नहीं हुआ",
     "clearAll": "सब हटाएं",
+    "renameDevice": "डिवाइस का नाम बदलें",
+    "enterDeviceName": "डिवाइस का नाम दर्ज करें",
+    "deviceNameCannotBeEmpty": "डिवाइस का नाम खाली नहीं हो सकता",
+    "deviceNameUpdated": "डिवाइस का नाम अपडेट हो गया",
     "phoneKeypad": "कीपैड",
     "phoneHideKeypad": "कीपैड छुपाएं"
 }

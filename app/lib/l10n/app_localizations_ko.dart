@@ -8410,16 +8410,16 @@ class AppLocalizationsKo extends AppLocalizations {
   String get notYetSynced => '아직 휴대폰에 동기화되지 않음';
 
   @override
-  String get renameDevice => 'Rename Device';
+  String get renameDevice => '기기 이름 변경';
 
   @override
-  String get enterDeviceName => 'Enter device name';
+  String get enterDeviceName => '기기 이름 입력';
 
   @override
-  String get deviceNameCannotBeEmpty => 'Device name cannot be empty';
+  String get deviceNameCannotBeEmpty => '기기 이름은 비워둘 수 없습니다';
 
   @override
-  String get deviceNameUpdated => 'Device name updated';
+  String get deviceNameUpdated => '기기 이름이 업데이트되었습니다';
 
   @override
   String get clearAll => '모두 지우기';

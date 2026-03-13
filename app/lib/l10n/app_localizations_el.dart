@@ -8616,16 +8616,16 @@ class AppLocalizationsEl extends AppLocalizations {
   String get notYetSynced => 'Δεν έχει συγχρονιστεί ακόμα με το τηλέφωνό σας';
 
   @override
-  String get renameDevice => 'Rename Device';
+  String get renameDevice => 'Μετονομασία συσκευής';
 
   @override
-  String get enterDeviceName => 'Enter device name';
+  String get enterDeviceName => 'Εισαγάγετε όνομα συσκευής';
 
   @override
-  String get deviceNameCannotBeEmpty => 'Device name cannot be empty';
+  String get deviceNameCannotBeEmpty => 'Το όνομα συσκευής δεν μπορεί να είναι κενό';
 
   @override
-  String get deviceNameUpdated => 'Device name updated';
+  String get deviceNameUpdated => 'Το όνομα συσκευής ενημερώθηκε';
 
   @override
   String get clearAll => 'Εκκαθάριση όλων';

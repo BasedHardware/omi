@@ -2749,6 +2749,10 @@
     "safelyBackedUp": "Respaldado en tu teléfono",
     "notYetSynced": "Aún no sincronizado con tu teléfono",
     "clearAll": "Borrar todo",
+    "renameDevice": "Cambiar nombre del dispositivo",
+    "enterDeviceName": "Introduce el nombre del dispositivo",
+    "deviceNameCannotBeEmpty": "El nombre del dispositivo no puede estar vacío",
+    "deviceNameUpdated": "Nombre del dispositivo actualizado",
     "phoneKeypad": "Teclado",
     "phoneHideKeypad": "Ocultar teclado"
 }

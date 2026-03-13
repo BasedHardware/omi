@@ -8565,16 +8565,16 @@ class AppLocalizationsTr extends AppLocalizations {
   String get notYetSynced => 'Henüz telefonunuzla senkronize edilmedi';
 
   @override
-  String get renameDevice => 'Rename Device';
+  String get renameDevice => 'Cihazı yeniden adlandır';
 
   @override
-  String get enterDeviceName => 'Enter device name';
+  String get enterDeviceName => 'Cihaz adını girin';
 
   @override
-  String get deviceNameCannotBeEmpty => 'Device name cannot be empty';
+  String get deviceNameCannotBeEmpty => 'Cihaz adı boş olamaz';
 
   @override
-  String get deviceNameUpdated => 'Device name updated';
+  String get deviceNameUpdated => 'Cihaz adı güncellendi';
 
   @override
   String get clearAll => 'Tümünü temizle';

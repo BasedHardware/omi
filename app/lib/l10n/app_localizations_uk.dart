@@ -8565,16 +8565,16 @@ class AppLocalizationsUk extends AppLocalizations {
   String get notYetSynced => 'Ще не синхронізовано з вашим телефоном';
 
   @override
-  String get renameDevice => 'Rename Device';
+  String get renameDevice => 'Перейменувати пристрій';
 
   @override
-  String get enterDeviceName => 'Enter device name';
+  String get enterDeviceName => 'Введіть назву пристрою';
 
   @override
-  String get deviceNameCannotBeEmpty => 'Device name cannot be empty';
+  String get deviceNameCannotBeEmpty => 'Назва пристрою не може бути порожньою';
 
   @override
-  String get deviceNameUpdated => 'Device name updated';
+  String get deviceNameUpdated => 'Назву пристрою оновлено';
 
   @override
   String get clearAll => 'Очистити все';

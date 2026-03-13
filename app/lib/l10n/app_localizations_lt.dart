@@ -8560,16 +8560,16 @@ class AppLocalizationsLt extends AppLocalizations {
   String get notYetSynced => 'Dar nesinchronizuota su jūsų telefonu';
 
   @override
-  String get renameDevice => 'Rename Device';
+  String get renameDevice => 'Pervadinti įrenginį';
 
   @override
-  String get enterDeviceName => 'Enter device name';
+  String get enterDeviceName => 'Įveskite įrenginio pavadinimą';
 
   @override
-  String get deviceNameCannotBeEmpty => 'Device name cannot be empty';
+  String get deviceNameCannotBeEmpty => 'Įrenginio pavadinimas negali būti tuščias';
 
   @override
-  String get deviceNameUpdated => 'Device name updated';
+  String get deviceNameUpdated => 'Įrenginio pavadinimas atnaujintas';
 
   @override
   String get clearAll => 'Išvalyti viską';

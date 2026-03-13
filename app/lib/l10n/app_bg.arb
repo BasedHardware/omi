@@ -2717,6 +2717,10 @@
     "safelyBackedUp": "Безопасно запазено на телефона ви",
     "notYetSynced": "Все още не е синхронизирано с телефона ви",
     "clearAll": "Изчисти всичко",
+    "renameDevice": "Преименувай устройството",
+    "enterDeviceName": "Въведете име на устройството",
+    "deviceNameCannotBeEmpty": "Името на устройството не може да е празно",
+    "deviceNameUpdated": "Името на устройството е актуализирано",
     "phoneKeypad": "Клавиатура",
     "phoneHideKeypad": "Скрий клавиатурата"
 }

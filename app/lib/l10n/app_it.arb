@@ -2748,6 +2748,10 @@
     "safelyBackedUp": "Salvato sul tuo telefono",
     "notYetSynced": "Non ancora sincronizzato con il tuo telefono",
     "clearAll": "Cancella tutto",
+    "renameDevice": "Rinomina dispositivo",
+    "enterDeviceName": "Inserisci il nome del dispositivo",
+    "deviceNameCannotBeEmpty": "Il nome del dispositivo non può essere vuoto",
+    "deviceNameUpdated": "Nome del dispositivo aggiornato",
     "phoneKeypad": "Tastiera",
     "phoneHideKeypad": "Nascondi tastiera"
 }

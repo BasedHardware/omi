@@ -8604,16 +8604,16 @@ class AppLocalizationsCa extends AppLocalizations {
   String get notYetSynced => 'Encara no sincronitzat amb el vostre telèfon';
 
   @override
-  String get renameDevice => 'Rename Device';
+  String get renameDevice => 'Canvia el nom del dispositiu';
 
   @override
-  String get enterDeviceName => 'Enter device name';
+  String get enterDeviceName => 'Introdueix el nom del dispositiu';
 
   @override
-  String get deviceNameCannotBeEmpty => 'Device name cannot be empty';
+  String get deviceNameCannotBeEmpty => 'El nom del dispositiu no pot estar buit';
 
   @override
-  String get deviceNameUpdated => 'Device name updated';
+  String get deviceNameUpdated => 'Nom del dispositiu actualitzat';
 
   @override
   String get clearAll => 'Esborrar tot';
