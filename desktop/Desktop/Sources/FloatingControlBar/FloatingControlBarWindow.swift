@@ -826,6 +826,12 @@ class FloatingControlBarManager {
         }
 
         AnalyticsManager.shared.floatingBarAskOmiOpened(source: "shortcut")
+
+        // Pre-populate chat history so previous conversation is visible immediately
+        if let provider = self.chatProvider {
+            window.state.loadHistory(from: provider.messages)
+        }
+
         if !window.isVisible {
             show()
         }
@@ -847,11 +853,13 @@ class FloatingControlBarManager {
         window.state.showingAIResponse = false
         window.state.aiInputText = ""
         window.state.currentAIMessage = nil
-        window.state.chatHistory = []
         window.state.isVoiceFollowUp = false
         window.state.voiceFollowUpTranscript = ""
 
         guard let provider = self.chatProvider else { return }
+
+        // Pre-populate chat history from provider so previous conversation is visible immediately
+        window.state.loadHistory(from: provider.messages)
 
         // Re-wire the onSendQuery to use the shared provider
         window.onSendQuery = { [weak self, weak window, weak provider] message in
