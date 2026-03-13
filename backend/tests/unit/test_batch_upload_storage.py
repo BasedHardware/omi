@@ -30,6 +30,12 @@ sys.modules.setdefault("google.oauth2.service_account", MagicMock())
 from utils.other import storage as storage_mod
 
 
+class _FakeNotFound(Exception):
+    """Fake NotFound exception for testing (storage_mod.NotFound is mocked)."""
+
+    pass
+
+
 def _collect_written_bytes(mock_blob):
     """Collect all bytes written via blob.open().__enter__().write() calls."""
     mock_file = mock_blob.open.return_value.__enter__.return_value
@@ -465,15 +471,14 @@ class TestDownloadAudioChunksMergeBatchAware:
             if path in download_data:
                 mb.download_as_bytes.return_value = download_data[path]
             else:
-                from google.cloud.exceptions import NotFound
-
-                mb.download_as_bytes.side_effect = NotFound(f"Not found: {path}")
+                mb.download_as_bytes.side_effect = _FakeNotFound(f"Not found: {path}")
             return mb
 
         mock_bucket.blob.side_effect = make_blob
         storage_mod.storage_client.bucket.return_value = mock_bucket
         return mock_bucket
 
+    @patch.object(storage_mod, 'NotFound', _FakeNotFound)
     def test_download_batch_blob_found(self):
         """Batch blob is resolved via list_audio_chunks and downloaded once."""
         batch_path = 'chunks/uid/conv/1000.000-1010.000.batch.bin'
@@ -493,6 +498,7 @@ class TestDownloadAudioChunksMergeBatchAware:
 
         assert result == batch_data
 
+    @patch.object(storage_mod, 'NotFound', _FakeNotFound)
     def test_download_per_chunk_still_works(self):
         """Per-chunk .bin files are still downloaded correctly."""
         self._setup_mock_bucket(
@@ -515,6 +521,7 @@ class TestDownloadAudioChunksMergeBatchAware:
 
         assert result == b'\x01' * 100 + b'\x02' * 100
 
+    @patch.object(storage_mod, 'NotFound', _FakeNotFound)
     def test_download_batch_deduplicates(self):
         """Multiple timestamps pointing to same batch blob download it once."""
         batch_path = 'chunks/uid/conv/1000.000-1010.000.batch.bin'
@@ -535,6 +542,7 @@ class TestDownloadAudioChunksMergeBatchAware:
 
         assert result == batch_data
 
+    @patch.object(storage_mod, 'NotFound', _FakeNotFound)
     @patch.object(storage_mod, 'encryption')
     def test_download_batch_encrypted_decrypts(self, mock_encryption):
         """Encrypted batch blob is decrypted via decrypt_audio_file."""
