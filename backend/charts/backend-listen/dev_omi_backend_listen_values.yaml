@@ -285,6 +285,11 @@ env:
       secretKeyRef:
         name: dev-omi-backend-secrets
         key: TWILIO_TWIML_APP_SID
+  - name: MODULATE_API_KEY
+    valueFrom:
+      secretKeyRef:
+        name: dev-omi-backend-secrets
+        key: MODULATE_API_KEY
   - name: VAD_GATE_MODE
     value: "active"
 
