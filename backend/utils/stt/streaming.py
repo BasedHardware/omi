@@ -1,7 +1,9 @@
 import asyncio
+import io
 import os
 import random
 import time
+import wave as _wave
 from enum import Enum
 from typing import Callable, List, Optional
 
@@ -865,6 +867,23 @@ async def process_audio_speechmatics(stream_transcript, sample_rate: int, langua
         raise
 
 
+def _build_wav_header(sample_rate: int, bits_per_sample: int = 16, channels: int = 1) -> bytes:
+    """Build a WAV header for streaming to Modulate.
+
+    Modulate's streaming endpoint requires a WAV header in the first audio frame.
+    Uses Python's wave module for a standards-compliant header, with a zero
+    data-length placeholder that gets overridden by actual stream bytes.
+    """
+    buf = io.BytesIO()
+    with _wave.open(buf, 'wb') as wf:
+        wf.setnchannels(channels)
+        wf.setsampwidth(bits_per_sample // 8)
+        wf.setframerate(sample_rate)
+        wf.writeframes(b'')  # write header only, zero-length data
+    header = buf.getvalue()
+    return header
+
+
 async def process_audio_modulate(stream_transcript, sample_rate: int, language: str, preseconds: int = 0):
     api_key = os.getenv('MODULATE_API_KEY')
     if not api_key:
@@ -877,12 +896,43 @@ async def process_audio_modulate(stream_transcript, sample_rate: int, language: 
 
     try:
         logger.info(f"Connecting to Modulate WebSocket (sample_rate={sample_rate})...")
-        modulate_socket = await websockets.connect(uri, ping_timeout=10, ping_interval=10)
+        raw_socket = await websockets.connect(uri, ping_timeout=10, ping_interval=10)
         logger.info("Connected to Modulate WebSocket.")
+
+        # Modulate streaming requires a WAV header prepended to the first audio frame.
+        # Wrap the socket so the header is sent with the first chunk of PCM data.
+        wav_header = _build_wav_header(sample_rate)
+        header_sent = False
+
+        class _ModulateSocketWrapper:
+            """Thin wrapper that prepends WAV header to the first send() call."""
+
+            def __init__(self, ws, header):
+                self._ws = ws
+                self._header = header
+                self._header_sent = False
+
+            async def send(self, data):
+                if not self._header_sent and isinstance(data, (bytes, bytearray)) and data:
+                    self._header_sent = True
+                    combined = self._header + bytes(data)
+                    await self._ws.send(combined)
+                    logger.info("Sent WAV header + first audio chunk to Modulate WebSocket.")
+                else:
+                    await self._ws.send(data)
+
+            async def close(self, *args, **kwargs):
+                return await self._ws.close(*args, **kwargs)
+
+            @property
+            def closed(self):
+                return self._ws.closed
+
+        modulate_socket = _ModulateSocketWrapper(raw_socket, wav_header)
 
         async def on_message():
             try:
-                async for message in modulate_socket:
+                async for message in raw_socket:
                     response = json.loads(message)
 
                     if response.get('type') == 'error':
@@ -931,8 +981,8 @@ async def process_audio_modulate(stream_transcript, sample_rate: int, language: 
             except Exception as e:
                 logger.error(f"Error receiving from Modulate: {e}")
             finally:
-                if not modulate_socket.closed:
-                    await modulate_socket.close()
+                if not raw_socket.closed:
+                    await raw_socket.close()
                     logger.info("Modulate WebSocket closed in on_message.")
 
         asyncio.create_task(on_message())
