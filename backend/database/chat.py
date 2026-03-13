@@ -549,10 +549,10 @@ def migrate_chats_level_batch(uid: str, message_doc_ids: List[str], target_level
         plain_data = _prepare_message_for_read(message_data, uid)
         plain_text = plain_data.get('text')
         migrated_text = plain_text
-        if target_level == 'enhanced':
+        if target_level in ('enhanced', 'e2ee'):
+            # Both levels use server-side encryption for chat (LLM sees plaintext anyway)
             if isinstance(plain_text, str):
                 migrated_text = encryption.encrypt(plain_text, uid)
-        # E2EE: store plaintext during migration; client re-encrypts on next write
 
         update_data = {'data_protection_level': target_level, 'text': migrated_text}
         batch.update(doc_snapshot.reference, update_data)

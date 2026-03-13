@@ -34,13 +34,8 @@ from database.redis_db import (
     get_generic_cache,
     set_generic_cache,
 )
-from database.users import (
-    get_user_transcription_preferences,
-    set_user_transcription_preferences,
-)
-from database.users import set_e2ee_key_hash, get_e2ee_key_hash
-from utils.stt.streaming import deepgram_nova3_multi_languages
 from database.users import *
+from utils.stt.streaming import deepgram_nova3_multi_languages
 from models.conversation import Geolocation, Conversation
 from models.other import Person, CreatePerson
 from typing import Optional

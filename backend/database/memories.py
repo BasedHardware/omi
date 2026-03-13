@@ -53,9 +53,11 @@ def _prepare_memory_for_read(memory_data: Optional[Dict[str, Any]], uid: str) ->
         return None
 
     level = memory_data.get('data_protection_level')
-    if level == 'enhanced':
+    if level in ('enhanced', 'e2ee'):
+        # For 'enhanced': standard server-side decryption.
+        # For 'e2ee': migrated data is server-encrypted; new client-encrypted data
+        # will fail server decryption and be returned as-is (client decrypts).
         return _decrypt_memory_data(memory_data, uid)
-    # E2EE: data is client-encrypted — return as-is for client to decrypt
     return memory_data
 
 
@@ -359,12 +361,12 @@ def migrate_memories_level_batch(uid: str, memory_ids: List[str], target_level: 
 
         plain_content = plain_data.get('content')
         migrated_content = plain_content
-        if target_level == 'enhanced':
+        if target_level in ('enhanced', 'e2ee'):
+            # Server-encrypt during migration for both levels.
+            # For E2EE: existing data gets server-encrypted so it remains readable.
+            # New data created after migration will be client-encrypted (true E2EE).
             if isinstance(plain_content, str):
                 migrated_content = encryption.encrypt(plain_content, uid)
-        # E2EE: the client sends pre-encrypted content via API calls after migration.
-        # During migration, we just store the plaintext (decrypted from previous level)
-        # and update the level flag. The client will re-encrypt on next write.
 
         # Update the document with the migrated data and the new protection level.
         update_data = {'data_protection_level': target_level, 'content': migrated_content}

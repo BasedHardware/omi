@@ -114,9 +114,13 @@ def create_goal(uid: str, goal_data: Dict[str, Any], max_goals: int = 3) -> Dict
 
 
 @set_data_protection_level(data_arg_name='updates')
-@prepare_for_write(data_arg_name='updates', prepare_func=_prepare_goal_for_write)
 def update_goal(uid: str, goal_id: str, updates: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-    """Update an existing goal."""
+    """Update an existing goal.
+
+    Note: We don't use @prepare_for_write here because that decorator returns
+    the original unencrypted input dict, but update_goal needs to return the
+    full updated goal document (re-read and decrypted).
+    """
     user_ref = db.collection(users_collection).document(uid)
     goals_ref = user_ref.collection(goals_collection)
     goal_ref = goals_ref.document(goal_id)
@@ -126,7 +130,11 @@ def update_goal(uid: str, goal_id: str, updates: Dict[str, Any]) -> Optional[Dic
         return None
 
     updates['updated_at'] = datetime.now(timezone.utc)
-    goal_ref.update(updates)
+
+    # Encrypt sensitive fields before writing
+    level = updates.get('data_protection_level') or doc.to_dict().get('data_protection_level', 'standard')
+    prepared_updates = _prepare_goal_for_write(updates, uid, level)
+    goal_ref.update(prepared_updates)
 
     updated_doc = goal_ref.get().to_dict()
     return _prepare_goal_for_read(updated_doc, uid)
