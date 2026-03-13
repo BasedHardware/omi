@@ -2747,5 +2747,6 @@
     "manageStorage": "Gestionare stocare",
     "safelyBackedUp": "Salvat în siguranță pe telefonul dvs.",
     "notYetSynced": "Nu a fost încă sincronizat cu telefonul dvs.",
-    "clearAll": "Șterge tot"
+    "clearAll": "Șterge tot",
+    "dontShowAgain": "Nu mai afișa"
 }

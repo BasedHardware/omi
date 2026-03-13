@@ -1728,7 +1728,7 @@ class AppLocalizationsCs extends AppLocalizations {
   }
 
   @override
-  String get dontShowAgain => 'Nezobrazovat znovu';
+  String get dontShowAgain => 'Znovu nezobrazovat';
 
   @override
   String get iUnderstand => 'Rozumím';

@@ -1700,7 +1700,7 @@ class AppLocalizationsJa extends AppLocalizations {
   }
 
   @override
-  String get dontShowAgain => '再度表示しない';
+  String get dontShowAgain => '今後表示しない';
 
   @override
   String get iUnderstand => '理解しました';

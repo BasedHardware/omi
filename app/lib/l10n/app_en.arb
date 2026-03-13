@@ -10294,5 +10294,6 @@
     "clearAll": "Clear All",
     "@clearAll": {
         "description": "Button label to clear all files"
-    }
+    },
+    "dontShowAgain": "Don't show again"
 }

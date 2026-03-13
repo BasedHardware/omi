@@ -2769,5 +2769,6 @@
     "manageStorage": "管理存储",
     "safelyBackedUp": "已安全备份到您的手机",
     "notYetSynced": "尚未同步到您的手机",
-    "clearAll": "全部清除"
+    "clearAll": "全部清除",
+    "dontShowAgain": "不再显示"
 }

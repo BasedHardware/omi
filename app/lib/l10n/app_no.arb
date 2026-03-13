@@ -2747,5 +2747,6 @@
     "manageStorage": "Administrer lagring",
     "safelyBackedUp": "Sikkert sikkerhetskopiert til telefonen din",
     "notYetSynced": "Ennå ikke synkronisert med telefonen din",
-    "clearAll": "Tøm alt"
+    "clearAll": "Tøm alt",
+    "dontShowAgain": "Ikke vis igjen"
 }

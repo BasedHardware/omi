@@ -2748,5 +2748,6 @@
     "manageStorage": "ストレージを管理",
     "safelyBackedUp": "スマホに安全にバックアップ済み",
     "notYetSynced": "まだスマホに同期されていません",
-    "clearAll": "すべて削除"
+    "clearAll": "すべて削除",
+    "dontShowAgain": "今後表示しない"
 }

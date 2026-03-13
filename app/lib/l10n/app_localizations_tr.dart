@@ -1732,7 +1732,7 @@ class AppLocalizationsTr extends AppLocalizations {
   }
 
   @override
-  String get dontShowAgain => 'Bir daha gösterme';
+  String get dontShowAgain => 'Tekrar gösterme';
 
   @override
   String get iUnderstand => 'Anlıyorum';

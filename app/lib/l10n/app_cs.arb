@@ -2716,5 +2716,6 @@
     "manageStorage": "Správa úložiště",
     "safelyBackedUp": "Bezpečně zálohováno na vašem telefonu",
     "notYetSynced": "Zatím nesynchronizováno s vaším telefonem",
-    "clearAll": "Vymazat vše"
+    "clearAll": "Vymazat vše",
+    "dontShowAgain": "Znovu nezobrazovat"
 }

@@ -2843,5 +2843,6 @@
     "manageStorage": "Tárhely kezelése",
     "safelyBackedUp": "Biztonságosan mentve a telefonjára",
     "notYetSynced": "Még nincs szinkronizálva a telefonjával",
-    "clearAll": "Összes törlése"
+    "clearAll": "Összes törlése",
+    "dontShowAgain": "Ne jelenjen meg újra"
 }

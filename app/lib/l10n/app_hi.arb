@@ -2748,5 +2748,6 @@
     "manageStorage": "स्टोरेज प्रबंधित करें",
     "safelyBackedUp": "आपके फोन पर सुरक्षित बैकअप",
     "notYetSynced": "अभी तक आपके फोन पर सिंक नहीं हुआ",
-    "clearAll": "सब हटाएं"
+    "clearAll": "सब हटाएं",
+    "dontShowAgain": "दोबारा न दिखाएं"
 }

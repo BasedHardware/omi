@@ -2715,5 +2715,6 @@
     "manageStorage": "Speicher verwalten",
     "safelyBackedUp": "Sicher auf Ihrem Telefon gesichert",
     "notYetSynced": "Noch nicht mit Ihrem Telefon synchronisiert",
-    "clearAll": "Alles löschen"
+    "clearAll": "Alles löschen",
+    "dontShowAgain": "Nicht erneut anzeigen"
 }

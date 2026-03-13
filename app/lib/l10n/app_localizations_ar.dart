@@ -1714,7 +1714,7 @@ class AppLocalizationsAr extends AppLocalizations {
   }
 
   @override
-  String get dontShowAgain => 'لا تظهر هذا مرة أخرى';
+  String get dontShowAgain => 'عدم الإظهار مجدداً';
 
   @override
   String get iUnderstand => 'أفهم';

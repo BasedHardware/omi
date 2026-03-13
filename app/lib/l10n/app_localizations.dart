@@ -3348,7 +3348,7 @@ abstract class AppLocalizations {
   /// Checkbox text to prevent showing dialog again
   ///
   /// In en, this message translates to:
-  /// **'Don\'t show it again'**
+  /// **'Don\'t show again'**
   String get dontShowAgain;
 
   /// Button to acknowledge warning

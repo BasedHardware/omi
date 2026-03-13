@@ -2783,5 +2783,6 @@
     "manageStorage": "Gerenciar armazenamento",
     "safelyBackedUp": "Backup seguro no seu telefone",
     "notYetSynced": "Ainda não sincronizado com seu telefone",
-    "clearAll": "Limpar tudo"
+    "clearAll": "Limpar tudo",
+    "dontShowAgain": "Não mostrar novamente"
 }

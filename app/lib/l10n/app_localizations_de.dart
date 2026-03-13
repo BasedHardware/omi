@@ -1740,7 +1740,7 @@ class AppLocalizationsDe extends AppLocalizations {
   }
 
   @override
-  String get dontShowAgain => 'Nicht mehr anzeigen';
+  String get dontShowAgain => 'Nicht erneut anzeigen';
 
   @override
   String get iUnderstand => 'Ich verstehe';

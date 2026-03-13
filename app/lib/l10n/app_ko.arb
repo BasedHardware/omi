@@ -2747,5 +2747,6 @@
     "manageStorage": "저장소 관리",
     "safelyBackedUp": "휴대폰에 안전하게 백업됨",
     "notYetSynced": "아직 휴대폰에 동기화되지 않음",
-    "clearAll": "모두 지우기"
+    "clearAll": "모두 지우기",
+    "dontShowAgain": "다시 표시하지 않기"
 }

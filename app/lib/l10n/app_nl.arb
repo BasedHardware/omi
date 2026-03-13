@@ -2747,5 +2747,6 @@
     "manageStorage": "Opslag beheren",
     "safelyBackedUp": "Veilig opgeslagen op uw telefoon",
     "notYetSynced": "Nog niet gesynchroniseerd met uw telefoon",
-    "clearAll": "Alles wissen"
+    "clearAll": "Alles wissen",
+    "dontShowAgain": "Niet meer weergeven"
 }

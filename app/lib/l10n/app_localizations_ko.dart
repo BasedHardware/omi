@@ -1700,7 +1700,7 @@ class AppLocalizationsKo extends AppLocalizations {
   }
 
   @override
-  String get dontShowAgain => '다시 표시하지 않음';
+  String get dontShowAgain => '다시 표시하지 않기';
 
   @override
   String get iUnderstand => '이해했습니다';

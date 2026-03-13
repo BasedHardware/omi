@@ -1730,7 +1730,7 @@ class AppLocalizationsLv extends AppLocalizations {
   }
 
   @override
-  String get dontShowAgain => 'Vairs nerādīt';
+  String get dontShowAgain => 'Nerādīt vēlreiz';
 
   @override
   String get iUnderstand => 'Es saprotu';

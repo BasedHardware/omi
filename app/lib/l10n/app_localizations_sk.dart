@@ -1731,7 +1731,7 @@ class AppLocalizationsSk extends AppLocalizations {
   }
 
   @override
-  String get dontShowAgain => 'Nezobrazovať znova';
+  String get dontShowAgain => 'Znovu nezobrazovať';
 
   @override
   String get iUnderstand => 'Rozumiem';
