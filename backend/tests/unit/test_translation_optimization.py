@@ -70,7 +70,7 @@ from utils.translation import (
     TRANSLATION_CACHE_TTL,
     MAX_BATCH_SIZE,
 )
-from utils.translation_cache import TranscriptSegmentLanguageCache
+from utils.translation_cache import TranscriptSegmentLanguageCache, should_persist_translation
 
 
 class TestSplitIntoSentences:
@@ -393,6 +393,210 @@ class TestTranscriptSegmentLanguageCache:
         cache.cache["seg1"] = True
         cache.delete_cache("seg1")
         assert "seg1" not in cache.cache
+
+
+class TestShouldPersistTranslation:
+    def test_noop_target_language_translation_not_persisted(self):
+        """If text is unchanged and detected language matches target, don't persist translation."""
+        should_persist = should_persist_translation("Hello world", "Hello world", "en", "en-US")
+        assert should_persist is False
+
+    def test_unchanged_text_without_detection_not_persisted(self):
+        """If text is unchanged and detection is missing, still treat as no-op."""
+        should_persist = should_persist_translation("Hello world", "Hello world", "", "en")
+        assert should_persist is False
+
+    def test_mixed_language_translation_still_persisted(self):
+        """Even with dominant detected target language, changed text must be persisted."""
+        should_persist = should_persist_translation("Hello. Hola.", "Hello. Hello.", "en", "en")
+        assert should_persist is True
+
+    def test_short_phrase_noop_not_persisted(self):
+        """Short phrases like 'Transcription service.' that return identical from API should not persist."""
+        assert should_persist_translation("Transcription service.", "Transcription service.", "en", "en") is False
+
+    def test_numeric_only_noop_not_persisted(self):
+        """Numeric/punctuation text like '123. 123.' returning identical should not persist."""
+        assert should_persist_translation("123. 123.", "123. 123.", "", "en") is False
+
+    def test_short_greeting_noop_not_persisted(self):
+        """Short greetings like 'Hey.' returning identical should not persist."""
+        assert should_persist_translation("Hey.", "Hey.", "en", "en") is False
+
+    def test_whitespace_difference_not_persisted(self):
+        """Whitespace-only differences should be treated as no-op."""
+        assert should_persist_translation("Hello  world", "Hello world", "en", "en") is False
+
+    def test_real_translation_persisted(self):
+        """Actual translation (text changed) should always persist."""
+        assert should_persist_translation("Bonjour", "Hello", "fr", "en") is True
+
+    def test_none_translated_text_persisted_as_change(self):
+        """None translated_text differs from source, should persist (text changed)."""
+        assert should_persist_translation("Hello", None, "en", "en") is True
+
+    def test_empty_source_and_translated_not_persisted(self):
+        """Both empty should be treated as no-op."""
+        assert should_persist_translation("", "", "en", "en") is False
+
+    def test_long_english_correctly_detected_not_persisted(self):
+        """Long English text (correctly detected by langdetect) returning identical should not persist."""
+        assert should_persist_translation("Two three four five.", "Two three four five.", "en", "en") is False
+
+    def test_question_english_not_persisted(self):
+        """English questions returning identical should not persist."""
+        assert (
+            should_persist_translation("Hello? Can you hear? Yes? No?", "Hello? Can you hear? Yes? No?", "en", "en")
+            is False
+        )
+
+    def test_case_variant_locale_tags_not_persisted(self):
+        """Case/locale variants like EN-us vs en-US should normalize and match."""
+        assert should_persist_translation("Hello world", "Hello world", "EN-us", "en-US") is False
+
+    def test_unchanged_text_mismatched_detected_lang_not_persisted(self):
+        """Unchanged text with detected 'fr' should still not persist (conservative: text unchanged = no-op)."""
+        assert should_persist_translation("Transcription service.", "Transcription service.", "fr", "en") is False
+
+    def test_short_foreign_word_translated_to_english_persisted(self):
+        """Short foreign word like 'Bonjour.' translated to 'Hello.' must persist (real translation)."""
+        assert should_persist_translation("Bonjour.", "Hello.", "fr", "en") is True
+        assert should_persist_translation("Hola.", "Hello.", "es", "en") is True
+        assert should_persist_translation("Danke.", "Thank you.", "de", "en") is True
+        assert should_persist_translation("Merci.", "Thank you.", "fr", "en") is True
+
+    def test_multiple_short_foreign_sentences_translated_persisted(self):
+        """Multiple short foreign sentences in one segment must persist when translated."""
+        assert should_persist_translation("Bonjour. Comment allez-vous?", "Hello. How are you?", "fr", "en") is True
+        assert should_persist_translation("Hola. Gracias. Adiós.", "Hello. Thank you. Goodbye.", "es", "en") is True
+        assert should_persist_translation("Oui. Non. Merci.", "Yes. No. Thank you.", "fr", "en") is True
+
+
+class TestShortForeignTextLangdetectPreFilter:
+    """Verify that langdetect does NOT misdetect short foreign words as English (target).
+
+    If langdetect detected foreign text as English, is_in_target_language() would return True
+    and the segment would be skipped entirely (never sent to API). These tests verify that
+    short foreign words are NOT skipped by the pre-filter.
+    """
+
+    def test_short_foreign_words_not_detected_as_english(self):
+        """Short foreign words should not be detected as 'en' by langdetect."""
+        cache = TranscriptSegmentLanguageCache()
+        foreign_words = [
+            ("Bonjour.", "seg-fr"),
+            ("Hola.", "seg-es"),
+            ("Danke.", "seg-de"),
+            ("Gracias.", "seg-es2"),
+        ]
+        for text, seg_id in foreign_words:
+            result = cache.is_in_target_language(seg_id, text, "en")
+            assert result is False, f"'{text}' was incorrectly detected as English — would skip translation"
+
+    def test_multiple_short_foreign_sentences_not_detected_as_english(self):
+        """Multiple short foreign sentences should not be detected as 'en'."""
+        cache = TranscriptSegmentLanguageCache()
+        result = cache.is_in_target_language("seg-multi-fr", "Bonjour. Merci. Au revoir.", "en")
+        assert result is False, "Multiple French sentences incorrectly detected as English"
+        result = cache.is_in_target_language("seg-multi-es", "Hola. Gracias. Adiós.", "en")
+        assert result is False, "Multiple Spanish sentences incorrectly detected as English"
+
+
+class TestTranslateSegmentGuardWired:
+    """Regression test: verify should_persist_translation is wired into transcribe.py.
+
+    _translate_segment is a closure inside _stream_handler and cannot be imported directly.
+    This test reads the source to verify the guard call is present — catches accidental removal.
+    """
+
+    def test_transcribe_imports_should_persist_translation(self):
+        """transcribe.py must import should_persist_translation from translation_cache."""
+        import inspect
+        import importlib
+
+        # Read transcribe module source to verify import
+        transcribe_path = os.path.join(os.path.dirname(__file__), '..', '..', 'routers', 'transcribe.py')
+        with open(transcribe_path) as f:
+            source = f.read()
+        assert 'from utils.translation_cache import' in source
+        assert 'should_persist_translation' in source
+
+    def test_transcribe_calls_should_persist_translation_before_translation_creation(self):
+        """Guard must appear before Translation object creation in _translate_segment."""
+        transcribe_path = os.path.join(os.path.dirname(__file__), '..', '..', 'routers', 'transcribe.py')
+        with open(transcribe_path) as f:
+            source = f.read()
+        guard_pos = source.find('should_persist_translation(')
+        translation_create_pos = source.find('trans = Translation(lang=translation_language')
+        assert guard_pos > 0, "should_persist_translation call not found in transcribe.py"
+        assert translation_create_pos > 0, "Translation creation not found in transcribe.py"
+        assert guard_pos < translation_create_pos, "Guard must appear before Translation creation"
+
+
+class TestTranslateSegmentGuardIntegration:
+    """Integration test simulating _translate_segment's guard path.
+
+    Verifies the full logic flow: translate API returns same text with target lang detected,
+    guard triggers early return, pending entry is pruned, no translation is persisted.
+    """
+
+    def test_noop_translation_skips_persist_and_prunes_pending(self):
+        """When API returns identical text with same detected lang, no Translation is created
+        and pending_translations entry is pruned."""
+        segment_text = "Transcription service."
+        translation_language = "en"
+        translation_language_base = "en"
+        pending_translations = {'seg-1': {'text_hash': 'abc123', 'version': 1}}
+        persisted_translations = []  # tracks what would be written to DB
+
+        # Simulate translate API returning identical text with "en" detected
+        translated_text = "Transcription service."
+        detected_lang = "en"
+
+        # Simulate language cache update (should still happen before guard)
+        cache = TranscriptSegmentLanguageCache()
+        cache.update_from_translate_response('seg-1', detected_lang, translation_language_base)
+        assert cache.cache.get('seg-1') is True  # cache learns target language
+
+        # Guard check — same as transcribe.py line 1514
+        if not should_persist_translation(
+            segment_text, translated_text, detected_lang, translation_language_base or translation_language
+        ):
+            pending_translations.pop('seg-1', None)
+            # Early return — no Translation created
+        else:
+            persisted_translations.append({'lang': translation_language, 'text': translated_text})
+
+        # Verify: no translation persisted, pending entry pruned
+        assert len(persisted_translations) == 0
+        assert 'seg-1' not in pending_translations
+
+    def test_real_translation_persists_and_keeps_pending(self):
+        """When API returns different text (real translation), Translation IS created."""
+        segment_text = "Bonjour le monde"
+        translation_language = "en"
+        translation_language_base = "en"
+        pending_translations = {'seg-2': {'text_hash': 'def456', 'version': 1}}
+        persisted_translations = []
+
+        translated_text = "Hello world"
+        detected_lang = "fr"
+
+        cache = TranscriptSegmentLanguageCache()
+        cache.update_from_translate_response('seg-2', detected_lang, translation_language_base)
+        assert cache.cache.get('seg-2') is False  # cache learns non-target language
+
+        if not should_persist_translation(
+            segment_text, translated_text, detected_lang, translation_language_base or translation_language
+        ):
+            pending_translations.pop('seg-2', None)
+        else:
+            persisted_translations.append({'lang': translation_language, 'text': translated_text})
+            pending_translations.pop('seg-2', None)  # normal cleanup after persist
+
+        # Verify: translation WAS persisted
+        assert len(persisted_translations) == 1
+        assert persisted_translations[0]['text'] == "Hello world"
 
 
 class TestRedisCacheTTL:

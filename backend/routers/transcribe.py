@@ -89,7 +89,7 @@ from utils.stt.streaming import (
 from utils.stt.vad_gate import VADStreamingGate, VAD_GATE_MODE, is_gate_enabled
 from utils.subscription import has_transcription_credits, get_remaining_transcription_seconds
 from utils.translation import TranslationService
-from utils.translation_cache import TranscriptSegmentLanguageCache
+from utils.translation_cache import TranscriptSegmentLanguageCache, should_persist_translation
 from utils.webhooks import get_audio_bytes_webhook_seconds
 from utils.onboarding import OnboardingHandler
 
@@ -1510,6 +1510,12 @@ async def _stream_handler(
                 language_cache.update_from_translate_response(
                     segment.id, detected_lang, translation_language_base or translation_language
                 )
+
+            if not should_persist_translation(
+                segment_text, translated_text, detected_lang, translation_language_base or translation_language
+            ):
+                pending_translations.pop(segment.id, None)
+                return
 
             # Create/Update Translation object
             trans = Translation(lang=translation_language, text=translated_text)
