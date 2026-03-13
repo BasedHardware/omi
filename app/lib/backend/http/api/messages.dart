@@ -88,14 +88,6 @@ ServerMessageChunk? parseMessageChunk(String line, String messageId) {
   return null;
 }
 
-/// Sends a chat message to the server in plaintext.
-///
-/// NOTE: Chat messages are NOT client-encrypted on send even when E2EE is enabled.
-/// The server LLM must see plaintext to generate a response. The backend encrypts
-/// stored messages at rest via the data_protection_level in the database layer,
-/// using server-side encryption for both 'enhanced' and 'e2ee' levels.
-/// This is an acknowledged security boundary — true E2EE for chat would require
-/// on-device LLM inference.
 Stream<ServerMessageChunk> sendMessageStreamServer(String text, {String? appId, List<String>? filesId}) async* {
   var url = '${Env.apiBaseUrl}v2/messages?app_id=$appId';
   if (appId == null || appId.isEmpty || appId == 'null' || appId == 'no_selected') {

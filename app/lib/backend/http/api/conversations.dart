@@ -8,13 +8,6 @@ import 'package:omi/services/e2ee_middleware.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 
-/// Process an in-progress conversation on the server.
-///
-/// NOTE: Conversations are NOT client-encrypted before upload even when E2EE is enabled.
-/// The server must see plaintext audio for Deepgram transcription. The backend encrypts
-/// stored transcript segments at rest via the data_protection_level in the database layer,
-/// using server-side encryption for both 'enhanced' and 'e2ee' levels.
-/// True E2EE for conversations would require on-device transcription.
 Future<CreateConversationResponse?> processInProgressConversation() async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/conversations',

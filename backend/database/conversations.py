@@ -124,7 +124,7 @@ def _prepare_conversation_for_read(conversation_data: Optional[Dict[str, Any]], 
 def _prepare_photo_for_write(data: Dict[str, Any], uid: str, level: str) -> Dict[str, Any]:
     data = copy.deepcopy(data)
     data['data_protection_level'] = level
-    if level == 'enhanced' and 'base64' in data and isinstance(data['base64'], str):
+    if level in ('enhanced', 'e2ee') and 'base64' in data and isinstance(data['base64'], str):
         data['base64'] = encryption.encrypt(data['base64'], uid)
     return data
 
@@ -134,7 +134,7 @@ def _prepare_photo_for_read(photo_data: Optional[Dict[str, Any]], uid: str) -> O
         return None
     data = copy.deepcopy(photo_data)
     level = data.get('data_protection_level')
-    if level == 'enhanced' and 'base64' in data and isinstance(data['base64'], str):
+    if level in ('enhanced', 'e2ee') and 'base64' in data and isinstance(data['base64'], str):
         try:
             data['base64'] = encryption.decrypt(data['base64'], uid)
         except Exception:
@@ -690,12 +690,9 @@ def migrate_conversations_level_batch(uid: str, conversation_ids: List[str], tar
 
             # Prepare the specific fields for update
             photo_update_payload = {'data_protection_level': target_level}
-            if target_level == 'enhanced':
+            if target_level in ('enhanced', 'e2ee'):
                 photo_update_payload['base64'] = encryption.encrypt(plain_photo_data['base64'], uid)
-            elif target_level == 'e2ee':
-                # E2EE: store plaintext during migration; client handles encryption
-                photo_update_payload['base64'] = plain_photo_data['base64']
-            else:  # Moving from enhanced to standard
+            else:  # Moving from enhanced/e2ee to standard
                 photo_update_payload['base64'] = plain_photo_data['base64']
 
             # Add photo update to the batch

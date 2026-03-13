@@ -10294,5 +10294,66 @@
     "clearAll": "Clear All",
     "@clearAll": {
         "description": "Button label to clear all files"
+    },
+    "enableE2ee": "Enable E2EE",
+    "@enableE2ee": {
+        "description": "Button to enable end-to-end encryption"
+    },
+    "recoveryKey": "Recovery Key",
+    "@recoveryKey": {
+        "description": "Title for recovery key dialog"
+    },
+    "saveKeyMessage": "Save this key somewhere safe. You will need it to recover your encrypted memories if you switch devices. Without this key, E2E encrypted data is unrecoverable.",
+    "@saveKeyMessage": {
+        "description": "Instructions for backing up E2EE recovery key"
+    },
+    "copyToClipboard": "Copy to Clipboard",
+    "@copyToClipboard": {
+        "description": "Button to copy text to clipboard"
+    },
+    "savedMyKey": "I've Saved My Key",
+    "@savedMyKey": {
+        "description": "Confirmation button after saving recovery key"
+    },
+    "showRecoveryKey": "Show Recovery Key",
+    "@showRecoveryKey": {
+        "description": "Button to display the E2EE recovery key"
+    },
+    "e2eeKeyWarning": "⚠️ If you lose your recovery key, your data cannot be recovered.",
+    "@e2eeKeyWarning": {
+        "description": "Warning about E2EE key loss"
+    },
+    "e2eeBackupReminder": "Make sure to back up your key after enabling.",
+    "@e2eeBackupReminder": {
+        "description": "Reminder to back up E2EE key"
+    },
+    "e2eeFailedToEnable": "Failed to enable E2EE: {error}",
+    "@e2eeFailedToEnable": {
+        "description": "Error message when E2EE enabling fails",
+        "placeholders": {
+            "error": {
+                "type": "String"
+            }
+        }
+    },
+    "keyCopiedToClipboard": "Key copied to clipboard",
+    "@keyCopiedToClipboard": {
+        "description": "Snackbar message after copying E2EE key"
+    },
+    "e2eeMemoriesDescription": "Encrypted on your device before reaching the server. Only you can read them.",
+    "@e2eeMemoriesDescription": {
+        "description": "Description of E2EE for memories"
+    },
+    "e2eeOtherDataDescription": "Encrypted at rest on the server. The server processes audio for transcription but stored data is encrypted and cannot be read at rest.",
+    "@e2eeOtherDataDescription": {
+        "description": "Description of server-side encryption for conversations and chat"
+    },
+    "e2eeCardSubtitle": "Maximum protection — memories encrypted on-device, all other data encrypted at rest",
+    "@e2eeCardSubtitle": {
+        "description": "Subtitle for E2EE card in data protection settings"
+    },
+    "e2eeUnableToDecrypt": "Encrypted — unable to decrypt. Check your recovery key.",
+    "@e2eeUnableToDecrypt": {
+        "description": "Error shown when E2EE decryption fails"
     }
 }

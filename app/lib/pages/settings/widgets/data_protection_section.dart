@@ -7,15 +7,7 @@ import 'package:omi/providers/user_provider.dart';
 import 'package:omi/services/e2ee_service.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
-// TODO(atlas): Move these to ARB l10n files
-const _kEnableE2ee = 'Enable E2EE';
-const _kRecoveryKey = 'Recovery Key';
-const _kSaveKeyMessage = 'Save this key somewhere safe. You will need it to recover your encrypted memories if you switch devices. Without this key, E2E encrypted data is unrecoverable.';
-const _kCopyToClipboard = 'Copy to Clipboard';
-const _kSavedMyKey = "I've Saved My Key";
-const _kShowRecoveryKey = 'Show Recovery Key';
-const _kKeyWarning = '⚠️ If you lose your recovery key, your data cannot be recovered.';
-const _kBackupReminder = 'Make sure to back up your key after enabling.';
+
 
 extension StringExtension on String {
   String capitalize() {
@@ -65,20 +57,20 @@ class _DataProtectionSectionState extends State<DataProtectionSection> {
                 text: '🔒 Memories: ',
                 style: TextStyle(fontWeight: FontWeight.bold),
               ),
-              const TextSpan(text: 'Encrypted on your device before reaching the server. Only you can read them.\n\n'),
+              TextSpan(text: '${context.l10n.e2eeMemoriesDescription}\n\n'),
               const TextSpan(
                 text: '🔐 Conversations, chat & other data: ',
                 style: TextStyle(fontWeight: FontWeight.bold),
               ),
-              const TextSpan(
-                  text:
-                      'Encrypted at rest on the server. The server processes audio for transcription but stored data is encrypted and cannot be read at rest.\n\n'),
               TextSpan(
-                text: '$_kKeyWarning\n',
+                  text:
+                      '${context.l10n.e2eeOtherDataDescription}\n\n'),
+              TextSpan(
+                text: '${context.l10n.e2eeKeyWarning}\n',
                 style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.orangeAccent),
               ),
               const TextSpan(
-                text: _kBackupReminder,
+                text: context.l10n.e2eeBackupReminder,
                 style: TextStyle(fontStyle: FontStyle.italic),
               ),
             ],
@@ -99,7 +91,7 @@ class _DataProtectionSectionState extends State<DataProtectionSection> {
               backgroundColor: Colors.deepPurple,
               foregroundColor: Colors.white,
             ),
-            child: const Text(_kEnableE2ee),
+            child: Text(context.l10n.enableE2ee),
           ),
         ],
       ),
@@ -115,7 +107,7 @@ class _DataProtectionSectionState extends State<DataProtectionSection> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to enable E2EE: $e'), backgroundColor: Colors.red),
+        SnackBar(content: Text(context.l10n.e2eeFailedToEnable(e.toString())), backgroundColor: Colors.red),
       );
     }
   }
@@ -132,7 +124,7 @@ class _DataProtectionSectionState extends State<DataProtectionSection> {
           children: [
             Icon(Icons.key, color: Colors.orangeAccent),
             SizedBox(width: 10),
-            Text(_kRecoveryKey, style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+            Text(context.l10n.recoveryKey, style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
           ],
         ),
         content: Column(
@@ -140,7 +132,7 @@ class _DataProtectionSectionState extends State<DataProtectionSection> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              _kSaveKeyMessage,
+              context.l10n.saveKeyMessage,
               style: TextStyle(color: Colors.white.withOpacity(0.8), height: 1.4),
             ),
             const SizedBox(height: 16),
@@ -167,11 +159,11 @@ class _DataProtectionSectionState extends State<DataProtectionSection> {
                 onPressed: () {
                   Clipboard.setData(ClipboardData(text: key));
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Key copied to clipboard')),
+                    SnackBar(content: Text(context.l10n.keyCopiedToClipboard)),
                   );
                 },
                 icon: const Icon(Icons.copy, size: 16, color: Colors.deepPurple),
-                label: const Text(_kCopyToClipboard, style: TextStyle(color: Colors.deepPurple)),
+                label: Text(context.l10n.copyToClipboard, style: TextStyle(color: Colors.deepPurple)),
               ),
             ),
           ],
@@ -183,7 +175,7 @@ class _DataProtectionSectionState extends State<DataProtectionSection> {
               backgroundColor: Colors.deepPurple,
               foregroundColor: Colors.white,
             ),
-            child: const Text(_kSavedMyKey),
+            child: Text(context.l10n.savedMyKey),
           ),
         ],
       ),
@@ -443,7 +435,7 @@ class _DataProtectionSectionState extends State<DataProtectionSection> {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'Maximum protection — memories encrypted on-device, all other data encrypted at rest',
+                    context.l10n.e2eeCardSubtitle,
                     style: TextStyle(color: Colors.grey.shade400, fontSize: 14, height: 1.4),
                   ),
                 ],
@@ -463,7 +455,7 @@ class _DataProtectionSectionState extends State<DataProtectionSection> {
           TextButton.icon(
             onPressed: () => _showExportKeyDialog(context),
             icon: const Icon(Icons.key, size: 16, color: Colors.deepPurple),
-            label: const Text(_kShowRecoveryKey, style: TextStyle(color: Colors.deepPurple, fontSize: 13)),
+            label: Text(context.l10n.showRecoveryKey, style: TextStyle(color: Colors.deepPurple, fontSize: 13)),
           ),
         ],
       ),
