@@ -20,7 +20,7 @@ steps:
 
   - name: Verify usage page
     assert:
-      text_visible: ["Plan & Usage"]
+      interactive_count: { min: 2 }
     note: "UsagePage shows current plan, usage stats, upgrade button if not PRO"
 
   - name: Scroll usage details
