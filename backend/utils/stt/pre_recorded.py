@@ -359,9 +359,7 @@ def modulate_prerecorded_from_bytes(
         logger.error(f'Modulate prerecorded error: {e}')
         if attempts < 2:
             return modulate_prerecorded_from_bytes(audio_bytes, sample_rate, diarize, attempts + 1, return_language)
-        if return_language:
-            return [], 'en'
-        return []
+        raise RuntimeError(f'Modulate transcription failed after {attempts + 1} attempts: {e}')
 
 
 @timeit
