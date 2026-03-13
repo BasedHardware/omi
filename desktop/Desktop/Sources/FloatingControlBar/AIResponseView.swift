@@ -30,13 +30,11 @@ struct AIResponseView: View {
                             chatExchangeView(exchange)
                         }
 
-                        // Current question (hidden when just showing history with no active query)
-                        if !userInput.isEmpty || currentMessage != nil {
-                            questionBar
+                        // Current question
+                        questionBar
 
-                            // Current response
-                            currentContentView
-                        }
+                        // Current response
+                        currentContentView
 
                         // Voice follow-up indicator (shown inline when PTT is active during conversation)
                         if isVoiceFollowUp {
@@ -110,12 +108,8 @@ struct AIResponseView: View {
                 Text("thinking")
                     .scaledFont(size: 14)
                     .foregroundColor(.secondary)
-            } else if userInput.isEmpty && currentMessage == nil {
-                Text("conversation")
-                    .scaledFont(size: 14)
-                    .foregroundColor(.secondary)
             } else {
-                Text("fazm says")
+                Text("omi says")
                     .scaledFont(size: 14)
                     .foregroundColor(.secondary)
             }
@@ -315,7 +309,7 @@ struct AIResponseView: View {
 
     private var followUpInputView: some View {
         HStack(spacing: 6) {
-            TextField("Ask Fazm...", text: $followUpText)
+            TextField("Ask follow up...", text: $followUpText)
                 .textFieldStyle(.plain)
                 .scaledFont(size: 13)
                 .padding(.horizontal, 10)
