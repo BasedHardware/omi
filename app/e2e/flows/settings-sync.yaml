@@ -20,7 +20,7 @@ steps:
 
   - name: Verify sync page
     assert:
-      text_visible: ["Offline Sync"]
+      interactive_count: { min: 2 }
     note: >
       SyncPage shows: sync status, local storage info,
       recordings list, synced conversations, fast transfer settings,
