@@ -42,12 +42,12 @@ steps:
   - name: Hot restart and verify Spanish UI
     hot_restart: true
     assert:
-      text_visible: ["Hoy"]
+      text_visible: ["Conversaciones"]
     screenshot: spanish-ui
 
   - name: Restore English locale
     adb_locale: { set: "en" }
     hot_restart: true
     assert:
-      text_visible: ["Today"]
+      text_visible: ["Conversations"]
     screenshot: english-restored
