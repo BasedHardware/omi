@@ -2608,6 +2608,10 @@ async def _stream_handler(
                 if speechmatics_socket:
                     await speechmatics_socket.close()
                 if modulate_socket:
+                    try:
+                        await modulate_socket.send("")  # EOS signal for final utterances
+                    except Exception:
+                        pass
                     await modulate_socket.close()
         except Exception as e:
             logger.error(f"Error closing STT sockets: {e} {uid} {session_id}")
