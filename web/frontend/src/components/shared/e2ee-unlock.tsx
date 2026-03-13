@@ -65,7 +65,10 @@ export default function E2eeUnlock({ onUnlocked, onClose }: E2eeUnlockProps) {
         await videoRef.current.play();
       }
 
-      const detector = new (window as any).BarcodeDetector({ formats: ['qr_code'] });
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const detector = new (window as unknown as Record<string, any>).BarcodeDetector({
+        formats: ['qr_code'],
+      });
 
       const scan = async () => {
         if (!videoRef.current || !streamRef.current) return;
