@@ -22,6 +22,7 @@ dependencies:
     sdk: flutter
 
   # UI
+  qr_flutter: ^4.1.0
   auto_size_text: 3.0.0
   lottie: ^3.1.2
   expandable_text: ^2.3.0

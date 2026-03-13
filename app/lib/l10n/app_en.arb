@@ -10355,5 +10355,26 @@
     "e2eeUnableToDecrypt": "Encrypted — unable to decrypt. Check your recovery key.",
     "@e2eeUnableToDecrypt": {
         "description": "Error shown when E2EE decryption fails"
+    },
+    "pairWithWeb": "Pair with Web",
+    "@pairWithWeb": {
+        "description": "Button to pair E2EE key with web UI via QR code"
+    },
+    "scanQrOnWeb": "Scan this QR code on omi.me to unlock your encrypted data",
+    "@scanQrOnWeb": {
+        "description": "Instructions for QR pairing"
+    },
+    "expiresInSeconds": "Expires in {seconds}s",
+    "@expiresInSeconds": {
+        "description": "Timer for QR code expiry",
+        "placeholders": {
+            "seconds": {
+                "type": "int"
+            }
+        }
+    },
+    "onlyTrustedDevice": "⚠️ Only scan on a trusted device",
+    "@onlyTrustedDevice": {
+        "description": "Warning about scanning QR code"
     }
 }

@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 
 import 'package:provider/provider.dart';
 
+import 'package:omi/pages/settings/widgets/e2ee_qr_dialog.dart';
 import 'package:omi/providers/user_provider.dart';
 import 'package:omi/services/e2ee_service.dart';
 import 'package:omi/utils/l10n_extensions.dart';
@@ -187,6 +188,16 @@ class _DataProtectionSectionState extends State<DataProtectionSection> {
     final key = await E2eeService().exportKey();
     if (key == null || !mounted) return;
     _showRecoveryKeyDialog(context, key);
+  }
+
+  /// Show QR code dialog for pairing E2EE key with web UI.
+  void _showQrPairingDialog(BuildContext context) async {
+    final key = await E2eeService().exportKey();
+    if (key == null || !mounted) return;
+    showDialog(
+      context: context,
+      builder: (ctx) => E2eeQrDialog(base64Key: key),
+    );
   }
 
   @override
@@ -456,6 +467,12 @@ class _DataProtectionSectionState extends State<DataProtectionSection> {
             onPressed: () => _showExportKeyDialog(context),
             icon: const Icon(Icons.key, size: 16, color: Colors.deepPurple),
             label: Text(context.l10n.showRecoveryKey, style: TextStyle(color: Colors.deepPurple, fontSize: 13)),
+          ),
+          const SizedBox(width: 4),
+          TextButton.icon(
+            onPressed: () => _showQrPairingDialog(context),
+            icon: const Icon(Icons.qr_code_2, size: 16, color: Colors.deepPurple),
+            label: Text(context.l10n.pairWithWeb, style: TextStyle(color: Colors.deepPurple, fontSize: 13)),
           ),
         ],
       ),
