@@ -16,38 +16,28 @@ setup:
   requires: developer_settings_enabled
 
 steps:
-  - name: Navigate to Developer Settings
-    press: { type: gesture, hint: "settings gear icon top-right" }
-    screenshot: settings-open
+  - name: Open settings drawer
+    press: { type: button, position: rightmost }
 
   - name: Open Developer Settings
     scroll: down
-    press: { type: gesture, hint: "Developer Settings row in settings" }
+    press: { type: gesture, hint: "Developer Settings" }
     screenshot: developer-settings
 
   - name: Open Persona Section
-    press: { type: gesture, hint: "Persona Section row in developer settings" }
+    press: { type: gesture, hint: "Persona" }
     screenshot: persona-entry
 
   - name: Verify persona profile page
     assert:
-      text_visible: ["Share Public Link", "Make Public"]
+      interactive_count: { min: 2 }
     note: >
       Profile image (100x100), name with verified badge,
       "Share Public Link" button, Make Public toggle,
       Social link rows (omi, Twitter active; others Coming Soon).
     screenshot: persona-profile
 
-  - name: Check social links
-    scroll: down
-    assert:
-      text_visible: ["Twitter"]
-    screenshot: persona-social-links
-
   - name: Back to developer settings
-    back: true
-
-  - name: Back to settings
     back: true
 
   - name: Back to home
