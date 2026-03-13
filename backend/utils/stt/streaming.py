@@ -870,10 +870,13 @@ async def process_audio_modulate(stream_transcript, sample_rate: int, language: 
     if not api_key:
         raise ValueError("Modulate API key is not set. Please set the MODULATE_API_KEY environment variable.")
 
-    uri = f'wss://modulate-developer-apis.com/api/velma-2-stt-streaming?api_key={api_key}&speaker_diarization=true'
+    uri = (
+        f'wss://modulate-developer-apis.com/api/velma-2-stt-streaming'
+        f'?api_key={api_key}&speaker_diarization=true&sample_rate={sample_rate}'
+    )
 
     try:
-        logger.info("Connecting to Modulate WebSocket...")
+        logger.info(f"Connecting to Modulate WebSocket (sample_rate={sample_rate})...")
         modulate_socket = await websockets.connect(uri, ping_timeout=10, ping_interval=10)
         logger.info("Connected to Modulate WebSocket.")
 
