@@ -901,8 +901,9 @@ async def process_audio_modulate(stream_transcript, sample_rate: int, language: 
                         start_s = utterance.get('start_ms', 0) / 1000.0
                         duration_s = utterance.get('duration_ms', 0) / 1000.0
                         end_s = start_s + duration_s
-                        # Modulate uses 1-indexed speakers
-                        speaker_id = utterance.get('speaker', 1)
+                        # Modulate uses 1-indexed speakers; guard against missing/null
+                        raw_speaker = utterance.get('speaker', 1)
+                        speaker_id = raw_speaker if isinstance(raw_speaker, int) and raw_speaker >= 1 else 1
 
                         if preseconds > 0 and start_s < preseconds:
                             continue
