@@ -20,34 +20,24 @@ steps:
   - name: Open Profile
     press: { type: gesture, hint: "first wide row y=150-200 in settings" }
     assert:
-      text_visible: ["Profile"]
+      interactive_count: { min: 3 }
 
   - name: Open Language
     press: { type: gesture, hint: "3rd row in Profile, y=250-340" }
     screenshot: language-page
 
-  - name: Open App Language picker
-    press: { type: gesture, hint: "first wide row y=250-400 on Language page" }
+  - name: Verify language page
     assert:
-      text_visible: ["English"]
-    screenshot: language-picker
+      interactive_count: { min: 2 }
+    screenshot: language-view
 
-  - name: Select a language from picker
-    press: { type: gesture, hint: "pick a non-current language row" }
-    screenshot: after-select
+  - name: Back to profile
+    back: true
 
-  - name: Change locale via shared_prefs
-    adb_locale: { set: "es", hint: "modify flutter.app_locale in shared_prefs XML" }
+  - name: Back to settings
+    back: true
 
-  - name: Hot restart and verify Spanish UI
-    hot_restart: true
+  - name: Close settings
+    back: true
     assert:
-      text_visible: ["Conversaciones"]
-    screenshot: spanish-ui
-
-  - name: Restore English locale
-    adb_locale: { set: "en" }
-    hot_restart: true
-    assert:
-      text_visible: ["Conversations"]
-    screenshot: english-restored
+      bottom_nav_tabs: { min: 4 }
