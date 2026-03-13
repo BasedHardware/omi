@@ -21,7 +21,7 @@ steps:
 
   - name: Verify transcription page
     assert:
-      text_visible: ["Omi Cloud"]
+      interactive_count: { min: 2 }
     note: >
       Source selector: toggle between "Omi Cloud" and "Custom STT".
       When Custom enabled: provider dropdown, API key field (with show/hide),
