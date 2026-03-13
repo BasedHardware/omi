@@ -247,6 +247,11 @@ env:
       secretKeyRef:
         name: dev-omi-backend-secrets
         key: SERVICE_ACCOUNT_JSON
+  - name: MODULATE_API_KEY
+    valueFrom:
+      secretKeyRef:
+        name: dev-omi-backend-secrets
+        key: MODULATE_API_KEY
   - name: GOOGLE_CLOUD_PROJECT
     value: "based-hardware"
 
