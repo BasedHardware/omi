@@ -25,7 +25,7 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get deleteConversationMessage =>
-      'क्या आप वाकई इस बातचीत को हटाना चाहते हैं? यह क्रिया पूर्ववत नहीं की जा सकती।';
+      'इससे संबंधित यादें, कार्य और ऑडियो फ़ाइलें भी हटा दी जाएंगी। यह क्रिया पूर्ववत नहीं की जा सकती।';
 
   @override
   String get confirm => 'पुष्टि करें';
@@ -8533,7 +8533,4 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get clearAll => 'सब हटाएं';
-
-  @override
-  String get deleteAssociatedData => 'संबंधित यादें और कार्य हटाएं';
 }

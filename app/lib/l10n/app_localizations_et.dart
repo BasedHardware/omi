@@ -25,7 +25,7 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get deleteConversationMessage =>
-      'Kas olete kindel, et soovite selle vestluse kustutada? Seda toimingut ei saa tagasi võtta.';
+      'See kustutab ka seotud mälestused, ülesanded ja helifailid. Seda toimingut ei saa tagasi võtta.';
 
   @override
   String get confirm => 'Kinnita';
@@ -8551,7 +8551,4 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get clearAll => 'Tühjenda kõik';
-
-  @override
-  String get deleteAssociatedData => 'Kustuta seotud mälestused ja ülesanded';
 }

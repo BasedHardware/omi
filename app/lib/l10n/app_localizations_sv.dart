@@ -25,7 +25,7 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get deleteConversationMessage =>
-      'Är du säker på att du vill ta bort denna konversation? Detta kan inte ångras.';
+      'Detta kommer också att radera tillhörande minnen, uppgifter och ljudfiler. Denna åtgärd kan inte ångras.';
 
   @override
   String get confirm => 'Bekräfta';
@@ -8557,7 +8557,4 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get clearAll => 'Rensa allt';
-
-  @override
-  String get deleteAssociatedData => 'Ta bort tillhörande minnen och uppgifter';
 }

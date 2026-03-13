@@ -25,7 +25,7 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get deleteConversationMessage =>
-      'Weet je zeker dat je dit gesprek wilt verwijderen? Deze actie kan niet ongedaan worden gemaakt.';
+      'Dit zal ook de bijbehorende herinneringen, taken en audiobestanden verwijderen. Deze actie kan niet ongedaan worden gemaakt.';
 
   @override
   String get confirm => 'Bevestigen';
@@ -8581,7 +8581,4 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get clearAll => 'Alles wissen';
-
-  @override
-  String get deleteAssociatedData => 'Gekoppelde herinneringen en taken verwijderen';
 }

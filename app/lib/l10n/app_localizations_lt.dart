@@ -24,7 +24,8 @@ class AppLocalizationsLt extends AppLocalizations {
   String get deleteConversationTitle => 'Ištrinti pokalbį?';
 
   @override
-  String get deleteConversationMessage => 'Ar tikrai norite ištrinti šį pokalbį? Šio veiksmo negalima atšaukti.';
+  String get deleteConversationMessage =>
+      'Tai taip pat ištrins susijusius prisiminimus, užduotis ir garso failus. Šio veiksmo negalima atšaukti.';
 
   @override
   String get confirm => 'Patvirtinti';
@@ -8560,7 +8561,4 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get clearAll => 'Išvalyti viską';
-
-  @override
-  String get deleteAssociatedData => 'Ištrinti susijusius prisiminimus ir užduotis';
 }

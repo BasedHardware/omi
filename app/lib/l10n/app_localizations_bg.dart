@@ -25,7 +25,7 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get deleteConversationMessage =>
-      'Сигурни ли сте, че искате да изтриете този разговор? Това действие не може да бъде отменено.';
+      'Това ще изтрие и свързаните спомени, задачи и аудио файлове. Това действие не може да бъде отменено.';
 
   @override
   String get confirm => 'Потвърди';
@@ -8589,7 +8589,4 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get clearAll => 'Изчисти всичко';
-
-  @override
-  String get deleteAssociatedData => 'Изтриване на свързаните спомени и задачи';
 }

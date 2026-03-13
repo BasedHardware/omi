@@ -25,7 +25,7 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get deleteConversationMessage =>
-      'Apakah Anda yakin ingin menghapus percakapan ini? Tindakan ini tidak dapat dibatalkan.';
+      'Ini juga akan menghapus kenangan, tugas, dan file audio terkait. Tindakan ini tidak dapat dibatalkan.';
 
   @override
   String get confirm => 'Konfirmasi';
@@ -8563,7 +8563,4 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get clearAll => 'Hapus semua';
-
-  @override
-  String get deleteAssociatedData => 'Hapus memori dan tugas terkait';
 }

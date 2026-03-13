@@ -24,7 +24,8 @@ class AppLocalizationsTh extends AppLocalizations {
   String get deleteConversationTitle => 'ลบบทสนทนา?';
 
   @override
-  String get deleteConversationMessage => 'คุณแน่ใจหรือไม่ว่าต้องการลบบทสนทนานี้? การดำเนินการนี้ไม่สามารถยกเลิกได้';
+  String get deleteConversationMessage =>
+      'การดำเนินการนี้จะลบความทรงจำ งาน และไฟล์เสียงที่เกี่ยวข้องด้วย การดำเนินการนี้ไม่สามารถย้อนกลับได้';
 
   @override
   String get confirm => 'ยืนยัน';
@@ -8508,7 +8509,4 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get clearAll => 'ล้างทั้งหมด';
-
-  @override
-  String get deleteAssociatedData => 'ลบความทรงจำและงานที่เกี่ยวข้อง';
 }

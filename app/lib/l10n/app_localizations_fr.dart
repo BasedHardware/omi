@@ -25,7 +25,7 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get deleteConversationMessage =>
-      'Êtes-vous sûr de vouloir supprimer cette conversation ? Cette action est irréversible.';
+      'Cela supprimera également les souvenirs, tâches et fichiers audio associés. Cette action est irréversible.';
 
   @override
   String get confirm => 'Confirmer';
@@ -8632,7 +8632,4 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get clearAll => 'Tout effacer';
-
-  @override
-  String get deleteAssociatedData => 'Supprimer les souvenirs et tâches associés';
 }

@@ -25,7 +25,7 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get deleteConversationMessage =>
-      'Biztosan törölni szeretnéd ezt a beszélgetést? Ez a művelet nem vonható vissza.';
+      'Ez törli a kapcsolódó emlékeket, feladatokat és hangfájlokat is. Ez a művelet nem vonható vissza.';
 
   @override
   String get confirm => 'Megerősítés';
@@ -8591,7 +8591,4 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get clearAll => 'Összes törlése';
-
-  @override
-  String get deleteAssociatedData => 'Kapcsolódó emlékek és feladatok törlése';
 }

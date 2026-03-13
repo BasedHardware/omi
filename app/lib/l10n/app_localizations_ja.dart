@@ -24,7 +24,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get deleteConversationTitle => '会話を削除しますか？';
 
   @override
-  String get deleteConversationMessage => 'この会話を削除してもよろしいですか？この操作は元に戻せません。';
+  String get deleteConversationMessage => '関連する記憶、タスク、音声ファイルも削除されます。この操作は元に戻せません。';
 
   @override
   String get confirm => '確認';
@@ -8409,7 +8409,4 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get clearAll => 'すべて削除';
-
-  @override
-  String get deleteAssociatedData => '関連するメモリーとタスクを削除';
 }

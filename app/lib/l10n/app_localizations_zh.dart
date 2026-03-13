@@ -24,7 +24,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get deleteConversationTitle => '删除对话？';
 
   @override
-  String get deleteConversationMessage => '您确定要删除此对话吗？此操作无法撤消。';
+  String get deleteConversationMessage => '这也将删除相关的记忆、任务和音频文件。此操作无法撤消。';
 
   @override
   String get confirm => '确认';
@@ -8399,7 +8399,4 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get clearAll => '全部清除';
-
-  @override
-  String get deleteAssociatedData => '删除相关记忆和任务';
 }

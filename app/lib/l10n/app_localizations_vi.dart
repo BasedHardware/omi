@@ -25,7 +25,7 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get deleteConversationMessage =>
-      'Bạn có chắc chắn muốn xóa cuộc trò chuyện này? Hành động này không thể hoàn tác.';
+      'Thao tác này cũng sẽ xóa các kỷ niệm, nhiệm vụ và tệp âm thanh liên quan. Hành động này không thể hoàn tác.';
 
   @override
   String get confirm => 'Xác nhận';
@@ -8556,7 +8556,4 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get clearAll => 'Xóa tất cả';
-
-  @override
-  String get deleteAssociatedData => 'Xóa các ký ức và nhiệm vụ liên quan';
 }

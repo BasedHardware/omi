@@ -192,7 +192,7 @@ abstract class AppLocalizations {
   /// Message for delete confirmation dialog
   ///
   /// In en, this message translates to:
-  /// **'Are you sure you want to delete this conversation? This action cannot be undone.'**
+  /// **'This will also delete associated memories, tasks, and audio files. This action cannot be undone.'**
   String get deleteConversationMessage;
 
   /// Confirm button label
@@ -15980,12 +15980,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Clear All'**
   String get clearAll;
-
-  /// No description provided for @deleteAssociatedData.
-  ///
-  /// In en, this message translates to:
-  /// **'Delete associated memories and tasks'**
-  String get deleteAssociatedData;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

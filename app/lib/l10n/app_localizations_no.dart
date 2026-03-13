@@ -24,7 +24,8 @@ class AppLocalizationsNo extends AppLocalizations {
   String get deleteConversationTitle => 'Slette samtale?';
 
   @override
-  String get deleteConversationMessage => 'Er du sikker på at du vil slette denne samtalen? Dette kan ikke angres.';
+  String get deleteConversationMessage =>
+      'Dette vil også slette tilknyttede minner, oppgaver og lydfiler. Denne handlingen kan ikke angres.';
 
   @override
   String get confirm => 'Bekreft';
@@ -8547,7 +8548,4 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get clearAll => 'Tøm alt';
-
-  @override
-  String get deleteAssociatedData => 'Slett tilknyttede minner og oppgaver';
 }
