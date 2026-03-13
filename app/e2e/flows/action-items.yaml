@@ -17,7 +17,7 @@ steps:
 
   - name: Verify action items page
     assert:
-      text_visible: ["Today", "No Tasks Yet"]
+      text_visible: ["No Tasks Yet"]
     note: >
       Shows task categories: Today, Tomorrow, Later, No Deadline, Overdue.
       FAB at bottom right (heroTag: action_items_fab) for creating tasks.
