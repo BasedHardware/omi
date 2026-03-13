@@ -88,6 +88,9 @@ def _prepare_conversation_for_write(data: Dict[str, Any], uid: str, level: str) 
         if level == 'enhanced':
             encrypted_segments = encryption.encrypt(compressed_segments_bytes.hex(), uid)
             data['transcript_segments'] = encrypted_segments
+        elif level == 'e2ee':
+            # E2EE: compress but don't server-encrypt — client handles encryption
+            data['transcript_segments'] = compressed_segments_bytes
         else:
             data['transcript_segments'] = compressed_segments_bytes
     return data
@@ -102,6 +105,9 @@ def _prepare_conversation_for_read(conversation_data: Optional[Dict[str, Any]], 
 
     if level == 'enhanced':
         return _decrypt_conversation_data(data, uid)
+
+    # E2EE: data is client-encrypted — decompress if needed but don't server-decrypt
+    # The client will handle decryption of individual segment text fields
 
     # Handle standard level with potential compression
     if data.get('transcript_segments_compressed'):
@@ -687,6 +693,9 @@ def migrate_conversations_level_batch(uid: str, conversation_ids: List[str], tar
             photo_update_payload = {'data_protection_level': target_level}
             if target_level == 'enhanced':
                 photo_update_payload['base64'] = encryption.encrypt(plain_photo_data['base64'], uid)
+            elif target_level == 'e2ee':
+                # E2EE: store plaintext during migration; client handles encryption
+                photo_update_payload['base64'] = plain_photo_data['base64']
             else:  # Moving from enhanced to standard
                 photo_update_payload['base64'] = plain_photo_data['base64']
 

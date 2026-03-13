@@ -625,12 +625,36 @@ def handle_batch_migration_requests(
 @router.post('/v1/users/migration/requests/data-protection-level/finalize', tags=['v1'])
 def finalize_migration_request(request: MigrationTargetRequest, uid: str = Depends(auth.get_current_user_uid)):
     """Finalizes the migration by setting the user's global protection level."""
-    if request.target_level != 'enhanced':
-        raise HTTPException(status_code=400, detail="Invalid target_level. Only migration to 'enhanced' is supported.")
+    if request.target_level not in ('enhanced', 'e2ee'):
+        raise HTTPException(status_code=400, detail="Invalid target_level. Only 'enhanced' or 'e2ee' are supported.")
 
     finalize_migration(uid, request.target_level)
     set_user_data_protection_level(uid, request.target_level)
     return {'status': 'ok'}
+
+
+class E2eeKeyHashRequest(BaseModel):
+    key_hash: str
+
+
+@router.post('/v1/users/e2ee/key-hash', tags=['v1'])
+def store_e2ee_key_hash(request: E2eeKeyHashRequest, uid: str = Depends(auth.get_current_user_uid)):
+    """Store a hash of the user's E2EE public key for verification purposes.
+
+    The server never sees the actual encryption key — only a SHA-256 hash
+    so the client can verify it has the correct key on a new device.
+    """
+    from database.users import set_e2ee_key_hash
+    set_e2ee_key_hash(uid, request.key_hash)
+    return {'status': 'ok'}
+
+
+@router.get('/v1/users/e2ee/key-hash', tags=['v1'])
+def get_e2ee_key_hash(uid: str = Depends(auth.get_current_user_uid)):
+    """Retrieve the stored E2EE key hash for verification."""
+    from database.users import get_e2ee_key_hash
+    key_hash = get_e2ee_key_hash(uid)
+    return {'key_hash': key_hash}
 
 
 @router.put('/v1/users/preferences/app', tags=['v1'])

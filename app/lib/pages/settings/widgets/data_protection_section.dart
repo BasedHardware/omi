@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import 'package:provider/provider.dart';
 
 import 'package:omi/providers/user_provider.dart';
+import 'package:omi/services/e2ee_service.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
 extension StringExtension on String {
@@ -27,7 +29,10 @@ class _DataProtectionSectionState extends State<DataProtectionSection> {
     super.initState();
   }
 
-  void _showE2eeComingSoonDialog(BuildContext context) {
+  /// Show dialog to enable E2EE with warnings about key backup.
+  void _showE2eeEnableDialog(BuildContext context) {
+    final provider = Provider.of<UserProvider>(context, listen: false);
+
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -37,7 +42,8 @@ class _DataProtectionSectionState extends State<DataProtectionSection> {
           children: [
             const Icon(Icons.lock_person_outlined, color: Colors.white),
             const SizedBox(width: 10),
-            Text(context.l10n.maximumSecurityE2ee, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+            Text(context.l10n.maximumSecurityE2ee,
+                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
           ],
         ),
         content: RichText(
@@ -51,9 +57,13 @@ class _DataProtectionSectionState extends State<DataProtectionSection> {
               ),
               TextSpan(text: '${context.l10n.e2eeTradeoff1}\n'),
               TextSpan(text: '${context.l10n.e2eeTradeoff2}\n\n'),
-              TextSpan(
-                text: context.l10n.featureComingSoon,
-                style: const TextStyle(fontStyle: FontStyle.italic),
+              const TextSpan(
+                text: '⚠️ If you lose your recovery key, your data cannot be recovered.\n',
+                style: TextStyle(fontWeight: FontWeight.bold, color: Colors.orangeAccent),
+              ),
+              const TextSpan(
+                text: 'Make sure to back up your key after enabling.',
+                style: TextStyle(fontStyle: FontStyle.italic),
               ),
             ],
           ),
@@ -61,11 +71,114 @@ class _DataProtectionSectionState extends State<DataProtectionSection> {
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(),
-            child: Text(context.l10n.ok, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+            child:
+                Text(context.l10n.ok, style: const TextStyle(color: Colors.grey, fontWeight: FontWeight.bold)),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.of(ctx).pop();
+              _enableE2ee(context, provider);
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.deepPurple,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Enable E2EE'),
           ),
         ],
       ),
     );
+  }
+
+  /// Generate key and start migration to e2ee level.
+  Future<void> _enableE2ee(BuildContext context, UserProvider provider) async {
+    try {
+      final key = await provider.enableE2ee();
+      if (!mounted) return;
+      _showRecoveryKeyDialog(context, key);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to enable E2EE: $e'), backgroundColor: Colors.red),
+      );
+    }
+  }
+
+  /// Show the recovery key after E2EE is enabled.
+  void _showRecoveryKeyDialog(BuildContext context, String key) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF2c2c2e),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        title: const Row(
+          children: [
+            Icon(Icons.key, color: Colors.orangeAccent),
+            SizedBox(width: 10),
+            Text('Recovery Key', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Save this key somewhere safe. You will need it to recover your data if you switch devices.',
+              style: TextStyle(color: Colors.white.withOpacity(0.8), height: 1.4),
+            ),
+            const SizedBox(height: 16),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.black26,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.deepPurple.shade300),
+              ),
+              child: SelectableText(
+                key,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontFamily: 'monospace',
+                  fontSize: 12,
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Center(
+              child: TextButton.icon(
+                onPressed: () {
+                  Clipboard.setData(ClipboardData(text: key));
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Key copied to clipboard')),
+                  );
+                },
+                icon: const Icon(Icons.copy, size: 16, color: Colors.deepPurple),
+                label: const Text('Copy to Clipboard', style: TextStyle(color: Colors.deepPurple)),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          ElevatedButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.deepPurple,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('I\'ve Saved My Key'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Show recovery key for an already-enabled E2EE setup.
+  void _showExportKeyDialog(BuildContext context) async {
+    final key = await E2eeService().exportKey();
+    if (key == null || !mounted) return;
+    _showRecoveryKeyDialog(context, key);
   }
 
   @override
@@ -74,6 +187,7 @@ class _DataProtectionSectionState extends State<DataProtectionSection> {
       builder: (context, provider, child) {
         final isMigrating = provider.isMigrating;
         final migrationFailed = provider.migrationFailed;
+        final isE2ee = provider.isE2eeEnabled;
 
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -92,8 +206,12 @@ class _DataProtectionSectionState extends State<DataProtectionSection> {
                   ),
                 ),
               ),
-            _buildDefaultProtectionCard(context),
-            _buildE2eeCard(context),
+            _buildDefaultProtectionCard(context, isActive: !isE2ee),
+            _buildE2eeCard(context, isActive: isE2ee),
+            if (isE2ee) ...[
+              const SizedBox(height: 8),
+              _buildKeyManagementRow(context),
+            ],
             const SizedBox(height: 12),
             _buildInfoRow(
               Icons.shield_outlined,
@@ -199,7 +317,8 @@ class _DataProtectionSectionState extends State<DataProtectionSection> {
                 style: const TextStyle(color: Colors.grey, fontSize: 12),
               ),
               Text(
-                context.l10n.objectsCount(provider.migrationProcessedCount.toString(), provider.migrationTotalCount.toString()),
+                context.l10n.objectsCount(
+                    provider.migrationProcessedCount.toString(), provider.migrationTotalCount.toString()),
                 style: const TextStyle(color: Colors.grey, fontSize: 12),
               ),
             ],
@@ -209,15 +328,15 @@ class _DataProtectionSectionState extends State<DataProtectionSection> {
     );
   }
 
-  Widget _buildDefaultProtectionCard(BuildContext context) {
+  Widget _buildDefaultProtectionCard(BuildContext context, {required bool isActive}) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.deepPurple.withOpacity(0.15),
+        color: isActive ? Colors.deepPurple.withOpacity(0.15) : const Color(0xFF1A1A1A),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: Theme.of(context).colorScheme.secondary,
-          width: 1.5,
+          color: isActive ? Theme.of(context).colorScheme.secondary : const Color(0xFF35343B),
+          width: isActive ? 1.5 : 1.0,
         ),
       ),
       child: Row(
@@ -225,7 +344,7 @@ class _DataProtectionSectionState extends State<DataProtectionSection> {
         children: [
           Icon(
             Icons.verified_user_outlined,
-            color: Theme.of(context).colorScheme.secondary,
+            color: isActive ? Theme.of(context).colorScheme.secondary : Colors.grey.shade400,
             size: 28,
           ),
           const SizedBox(width: 16),
@@ -233,13 +352,21 @@ class _DataProtectionSectionState extends State<DataProtectionSection> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  context.l10n.secureEncryption,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
-                    fontSize: 16,
-                  ),
+                Row(
+                  children: [
+                    Text(
+                      context.l10n.secureEncryption,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                        fontSize: 16,
+                      ),
+                    ),
+                    if (isActive) ...[
+                      const SizedBox(width: 8),
+                      const Icon(Icons.check_circle, color: Colors.green, size: 18),
+                    ],
+                  ],
                 ),
                 const SizedBox(height: 8),
                 Text(
@@ -254,21 +381,28 @@ class _DataProtectionSectionState extends State<DataProtectionSection> {
     );
   }
 
-  Widget _buildE2eeCard(BuildContext context) {
+  Widget _buildE2eeCard(BuildContext context, {required bool isActive}) {
     return GestureDetector(
-      onTap: () => _showE2eeComingSoonDialog(context),
+      onTap: isActive ? null : () => _showE2eeEnableDialog(context),
       child: Container(
         padding: const EdgeInsets.all(16),
         margin: const EdgeInsets.only(top: 12),
         decoration: BoxDecoration(
-          color: const Color(0xFF1A1A1A),
+          color: isActive ? Colors.deepPurple.withOpacity(0.15) : const Color(0xFF1A1A1A),
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: Color(0xFF35343B)),
+          border: Border.all(
+            color: isActive ? Colors.deepPurple : const Color(0xFF35343B),
+            width: isActive ? 1.5 : 1.0,
+          ),
         ),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Icon(Icons.lock_outline, color: Colors.grey.shade400, size: 28),
+            Icon(
+              Icons.lock_outline,
+              color: isActive ? Colors.deepPurple : Colors.grey.shade400,
+              size: 28,
+            ),
             const SizedBox(width: 16),
             Expanded(
               child: Column(
@@ -285,21 +419,10 @@ class _DataProtectionSectionState extends State<DataProtectionSection> {
                         ),
                       ),
                       const SizedBox(width: 8),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: Colors.grey.shade700,
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                        child: Text(
-                          context.l10n.comingSoon,
-                          style: const TextStyle(
-                            fontSize: 10,
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ),
+                      if (isActive)
+                        const Icon(Icons.check_circle, color: Colors.green, size: 18)
+                      else
+                        Icon(Icons.arrow_forward_ios, color: Colors.grey.shade600, size: 14),
                     ],
                   ),
                   const SizedBox(height: 8),
@@ -310,9 +433,23 @@ class _DataProtectionSectionState extends State<DataProtectionSection> {
                 ],
               ),
             ),
-            Icon(Icons.info_outline, color: Colors.grey.shade600, size: 20),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildKeyManagementRow(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 4.0),
+      child: Row(
+        children: [
+          TextButton.icon(
+            onPressed: () => _showExportKeyDialog(context),
+            icon: const Icon(Icons.key, size: 16, color: Colors.deepPurple),
+            label: const Text('Show Recovery Key', style: TextStyle(color: Colors.deepPurple, fontSize: 13)),
+          ),
+        ],
       ),
     );
   }

@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:omi/backend/http/shared.dart';
 import 'package:omi/backend/schema/message.dart';
 import 'package:omi/env/env.dart';
+import 'package:omi/services/e2ee_middleware.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/other/string_utils.dart';
 
@@ -27,6 +28,12 @@ Future<List<ServerMessage>> getMessagesServer({
       return [];
     }
     var messages = decodedBody.map((conversation) => ServerMessage.fromJson(conversation)).toList();
+    // Decrypt message text if E2EE is enabled
+    if (E2eeMiddleware.isE2eeEnabled()) {
+      for (var msg in messages) {
+        msg.text = await E2eeMiddleware.decryptIfEnabled(msg.text);
+      }
+    }
     Logger.debug('getMessages length: ${messages.length}');
     // Debug: Check if any messages have ratings
     var ratedMessages = messages.where((m) => m.rating != null).toList();

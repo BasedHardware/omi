@@ -3,15 +3,19 @@ import 'dart:convert';
 import 'package:omi/backend/http/shared.dart';
 import 'package:omi/backend/schema/memory.dart';
 import 'package:omi/env/env.dart';
+import 'package:omi/services/e2ee_middleware.dart';
 import 'package:omi/utils/logger.dart';
 
 Future<Memory?> createMemoryServer(String content, String visibility, String category) async {
+  // Encrypt content client-side if E2EE is enabled
+  final encryptedContent = await E2eeMiddleware.encryptIfEnabled(content);
+
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v3/memories',
     headers: {},
     method: 'POST',
     body: json.encode({
-      'content': content,
+      'content': encryptedContent,
       'visibility': visibility,
       'category': category,
     }),
@@ -19,7 +23,10 @@ Future<Memory?> createMemoryServer(String content, String visibility, String cat
   if (response == null) return null;
   Logger.debug('createMemory response: ${response.body}');
   if (response.statusCode == 200) {
-    return Memory.fromJson(json.decode(response.body));
+    var memory = Memory.fromJson(json.decode(response.body));
+    // Decrypt content after reading back from server
+    memory.content = await E2eeMiddleware.decryptIfEnabled(memory.content);
+    return memory;
   }
   return null;
 }
@@ -47,7 +54,14 @@ Future<List<Memory>> getMemories({int limit = 100, int offset = 0}) async {
   if (response.statusCode == 200) {
     var decoded = json.decode(response.body);
     if (decoded is List) {
-      return decoded.map((e) => Memory.fromJson(e)).toList();
+      var memories = decoded.map((e) => Memory.fromJson(e)).toList();
+      // Decrypt content fields if E2EE is enabled
+      if (E2eeMiddleware.isE2eeEnabled()) {
+        for (var memory in memories) {
+          memory.content = await E2eeMiddleware.decryptIfEnabled(memory.content);
+        }
+      }
+      return memories;
     }
   }
   return [];

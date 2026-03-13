@@ -648,6 +648,25 @@ def finalize_migration(uid: str, target_level: str):
     user_ref.update({'data_protection_level': target_level, 'migration_status': firestore.DELETE_FIELD})
 
 
+def set_e2ee_key_hash(uid: str, key_hash: str) -> None:
+    """Store a SHA-256 hash of the user's E2EE key for verification.
+
+    The server never stores the actual key — only a hash so the client can
+    verify it has the correct key on a new device.
+    """
+    user_ref = db.collection('users').document(uid)
+    user_ref.set({'e2ee_key_hash': key_hash}, merge=True)
+
+
+def get_e2ee_key_hash(uid: str) -> str:
+    """Retrieve the stored E2EE key hash, or empty string if none."""
+    user_ref = db.collection('users').document(uid)
+    doc = user_ref.get()
+    if doc.exists:
+        return doc.to_dict().get('e2ee_key_hash', '')
+    return ''
+
+
 # **************************************
 # ************* Language ***************
 # **************************************

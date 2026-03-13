@@ -30,10 +30,26 @@ def derive_key(uid: str) -> bytes:
     return hkdf.derive(ENCRYPTION_SECRET)
 
 
+def is_e2ee_level(uid: str) -> bool:
+    """Check if the user's protection level is 'e2ee'.
+
+    When E2EE is active, the server should NOT encrypt/decrypt data —
+    it arrives pre-encrypted from the client and is stored as-is.
+    """
+    try:
+        from database.users import get_data_protection_level
+        return get_data_protection_level(uid) == 'e2ee'
+    except Exception:
+        return False
+
+
 def encrypt(data: str, uid: str) -> str:
     """
-    Encrypts a string using a user-specific key.
+    Encrypts a string using a user-specific key (server-side encryption).
     Returns a base64 encoded string containing nonce + ciphertext + tag.
+
+    NOTE: This should NOT be called for E2EE users — their data is
+    pre-encrypted by the client. The database layer handles this check.
     """
     if not data:
         return data

@@ -132,6 +132,43 @@ class PrivacyApi {
     }
   }
 
+  static Future<void> storeE2eeKeyHash(String keyHash) async {
+    try {
+      final response = await makeApiCall(
+        url: '${Env.apiBaseUrl}v1/users/e2ee/key-hash',
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'key_hash': keyHash}),
+      );
+      if (response == null || response.statusCode != 200) {
+        Logger.error('Failed to store E2EE key hash: ${response?.statusCode} ${response?.body}');
+        throw Exception('Failed to store E2EE key hash');
+      }
+    } catch (e, stackTrace) {
+      Logger.error('Error storing E2EE key hash: $e\n$stackTrace');
+      rethrow;
+    }
+  }
+
+  static Future<String> getE2eeKeyHash() async {
+    try {
+      final response = await makeApiCall(
+        url: '${Env.apiBaseUrl}v1/users/e2ee/key-hash',
+        method: 'GET',
+        headers: {},
+        body: '',
+      );
+      if (response != null && response.statusCode == 200) {
+        final body = jsonDecode(response.body);
+        return body['key_hash'] ?? '';
+      }
+      return '';
+    } catch (e, stackTrace) {
+      Logger.error('Error getting E2EE key hash: $e\n$stackTrace');
+      return '';
+    }
+  }
+
   static Future<void> finalizeMigration(String targetLevel) async {
     try {
       final response = await makeApiCall(

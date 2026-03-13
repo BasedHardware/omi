@@ -369,6 +369,10 @@ class SharedPreferencesUtil {
 
   set cachedTranscriptionVocabulary(List<String> value) => saveStringList('cachedTranscriptionVocabulary', value);
 
+  // E2EE enabled flag — cached locally for fast sync access in API middleware
+  bool get e2eeEnabled => getBool('e2eeEnabled');
+  set e2eeEnabled(bool value) => saveBool('e2eeEnabled', value);
+
   // User primary language preferences
   String get userPrimaryLanguage => getString('userPrimaryLanguage');
 

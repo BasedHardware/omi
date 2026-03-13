@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:omi/backend/http/shared.dart';
 import 'package:omi/backend/schema/schema.dart';
 import 'package:omi/env/env.dart';
+import 'package:omi/services/e2ee_middleware.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 
@@ -60,6 +61,14 @@ Future<List<ServerConversation>> getConversations({
     var body = utf8.decode(response.bodyBytes);
     var memories =
         (jsonDecode(body) as List<dynamic>).map((conversation) => ServerConversation.fromJson(conversation)).toList();
+    // Decrypt transcript segment text fields if E2EE is enabled
+    if (E2eeMiddleware.isE2eeEnabled()) {
+      for (var convo in memories) {
+        for (var segment in convo.transcriptSegments) {
+          segment.text = await E2eeMiddleware.decryptIfEnabled(segment.text);
+        }
+      }
+    }
     Logger.debug('getConversations length: ${memories.length}');
     return memories;
   } else {

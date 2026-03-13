@@ -1,6 +1,9 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 
 import 'package:awesome_notifications/awesome_notifications.dart';
+import 'package:crypto/crypto.dart';
 import 'package:geolocator/geolocator.dart';
 
 import 'package:omi/backend/http/api/privacy.dart';
@@ -9,6 +12,7 @@ import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/geolocation.dart';
 import 'package:omi/main.dart';
+import 'package:omi/services/e2ee_service.dart';
 import 'package:omi/services/notifications.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
@@ -62,6 +66,9 @@ class UserProvider with ChangeNotifier {
   String get sourceLevel => _sourceLevel;
   String get targetLevel => _targetLevel;
 
+  /// Whether the user's data protection level is 'e2ee'.
+  bool get isE2eeEnabled => _dataProtectionLevel == 'e2ee';
+
   String get migrationETA {
     final ctx = MyApp.navigatorKey.currentContext;
     if (_processedCount == 0 || _startTime == null || migrationTotalCount == 0) {
@@ -111,6 +118,9 @@ class UserProvider with ChangeNotifier {
     try {
       final userProfile = await PrivacyApi.getUserProfile();
       _dataProtectionLevel = userProfile['data_protection_level'] ?? 'standard';
+
+      // Sync E2EE flag to SharedPreferences for middleware access
+      SharedPreferencesUtil().e2eeEnabled = _dataProtectionLevel == 'e2ee';
 
       // Load private cloud sync status
       await _loadPrivateCloudSyncStatus();
@@ -324,6 +334,28 @@ class UserProvider with ChangeNotifier {
     } catch (e) {
       return 0;
     }
+  }
+
+  /// Enable E2EE: generates an encryption key, stores a key hash on the server
+  /// for verification, caches the e2ee flag, then starts migration.
+  /// Returns the base64-encoded recovery key so the UI can show it.
+  Future<String> enableE2ee() async {
+    final e2eeService = E2eeService();
+    final key = await e2eeService.generateAndStoreKey();
+
+    // Store a hash of the key on the server for future verification
+    // (the server never sees the actual key)
+    final keyBytes = base64Decode(key);
+    final keyHash = sha256.convert(keyBytes).toString();
+    await PrivacyApi.storeE2eeKeyHash(keyHash);
+
+    // Cache the flag so the middleware can check synchronously
+    SharedPreferencesUtil().e2eeEnabled = true;
+
+    // Start migration (updates protection level; client handles encryption going forward)
+    await updateDataProtectionLevel('e2ee');
+
+    return key;
   }
 
   Future<void> updateDataProtectionLevel(String targetLevel) async {

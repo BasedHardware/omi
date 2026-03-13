@@ -44,6 +44,7 @@ def _decrypt_chat_data(chat_data: Dict[str, Any], uid: str) -> Dict[str, Any]:
 def _prepare_data_for_write(data: Dict[str, Any], uid: str, level: str) -> Dict[str, Any]:
     if level == 'enhanced':
         return _encrypt_chat_data(data, uid)
+    # E2EE: data arrives pre-encrypted from the client — store as-is
     return data
 
 
@@ -54,7 +55,7 @@ def _prepare_message_for_read(message_data: Optional[Dict[str, Any]], uid: str) 
     level = message_data.get('data_protection_level')
     if level == 'enhanced':
         return _decrypt_chat_data(message_data, uid)
-
+    # E2EE: data is client-encrypted — return as-is for client to decrypt
     return message_data
 
 
@@ -549,6 +550,7 @@ def migrate_chats_level_batch(uid: str, message_doc_ids: List[str], target_level
         if target_level == 'enhanced':
             if isinstance(plain_text, str):
                 migrated_text = encryption.encrypt(plain_text, uid)
+        # E2EE: store plaintext during migration; client re-encrypts on next write
 
         update_data = {'data_protection_level': target_level, 'text': migrated_text}
         batch.update(doc_snapshot.reference, update_data)
