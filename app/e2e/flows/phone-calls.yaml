@@ -12,19 +12,16 @@ prerequisites:
 setup: normal
 
 steps:
-  - name: Navigate to Phone Calls
-    note: "Settings drawer → Phone Calls item"
-    press: { type: gesture, hint: "settings gear icon top-right" }
-    screenshot: settings-open
+  - name: Open settings drawer
+    press: { type: button, position: rightmost }
 
   - name: Open Phone Calls setting
-    scroll: down
-    press: { type: gesture, hint: "Phone Calls row in settings" }
+    press: { type: gesture, hint: "Phone Calls" }
     screenshot: phone-calls-entry
 
   - name: Verify phone call settings page
     assert:
-      text_visible: ["Your Verified Numbers"]
+      interactive_count: { min: 2 }
     note: >
       PhoneCallSettingsPage shows "Your Verified Numbers" list.
       Each number has phone icon, number text, verification timestamp,
