@@ -339,7 +339,8 @@ def modulate_prerecorded_from_bytes(
             duration_s = utt.get('duration_ms', 0) / 1000.0
             end_s = start_s + duration_s
             # Modulate speakers are 1-indexed, convert to 0-indexed for SPEAKER_XX format
-            speaker_id = utt.get('speaker', 1) - 1
+            raw_speaker = utt.get('speaker', 1)
+            speaker_id = (raw_speaker - 1) if isinstance(raw_speaker, int) and raw_speaker >= 1 else 0
             detected_language = utt.get('language', detected_language)
 
             words.append(
