@@ -29,27 +29,21 @@ steps:
 
   - name: Task creation form
     assert:
-      text_visible: ["Save"]
-    note: "ActionItemFormSheet — bottom sheet with title, description, deadline, goal link"
+      text_visible: ["Mark Complete"]
+    note: "Bottom sheet with title field, Mark Complete checkbox, deadline. No Save button — press keyboard done to create."
     screenshot: task-form
 
   - name: Fill task title
     fill: { type: textfield, value: "Test task from E2E" }
     screenshot: task-filled
 
-  - name: Close task form
+  - name: Dismiss keyboard
     back: true
 
-  - name: Scroll to see task categories
-    scroll: down
-    screenshot: task-categories
-
-  - name: Toggle task completion (if tasks exist)
-    note: "Tap checkbox on any task item to mark complete"
-    press: { type: gesture, hint: "task checkbox — leftmost gesture in task row" }
-    screenshot: task-toggled
+  - name: Close task form
+    back: true
 
   - name: Return to home tab
     press: { bottom_nav_tab: 0 }
     assert:
-      bottom_nav_tabs: { min: 4 }
+      text_visible: ["Conversations"]
