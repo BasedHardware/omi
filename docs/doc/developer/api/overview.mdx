@@ -20,6 +20,9 @@ The Omi Developer API provides programmatic access to your personal Omi data, al
   <Card title="API Keys" icon="key" color="#f59e0b" href="/doc/developer/api/keys">
     Manage API access
   </Card>
+  <Card title="E2EE at Rest" icon="lock" color="#ef4444" href="/doc/developer/api/e2ee">
+    Access encrypted data
+  </Card>
 </CardGroup>
 
 ---
@@ -159,7 +162,7 @@ X-RateLimit-Reset: 1642694400
     | `204 No Content` | Request succeeded with no response body |
     | `400 Bad Request` | Invalid request parameters |
     | `401 Unauthorized` | Invalid or missing API key |
-    | `403 Forbidden` | API key doesn't have required permissions |
+    | `403 Forbidden` | API key doesn't have required permissions, or [E2EE key hash](/doc/developer/api/e2ee) required |
     | `404 Not Found` | Resource not found |
     | `422 Unprocessable Entity` | Validation error |
     | `429 Too Many Requests` | Rate limit exceeded |
@@ -196,6 +199,10 @@ X-RateLimit-Reset: 1642694400
 <Tip>
 If a key is compromised, revoke it immediately from **Settings → Developer** in the Omi app.
 </Tip>
+
+<Info>
+If a user has **E2EE at rest** enabled, data endpoints return `403` unless you include the key hash. See the [E2EE documentation](/doc/developer/api/e2ee) for details.
+</Info>
 
 ---
 

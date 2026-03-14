@@ -64,6 +64,21 @@ We are dedicated to using your information responsibly:
   </Card>
 </CardGroup>
 
+### E2EE at Rest
+
+Omi offers optional **E2EE at rest** encryption. When enabled:
+
+- A unique encryption key is generated on your device and never leaves it
+- All stored data (conversations, memories, action items, etc.) is encrypted in the database
+- Only devices with your key can read your data via the API
+- You can pair the web app by scanning a QR code from the mobile app
+
+<Warning>
+Back up your recovery key. If lost, encrypted data cannot be recovered.
+</Warning>
+
+Enable E2EE from **Settings → Data Privacy** in the Omi app. For developer access to encrypted data, see the [E2EE API documentation](/doc/developer/api/e2ee).
+
 ---
 
 ## 4. Information Sharing

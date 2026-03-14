@@ -1,0 +1,171 @@
+---
+title: "E2EE at Rest"
+description: "End-to-end encryption at rest protects your data with a client-managed key. Learn how to access encrypted data via the API."
+---
+
+## Overview
+
+When **E2EE at rest** is enabled, all sensitive data (conversations, memories, action items, etc.) is encrypted in the database. API reads require proof that you possess the encryption key.
+
+<CardGroup cols={3}>
+  <Card title="Client Key" icon="key" color="#a855f7">
+    Generated on your device, never sent to the server
+  </Card>
+  <Card title="Key Hash" icon="fingerprint" color="#3b82f6">
+    SHA-256 hash stored server-side for verification
+  </Card>
+  <Card title="Access Control" icon="shield-check" color="#22c55e">
+    API reads require the key hash to prove key possession
+  </Card>
+</CardGroup>
+
+---
+
+## Protection Levels
+
+| Level | Data at Rest | API Access | Server Can Read |
+|-------|-------------|------------|-----------------|
+| **Standard** | Plaintext | Auth token only | Yes |
+| **Enhanced** | Server-encrypted | Auth token only | Yes (has the key) |
+| **E2EE** | Server-encrypted | Auth token + key hash | Yes (server processes data), but API reads are gated |
+
+<Note>
+The server still processes audio transcription and LLM summarization, so it briefly sees plaintext during processing. E2EE at rest protects data **in the database** and **at the API layer**.
+</Note>
+
+---
+
+## Checking Protection Level
+
+Before making data requests, check if the user has E2EE enabled:
+
+```bash
+curl -H "Authorization: Bearer omi_dev_your_key_here" \
+  https://api.omi.me/v1/users/data-protection-level
+```
+
+Response:
+```json
+{
+  "level": "e2ee"
+}
+```
+
+If `level` is `"e2ee"`, all data endpoints require the key hash.
+
+---
+
+## Accessing Encrypted Data
+
+When E2EE is enabled, include the key hash in your requests via header or query parameter:
+
+<Tabs>
+  <Tab title="Header (recommended)">
+    ```bash
+    curl -H "Authorization: Bearer omi_dev_your_key_here" \
+         -H "X-E2EE-Key-Hash: your_sha256_key_hash" \
+         https://api.omi.me/v1/conversations
+    ```
+  </Tab>
+  <Tab title="Query Parameter">
+    ```bash
+    curl -H "Authorization: Bearer omi_dev_your_key_here" \
+      "https://api.omi.me/v1/conversations?e2ee_key_hash=your_sha256_key_hash"
+    ```
+  </Tab>
+</Tabs>
+
+### Computing the Key Hash
+
+The key hash is a SHA-256 digest of the raw 32-byte encryption key:
+
+<Tabs>
+  <Tab title="Python">
+    ```python
+    import hashlib, base64
+
+    # The base64 key from the Omi app (Settings → Data Privacy → Recovery Key)
+    base64_key = "your_base64_recovery_key"
+    raw_key = base64.b64decode(base64_key)
+    key_hash = hashlib.sha256(raw_key).hexdigest()
+    print(key_hash)  # Use this in X-E2EE-Key-Hash header
+    ```
+  </Tab>
+  <Tab title="JavaScript">
+    ```javascript
+    const base64Key = "your_base64_recovery_key";
+    const keyBytes = Uint8Array.from(atob(base64Key), c => c.charCodeAt(0));
+    const hashBuffer = await crypto.subtle.digest('SHA-256', keyBytes);
+    const keyHash = Array.from(new Uint8Array(hashBuffer))
+      .map(b => b.toString(16).padStart(2, '0')).join('');
+    console.log(keyHash); // Use this in X-E2EE-Key-Hash header
+    ```
+  </Tab>
+</Tabs>
+
+---
+
+## Error Responses
+
+When E2EE is enabled and the key hash is missing or incorrect:
+
+```json
+// 403 Forbidden - missing key hash
+{
+  "detail": "E2EE is enabled. Provide X-E2EE-Key-Hash header."
+}
+
+// 403 Forbidden - wrong key hash
+{
+  "detail": "Invalid E2EE key hash."
+}
+```
+
+---
+
+## Protected Endpoints
+
+All data-reading endpoints require the key hash when E2EE is enabled:
+
+| Endpoint | Description |
+|----------|-------------|
+| `GET /v1/conversations` | List conversations |
+| `GET /v1/conversations/{id}` | Get conversation |
+| `GET /v3/memories` | List memories |
+| `GET /v2/messages` | Get chat messages |
+| `GET /v1/action-items` | List action items |
+| `GET /v1/users/people` | List people |
+| `GET /v1/users/daily-summaries` | List daily summaries |
+| `GET /v1/goals/all` | List goals |
+| `GET /v1/knowledge-graph` | Get knowledge graph |
+
+Write endpoints (POST, PATCH, DELETE) are **not** gated by the key hash — only reads are protected.
+
+---
+
+## Impact on Apps & Integrations
+
+<Warning>
+When a user enables E2EE, third-party apps that access their data via webhooks or the API will be affected.
+</Warning>
+
+- **Webhook payloads** include an `e2ee_enabled: true` flag when the user has E2EE active
+- **Apps** should check the protection level endpoint before requesting data
+- **MCP integrations** need the key hash configured as an environment variable
+
+<Tip>
+Users can find their recovery key in the Omi app under **Settings → Data Privacy → Recovery Key**. They'll need to share the key hash with any apps they want to grant access to.
+</Tip>
+
+---
+
+## Enabling / Disabling E2EE
+
+E2EE is managed from the Omi app:
+
+1. Open **Settings → Data Privacy**
+2. Select **E2EE at Rest**
+3. The app generates a key, encrypts existing data, and stores the key hash on the server
+4. **Back up your recovery key** — if lost, data cannot be recovered
+
+To disable, tap the standard encryption option. The app will re-encrypt data with server-managed keys.
