@@ -5,7 +5,7 @@ from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
 from ._client import db
-from database.helpers import set_data_protection_level, prepare_for_write, prepare_for_read
+from database.helpers import set_data_protection_level, prepare_for_read
 from utils import encryption
 import logging
 
@@ -78,7 +78,6 @@ def _prepare_action_item_for_read(action_item_data: dict, uid: str) -> dict:
 
 
 @set_data_protection_level(data_arg_name='action_item_data')
-@prepare_for_write(data_arg_name='action_item_data', prepare_func=_prepare_action_item_for_write)
 def create_action_item(uid: str, action_item_data: dict) -> str:
     """
     Create a new action item for a user.
@@ -102,13 +101,15 @@ def create_action_item(uid: str, action_item_data: dict) -> str:
     if action_item_data.get('completed', False) and 'completed_at' not in action_item_data:
         action_item_data['completed_at'] = datetime.now(timezone.utc)
 
+    level = action_item_data.get('data_protection_level', 'standard')
+    action_item_data = _prepare_action_item_for_write(action_item_data, uid, level)
+
     doc_ref = action_items_ref.add(action_item_data)[1]
 
     return doc_ref.id
 
 
 @set_data_protection_level(data_arg_name='action_items_data')
-@prepare_for_write(data_arg_name='action_items_data', prepare_func=_prepare_action_item_for_write)
 def create_action_items_batch(uid: str, action_items_data: List[dict]) -> List[str]:
     """
     Create multiple action items in a batch operation.
@@ -139,8 +140,11 @@ def create_action_items_batch(uid: str, action_items_data: List[dict]) -> List[s
         if action_item_data.get('completed', False) and 'completed_at' not in action_item_data:
             action_item_data['completed_at'] = datetime.now(timezone.utc)
 
+        level = action_item_data.get('data_protection_level', 'standard')
+        prepared_data = _prepare_action_item_for_write(action_item_data, uid, level)
+
         doc_ref = action_items_ref.document()
-        batch.set(doc_ref, action_item_data)
+        batch.set(doc_ref, prepared_data)
         doc_refs.append(doc_ref.id)
 
     # Commit batch
@@ -328,7 +332,6 @@ def get_action_items_by_ids(uid: str, action_item_ids: List[str]) -> List[dict]:
 
 
 @set_data_protection_level(data_arg_name='update_data')
-@prepare_for_write(data_arg_name='update_data', prepare_func=_prepare_action_item_for_write)
 def update_action_item(uid: str, action_item_id: str, update_data: dict) -> bool:
     """
     Update an action item.
@@ -350,6 +353,9 @@ def update_action_item(uid: str, action_item_id: str, update_data: dict) -> bool
 
     # Add updated timestamp
     update_data['updated_at'] = datetime.now(timezone.utc)
+
+    level = update_data.get('data_protection_level', 'standard')
+    update_data = _prepare_action_item_for_write(update_data, uid, level)
 
     # Update the document
     action_item_ref.update(update_data)

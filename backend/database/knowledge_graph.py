@@ -43,12 +43,15 @@ def _decrypt_node_data(data: dict, uid: str) -> dict:
             try:
                 decrypted = encryption.decrypt(data['aliases'], uid)
                 data['aliases'] = json.loads(decrypted)
-            except json.JSONDecodeError:
-                logger.warning(f"Failed to parse aliases JSON for node in user {uid}")
+            except json.JSONDecodeError as e:
+                logger.warning(f"Failed to parse aliases JSON for node in user {uid}: {e}")
                 data['aliases'] = []
-            except Exception as e:
+            except (TypeError, ValueError) as e:
                 logger.error(f"Failed to decrypt aliases for node in user {uid}: {e}")
                 data['aliases'] = []
+            except Exception as e:
+                logger.error(f"Unexpected error decrypting aliases for node in user {uid}: {type(e).__name__}: {e}")
+                raise
     return data
 
 

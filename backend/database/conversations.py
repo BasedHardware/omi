@@ -135,7 +135,7 @@ def _update_encrypted_structured_field(doc_ref, doc_data: Dict[str, Any], uid: s
             structured = json.loads(decrypted)
         except (json.JSONDecodeError, TypeError, ValueError) as e:
             logger.error(f"Failed to decrypt structured for update: {e} {uid}")
-            structured = {}
+            raise
     elif isinstance(raw_structured, dict):
         structured = raw_structured
     else:

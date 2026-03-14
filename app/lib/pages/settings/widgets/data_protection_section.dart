@@ -54,15 +54,15 @@ class _DataProtectionSectionState extends State<DataProtectionSection> {
           text: TextSpan(
             style: TextStyle(color: Colors.white.withOpacity(0.8), height: 1.5, fontSize: 15),
             children: [
-              const TextSpan(text: 'End-to-end encryption provides the highest level of data protection:\n\n'),
-              const TextSpan(
-                text: '🔒 Memories: ',
-                style: TextStyle(fontWeight: FontWeight.bold),
+              TextSpan(text: context.l10n.e2eeEnableDialogIntro),
+              TextSpan(
+                text: context.l10n.e2eeMemoriesLabel,
+                style: const TextStyle(fontWeight: FontWeight.bold),
               ),
               TextSpan(text: '${context.l10n.e2eeMemoriesDescription}\n\n'),
-              const TextSpan(
-                text: '🔐 Conversations, chat & other data: ',
-                style: TextStyle(fontWeight: FontWeight.bold),
+              TextSpan(
+                text: context.l10n.e2eeOtherDataLabel,
+                style: const TextStyle(fontWeight: FontWeight.bold),
               ),
               TextSpan(
                   text:
@@ -234,7 +234,7 @@ class _DataProtectionSectionState extends State<DataProtectionSection> {
               const SizedBox(height: 8),
               _buildInfoRow(
                 Icons.warning_amber_rounded,
-                'Third-party apps and integrations won\'t be able to access your encrypted data unless you provide them with your key.',
+                context.l10n.thirdPartyAppsWarning,
               ),
             ],
             const SizedBox(height: 12),
@@ -326,7 +326,7 @@ class _DataProtectionSectionState extends State<DataProtectionSection> {
                 Text(
                   provider.migrationMessage.isNotEmpty
                       ? provider.migrationMessage
-                      : 'Preparing migration...',
+                      : context.l10n.preparingMigration,
                   style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12),
                 ),
               ],
@@ -378,24 +378,22 @@ class _DataProtectionSectionState extends State<DataProtectionSection> {
       builder: (ctx) => AlertDialog(
         backgroundColor: const Color(0xFF2c2c2e),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-        title: const Row(
+        title: Row(
           children: [
-            Icon(Icons.warning_amber_rounded, color: Colors.orangeAccent),
-            SizedBox(width: 10),
-            Text('Switch to Secure Encryption?',
-                style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
+            const Icon(Icons.warning_amber_rounded, color: Colors.orangeAccent),
+            const SizedBox(width: 10),
+            Text(context.l10n.switchToSecureEncryption,
+                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
           ],
         ),
         content: Text(
-          'This will re-encrypt your data with server-managed keys. '
-          'Your end-to-end encryption key will no longer be used.\n\n'
-          'Your data will still be encrypted at rest, but the server will manage the keys.',
+          context.l10n.switchToSecureEncryptionBody,
           style: TextStyle(color: Colors.white.withOpacity(0.8), height: 1.5, fontSize: 15),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('Cancel', style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold)),
+            child: Text(context.l10n.cancel, style: const TextStyle(color: Colors.grey, fontWeight: FontWeight.bold)),
           ),
           ElevatedButton(
             onPressed: () {
@@ -407,7 +405,7 @@ class _DataProtectionSectionState extends State<DataProtectionSection> {
               backgroundColor: Colors.orangeAccent,
               foregroundColor: Colors.white,
             ),
-            child: const Text('Switch'),
+            child: Text(context.l10n.switchButton),
           ),
         ],
       ),

@@ -10377,5 +10377,41 @@
     "@onlyTrustedDevice": {
         "description": "Warning about scanning QR code"
     },
-    "dontShowAgain": "Don't show again"
+    "dontShowAgain": "Don't show again",
+    "e2eeEnableDialogIntro": "End-to-end encryption provides the highest level of data protection:\n\n",
+    "@e2eeEnableDialogIntro": {
+        "description": "Intro text for E2EE enable dialog"
+    },
+    "e2eeMemoriesLabel": "🔒 Memories: ",
+    "@e2eeMemoriesLabel": {
+        "description": "Label for memories in E2EE dialog"
+    },
+    "e2eeOtherDataLabel": "🔐 Conversations, chat & other data: ",
+    "@e2eeOtherDataLabel": {
+        "description": "Label for other data in E2EE dialog"
+    },
+    "switchToSecureEncryption": "Switch to Secure Encryption?",
+    "@switchToSecureEncryption": {
+        "description": "Title for E2EE downgrade confirmation dialog"
+    },
+    "switchToSecureEncryptionBody": "This will re-encrypt your data with server-managed keys. Your end-to-end encryption key will no longer be used.\n\nYour data will still be encrypted at rest, but the server will manage the keys.",
+    "@switchToSecureEncryptionBody": {
+        "description": "Body text for E2EE downgrade confirmation dialog"
+    },
+    "cancel": "Cancel",
+    "@cancel": {
+        "description": "Cancel button label"
+    },
+    "switchButton": "Switch",
+    "@switchButton": {
+        "description": "Switch button label for downgrade dialog"
+    },
+    "thirdPartyAppsWarning": "Third-party apps and integrations won't be able to access your encrypted data unless you provide them with your key.",
+    "@thirdPartyAppsWarning": {
+        "description": "Warning about third-party app access with E2EE"
+    },
+    "preparingMigration": "Preparing migration...",
+    "@preparingMigration": {
+        "description": "Message shown while preparing data migration"
+    }
 }

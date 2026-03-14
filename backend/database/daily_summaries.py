@@ -24,7 +24,7 @@ from datetime import datetime
 from google.cloud.firestore_v1.base_query import FieldFilter
 from google.cloud import firestore
 from ._client import db
-from database.helpers import set_data_protection_level, prepare_for_write, prepare_for_read
+from database.helpers import set_data_protection_level, prepare_for_read
 from utils import encryption
 
 DAILY_SUMMARIES_COLLECTION = 'daily_summaries'
@@ -59,7 +59,6 @@ def _prepare_summary_for_read(data: dict, uid: str) -> dict:
 
 
 @set_data_protection_level(data_arg_name='summary_data')
-@prepare_for_write(data_arg_name='summary_data', prepare_func=_prepare_summary_for_write)
 def create_daily_summary(uid: str, summary_data: dict) -> str:
     """
     Create a new daily summary document.
@@ -71,10 +70,14 @@ def create_daily_summary(uid: str, summary_data: dict) -> str:
     Returns:
         The summary ID
     """
+    summary_id = summary_data['id']
+    level = summary_data.get('data_protection_level', 'standard')
+    summary_data = _prepare_summary_for_write(summary_data, uid, level)
+
     user_ref = db.collection('users').document(uid)
-    summary_ref = user_ref.collection(DAILY_SUMMARIES_COLLECTION).document(summary_data['id'])
+    summary_ref = user_ref.collection(DAILY_SUMMARIES_COLLECTION).document(summary_id)
     summary_ref.set(summary_data)
-    return summary_data['id']
+    return summary_id
 
 
 @prepare_for_read(decrypt_func=_prepare_summary_for_read)
