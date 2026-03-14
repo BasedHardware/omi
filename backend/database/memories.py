@@ -54,9 +54,8 @@ def _prepare_memory_for_read(memory_data: Optional[Dict[str, Any]], uid: str) ->
 
     level = memory_data.get('data_protection_level')
     if level in ('enhanced', 'e2ee'):
-        # For 'enhanced': standard server-side decryption.
-        # For 'e2ee': migrated data is server-encrypted; new client-encrypted data
-        # will fail server decryption and be returned as-is (client decrypts).
+        # Server-side decrypt. For e2ee, removes the server layer;
+        # client handles its own E2EE encryption on top.
         return _decrypt_memory_data(memory_data, uid)
     return memory_data
 

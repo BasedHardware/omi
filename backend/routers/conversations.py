@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, BackgroundTasks
 from typing import Optional, List
 from datetime import datetime, timezone
 
@@ -45,6 +45,27 @@ import logging
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+def _verify_e2ee_access(uid: str, x_e2ee_key_hash: Optional[str] = None):
+    """
+    If the user's data protection level is 'e2ee', require a valid key hash header.
+    Web clients without the E2EE key cannot access encrypted data.
+    """
+    level = users_db.get_data_protection_level(uid)
+    if level != 'e2ee':
+        return
+    if not x_e2ee_key_hash:
+        raise HTTPException(
+            status_code=403,
+            detail="E2EE is enabled. Provide X-E2EE-Key-Hash header to access encrypted data."
+        )
+    stored_hash = users_db.get_e2ee_key_hash(uid)
+    if not stored_hash or x_e2ee_key_hash != stored_hash:
+        raise HTTPException(
+            status_code=403,
+            detail="Invalid E2EE key hash. Pair your device using the QR code in the app."
+        )
 
 
 def _get_valid_conversation_by_id(uid: str, conversation_id: str) -> dict:
@@ -129,7 +150,9 @@ def get_conversations(
     folder_id: Optional[str] = Query(None, description="Filter by folder ID"),
     starred: Optional[bool] = Query(None, description="Filter by starred status"),
     uid: str = Depends(auth.get_current_user_uid),
+    x_e2ee_key_hash: Optional[str] = Header(None),
 ):
+    _verify_e2ee_access(uid, x_e2ee_key_hash)
     logger.info(f'get_conversations {uid} {limit} {offset} {statuses} {folder_id} {starred}')
     # force convos statuses to processing, completed on the empty filter
     if len(statuses) == 0:
@@ -158,7 +181,12 @@ def get_conversations(
 
 
 @router.get("/v1/conversations/{conversation_id}", response_model=Conversation, tags=['conversations'])
-def get_conversation_by_id(conversation_id: str, uid: str = Depends(auth.get_current_user_uid)):
+def get_conversation_by_id(
+    conversation_id: str,
+    uid: str = Depends(auth.get_current_user_uid),
+    x_e2ee_key_hash: Optional[str] = Header(None),
+):
+    _verify_e2ee_access(uid, x_e2ee_key_hash)
     logger.info(f'get_conversation_by_id {uid} {conversation_id}')
     return _get_valid_conversation_by_id(uid, conversation_id)
 

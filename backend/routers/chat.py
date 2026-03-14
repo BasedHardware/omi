@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from typing import List, Optional
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
+from fastapi import APIRouter, Depends, Header, HTTPException, UploadFile, File, Form
 from fastapi.responses import StreamingResponse
 from multipart.multipart import shutil
 
@@ -40,11 +40,23 @@ from utils.other.chat_file import FileChatTool
 from utils.retrieval.graph import execute_graph_chat, execute_graph_chat_stream, execute_persona_chat_stream
 from utils.llm.usage_tracker import set_usage_context, reset_usage_context, Features
 from utils.retrieval.agentic import execute_agentic_chat, execute_agentic_chat_stream
+import database.users as users_db
 import logging
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+def _verify_e2ee_access(uid: str, x_e2ee_key_hash: Optional[str] = None):
+    level = users_db.get_data_protection_level(uid)
+    if level != 'e2ee':
+        return
+    if not x_e2ee_key_hash:
+        raise HTTPException(status_code=403, detail="E2EE is enabled. Provide X-E2EE-Key-Hash header.")
+    stored_hash = users_db.get_e2ee_key_hash(uid)
+    if not stored_hash or x_e2ee_key_hash != stored_hash:
+        raise HTTPException(status_code=403, detail="Invalid E2EE key hash.")
 
 
 def filter_messages(messages, app_id):
@@ -302,8 +314,10 @@ def create_initial_message(
 
 @router.get('/v2/messages', response_model=List[Message], tags=['chat'])
 def get_messages(
-    plugin_id: Optional[str] = None, app_id: Optional[str] = None, uid: str = Depends(auth.get_current_user_uid)
+    plugin_id: Optional[str] = None, app_id: Optional[str] = None, uid: str = Depends(auth.get_current_user_uid),
+    x_e2ee_key_hash: Optional[str] = Header(None),
 ):
+    _verify_e2ee_access(uid, x_e2ee_key_hash)
     compat_app_id = app_id or plugin_id
     if compat_app_id in ['null', '']:
         compat_app_id = None

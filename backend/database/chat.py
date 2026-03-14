@@ -56,7 +56,8 @@ def _prepare_message_for_read(message_data: Optional[Dict[str, Any]], uid: str) 
 
     level = message_data.get('data_protection_level')
     if level in ('enhanced', 'e2ee'):
-        # Both levels use server-side encryption for chat (LLM sees plaintext anyway)
+        # Server-side decrypt. For e2ee, removes the server layer;
+        # client handles its own E2EE encryption on top.
         return _decrypt_chat_data(message_data, uid)
     return message_data
 

@@ -164,8 +164,10 @@ def _prepare_conversation_for_read(conversation_data: Optional[Dict[str, Any]], 
     level = data.get('data_protection_level')
 
     if level in ('enhanced', 'e2ee'):
-        # Both levels use server-side encryption for conversations
-        # (server sees plaintext during Deepgram transcription anyway)
+        # Server-side decrypt for API responses.
+        # For 'enhanced': this is the only decryption layer.
+        # For 'e2ee': this removes the server-side encryption layer;
+        # the client adds its own E2EE encryption on top.
         return _decrypt_conversation_data(data, uid)
 
     # Handle standard level with potential compression

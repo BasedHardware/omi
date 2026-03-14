@@ -9,6 +9,7 @@ import 'package:omi/backend/http/http_pool_manager.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/services/auth_service.dart';
+import 'package:omi/services/e2ee_service.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 
@@ -60,6 +61,14 @@ Future<Map<String, String>> buildHeaders({
 
   if (requireAuthCheck) {
     headers['Authorization'] = await getAuthHeader();
+  }
+
+  // Include E2EE key hash for e2ee-protected endpoints
+  if (SharedPreferencesUtil().e2eeEnabled) {
+    final keyHash = await E2eeService().getKeyHash();
+    if (keyHash != null) {
+      headers['X-E2EE-Key-Hash'] = keyHash;
+    }
   }
 
   return headers;

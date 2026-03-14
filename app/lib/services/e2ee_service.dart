@@ -16,6 +16,7 @@ import 'dart:convert';
 import 'dart:math';
 import 'dart:typed_data';
 
+import 'package:crypto/crypto.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:pointycastle/export.dart';
 
@@ -170,6 +171,14 @@ class E2eeService {
     }
     _cachedKey = Uint8List.fromList(key);
     await _secureStorage.write(key: _keyPrefKey, value: base64Key);
+  }
+
+  /// Get the SHA-256 hash of the current key, for use as X-E2EE-Key-Hash header.
+  Future<String?> getKeyHash() async {
+    final key = await _loadKey();
+    if (key == null) return null;
+    final digest = sha256.convert(key);
+    return digest.toString();
   }
 
   /// Clear the stored key. Used if user disables E2EE (data must be re-encrypted server-side first).
