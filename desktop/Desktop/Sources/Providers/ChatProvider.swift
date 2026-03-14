@@ -2129,10 +2129,9 @@ A screenshot may be attached — use it silently only if relevant. Never mention
             if isOmiMode {
                 sessionTokensUsed += queryResult.inputTokens + queryResult.outputTokens
                 omiAICumulativeCostUsd += queryResult.costUsd
-                // Auto-switch to the user's Claude account when the $50 Omi usage threshold is reached
+                // Show the upgrade flow when the free Omi usage threshold is reached.
                 if omiAICumulativeCostUsd >= 50.0 {
                     showOmiThresholdAlert = true
-                    Task { await self.switchBridgeMode(to: .userClaude) }
                 }
             }
 

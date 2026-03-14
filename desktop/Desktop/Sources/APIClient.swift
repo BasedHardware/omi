@@ -3628,6 +3628,113 @@ struct NotificationSettingsResponse: Codable {
     }
 }
 
+enum SubscriptionPlanType: String, Codable {
+    case basic
+    case unlimited
+    case pro
+}
+
+enum SubscriptionStatusType: String, Codable {
+    case active
+    case inactive
+}
+
+struct SubscriptionLimitsResponse: Codable {
+    let transcriptionSeconds: Int?
+    let wordsTranscribed: Int?
+    let insightsGained: Int?
+    let memoriesCreated: Int?
+
+    enum CodingKeys: String, CodingKey {
+        case transcriptionSeconds = "transcription_seconds"
+        case wordsTranscribed = "words_transcribed"
+        case insightsGained = "insights_gained"
+        case memoriesCreated = "memories_created"
+    }
+}
+
+struct UserSubscriptionInfo: Codable {
+    let plan: SubscriptionPlanType
+    let status: SubscriptionStatusType
+    let currentPeriodEnd: Int?
+    let stripeSubscriptionId: String?
+    let currentPriceId: String?
+    let features: [String]
+    let cancelAtPeriodEnd: Bool
+    let limits: SubscriptionLimitsResponse
+
+    enum CodingKeys: String, CodingKey {
+        case plan, status, features, limits
+        case currentPeriodEnd = "current_period_end"
+        case stripeSubscriptionId = "stripe_subscription_id"
+        case currentPriceId = "current_price_id"
+        case cancelAtPeriodEnd = "cancel_at_period_end"
+    }
+}
+
+struct SubscriptionPriceOption: Codable, Identifiable {
+    let id: String
+    let title: String
+    let description: String?
+    let priceString: String
+
+    enum CodingKeys: String, CodingKey {
+        case id, title, description
+        case priceString = "price_string"
+    }
+}
+
+struct SubscriptionPlanOption: Codable, Identifiable {
+    let id: String
+    let title: String
+    let features: [String]
+    let prices: [SubscriptionPriceOption]
+}
+
+struct UserSubscriptionResponse: Codable {
+    let subscription: UserSubscriptionInfo
+    let transcriptionSecondsUsed: Int
+    let transcriptionSecondsLimit: Int
+    let wordsTranscribedUsed: Int
+    let wordsTranscribedLimit: Int
+    let insightsGainedUsed: Int
+    let insightsGainedLimit: Int
+    let memoriesCreatedUsed: Int
+    let memoriesCreatedLimit: Int
+    let availablePlans: [SubscriptionPlanOption]
+    let showSubscriptionUI: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case subscription
+        case transcriptionSecondsUsed = "transcription_seconds_used"
+        case transcriptionSecondsLimit = "transcription_seconds_limit"
+        case wordsTranscribedUsed = "words_transcribed_used"
+        case wordsTranscribedLimit = "words_transcribed_limit"
+        case insightsGainedUsed = "insights_gained_used"
+        case insightsGainedLimit = "insights_gained_limit"
+        case memoriesCreatedUsed = "memories_created_used"
+        case memoriesCreatedLimit = "memories_created_limit"
+        case availablePlans = "available_plans"
+        case showSubscriptionUI = "show_subscription_ui"
+    }
+}
+
+struct CheckoutSessionResponse: Codable {
+    let url: String?
+    let sessionId: String?
+    let status: String?
+    let message: String?
+
+    enum CodingKeys: String, CodingKey {
+        case url, status, message
+        case sessionId = "session_id"
+    }
+}
+
+struct CustomerPortalResponse: Codable {
+    let url: String
+}
+
 /// User profile response
 struct UserProfileResponse: Codable {
     let uid: String
@@ -4324,6 +4431,26 @@ struct Person: Codable, Identifiable {
 // MARK: - People API
 
 extension APIClient {
+
+    func getUserSubscription() async throws -> UserSubscriptionResponse {
+        return try await get("v1/users/me/subscription")
+    }
+
+    func createCheckoutSession(priceId: String) async throws -> CheckoutSessionResponse {
+        struct Request: Encodable {
+            let priceId: String
+
+            enum CodingKeys: String, CodingKey {
+                case priceId = "price_id"
+            }
+        }
+
+        return try await post("v1/payments/checkout-session", body: Request(priceId: priceId))
+    }
+
+    func createCustomerPortalSession() async throws -> CustomerPortalResponse {
+        return try await post("v1/payments/customer-portal")
+    }
 
     /// Fetches all people for the current user
     func getPeople() async throws -> [Person] {
