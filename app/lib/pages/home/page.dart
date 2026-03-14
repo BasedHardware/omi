@@ -80,39 +80,16 @@ class HomePageWrapper extends StatefulWidget {
 class _HomePageWrapperState extends State<HomePageWrapper> {
   String? _navigateToRoute;
   String? _autoMessage;
-  bool _e2eeChecked = false;
-
-  Future<void> _showE2eeRecovery(UserProvider userProvider) async {
-    await showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (_) => ChangeNotifierProvider.value(
-        value: userProvider,
-        child: const E2eeKeyRecoveryDialog(),
-      ),
-    );
-  }
+  bool _e2eeDialogShowing = false;
 
   @override
   void initState() {
     WidgetsBinding.instance.addPostFrameCallback((_) async {
-      // E2EE key recovery check — must happen before any data loads
-      if (mounted && !_e2eeChecked) {
-        _e2eeChecked = true;
+      // Ensure UserProvider is initialized (may not have been if sign-in happened after AppShell init)
+      if (mounted) {
         final userProvider = context.read<UserProvider>();
-        if (!userProvider.isLoading && userProvider.needsKeyRecovery) {
-          await _showE2eeRecovery(userProvider);
-        } else if (userProvider.isLoading) {
-          // Wait for UserProvider to finish initializing
-          void listener() async {
-            if (!userProvider.isLoading && mounted) {
-              userProvider.removeListener(listener);
-              if (userProvider.needsKeyRecovery) {
-                await _showE2eeRecovery(userProvider);
-              }
-            }
-          }
-          userProvider.addListener(listener);
+        if (!userProvider.isLoading) {
+          await userProvider.initialize();
         }
       }
 
@@ -123,7 +100,6 @@ class _HomePageWrapperState extends State<HomePageWrapper> {
         NotificationService.instance.register();
         NotificationService.instance.saveNotificationToken();
 
-        // Schedule daily reflection notification if enabled
         if (SharedPreferencesUtil().dailyReflectionEnabled) {
           DailyReflectionNotification.scheduleDailyNotification(channelKey: 'channel');
         }
@@ -134,8 +110,34 @@ class _HomePageWrapperState extends State<HomePageWrapper> {
     super.initState();
   }
 
+  void _checkE2eeRecovery() {
+    if (_e2eeDialogShowing) return;
+    final userProvider = context.read<UserProvider>();
+    if (!userProvider.isLoading && userProvider.needsKeyRecovery) {
+      _e2eeDialogShowing = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (_) => ChangeNotifierProvider.value(
+            value: userProvider,
+            child: const E2eeKeyRecoveryDialog(),
+          ),
+        ).then((_) {
+          _e2eeDialogShowing = false;
+        });
+      });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    // Watch UserProvider to react when needsKeyRecovery changes
+    final userProvider = context.watch<UserProvider>();
+    if (userProvider.needsKeyRecovery && !_e2eeDialogShowing) {
+      _checkE2eeRecovery();
+    }
     return HomePage(navigateToRoute: _navigateToRoute, autoMessage: _autoMessage);
   }
 }
