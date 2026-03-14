@@ -69,6 +69,7 @@ class PhoneCallsPlugin private constructor(
 
         override fun onConnectFailure(call: Call, callException: CallException) {
             Log.e(TAG, "Call failed to connect: ${callException.message}")
+            resetAudioMode()
             sendCallStateEvent("failed")
             activeCall = null
             currentCallId = null
@@ -77,6 +78,7 @@ class PhoneCallsPlugin private constructor(
         override fun onConnected(call: Call) {
             Log.d(TAG, "Call connected")
             activeCall = call
+            setAudioModeInCommunication()
             sendCallStateEvent("active")
         }
 
@@ -91,6 +93,7 @@ class PhoneCallsPlugin private constructor(
         }
 
         override fun onDisconnected(call: Call, callException: CallException?) {
+            resetAudioMode()
             if (callException != null) {
                 Log.e(TAG, "Call disconnected with error: ${callException.message}")
                 sendCallStateEvent("failed")
@@ -160,6 +163,7 @@ class PhoneCallsPlugin private constructor(
 
     private fun handleEndCall(result: MethodChannel.Result) {
         activeCall?.disconnect()
+        resetAudioMode()
         sendCallStateEvent("ended")
         activeCall = null
         currentCallId = null
@@ -181,6 +185,20 @@ class PhoneCallsPlugin private constructor(
         val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
         audioManager.isSpeakerphoneOn = speakerOn
         result.success(null)
+    }
+
+    // MARK: - Audio Mode
+
+    private fun setAudioModeInCommunication() {
+        val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+        audioManager.mode = AudioManager.MODE_IN_COMMUNICATION
+    }
+
+    private fun resetAudioMode() {
+        val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+        audioManager.mode = AudioManager.MODE_NORMAL
+        audioManager.isSpeakerphoneOn = false
+        isSpeakerOn = false
     }
 
     // MARK: - Event Sending
