@@ -48,6 +48,24 @@ def _ensure_timezone_aware(dt: datetime) -> datetime:
 def _decrypt_conversation_data(conversation_data: Dict[str, Any], uid: str) -> Dict[str, Any]:
     data = copy.deepcopy(conversation_data)
 
+    # Decrypt structured field if it was encrypted as a JSON blob
+    if 'structured' in data and isinstance(data['structured'], str):
+        try:
+            decrypted_structured = encryption.decrypt(data['structured'], uid)
+            data['structured'] = json.loads(decrypted_structured)
+        except (json.JSONDecodeError, TypeError, ValueError) as e:
+            logger.error(f"Failed to decrypt structured field: {e} {uid}")
+            data['structured'] = {}
+
+    # Decrypt geolocation field if it was encrypted as a JSON blob
+    if 'geolocation' in data and isinstance(data['geolocation'], str):
+        try:
+            decrypted_geolocation = encryption.decrypt(data['geolocation'], uid)
+            data['geolocation'] = json.loads(decrypted_geolocation)
+        except (json.JSONDecodeError, TypeError, ValueError) as e:
+            logger.error(f"Failed to decrypt geolocation field: {e} {uid}")
+            data['geolocation'] = None
+
     if 'transcript_segments' not in data:
         return data
 
@@ -93,7 +111,42 @@ def _prepare_conversation_for_write(data: Dict[str, Any], uid: str, level: str) 
             data['transcript_segments'] = encrypted_segments
         else:
             data['transcript_segments'] = compressed_segments_bytes
+
+    if level in ('enhanced', 'e2ee'):
+        # Encrypt structured field (title, overview, action_items, events)
+        if 'structured' in data and isinstance(data['structured'], dict):
+            structured_json = json.dumps(data['structured'])
+            data['structured'] = encryption.encrypt(structured_json, uid)
+
+        # Encrypt geolocation field
+        if 'geolocation' in data and isinstance(data['geolocation'], dict):
+            geolocation_json = json.dumps(data['geolocation'])
+            data['geolocation'] = encryption.encrypt(geolocation_json, uid)
+
     return data
+
+
+def _update_encrypted_structured_field(doc_ref, doc_data: Dict[str, Any], uid: str, field: str, value):
+    """
+    Read the encrypted structured blob, decrypt it, update one field, re-encrypt, and write back.
+    Handles graceful transition from unencrypted (dict) structured data.
+    """
+    raw_structured = doc_data.get('structured', {})
+    if isinstance(raw_structured, str):
+        try:
+            decrypted = encryption.decrypt(raw_structured, uid)
+            structured = json.loads(decrypted)
+        except (json.JSONDecodeError, TypeError, ValueError) as e:
+            logger.error(f"Failed to decrypt structured for update: {e} {uid}")
+            structured = {}
+    elif isinstance(raw_structured, dict):
+        structured = raw_structured
+    else:
+        structured = {}
+
+    structured[field] = value
+    encrypted = encryption.encrypt(json.dumps(structured), uid)
+    doc_ref.update({'structured': encrypted})
 
 
 def _prepare_conversation_for_read(conversation_data: Optional[Dict[str, Any]], uid: str) -> Optional[Dict[str, Any]]:
@@ -405,7 +458,13 @@ def update_conversation_title(uid: str, conversation_id: str, title: str):
     if not doc_snapshot.exists:
         return
 
-    conversation_ref.update({'structured.title': title})
+    doc_data = doc_snapshot.to_dict()
+    doc_level = doc_data.get('data_protection_level', 'standard')
+
+    if doc_level in ('enhanced', 'e2ee'):
+        _update_encrypted_structured_field(conversation_ref, doc_data, uid, 'title', title)
+    else:
+        conversation_ref.update({'structured.title': title})
 
 
 def update_conversation_segment_text(uid: str, conversation_id: str, segment_id: str, text: str) -> str:
@@ -635,7 +694,7 @@ def migrate_conversations_level_batch(uid: str, conversation_ids: List[str], tar
     conversations_ref = db.collection('users').document(uid).collection(conversations_collection)
     doc_refs = [conversations_ref.document(conv_id) for conv_id in conversation_ids]
     doc_snapshots = db.get_all(
-        doc_refs, field_paths=['data_protection_level', 'transcript_segments', 'transcript_segments_compressed']
+        doc_refs, field_paths=['data_protection_level', 'transcript_segments', 'transcript_segments_compressed', 'structured', 'geolocation']
     )
 
     for doc_snapshot in doc_snapshots:
@@ -652,8 +711,13 @@ def migrate_conversations_level_batch(uid: str, conversation_ids: List[str], tar
         # Decrypt/decompress the data to get a clean slate.
         plain_data = _prepare_conversation_for_read(conversation_data, uid)
 
-        # Re-prepare the segments for writing with the new level.
+        # Re-prepare the data for writing with the new level.
         update_payload = {'transcript_segments': plain_data.get('transcript_segments')}
+        if 'structured' in plain_data:
+            update_payload['structured'] = plain_data['structured']
+        if 'geolocation' in plain_data:
+            update_payload['geolocation'] = plain_data['geolocation']
+
         prepared_payload = _prepare_conversation_for_write(update_payload, uid, target_level)
 
         # Update the document with the migrated data and the new protection level.
@@ -665,6 +729,10 @@ def migrate_conversations_level_batch(uid: str, conversation_ids: List[str], tar
             update_data['transcript_segments_compressed'] = prepared_payload.get(
                 'transcript_segments_compressed', False
             )
+        if 'structured' in prepared_payload:
+            update_data['structured'] = prepared_payload['structured']
+        if 'geolocation' in prepared_payload:
+            update_data['geolocation'] = prepared_payload['geolocation']
 
         if not update_data.get('transcript_segments_compressed'):
             update_data['transcript_segments_compressed'] = firestore.DELETE_FIELD
@@ -770,7 +838,18 @@ def set_conversation_as_discarded(uid: str, conversation_id: str):
 
 
 def update_conversation_events(uid: str, conversation_id: str, events: List[dict]):
-    update_conversation(uid, conversation_id, {'structured.events': events})
+    doc_ref = db.collection('users').document(uid).collection(conversations_collection).document(conversation_id)
+    doc_snapshot = doc_ref.get()
+    if not doc_snapshot.exists:
+        return
+
+    doc_data = doc_snapshot.to_dict()
+    doc_level = doc_data.get('data_protection_level', 'standard')
+
+    if doc_level in ('enhanced', 'e2ee'):
+        _update_encrypted_structured_field(doc_ref, doc_data, uid, 'events', events)
+    else:
+        doc_ref.update({'structured.events': events})
 
 
 # *********************************
@@ -779,7 +858,18 @@ def update_conversation_events(uid: str, conversation_id: str, events: List[dict
 
 
 def update_conversation_action_items(uid: str, conversation_id: str, action_items: List[dict]):
-    update_conversation(uid, conversation_id, {'structured.action_items': action_items})
+    doc_ref = db.collection('users').document(uid).collection(conversations_collection).document(conversation_id)
+    doc_snapshot = doc_ref.get()
+    if not doc_snapshot.exists:
+        return
+
+    doc_data = doc_snapshot.to_dict()
+    doc_level = doc_data.get('data_protection_level', 'standard')
+
+    if doc_level in ('enhanced', 'e2ee'):
+        _update_encrypted_structured_field(doc_ref, doc_data, uid, 'action_items', action_items)
+    else:
+        doc_ref.update({'structured.action_items': action_items})
 
 
 def get_action_items(
@@ -810,13 +900,19 @@ def get_action_items(
     for doc in conversations_ref.stream():
         conversation_data = doc.to_dict()
 
+        # Decrypt first since structured may be an encrypted blob
+        decrypted_data = _prepare_conversation_for_read(conversation_data, uid)
+        if not decrypted_data:
+            continue
+
         # Check if conversation has action items
-        structured = conversation_data.get('structured', {})
-        raw_action_items = structured.get('action_items', [])
+        structured = decrypted_data.get('structured', {})
+        if isinstance(structured, dict):
+            raw_action_items = structured.get('action_items', [])
+        else:
+            raw_action_items = []
 
         if raw_action_items:
-            # Decrypt conversation data for proper reading
-            decrypted_data = _prepare_conversation_for_read(conversation_data, uid)
             conversations.append(decrypted_data)
 
     # Extract and flatten action items with metadata

@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import 'package:omi/pages/settings/widgets/e2ee_qr_dialog.dart';
 import 'package:omi/providers/user_provider.dart';
 import 'package:omi/services/e2ee_service.dart';
+import 'package:omi/backend/preferences.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
 
@@ -305,42 +306,103 @@ class _DataProtectionSectionState extends State<DataProtectionSection> {
             style: const TextStyle(color: Colors.white, fontSize: 16, height: 1.4),
           ),
           const SizedBox(height: 16),
-          Row(
-            children: [
-              Expanded(
-                child: LinearProgressIndicator(
-                  value: provider.migrationTotalCount > 0
-                      ? provider.migrationProcessedCount / provider.migrationTotalCount
-                      : 0.0,
-                  backgroundColor: Colors.grey.shade700,
-                  color: Colors.deepPurple,
-                  minHeight: 6,
-                  borderRadius: BorderRadius.circular(3),
+          if (provider.migrationTotalCount == 0) ...[
+            Row(
+              children: [
+                Expanded(
+                  child: LinearProgressIndicator(
+                    backgroundColor: Colors.grey.shade700,
+                    color: Colors.deepPurple,
+                    minHeight: 6,
+                    borderRadius: BorderRadius.circular(3),
+                  ),
                 ),
-              ),
-              const SizedBox(width: 12),
-              Text(
-                provider.migrationTotalCount > 0
-                    ? '${(provider.migrationProcessedCount / provider.migrationTotalCount * 100).toInt()}%'
-                    : '0%',
-                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-              ),
-            ],
+                const SizedBox(width: 12),
+                Text(
+                  provider.migrationMessage.isNotEmpty
+                      ? provider.migrationMessage
+                      : 'Preparing migration...',
+                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12),
+                ),
+              ],
+            ),
+          ] else ...[
+            Row(
+              children: [
+                Expanded(
+                  child: LinearProgressIndicator(
+                    value: provider.migrationProcessedCount / provider.migrationTotalCount,
+                    backgroundColor: Colors.grey.shade700,
+                    color: Colors.deepPurple,
+                    minHeight: 6,
+                    borderRadius: BorderRadius.circular(3),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Text(
+                  '${(provider.migrationProcessedCount / provider.migrationTotalCount * 100).toInt()}%',
+                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  provider.migrationETA,
+                  style: const TextStyle(color: Colors.grey, fontSize: 12),
+                ),
+                Text(
+                  context.l10n.objectsCount(
+                      provider.migrationProcessedCount.toString(), provider.migrationTotalCount.toString()),
+                  style: const TextStyle(color: Colors.grey, fontSize: 12),
+                ),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  void _showDowngradeDialog(BuildContext context) {
+    final provider = Provider.of<UserProvider>(context, listen: false);
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF2c2c2e),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        title: const Row(
+          children: [
+            Icon(Icons.warning_amber_rounded, color: Colors.orangeAccent),
+            SizedBox(width: 10),
+            Text('Switch to Secure Encryption?',
+                style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
+          ],
+        ),
+        content: Text(
+          'This will re-encrypt your data with server-managed keys. '
+          'Your end-to-end encryption key will no longer be used.\n\n'
+          'Your data will still be encrypted at rest, but the server will manage the keys.',
+          style: TextStyle(color: Colors.white.withOpacity(0.8), height: 1.5, fontSize: 15),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Cancel', style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold)),
           ),
-          const SizedBox(height: 8),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                provider.migrationETA,
-                style: const TextStyle(color: Colors.grey, fontSize: 12),
-              ),
-              Text(
-                context.l10n.objectsCount(
-                    provider.migrationProcessedCount.toString(), provider.migrationTotalCount.toString()),
-                style: const TextStyle(color: Colors.grey, fontSize: 12),
-              ),
-            ],
+          ElevatedButton(
+            onPressed: () {
+              Navigator.of(ctx).pop();
+              SharedPreferencesUtil().e2eeEnabled = false;
+              provider.updateDataProtectionLevel('enhanced');
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.orangeAccent,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Switch'),
           ),
         ],
       ),
@@ -348,7 +410,9 @@ class _DataProtectionSectionState extends State<DataProtectionSection> {
   }
 
   Widget _buildDefaultProtectionCard(BuildContext context, {required bool isActive}) {
-    return Container(
+    return GestureDetector(
+      onTap: isActive ? null : () => _showDowngradeDialog(context),
+      child: Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: isActive ? Colors.deepPurple.withOpacity(0.15) : const Color(0xFF1A1A1A),
@@ -397,6 +461,7 @@ class _DataProtectionSectionState extends State<DataProtectionSection> {
           ),
         ],
       ),
+    ),
     );
   }
 
