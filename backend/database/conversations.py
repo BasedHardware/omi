@@ -96,10 +96,17 @@ def _decrypt_conversation_data(conversation_data: Dict[str, Any], uid: str) -> D
     return data
 
 
+def _json_serial(obj):
+    """JSON serializer for objects not serializable by default json code."""
+    if hasattr(obj, 'isoformat'):
+        return obj.isoformat()
+    raise TypeError(f"Type {type(obj)} not serializable")
+
+
 def _prepare_conversation_for_write(data: Dict[str, Any], uid: str, level: str) -> Dict[str, Any]:
     data = copy.deepcopy(data)
     if 'transcript_segments' in data and isinstance(data['transcript_segments'], list):
-        segments_json = json.dumps(data['transcript_segments'])
+        segments_json = json.dumps(data['transcript_segments'], default=_json_serial)
         compressed_segments_bytes = zlib.compress(segments_json.encode('utf-8'))
         data['transcript_segments_compressed'] = True
 
@@ -115,12 +122,12 @@ def _prepare_conversation_for_write(data: Dict[str, Any], uid: str, level: str) 
     if level in ('enhanced', 'e2ee'):
         # Encrypt structured field (title, overview, action_items, events)
         if 'structured' in data and isinstance(data['structured'], dict):
-            structured_json = json.dumps(data['structured'])
+            structured_json = json.dumps(data['structured'], default=_json_serial)
             data['structured'] = encryption.encrypt(structured_json, uid)
 
         # Encrypt geolocation field
         if 'geolocation' in data and isinstance(data['geolocation'], dict):
-            geolocation_json = json.dumps(data['geolocation'])
+            geolocation_json = json.dumps(data['geolocation'], default=_json_serial)
             data['geolocation'] = encryption.encrypt(geolocation_json, uid)
 
     return data
@@ -145,7 +152,7 @@ def _update_encrypted_structured_field(doc_ref, doc_data: Dict[str, Any], uid: s
         structured = {}
 
     structured[field] = value
-    encrypted = encryption.encrypt(json.dumps(structured), uid)
+    encrypted = encryption.encrypt(json.dumps(structured, default=_json_serial), uid)
     doc_ref.update({'structured': encrypted})
 
 
