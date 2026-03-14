@@ -82,6 +82,17 @@ class _HomePageWrapperState extends State<HomePageWrapper> {
   String? _autoMessage;
   bool _e2eeChecked = false;
 
+  Future<void> _showE2eeRecovery(UserProvider userProvider) async {
+    await showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => ChangeNotifierProvider.value(
+        value: userProvider,
+        child: const E2eeKeyRecoveryDialog(),
+      ),
+    );
+  }
+
   @override
   void initState() {
     WidgetsBinding.instance.addPostFrameCallback((_) async {
@@ -505,18 +516,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
     });
   }
 
-  Future<void> _showE2eeRecovery(UserProvider userProvider) async {
-    await showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (_) => ChangeNotifierProvider.value(
-        value: userProvider,
-        child: const E2eeKeyRecoveryDialog(),
-      ),
-    );
-  }
-
-  void _onDeviceConnectedForAnnouncements(BtDevice device) async {
+    void _onDeviceConnectedForAnnouncements(BtDevice device) async {
     if (!mounted) return;
 
     final announcementProvider = Provider.of<AnnouncementProvider>(context, listen: false);
