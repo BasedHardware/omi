@@ -10413,5 +10413,37 @@
     "preparingMigration": "Preparing migration...",
     "@preparingMigration": {
         "description": "Message shown while preparing data migration"
+    },
+    "e2eeKeyRecoveryTitle": "Recovery Key Required",
+    "@e2eeKeyRecoveryTitle": {
+        "description": "Title for the E2EE key recovery dialog"
+    },
+    "e2eeKeyRecoveryBody": "Your E2EE encryption key is missing. Paste your recovery key to restore access to your encrypted data.",
+    "@e2eeKeyRecoveryBody": {
+        "description": "Body text for the E2EE key recovery dialog"
+    },
+    "e2eeKeyRecoveryHint": "Paste recovery key",
+    "@e2eeKeyRecoveryHint": {
+        "description": "Hint text for the recovery key input field"
+    },
+    "e2eeKeyRecoveryButton": "Recover",
+    "@e2eeKeyRecoveryButton": {
+        "description": "Button text to recover the E2EE key"
+    },
+    "e2eeKeyRecoverySuccess": "Key recovered successfully",
+    "@e2eeKeyRecoverySuccess": {
+        "description": "Success message after key recovery"
+    },
+    "e2eeKeyRecoveryWrongKey": "Wrong key — doesn't match the one used to encrypt your data",
+    "@e2eeKeyRecoveryWrongKey": {
+        "description": "Error message when the recovery key doesn't match"
+    },
+    "e2eeKeyRecoveryLostKey": "I lost my recovery key",
+    "@e2eeKeyRecoveryLostKey": {
+        "description": "Link text for users who lost their recovery key"
+    },
+    "e2eeKeyRecoveryLostKeyBody": "Without the recovery key, you'll need to disable E2EE from another device where you're logged in, or contact support to reset your encryption.",
+    "@e2eeKeyRecoveryLostKeyBody": {
+        "description": "Explanation text for users who lost their recovery key"
     }
 }

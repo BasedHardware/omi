@@ -22,6 +22,7 @@ class UserProvider with ChangeNotifier {
 
   String _dataProtectionLevel = 'standard';
   bool _isLoading = false;
+  bool _needsKeyRecovery = false;
   bool _privateCloudSyncEnabled = false;
   bool _trainingDataOptedIn = false;
   String? _trainingDataStatus;
@@ -67,6 +68,7 @@ class UserProvider with ChangeNotifier {
   String get targetLevel => _targetLevel;
 
   bool get isE2eeEnabled => _dataProtectionLevel == 'e2ee';
+  bool get needsKeyRecovery => _needsKeyRecovery;
 
   String get migrationETA {
     final ctx = MyApp.navigatorKey.currentContext;
@@ -119,6 +121,13 @@ class UserProvider with ChangeNotifier {
       _dataProtectionLevel = userProfile['data_protection_level'] ?? 'standard';
 
       SharedPreferencesUtil().e2eeEnabled = _dataProtectionLevel == 'e2ee';
+
+      // Check if E2EE key is missing (e.g. after reinstall or cleared data)
+      if (_dataProtectionLevel == 'e2ee') {
+        final e2eeService = E2eeService();
+        final keyAvailable = await e2eeService.hasKey;
+        _needsKeyRecovery = !keyAvailable;
+      }
 
       // Load private cloud sync status
       await _loadPrivateCloudSyncStatus();
@@ -347,6 +356,31 @@ class UserProvider with ChangeNotifier {
     await updateDataProtectionLevel('e2ee');
 
     return key;
+  }
+
+  Future<bool> recoverE2eeKey(String base64Key) async {
+    try {
+      final e2eeService = E2eeService();
+      await e2eeService.importKey(base64Key);
+
+      // Verify the key hash matches what's on the server
+      final keyHash = await e2eeService.getKeyHash();
+      if (keyHash == null) return false;
+
+      final storedHash = await PrivacyApi.getE2eeKeyHash();
+      if (storedHash != keyHash) {
+        // Wrong key - clear it
+        await e2eeService.clearKey();
+        return false;
+      }
+
+      _needsKeyRecovery = false;
+      notifyListeners();
+      return true;
+    } catch (e) {
+      Logger.error('Key recovery failed: $e');
+      return false;
+    }
   }
 
   Future<void> updateDataProtectionLevel(String targetLevel) async {
