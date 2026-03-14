@@ -1,7 +1,7 @@
 import SwiftUI
 import AppKit
 
-/// Onboarding step: prompts user to hold the PTT key (Option by default)
+/// Onboarding step: prompts user to hold the selected push-to-talk key
 /// to ask a question using voice via the real floating bar.
 struct OnboardingVoiceInputDemoView: View {
     @ObservedObject var appState: AppState
@@ -10,6 +10,7 @@ struct OnboardingVoiceInputDemoView: View {
     var onSkip: () -> Void
 
     @ObservedObject private var pttManager = PushToTalkManager.shared
+    @ObservedObject private var shortcutSettings = ShortcutSettings.shared
     @State private var hasTried = false
     @State private var showContinue = false
     @State private var pulseAnimation = false
@@ -67,7 +68,7 @@ struct OnboardingVoiceInputDemoView: View {
                         .font(.system(size: 24, weight: .bold))
                         .foregroundColor(OmiColors.textPrimary)
 
-                    Text("Hold the Option key and speak your question.\nRelease to send it.")
+                    Text("Hold \(shortcutSettings.pttKey.rawValue) and speak your question.\nRelease to send it.")
                         .font(.system(size: 14))
                         .foregroundColor(OmiColors.textSecondary)
                         .multilineTextAlignment(.center)
@@ -81,7 +82,7 @@ struct OnboardingVoiceInputDemoView: View {
                                 .font(.system(size: 13))
                                 .foregroundColor(OmiColors.textTertiary)
 
-                            keyCap("⌥")
+                            keyCap(shortcutSettings.pttKey.symbol)
                         }
 
                         Text("Try asking: \"What's the weather in my city?\"")
