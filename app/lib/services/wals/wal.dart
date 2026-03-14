@@ -9,24 +9,28 @@ const newFrameSyncDelaySeconds = 15;
 const framesPerFlashPage = 8;
 const secondsPerFlashPage = 1.4;
 
-enum WalStatus {
-  inProgress,
-  miss,
-  synced,
-  corrupted,
+/// Counts opus frames in raw bytes stored as [1-byte size prefix][opus data] per frame.
+int countOpusFramesFromRawBytes(List<int> rawBytes) {
+  int count = 0;
+  int offset = 0;
+  while (offset < rawBytes.length) {
+    var size = rawBytes[offset];
+    if (size == 0) {
+      offset += 1;
+      continue;
+    }
+    if (offset + 1 + size > rawBytes.length) break;
+    count++;
+    offset += 1 + size;
+  }
+  return count;
 }
 
-enum WalStorage {
-  mem,
-  disk,
-  sdcard,
-  flashPage,
-}
+enum WalStatus { inProgress, miss, synced, corrupted }
 
-enum SyncMethod {
-  ble,
-  wifi,
-}
+enum WalStorage { mem, disk, sdcard, flashPage }
+
+enum SyncMethod { ble, wifi }
 
 class WalStats {
   final int totalFiles;
@@ -140,8 +144,9 @@ class Wal {
       fileNum: json['file_num'] ?? 1,
       totalFrames: json['total_frames'] ?? 0,
       syncedFrameOffset: json['synced_frame_offset'] ?? 0,
-      originalStorage:
-          json['original_storage'] != null ? WalStorage.values.asNameMap()[json['original_storage']] : null,
+      originalStorage: json['original_storage'] != null
+          ? WalStorage.values.asNameMap()[json['original_storage']]
+          : null,
     );
   }
 
