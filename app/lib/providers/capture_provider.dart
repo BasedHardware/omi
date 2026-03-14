@@ -1356,7 +1356,7 @@ class CaptureProvider extends ChangeNotifier
   }
 
   Duration _getReconnectDelay() {
-    final cap = min(pow(2, _reconnectAttempt).toInt(), _maxBackoffSeconds);
+    final cap = min(pow(2, _reconnectAttempt), _maxBackoffSeconds).toInt();
     final jitterMs = cap > 0 ? Random().nextInt(cap * 1000) : 1000;
     return Duration(milliseconds: jitterMs);
   }
