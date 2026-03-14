@@ -33,8 +33,8 @@ def verify_token(token: str) -> str:
     """
     # Check for ADMIN_KEY format
     admin_key = os.getenv('ADMIN_KEY')
-    if admin_key and admin_key in token:
-        return token.split(admin_key)[1]
+    if admin_key and token.startswith(admin_key):
+        return token[len(admin_key) :]
 
     # Verify Firebase token
     try:

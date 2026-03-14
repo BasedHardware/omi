@@ -43,6 +43,8 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   bool get havingNewFirmware => _havingNewFirmware && pairedDevice != null && isConnected;
 
   // Track firmware update state to prevent showing dialog during updates
+  bool _isCheckingFirmware = false;
+  bool _isFirmwareDialogShowing = false;
   bool _isFirmwareUpdateInProgress = false;
   bool get isFirmwareUpdateInProgress => _isFirmwareUpdateInProgress;
 
@@ -198,8 +200,9 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     // Throttle notifyListeners to reduce battery drain from excessive UI rebuilds
     // Only notify when: first reading, >=5% change, 15min elapsed, or crosses 20% threshold
     final delta = (_lastNotifiedBatteryLevel - value).abs();
-    final elapsed =
-        _lastBatteryNotifyTime == null ? const Duration(minutes: 999) : currentTime.difference(_lastBatteryNotifyTime!);
+    final elapsed = _lastBatteryNotifyTime == null
+        ? const Duration(minutes: 999)
+        : currentTime.difference(_lastBatteryNotifyTime!);
     final crossedLowBatteryThreshold =
         (value < 20 && _lastNotifiedBatteryLevel >= 20) || (value >= 20 && _lastNotifiedBatteryLevel < 20);
     final shouldNotify =
@@ -346,6 +349,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   void onDeviceDisconnected() async {
     Logger.debug('onDisconnected inside: $connectedDevice');
     _havingNewFirmware = false;
+    _isFirmwareDialogShowing = false;
     setConnectedDevice(null);
     setisDeviceStorageSupport();
     setIsConnected(false);
@@ -394,7 +398,9 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     );
 
     var (message, hasUpdate, version) = await DeviceUtils.shouldUpdateFirmware(
-        currentFirmware: device.firmwareRevision, latestFirmwareDetails: latestFirmwareDetails);
+      currentFirmware: device.firmwareRevision,
+      latestFirmwareDetails: latestFirmwareDetails,
+    );
     return (message, hasUpdate, version, latestFirmwareDetails);
   }
 
@@ -455,21 +461,26 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   }
 
   void _checkFirmwareUpdates() async {
-    if (_isFirmwareUpdateInProgress) {
+    if (_isFirmwareUpdateInProgress || _isCheckingFirmware) {
       return;
     }
 
-    await checkFirmwareUpdates();
+    _isCheckingFirmware = true;
+    try {
+      await checkFirmwareUpdates();
 
-    // Show firmware update dialog if needed
-    if (_havingNewFirmware) {
-      // Use a small delay to ensure the UI is ready
-      Future.delayed(const Duration(milliseconds: 500), () {
-        final context = MyApp.navigatorKey.currentContext;
-        if (context != null) {
-          showFirmwareUpdateDialog(context);
-        }
-      });
+      // Show firmware update dialog if needed
+      if (_havingNewFirmware) {
+        // Use a small delay to ensure the UI is ready
+        Future.delayed(const Duration(milliseconds: 500), () {
+          final context = MyApp.navigatorKey.currentContext;
+          if (context != null) {
+            showFirmwareUpdateDialog(context);
+          }
+        });
+      }
+    } finally {
+      _isCheckingFirmware = false;
     }
   }
 
@@ -535,10 +546,12 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     if (!_havingNewFirmware ||
         !SharedPreferencesUtil().showFirmwareUpdateDialog ||
         _isFirmwareUpdateInProgress ||
+        _isFirmwareDialogShowing ||
         _isOnFirmwareUpdatePage) {
       return;
     }
 
+    _isFirmwareDialogShowing = true;
     showDialog(
       context: context,
       builder: (context) => ConfirmationDialog(
@@ -552,25 +565,21 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
           if (_isOmiGlassDevice) {
             Navigator.of(context).push(
               MaterialPageRoute(
-                builder: (context) => OmiGlassOtaUpdate(
-                  device: pairedDevice,
-                  latestFirmwareDetails: _latestOmiGlassFirmwareDetails,
-                ),
+                builder: (context) =>
+                    OmiGlassOtaUpdate(device: pairedDevice, latestFirmwareDetails: _latestOmiGlassFirmwareDetails),
               ),
             );
           } else {
-            Navigator.of(context).push(
-              MaterialPageRoute(
-                builder: (context) => FirmwareUpdate(device: pairedDevice),
-              ),
-            );
+            Navigator.of(context).push(MaterialPageRoute(builder: (context) => FirmwareUpdate(device: pairedDevice)));
           }
         },
         onCancel: () {
           Navigator.of(context).pop();
         },
       ),
-    );
+    ).then((_) {
+      _isFirmwareDialogShowing = false;
+    });
   }
 
   Future setisDeviceStorageSupport() async {
