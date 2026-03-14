@@ -6,7 +6,7 @@ import hashlib
 import os
 
 import pytz
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Header, Query
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, field_validator
 import re
@@ -35,6 +35,7 @@ from database.redis_db import (
     set_generic_cache,
 )
 from database.users import *
+import database.users as users_db
 from utils.stt.streaming import deepgram_nova3_multi_languages
 from models.conversation import Geolocation, Conversation
 from models.other import Person, CreatePerson
@@ -70,6 +71,17 @@ import logging
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+def _verify_e2ee_access(uid: str, x_e2ee_key_hash: Optional[str] = None):
+    level = users_db.get_data_protection_level(uid)
+    if level != 'e2ee':
+        return
+    if not x_e2ee_key_hash:
+        raise HTTPException(status_code=403, detail="E2EE is enabled. Provide X-E2EE-Key-Hash header.")
+    stored_hash = users_db.get_e2ee_key_hash(uid)
+    if not stored_hash or x_e2ee_key_hash != stored_hash:
+        raise HTTPException(status_code=403, detail="Invalid E2EE key hash.")
 
 
 class MigrationRequest(BaseModel):
@@ -298,8 +310,10 @@ def get_single_person(
 
 
 @router.get('/v1/users/people', tags=['v1'], response_model=List[Person])
-def get_all_people(include_speech_samples: bool = True, uid: str = Depends(auth.get_current_user_uid)):
+def get_all_people(include_speech_samples: bool = True, uid: str = Depends(auth.get_current_user_uid),
+                   x_e2ee_key_hash: Optional[str] = Header(None)):
     logger.info(f'get_all_people {include_speech_samples}')
+    _verify_e2ee_access(uid, x_e2ee_key_hash)
     people = get_people(uid)
     if include_speech_samples:
         # Convert GCS paths to signed URLs for each person
@@ -1046,21 +1060,25 @@ def test_daily_summary(request: TestDailySummaryRequest = None, uid: str = Depen
 
 @router.get('/v1/users/daily-summaries', tags=['v1'])
 def get_daily_summaries(
-    limit: int = Query(30, ge=1, le=100), offset: int = Query(0, ge=0), uid: str = Depends(auth.get_current_user_uid)
+    limit: int = Query(30, ge=1, le=100), offset: int = Query(0, ge=0), uid: str = Depends(auth.get_current_user_uid),
+    x_e2ee_key_hash: Optional[str] = Header(None),
 ):
     """
     Get list of daily summaries for the authenticated user.
     Returns summaries in reverse chronological order.
     """
+    _verify_e2ee_access(uid, x_e2ee_key_hash)
     summaries = daily_summaries_db.get_daily_summaries(uid, limit=limit, offset=offset)
     return {'summaries': summaries}
 
 
 @router.get('/v1/users/daily-summaries/{summary_id}', tags=['v1'])
-def get_daily_summary(summary_id: str, uid: str = Depends(auth.get_current_user_uid)):
+def get_daily_summary(summary_id: str, uid: str = Depends(auth.get_current_user_uid),
+                      x_e2ee_key_hash: Optional[str] = Header(None)):
     """
     Get a single daily summary by ID.
     """
+    _verify_e2ee_access(uid, x_e2ee_key_hash)
     summary = daily_summaries_db.get_daily_summary(uid, summary_id)
     if not summary:
         raise HTTPException(status_code=404, detail='Daily summary not found')

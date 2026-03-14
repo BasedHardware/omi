@@ -8,10 +8,11 @@ from datetime import datetime
 from typing import Optional, List
 from enum import Enum
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Header, Query
 from pydantic import BaseModel, Field
 
 from database import goals as goals_db
+import database.users as users_db
 from utils.other import endpoints as auth
 from utils.llm.goals import (
     suggest_goal as suggest_goal_llm,
@@ -20,6 +21,17 @@ from utils.llm.goals import (
 )
 
 router = APIRouter()
+
+
+def _verify_e2ee_access(uid: str, x_e2ee_key_hash: Optional[str] = None):
+    level = users_db.get_data_protection_level(uid)
+    if level != 'e2ee':
+        return
+    if not x_e2ee_key_hash:
+        raise HTTPException(status_code=403, detail="E2EE is enabled. Provide X-E2EE-Key-Hash header.")
+    stored_hash = users_db.get_e2ee_key_hash(uid)
+    if not stored_hash or x_e2ee_key_hash != stored_hash:
+        raise HTTPException(status_code=403, detail="Invalid E2EE key hash.")
 
 
 class GoalType(str, Enum):
@@ -99,8 +111,10 @@ async def get_current_goal(uid: str = Depends(auth.get_current_user_uid)) -> Opt
 
 
 @router.get('/v1/goals/all', tags=['goals'])
-async def get_all_goals(uid: str = Depends(auth.get_current_user_uid)) -> List[dict]:
+async def get_all_goals(uid: str = Depends(auth.get_current_user_uid),
+                       x_e2ee_key_hash: Optional[str] = Header(None)) -> List[dict]:
     """Get all active goals for the user (up to 3)."""
+    _verify_e2ee_access(uid, x_e2ee_key_hash)
     goals = goals_db.get_user_goals(uid, limit=3)
 
     # Convert datetime objects to strings for JSON serialization

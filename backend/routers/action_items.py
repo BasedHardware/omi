@@ -2,11 +2,12 @@ import asyncio
 import threading
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Header, Query
 from typing import Optional, List
 from datetime import datetime, timezone
 
 import database.action_items as action_items_db
+import database.users as users_db
 import database.redis_db as redis_db
 from utils.users import get_user_display_name
 from utils.other import endpoints as auth
@@ -20,6 +21,17 @@ from utils.task_sync import auto_sync_action_item
 from pydantic import BaseModel, Field
 
 router = APIRouter()
+
+
+def _verify_e2ee_access(uid: str, x_e2ee_key_hash: Optional[str] = None):
+    level = users_db.get_data_protection_level(uid)
+    if level != 'e2ee':
+        return
+    if not x_e2ee_key_hash:
+        raise HTTPException(status_code=403, detail="E2EE is enabled. Provide X-E2EE-Key-Hash header.")
+    stored_hash = users_db.get_e2ee_key_hash(uid)
+    if not stored_hash or x_e2ee_key_hash != stored_hash:
+        raise HTTPException(status_code=403, detail="Invalid E2EE key hash.")
 
 
 # Request models specific to action items
@@ -142,8 +154,10 @@ def get_action_items(
     due_start_date: Optional[datetime] = Query(None, description="Filter by due start date (inclusive)"),
     due_end_date: Optional[datetime] = Query(None, description="Filter by due end date (inclusive)"),
     uid: str = Depends(auth.get_current_user_uid),
+    x_e2ee_key_hash: Optional[str] = Header(None),
 ):
     """Get action items for the current user."""
+    _verify_e2ee_access(uid, x_e2ee_key_hash)
     action_items = action_items_db.get_action_items(
         uid=uid,
         conversation_id=conversation_id,
@@ -182,8 +196,10 @@ def get_action_items(
 
 
 @router.get("/v1/action-items/{action_item_id}", response_model=ActionItemResponse, tags=['action-items'])
-def get_action_item(action_item_id: str, uid: str = Depends(auth.get_current_user_uid)):
+def get_action_item(action_item_id: str, uid: str = Depends(auth.get_current_user_uid),
+                    x_e2ee_key_hash: Optional[str] = Header(None)):
     """Get a specific action item by ID."""
+    _verify_e2ee_access(uid, x_e2ee_key_hash)
     action_item = _get_valid_action_item(uid, action_item_id)
 
     if not action_item:
@@ -308,8 +324,10 @@ def delete_action_item(action_item_id: str, uid: str = Depends(auth.get_current_
 
 
 @router.get("/v1/conversations/{conversation_id}/action-items", tags=['action-items'])
-def get_conversation_action_items(conversation_id: str, uid: str = Depends(auth.get_current_user_uid)):
+def get_conversation_action_items(conversation_id: str, uid: str = Depends(auth.get_current_user_uid),
+                                  x_e2ee_key_hash: Optional[str] = Header(None)):
     """Get all action items for a specific conversation."""
+    _verify_e2ee_access(uid, x_e2ee_key_hash)
     action_items = action_items_db.get_action_items_by_conversation(uid, conversation_id)
     response_items = [ActionItemResponse(**item) for item in action_items]
 
