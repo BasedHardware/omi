@@ -48,10 +48,7 @@ router = APIRouter()
 
 
 def _verify_e2ee_access(uid: str, x_e2ee_key_hash: Optional[str] = None):
-    """
-    If the user's data protection level is 'e2ee', require a valid key hash header.
-    Web clients without the E2EE key cannot access encrypted data.
-    """
+    """Require valid E2EE key hash header if user has E2EE enabled."""
     level = users_db.get_data_protection_level(uid)
     if level != 'e2ee':
         return

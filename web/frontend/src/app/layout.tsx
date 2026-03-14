@@ -6,6 +6,7 @@ import ConditionalFooter from '../components/shared/conditional-footer';
 import envConfig from '../constants/envConfig';
 import { GleapInit } from '@/src/components/shared/gleap';
 import { GoogleAnalytics } from '@/src/components/shared/google-analytics';
+import { E2eeProvider } from '@/src/providers/e2ee-provider';
 
 const inter = Mulish({
   subsets: ['latin'],
@@ -36,9 +37,11 @@ export default function RootLayout({
         <AppHeader />
         {/* Elfsight Announcement Bar */}
         <div className="elfsight-app-4df8bf4f-92a3-44bb-8bae-fcdac7faa58a" data-elfsight-app-lazy></div>
-        <main className="flex min-h-screen flex-col">
-          <div className="w-full flex-grow">{children}</div>
-        </main>
+        <E2eeProvider>
+          <main className="flex min-h-screen flex-col">
+            <div className="w-full flex-grow">{children}</div>
+          </main>
+        </E2eeProvider>
         <ConditionalFooter />
       </body>
       <GleapInit />

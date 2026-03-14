@@ -29,7 +29,6 @@ from utils import encryption
 
 DAILY_SUMMARIES_COLLECTION = 'daily_summaries'
 
-# Sensitive text fields to encrypt at rest
 _ENCRYPTED_FIELDS = ('headline', 'overview', 'tomorrow_focus')
 
 
@@ -39,7 +38,6 @@ _ENCRYPTED_FIELDS = ('headline', 'overview', 'tomorrow_focus')
 
 
 def _prepare_summary_for_write(data: dict, uid: str, level: str) -> dict:
-    """Encrypt sensitive fields if data protection level is enhanced or e2ee."""
     data = copy.deepcopy(data)
     if level in ('enhanced', 'e2ee'):
         for field in _ENCRYPTED_FIELDS:
@@ -49,7 +47,6 @@ def _prepare_summary_for_write(data: dict, uid: str, level: str) -> dict:
 
 
 def _prepare_summary_for_read(data: dict, uid: str) -> dict:
-    """Decrypt sensitive fields if data protection level is enhanced or e2ee."""
     if not data:
         return data
     data = copy.deepcopy(data)

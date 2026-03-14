@@ -28,7 +28,6 @@ Future<List<ServerMessage>> getMessagesServer({
       return [];
     }
     var messages = decodedBody.map((conversation) => ServerMessage.fromJson(conversation)).toList();
-    // Decrypt message text if E2EE is enabled
     if (E2eeMiddleware.isE2eeEnabled()) {
       for (var msg in messages) {
         msg.text = await E2eeMiddleware.decryptIfEnabled(msg.text);

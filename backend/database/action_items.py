@@ -22,7 +22,7 @@ action_items_collection = 'action_items'
 
 
 def _prepare_action_item_for_write(action_item_data: dict, uid: str, level: str) -> dict:
-    """Prepare action item data for writing to database, encrypting sensitive fields."""
+    """Prepare action item data for writing to database."""
     action_item_data = copy.deepcopy(action_item_data)
 
     # Ensure timestamps are properly formatted
@@ -48,7 +48,6 @@ def _prepare_action_item_for_write(action_item_data: dict, uid: str, level: str)
                 action_item_data['completed_at'].replace('Z', '+00:00')
             )
 
-    # Encrypt sensitive fields
     if level in ('enhanced', 'e2ee') and 'description' in action_item_data and action_item_data['description']:
         action_item_data['description'] = encryption.encrypt(action_item_data['description'], uid)
 
@@ -56,7 +55,7 @@ def _prepare_action_item_for_write(action_item_data: dict, uid: str, level: str)
 
 
 def _prepare_action_item_for_read(action_item_data: dict, uid: str) -> dict:
-    """Prepare action item data for reading from database, decrypting sensitive fields."""
+    """Prepare action item data for reading from database."""
     if not action_item_data:
         return action_item_data
     action_item_data = copy.deepcopy(action_item_data)
@@ -66,7 +65,6 @@ def _prepare_action_item_for_read(action_item_data: dict, uid: str) -> dict:
             if hasattr(action_item_data[field], 'timestamp'):
                 action_item_data[field] = datetime.fromtimestamp(action_item_data[field].timestamp(), tz=timezone.utc)
 
-    # Decrypt sensitive fields
     level = action_item_data.get('data_protection_level')
     if level in ('enhanced', 'e2ee') and 'description' in action_item_data and action_item_data['description']:
         action_item_data['description'] = encryption.decrypt(action_item_data['description'], uid)

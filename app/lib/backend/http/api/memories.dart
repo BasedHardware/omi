@@ -7,7 +7,6 @@ import 'package:omi/services/e2ee_middleware.dart';
 import 'package:omi/utils/logger.dart';
 
 Future<Memory?> createMemoryServer(String content, String visibility, String category) async {
-  // Encrypt content client-side if E2EE is enabled
   final encryptedContent = await E2eeMiddleware.encryptIfEnabled(content);
 
   var response = await makeApiCall(
@@ -24,7 +23,6 @@ Future<Memory?> createMemoryServer(String content, String visibility, String cat
   Logger.debug('createMemory response: ${response.body}');
   if (response.statusCode == 200) {
     var memory = Memory.fromJson(json.decode(response.body));
-    // Decrypt content after reading back from server
     memory.content = await E2eeMiddleware.decryptIfEnabled(memory.content);
     return memory;
   }
@@ -55,7 +53,6 @@ Future<List<Memory>> getMemories({int limit = 100, int offset = 0}) async {
     var decoded = json.decode(response.body);
     if (decoded is List) {
       var memories = decoded.map((e) => Memory.fromJson(e)).toList();
-      // Decrypt content fields if E2EE is enabled
       if (E2eeMiddleware.isE2eeEnabled()) {
         for (var memory in memories) {
           memory.content = await E2eeMiddleware.decryptIfEnabled(memory.content);
@@ -92,7 +89,6 @@ Future<bool> deleteAllMemoriesServer() async {
 }
 
 Future<bool> editMemoryServer(String memoryId, String value) async {
-  // E2EE: encrypt memory content before sending to server
   final encryptedValue = await E2eeMiddleware.encryptIfEnabled(value);
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v3/memories/$memoryId?value=${Uri.encodeComponent(encryptedValue)}',

@@ -25,13 +25,7 @@ knowledge_edges_collection = 'knowledge_edges'
 
 
 def _encrypt_node_data(data: dict, uid: str, level: str) -> dict:
-    """Encrypt sensitive fields on a knowledge node.
-
-    NOTE: `label` and `label_lower` are NOT encrypted because they are required for
-    deduplication queries (find_node_by_label_or_alias). `aliases_lower` is also kept
-    plaintext for the same reason. Only `aliases` (the display-cased list) is encrypted.
-    Edge `label` describes relationships and IS encrypted.
-    """
+    """Encrypt sensitive fields on a knowledge node (aliases only; label stays plaintext for queries)."""
     data = copy.deepcopy(data)
     if level in ('enhanced', 'e2ee'):
         if 'aliases' in data and data['aliases']:
@@ -40,7 +34,6 @@ def _encrypt_node_data(data: dict, uid: str, level: str) -> dict:
 
 
 def _decrypt_node_data(data: dict, uid: str) -> dict:
-    """Decrypt sensitive fields on a knowledge node."""
     if not data:
         return data
     data = copy.deepcopy(data)
@@ -60,7 +53,6 @@ def _decrypt_node_data(data: dict, uid: str) -> dict:
 
 
 def _encrypt_edge_data(data: dict, uid: str, level: str) -> dict:
-    """Encrypt the relationship label on a knowledge edge."""
     data = copy.deepcopy(data)
     if level in ('enhanced', 'e2ee'):
         if 'label' in data and data['label']:
@@ -69,7 +61,6 @@ def _encrypt_edge_data(data: dict, uid: str, level: str) -> dict:
 
 
 def _decrypt_edge_data(data: dict, uid: str) -> dict:
-    """Decrypt the relationship label on a knowledge edge."""
     if not data:
         return data
     data = copy.deepcopy(data)
@@ -205,7 +196,6 @@ def upsert_knowledge_node(uid: str, node_data: Dict[str, Any]) -> Dict[str, Any]
 
     if existing.exists:
         existing_data = existing.to_dict()
-        # Decrypt existing aliases before merging if they were encrypted
         existing_data = _decrypt_node_data(existing_data, uid)
         existing_memory_ids = set(existing_data.get('memory_ids', []))
         new_memory_ids = set(node_data.get('memory_ids', []))
@@ -227,10 +217,10 @@ def upsert_knowledge_node(uid: str, node_data: Dict[str, Any]) -> Dict[str, Any]
         node_data['label_lower'] = node_data.get('label', '').lower()
         node_data['aliases_lower'] = [a.lower() for a in node_data.get('aliases', [])]
 
-    # Keep an unencrypted copy to return to the caller
+
     result_data = copy.deepcopy(node_data)
 
-    # Encrypt and store
+
     node_data['data_protection_level'] = level
     write_data = _encrypt_node_data(node_data, uid, level)
     node_ref.set(write_data)
@@ -287,10 +277,10 @@ def upsert_knowledge_edge(uid: str, edge_data: Dict[str, Any]) -> Dict[str, Any]
     else:
         edge_data['created_at'] = datetime.now(timezone.utc)
 
-    # Keep an unencrypted copy to return to the caller
+
     result_data = copy.deepcopy(edge_data)
 
-    # Encrypt and store
+
     edge_data['data_protection_level'] = level
     write_data = _encrypt_edge_data(edge_data, uid, level)
     edge_ref.set(write_data)

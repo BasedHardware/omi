@@ -61,7 +61,6 @@ Future<List<ServerConversation>> getConversations({
     var body = utf8.decode(response.bodyBytes);
     var memories =
         (jsonDecode(body) as List<dynamic>).map((conversation) => ServerConversation.fromJson(conversation)).toList();
-    // Decrypt transcript segment text fields if E2EE is enabled
     if (E2eeMiddleware.isE2eeEnabled()) {
       for (var convo in memories) {
         for (var segment in convo.transcriptSegments) {

@@ -48,7 +48,6 @@ def _ensure_timezone_aware(dt: datetime) -> datetime:
 def _decrypt_conversation_data(conversation_data: Dict[str, Any], uid: str) -> Dict[str, Any]:
     data = copy.deepcopy(conversation_data)
 
-    # Decrypt structured field if it was encrypted as a JSON blob
     if 'structured' in data and isinstance(data['structured'], str):
         try:
             decrypted_structured = encryption.decrypt(data['structured'], uid)
@@ -57,7 +56,6 @@ def _decrypt_conversation_data(conversation_data: Dict[str, Any], uid: str) -> D
             logger.error(f"Failed to decrypt structured field: {e} {uid}")
             data['structured'] = {}
 
-    # Decrypt geolocation field if it was encrypted as a JSON blob
     if 'geolocation' in data and isinstance(data['geolocation'], str):
         try:
             decrypted_geolocation = encryption.decrypt(data['geolocation'], uid)
@@ -97,7 +95,7 @@ def _decrypt_conversation_data(conversation_data: Dict[str, Any], uid: str) -> D
 
 
 def _json_serial(obj):
-    """JSON serializer for objects not serializable by default json code."""
+    """JSON serializer for datetime objects."""
     if hasattr(obj, 'isoformat'):
         return obj.isoformat()
     raise TypeError(f"Type {type(obj)} not serializable")
@@ -111,21 +109,16 @@ def _prepare_conversation_for_write(data: Dict[str, Any], uid: str, level: str) 
         data['transcript_segments_compressed'] = True
 
         if level in ('enhanced', 'e2ee'):
-            # For both 'enhanced' and 'e2ee': server-side encrypt transcript segments.
-            # Conversations are transcribed server-side (Deepgram), so the server already
-            # sees plaintext. We encrypt at rest for both levels.
             encrypted_segments = encryption.encrypt(compressed_segments_bytes.hex(), uid)
             data['transcript_segments'] = encrypted_segments
         else:
             data['transcript_segments'] = compressed_segments_bytes
 
     if level in ('enhanced', 'e2ee'):
-        # Encrypt structured field (title, overview, action_items, events)
         if 'structured' in data and isinstance(data['structured'], dict):
             structured_json = json.dumps(data['structured'], default=_json_serial)
             data['structured'] = encryption.encrypt(structured_json, uid)
 
-        # Encrypt geolocation field
         if 'geolocation' in data and isinstance(data['geolocation'], dict):
             geolocation_json = json.dumps(data['geolocation'], default=_json_serial)
             data['geolocation'] = encryption.encrypt(geolocation_json, uid)
@@ -134,10 +127,7 @@ def _prepare_conversation_for_write(data: Dict[str, Any], uid: str, level: str) 
 
 
 def _update_encrypted_structured_field(doc_ref, doc_data: Dict[str, Any], uid: str, field: str, value):
-    """
-    Read the encrypted structured blob, decrypt it, update one field, re-encrypt, and write back.
-    Handles graceful transition from unencrypted (dict) structured data.
-    """
+    """Decrypt structured blob, update one field, re-encrypt and write back."""
     raw_structured = doc_data.get('structured', {})
     if isinstance(raw_structured, str):
         try:
@@ -164,10 +154,6 @@ def _prepare_conversation_for_read(conversation_data: Optional[Dict[str, Any]], 
     level = data.get('data_protection_level')
 
     if level in ('enhanced', 'e2ee'):
-        # Server-side decrypt for API responses.
-        # For 'enhanced': this is the only decryption layer.
-        # For 'e2ee': this removes the server-side encryption layer;
-        # the client adds its own E2EE encryption on top.
         return _decrypt_conversation_data(data, uid)
 
     # Handle standard level with potential compression
@@ -691,8 +677,6 @@ def get_conversations_to_migrate(uid: str, target_level: str) -> List[dict]:
         if target_level != current_level:
             to_migrate.append({'id': doc.id, 'type': 'conversation'})
         elif target_level == current_level and target_level in ('enhanced', 'e2ee'):
-            # Re-migrate docs that have the right level label but unencrypted structured data
-            # (e.g. migrated before structured encryption was implemented)
             structured = doc_data.get('structured')
             if isinstance(structured, dict):
                 to_migrate.append({'id': doc.id, 'type': 'conversation'})
@@ -721,16 +705,13 @@ def migrate_conversations_level_batch(uid: str, conversation_ids: List[str], tar
         current_level = conversation_data.get('data_protection_level', 'standard')
 
         if current_level == target_level:
-            # Check if structured data still needs encryption (re-migration case)
             structured = conversation_data.get('structured')
             geolocation = conversation_data.get('geolocation')
             if not (isinstance(structured, dict) or isinstance(geolocation, dict)):
-                continue  # Already fully encrypted, skip
+                continue
 
-        # Decrypt/decompress the data to get a clean slate.
         plain_data = _prepare_conversation_for_read(conversation_data, uid)
 
-        # Re-prepare the data for writing with the new level.
         update_payload = {'transcript_segments': plain_data.get('transcript_segments')}
         if 'structured' in plain_data:
             update_payload['structured'] = plain_data['structured']
@@ -739,7 +720,6 @@ def migrate_conversations_level_batch(uid: str, conversation_ids: List[str], tar
 
         prepared_payload = _prepare_conversation_for_write(update_payload, uid, target_level)
 
-        # Update the document with the migrated data and the new protection level.
         update_data = {
             'data_protection_level': target_level,
         }
@@ -763,7 +743,6 @@ def migrate_conversations_level_batch(uid: str, conversation_ids: List[str], tar
             batch = db.batch()
             batch_count = 0
 
-        # Now migrate photos for this conversation in the same batch
         photos_ref = doc_snapshot.reference.collection('photos')
         photos_stream = photos_ref.select(['data_protection_level', 'base64']).stream()
         for photo_doc in photos_stream:
@@ -772,17 +751,14 @@ def migrate_conversations_level_batch(uid: str, conversation_ids: List[str], tar
             if current_photo_level == target_level:
                 continue
 
-            # Decrypt first to get a clean state
             plain_photo_data = _prepare_photo_for_read(photo_data, uid)
 
-            # Prepare the specific fields for update
             photo_update_payload = {'data_protection_level': target_level}
             if target_level in ('enhanced', 'e2ee'):
                 photo_update_payload['base64'] = encryption.encrypt(plain_photo_data['base64'], uid)
-            else:  # Moving from enhanced/e2ee to standard
+            else:
                 photo_update_payload['base64'] = plain_photo_data['base64']
 
-            # Add photo update to the batch
             batch.update(photo_doc.reference, photo_update_payload)
             batch_count += 1
             if batch_count >= 100:
@@ -919,12 +895,10 @@ def get_action_items(
     for doc in conversations_ref.stream():
         conversation_data = doc.to_dict()
 
-        # Decrypt first since structured may be an encrypted blob
         decrypted_data = _prepare_conversation_for_read(conversation_data, uid)
         if not decrypted_data:
             continue
 
-        # Check if conversation has action items
         structured = decrypted_data.get('structured', {})
         if isinstance(structured, dict):
             raw_action_items = structured.get('action_items', [])

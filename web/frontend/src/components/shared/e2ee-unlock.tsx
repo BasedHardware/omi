@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { storeKey, importKey } from '@/src/lib/e2ee';
+import { storeKey, importKey, computeKeyHash, storeKeyHash } from '@/src/lib/e2ee';
 
 interface E2eeUnlockProps {
   onUnlocked: () => void;
@@ -21,7 +21,9 @@ export default function E2eeUnlock({ onUnlocked, onClose }: E2eeUnlockProps) {
     async (base64Key: string) => {
       try {
         await importKey(base64Key); // Validate
-        storeKey(base64Key);
+        await storeKey(base64Key);
+        const hash = await computeKeyHash(base64Key);
+        storeKeyHash(hash);
         setSuccess(true);
         setTimeout(() => {
           onUnlocked();

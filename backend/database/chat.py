@@ -43,9 +43,6 @@ def _decrypt_chat_data(chat_data: Dict[str, Any], uid: str) -> Dict[str, Any]:
 
 def _prepare_data_for_write(data: Dict[str, Any], uid: str, level: str) -> Dict[str, Any]:
     if level in ('enhanced', 'e2ee'):
-        # For both 'enhanced' and 'e2ee': server-side encrypt chat messages.
-        # Chat messages are processed by the LLM server-side, so the server already
-        # sees plaintext. We encrypt at rest for both levels.
         return _encrypt_chat_data(data, uid)
     return data
 
@@ -56,8 +53,6 @@ def _prepare_message_for_read(message_data: Optional[Dict[str, Any]], uid: str) 
 
     level = message_data.get('data_protection_level')
     if level in ('enhanced', 'e2ee'):
-        # Server-side decrypt. For e2ee, removes the server layer;
-        # client handles its own E2EE encryption on top.
         return _decrypt_chat_data(message_data, uid)
     return message_data
 
@@ -551,7 +546,6 @@ def migrate_chats_level_batch(uid: str, message_doc_ids: List[str], target_level
         plain_text = plain_data.get('text')
         migrated_text = plain_text
         if target_level in ('enhanced', 'e2ee'):
-            # Both levels use server-side encryption for chat (LLM sees plaintext anyway)
             if isinstance(plain_text, str):
                 migrated_text = encryption.encrypt(plain_text, uid)
 

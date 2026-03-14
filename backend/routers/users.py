@@ -658,11 +658,7 @@ class E2eeKeyHashRequest(BaseModel):
 
 @router.post('/v1/users/e2ee/key-hash', tags=['v1'])
 def store_e2ee_key_hash_endpoint(request: E2eeKeyHashRequest, uid: str = Depends(auth.get_current_user_uid)):
-    """Store a hash of the user's E2EE public key for verification purposes.
-
-    The server never sees the actual encryption key — only a SHA-256 hash
-    so the client can verify it has the correct key on a new device.
-    """
+    """Store the SHA-256 hash of the user's E2EE key."""
     set_e2ee_key_hash(uid, request.key_hash)
     return {'status': 'ok'}
 

@@ -169,9 +169,7 @@ def _add_sample_transaction(transaction, person_ref, sample_path, transcript, ma
         # pad with empty strings for the existing samples first (Dart expects non-null)
         existing_sample_count = len(samples) - 1  # samples already has new one appended
         if len(transcripts) < existing_sample_count:
-            # Pad with empty strings for each existing sample without a transcript
             transcripts.extend([''] * (existing_sample_count - len(transcripts)))
-        # Encrypt transcript if protection level requires it
         if level in ('enhanced', 'e2ee') and uid and transcript:
             transcripts.append(encryption.encrypt(transcript, uid))
         else:
@@ -179,7 +177,6 @@ def _add_sample_transaction(transaction, person_ref, sample_path, transcript, ma
         update_data['speech_sample_transcripts'] = transcripts
         update_data['speech_samples_version'] = 3
 
-    # Store data_protection_level on the person document
     if level:
         update_data['data_protection_level'] = level
 
@@ -348,7 +345,6 @@ def set_person_speech_sample_transcript(uid: str, person_id: str, sample_index: 
     while len(transcripts) < len(samples):
         transcripts.append('')
 
-    # Encrypt transcript if protection level requires it
     level = get_data_protection_level(uid)
     if level in ('enhanced', 'e2ee') and transcript:
         transcripts[sample_index] = encryption.encrypt(transcript, uid)
@@ -688,11 +684,7 @@ def finalize_migration(uid: str, target_level: str):
 
 
 def set_e2ee_key_hash(uid: str, key_hash: str) -> None:
-    """Store a SHA-256 hash of the user's E2EE key for verification.
-
-    The server never stores the actual key — only a hash so the client can
-    verify it has the correct key on a new device.
-    """
+    """Store SHA-256 hash of the user's E2EE key."""
     user_ref = db.collection('users').document(uid)
     user_ref.set({'e2ee_key_hash': key_hash}, merge=True)
 

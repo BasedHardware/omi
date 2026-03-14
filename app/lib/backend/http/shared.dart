@@ -63,7 +63,6 @@ Future<Map<String, String>> buildHeaders({
     headers['Authorization'] = await getAuthHeader();
   }
 
-  // Include E2EE key hash for e2ee-protected endpoints
   if (SharedPreferencesUtil().e2eeEnabled) {
     final keyHash = await E2eeService().getKeyHash();
     if (keyHash != null) {

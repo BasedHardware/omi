@@ -66,7 +66,6 @@ class UserProvider with ChangeNotifier {
   String get sourceLevel => _sourceLevel;
   String get targetLevel => _targetLevel;
 
-  /// Whether the user's data protection level is 'e2ee'.
   bool get isE2eeEnabled => _dataProtectionLevel == 'e2ee';
 
   String get migrationETA {
@@ -119,7 +118,6 @@ class UserProvider with ChangeNotifier {
       final userProfile = await PrivacyApi.getUserProfile();
       _dataProtectionLevel = userProfile['data_protection_level'] ?? 'standard';
 
-      // Sync E2EE flag to SharedPreferences for middleware access
       SharedPreferencesUtil().e2eeEnabled = _dataProtectionLevel == 'e2ee';
 
       // Load private cloud sync status
@@ -336,23 +334,16 @@ class UserProvider with ChangeNotifier {
     }
   }
 
-  /// Enable E2EE: generates an encryption key, stores a key hash on the server
-  /// for verification, caches the e2ee flag, then starts migration.
-  /// Returns the base64-encoded recovery key so the UI can show it.
+  /// Enable E2EE. Returns the base64-encoded recovery key.
   Future<String> enableE2ee() async {
     final e2eeService = E2eeService();
     final key = await e2eeService.generateAndStoreKey();
 
-    // Store a hash of the key on the server for future verification
-    // (the server never sees the actual key)
     final keyBytes = base64Decode(key);
     final keyHash = sha256.convert(keyBytes).toString();
     await PrivacyApi.storeE2eeKeyHash(keyHash);
 
-    // Cache the flag so the middleware can check synchronously
     SharedPreferencesUtil().e2eeEnabled = true;
-
-    // Start migration (updates protection level; client handles encryption going forward)
     await updateDataProtectionLevel('e2ee');
 
     return key;

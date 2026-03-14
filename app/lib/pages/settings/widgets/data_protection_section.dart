@@ -33,7 +33,7 @@ class _DataProtectionSectionState extends State<DataProtectionSection> {
     super.initState();
   }
 
-  /// Show dialog to enable E2EE with warnings about key backup.
+  /// Show E2EE enable dialog.
   void _showE2eeEnableDialog(BuildContext context) {
     final provider = Provider.of<UserProvider>(context, listen: false);
 
@@ -100,7 +100,7 @@ class _DataProtectionSectionState extends State<DataProtectionSection> {
     );
   }
 
-  /// Generate key and start migration to e2ee level.
+  /// Enable E2EE.
   Future<void> _enableE2ee(BuildContext context, UserProvider provider) async {
     try {
       final key = await provider.enableE2ee();
@@ -114,7 +114,7 @@ class _DataProtectionSectionState extends State<DataProtectionSection> {
     }
   }
 
-  /// Show the recovery key after E2EE is enabled.
+  /// Show recovery key dialog.
   void _showRecoveryKeyDialog(BuildContext context, String key) {
     showDialog(
       context: context,
@@ -184,14 +184,14 @@ class _DataProtectionSectionState extends State<DataProtectionSection> {
     );
   }
 
-  /// Show recovery key for an already-enabled E2EE setup.
+  /// Export and show recovery key.
   void _showExportKeyDialog(BuildContext context) async {
     final key = await E2eeService().exportKey();
     if (key == null || !mounted) return;
     _showRecoveryKeyDialog(context, key);
   }
 
-  /// Show QR code dialog for pairing E2EE key with web UI.
+  /// Show QR pairing dialog.
   void _showQrPairingDialog(BuildContext context) async {
     final key = await E2eeService().exportKey();
     if (key == null || !mounted) return;

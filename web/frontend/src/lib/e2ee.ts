@@ -1,11 +1,28 @@
 /**
  * E2EE decryption for the web frontend using Web Crypto API.
  * Mirrors the AES-256-GCM encryption in the Flutter app.
- * The key never leaves the browser — it's stored in sessionStorage
- * and cleared when the tab is closed.
+ * The key is stored in localStorage and persists across tabs/sessions.
  */
 
 const E2EE_KEY_STORAGE = 'omi_e2ee_key';
+const E2EE_KEY_HASH_STORAGE = 'omi_e2ee_key_hash';
+
+export async function computeKeyHash(base64Key: string): Promise<string> {
+  const keyBytes = Uint8Array.from(atob(base64Key), (c) => c.charCodeAt(0));
+  const hashBuffer = await crypto.subtle.digest('SHA-256', keyBytes);
+  const hashArray = new Uint8Array(hashBuffer);
+  return Array.from(hashArray)
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('');
+}
+
+export function storeKeyHash(hash: string): void {
+  localStorage.setItem(E2EE_KEY_HASH_STORAGE, hash);
+}
+
+export function getStoredKeyHash(): string | null {
+  return localStorage.getItem(E2EE_KEY_HASH_STORAGE);
+}
 
 export async function importKey(base64Key: string): Promise<CryptoKey> {
   const keyBytes = Uint8Array.from(atob(base64Key), (c) => c.charCodeAt(0));
@@ -28,12 +45,10 @@ export async function decrypt(encrypted: string, key: CryptoKey): Promise<string
   try {
     payload = Uint8Array.from(atob(encrypted), (c) => c.charCodeAt(0));
   } catch {
-    // Not valid base64 — likely plaintext
     return encrypted;
   }
 
   if (payload.length < 28) {
-    // Too short for nonce(12) + tag(16) + data
     return encrypted;
   }
 
@@ -48,25 +63,27 @@ export async function decrypt(encrypted: string, key: CryptoKey): Promise<string
     );
     return new TextDecoder().decode(decrypted);
   } catch {
-    // Decryption failed — might be server-encrypted, not client-encrypted
     return encrypted;
   }
 }
 
-export function storeKey(base64Key: string): void {
-  sessionStorage.setItem(E2EE_KEY_STORAGE, base64Key);
+export async function storeKey(base64Key: string): Promise<void> {
+  localStorage.setItem(E2EE_KEY_STORAGE, base64Key);
+  const hash = await computeKeyHash(base64Key);
+  storeKeyHash(hash);
 }
 
 export function getStoredKey(): string | null {
-  return sessionStorage.getItem(E2EE_KEY_STORAGE);
+  return localStorage.getItem(E2EE_KEY_STORAGE);
 }
 
 export function clearKey(): void {
-  sessionStorage.removeItem(E2EE_KEY_STORAGE);
+  localStorage.removeItem(E2EE_KEY_STORAGE);
+  localStorage.removeItem(E2EE_KEY_HASH_STORAGE);
 }
 
 export function hasKey(): boolean {
-  return sessionStorage.getItem(E2EE_KEY_STORAGE) !== null;
+  return localStorage.getItem(E2EE_KEY_STORAGE) !== null;
 }
 
 export async function getDecryptionKey(): Promise<CryptoKey | null> {

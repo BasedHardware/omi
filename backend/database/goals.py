@@ -18,7 +18,6 @@ goals_collection = 'goals'
 goal_history_collection = 'goal_history'
 users_collection = 'users'
 
-# Sensitive text field on goals
 _ENCRYPTED_FIELDS = ('title',)
 
 
@@ -28,7 +27,6 @@ _ENCRYPTED_FIELDS = ('title',)
 
 
 def _prepare_goal_for_write(data: dict, uid: str, level: str) -> dict:
-    """Encrypt sensitive goal fields if data protection level is enhanced or e2ee."""
     data = copy.deepcopy(data)
     if level in ('enhanced', 'e2ee'):
         for field in _ENCRYPTED_FIELDS:
@@ -38,7 +36,6 @@ def _prepare_goal_for_write(data: dict, uid: str, level: str) -> dict:
 
 
 def _prepare_goal_for_read(data: dict, uid: str) -> dict:
-    """Decrypt sensitive goal fields if data protection level is enhanced or e2ee."""
     if not data:
         return data
     data = copy.deepcopy(data)
@@ -115,12 +112,7 @@ def create_goal(uid: str, goal_data: Dict[str, Any], max_goals: int = 3) -> Dict
 
 @set_data_protection_level(data_arg_name='updates')
 def update_goal(uid: str, goal_id: str, updates: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-    """Update an existing goal.
-
-    Note: We don't use @prepare_for_write here because that decorator returns
-    the original unencrypted input dict, but update_goal needs to return the
-    full updated goal document (re-read and decrypted).
-    """
+    """Update an existing goal."""
     user_ref = db.collection(users_collection).document(uid)
     goals_ref = user_ref.collection(goals_collection)
     goal_ref = goals_ref.document(goal_id)
@@ -131,7 +123,6 @@ def update_goal(uid: str, goal_id: str, updates: Dict[str, Any]) -> Optional[Dic
 
     updates['updated_at'] = datetime.now(timezone.utc)
 
-    # Encrypt sensitive fields before writing
     level = updates.get('data_protection_level') or doc.to_dict().get('data_protection_level', 'standard')
     prepared_updates = _prepare_goal_for_write(updates, uid, level)
     goal_ref.update(prepared_updates)

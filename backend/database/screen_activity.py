@@ -14,12 +14,12 @@ logger = logging.getLogger(__name__)
 SCREEN_ACTIVITY_COLLECTION = 'screen_activity'
 USERS_COLLECTION = 'users'
 
-# Sensitive fields to encrypt (appName stays plaintext for grouping/queries)
+# Fields to encrypt at rest (appName stays plaintext for queries)
 _ENCRYPTED_FIELDS = ('windowTitle', 'ocrText')
 
 
 def _encrypt_screen_row(doc_data: dict, uid: str, level: str) -> dict:
-    """Encrypt sensitive fields in a screen activity row."""
+    """Encrypt fields for storage."""
     if level in ('enhanced', 'e2ee'):
         for field in _ENCRYPTED_FIELDS:
             if field in doc_data and doc_data[field]:
@@ -28,7 +28,7 @@ def _encrypt_screen_row(doc_data: dict, uid: str, level: str) -> dict:
 
 
 def _decrypt_screen_row(doc_data: dict, uid: str) -> dict:
-    """Decrypt sensitive fields in a screen activity row."""
+    """Decrypt fields for reading."""
     if not doc_data:
         return doc_data
     doc_data = copy.deepcopy(doc_data)

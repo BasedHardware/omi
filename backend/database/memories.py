@@ -44,7 +44,6 @@ def _decrypt_memory_data(memory_data: Dict[str, Any], uid: str) -> Dict[str, Any
 def _prepare_data_for_write(data: Dict[str, Any], uid: str, level: str) -> Dict[str, Any]:
     if level == 'enhanced':
         return _encrypt_memory_data(data, uid)
-    # E2EE: data arrives pre-encrypted from the client — store as-is
     return data
 
 
@@ -54,8 +53,6 @@ def _prepare_memory_for_read(memory_data: Optional[Dict[str, Any]], uid: str) ->
 
     level = memory_data.get('data_protection_level')
     if level in ('enhanced', 'e2ee'):
-        # Server-side decrypt. For e2ee, removes the server layer;
-        # client handles its own E2EE encryption on top.
         return _decrypt_memory_data(memory_data, uid)
     return memory_data
 
@@ -244,9 +241,7 @@ def edit_memory(uid: str, memory_id: str, value: str):
     doc_level = doc_snapshot.to_dict().get('data_protection_level', 'standard')
     content = value
     if doc_level == 'enhanced':
-        # Server-side encryption for enhanced level
         content = encryption.encrypt(content, uid)
-    # For 'e2ee': content arrives pre-encrypted from the client middleware — store as-is
 
     memory_ref.update({'content': content, 'edited': True, 'updated_at': datetime.now(timezone.utc)})
 
@@ -363,13 +358,9 @@ def migrate_memories_level_batch(uid: str, memory_ids: List[str], target_level: 
         plain_content = plain_data.get('content')
         migrated_content = plain_content
         if target_level in ('enhanced', 'e2ee'):
-            # Server-encrypt during migration for both levels.
-            # For E2EE: existing data gets server-encrypted so it remains readable.
-            # New data created after migration will be client-encrypted (true E2EE).
             if isinstance(plain_content, str):
                 migrated_content = encryption.encrypt(plain_content, uid)
 
-        # Update the document with the migrated data and the new protection level.
         update_data = {'data_protection_level': target_level, 'content': migrated_content}
         batch.update(doc_snapshot.reference, update_data)
 
