@@ -25,7 +25,7 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get deleteConversationMessage =>
-      'Sei sicuro di voler eliminare questa conversazione? Questa azione non può essere annullata.';
+      'Questo eliminerà anche i ricordi, le attività e i file audio associati. Questa azione non può essere annullata.';
 
   @override
   String get confirm => 'Conferma';

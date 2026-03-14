@@ -5,7 +5,7 @@
     "transcriptTab": "Trascrizione",
     "actionItemsTab": "Azioni",
     "deleteConversationTitle": "Eliminare Conversazione?",
-    "deleteConversationMessage": "Sei sicuro di voler eliminare questa conversazione? Questa azione non può essere annullata.",
+    "deleteConversationMessage": "Questo eliminerà anche i ricordi, le attività e i file audio associati. Questa azione non può essere annullata.",
     "confirm": "Conferma",
     "cancel": "Annulla",
     "ok": "OK",
@@ -2825,5 +2825,6 @@
     "onlyTrustedDevice": "⚠️ Scansiona solo su un dispositivo affidabile",
     "@onlyTrustedDevice": {
         "description": "Warning about scanning QR code"
-    }
+    },
+    "dontShowAgain": "Non mostrare più"
 }

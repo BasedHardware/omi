@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:ui';
 
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -197,16 +198,79 @@ class _ConversationListItemState extends State<ConversationListItem> {
                           final connectivityProvider = Provider.of<ConnectivityProvider>(context, listen: false);
 
                           if (connectivityProvider.isConnected) {
-                            return await showDialog(
+                            bool dontShow = false;
+                            return await showDialog<bool>(
                               context: context,
-                              builder: (ctx) => getDialog(
-                                context,
-                                () => Navigator.of(context).pop(false),
-                                () => Navigator.of(context).pop(true),
-                                context.l10n.deleteConversationTitle,
-                                context.l10n.deleteConversationMessage,
-                                okButtonText: context.l10n.confirm,
-                              ),
+                              builder: (ctx) {
+                                return StatefulBuilder(
+                                  builder: (context, setState) {
+                                    final checkbox = GestureDetector(
+                                      onTap: () => setState(() => dontShow = !dontShow),
+                                      child: Row(
+                                        children: [
+                                          SizedBox(
+                                            width: 24,
+                                            height: 24,
+                                            child: Checkbox(
+                                              value: dontShow,
+                                              onChanged: (v) => setState(() => dontShow = v ?? false),
+                                              activeColor: Colors.deepPurple,
+                                              checkColor: Colors.white,
+                                              side: const BorderSide(color: Colors.white54),
+                                              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                            ),
+                                          ),
+                                          const SizedBox(width: 8),
+                                          Flexible(
+                                            child: Text(
+                                              context.l10n.dontShowAgain,
+                                              style: const TextStyle(fontSize: 14),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    );
+                                    final content = Column(
+                                      mainAxisSize: MainAxisSize.min,
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(context.l10n.deleteConversationMessage),
+                                        const SizedBox(height: 16),
+                                        PlatformService.isApple
+                                            ? Material(color: Colors.transparent, child: checkbox)
+                                            : checkbox,
+                                      ],
+                                    );
+                                    final actions = [
+                                      TextButton(
+                                        onPressed: () => Navigator.of(ctx).pop(false),
+                                        child: Text(context.l10n.cancel, style: const TextStyle(color: Colors.white)),
+                                      ),
+                                      TextButton(
+                                        onPressed: () {
+                                          if (dontShow) {
+                                            SharedPreferencesUtil().showConversationDeleteConfirmation = false;
+                                          }
+                                          Navigator.of(ctx).pop(true);
+                                        },
+                                        child: Text(context.l10n.confirm, style: const TextStyle(color: Colors.red)),
+                                      ),
+                                    ];
+                                    if (PlatformService.isApple) {
+                                      return CupertinoAlertDialog(
+                                        title: Text(context.l10n.deleteConversationTitle),
+                                        content: content,
+                                        actions: actions,
+                                      );
+                                    }
+                                    return AlertDialog(
+                                      title: Text(context.l10n.deleteConversationTitle),
+                                      content: content,
+                                      actions: actions,
+                                    );
+                                  },
+                                );
+                              },
                             );
                           } else {
                             return showDialog(

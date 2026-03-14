@@ -24,7 +24,8 @@ class AppLocalizationsFi extends AppLocalizations {
   String get deleteConversationTitle => 'Poista keskustelu?';
 
   @override
-  String get deleteConversationMessage => 'Haluatko varmasti poistaa tämän keskustelun? Tätä toimintoa ei voi perua.';
+  String get deleteConversationMessage =>
+      'Tämä poistaa myös liittyvät muistot, tehtävät ja äänitiedostot. Tätä toimintoa ei voi kumota.';
 
   @override
   String get confirm => 'Vahvista';

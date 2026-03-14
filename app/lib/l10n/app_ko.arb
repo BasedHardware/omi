@@ -5,7 +5,7 @@
     "transcriptTab": "녹취록",
     "actionItemsTab": "할 일",
     "deleteConversationTitle": "대화를 삭제하시겠습니까?",
-    "deleteConversationMessage": "이 대화를 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.",
+    "deleteConversationMessage": "관련된 기억, 작업 및 오디오 파일도 삭제됩니다. 이 작업은 되돌릴 수 없습니다.",
     "confirm": "확인",
     "cancel": "취소",
     "ok": "확인",
@@ -2825,5 +2825,6 @@
     "onlyTrustedDevice": "⚠️ 신뢰할 수 있는 기기에서만 스캔",
     "@onlyTrustedDevice": {
         "description": "Warning about scanning QR code"
-    }
+    },
+    "dontShowAgain": "다시 표시하지 않기"
 }

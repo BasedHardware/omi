@@ -24,7 +24,8 @@ class AppLocalizationsAr extends AppLocalizations {
   String get deleteConversationTitle => 'حذف المحادثة؟';
 
   @override
-  String get deleteConversationMessage => 'هل أنت متأكد من رغبتك في حذف هذه المحادثة؟ لا يمكن التراجع عن هذا الإجراء.';
+  String get deleteConversationMessage =>
+      'سيؤدي هذا أيضًا إلى حذف الذكريات والمهام وملفات الصوت المرتبطة. لا يمكن التراجع عن هذا الإجراء.';
 
   @override
   String get confirm => 'تأكيد';
@@ -1713,7 +1714,7 @@ class AppLocalizationsAr extends AppLocalizations {
   }
 
   @override
-  String get dontShowAgain => 'لا تظهر هذا مرة أخرى';
+  String get dontShowAgain => 'عدم الإظهار مجدداً';
 
   @override
   String get iUnderstand => 'أفهم';

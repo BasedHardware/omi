@@ -5,7 +5,7 @@
     "transcriptTab": "Transkript",
     "actionItemsTab": "Eylem Öğeleri",
     "deleteConversationTitle": "Konuşma Silinsin mi?",
-    "deleteConversationMessage": "Bu konuşmayı silmek istediğinizden emin misiniz? Bu işlem geri alınamaz.",
+    "deleteConversationMessage": "Bu işlem ilişkili anıları, görevleri ve ses dosyalarını da silecektir. Bu işlem geri alınamaz.",
     "confirm": "Onayla",
     "cancel": "İptal",
     "ok": "Tamam",
@@ -2860,5 +2860,6 @@
     "onlyTrustedDevice": "⚠️ Yalnızca güvenilir bir cihazda tarayın",
     "@onlyTrustedDevice": {
         "description": "Warning about scanning QR code"
-    }
+    },
+    "dontShowAgain": "Tekrar gösterme"
 }

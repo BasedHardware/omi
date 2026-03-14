@@ -5,7 +5,7 @@
     "transcriptTab": "Transcriptie",
     "actionItemsTab": "Actiepunten",
     "deleteConversationTitle": "Gesprek verwijderen?",
-    "deleteConversationMessage": "Weet je zeker dat je dit gesprek wilt verwijderen? Deze actie kan niet ongedaan worden gemaakt.",
+    "deleteConversationMessage": "Dit zal ook de bijbehorende herinneringen, taken en audiobestanden verwijderen. Deze actie kan niet ongedaan worden gemaakt.",
     "confirm": "Bevestigen",
     "cancel": "Annuleren",
     "ok": "OK",
@@ -2825,5 +2825,6 @@
     "onlyTrustedDevice": "⚠️ Scan alleen op een vertrouwd apparaat",
     "@onlyTrustedDevice": {
         "description": "Warning about scanning QR code"
-    }
+    },
+    "dontShowAgain": "Niet meer weergeven"
 }

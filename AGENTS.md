@@ -118,6 +118,7 @@ Key rules:
 - Dev bundle ID: `com.omi.desktop-dev`. Prod: `com.omi.computer-macos`.
 - App flows & exploration skill: See `desktop/e2e/SKILL.md` for navigation architecture, interaction patterns, and reference flows.
 - Full command reference: `agent-swift --help` or `agent-swift schema`.
+- When asked to build or rebuild the desktop app for testing, don't stop at a successful compile: launch the dev app, interact with it programmatically to confirm it actually runs, and report any environment blocker if full interaction is impossible.
 
 ## Formatting
 
@@ -127,6 +128,12 @@ Always format code after making changes. The pre-commit hook handles this automa
   - Files ending in `.gen.dart` or `.g.dart` are auto-generated and should not be formatted manually.
 - **Python (backend/)**: `black --line-length 120 --skip-string-normalization <files>`
 - **C/C++ (firmware: omi/, omiGlass/)**: `clang-format -i <files>`
+
+## Git
+
+- Never push directly to `main`.
+- Never merge directly from a local branch. Land changes through a PR only.
+- When a change should go remote, create or use a feature branch, commit there, open/update a PR, and merge via the PR.
 
 ## Documentation Maintenance
 

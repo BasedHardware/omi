@@ -24,7 +24,8 @@ class AppLocalizationsUk extends AppLocalizations {
   String get deleteConversationTitle => 'Видалити розмову?';
 
   @override
-  String get deleteConversationMessage => 'Ви впевнені, що хочете видалити цю розмову? Цю дію не можна скасувати.';
+  String get deleteConversationMessage =>
+      'Це також видалить пов\'язані спогади, завдання та аудіофайли. Цю дію не можна скасувати.';
 
   @override
   String get confirm => 'Підтвердити';

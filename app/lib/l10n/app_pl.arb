@@ -5,7 +5,7 @@
     "transcriptTab": "Transkrypcja",
     "actionItemsTab": "Zadania",
     "deleteConversationTitle": "Usunąć rozmowę?",
-    "deleteConversationMessage": "Czy na pewno chcesz usunąć tę rozmowę? Ta czynność nie może zostać cofnięta.",
+    "deleteConversationMessage": "Spowoduje to również usunięcie powiązanych wspomnień, zadań i plików audio. Tej czynności nie można cofnąć.",
     "confirm": "Potwierdź",
     "cancel": "Anuluj",
     "ok": "OK",
@@ -2860,5 +2860,6 @@
     "onlyTrustedDevice": "⚠️ Skanuj tylko na zaufanym urządzeniu",
     "@onlyTrustedDevice": {
         "description": "Warning about scanning QR code"
-    }
+    },
+    "dontShowAgain": "Nie pokazuj ponownie"
 }

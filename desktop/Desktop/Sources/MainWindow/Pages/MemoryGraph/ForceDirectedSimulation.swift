@@ -37,11 +37,23 @@ struct GraphEdge3D {
     let sourceId: String
     let targetId: String
     let label: String
+    let affectsPhysics: Bool
+
+    init(id: String, sourceId: String, targetId: String, label: String, affectsPhysics: Bool = true) {
+        self.id = id
+        self.sourceId = sourceId
+        self.targetId = targetId
+        self.label = label
+        self.affectsPhysics = affectsPhysics
+    }
 }
 
 // MARK: - Force-Directed Layout Simulation
 
 class ForceDirectedSimulation {
+    private static let userCenterNodeId = "__user_center__"
+    private static let visualBridgeEdgePrefix = "__visual_bridge__"
+
     var nodes: [GraphNode3D] = []
     var edges: [GraphEdge3D] = []
     var nodeMap: [String: GraphNode3D] = [:]
@@ -100,7 +112,7 @@ class ForceDirectedSimulation {
         // Always create a center "me" node if none was found
         if !foundUserNode {
             let meNode = GraphNode3D(
-                id: "__user_center__",
+                id: Self.userCenterNodeId,
                 label: userNodeLabel ?? "Me",
                 nodeType: .person
             )
@@ -114,7 +126,7 @@ class ForceDirectedSimulation {
             for (nodeId, _) in topNodes {
                 edges.append(GraphEdge3D(
                     id: "__user_edge_\(nodeId)__",
-                    sourceId: "__user_center__",
+                    sourceId: Self.userCenterNodeId,
                     targetId: nodeId,
                     label: ""
                 ))
@@ -133,6 +145,9 @@ class ForceDirectedSimulation {
                 label: edge.label
             ))
         }
+
+        ensureConnectedToUserAnchor(userNodeLabel: userNodeLabel)
+        recountConnections()
 
         // Adapt physics parameters to graph size
         let nodeCount = nodes.count
@@ -198,7 +213,7 @@ class ForceDirectedSimulation {
         }
 
         // 3. Calculate attractive forces (spring-like along edges)
-        for edge in edges {
+        for edge in edges where edge.affectsPhysics {
             guard let source = nodeMap[edge.sourceId],
                   let target = nodeMap[edge.targetId] else { continue }
 
@@ -292,7 +307,7 @@ class ForceDirectedSimulation {
         }
 
         // 3. Calculate attractive forces
-        for edge in edges {
+        for edge in edges where edge.affectsPhysics {
             guard let source = nodeMap[edge.sourceId],
                   let target = nodeMap[edge.targetId] else { continue }
 
@@ -329,6 +344,8 @@ class ForceDirectedSimulation {
 
     /// Add new nodes and edges incrementally without clearing existing ones
     func addNodesAndEdges(graphResponse: KnowledgeGraphResponse, userNodeLabel: String?) {
+        var newNodeIds = Set<String>()
+
         // Skip nodes that already exist (by id)
         for node in graphResponse.nodes {
             guard nodeMap[node.id] == nil else { continue }
@@ -346,6 +363,7 @@ class ForceDirectedSimulation {
             }
             nodes.append(node3D)
             nodeMap[node.id] = node3D
+            newNodeIds.insert(node.id)
         }
 
         // Add new edges (skip duplicates)
@@ -359,19 +377,15 @@ class ForceDirectedSimulation {
 
         // Ensure user center node exists
         if !nodes.contains(where: { $0.isFixed }) {
-            let meNode = GraphNode3D(id: "__user_center__", label: userNodeLabel ?? "Me", nodeType: .person)
+            let meNode = GraphNode3D(id: Self.userCenterNodeId, label: userNodeLabel ?? "Me", nodeType: .person)
             meNode.position = .zero
             meNode.isFixed = true
             nodes.insert(meNode, at: 0)
             nodeMap[meNode.id] = meNode
         }
 
-        // Re-count connections
-        for node in nodes { node.connectionCount = 0 }
-        for edge in edges {
-            nodeMap[edge.sourceId]?.connectionCount += 1
-            nodeMap[edge.targetId]?.connectionCount += 1
-        }
+        ensureConnectedToUserAnchor(userNodeLabel: userNodeLabel, prioritizeNodeIds: newNodeIds)
+        recountConnections()
 
         // Re-tune physics for new graph size
         let nodeCount = nodes.count
@@ -384,6 +398,90 @@ class ForceDirectedSimulation {
         }
 
         wake()
+    }
+
+    private func ensureConnectedToUserAnchor(userNodeLabel: String?, prioritizeNodeIds: Set<String> = []) {
+        guard let anchorId = userAnchorId(userNodeLabel: userNodeLabel),
+              let anchorNode = nodeMap[anchorId] else { return }
+
+        var adjacency: [String: Set<String>] = [:]
+        for node in nodes {
+            adjacency[node.id, default: []]
+        }
+        for edge in edges {
+            adjacency[edge.sourceId, default: []].insert(edge.targetId)
+            adjacency[edge.targetId, default: []].insert(edge.sourceId)
+        }
+
+        var visited = Set<String>()
+        var existingEdgeIds = Set(edges.map(\.id))
+
+        for node in nodes {
+            guard !visited.contains(node.id) else { continue }
+
+            var stack = [node.id]
+            var component: [String] = []
+            visited.insert(node.id)
+
+            while let current = stack.popLast() {
+                component.append(current)
+                for neighbor in adjacency[current, default: []] where !visited.contains(neighbor) {
+                    visited.insert(neighbor)
+                    stack.append(neighbor)
+                }
+            }
+
+            guard !component.contains(anchorId) else { continue }
+            guard let bridgeTargetId = preferredBridgeTarget(in: component, prioritizeNodeIds: prioritizeNodeIds) else { continue }
+
+            let bridgeId = "\(Self.visualBridgeEdgePrefix)_\(anchorId)_\(bridgeTargetId)"
+            guard !existingEdgeIds.contains(bridgeId) else { continue }
+
+            edges.append(GraphEdge3D(
+                id: bridgeId,
+                sourceId: anchorId,
+                targetId: bridgeTargetId,
+                label: "",
+                affectsPhysics: false
+            ))
+            existingEdgeIds.insert(bridgeId)
+            adjacency[anchorId, default: []].insert(bridgeTargetId)
+            adjacency[bridgeTargetId, default: []].insert(anchorId)
+
+            if let bridgeTarget = nodeMap[bridgeTargetId], prioritizeNodeIds.contains(bridgeTargetId) {
+                let offset = SIMD3<Float>.random(in: -180...180)
+                bridgeTarget.position = anchorNode.position + offset
+            }
+        }
+    }
+
+    private func userAnchorId(userNodeLabel: String?) -> String? {
+        if let fixedNode = nodes.first(where: \.isFixed) {
+            return fixedNode.id
+        }
+
+        guard let userName = userNodeLabel?.lowercased() else { return nil }
+        return nodes.first(where: { $0.label.lowercased() == userName })?.id
+    }
+
+    private func preferredBridgeTarget(in component: [String], prioritizeNodeIds: Set<String>) -> String? {
+        if let prioritizedNodeId = component.first(where: { prioritizeNodeIds.contains($0) }) {
+            return prioritizedNodeId
+        }
+
+        return component.max { lhs, rhs in
+            (nodeMap[lhs]?.connectionCount ?? 0) < (nodeMap[rhs]?.connectionCount ?? 0)
+        }
+    }
+
+    private func recountConnections() {
+        for node in nodes {
+            node.connectionCount = 0
+        }
+        for edge in edges {
+            nodeMap[edge.sourceId]?.connectionCount += 1
+            nodeMap[edge.targetId]?.connectionCount += 1
+        }
     }
 
     /// Wake up the simulation (reset stability counter)

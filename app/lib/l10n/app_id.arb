@@ -5,7 +5,7 @@
     "transcriptTab": "Transkrip",
     "actionItemsTab": "Item Tindakan",
     "deleteConversationTitle": "Hapus Percakapan?",
-    "deleteConversationMessage": "Apakah Anda yakin ingin menghapus percakapan ini? Tindakan ini tidak dapat dibatalkan.",
+    "deleteConversationMessage": "Ini juga akan menghapus kenangan, tugas, dan file audio terkait. Tindakan ini tidak dapat dibatalkan.",
     "confirm": "Konfirmasi",
     "cancel": "Batal",
     "ok": "Oke",
@@ -2867,5 +2867,6 @@
     "onlyTrustedDevice": "⚠️ Pindai hanya di perangkat tepercaya",
     "@onlyTrustedDevice": {
         "description": "Warning about scanning QR code"
-    }
+    },
+    "dontShowAgain": "Jangan tampilkan lagi"
 }

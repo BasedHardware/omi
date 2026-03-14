@@ -25,7 +25,7 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get deleteConversationMessage =>
-      'Tem certeza de que deseja apagar esta conversa? Esta ação não pode ser desfeita.';
+      'Isso também excluirá as memórias, tarefas e arquivos de áudio associados. Esta ação não pode ser desfeita.';
 
   @override
   String get confirm => 'Confirmar';

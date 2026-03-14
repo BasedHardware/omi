@@ -25,7 +25,7 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get deleteConversationMessage =>
-      'Sind Sie sicher, dass Sie diese Unterhaltung löschen möchten? Diese Aktion kann nicht rückgängig gemacht werden.';
+      'Dadurch werden auch zugehörige Erinnerungen, Aufgaben und Audiodateien gelöscht. Diese Aktion kann nicht rückgängig gemacht werden.';
 
   @override
   String get confirm => 'Bestätigen';
@@ -1740,7 +1740,7 @@ class AppLocalizationsDe extends AppLocalizations {
   }
 
   @override
-  String get dontShowAgain => 'Nicht mehr anzeigen';
+  String get dontShowAgain => 'Nicht erneut anzeigen';
 
   @override
   String get iUnderstand => 'Ich verstehe';

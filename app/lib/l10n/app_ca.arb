@@ -5,7 +5,7 @@
     "transcriptTab": "Transcripció",
     "actionItemsTab": "Tasques",
     "deleteConversationTitle": "Eliminar conversa?",
-    "deleteConversationMessage": "Esteu segur que voleu eliminar aquesta conversa? Aquesta acció no es pot desfer.",
+    "deleteConversationMessage": "Això també eliminarà els records, tasques i fitxers d'àudio associats. Aquesta acció no es pot desfer.",
     "confirm": "Confirmar",
     "cancel": "Cancel·lar",
     "ok": "D'acord",
@@ -2794,5 +2794,6 @@
     "onlyTrustedDevice": "⚠️ Escanegeu només en un dispositiu de confiança",
     "@onlyTrustedDevice": {
         "description": "Warning about scanning QR code"
-    }
+    },
+    "dontShowAgain": "No ho tornis a mostrar"
 }

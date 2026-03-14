@@ -5,7 +5,7 @@
     "transcriptTab": "प्रतिलेख",
     "actionItemsTab": "कार्य",
     "deleteConversationTitle": "बातचीत हटाएं?",
-    "deleteConversationMessage": "क्या आप वाकई इस बातचीत को हटाना चाहते हैं? यह क्रिया पूर्ववत नहीं की जा सकती।",
+    "deleteConversationMessage": "इससे संबंधित यादें, कार्य और ऑडियो फ़ाइलें भी हटा दी जाएंगी। यह क्रिया पूर्ववत नहीं की जा सकती।",
     "confirm": "पुष्टि करें",
     "cancel": "रद्द करें",
     "ok": "ठीक है",
@@ -2826,5 +2826,6 @@
     "onlyTrustedDevice": "⚠️ केवल विश्वसनीय डिवाइस पर स्कैन करें",
     "@onlyTrustedDevice": {
         "description": "Warning about scanning QR code"
-    }
+    },
+    "dontShowAgain": "दोबारा न दिखाएं"
 }

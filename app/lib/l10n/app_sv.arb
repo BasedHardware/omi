@@ -5,7 +5,7 @@
     "transcriptTab": "Transkription",
     "actionItemsTab": "Åtgärder",
     "deleteConversationTitle": "Ta bort konversation?",
-    "deleteConversationMessage": "Är du säker på att du vill ta bort denna konversation? Detta kan inte ångras.",
+    "deleteConversationMessage": "Detta kommer också att radera tillhörande minnen, uppgifter och ljudfiler. Denna åtgärd kan inte ångras.",
     "confirm": "Bekräfta",
     "cancel": "Avbryt",
     "ok": "OK",
@@ -2825,5 +2825,6 @@
     "onlyTrustedDevice": "⚠️ Skanna bara på en betrodd enhet",
     "@onlyTrustedDevice": {
         "description": "Warning about scanning QR code"
-    }
+    },
+    "dontShowAgain": "Visa inte igen"
 }

@@ -5,7 +5,7 @@
     "transcriptTab": "Транскрипт",
     "actionItemsTab": "Задачи",
     "deleteConversationTitle": "Изтриване на разговор?",
-    "deleteConversationMessage": "Сигурни ли сте, че искате да изтриете този разговор? Това действие не може да бъде отменено.",
+    "deleteConversationMessage": "Това ще изтрие и свързаните спомени, задачи и аудио файлове. Това действие не може да бъде отменено.",
     "confirm": "Потвърди",
     "cancel": "Отказ",
     "ok": "ОК",
@@ -2794,5 +2794,6 @@
     "onlyTrustedDevice": "⚠️ Сканирайте само на доверено устройство",
     "@onlyTrustedDevice": {
         "description": "Warning about scanning QR code"
-    }
+    },
+    "dontShowAgain": "Не показвай отново"
 }

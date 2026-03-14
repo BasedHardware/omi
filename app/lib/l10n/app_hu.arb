@@ -5,7 +5,7 @@
     "transcriptTab": "Átirat",
     "actionItemsTab": "Teendők",
     "deleteConversationTitle": "Beszélgetés törlése?",
-    "deleteConversationMessage": "Biztosan törölni szeretnéd ezt a beszélgetést? Ez a művelet nem vonható vissza.",
+    "deleteConversationMessage": "Ez törli a kapcsolódó emlékeket, feladatokat és hangfájlokat is. Ez a művelet nem vonható vissza.",
     "confirm": "Megerősítés",
     "cancel": "Mégse",
     "ok": "OK",
@@ -2921,5 +2921,6 @@
     "onlyTrustedDevice": "⚠️ Csak megbízható eszközön olvassa be",
     "@onlyTrustedDevice": {
         "description": "Warning about scanning QR code"
-    }
+    },
+    "dontShowAgain": "Ne jelenjen meg újra"
 }

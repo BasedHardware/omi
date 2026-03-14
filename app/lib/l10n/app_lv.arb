@@ -5,7 +5,7 @@
     "transcriptTab": "Transkripcija",
     "actionItemsTab": "Uzdevumi",
     "deleteConversationTitle": "Dzēst sarunu?",
-    "deleteConversationMessage": "Vai tiešām vēlaties dzēst šo sarunu? Šo darbību nevar atsaukt.",
+    "deleteConversationMessage": "Tas arī izdzēsīs saistītās atmiņas, uzdevumus un audio failus. Šo darbību nevar atsaukt.",
     "confirm": "Apstiprināt",
     "cancel": "Atcelt",
     "ok": "Labi",
@@ -2825,5 +2825,6 @@
     "onlyTrustedDevice": "⚠️ Skenējiet tikai uzticamā ierīcē",
     "@onlyTrustedDevice": {
         "description": "Warning about scanning QR code"
-    }
+    },
+    "dontShowAgain": "Nerādīt vēlreiz"
 }

@@ -5,7 +5,7 @@
     "transcriptTab": "Udskrift",
     "actionItemsTab": "Handlingspunkter",
     "deleteConversationTitle": "Slet samtale?",
-    "deleteConversationMessage": "Er du sikker på, at du vil slette denne samtale? Denne handling kan ikke fortrydes.",
+    "deleteConversationMessage": "Dette vil også slette tilknyttede minder, opgaver og lydfiler. Denne handling kan ikke fortrydes.",
     "confirm": "Bekræft",
     "cancel": "Annuller",
     "ok": "Ok",
@@ -2834,5 +2834,6 @@
     "onlyTrustedDevice": "⚠️ Scan kun på en pålidelig enhed",
     "@onlyTrustedDevice": {
         "description": "Warning about scanning QR code"
-    }
+    },
+    "dontShowAgain": "Vis ikke igen"
 }

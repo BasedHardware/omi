@@ -5,7 +5,7 @@
     "transcriptTab": "Bản ghi",
     "actionItemsTab": "Việc cần làm",
     "deleteConversationTitle": "Xóa cuộc trò chuyện?",
-    "deleteConversationMessage": "Bạn có chắc chắn muốn xóa cuộc trò chuyện này? Hành động này không thể hoàn tác.",
+    "deleteConversationMessage": "Thao tác này cũng sẽ xóa các kỷ niệm, nhiệm vụ và tệp âm thanh liên quan. Hành động này không thể hoàn tác.",
     "confirm": "Xác nhận",
     "cancel": "Hủy",
     "ok": "Ok",
@@ -2830,5 +2830,6 @@
     "onlyTrustedDevice": "⚠️ Chỉ quét trên thiết bị đáng tin cậy",
     "@onlyTrustedDevice": {
         "description": "Warning about scanning QR code"
-    }
+    },
+    "dontShowAgain": "Không hiển thị lại"
 }

@@ -5,7 +5,7 @@
     "transcriptTab": "Prepis",
     "actionItemsTab": "Úlohy",
     "deleteConversationTitle": "Odstrániť konverzáciu?",
-    "deleteConversationMessage": "Naozaj chcete odstrániť túto konverzáciu? Túto akciu nie je možné vrátiť späť.",
+    "deleteConversationMessage": "Tým sa tiež vymažú súvisiace spomienky, úlohy a zvukové súbory. Túto akciu nie je možné vrátiť späť.",
     "confirm": "Potvrdiť",
     "cancel": "Zrušiť",
     "ok": "OK",
@@ -2830,5 +2830,6 @@
     "onlyTrustedDevice": "⚠️ Skenujte iba na dôveryhodnom zariadení",
     "@onlyTrustedDevice": {
         "description": "Warning about scanning QR code"
-    }
+    },
+    "dontShowAgain": "Znovu nezobrazovať"
 }
