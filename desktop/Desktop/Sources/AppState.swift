@@ -792,11 +792,7 @@ class AppState: ObservableObject {
             if !realPermission && !isScreenRecordingStale {
                 log("Screen capture: stale TCC entry detected (developer signing changed)")
                 isScreenRecordingStale = true
-                // Try tccutil reset in case it works (it may not on macOS 15+ for system TCC)
-                Task.detached {
-                    ScreenCaptureService.ensureLaunchServicesRegistrationSync()
-                    _ = ScreenCaptureService.resetScreenCapturePermission()
-                }
+                log("Screen capture: please toggle Screen Recording OFF then ON for this app in System Settings → Privacy & Security → Screen Recording")
             } else if realPermission {
                 // Permission recovered (user toggled off/on in System Settings)
                 isScreenRecordingStale = false
