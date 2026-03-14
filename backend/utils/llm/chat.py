@@ -1009,7 +1009,7 @@ def extract_question_from_conversation(messages: List[Message]) -> str:
     </user_last_messages>
 
     <previous_messages>
-    {Message.get_messages_as_xml(messages)}
+    {Message.get_messages_as_xml(messages[:user_message_idx])}
     </previous_messages>
 
     <date_in_term>

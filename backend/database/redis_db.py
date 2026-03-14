@@ -882,3 +882,20 @@ def check_credits_invalidation(uid: str) -> bool:
     """
     result = r.get(f'credits_invalidated:{uid}')
     return result is not None
+
+
+# ******************************************************
+# *************** GOAL RATE LIMITING *******************
+# ******************************************************
+
+
+def try_acquire_goal_extraction_lock(uid: str, ttl: int = 300) -> bool:
+    """Per-user rate limit for goal extraction. Returns True if acquired (not rate limited)."""
+    result = r.set(f'users:{uid}:goal_extraction_lock', '1', ex=ttl, nx=True)
+    return result is not None
+
+
+def try_acquire_conversation_goal_lock(uid: str, conversation_id: str, ttl: int = 3600) -> bool:
+    """Idempotency lock: one goal extraction per conversation. Returns True if acquired."""
+    result = r.set(f'users:{uid}:conv_goal_lock:{conversation_id}', '1', ex=ttl, nx=True)
+    return result is not None
