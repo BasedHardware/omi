@@ -36,6 +36,11 @@ BUILD_DIR="build"
 APP_BUNDLE="$BUILD_DIR/$APP_NAME.app"
 APP_PATH="/Applications/$APP_NAME.app"
 SIGN_IDENTITY="${OMI_SIGN_IDENTITY:-}"
+AUTOMATION_ARGS=()
+if [ "${OMI_ENABLE_LOCAL_AUTOMATION:-0}" = "1" ]; then
+    AUTOMATION_PORT="${OMI_AUTOMATION_PORT:-47777}"
+    AUTOMATION_ARGS+=(--automation-bridge "--automation-port=$AUTOMATION_PORT")
+fi
 
 # Backend configuration (Rust)
 BACKEND_DIR="$(dirname "$0")/Backend-Rust"
@@ -398,12 +403,19 @@ echo "=== Services Running (total: ${TOTAL_TIME%.*}s) ==="
 echo "Backend:  http://localhost:8080 (PID: $BACKEND_PID)"
 echo "Tunnel:   $TUNNEL_URL (PID: $TUNNEL_PID)"
 echo "App:      $APP_PATH (installed from $APP_BUNDLE)"
+if [ "${#AUTOMATION_ARGS[@]}" -gt 0 ]; then
+    echo "Automation bridge: http://127.0.0.1:${AUTOMATION_PORT}"
+fi
 echo "Using backend: $TUNNEL_URL"
 echo "========================================"
 echo ""
 
 auth_debug "BEFORE launch: $(defaults read "$BUNDLE_ID" auth_isSignedIn 2>&1 || true)"
-open "$APP_PATH" || "$APP_PATH/Contents/MacOS/$BINARY_NAME" &
+if [ "${#AUTOMATION_ARGS[@]}" -gt 0 ]; then
+    open "$APP_PATH" --args "${AUTOMATION_ARGS[@]}" || "$APP_PATH/Contents/MacOS/$BINARY_NAME" "${AUTOMATION_ARGS[@]}" &
+else
+    open "$APP_PATH" || "$APP_PATH/Contents/MacOS/$BINARY_NAME" &
+fi
 
 # Wait for backend process (keeps script running and shows logs)
 echo "Press Ctrl+C to stop all services..."
