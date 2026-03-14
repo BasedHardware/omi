@@ -35,6 +35,7 @@ from utils.chat import (
 from utils.llm.persona import initial_persona_chat_message
 from utils.llm.chat import initial_chat_message
 from utils.llm.goals import extract_and_update_goal_progress
+from database.redis_db import try_acquire_goal_extraction_lock
 from utils.other import endpoints as auth, storage
 from utils.other.chat_file import FileChatTool
 from utils.retrieval.graph import execute_graph_chat, execute_graph_chat_stream, execute_persona_chat_stream
@@ -113,8 +114,9 @@ def send_message(
 
     chat_db.add_message(uid, message.dict())
 
-    # Check for goal progress (background)
-    threading.Thread(target=extract_and_update_goal_progress, args=(uid, data.text)).start()
+    # Check for goal progress (background) — rate-limited to one call per user per 5 min
+    if try_acquire_goal_extraction_lock(uid):
+        threading.Thread(target=extract_and_update_goal_progress, args=(uid, data.text)).start()
 
     app = get_available_app_by_id(compat_app_id, uid)
     app = App(**app) if app else None
