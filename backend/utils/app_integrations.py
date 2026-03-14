@@ -127,6 +127,11 @@ def trigger_external_integrations(uid: str, conversation: Conversation) -> list:
         if conversation.source == ConversationSource.workflow and 'external_data' in conversation_dict:
             conversation_dict['external_data'] = None
 
+        # Flag when user has E2EE enabled so apps know data is security-sensitive
+        protection_level = conversation_dict.get('data_protection_level')
+        if protection_level == 'e2ee':
+            conversation_dict['e2ee_enabled'] = True
+
         url = app.external_integration.webhook_url
         if '?' in url:
             url += '&uid=' + uid

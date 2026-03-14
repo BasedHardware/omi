@@ -9,10 +9,24 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-# E2EE Architecture Notes:
-# - For memories: true client-side E2EE. Content encrypted on-device before API call.
-# - For conversations & chat: hybrid model. Server processes plaintext (Deepgram transcription,
+# E2EE Architecture
+# ==================
+# Data Protection Levels:
+#   - standard: no encryption at rest (legacy).
+#   - enhanced: server-side AES-256-GCM at rest, keyed per-user via
+#     HKDF(ENCRYPTION_SECRET, uid). The server can read data internally.
+#   - e2ee: same server-side encryption at rest PLUS external API reads
+#     require the caller to prove key possession via X-E2EE-Key-Hash header
+#     or e2ee_key_hash query param. Server can still process data internally
+#     (transcription, LLM pipelines, background tasks). Only client-facing
+#     read endpoints enforce the key-hash check.
+#
+# For memories: true client-side E2EE. Content encrypted on-device before API call.
+# For conversations & chat: hybrid model. Server processes plaintext (Deepgram transcription,
 #   LLM chat) then encrypts at rest using server-side encryption even at 'e2ee' level.
+#
+# Third-party apps/MCP integrations: will get 403 on guarded endpoints unless
+#   they include the key hash. Use GET /v1/users/data-protection-level to check.
 #   This is an acknowledged security boundary — the server sees plaintext during processing
 #   but stored data is encrypted. Future: on-device transcription would enable true E2EE.
 

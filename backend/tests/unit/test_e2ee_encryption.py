@@ -205,5 +205,69 @@ class TestWebCryptoCompatibility(unittest.TestCase):
         self.assertEqual(len(nonce), 12)
 
 
+@unittest.skipUnless(
+    os.environ.get('RUN_INTEGRATION_TESTS') or __import__('importlib').util.find_spec('fastapi'),
+    'fastapi not installed — skipping verify_e2ee_access tests'
+)
+class TestVerifyE2eeAccess(unittest.TestCase):
+    """Test the centralized verify_e2ee_access helper."""
+
+    def setUp(self):
+        self.uid = 'test-verify-user'
+
+    @patch('utils.e2ee_access.users_db')
+    def test_non_e2ee_user_passes(self, mock_users):
+        """Non-E2EE users are not blocked."""
+        mock_users.get_data_protection_level.return_value = 'enhanced'
+        from utils.e2ee_access import verify_e2ee_access
+        verify_e2ee_access(self.uid, None, None)
+
+    @patch('utils.e2ee_access.users_db')
+    def test_e2ee_without_hash_raises(self, mock_users):
+        """E2EE user without key hash gets 403."""
+        mock_users.get_data_protection_level.return_value = 'e2ee'
+        from utils.e2ee_access import verify_e2ee_access
+        from fastapi import HTTPException
+        with self.assertRaises(HTTPException) as ctx:
+            verify_e2ee_access(self.uid, None, None)
+        self.assertEqual(ctx.exception.status_code, 403)
+
+    @patch('utils.e2ee_access.users_db')
+    def test_e2ee_with_valid_header_hash(self, mock_users):
+        """Valid key hash via header passes."""
+        mock_users.get_data_protection_level.return_value = 'e2ee'
+        mock_users.get_e2ee_key_hash.return_value = 'a' * 64
+        from utils.e2ee_access import verify_e2ee_access
+        verify_e2ee_access(self.uid, 'a' * 64, None)
+
+    @patch('utils.e2ee_access.users_db')
+    def test_e2ee_with_valid_query_hash(self, mock_users):
+        """Valid key hash via query parameter passes."""
+        mock_users.get_data_protection_level.return_value = 'e2ee'
+        mock_users.get_e2ee_key_hash.return_value = 'b' * 64
+        from utils.e2ee_access import verify_e2ee_access
+        verify_e2ee_access(self.uid, None, 'b' * 64)
+
+    @patch('utils.e2ee_access.users_db')
+    def test_e2ee_with_wrong_hash_raises(self, mock_users):
+        """Wrong key hash gets 403."""
+        mock_users.get_data_protection_level.return_value = 'e2ee'
+        mock_users.get_e2ee_key_hash.return_value = 'a' * 64
+        from utils.e2ee_access import verify_e2ee_access
+        from fastapi import HTTPException
+        with self.assertRaises(HTTPException) as ctx:
+            verify_e2ee_access(self.uid, 'b' * 64, None)
+        self.assertEqual(ctx.exception.status_code, 403)
+
+    @patch('utils.e2ee_access.users_db')
+    def test_e2ee_empty_string_hash_rejected(self, mock_users):
+        """Empty string key hash is treated as missing."""
+        mock_users.get_data_protection_level.return_value = 'e2ee'
+        from utils.e2ee_access import verify_e2ee_access
+        from fastapi import HTTPException
+        with self.assertRaises(HTTPException):
+            verify_e2ee_access(self.uid, '', None)
+
+
 if __name__ == '__main__':
     unittest.main()

@@ -42,7 +42,7 @@ def _decrypt_memory_data(memory_data: Dict[str, Any], uid: str) -> Dict[str, Any
 
 
 def _prepare_data_for_write(data: Dict[str, Any], uid: str, level: str) -> Dict[str, Any]:
-    if level == 'enhanced':
+    if level in ('enhanced', 'e2ee'):
         return _encrypt_memory_data(data, uid)
     return data
 

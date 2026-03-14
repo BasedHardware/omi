@@ -73,15 +73,9 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-def _verify_e2ee_access(uid: str, x_e2ee_key_hash: Optional[str] = None):
-    level = users_db.get_data_protection_level(uid)
-    if level != 'e2ee':
-        return
-    if not x_e2ee_key_hash:
-        raise HTTPException(status_code=403, detail="E2EE is enabled. Provide X-E2EE-Key-Hash header.")
-    stored_hash = users_db.get_e2ee_key_hash(uid)
-    if not stored_hash or x_e2ee_key_hash != stored_hash:
-        raise HTTPException(status_code=403, detail="Invalid E2EE key hash.")
+def _verify_e2ee_access(uid: str, x_e2ee_key_hash: Optional[str] = None, e2ee_key_hash: Optional[str] = None):
+    from utils.e2ee_access import verify_e2ee_access
+    verify_e2ee_access(uid, x_e2ee_key_hash, e2ee_key_hash)
 
 
 class MigrationRequest(BaseModel):
@@ -311,9 +305,10 @@ def get_single_person(
 
 @router.get('/v1/users/people', tags=['v1'], response_model=List[Person])
 def get_all_people(include_speech_samples: bool = True, uid: str = Depends(auth.get_current_user_uid),
-                   x_e2ee_key_hash: Optional[str] = Header(None)):
+                   x_e2ee_key_hash: Optional[str] = Header(None),
+                   e2ee_key_hash: Optional[str] = Query(None)):
     logger.info(f'get_all_people {include_speech_samples}')
-    _verify_e2ee_access(uid, x_e2ee_key_hash)
+    _verify_e2ee_access(uid, x_e2ee_key_hash, e2ee_key_hash)
     people = get_people(uid)
     if include_speech_samples:
         # Convert GCS paths to signed URLs for each person
@@ -665,9 +660,33 @@ def store_e2ee_key_hash_endpoint(request: E2eeKeyHashRequest, uid: str = Depends
 
 @router.get('/v1/users/e2ee/key-hash', tags=['v1'])
 def get_e2ee_key_hash_endpoint(uid: str = Depends(auth.get_current_user_uid)):
-    """Retrieve the stored E2EE key hash for verification."""
+    """Retrieve the stored E2EE key hash.
+
+    Used by clients to verify their locally-stored key hash matches the
+    server-side record. Apps and MCP integrations can call this to check
+    if the user has an E2EE key registered.
+    """
     key_hash = get_e2ee_key_hash(uid)
     return {'key_hash': key_hash}
+
+
+@router.get('/v1/users/data-protection-level', tags=['v1'])
+def get_data_protection_level_endpoint(uid: str = Depends(auth.get_current_user_uid)):
+    """Return the user's current data protection level.
+
+    Possible values:
+      - ``standard``: no encryption at rest (legacy, rarely used).
+      - ``enhanced``: server-side AES-256-GCM encryption at rest.
+      - ``e2ee``: enhanced encryption PLUS API reads require a valid
+        E2EE key hash in the ``X-E2EE-Key-Hash`` header or the
+        ``e2ee_key_hash`` query parameter.
+
+    Third-party apps and MCP integrations should call this endpoint
+    first to determine whether they need to supply a key hash when
+    accessing the user's conversations, memories, etc.
+    """
+    level = users_db.get_data_protection_level(uid)
+    return {'data_protection_level': level}
 
 
 @router.put('/v1/users/preferences/app', tags=['v1'])
@@ -1058,23 +1077,25 @@ def test_daily_summary(request: TestDailySummaryRequest = None, uid: str = Depen
 def get_daily_summaries(
     limit: int = Query(30, ge=1, le=100), offset: int = Query(0, ge=0), uid: str = Depends(auth.get_current_user_uid),
     x_e2ee_key_hash: Optional[str] = Header(None),
+    e2ee_key_hash: Optional[str] = Query(None),
 ):
     """
     Get list of daily summaries for the authenticated user.
     Returns summaries in reverse chronological order.
     """
-    _verify_e2ee_access(uid, x_e2ee_key_hash)
+    _verify_e2ee_access(uid, x_e2ee_key_hash, e2ee_key_hash)
     summaries = daily_summaries_db.get_daily_summaries(uid, limit=limit, offset=offset)
     return {'summaries': summaries}
 
 
 @router.get('/v1/users/daily-summaries/{summary_id}', tags=['v1'])
 def get_daily_summary(summary_id: str, uid: str = Depends(auth.get_current_user_uid),
-                      x_e2ee_key_hash: Optional[str] = Header(None)):
+                      x_e2ee_key_hash: Optional[str] = Header(None),
+                      e2ee_key_hash: Optional[str] = Query(None)):
     """
     Get a single daily summary by ID.
     """
-    _verify_e2ee_access(uid, x_e2ee_key_hash)
+    _verify_e2ee_access(uid, x_e2ee_key_hash, e2ee_key_hash)
     summary = daily_summaries_db.get_daily_summary(uid, summary_id)
     if not summary:
         raise HTTPException(status_code=404, detail='Daily summary not found')

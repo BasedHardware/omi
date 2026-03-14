@@ -1,4 +1,8 @@
 /// E2EE Middleware — encrypt/decrypt wrapper for API calls.
+///
+/// Wraps E2eeService for use in the HTTP layer. When E2EE is enabled
+/// (SharedPreferencesUtil().e2eeEnabled), all sensitive string data is
+/// encrypted before sending to the API and decrypted on read.
 
 import 'package:omi/services/e2ee_service.dart';
 import 'package:omi/backend/preferences.dart';

@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Header, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, Header, Query, BackgroundTasks
 from pydantic import BaseModel
 from typing import List, Dict, Any, Optional
 
@@ -6,21 +6,15 @@ from database import knowledge_graph as kg_db
 import database.users as users_db
 from database import memories as memories_db
 from database.auth import get_user_name
+from utils.e2ee_access import verify_e2ee_access
 from utils.llm.knowledge_graph import extract_knowledge_from_memory, rebuild_knowledge_graph
 from utils.other import endpoints as auth
 
 router = APIRouter()
 
 
-def _verify_e2ee_access(uid: str, x_e2ee_key_hash: Optional[str] = None):
-    level = users_db.get_data_protection_level(uid)
-    if level != 'e2ee':
-        return
-    if not x_e2ee_key_hash:
-        raise HTTPException(status_code=403, detail="E2EE is enabled. Provide X-E2EE-Key-Hash header.")
-    stored_hash = users_db.get_e2ee_key_hash(uid)
-    if not stored_hash or x_e2ee_key_hash != stored_hash:
-        raise HTTPException(status_code=403, detail="Invalid E2EE key hash.")
+def _verify_e2ee_access(uid: str, x_e2ee_key_hash: Optional[str] = None, e2ee_key_hash: Optional[str] = None):
+    verify_e2ee_access(uid, x_e2ee_key_hash, e2ee_key_hash)
 
 
 class KnowledgeNode(BaseModel):
@@ -52,8 +46,9 @@ class RebuildResponse(BaseModel):
 
 @router.get('/v1/knowledge-graph', tags=['knowledge_graph'], response_model=KnowledgeGraphResponse)
 def get_knowledge_graph(uid: str = Depends(auth.get_current_user_uid),
-                        x_e2ee_key_hash: Optional[str] = Header(None)):
-    _verify_e2ee_access(uid, x_e2ee_key_hash)
+                        x_e2ee_key_hash: Optional[str] = Header(None),
+                        e2ee_key_hash: Optional[str] = Query(None)):
+    _verify_e2ee_access(uid, x_e2ee_key_hash, e2ee_key_hash)
     graph = kg_db.get_knowledge_graph(uid)
     return KnowledgeGraphResponse(nodes=graph.get('nodes', []), edges=graph.get('edges', []))
 

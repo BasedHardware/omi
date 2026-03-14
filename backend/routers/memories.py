@@ -9,6 +9,7 @@ import database.memories as memories_db
 from database.vector_db import upsert_memory_vector, delete_memory_vector
 from models.memories import MemoryDB, Memory, MemoryCategory
 from utils.apps import update_personas_async
+from utils.e2ee_access import verify_e2ee_access
 import database.users as users_db
 from utils.other import endpoints as auth
 
@@ -17,15 +18,8 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-def _verify_e2ee_access(uid: str, x_e2ee_key_hash: Optional[str] = None):
-    level = users_db.get_data_protection_level(uid)
-    if level != 'e2ee':
-        return
-    if not x_e2ee_key_hash:
-        raise HTTPException(status_code=403, detail="E2EE is enabled. Provide X-E2EE-Key-Hash header.")
-    stored_hash = users_db.get_e2ee_key_hash(uid)
-    if not stored_hash or x_e2ee_key_hash != stored_hash:
-        raise HTTPException(status_code=403, detail="Invalid E2EE key hash.")
+def _verify_e2ee_access(uid: str, x_e2ee_key_hash: Optional[str] = None, e2ee_key_hash: Optional[str] = None):
+    verify_e2ee_access(uid, x_e2ee_key_hash, e2ee_key_hash)
 
 
 def _validate_memory(uid: str, memory_id: str) -> dict:
@@ -53,8 +47,8 @@ def create_memory(memory: Memory, uid: str = Depends(auth.get_current_user_uid))
 
 
 @router.get('/v3/memories', tags=['memories'], response_model=List[MemoryDB])
-def get_memories(limit: int = 100, offset: int = 0, uid: str = Depends(auth.get_current_user_uid), x_e2ee_key_hash: Optional[str] = Header(None)):
-    _verify_e2ee_access(uid, x_e2ee_key_hash)
+def get_memories(limit: int = 100, offset: int = 0, uid: str = Depends(auth.get_current_user_uid), x_e2ee_key_hash: Optional[str] = Header(None), e2ee_key_hash: Optional[str] = Query(None)):
+    _verify_e2ee_access(uid, x_e2ee_key_hash, e2ee_key_hash)
     # Use high limits for the first page
     # Warn: should remove
     if offset == 0:

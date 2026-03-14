@@ -1,6 +1,17 @@
 /// E2EE Service — AES-256-GCM encryption with locally-generated keys.
 /// Key stored in iOS Keychain / Android EncryptedSharedPreferences.
 /// Data format: base64(nonce[12] || ciphertext || tag[16]).
+///
+/// Architecture:
+///   Enhanced: server-side encryption at rest, server can read data.
+///   E2EE:     server-side encryption at rest PLUS API access requires
+///             key hash verification. Server can still process data
+///             internally, but external API reads require proof of key
+///             possession via X-E2EE-Key-Hash header.
+///
+/// The SHA-256 hash of the key is sent to the server and stored so that
+/// API endpoints can verify the caller has the correct key without the
+/// server ever seeing the raw key bytes.
 
 import 'dart:convert';
 import 'dart:math';

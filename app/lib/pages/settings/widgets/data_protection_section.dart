@@ -231,6 +231,11 @@ class _DataProtectionSectionState extends State<DataProtectionSection> {
             if (isE2ee) ...[
               const SizedBox(height: 8),
               _buildKeyManagementRow(context),
+              const SizedBox(height: 8),
+              _buildInfoRow(
+                Icons.warning_amber_rounded,
+                'Third-party apps and integrations won\'t be able to access your encrypted data unless you provide them with your key.',
+              ),
             ],
             const SizedBox(height: 12),
             _buildInfoRow(
