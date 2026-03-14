@@ -561,9 +561,9 @@ def handle_migration_requests(
             raise HTTPException(status_code=400, detail=f"Unknown object type for migration: {request.type}")
     elif isinstance(request, MigrationTargetRequest):
         # This is for starting the migration process
-        if request.target_level != 'enhanced':
+        if request.target_level not in ('enhanced', 'e2ee'):
             raise HTTPException(
-                status_code=400, detail="Invalid target_level. Only migration to 'enhanced' is supported."
+                status_code=400, detail="Invalid target_level. Only 'enhanced' or 'e2ee' are supported."
             )
 
         set_migration_status(uid, request.target_level)
@@ -573,8 +573,8 @@ def handle_migration_requests(
 @router.get('/v1/users/migration/requests', tags=['v1'])
 def get_migration_requests(target_level: str, uid: str = Depends(auth.get_current_user_uid)):
     """Checks which documents need to be migrated to the target level."""
-    if target_level != 'enhanced':
-        raise HTTPException(status_code=400, detail="Invalid target_level. Only migration to 'enhanced' is supported.")
+    if target_level not in ('enhanced', 'e2ee'):
+        raise HTTPException(status_code=400, detail="Invalid target_level. Only 'enhanced' or 'e2ee' are supported.")
 
     conversations_to_migrate = conversations_db.get_conversations_to_migrate(uid, target_level)
     memories_to_migrate = memories_db.get_memories_to_migrate(uid, target_level)
