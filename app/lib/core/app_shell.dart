@@ -7,6 +7,7 @@ import 'package:provider/provider.dart';
 
 import 'package:omi/backend/http/api/action_items.dart' as action_items_api;
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/pages/settings/widgets/e2ee_key_recovery_dialog.dart';
 import 'package:omi/mobile/mobile_app.dart';
 import 'package:omi/pages/action_items/widgets/accept_shared_tasks_sheet.dart';
 import 'package:omi/pages/apps/app_detail/app_detail.dart';
@@ -348,7 +349,21 @@ class _AppShellState extends State<AppShell> {
     if (isSignedIn) {
       context.read<HomeProvider>().setupHasSpeakerProfile();
       context.read<HomeProvider>().setupUserPrimaryLanguage();
-      context.read<UserProvider>().initialize();
+      await context.read<UserProvider>().initialize();
+
+      // Check for E2EE key recovery before loading any data
+      if (mounted && context.read<UserProvider>().needsKeyRecovery) {
+        await showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (_) => ChangeNotifierProvider.value(
+            value: context.read<UserProvider>(),
+            child: const E2eeKeyRecoveryDialog(),
+          ),
+        );
+      }
+
+      if (!mounted) return;
       context.read<PeopleProvider>().initialize();
       try {
         await PlatformManager.instance.intercom.loginIdentifiedUser(SharedPreferencesUtil().uid);

@@ -49,7 +49,7 @@ import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/message_provider.dart';
 import 'package:omi/providers/sync_provider.dart';
 import 'package:omi/providers/user_provider.dart';
-import 'package:omi/pages/settings/widgets/e2ee_key_recovery_dialog.dart';
+
 import 'package:omi/services/announcement_service.dart';
 import 'package:omi/services/notifications.dart';
 import 'package:omi/services/notifications/daily_reflection_notification.dart';
@@ -455,7 +455,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
     _listenToMessagesFromNotification();
     _listenToFreemiumThreshold();
     _checkForAnnouncements();
-    _checkForE2eeKeyRecovery();
+
     super.initState();
 
     // After init
@@ -480,28 +480,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
 
       // Register callback for device connection to check firmware announcements
       deviceProvider.onDeviceConnected = _onDeviceConnectedForAnnouncements;
-    });
-  }
-
-  bool _e2eeRecoveryDialogShown = false;
-
-  void _checkForE2eeKeyRecovery() {
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
-      if (!mounted || _e2eeRecoveryDialogShown) return;
-
-      // Wait for UserProvider to finish initializing
-      await Future.delayed(const Duration(seconds: 3));
-      if (!mounted) return;
-
-      final userProvider = Provider.of<UserProvider>(context, listen: false);
-      if (userProvider.needsKeyRecovery) {
-        _e2eeRecoveryDialogShown = true;
-        showDialog(
-          context: context,
-          barrierDismissible: false,
-          builder: (_) => const E2eeKeyRecoveryDialog(),
-        );
-      }
     });
   }
 
