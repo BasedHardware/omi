@@ -88,13 +88,15 @@ def upload_profile(file: UploadFile, uid: str = Depends(auth.get_current_user_ui
     url = upload_profile_audio(file_path, uid)
     remove_user_soniox_speech_profile(uid)
 
+    embedding_status = "ok"
     try:
         embedding = extract_embedding(file_path)
         set_user_speaker_embedding(uid, embedding.flatten().tolist())
     except Exception as e:
+        embedding_status = "failed"
         logger.error(f"Failed to extract speaker embedding during profile upload: {e} {uid}")
 
-    return {"url": url}
+    return {"url": url, "embedding_status": embedding_status}
 
 
 # ******************************************************
