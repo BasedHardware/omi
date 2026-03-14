@@ -77,7 +77,7 @@ def _send_summary_notification(user_data: tuple):
     uid = user_data[0]
     user_tz_name = user_data[2] if len(user_data) > 2 else None
 
-    # Calculate past 24 hours for conversation fetching
+    # Calculate local day boundaries for conversation fetching
     # date_str is set based on current hour:
     #   - Before 12 PM (noon): use previous day's date
     #   - 12 PM or after: use current day's date
@@ -89,17 +89,19 @@ def _send_summary_notification(user_data: tuple):
             user_tz = pytz.timezone(user_tz_name)
             now_in_user_tz = datetime.now(user_tz)
 
-            # Use past 24 hours for conversation range
-            end_date_utc = now_in_user_tz.astimezone(pytz.utc)
-            start_date_utc = (now_in_user_tz - timedelta(hours=24)).astimezone(pytz.utc)
-
-            # Determine display date based on current hour
+            # Determine which calendar day to summarize
             if now_in_user_tz.hour < 12:
-                # Before noon: show previous day
+                # Before noon: summarize previous day
                 display_date = now_in_user_tz.date() - timedelta(days=1)
             else:
-                # Noon or after: show current day
+                # Noon or after: summarize current day
                 display_date = now_in_user_tz.date()
+
+            # Use local day boundaries (midnight-to-midnight) converted to UTC
+            start_of_day = user_tz.localize(datetime.combine(display_date, time.min))
+            end_of_day = user_tz.localize(datetime.combine(display_date, time.max))
+            start_date_utc = start_of_day.astimezone(pytz.utc)
+            end_date_utc = end_of_day.astimezone(pytz.utc)
             date_str = display_date.strftime('%Y-%m-%d')
         except Exception as e:
             logger.error(e)
@@ -108,15 +110,15 @@ def _send_summary_notification(user_data: tuple):
     if not start_date_utc or not end_date_utc:
         now_utc = datetime.now(pytz.utc)
 
-        # Use past 24 hours for conversation range
-        end_date_utc = now_utc
-        start_date_utc = now_utc - timedelta(hours=24)
-
-        # Determine display date based on current hour
+        # Determine which calendar day to summarize
         if now_utc.hour < 12:
             display_date = now_utc.date() - timedelta(days=1)
         else:
             display_date = now_utc.date()
+
+        # Use UTC day boundaries
+        start_date_utc = datetime.combine(display_date, time.min).replace(tzinfo=pytz.utc)
+        end_date_utc = datetime.combine(display_date, time.max).replace(tzinfo=pytz.utc)
         date_str = display_date.strftime('%Y-%m-%d')
 
     # Atomically acquire lock BEFORE expensive LLM work to prevent race condition

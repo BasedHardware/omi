@@ -4206,6 +4206,7 @@ struct SettingsContentView: View {
                         Toggle("", isOn: $updaterViewModel.automaticallyChecksForUpdates)
                             .toggleStyle(.switch)
                             .labelsHidden()
+                            .disabled(updaterViewModel.usesManagedUpdatePolicy || AnalyticsManager.isDevBuild)
                     }
 
                     if updaterViewModel.automaticallyChecksForUpdates {
@@ -4213,7 +4214,18 @@ struct SettingsContentView: View {
                             Toggle("", isOn: $updaterViewModel.automaticallyDownloadsUpdates)
                                 .toggleStyle(.switch)
                                 .labelsHidden()
+                                .disabled(updaterViewModel.usesManagedUpdatePolicy || AnalyticsManager.isDevBuild)
                         }
+                    }
+
+                    if updaterViewModel.usesManagedUpdatePolicy {
+                        Text("Release builds always auto-check and auto-install updates in the background.")
+                            .scaledFont(size: 12)
+                            .foregroundColor(OmiColors.textTertiary)
+                    } else if AnalyticsManager.isDevBuild {
+                        Text("Development builds keep automatic installation disabled to avoid replacing the local app.")
+                            .scaledFont(size: 12)
+                            .foregroundColor(OmiColors.textTertiary)
                     }
 
                     Divider()

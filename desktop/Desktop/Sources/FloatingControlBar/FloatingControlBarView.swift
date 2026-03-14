@@ -14,6 +14,34 @@ struct FloatingControlBarView: View {
     @State private var isHovering = false
 
     var body: some View {
+        VStack(spacing: state.isShowingNotification && !state.showingAIConversation ? 8 : 0) {
+            barChrome
+
+            if let notification = state.currentNotification, !state.showingAIConversation {
+                notificationView(notification)
+                    .padding(.horizontal, 8)
+                    .padding(.bottom, 8)
+                    .transition(.move(edge: .top).combined(with: .opacity))
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .onHover { hovering in
+            // Resize window BEFORE updating SwiftUI state on expand so the expanded
+            // content never renders in a too-small window (which causes overflow).
+            if hovering {
+                (window as? FloatingControlBarWindow)?.resizeForHover(expanded: true)
+            }
+            withAnimation(.easeInOut(duration: 0.2)) {
+                isHovering = hovering
+            }
+            if !hovering {
+                (window as? FloatingControlBarWindow)?.resizeForHover(expanded: false)
+            }
+        }
+        .animation(.spring(response: 0.35, dampingFraction: 0.82), value: state.currentNotification?.id)
+    }
+
+    private var barChrome: some View {
         VStack(spacing: 0) {
             // Main control bar - always visible
             controlBarView
@@ -35,7 +63,7 @@ struct FloatingControlBarView: View {
                 .padding(.bottom, 8)
             }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .frame(maxWidth: .infinity, alignment: .top)
         .overlay(alignment: .topLeading) {
             if state.showingAIConversation {
                 Button {
@@ -83,21 +111,53 @@ struct FloatingControlBarView: View {
             }
         }
         .clipped()
-        .onHover { hovering in
-            // Resize window BEFORE updating SwiftUI state on expand so the expanded
-            // content never renders in a too-small window (which causes overflow).
-            if hovering {
-                (window as? FloatingControlBarWindow)?.resizeForHover(expanded: true)
-            }
-            withAnimation(.easeInOut(duration: 0.2)) {
-                isHovering = hovering
-            }
-            if !hovering {
-                (window as? FloatingControlBarWindow)?.resizeForHover(expanded: false)
-            }
-        }
         .background(DraggableAreaView(targetWindow: window))
-        .floatingBackground(cornerRadius: isHovering || state.showingAIConversation || state.isVoiceListening ? 20 : 5)
+        .floatingBackground(cornerRadius: isHovering || state.showingAIConversation || state.isVoiceListening || state.isShowingNotification ? 20 : 5)
+    }
+
+    private func notificationView(_ notification: FloatingBarNotification) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 10)
+                    .fill(Color.white.opacity(0.08))
+                    .frame(width: 34, height: 34)
+
+                Image(systemName: "bell.badge.fill")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundColor(.white)
+            }
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(notification.title)
+                    .scaledFont(size: 13, weight: .semibold)
+                    .foregroundColor(.white)
+                    .lineLimit(1)
+
+                Text(notification.message)
+                    .scaledFont(size: 12)
+                    .foregroundColor(.white.opacity(0.72))
+                    .lineLimit(3)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Spacer(minLength: 0)
+
+            Button {
+                FloatingControlBarManager.shared.dismissCurrentNotification()
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundColor(.white.opacity(0.62))
+                    .frame(width: 18, height: 18)
+                    .background(Color.white.opacity(0.08))
+                    .clipShape(Circle())
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .floatingBackground(cornerRadius: 18)
     }
 
     private func openFloatingBarSettings() {

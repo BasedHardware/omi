@@ -361,6 +361,11 @@ def _trigger_apps(
 def _update_goal_progress(uid: str, conversation: Conversation):
     """Extract and update goal progress from conversation text."""
     try:
+        # Idempotency: skip if this conversation was already processed for goals
+        if not redis_db.try_acquire_conversation_goal_lock(uid, conversation.id):
+            logger.info(f"[GOAL] Skipping already-processed conversation {conversation.id}")
+            return
+
         # Get conversation text
         text = ""
         if conversation.structured and conversation.structured.overview:

@@ -161,6 +161,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         // Without this, writing to a dead FFmpeg stdin or agent-bridge pipe kills the process.
         signal(SIGPIPE, SIG_IGN)
 
+        DesktopAutomationBridge.shared.startIfNeeded()
+
         // Strip com.apple.provenance xattrs that macOS adds when Sparkle extracts updates.
         // These break the code signature seal, causing the NEXT update to fail with
         // "An error occurred while running the updater."
@@ -210,6 +212,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         // Initialize Sparkle auto-updater early so the 10-minute check timer starts at launch
         // Without this, the updater only starts when the user opens Settings or clicks "Check for Updates"
         _ = UpdaterViewModel.shared
+        UpdaterViewModel.shared.checkForUpdatesImmediatelyAfterLaunchIfNeeded()
 
         // Initialize Sentry for crash reporting and error tracking (including dev builds)
         let isDev = AnalyticsManager.isDevBuild
