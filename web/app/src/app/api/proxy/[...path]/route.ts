@@ -71,6 +71,10 @@ async function handleRequest(
     if (deviceIdHash) {
       headers['X-Device-Id-Hash'] = deviceIdHash;
     }
+    const e2eeKeyHash = request.headers.get('X-E2EE-Key-Hash');
+    if (e2eeKeyHash) {
+      headers['X-E2EE-Key-Hash'] = e2eeKeyHash;
+    }
 
     if (!isMultipart && request.method !== 'GET' && request.method !== 'DELETE') {
       headers['Content-Type'] = 'application/json';

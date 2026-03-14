@@ -63,13 +63,22 @@ async function fetchWithAuth<T>(
   const url = `${API_BASE_URL}${endpoint}`;
 
   try {
+    const headers: Record<string, string> = {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json',
+      ...(options.headers as Record<string, string>),
+    };
+
+    if (typeof window !== 'undefined') {
+      const e2eeKeyHash = localStorage.getItem('omi_e2ee_key_hash');
+      if (e2eeKeyHash) {
+        headers['X-E2EE-Key-Hash'] = e2eeKeyHash;
+      }
+    }
+
     const response = await fetch(url, {
       ...options,
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-        ...options.headers,
-      },
+      headers,
     });
 
     if (!response.ok) {
@@ -77,6 +86,13 @@ async function fetchWithAuth<T>(
       // Only log non-404 errors (404s are expected for optional endpoints)
       if (response.status !== 404) {
         console.error('API error response:', response.status, errorText);
+      }
+
+      if (response.status === 403 && errorText.includes('E2EE')) {
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('e2ee-required'));
+        }
+        throw new Error('E2EE key required');
       }
 
       if (response.status === 401) {

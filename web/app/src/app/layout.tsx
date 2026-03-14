@@ -3,6 +3,7 @@ import { AuthProvider } from '@/components/auth/AuthProvider';
 import { MobileBlockOverlay } from '@/components/layout/MobileBlockOverlay';
 import { RecordingProvider, RecordingController } from '@/components/recording';
 import { ToastProvider } from '@/components/ui/Toast';
+import { E2eeProvider } from '@/providers/E2eeProvider';
 import './globals.css';
 
 export const viewport: Viewport = {
@@ -43,12 +44,14 @@ export default function RootLayout({
       <body className="bg-bg-primary text-text-primary font-body antialiased overflow-x-hidden w-full">
         <MobileBlockOverlay />
         <AuthProvider>
-          <RecordingProvider>
-            <ToastProvider>
-              <RecordingController />
-              {children}
-            </ToastProvider>
-          </RecordingProvider>
+          <E2eeProvider>
+            <RecordingProvider>
+              <ToastProvider>
+                <RecordingController />
+                {children}
+              </ToastProvider>
+            </RecordingProvider>
+          </E2eeProvider>
         </AuthProvider>
       </body>
     </html>
