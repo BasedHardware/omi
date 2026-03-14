@@ -670,7 +670,7 @@ def get_conversations_to_migrate(uid: str, target_level: str) -> List[dict]:
     users with a very large number of documents.
     """
     conversations_ref = db.collection('users').document(uid).collection(conversations_collection)
-    all_conversations = conversations_ref.select(['data_protection_level', 'visibility']).stream()
+    all_conversations = conversations_ref.select(['data_protection_level', 'visibility', 'structured']).stream()
 
     to_migrate = []
     for doc in all_conversations:
@@ -681,6 +681,12 @@ def get_conversations_to_migrate(uid: str, target_level: str) -> List[dict]:
         current_level = doc_data.get('data_protection_level', 'standard')
         if target_level != current_level:
             to_migrate.append({'id': doc.id, 'type': 'conversation'})
+        elif target_level == current_level and target_level in ('enhanced', 'e2ee'):
+            # Re-migrate docs that have the right level label but unencrypted structured data
+            # (e.g. migrated before structured encryption was implemented)
+            structured = doc_data.get('structured')
+            if isinstance(structured, dict):
+                to_migrate.append({'id': doc.id, 'type': 'conversation'})
 
     return to_migrate
 
@@ -706,7 +712,11 @@ def migrate_conversations_level_batch(uid: str, conversation_ids: List[str], tar
         current_level = conversation_data.get('data_protection_level', 'standard')
 
         if current_level == target_level:
-            continue
+            # Check if structured data still needs encryption (re-migration case)
+            structured = conversation_data.get('structured')
+            geolocation = conversation_data.get('geolocation')
+            if not (isinstance(structured, dict) or isinstance(geolocation, dict)):
+                continue  # Already fully encrypted, skip
 
         # Decrypt/decompress the data to get a clean slate.
         plain_data = _prepare_conversation_for_read(conversation_data, uid)
