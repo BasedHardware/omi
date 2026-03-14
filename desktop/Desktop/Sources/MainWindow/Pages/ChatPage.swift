@@ -182,7 +182,13 @@ struct ChatPage: View {
         .sheet(isPresented: $chatProvider.isClaudeAuthRequired) {
             ClaudeAuthSheet(
                 onConnect: {
-                    chatProvider.startClaudeAuth()
+                    if let url = URL(string: "https://omi.me/pricing") {
+                        NSWorkspace.shared.open(url)
+                    }
+                    chatProvider.isClaudeAuthRequired = false
+                    Task {
+                        await chatProvider.switchBridgeMode(to: ChatProvider.BridgeMode.omiAI)
+                    }
                 },
                 onCancel: {
                     chatProvider.isClaudeAuthRequired = false
@@ -193,18 +199,18 @@ struct ChatPage: View {
                 }
             )
         }
-        .alert("Free Usage Limit Reached", isPresented: $chatProvider.showOmiThresholdAlert) {
-            Button("Connect Claude Account") {
+        .alert("Upgrade Required", isPresented: $chatProvider.showOmiThresholdAlert) {
+            Button("Upgrade to Omi Pro") {
                 chatProvider.showOmiThresholdAlert = false
-                if !chatProvider.isClaudeConnected {
-                    chatProvider.isClaudeAuthRequired = true
+                if let url = URL(string: "https://omi.me/pricing") {
+                    NSWorkspace.shared.open(url)
                 }
             }
             Button("Later", role: .cancel) {
                 chatProvider.showOmiThresholdAlert = false
             }
         } message: {
-            Text("Please connect your Claude account to continue chatting.")
+            Text("Upgrade to Omi Pro for $199/month to continue chatting.")
         }
         .overlay {
             // Loading overlay when fetching citation

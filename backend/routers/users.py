@@ -48,6 +48,7 @@ from datetime import datetime, time, timedelta
 from models.users import WebhookType, UserSubscriptionResponse, SubscriptionPlan, PlanType, PricingOption
 from utils.apps import get_available_app_by_id
 from utils.subscription import (
+    get_paid_plan_definitions,
     get_plan_limits,
     get_plan_features,
     get_monthly_usage_for_subscription,
@@ -768,62 +769,58 @@ def get_user_subscription_endpoint(uid: str = Depends(auth.get_current_user_uid)
 
     # Build available plans for upgrading
     available_plans: List[SubscriptionPlan] = []
-    monthly_price_id = os.getenv('STRIPE_UNLIMITED_MONTHLY_PRICE_ID')
-    annual_price_id = os.getenv('STRIPE_UNLIMITED_ANNUAL_PRICE_ID')
+    for definition in get_paid_plan_definitions():
+        plan_prices: List[PricingOption] = []
+        monthly_price_id = definition["monthly_price_id"]
+        annual_price_id = definition["annual_price_id"]
 
-    unlimited_plan_prices: List[PricingOption] = []
-    if monthly_price_id:
-        try:
-            price_data = get_generic_cache(f'stripe_price:{monthly_price_id}')
-            if not price_data:
-                price = stripe_utils.stripe.Price.retrieve(monthly_price_id)
-                price_data = price.to_dict_recursive()
-                set_generic_cache(f'stripe_price:{monthly_price_id}', price_data, ttl=3600 * 24)  # 24 hours
+        if monthly_price_id:
+            try:
+                price_data = get_generic_cache(f'stripe_price:{monthly_price_id}')
+                if not price_data:
+                    price = stripe_utils.stripe.Price.retrieve(monthly_price_id)
+                    price_data = price.to_dict_recursive()
+                    set_generic_cache(f'stripe_price:{monthly_price_id}', price_data, ttl=3600 * 24)
 
-            unlimited_plan_prices.append(
-                PricingOption(
-                    id=price_data['id'],
-                    title="Monthly",
-                    price_string=f"${price_data['unit_amount'] / 100:.2f}/{price_data['recurring']['interval']}",
-                    description="Billed monthly. Cancel anytime.",
+                plan_prices.append(
+                    PricingOption(
+                        id=price_data['id'],
+                        title="Monthly",
+                        price_string=f"${price_data['unit_amount'] / 100:.2f}/{price_data['recurring']['interval']}",
+                        description="Billed monthly. Cancel anytime.",
+                    )
+                )
+            except Exception as e:
+                logger.error(f"Error retrieving monthly price from Stripe for {definition['plan_id']}: {e}")
+
+        if annual_price_id:
+            try:
+                price_data = get_generic_cache(f'stripe_price:{annual_price_id}')
+                if not price_data:
+                    price = stripe_utils.stripe.Price.retrieve(annual_price_id)
+                    price_data = price.to_dict_recursive()
+                    set_generic_cache(f'stripe_price:{annual_price_id}', price_data, ttl=3600 * 24)
+
+                plan_prices.append(
+                    PricingOption(
+                        id=price_data['id'],
+                        title="Annual",
+                        price_string=f"${price_data['unit_amount'] / 100:.2f}/{price_data['recurring']['interval']}",
+                        description=definition["annual_description"],
+                    )
+                )
+            except Exception as e:
+                logger.error(f"Error retrieving annual price from Stripe for {definition['plan_id']}: {e}")
+
+        if plan_prices:
+            available_plans.append(
+                SubscriptionPlan(
+                    id=definition["plan_id"],
+                    title=definition["title"],
+                    features=get_plan_features(definition["plan_type"]),
+                    prices=plan_prices,
                 )
             )
-        except Exception as e:
-            logger.error(f"Error retrieving monthly price from Stripe: {e}")
-
-    if annual_price_id:
-        try:
-            price_data = get_generic_cache(f'stripe_price:{annual_price_id}')
-            if not price_data:
-                price = stripe_utils.stripe.Price.retrieve(annual_price_id)
-                price_data = price.to_dict_recursive()
-                set_generic_cache(f'stripe_price:{annual_price_id}', price_data, ttl=3600 * 24)  # 24 hours
-
-            unlimited_plan_prices.append(
-                PricingOption(
-                    id=price_data['id'],
-                    title="Annual",
-                    price_string=f"${price_data['unit_amount'] / 100:.2f}/{price_data['recurring']['interval']}",
-                    description="Save 20% with annual billing.",
-                )
-            )
-        except Exception as e:
-            logger.error(f"Error retrieving annual price from Stripe: {e}")
-
-    if unlimited_plan_prices:
-        available_plans.append(
-            SubscriptionPlan(
-                id="unlimited",
-                title="Unlimited",
-                features=[
-                    "Unlimited listening time",
-                    "Unlimited words transcribed",
-                    "Unlimited insights",
-                    "Unlimited memories",
-                ],
-                prices=unlimited_plan_prices,
-            )
-        )
 
     return UserSubscriptionResponse(
         subscription=subscription,

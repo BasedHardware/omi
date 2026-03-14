@@ -53,7 +53,7 @@ def _get_valid_conversation_by_id(uid: str, conversation_id: str) -> dict:
         raise HTTPException(status_code=404, detail="Conversation not found")
 
     if conversation.get('is_locked', False):
-        raise HTTPException(status_code=402, detail="Unlimited Plan Required to access this conversation.")
+        raise HTTPException(status_code=402, detail="A paid plan is required to access this conversation.")
 
     return conversation
 

@@ -1,6 +1,7 @@
 import SwiftUI
 import Sparkle
 import UniformTypeIdentifiers
+import WebKit
 
 /// Settings page that wraps SettingsView with proper dark theme styling for the main window
 struct SettingsPage: View {
@@ -167,6 +168,15 @@ struct SettingsContentView: View {
 
     // Loading states
     @State private var isLoadingSettings: Bool = false
+    @State private var userSubscription: UserSubscriptionResponse?
+    @State private var isLoadingSubscription: Bool = false
+    @State private var subscriptionError: String?
+    @State private var activeCheckoutPriceId: String?
+    @State private var selectedPlanIdForCheckout: String?
+    @State private var isOpeningCustomerPortal: Bool = false
+    @State private var activeBillingWebFlow: BillingWebFlow?
+    @State private var pendingSubscriptionPriceId: String?
+    @State private var pendingCheckoutSessionId: String?
 
     private let cooldownOptions = [1, 2, 5, 10, 15, 30, 60]
     private let analysisDelayOptions = [0, 10, 20, 30, 60, 300] // seconds: instant, 10s, 20s, 30s, 1 min, 5 min
@@ -231,6 +241,7 @@ struct SettingsContentView: View {
         case notifications = "Notifications"
         case privacy = "Privacy"
         case account = "Account"
+        case planUsage = "Plan and Usage"
         case aiChat = "AI Chat"
         case advanced = "Advanced"
         case about = "About"
@@ -345,6 +356,8 @@ struct SettingsContentView: View {
                     privacySection
                 case .account:
                     accountSection
+                case .planUsage:
+                    planUsageSection
                 case .aiChat:
                     aiChatSection
                 case .advanced:
@@ -359,6 +372,7 @@ struct SettingsContentView: View {
         }
         .onAppear {
             loadBackendSettings()
+            loadSubscriptionInfo()
             // Sync transcription state with appState
             isTranscribing = appState.isTranscribing
             // Sync floating bar state
@@ -373,6 +387,11 @@ struct SettingsContentView: View {
         }
         .onChange(of: appState.isTranscribing) { _, newValue in
             isTranscribing = newValue
+        }
+        .onChange(of: selectedSection) { _, newValue in
+            if newValue == .planUsage {
+                loadSubscriptionInfo()
+            }
         }
         .onReceive(NotificationCenter.default.publisher(for: .navigateToTaskSettings)) { _ in
             selectedSection = .advanced
@@ -389,6 +408,12 @@ struct SettingsContentView: View {
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             // Refresh notification permission when app becomes active (user may have changed it in System Settings)
             appState.checkNotificationPermission()
+        }
+        .sheet(item: $activeBillingWebFlow) { flow in
+            BillingWebFlowSheet(flow: flow) { outcome in
+                activeBillingWebFlow = nil
+                handleBillingFlowCompletion(outcome)
+            }
         }
     }
 
@@ -1617,6 +1642,94 @@ struct SettingsContentView: View {
 //                    .tint(OmiColors.purplePrimary)
 //                }
 //            }
+        }
+    }
+
+    // MARK: - Plan and Usage Section
+
+    private var planUsageSection: some View {
+        VStack(spacing: 20) {
+            settingsCard(settingId: "planusage.current") {
+                VStack(alignment: .leading, spacing: 14) {
+                    HStack(spacing: 16) {
+                        Image(systemName: "creditcard.fill")
+                            .scaledFont(size: 28)
+                            .foregroundColor(OmiColors.purplePrimary)
+
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(currentPlanTitle)
+                                .scaledFont(size: 16, weight: .semibold)
+                                .foregroundColor(OmiColors.textPrimary)
+
+                            Text(currentPlanSubtitle)
+                                .scaledFont(size: 13)
+                                .foregroundColor(OmiColors.textTertiary)
+                        }
+
+                        Spacer()
+
+                        if isLoadingSubscription {
+                            ProgressView()
+                                .controlSize(.small)
+                        } else if hasPaidSubscription {
+                            Button(action: openCustomerPortal) {
+                                if isOpeningCustomerPortal {
+                                    ProgressView()
+                                        .controlSize(.small)
+                                } else {
+                                    Text("Manage")
+                                        .scaledFont(size: 13, weight: .semibold)
+                                }
+                            }
+                            .buttonStyle(.bordered)
+                            .disabled(isOpeningCustomerPortal)
+                        } else {
+                            Button("Refresh") {
+                                loadSubscriptionInfo()
+                            }
+                            .buttonStyle(.bordered)
+                            .disabled(isLoadingSubscription)
+                        }
+                    }
+
+                    if let periodText = currentPlanPeriodText {
+                        Divider()
+                            .overlay(OmiColors.backgroundQuaternary)
+
+                        Text(periodText)
+                            .scaledFont(size: 12)
+                            .foregroundColor(OmiColors.textSecondary)
+                    }
+
+                    if let error = subscriptionError {
+                        Text(error)
+                            .scaledFont(size: 12)
+                            .foregroundColor(OmiColors.warning)
+                    }
+                }
+            }
+
+            if shouldShowPlanPurchaseOptions {
+                settingsCard(settingId: "planusage.purchase") {
+                    VStack(alignment: .leading, spacing: 18) {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Choose a plan")
+                                .scaledFont(size: 15, weight: .semibold)
+                                .foregroundColor(OmiColors.textPrimary)
+
+                            Text("Pick one plan first. Billing options appear only after the card is selected.")
+                                .scaledFont(size: 12)
+                                .foregroundColor(OmiColors.textTertiary)
+                        }
+
+                        HStack(alignment: .top, spacing: 14) {
+                            ForEach(subscriptionPlansForDisplay) { plan in
+                                subscriptionPlanCard(plan)
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -4275,6 +4388,280 @@ struct SettingsContentView: View {
         }
     }
 
+    private var hasPaidSubscription: Bool {
+        guard let subscription = userSubscription?.subscription else { return false }
+        return subscription.plan != .basic && subscription.status == .active
+    }
+
+    private var shouldShowPlanPurchaseOptions: Bool {
+        guard let subscription = userSubscription else { return false }
+        return subscription.showSubscriptionUI && !hasPaidSubscription && !subscriptionPlansForDisplay.isEmpty
+    }
+
+    private var subscriptionPlansForDisplay: [SubscriptionPlanOption] {
+        let order = ["unlimited": 0, "pro": 1]
+        return (userSubscription?.availablePlans ?? []).sorted { lhs, rhs in
+            let lhsOrder = order[lhs.id, default: Int.max]
+            let rhsOrder = order[rhs.id, default: Int.max]
+            if lhsOrder != rhsOrder {
+                return lhsOrder < rhsOrder
+            }
+            return lhs.title < rhs.title
+        }
+    }
+
+    private var currentPlanTitle: String {
+        guard let subscription = userSubscription?.subscription else {
+            return isLoadingSubscription ? "Loading plan..." : "Basic"
+        }
+        switch subscription.plan {
+        case .basic:
+            return "Basic"
+        case .unlimited:
+            return "Unlimited Plan"
+        case .pro:
+            return "Omi Pro"
+        }
+    }
+
+    private var currentPlanSubtitle: String {
+        if isLoadingSubscription {
+            return "Fetching subscription details from omi."
+        }
+        if let detail = currentPlanBillingDetail {
+            return detail
+        }
+        if hasPaidSubscription {
+            return "Your paid plan is active."
+        }
+        return "You are currently on the free tier."
+    }
+
+    private var currentPlanBillingDetail: String? {
+        guard hasPaidSubscription,
+              let subscription = userSubscription?.subscription,
+              let currentPriceId = subscription.currentPriceId
+        else {
+            return nil
+        }
+
+        for plan in subscriptionPlansForDisplay {
+            if let price = plan.prices.first(where: { $0.id == currentPriceId }) {
+                return "\(plan.title) \(price.title) • \(price.priceString)"
+            }
+        }
+
+        return nil
+    }
+
+    private var currentPlanPeriodText: String? {
+        guard let subscription = userSubscription?.subscription else { return nil }
+        guard hasPaidSubscription, let periodEnd = subscription.currentPeriodEnd else { return nil }
+        let date = Date(timeIntervalSince1970: TimeInterval(periodEnd))
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .none
+        let prefix = subscription.cancelAtPeriodEnd ? "Access ends" : "Renews"
+        return "\(prefix) on \(formatter.string(from: date))"
+    }
+
+    private func planSubtitle(for planId: String) -> String? {
+        switch planId {
+        case "unlimited":
+            return "Current mobile and web subscription"
+        case "pro":
+            return "Desktop power-user tier"
+        default:
+            return nil
+        }
+    }
+
+    private func planAccentColor(for planId: String) -> Color {
+        planId == "pro" ? OmiColors.purplePrimary : OmiColors.success
+    }
+
+    private func planSummaryText(for plan: SubscriptionPlanOption) -> String {
+        preferredStartingPrice(for: plan)?.priceString ?? ""
+    }
+
+    private func preferredStartingPrice(for plan: SubscriptionPlanOption) -> SubscriptionPriceOption? {
+        let prices = sortedPrices(for: plan)
+        if let monthly = prices.first(where: { price in
+            let title = price.title.lowercased()
+            return title.contains("month")
+        }) {
+            return monthly
+        }
+        return prices.first
+    }
+
+    private func planEyebrow(for planId: String) -> String {
+        switch planId {
+        case "unlimited":
+            return "Most popular"
+        case "pro":
+            return "Automation + coding"
+        default:
+            return "Plan"
+        }
+    }
+
+    private func planDescription(for planId: String) -> String {
+        switch planId {
+        case "unlimited":
+            return "Uses the existing Unlimited subscription from mobile and web."
+        case "pro":
+            return "Unlock automations, vibe coding, and unlimited actions on desktop."
+        default:
+            return ""
+        }
+    }
+
+    private func sortedPrices(for plan: SubscriptionPlanOption) -> [SubscriptionPriceOption] {
+        plan.prices.sorted { lhs, rhs in
+            let lhsIsMonthly = lhs.title.lowercased().contains("month")
+            let rhsIsMonthly = rhs.title.lowercased().contains("month")
+            if lhsIsMonthly != rhsIsMonthly {
+                return lhsIsMonthly && !rhsIsMonthly
+            }
+            return lhs.title < rhs.title
+        }
+    }
+
+    @ViewBuilder
+    private func subscriptionPlanCard(_ plan: SubscriptionPlanOption) -> some View {
+        let isSelected = selectedPlanIdForCheckout == plan.id
+        let accent = planAccentColor(for: plan.id)
+
+        VStack(alignment: .leading, spacing: 16) {
+            HStack(alignment: .top, spacing: 12) {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(planEyebrow(for: plan.id).uppercased())
+                        .scaledFont(size: 10, weight: .bold)
+                        .foregroundColor(accent)
+                        .tracking(0.8)
+
+                    Text(plan.title)
+                        .scaledFont(size: 18, weight: .bold)
+                        .foregroundColor(OmiColors.textPrimary)
+
+                    if let subtitle = planSubtitle(for: plan.id) {
+                        Text(subtitle)
+                            .scaledFont(size: 12)
+                            .foregroundColor(OmiColors.textTertiary)
+                    }
+                }
+
+                Spacer()
+
+                VStack(alignment: .trailing, spacing: 2) {
+                    Text(planSummaryText(for: plan))
+                        .scaledFont(size: 17, weight: .bold)
+                        .foregroundColor(isSelected ? accent : OmiColors.textPrimary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.72)
+
+                    Text("starting price")
+                        .scaledFont(size: 10, weight: .medium)
+                        .foregroundColor(isSelected ? accent.opacity(0.8) : OmiColors.textTertiary)
+                }
+                .fixedSize(horizontal: true, vertical: false)
+            }
+
+            Text(planDescription(for: plan.id))
+                .scaledFont(size: 13)
+                .foregroundColor(OmiColors.textSecondary)
+
+            VStack(alignment: .leading, spacing: 8) {
+                ForEach(plan.features.prefix(4), id: \.self) { feature in
+                    HStack(spacing: 8) {
+                        ZStack {
+                            Circle()
+                                .fill(accent.opacity(0.16))
+                                .frame(width: 18, height: 18)
+                            Image(systemName: "checkmark")
+                                .scaledFont(size: 9, weight: .bold)
+                                .foregroundColor(accent)
+                        }
+                        Text(feature)
+                            .scaledFont(size: 13, weight: .medium)
+                            .foregroundColor(OmiColors.textSecondary)
+                    }
+                }
+            }
+
+            if isSelected {
+                Divider()
+                    .overlay(OmiColors.backgroundQuaternary)
+
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("Choose billing")
+                        .scaledFont(size: 12, weight: .semibold)
+                        .foregroundColor(OmiColors.textTertiary)
+
+                    HStack(spacing: 10) {
+                        ForEach(sortedPrices(for: plan)) { price in
+                            Button(action: {
+                                startCheckout(for: price.id)
+                            }) {
+                                Group {
+                                    if activeCheckoutPriceId == price.id {
+                                        ProgressView()
+                                            .controlSize(.small)
+                                            .frame(maxWidth: .infinity)
+                                    } else {
+                                        VStack(spacing: 3) {
+                                            Text(price.title)
+                                                .scaledFont(size: 12, weight: .bold)
+                                            Text(price.priceString)
+                                                .scaledFont(size: 11)
+                                                .foregroundColor(Color.white.opacity(0.92))
+                                        }
+                                        .foregroundColor(.white)
+                                        .frame(maxWidth: .infinity)
+                                    }
+                                }
+                                .padding(.vertical, 10)
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .tint(accent)
+                            .disabled(activeCheckoutPriceId != nil)
+                        }
+                    }
+                }
+            } else {
+                Button(action: {
+                    selectedPlanIdForCheckout = plan.id
+                }) {
+                    HStack {
+                        Text("Select \(plan.title)")
+                            .scaledFont(size: 12, weight: .bold)
+                        Spacer()
+                        Image(systemName: "arrow.right")
+                            .scaledFont(size: 11, weight: .bold)
+                    }
+                    .padding(.vertical, 10)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(accent)
+            }
+        }
+        .padding(20)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 18)
+                .fill(isSelected ? accent.opacity(0.12) : OmiColors.backgroundPrimary.opacity(0.68))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 18)
+                        .stroke(isSelected ? accent.opacity(0.85) : OmiColors.backgroundQuaternary, lineWidth: isSelected ? 1.5 : 1)
+                )
+        )
+        .contentShape(RoundedRectangle(cornerRadius: 18))
+        .onTapGesture {
+            selectedPlanIdForCheckout = plan.id
+        }
+    }
+
     // MARK: - Language Helpers
 
     /// Whether the selected language supports auto-detect mode
@@ -4565,6 +4952,217 @@ struct SettingsContentView: View {
         }
     }
 
+    private func loadSubscriptionInfo() {
+        guard !isLoadingSubscription else { return }
+        isLoadingSubscription = true
+        subscriptionError = nil
+
+        Task {
+            do {
+                let subscription = try await APIClient.shared.getUserSubscription()
+                await MainActor.run {
+                    userSubscription = subscription
+                    isLoadingSubscription = false
+                }
+            } catch {
+                logError("Failed to load subscription", error: error)
+                await MainActor.run {
+                    subscriptionError = "Failed to load plan information."
+                    isLoadingSubscription = false
+                }
+            }
+        }
+    }
+
+    private func startCheckout(for priceId: String) {
+        guard activeCheckoutPriceId == nil else { return }
+        activeCheckoutPriceId = priceId
+        pendingSubscriptionPriceId = priceId
+        subscriptionError = nil
+
+        Task {
+            do {
+                let response = try await APIClient.shared.createCheckoutSession(priceId: priceId)
+                let apiBaseURL = await APIClient.shared.baseURL
+                await MainActor.run {
+                    activeCheckoutPriceId = nil
+                    pendingCheckoutSessionId = response.sessionId
+                }
+
+                if response.status == "reactivated" {
+                    await MainActor.run {
+                        subscriptionError = nil
+                        pendingSubscriptionPriceId = nil
+                        pendingCheckoutSessionId = nil
+                        loadSubscriptionInfo()
+                    }
+                } else if let urlString = response.url, let url = URL(string: urlString) {
+                    let normalizedBaseURL = apiBaseURL.hasSuffix("/") ? apiBaseURL : apiBaseURL + "/"
+                    await MainActor.run {
+                        activeBillingWebFlow = BillingWebFlow(
+                            title: "Complete Your Upgrade",
+                            url: url,
+                            completionURLs: [
+                                normalizedBaseURL + "v1/payments/success",
+                                normalizedBaseURL + "v1/payments/cancel",
+                            ]
+                        )
+                    }
+                } else {
+                    await MainActor.run {
+                        subscriptionError = response.message ?? "Could not start checkout."
+                    }
+                }
+            } catch {
+                logError("Failed to create checkout session", error: error)
+                await MainActor.run {
+                    activeCheckoutPriceId = nil
+                    pendingSubscriptionPriceId = nil
+                    pendingCheckoutSessionId = nil
+                    subscriptionError = "Failed to open checkout."
+                }
+            }
+        }
+    }
+
+    private func openCustomerPortal() {
+        guard !isOpeningCustomerPortal else { return }
+        isOpeningCustomerPortal = true
+        subscriptionError = nil
+
+        Task {
+            do {
+                let response = try await APIClient.shared.createCustomerPortalSession()
+                await MainActor.run {
+                    isOpeningCustomerPortal = false
+                }
+
+                if let url = URL(string: response.url) {
+                    await MainActor.run {
+                        openURLInDefaultBrowser(url)
+                        subscriptionError = "Billing portal opened in your browser."
+                    }
+                } else {
+                    await MainActor.run {
+                        subscriptionError = "Could not open billing portal."
+                    }
+                }
+            } catch {
+                logError("Failed to open customer portal", error: error)
+                await MainActor.run {
+                    isOpeningCustomerPortal = false
+                    subscriptionError = "Failed to open billing portal."
+                }
+            }
+        }
+    }
+
+    private func handleBillingFlowCompletion(_ outcome: BillingWebFlowOutcome) {
+        switch outcome {
+        case .completed:
+            Task {
+                await completeLocalTestSubscriptionIfNeeded()
+                await MainActor.run {
+                    pollForUpdatedSubscription()
+                }
+            }
+        case .cancelled, .dismissed:
+            pendingSubscriptionPriceId = nil
+            pendingCheckoutSessionId = nil
+            loadSubscriptionInfo()
+        }
+    }
+
+    private func pollForUpdatedSubscription() {
+        let expectedPriceId = pendingSubscriptionPriceId
+
+        Task {
+            for attempt in 0..<8 {
+                do {
+                    let subscription = try await APIClient.shared.getUserSubscription()
+                    let matchedPrice = expectedPriceId == nil || subscription.subscription.currentPriceId == expectedPriceId
+                    let hasPaidPlan = subscription.subscription.plan != .basic && subscription.subscription.status == .active
+
+                    if matchedPrice && hasPaidPlan {
+                        await MainActor.run {
+                            userSubscription = subscription
+                            subscriptionError = nil
+                            pendingSubscriptionPriceId = nil
+                            pendingCheckoutSessionId = nil
+                        }
+                        return
+                    }
+
+                    if attempt == 7 {
+                        await MainActor.run {
+                            userSubscription = subscription
+                            subscriptionError = "Payment completed, but plan refresh is still catching up. Click Refresh in a moment."
+                            pendingSubscriptionPriceId = nil
+                            pendingCheckoutSessionId = nil
+                        }
+                        return
+                    }
+
+                    try await Task.sleep(nanoseconds: 1_000_000_000)
+                } catch {
+                    if attempt == 7 {
+                        await MainActor.run {
+                            subscriptionError = "Payment completed, but subscription refresh failed."
+                            pendingSubscriptionPriceId = nil
+                            pendingCheckoutSessionId = nil
+                        }
+                        return
+                    }
+
+                    try? await Task.sleep(nanoseconds: 1_000_000_000)
+                }
+            }
+        }
+    }
+
+    private func completeLocalTestSubscriptionIfNeeded() async {
+        guard let expectedPriceId = pendingSubscriptionPriceId else { return }
+        let checkoutSessionId = pendingCheckoutSessionId
+        let baseURL = await APIClient.shared.baseURL
+        guard baseURL.hasPrefix("http://127.0.0.1:8787/") || baseURL.hasPrefix("http://localhost:8787/") else {
+            return
+        }
+
+        guard let encodedPriceId = expectedPriceId.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) else {
+            return
+        }
+
+        var urlString = "\(baseURL)test/complete-subscription?price_id=\(encodedPriceId)"
+        if let checkoutSessionId,
+           let encodedSessionId = checkoutSessionId.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) {
+            urlString += "&session_id=\(encodedSessionId)"
+        }
+
+        guard let url = URL(string: urlString) else { return }
+
+        do {
+            _ = try await URLSession.shared.data(from: url)
+        } catch {
+            logError("Failed to complete local test subscription", error: error)
+        }
+    }
+
+    private func openURLInDefaultBrowser(_ url: URL) {
+        if let appURL = NSWorkspace.shared.urlForApplication(toOpen: url) {
+            let configuration = NSWorkspace.OpenConfiguration()
+            configuration.activates = true
+            NSWorkspace.shared.open([url], withApplicationAt: appURL, configuration: configuration) { _, error in
+                if let error {
+                    NSLog("OMI SETTINGS: Failed to open browser URL %@: %@", url.absoluteString, error.localizedDescription)
+                    NSWorkspace.shared.open(url)
+                }
+            }
+            return
+        }
+
+        NSWorkspace.shared.open(url)
+    }
+
     private func updateDailySummarySettings(enabled: Bool? = nil, hour: Int? = nil) {
         Task {
             do {
@@ -4662,6 +5260,129 @@ struct SettingsContentView: View {
                     deleteAccountError = "Failed to delete account: \(error.localizedDescription)"
                     isDeletingAccount = false
                 }
+            }
+        }
+    }
+
+}
+
+private struct BillingWebFlow: Identifiable {
+    let id = UUID()
+    let title: String
+    let url: URL
+    let completionURLs: [String]
+}
+
+private enum BillingWebFlowOutcome {
+    case completed
+    case cancelled
+    case dismissed
+}
+
+private struct BillingWebFlowSheet: View {
+    let flow: BillingWebFlow
+    let onComplete: (BillingWebFlowOutcome) -> Void
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 12) {
+                Text(flow.title)
+                    .scaledFont(size: 18, weight: .semibold)
+                    .foregroundColor(OmiColors.textPrimary)
+
+                Spacer()
+
+                Button("Close") {
+                    onComplete(.dismissed)
+                }
+                .buttonStyle(.plain)
+                .foregroundColor(OmiColors.textSecondary)
+            }
+            .padding(.horizontal, 20)
+            .padding(.vertical, 16)
+            .background(OmiColors.backgroundTertiary)
+
+            Divider()
+
+            BillingWebView(flow: flow, onComplete: onComplete)
+                .frame(minWidth: 860, minHeight: 680)
+        }
+        .background(OmiColors.backgroundPrimary)
+    }
+}
+
+private struct BillingWebView: NSViewRepresentable {
+    let flow: BillingWebFlow
+    let onComplete: (BillingWebFlowOutcome) -> Void
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(flow: flow, onComplete: onComplete)
+    }
+
+    func makeNSView(context: Context) -> WKWebView {
+        let configuration = WKWebViewConfiguration()
+        configuration.defaultWebpagePreferences.allowsContentJavaScript = true
+
+        let webView = WKWebView(frame: .zero, configuration: configuration)
+        webView.navigationDelegate = context.coordinator
+        webView.uiDelegate = context.coordinator
+        webView.setValue(false, forKey: "drawsBackground")
+        webView.load(URLRequest(url: flow.url))
+        return webView
+    }
+
+    func updateNSView(_ nsView: WKWebView, context: Context) {}
+
+    final class Coordinator: NSObject, WKNavigationDelegate, WKUIDelegate {
+        private let flow: BillingWebFlow
+        private let onComplete: (BillingWebFlowOutcome) -> Void
+        private var completionHandled = false
+
+        init(flow: BillingWebFlow, onComplete: @escaping (BillingWebFlowOutcome) -> Void) {
+            self.flow = flow
+            self.onComplete = onComplete
+        }
+
+        func webView(
+            _ webView: WKWebView,
+            decidePolicyFor navigationAction: WKNavigationAction,
+            decisionHandler: @escaping (WKNavigationActionPolicy) -> Void
+        ) {
+            guard let url = navigationAction.request.url?.absoluteString else {
+                decisionHandler(.allow)
+                return
+            }
+
+            if let matchedCompletionURL = flow.completionURLs.first(where: { url.hasPrefix($0) }) {
+                if matchedCompletionURL.hasSuffix("/cancel") {
+                    finish(.cancelled)
+                } else {
+                    finish(.completed)
+                }
+                decisionHandler(.cancel)
+                return
+            }
+
+            decisionHandler(.allow)
+        }
+
+        func webView(
+            _ webView: WKWebView,
+            createWebViewWith configuration: WKWebViewConfiguration,
+            for navigationAction: WKNavigationAction,
+            windowFeatures: WKWindowFeatures
+        ) -> WKWebView? {
+            if navigationAction.targetFrame == nil, let requestURL = navigationAction.request.url {
+                webView.load(URLRequest(url: requestURL))
+            }
+            return nil
+        }
+
+        private func finish(_ outcome: BillingWebFlowOutcome) {
+            guard !completionHandled else { return }
+            completionHandled = true
+            DispatchQueue.main.async {
+                self.onComplete(outcome)
             }
         }
     }

@@ -763,7 +763,7 @@ def get_user_valid_subscription(uid: str) -> Optional[Subscription]:
     if subscription.plan == PlanType.basic:
         return subscription if subscription.status == SubscriptionStatus.active else None
 
-    # For paid plans (e.g., unlimited), validity is determined by the period end.
+    # For paid plans, validity is determined by the period end.
     if subscription.current_period_end:
         period_end_dt = datetime.fromtimestamp(subscription.current_period_end, tz=timezone.utc)
         if period_end_dt >= datetime.now(timezone.utc):
