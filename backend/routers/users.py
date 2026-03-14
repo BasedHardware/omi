@@ -937,24 +937,20 @@ def test_daily_summary(request: TestDailySummaryRequest = None, uid: str = Depen
                 start_of_day = user_tz.localize(datetime.combine(target_date, time.min))
                 end_of_day = user_tz.localize(datetime.combine(target_date, time.max))
             else:
-                # Use past 24 hours
+                # Use local day boundaries (midnight-to-midnight)
                 now_in_user_tz = datetime.now(user_tz)
-                end_date_utc = now_in_user_tz.astimezone(pytz.utc)
-                start_date_utc = (now_in_user_tz - timedelta(hours=24)).astimezone(pytz.utc)
 
-                # Determine display date based on current hour
+                # Determine which calendar day to summarize
                 if now_in_user_tz.hour < 12:
                     display_date = now_in_user_tz.date() - timedelta(days=1)
                 else:
                     display_date = now_in_user_tz.date()
                 date_str = display_date.strftime('%Y-%m-%d')
-                # Skip the conversion below since we already have UTC times
-                start_of_day = None
-                end_of_day = None
+                start_of_day = user_tz.localize(datetime.combine(display_date, time.min))
+                end_of_day = user_tz.localize(datetime.combine(display_date, time.max))
 
-            if start_of_day and end_of_day:
-                start_date_utc = start_of_day.astimezone(pytz.utc)
-                end_date_utc = end_of_day.astimezone(pytz.utc)
+            start_date_utc = start_of_day.astimezone(pytz.utc)
+            end_date_utc = end_of_day.astimezone(pytz.utc)
         except Exception as e:
             raise HTTPException(status_code=500, detail=f'Timezone error: {str(e)}')
     else:
@@ -964,16 +960,14 @@ def test_daily_summary(request: TestDailySummaryRequest = None, uid: str = Depen
             start_date_utc = datetime.combine(target_date, time.min).replace(tzinfo=pytz.utc)
             end_date_utc = datetime.combine(target_date, time.max).replace(tzinfo=pytz.utc)
         else:
-            # Use past 24 hours
-            end_date_utc = now_utc
-            start_date_utc = now_utc - timedelta(hours=24)
-
-            # Determine display date based on current hour
+            # Use UTC day boundaries
             if now_utc.hour < 12:
                 display_date = now_utc.date() - timedelta(days=1)
             else:
                 display_date = now_utc.date()
             date_str = display_date.strftime('%Y-%m-%d')
+            start_date_utc = datetime.combine(display_date, time.min).replace(tzinfo=pytz.utc)
+            end_date_utc = datetime.combine(display_date, time.max).replace(tzinfo=pytz.utc)
 
     # Get conversations for the date
     conversations_data = conversations_db.get_conversations(uid, start_date=start_date_utc, end_date=end_date_utc)
