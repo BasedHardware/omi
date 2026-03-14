@@ -9,23 +9,6 @@ const newFrameSyncDelaySeconds = 15;
 const framesPerFlashPage = 8;
 const secondsPerFlashPage = 1.4;
 
-/// Counts opus frames in raw bytes stored as [1-byte size prefix][opus data] per frame.
-int countOpusFramesFromRawBytes(List<int> rawBytes) {
-  int count = 0;
-  int offset = 0;
-  while (offset < rawBytes.length) {
-    var size = rawBytes[offset];
-    if (size == 0) {
-      offset += 1;
-      continue;
-    }
-    if (offset + 1 + size > rawBytes.length) break;
-    count++;
-    offset += 1 + size;
-  }
-  return count;
-}
-
 enum WalStatus { inProgress, miss, synced, corrupted }
 
 enum WalStorage { mem, disk, sdcard, flashPage }

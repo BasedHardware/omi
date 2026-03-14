@@ -426,12 +426,14 @@ class SDCardWalSyncImpl implements SDCardWalSync {
       int timerStart = DateTime.now().millisecondsSinceEpoch ~/ 1000 - accurateDuration;
 
       int bytesLeft = 0;
+      int chunkOffset = wal.storageOffset;
       while (bytesData.length - bytesLeft >= chunkSize) {
         var chunk = bytesData.sublist(bytesLeft, bytesLeft + chunkSize);
         bytesLeft += chunkSize;
+        chunkOffset += chunkSize * wal.codec.getFramesLengthInBytes();
         try {
           var file = await _flushToDisk(wal, chunk, timerStart);
-          await callback(file, offset, timerStart, chunk.length);
+          await callback(file, chunkOffset, timerStart, chunk.length);
         } catch (e) {
           Logger.debug('Error in callback during chunking: $e');
           hasError = true;
@@ -441,8 +443,9 @@ class SDCardWalSyncImpl implements SDCardWalSync {
       }
       if (!hasError && bytesLeft < bytesData.length) {
         var chunk = bytesData.sublist(bytesLeft);
+        chunkOffset += chunk.length * wal.codec.getFramesLengthInBytes();
         var file = await _flushToDisk(wal, chunk, timerStart);
-        await callback(file, offset, timerStart, chunk.length);
+        await callback(file, chunkOffset, timerStart, chunk.length);
       }
     }
 
