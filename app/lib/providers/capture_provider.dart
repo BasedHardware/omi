@@ -76,6 +76,8 @@ class CaptureProvider extends ChangeNotifier
   TranscriptSegmentSocketService? _socket;
   Timer? _keepAliveTimer;
   DateTime? _keepAliveLastExecutedAt;
+  int _reconnectAttempt = 0;
+  static const int _maxBackoffSeconds = 120;
 
   // Method channel for system audio permissions
   static late MethodChannel _screenCaptureChannel;
@@ -1374,26 +1376,28 @@ class CaptureProvider extends ChangeNotifier
     _startKeepAliveServices();
   }
 
+  Duration _getReconnectDelay() {
+    final cap = min(pow(2, _reconnectAttempt), _maxBackoffSeconds).toInt();
+    final jitterMs = cap > 0 ? Random().nextInt(cap * 1000) : 1000;
+    return Duration(milliseconds: jitterMs);
+  }
+
   void _startKeepAliveServices() {
     _keepAliveTimer?.cancel();
-    _keepAliveTimer = Timer.periodic(const Duration(seconds: 15), (t) async {
+    final delay = _getReconnectDelay();
+    _reconnectAttempt++;
+    Logger.debug(
+      "[Provider] keep alive - scheduling reconnect in ${delay.inMilliseconds}ms (attempt $_reconnectAttempt)",
+    );
+    _keepAliveTimer = Timer(delay, () async {
       Logger.debug("[Provider] keep alive");
-      // rate 1/15s
-      if (_keepAliveLastExecutedAt != null &&
-          DateTime.now().subtract(const Duration(seconds: 15)).isBefore(_keepAliveLastExecutedAt!)) {
-        Logger.debug("[Provider] keep alive - hitting rate limits 1/15s");
-        return;
-      }
 
-      _keepAliveLastExecutedAt = DateTime.now();
       if (!recordingDeviceServiceReady || _socket?.state == SocketServiceState.connected) {
-        t.cancel();
         return;
       }
 
       if (!AuthService.instance.isSignedIn()) {
         Logger.debug("[Provider] keep alive - user not signed in, cancelling reconnect");
-        t.cancel();
         return;
       }
 
@@ -1419,6 +1423,8 @@ class CaptureProvider extends ChangeNotifier
         );
         return;
       }
+      // If we get here without reconnecting, schedule another attempt
+      _startKeepAliveServices();
     });
   }
 
@@ -1443,6 +1449,7 @@ class CaptureProvider extends ChangeNotifier
 
   @override
   void onConnected() {
+    _reconnectAttempt = 0;
     _transcriptServiceReady = true;
     notifyListeners();
   }
