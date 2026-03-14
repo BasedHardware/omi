@@ -1,5 +1,6 @@
 package com.friend.ios
 
+import android.app.Activity
 import android.content.Context
 import android.media.AudioManager
 import android.util.Log
@@ -19,7 +20,8 @@ import io.flutter.plugin.common.MethodChannel
  * Integrates with Twilio Voice SDK for VoIP calling with real-time audio capture.
  */
 class PhoneCallsPlugin private constructor(
-    private val context: Context
+    private val context: Context,
+    private val activity: Activity?
 ) : MethodChannel.MethodCallHandler, EventChannel.StreamHandler {
 
     private var eventSink: EventChannel.EventSink? = null
@@ -36,7 +38,8 @@ class PhoneCallsPlugin private constructor(
         private const val EVENT_CHANNEL = "com.omi/phone_calls/events"
 
         fun registerWith(flutterEngine: FlutterEngine, context: Context) {
-            val instance = PhoneCallsPlugin(context)
+            val activity = context as? Activity
+            val instance = PhoneCallsPlugin(context, activity)
 
             // Wire audio data callback to stream captured audio to Flutter
             instance.audioDevice.onAudioData = { data, channel ->
@@ -162,11 +165,13 @@ class PhoneCallsPlugin private constructor(
     }
 
     private fun handleEndCall(result: MethodChannel.Result) {
-        activeCall?.disconnect()
-        resetAudioMode()
-        sendCallStateEvent("ended")
-        activeCall = null
-        currentCallId = null
+        if (activeCall == null) {
+            resetAudioMode()
+            sendCallStateEvent("ended")
+        } else {
+            // onDisconnected callback will handle resetAudioMode + state event
+            activeCall?.disconnect()
+        }
         result.success(null)
     }
 
@@ -192,6 +197,7 @@ class PhoneCallsPlugin private constructor(
     private fun setAudioModeInCommunication() {
         val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
         audioManager.mode = AudioManager.MODE_IN_COMMUNICATION
+        activity?.volumeControlStream = AudioManager.STREAM_VOICE_CALL
     }
 
     private fun resetAudioMode() {
@@ -199,6 +205,7 @@ class PhoneCallsPlugin private constructor(
         audioManager.mode = AudioManager.MODE_NORMAL
         audioManager.isSpeakerphoneOn = false
         isSpeakerOn = false
+        activity?.volumeControlStream = AudioManager.USE_DEFAULT_STREAM_TYPE
     }
 
     // MARK: - Event Sending
