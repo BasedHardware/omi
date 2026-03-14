@@ -48,6 +48,7 @@ import 'package:omi/providers/announcement_provider.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/message_provider.dart';
 import 'package:omi/providers/sync_provider.dart';
+import 'package:omi/pages/settings/widgets/e2ee_key_recovery_dialog.dart';
 import 'package:omi/providers/user_provider.dart';
 
 import 'package:omi/services/announcement_service.dart';
@@ -79,10 +80,31 @@ class HomePageWrapper extends StatefulWidget {
 class _HomePageWrapperState extends State<HomePageWrapper> {
   String? _navigateToRoute;
   String? _autoMessage;
+  bool _e2eeChecked = false;
 
   @override
   void initState() {
     WidgetsBinding.instance.addPostFrameCallback((_) async {
+      // E2EE key recovery check — must happen before any data loads
+      if (mounted && !_e2eeChecked) {
+        _e2eeChecked = true;
+        final userProvider = context.read<UserProvider>();
+        if (!userProvider.isLoading && userProvider.needsKeyRecovery) {
+          await _showE2eeRecovery(userProvider);
+        } else if (userProvider.isLoading) {
+          // Wait for UserProvider to finish initializing
+          void listener() async {
+            if (!userProvider.isLoading && mounted) {
+              userProvider.removeListener(listener);
+              if (userProvider.needsKeyRecovery) {
+                await _showE2eeRecovery(userProvider);
+              }
+            }
+          }
+          userProvider.addListener(listener);
+        }
+      }
+
       if (mounted) {
         context.read<DeviceProvider>().periodicConnect('coming from HomePageWrapper', boundDeviceOnly: true);
       }
@@ -481,6 +503,17 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
       // Register callback for device connection to check firmware announcements
       deviceProvider.onDeviceConnected = _onDeviceConnectedForAnnouncements;
     });
+  }
+
+  Future<void> _showE2eeRecovery(UserProvider userProvider) async {
+    await showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => ChangeNotifierProvider.value(
+        value: userProvider,
+        child: const E2eeKeyRecoveryDialog(),
+      ),
+    );
   }
 
   void _onDeviceConnectedForAnnouncements(BtDevice device) async {

@@ -12,8 +12,6 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/pages/home/page.dart';
 import 'package:omi/pages/onboarding/auth.dart';
-import 'package:omi/pages/settings/widgets/e2ee_key_recovery_dialog.dart';
-import 'package:omi/providers/user_provider.dart';
 import 'package:omi/pages/onboarding/found_omi/found_omi_widget.dart';
 import 'package:omi/pages/onboarding/knowledge_graph_step.dart';
 import 'package:omi/pages/onboarding/name/name_widget.dart';
@@ -237,28 +235,12 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
   Widget build(BuildContext context) {
     List<Widget> pages = [
       AuthComponent(
-        onSignIn: () async {
+        onSignIn: () {
           SharedPreferencesUtil().hasOmiDevice = true;
           SharedPreferencesUtil().verifiedPersonaId = null;
           MixpanelManager().onboardingStepCompleted('Auth');
           context.read<HomeProvider>().setupHasSpeakerProfile();
           IntercomManager.instance.loginIdentifiedUser(SharedPreferencesUtil().uid);
-
-          // Check for E2EE key recovery immediately after sign-in
-          final userProvider = context.read<UserProvider>();
-          await userProvider.initialize();
-          if (mounted && userProvider.needsKeyRecovery) {
-            await showDialog(
-              context: context,
-              barrierDismissible: false,
-              builder: (_) => ChangeNotifierProvider.value(
-                value: userProvider,
-                child: const E2eeKeyRecoveryDialog(),
-              ),
-            );
-          }
-
-          if (!mounted) return;
           if (SharedPreferencesUtil().onboardingCompleted) {
             routeToPage(context, const HomePageWrapper(), replace: true);
           } else {
