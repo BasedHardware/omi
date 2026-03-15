@@ -227,6 +227,43 @@ final class DesktopAutomationBridge {
           statusCode: 400
         )
       }
+    case ("POST", "/gmail-read"):
+      do {
+        let emails = try await GmailReaderService.shared.readRecentEmails(maxResults: 50)
+        let result = await GmailReaderService.shared.saveAsMemories(emails: emails)
+        struct GmailReadResult: Codable {
+          let emailCount: Int
+          let memoriesSaved: Int
+          let memoriesFailed: Int
+          let emails: [GmailEmailSummary]
+        }
+        struct GmailEmailSummary: Codable {
+          let from: String
+          let subject: String
+          let snippet: String
+          let date: String
+          let isUnread: Bool
+        }
+        let formatter = ISO8601DateFormatter()
+        let summaries = emails.prefix(50).map { e in
+          GmailEmailSummary(
+            from: e.from, subject: e.subject, snippet: e.snippet,
+            date: formatter.string(from: e.date), isUnread: e.isUnread)
+        }
+        let gmailResult = GmailReadResult(
+          emailCount: emails.count,
+          memoriesSaved: result.saved,
+          memoriesFailed: result.failed,
+          emails: summaries
+        )
+        return jsonResponse(DesktopAutomationResponse(ok: true, result: gmailResult, error: nil))
+      } catch {
+        struct ErrorResult: Codable { let message: String }
+        return jsonResponse(
+          DesktopAutomationResponse(ok: false, result: ErrorResult(message: error.localizedDescription), error: error.localizedDescription),
+          statusCode: 500
+        )
+      }
     default:
       return jsonResponse(
         DesktopAutomationResponse<DesktopAutomationSnapshot>(
