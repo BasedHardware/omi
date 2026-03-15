@@ -671,18 +671,22 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                   left: 20,
                                   bottom: 100,
                                   child: GestureDetector(
-                                    onTap: () {
+                                    onTap: () async {
                                       HapticFeedback.mediumImpact();
                                       MixpanelManager().bottomNavigationTabClicked('Phone Calls');
                                       var usageProvider = context.read<UsageProvider>();
-                                      if (usageProvider.isLoading) return;
+                                      if (usageProvider.subscription == null) {
+                                        await usageProvider.fetchSubscription();
+                                      }
                                       var isUnlimited =
                                           usageProvider.subscription?.subscription.plan == PlanType.unlimited;
                                       if (!isUnlimited) {
                                         MixpanelManager().phoneCallUpsellShown(source: 'home');
+                                        if (!context.mounted) return;
                                         showPhoneCallsUpsell(context);
                                         return;
                                       }
+                                      if (!context.mounted) return;
                                       Navigator.push(
                                         context,
                                         MaterialPageRoute(
