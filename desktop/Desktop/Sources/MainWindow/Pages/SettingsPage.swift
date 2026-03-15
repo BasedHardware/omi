@@ -260,6 +260,7 @@ struct SettingsContentView: View {
         case askOmiFloatingBar = "Ask omi Floating Bar"
         case preferences = "Preferences"
         case troubleshooting = "Troubleshooting"
+        case gmailReader = "Gmail Reader"
 
         var icon: String {
             switch self {
@@ -275,6 +276,7 @@ struct SettingsContentView: View {
             case .askOmiFloatingBar: return "sparkles"
             case .preferences: return "slider.horizontal.3"
             case .troubleshooting: return "wrench.and.screwdriver"
+            case .gmailReader: return "envelope.fill"
             }
         }
     }
@@ -282,6 +284,14 @@ struct SettingsContentView: View {
     @State private var showResetOnboardingAlert: Bool = false
     @State private var showRescanFilesAlert: Bool = false
     @State private var showDeleteAccountAlert: Bool = false
+
+    // Gmail Reader states
+    @State private var gmailEmails: [GmailEmail] = []
+    @State private var isReadingGmail: Bool = false
+    @State private var isSavingGmailMemories: Bool = false
+    @State private var gmailMemoriesSaved: Int = 0
+    @State private var gmailReadError: String?
+    @State private var gmailLastFetched: Date?
     @State private var isDeletingAccount: Bool = false
     @State private var deleteAccountError: String?
 
@@ -2501,6 +2511,8 @@ struct SettingsContentView: View {
             preferencesSubsection
             advancedCategoryHeader(title: "Troubleshooting", icon: "wrench.and.screwdriver")
             troubleshootingSubsection
+            advancedCategoryHeader(title: "Gmail Reader", icon: "envelope.fill")
+            gmailReaderSubsection
         }
     }
 
@@ -3944,6 +3956,150 @@ struct SettingsContentView: View {
                 Text("This will reset onboarding for this app build only, clear onboarding chat history, and restart the app without affecting the other installed build.")
             }
         }
+    }
+
+    // MARK: - Gmail Reader Subsection
+
+    private var gmailReaderSubsection: some View {
+        VStack(spacing: 20) {
+            // Read Gmail button
+            settingsCard(settingId: "advanced.gmail.read") {
+                HStack(spacing: 16) {
+                    Image(systemName: "envelope.badge")
+                        .scaledFont(size: 16)
+                        .foregroundColor(OmiColors.textSecondary)
+                        .frame(width: 24, height: 24)
+
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Read Gmail")
+                            .scaledFont(size: 16, weight: .semibold)
+                            .foregroundColor(OmiColors.textPrimary)
+
+                        if let lastFetched = gmailLastFetched {
+                            Text("Last read \(lastFetched, formatter: relativeDateFormatter)")
+                                .scaledFont(size: 13)
+                                .foregroundColor(OmiColors.textTertiary)
+                        } else {
+                            Text("Reads recent emails using browser cookies — no OAuth needed")
+                                .scaledFont(size: 13)
+                                .foregroundColor(OmiColors.textTertiary)
+                        }
+                    }
+
+                    Spacer()
+
+                    Button(action: {
+                        Task { await readGmail() }
+                    }) {
+                        if isReadingGmail {
+                            ProgressView()
+                                .scaleEffect(0.7)
+                                .frame(width: 60, height: 22)
+                        } else {
+                            Text("Read Gmail")
+                                .scaledFont(size: 13, weight: .medium)
+                                .foregroundColor(.white)
+                                .padding(.horizontal, 14)
+                                .padding(.vertical, 6)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 6)
+                                        .fill(OmiColors.purplePrimary)
+                                )
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(isReadingGmail)
+                }
+            }
+
+            // Error card
+            if let error = gmailReadError {
+                settingsCard(settingId: "advanced.gmail.error") {
+                    HStack(spacing: 12) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .foregroundColor(.orange)
+                        Text(error)
+                            .scaledFont(size: 13)
+                            .foregroundColor(OmiColors.textSecondary)
+                            .lineLimit(3)
+                        Spacer()
+                    }
+                }
+            }
+
+            // Memory save status
+            if gmailMemoriesSaved > 0 {
+                settingsCard(settingId: "advanced.gmail.saved") {
+                    HStack(spacing: 12) {
+                        Image(systemName: "checkmark.circle.fill")
+                            .foregroundColor(.green)
+                        Text("\(gmailMemoriesSaved) emails saved as memories")
+                            .scaledFont(size: 13)
+                            .foregroundColor(OmiColors.textSecondary)
+                        Spacer()
+                    }
+                }
+            }
+
+            // Email list
+            if !gmailEmails.isEmpty {
+                VStack(spacing: 8) {
+                    ForEach(gmailEmails.prefix(20)) { email in
+                        settingsCard(settingId: "advanced.gmail.email.\(email.id)") {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(email.subject)
+                                    .scaledFont(size: 14, weight: .medium)
+                                    .foregroundColor(OmiColors.textPrimary)
+                                    .lineLimit(1)
+
+                                Text(email.from)
+                                    .scaledFont(size: 12)
+                                    .foregroundColor(OmiColors.textSecondary)
+                                    .lineLimit(1)
+
+                                if !email.snippet.isEmpty {
+                                    Text(email.snippet)
+                                        .scaledFont(size: 12)
+                                        .foregroundColor(OmiColors.textTertiary)
+                                        .lineLimit(2)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private func readGmail() async {
+        isReadingGmail = true
+        gmailReadError = nil
+        gmailMemoriesSaved = 0
+
+        do {
+            let emails = try await GmailReaderService.shared.readRecentEmails(maxResults: 50)
+            gmailEmails = emails
+            gmailLastFetched = Date()
+
+            if !emails.isEmpty {
+                isSavingGmailMemories = true
+                let result = await GmailReaderService.shared.saveAsMemories(emails: emails)
+                gmailMemoriesSaved = result.saved
+                isSavingGmailMemories = false
+            }
+        } catch {
+            gmailReadError = error.localizedDescription
+        }
+
+        isReadingGmail = false
+    }
+
+    private var relativeDateFormatter: DateFormatter {
+        let formatter = DateFormatter()
+        formatter.doesRelativeDateFormatting = true
+        formatter.dateStyle = .short
+        formatter.timeStyle = .short
+        return formatter
     }
 
     private func tierPickerRow(tier: Int, label: String, subtitle: String) -> some View {
