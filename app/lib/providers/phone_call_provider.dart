@@ -237,6 +237,12 @@ class PhoneCallProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  void sendDtmf(String digit) {
+    if (_callState == PhoneCallState.active) {
+      _nativeService.sendDtmf(digit);
+    }
+  }
+
   // ************************************************
   // ************* SPEAKER LABELS *******************
   // ************************************************
