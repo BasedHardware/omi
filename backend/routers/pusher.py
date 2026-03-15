@@ -28,6 +28,7 @@ from utils.webhooks import (
     get_audio_bytes_webhook_seconds,
 )
 from utils.other.storage import upload_audio_chunk, upload_audio_chunks_batch
+from utils.metrics import PUSHER_ACTIVE_WS_CONNECTIONS
 from utils.speaker_identification import extract_speaker_samples
 import logging
 
@@ -535,6 +536,7 @@ async def _websocket_util_trigger(
             websocket_active = False
 
     try:
+        PUSHER_ACTIVE_WS_CONNECTIONS.inc()
         receive_task = asyncio.create_task(receive_tasks())
         speaker_sample_task = asyncio.create_task(process_speaker_sample_queue())
         private_cloud_task = asyncio.create_task(process_private_cloud_queue())
@@ -560,6 +562,8 @@ async def _websocket_util_trigger(
         if tasks_to_cancel:
             await asyncio.gather(*tasks_to_cancel, return_exceptions=True)
         bg_tasks.clear()
+
+        PUSHER_ACTIVE_WS_CONNECTIONS.dec()
 
         if websocket.client_state == WebSocketState.CONNECTED:
             try:
