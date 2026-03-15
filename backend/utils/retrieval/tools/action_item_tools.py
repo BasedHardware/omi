@@ -2,7 +2,7 @@
 Tools for accessing and managing user action items.
 """
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 import contextvars
 
@@ -370,6 +370,17 @@ def create_action_item_tool(
             due_dt = datetime.fromisoformat(due_at.replace('Z', '+00:00'))
             if due_dt.tzinfo is None:
                 return f"Error: due_at must include timezone in user's timezone format YYYY-MM-DDTHH:MM:SS+HH:MM (e.g., '2024-01-20T14:30:00-08:00'): {due_at}"
+            # Reject due dates more than 1 day in the past (allow 1-day grace for timezone differences)
+            now_utc = datetime.now(timezone.utc)
+            if due_dt < now_utc - timedelta(days=1):
+                logger.warning(
+                    f"⚠️ create_action_item_tool - rejected past due_at: {due_at} (now: {now_utc.isoformat()})"
+                )
+                return (
+                    f"Error: due_at '{due_at}' is in the past. "
+                    f"The current time is {now_utc.strftime('%Y-%m-%dT%H:%M:%SZ')}. "
+                    "Please use a future date for the due date."
+                )
             action_item_data['due_at'] = due_dt
         except ValueError as e:
             return f"Error: Invalid due_at format. Expected YYYY-MM-DDTHH:MM:SS+HH:MM in user's timezone: {due_at} - {str(e)}"
@@ -521,6 +532,17 @@ def update_action_item_tool(
             due_dt = datetime.fromisoformat(due_at.replace('Z', '+00:00'))
             if due_dt.tzinfo is None:
                 return f"Error: due_at must include timezone in user's timezone format YYYY-MM-DDTHH:MM:SS+HH:MM (e.g., '2024-01-20T14:30:00-08:00'): {due_at}"
+            # Reject due dates more than 1 day in the past (allow 1-day grace for timezone differences)
+            now_utc = datetime.now(timezone.utc)
+            if due_dt < now_utc - timedelta(days=1):
+                logger.warning(
+                    f"⚠️ update_action_item_tool - rejected past due_at: {due_at} (now: {now_utc.isoformat()})"
+                )
+                return (
+                    f"Error: due_at '{due_at}' is in the past. "
+                    f"The current time is {now_utc.strftime('%Y-%m-%dT%H:%M:%SZ')}. "
+                    "Please use a future date for the due date."
+                )
 
             update_data['due_at'] = due_dt
             changes.append(f"due date set to {due_dt.strftime('%Y-%m-%d %H:%M:%S %Z')}")
