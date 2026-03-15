@@ -50,6 +50,8 @@ grafana:
 prometheus:
   enabled: true
   prometheusSpec:
+    secrets:
+      - metrics-scrape-token
     persistentVolumeClaimRetentionPolicy:
       whenDeleted: Retain
       whenScaled: Delete
@@ -110,6 +112,9 @@ prometheus:
         scrape_interval: 15s
         metrics_path: /metrics
         scheme: http
+        authorization:
+          type: Bearer
+          credentials_file: /etc/prometheus/secrets/metrics-scrape-token/token
         kubernetes_sd_configs:
         - role: pod
         relabel_configs:
@@ -136,6 +141,9 @@ prometheus:
         scrape_interval: 15s
         metrics_path: /metrics
         scheme: http
+        authorization:
+          type: Bearer
+          credentials_file: /etc/prometheus/secrets/metrics-scrape-token/token
         kubernetes_sd_configs:
         - role: pod
         relabel_configs:
