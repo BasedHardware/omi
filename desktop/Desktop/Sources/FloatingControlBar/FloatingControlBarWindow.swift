@@ -578,6 +578,13 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         resizeAnchored(to: targetSize, makeResizable: false, animated: animated, anchorTop: true)
     }
 
+    /// Restore the compact pill size when we temporarily surface the bar outside
+    /// of an active hover, notification, voice session, or AI conversation.
+    func normalizeForTemporaryShow() {
+        guard !state.showingAIConversation, !state.isVoiceListening, state.currentNotification == nil else { return }
+        resizeAnchored(to: Self.minBarSize, makeResizable: false, animated: false, anchorTop: true)
+    }
+
     private func resizeToResponseHeight(animated: Bool = false) {
         // Determine the 2× cap from the user's saved (or default) preferred height.
         let savedSize = UserDefaults.standard.string(forKey: FloatingControlBarWindow.sizeKey)
@@ -870,6 +877,7 @@ class FloatingControlBarManager {
     func showTemporarily() {
         guard window != nil else { return }
         log("FloatingControlBarManager: showTemporarily() — showing bar above Chrome")
+        window?.normalizeForTemporaryShow()
         window?.makeKeyAndOrderFront(nil)
     }
 
