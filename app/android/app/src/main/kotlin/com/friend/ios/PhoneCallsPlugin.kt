@@ -188,7 +188,21 @@ class PhoneCallsPlugin private constructor(
         isSpeakerOn = speakerOn
 
         val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
-        audioManager.isSpeakerphoneOn = speakerOn
+        if (speakerOn) {
+            // Disable Bluetooth SCO when switching to speaker
+            if (audioManager.isBluetoothScoOn) {
+                audioManager.stopBluetoothSco()
+                audioManager.isBluetoothScoOn = false
+            }
+            audioManager.isSpeakerphoneOn = true
+        } else {
+            audioManager.isSpeakerphoneOn = false
+            // Re-enable Bluetooth SCO if available
+            if (audioManager.isBluetoothScoAvailableOffCall) {
+                audioManager.startBluetoothSco()
+                audioManager.isBluetoothScoOn = true
+            }
+        }
         result.success(null)
     }
 
@@ -197,13 +211,25 @@ class PhoneCallsPlugin private constructor(
     private fun setAudioModeInCommunication() {
         val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
         audioManager.mode = AudioManager.MODE_IN_COMMUNICATION
-        // Explicitly disable speaker so audio routes to earpiece or connected headset
         audioManager.isSpeakerphoneOn = false
         activity?.volumeControlStream = AudioManager.STREAM_VOICE_CALL
+
+        // Route to Bluetooth headset if one is connected
+        if (audioManager.isBluetoothScoAvailableOffCall || audioManager.isBluetoothScoOn) {
+            audioManager.startBluetoothSco()
+            audioManager.isBluetoothScoOn = true
+        }
     }
 
     private fun resetAudioMode() {
         val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+
+        // Stop Bluetooth SCO if it was started
+        if (audioManager.isBluetoothScoOn) {
+            audioManager.stopBluetoothSco()
+            audioManager.isBluetoothScoOn = false
+        }
+
         audioManager.mode = AudioManager.MODE_NORMAL
         audioManager.isSpeakerphoneOn = false
         isSpeakerOn = false
