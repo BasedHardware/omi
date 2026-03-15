@@ -157,6 +157,24 @@ async def send_audio_chunks(ws, pcm_data: bytes, chunk_size: int = 960, delay: f
             await asyncio.sleep(delay)
 
 
+def _normalize_ws_message(parsed) -> list:
+    """Normalize a parsed JSON message into a list of event dicts.
+
+    Transcripts arrive as raw JSON arrays of segment dicts:
+      [{"id": ..., "text": ..., "speaker": ...}, ...]
+    Other events arrive as JSON objects with a 'type' field:
+      {"type": "translating", "segments": [...]}
+
+    Returns a list of event dicts (wrapping arrays in a synthetic dict).
+    """
+    if isinstance(parsed, dict):
+        return [parsed]
+    elif isinstance(parsed, list):
+        # Wrap transcript segment array in a synthetic event dict
+        return [{"type": "transcript_segments", "segments": parsed}]
+    return []
+
+
 async def collect_events(ws, duration: float = 10, event_filter=None) -> list:
     """Collect parsed JSON events from WebSocket for up to `duration` seconds."""
     events = []
@@ -167,8 +185,9 @@ async def collect_events(ws, duration: float = 10, event_filter=None) -> list:
             if isinstance(msg, str) and msg != 'ping':
                 try:
                     parsed = json.loads(msg)
-                    if event_filter is None or event_filter(parsed):
-                        events.append(parsed)
+                    for evt in _normalize_ws_message(parsed):
+                        if event_filter is None or event_filter(evt):
+                            events.append(evt)
                 except json.JSONDecodeError:
                     pass
         except asyncio.TimeoutError:
@@ -188,7 +207,8 @@ async def collect_events_until(ws, predicate, timeout: float = 30) -> list:
             if isinstance(msg, str) and msg != 'ping':
                 try:
                     parsed = json.loads(msg)
-                    events.append(parsed)
+                    for evt in _normalize_ws_message(parsed):
+                        events.append(evt)
                     if predicate(events):
                         return events
                 except json.JSONDecodeError:
