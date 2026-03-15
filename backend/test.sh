@@ -48,3 +48,5 @@ pytest tests/unit/test_ws_auth_handshake.py -v
 pytest tests/unit/test_streaming_deepgram_backoff.py -v
 pytest tests/unit/test_batch_upload_storage.py -v
 pytest tests/unit/test_action_item_date_validation.py -v
+pytest tests/unit/test_kg_user_type_mismatch.py -v
+pytest tests/unit/test_kg_edge_id_sanitization.py -v

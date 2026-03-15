@@ -478,8 +478,12 @@ def _extract_memories_inner(uid: str, conversation: Conversation):
             for memory_db_obj in parsed_memories:
                 if memory_db_obj.kg_extracted:
                     continue
-                extract_knowledge_from_memory(uid, memory_db_obj.content, memory_db_obj.id, user_name)
-                set_memory_kg_extracted(uid, memory_db_obj.id)
+                try:
+                    result = extract_knowledge_from_memory(uid, memory_db_obj.content, memory_db_obj.id, user_name)
+                    if result is not None:
+                        set_memory_kg_extracted(uid, memory_db_obj.id)
+                except Exception:
+                    logging.exception(f"Error extracting knowledge graph from memory_id: {memory_db_obj.id}")
         except Exception:
             logging.exception("Error extracting knowledge graph from memory.")
 
