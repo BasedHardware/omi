@@ -277,6 +277,11 @@ env:
     value: "price_1RtJQ71F8wnoWYvwKMPaGlGY"
   - name: SUBSCRIPTION_LAUNCH_DATE
     value: "2025-08-21"
+  - name: METRICS_SECRET
+    valueFrom:
+      secretKeyRef:
+        name: prod-omi-backend-secrets
+        key: METRICS_SECRET
 
 resources:
   # We usually recommend not to specify default resources and to leave this as a conscious
