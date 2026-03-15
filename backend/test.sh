@@ -47,3 +47,4 @@ pytest tests/unit/test_firestore_read_ops_cache.py -v
 pytest tests/unit/test_ws_auth_handshake.py -v
 pytest tests/unit/test_streaming_deepgram_backoff.py -v
 pytest tests/unit/test_batch_upload_storage.py -v
+pytest tests/unit/test_action_item_date_validation.py -v
