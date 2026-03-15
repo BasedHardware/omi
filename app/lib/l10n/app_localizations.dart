@@ -15980,6 +15980,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Clear All'**
   String get clearAll;
+
+  /// Label for the keypad/dialpad button during an active phone call
+  ///
+  /// In en, this message translates to:
+  /// **'Keypad'**
+  String get phoneKeypad;
+
+  /// Label for the button to dismiss the in-call keypad
+  ///
+  /// In en, this message translates to:
+  /// **'Hide Keypad'**
+  String get phoneHideKeypad;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

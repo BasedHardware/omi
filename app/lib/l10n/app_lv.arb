@@ -531,7 +531,7 @@
     "devicesFoundNearby": "{count} {count, plural, =1{IERĪCE} other{IERĪCES}} ATRASTAS TUVUMĀ",
     "pairingSuccessful": "PĀROŠANA VEIKSMĪGA",
     "errorConnectingAppleWatch": "Kļūda, savienojoties ar Apple Watch: {error}",
-    "dontShowAgain": "Vairs nerādīt",
+    "dontShowAgain": "Nerādīt vēlreiz",
     "iUnderstand": "Es saprotu",
     "enableBluetooth": "Iespējot Bluetooth",
     "bluetoothNeeded": "Omi nepieciešams Bluetooth, lai savienotos ar jūsu valkājamo ierīci. Lūdzu, iespējojiet Bluetooth un mēģiniet vēlreiz.",
@@ -2748,5 +2748,6 @@
     "safelyBackedUp": "Droši dublēts jūsu tālrunī",
     "notYetSynced": "Vēl nav sinhronizēts ar jūsu tālruni",
     "clearAll": "Notīrīt visu",
-    "dontShowAgain": "Nerādīt vēlreiz"
+    "phoneKeypad": "Tastatūra",
+    "phoneHideKeypad": "Paslēpt tastatūru"
 }

@@ -2748,5 +2748,6 @@
     "safelyBackedUp": "Salvato sul tuo telefono",
     "notYetSynced": "Non ancora sincronizzato con il tuo telefono",
     "clearAll": "Cancella tutto",
-    "dontShowAgain": "Non mostrare più"
+    "phoneKeypad": "Tastiera",
+    "phoneHideKeypad": "Nascondi tastiera"
 }

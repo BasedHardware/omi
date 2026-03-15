@@ -531,7 +531,7 @@
     "devicesFoundNearby": "{count} {count, plural, =1{CİHAZ} other{CİHAZ}} YAKINLARDA BULUNDU",
     "pairingSuccessful": "EŞLEŞTIRME BAŞARILI",
     "errorConnectingAppleWatch": "Apple Watch'a bağlanırken hata: {error}",
-    "dontShowAgain": "Bir daha gösterme",
+    "dontShowAgain": "Tekrar gösterme",
     "iUnderstand": "Anlıyorum",
     "enableBluetooth": "Bluetooth'u Etkinleştir",
     "bluetoothNeeded": "Omi'nin giyilebilir cihazınıza bağlanması için Bluetooth gereklidir. Lütfen Bluetooth'u etkinleştirin ve tekrar deneyin.",
@@ -2783,5 +2783,6 @@
     "safelyBackedUp": "Telefonunuza güvenli şekilde yedeklendi",
     "notYetSynced": "Henüz telefonunuzla senkronize edilmedi",
     "clearAll": "Tümünü temizle",
-    "dontShowAgain": "Tekrar gösterme"
+    "phoneKeypad": "Tuş takımı",
+    "phoneHideKeypad": "Tuş takımını gizle"
 }

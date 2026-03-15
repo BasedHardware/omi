@@ -8581,4 +8581,10 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get clearAll => 'Alles wissen';
+
+  @override
+  String get phoneKeypad => 'Toetsenbord';
+
+  @override
+  String get phoneHideKeypad => 'Toetsenbord verbergen';
 }

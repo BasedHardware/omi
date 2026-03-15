@@ -8411,4 +8411,10 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get clearAll => '모두 지우기';
+
+  @override
+  String get phoneKeypad => '키패드';
+
+  @override
+  String get phoneHideKeypad => '키패드 숨기기';
 }

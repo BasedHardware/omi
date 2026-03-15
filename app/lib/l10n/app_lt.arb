@@ -2748,5 +2748,6 @@
     "safelyBackedUp": "Saugiai nukopijuota į jūsų telefoną",
     "notYetSynced": "Dar nesinchronizuota su jūsų telefonu",
     "clearAll": "Išvalyti viską",
-    "dontShowAgain": "Daugiau nerodyti"
+    "phoneKeypad": "Klaviatūra",
+    "phoneHideKeypad": "Slėpti klaviatūrą"
 }

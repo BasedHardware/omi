@@ -2748,5 +2748,6 @@
     "safelyBackedUp": "สำรองข้อมูลไว้ในโทรศัพท์อย่างปลอดภัย",
     "notYetSynced": "ยังไม่ได้ซิงค์กับโทรศัพท์ของคุณ",
     "clearAll": "ล้างทั้งหมด",
-    "dontShowAgain": "ไม่ต้องแสดงอีก"
+    "phoneKeypad": "แป้นกด",
+    "phoneHideKeypad": "ซ่อนแป้นกด"
 }

@@ -526,7 +526,7 @@
     "devicesFoundNearby": "{count} डिवाइस आस-पास मिले",
     "pairingSuccessful": "पेयरिंग सफल",
     "errorConnectingAppleWatch": "Apple Watch कनेक्ट करने में त्रुटि: {error}",
-    "dontShowAgain": "फिर से न दिखाएं",
+    "dontShowAgain": "दोबारा न दिखाएं",
     "iUnderstand": "मैं समझता हूं",
     "enableBluetooth": "ब्लूटूथ सक्षम करें",
     "bluetoothNeeded": "आपके वियरेबल से कनेक्ट करने के लिए Omi को ब्लूटूथ की आवश्यकता है।",
@@ -2749,5 +2749,6 @@
     "safelyBackedUp": "आपके फोन पर सुरक्षित बैकअप",
     "notYetSynced": "अभी तक आपके फोन पर सिंक नहीं हुआ",
     "clearAll": "सब हटाएं",
-    "dontShowAgain": "दोबारा न दिखाएं"
+    "phoneKeypad": "कीपैड",
+    "phoneHideKeypad": "कीपैड छुपाएं"
 }

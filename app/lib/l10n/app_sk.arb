@@ -531,7 +531,7 @@
     "devicesFoundNearby": "{count} {count, plural, =1{ZARIADENIE} other{ZARIADENIA}} NÁJDENÉ V BLÍZKOSTI",
     "pairingSuccessful": "PÁROVANIE ÚSPEŠNÉ",
     "errorConnectingAppleWatch": "Chyba pri pripájaní Apple Watch: {error}",
-    "dontShowAgain": "Nezobrazovať znova",
+    "dontShowAgain": "Znovu nezobrazovať",
     "iUnderstand": "Rozumiem",
     "enableBluetooth": "Povoliť Bluetooth",
     "bluetoothNeeded": "Omi potrebuje Bluetooth na pripojenie k vášmu nositeľnému zariadeniu. Povoľte prosím Bluetooth a skúste to znova.",
@@ -2753,5 +2753,6 @@
     "safelyBackedUp": "Bezpečne zálohované na vašom telefóne",
     "notYetSynced": "Zatiaľ nesynchronizované s vaším telefónom",
     "clearAll": "Vymazať všetko",
-    "dontShowAgain": "Znovu nezobrazovať"
+    "phoneKeypad": "Klávesnica",
+    "phoneHideKeypad": "Skryť klávesnicu"
 }

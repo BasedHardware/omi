@@ -8577,4 +8577,10 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get clearAll => 'Kosongkan semua';
+
+  @override
+  String get phoneKeypad => 'Pad kekunci';
+
+  @override
+  String get phoneHideKeypad => 'Sembunyikan pad kekunci';
 }

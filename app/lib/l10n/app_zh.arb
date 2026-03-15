@@ -2770,5 +2770,6 @@
     "safelyBackedUp": "已安全备份到您的手机",
     "notYetSynced": "尚未同步到您的手机",
     "clearAll": "全部清除",
-    "dontShowAgain": "不再显示"
+    "phoneKeypad": "键盘",
+    "phoneHideKeypad": "隐藏键盘"
 }

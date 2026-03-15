@@ -8557,4 +8557,10 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get clearAll => 'Rensa allt';
+
+  @override
+  String get phoneKeypad => 'Knappsats';
+
+  @override
+  String get phoneHideKeypad => 'Dölj knappsats';
 }

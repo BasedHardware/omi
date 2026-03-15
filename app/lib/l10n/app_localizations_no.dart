@@ -8548,4 +8548,10 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get clearAll => 'Tøm alt';
+
+  @override
+  String get phoneKeypad => 'Tastatur';
+
+  @override
+  String get phoneHideKeypad => 'Skjul tastatur';
 }

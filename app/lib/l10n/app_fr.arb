@@ -2783,5 +2783,6 @@
     "safelyBackedUp": "Sauvegardé sur votre téléphone",
     "notYetSynced": "Pas encore synchronisé avec votre téléphone",
     "clearAll": "Tout effacer",
-    "dontShowAgain": "Ne plus afficher"
+    "phoneKeypad": "Clavier",
+    "phoneHideKeypad": "Masquer le clavier"
 }

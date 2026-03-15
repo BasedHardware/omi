@@ -8591,4 +8591,10 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get clearAll => 'Összes törlése';
+
+  @override
+  String get phoneKeypad => 'Billentyűzet';
+
+  @override
+  String get phoneHideKeypad => 'Billentyűzet elrejtése';
 }

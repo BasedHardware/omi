@@ -531,7 +531,7 @@
     "devicesFoundNearby": "{count} {count, plural, =1{GERÄT} other{GERÄTE}} IN DER NÄHE GEFUNDEN",
     "pairingSuccessful": "Kopplung erfolgreich",
     "errorConnectingAppleWatch": "Fehler beim Verbinden mit Apple Watch: {error}",
-    "dontShowAgain": "Nicht mehr anzeigen",
+    "dontShowAgain": "Nicht erneut anzeigen",
     "iUnderstand": "Ich verstehe",
     "enableBluetooth": "Bluetooth aktivieren",
     "bluetoothNeeded": "Omi benötigt Bluetooth, um sich mit Ihrem Wearable zu verbinden. Bitte aktivieren Sie Bluetooth und versuchen Sie es erneut.",
@@ -2716,5 +2716,6 @@
     "safelyBackedUp": "Sicher auf Ihrem Telefon gesichert",
     "notYetSynced": "Noch nicht mit Ihrem Telefon synchronisiert",
     "clearAll": "Alles löschen",
-    "dontShowAgain": "Nicht erneut anzeigen"
+    "phoneKeypad": "Tastatur",
+    "phoneHideKeypad": "Tastatur ausblenden"
 }

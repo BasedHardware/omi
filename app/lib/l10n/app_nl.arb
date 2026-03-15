@@ -2748,5 +2748,6 @@
     "safelyBackedUp": "Veilig opgeslagen op uw telefoon",
     "notYetSynced": "Nog niet gesynchroniseerd met uw telefoon",
     "clearAll": "Alles wissen",
-    "dontShowAgain": "Niet meer weergeven"
+    "phoneKeypad": "Toetsenbord",
+    "phoneHideKeypad": "Toetsenbord verbergen"
 }

@@ -8617,4 +8617,10 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get clearAll => 'Εκκαθάριση όλων';
+
+  @override
+  String get phoneKeypad => 'Πληκτρολόγιο';
+
+  @override
+  String get phoneHideKeypad => 'Απόκρυψη πληκτρολογίου';
 }

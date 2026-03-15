@@ -2753,5 +2753,6 @@
     "safelyBackedUp": "Đã sao lưu an toàn vào điện thoại",
     "notYetSynced": "Chưa đồng bộ với điện thoại của bạn",
     "clearAll": "Xóa tất cả",
-    "dontShowAgain": "Không hiển thị lại"
+    "phoneKeypad": "Bàn phím",
+    "phoneHideKeypad": "Ẩn bàn phím"
 }

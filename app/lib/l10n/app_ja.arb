@@ -531,7 +531,7 @@
     "devicesFoundNearby": "{count}台のデバイスが近くに見つかりました",
     "pairingSuccessful": "ペアリング成功",
     "errorConnectingAppleWatch": "Apple Watchへの接続エラー: {error}",
-    "dontShowAgain": "再度表示しない",
+    "dontShowAgain": "今後表示しない",
     "iUnderstand": "理解しました",
     "enableBluetooth": "Bluetoothを有効にする",
     "bluetoothNeeded": "Omiはウェアラブルに接続するためにBluetoothが必要です。Bluetoothを有効にして再試行してください。",
@@ -2749,5 +2749,6 @@
     "safelyBackedUp": "スマホに安全にバックアップ済み",
     "notYetSynced": "まだスマホに同期されていません",
     "clearAll": "すべて削除",
-    "dontShowAgain": "今後表示しない"
+    "phoneKeypad": "キーパッド",
+    "phoneHideKeypad": "キーパッドを隠す"
 }

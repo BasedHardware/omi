@@ -8566,4 +8566,10 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get clearAll => 'Tümünü temizle';
+
+  @override
+  String get phoneKeypad => 'Tuş takımı';
+
+  @override
+  String get phoneHideKeypad => 'Tuş takımını gizle';
 }

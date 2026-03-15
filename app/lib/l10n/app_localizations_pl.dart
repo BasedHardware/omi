@@ -8572,4 +8572,10 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get clearAll => 'Wyczyść wszystko';
+
+  @override
+  String get phoneKeypad => 'Klawiatura';
+
+  @override
+  String get phoneHideKeypad => 'Ukryj klawiaturę';
 }

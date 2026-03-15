@@ -2757,5 +2757,6 @@
     "safelyBackedUp": "Sikkert sikkerhedskopieret til din telefon",
     "notYetSynced": "Endnu ikke synkroniseret med din telefon",
     "clearAll": "Ryd alt",
-    "dontShowAgain": "Vis ikke igen"
+    "phoneKeypad": "Tastatur",
+    "phoneHideKeypad": "Skjul tastatur"
 }

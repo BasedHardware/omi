@@ -8495,4 +8495,10 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get clearAll => 'مسح الكل';
+
+  @override
+  String get phoneKeypad => 'لوحة المفاتيح';
+
+  @override
+  String get phoneHideKeypad => 'إخفاء لوحة المفاتيح';
 }

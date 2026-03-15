@@ -2717,5 +2717,6 @@
     "safelyBackedUp": "Còpia de seguretat al vostre telèfon",
     "notYetSynced": "Encara no sincronitzat amb el vostre telèfon",
     "clearAll": "Esborrar tot",
-    "dontShowAgain": "No ho tornis a mostrar"
+    "phoneKeypad": "Teclat",
+    "phoneHideKeypad": "Amaga el teclat"
 }

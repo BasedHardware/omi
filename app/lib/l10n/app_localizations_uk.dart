@@ -8566,4 +8566,10 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get clearAll => 'Очистити все';
+
+  @override
+  String get phoneKeypad => 'Клавіатура';
+
+  @override
+  String get phoneHideKeypad => 'Сховати клавіатуру';
 }

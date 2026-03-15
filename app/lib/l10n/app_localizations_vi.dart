@@ -8556,4 +8556,10 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get clearAll => 'Xóa tất cả';
+
+  @override
+  String get phoneKeypad => 'Bàn phím';
+
+  @override
+  String get phoneHideKeypad => 'Ẩn bàn phím';
 }

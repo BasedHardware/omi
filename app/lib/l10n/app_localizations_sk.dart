@@ -8543,4 +8543,10 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get clearAll => 'Vymazať všetko';
+
+  @override
+  String get phoneKeypad => 'Klávesnica';
+
+  @override
+  String get phoneHideKeypad => 'Skryť klávesnicu';
 }
