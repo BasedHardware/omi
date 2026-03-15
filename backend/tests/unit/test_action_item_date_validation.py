@@ -262,6 +262,38 @@ class TestCreateActionItemDateValidation:
         )
         assert "in the past" not in result
 
+    def test_boundary_23h_ago_accepted(self):
+        """Due date 23h ago should be accepted (within 1-day grace)."""
+        twenty_three_h = (datetime.now(timezone.utc) - timedelta(hours=23)).strftime('%Y-%m-%dT%H:%M:%S+00:00')
+        result = create_action_item_tool(
+            description="Boundary task",
+            due_at=twenty_three_h,
+            config=_make_config(),
+        )
+        assert "in the past" not in result
+
+    def test_boundary_25h_ago_rejected(self):
+        """Due date 25h ago should be rejected (beyond 1-day grace)."""
+        twenty_five_h = (datetime.now(timezone.utc) - timedelta(hours=25)).strftime('%Y-%m-%dT%H:%M:%S+00:00')
+        result = create_action_item_tool(
+            description="Just beyond boundary",
+            due_at=twenty_five_h,
+            config=_make_config(),
+        )
+        assert "Error" in result
+        assert "in the past" in result
+
+    def test_accepts_non_utc_timezone_offset(self):
+        """Due date with -08:00 offset in the future should be accepted."""
+        future_pst = (datetime.now(timezone.utc) + timedelta(days=2)).strftime('%Y-%m-%dT%H:%M:%S-08:00')
+        result = create_action_item_tool(
+            description="PST task",
+            due_at=future_pst,
+            config=_make_config(),
+        )
+        assert "Error" not in result
+        assert "Added" in result or "✅" in result
+
 
 # ===========================================================================
 # update_action_item_tool tests
@@ -300,6 +332,27 @@ class TestUpdateActionItemDateValidation:
             config=_make_config(),
         )
         assert "in the past" not in result
+
+    def test_rejects_invalid_format_on_update(self):
+        """Invalid date format on update should be rejected."""
+        result = update_action_item_tool(
+            action_item_id="test-item-id",
+            due_at="not-a-date",
+            config=_make_config(),
+        )
+        assert "Error" in result
+        assert "Invalid due_at format" in result
+
+    def test_boundary_25h_ago_rejected_on_update(self):
+        """Due date 25h ago on update should be rejected."""
+        just_beyond = (datetime.now(timezone.utc) - timedelta(hours=25)).strftime('%Y-%m-%dT%H:%M:%S+00:00')
+        result = update_action_item_tool(
+            action_item_id="test-item-id",
+            due_at=just_beyond,
+            config=_make_config(),
+        )
+        assert "Error" in result
+        assert "in the past" in result
 
 
 # ===========================================================================
@@ -453,3 +506,48 @@ class TestExtractActionItemsPostValidation:
 
         assert len(result) == 1
         assert result[0].due_at is None
+
+    def test_preserves_due_date_within_grace_boundary(self):
+        """Due date 23h ago should be preserved (within 1-day grace window)."""
+        from models.conversation import ActionItem, ActionItemsExtraction
+
+        boundary_due = datetime.now(timezone.utc) - timedelta(hours=23)
+        mock_response = ActionItemsExtraction(
+            action_items=[ActionItem(description="Boundary task", due_at=boundary_due)]
+        )
+        mock_chain = MagicMock()
+        mock_chain.invoke.return_value = mock_response
+        mock_chain.__or__ = MagicMock(return_value=mock_chain)
+
+        conv_proc = sys.modules.get("utils.llm.conversation_processing")
+        if conv_proc is None:
+            conv_proc = _load_module_from_file(
+                "utils.llm.conversation_processing",
+                BACKEND_DIR / "utils" / "llm" / "conversation_processing.py",
+            )
+
+        with patch.object(conv_proc, 'llm_medium_experiment') as mock_llm, patch.object(
+            conv_proc, 'PydanticOutputParser'
+        ) as mock_parser_cls, patch.object(conv_proc, 'ChatPromptTemplate') as mock_prompt_cls:
+
+            mock_llm.bind.return_value = mock_llm
+            mock_llm.__or__ = MagicMock(return_value=mock_chain)
+
+            mock_parser = MagicMock()
+            mock_parser.get_format_instructions.return_value = "format"
+            mock_parser_cls.return_value = mock_parser
+
+            mock_prompt = MagicMock()
+            mock_prompt.__or__ = MagicMock(return_value=mock_chain)
+            mock_prompt_cls.from_messages.return_value = mock_prompt
+
+            result = conv_proc.extract_action_items(
+                transcript="Boundary test",
+                started_at=datetime.now(timezone.utc),
+                language_code="en",
+                tz="UTC",
+            )
+
+        assert len(result) == 1
+        # At exact boundary, strict < means it should NOT be cleared
+        assert result[0].due_at is not None
