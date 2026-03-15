@@ -197,6 +197,8 @@ class PhoneCallsPlugin private constructor(
     private fun setAudioModeInCommunication() {
         val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
         audioManager.mode = AudioManager.MODE_IN_COMMUNICATION
+        // Explicitly disable speaker so audio routes to earpiece or connected headset
+        audioManager.isSpeakerphoneOn = false
         activity?.volumeControlStream = AudioManager.STREAM_VOICE_CALL
     }
 
