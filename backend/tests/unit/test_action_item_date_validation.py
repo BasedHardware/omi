@@ -209,7 +209,8 @@ class TestCreateActionItemDateValidation:
             due_at=future_date,
             config=_make_config(),
         )
-        assert "in the past" not in result
+        assert "Error" not in result
+        assert "Added" in result or "✅" in result
 
     def test_accepts_date_within_grace_window(self):
         """Due date 12 hours ago should be accepted (within 1-day grace)."""
@@ -219,7 +220,8 @@ class TestCreateActionItemDateValidation:
             due_at=twelve_hours_ago,
             config=_make_config(),
         )
-        assert "in the past" not in result
+        assert "Error" not in result
+        assert "Added" in result or "✅" in result
 
     def test_rejects_date_two_days_in_past(self):
         """Due date 2 days ago should be rejected (beyond 1-day grace)."""
@@ -286,7 +288,8 @@ class TestUpdateActionItemDateValidation:
             due_at=future_date,
             config=_make_config(),
         )
-        assert "in the past" not in result
+        assert "Error" not in result or "in the past" not in result
+        assert "updated" in result.lower() or "Successfully" in result
 
     def test_accepts_date_within_grace_window_on_update(self):
         """Due date 12 hours ago on update should be accepted."""
