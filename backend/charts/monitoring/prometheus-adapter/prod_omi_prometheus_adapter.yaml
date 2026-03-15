@@ -11,13 +11,6 @@ rules:
         overrides:
           namespace: { resource: "namespace" }
     - name:
-        as: "pusher_active_ws_connections_per_pod"
-      seriesQuery: 'pusher_active_ws_connections'
-      metricsQuery: 'avg(pusher_active_ws_connections)'
-      resources:
-        overrides:
-          namespace: { resource: "namespace" }
-    - name:
         as: "backend_listen_response_code_500"
       seriesQuery: 'stackdriver_https_lb_rule_loadbalancing_googleapis_com_https_backend_request_count{backend_target_name="custom-domains-api-omi-me-backend-listen-49a4-be"}'
       metricsQuery: 'avg(stackdriver_https_lb_rule_loadbalancing_googleapis_com_https_backend_request_count{response_code="500", backend_target_name="custom-domains-api-omi-me-backend-listen-49a4-be"}) or vector(0)'
