@@ -13,5 +13,5 @@ def metrics(credentials: HTTPAuthorizationCredentials = Security(_bearer)):
     expected = os.environ.get("METRICS_SECRET", "")
     token = credentials.credentials if credentials else ""
     if not expected or token != expected:
-        raise HTTPException(status_code=403)
+        raise HTTPException(status_code=401)
     return metrics_response()
