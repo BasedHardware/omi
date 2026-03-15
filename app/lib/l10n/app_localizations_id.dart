@@ -8563,4 +8563,10 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get clearAll => 'Hapus semua';
+
+  @override
+  String get phoneKeypad => 'Keypad';
+
+  @override
+  String get phoneHideKeypad => 'Sembunyikan keypad';
 }

@@ -8571,4 +8571,10 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get clearAll => 'Notīrīt visu';
+
+  @override
+  String get phoneKeypad => 'Tastatūra';
+
+  @override
+  String get phoneHideKeypad => 'Paslēpt tastatūru';
 }

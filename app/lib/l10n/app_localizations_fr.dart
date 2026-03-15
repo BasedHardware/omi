@@ -8632,4 +8632,10 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get clearAll => 'Tout effacer';
+
+  @override
+  String get phoneKeypad => 'Clavier';
+
+  @override
+  String get phoneHideKeypad => 'Masquer le clavier';
 }

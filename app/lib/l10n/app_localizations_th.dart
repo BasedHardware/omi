@@ -8509,4 +8509,10 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get clearAll => 'ล้างทั้งหมด';
+
+  @override
+  String get phoneKeypad => 'แป้นกด';
+
+  @override
+  String get phoneHideKeypad => 'ซ่อนแป้นกด';
 }

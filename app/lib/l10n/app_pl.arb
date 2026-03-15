@@ -2783,5 +2783,6 @@
     "safelyBackedUp": "Bezpiecznie zapisane na Twoim telefonie",
     "notYetSynced": "Jeszcze nie zsynchronizowano z Twoim telefonem",
     "clearAll": "Wyczyść wszystko",
-    "dontShowAgain": "Nie pokazuj ponownie"
+    "phoneKeypad": "Klawiatura",
+    "phoneHideKeypad": "Ukryj klawiaturę"
 }

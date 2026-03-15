@@ -8605,4 +8605,10 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get clearAll => 'Esborrar tot';
+
+  @override
+  String get phoneKeypad => 'Teclat';
+
+  @override
+  String get phoneHideKeypad => 'Amaga el teclat';
 }

@@ -2748,5 +2748,6 @@
     "safelyBackedUp": "Säkerhetskopierat till din telefon",
     "notYetSynced": "Inte synkroniserat med din telefon ännu",
     "clearAll": "Rensa allt",
-    "dontShowAgain": "Visa inte igen"
+    "phoneKeypad": "Knappsats",
+    "phoneHideKeypad": "Dölj knappsats"
 }

@@ -116,6 +116,7 @@ class PhoneCallsPlugin private constructor(
             "endCall" -> handleEndCall(result)
             "toggleMute" -> handleToggleMute(call, result)
             "toggleSpeaker" -> handleToggleSpeaker(call, result)
+            "sendDtmf" -> handleSendDtmf(call, result)
             else -> result.notImplemented()
         }
     }
@@ -203,6 +204,12 @@ class PhoneCallsPlugin private constructor(
                 audioManager.isBluetoothScoOn = true
             }
         }
+        result.success(null)
+    }
+
+    private fun handleSendDtmf(call: MethodCall, result: MethodChannel.Result) {
+        val digits = call.argument<String>("digits") ?: ""
+        activeCall?.sendDigits(digits)
         result.success(null)
     }
 

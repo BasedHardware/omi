@@ -8589,4 +8589,10 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get clearAll => 'Изчисти всичко';
+
+  @override
+  String get phoneKeypad => 'Клавиатура';
+
+  @override
+  String get phoneHideKeypad => 'Скрий клавиатурата';
 }

@@ -2748,5 +2748,6 @@
     "safelyBackedUp": "Disandarkan dengan selamat ke telefon anda",
     "notYetSynced": "Belum disegerakkan ke telefon anda",
     "clearAll": "Kosongkan semua",
-    "dontShowAgain": "Jangan tunjukkan lagi"
+    "phoneKeypad": "Pad kekunci",
+    "phoneHideKeypad": "Sembunyikan pad kekunci"
 }

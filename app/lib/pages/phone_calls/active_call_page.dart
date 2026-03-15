@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/backend/schema/phone_call.dart';
 import 'package:omi/providers/phone_call_provider.dart';
+import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
 class ActiveCallPage extends StatefulWidget {
@@ -41,6 +43,18 @@ class _ActiveCallPageState extends State<ActiveCallPage> {
     }
   }
 
+  void _showDtmfDialpad(BuildContext context, PhoneCallProvider provider) {
+    MixpanelManager().phoneCallDialpadOpened();
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _DtmfDialpadSheet(onDigitPressed: (digit) {
+        MixpanelManager().phoneCallDialpadDigitPressed(digit);
+        provider.sendDtmf(digit);
+      }),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Consumer<PhoneCallProvider>(
@@ -73,6 +87,7 @@ class _ActiveCallPageState extends State<ActiveCallPage> {
                     onMuteToggle: provider.toggleMute,
                     onSpeakerToggle: provider.toggleSpeaker,
                     onEndCall: () => provider.endCall(),
+                    onKeypad: () => _showDtmfDialpad(context, provider),
                   ),
                   const SizedBox(height: 32),
                 ],
@@ -271,6 +286,7 @@ class _CallControls extends StatelessWidget {
   final VoidCallback onMuteToggle;
   final VoidCallback onSpeakerToggle;
   final VoidCallback onEndCall;
+  final VoidCallback onKeypad;
 
   const _CallControls({
     required this.state,
@@ -279,6 +295,7 @@ class _CallControls extends StatelessWidget {
     required this.onMuteToggle,
     required this.onSpeakerToggle,
     required this.onEndCall,
+    required this.onKeypad,
   });
 
   @override
@@ -286,7 +303,7 @@ class _CallControls extends StatelessWidget {
     bool isActive = state == PhoneCallState.active || state == PhoneCallState.ringing;
 
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 32),
+      padding: const EdgeInsets.symmetric(horizontal: 24),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
         children: [
@@ -295,6 +312,11 @@ class _CallControls extends StatelessWidget {
             label: isMuted ? context.l10n.phoneUnmute : context.l10n.phoneMute,
             isActive: isMuted,
             onTap: isActive ? onMuteToggle : null,
+          ),
+          _ControlButton(
+            icon: Icons.dialpad,
+            label: context.l10n.phoneKeypad,
+            onTap: isActive ? onKeypad : null,
           ),
           _EndCallButton(
             onTap: state != PhoneCallState.ended ? onEndCall : null,
@@ -386,6 +408,132 @@ class _EndCallButton extends StatelessWidget {
             style: TextStyle(fontSize: 12, color: onTap != null ? Colors.white : Colors.grey[600]),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _DtmfDialpadSheet extends StatefulWidget {
+  final void Function(String digit) onDigitPressed;
+
+  const _DtmfDialpadSheet({required this.onDigitPressed});
+
+  @override
+  State<_DtmfDialpadSheet> createState() => _DtmfDialpadSheetState();
+}
+
+class _DtmfDialpadSheetState extends State<_DtmfDialpadSheet> {
+  String _digits = '';
+
+  static const _keys = [
+    ['1', '2', '3'],
+    ['4', '5', '6'],
+    ['7', '8', '9'],
+    ['*', '0', '#'],
+  ];
+  static const _subtexts = [
+    ['', 'ABC', 'DEF'],
+    ['GHI', 'JKL', 'MNO'],
+    ['PQRS', 'TUV', 'WXYZ'],
+    ['', '+', ''],
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: const BoxDecoration(
+        color: Color(0xFF1C1C1E),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      padding: const EdgeInsets.only(top: 12, bottom: 32),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 36,
+            height: 4,
+            decoration: BoxDecoration(color: Colors.grey[700], borderRadius: BorderRadius.circular(2)),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            _digits.isEmpty ? ' ' : _digits,
+            style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w300, color: Colors.white, letterSpacing: 2),
+          ),
+          const SizedBox(height: 16),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 32),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: List.generate(_keys.length, (row) {
+                return Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                    children: List.generate(_keys[row].length, (col) {
+                      return _DtmfKey(
+                        digit: _keys[row][col],
+                        subtext: _subtexts[row][col],
+                        onTap: () {
+                          HapticFeedback.lightImpact();
+                          widget.onDigitPressed(_keys[row][col]);
+                          setState(() {
+                            _digits += _keys[row][col];
+                          });
+                        },
+                      );
+                    }),
+                  ),
+                );
+              }),
+            ),
+          ),
+          const SizedBox(height: 16),
+          GestureDetector(
+            onTap: () => Navigator.of(context).pop(),
+            child: Text(context.l10n.phoneHideKeypad, style: TextStyle(fontSize: 16, color: Colors.grey[400])),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DtmfKey extends StatelessWidget {
+  final String digit;
+  final String subtext;
+  final VoidCallback onTap;
+
+  const _DtmfKey({required this.digit, required this.subtext, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(36),
+      splashColor: Colors.white.withValues(alpha: 0.08),
+      highlightColor: Colors.white.withValues(alpha: 0.05),
+      child: Container(
+        width: 72,
+        height: 72,
+        decoration: const BoxDecoration(
+          shape: BoxShape.circle,
+          color: Color(0xFF2A2A30),
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text(digit, style: const TextStyle(fontSize: 30, fontWeight: FontWeight.w300, color: Colors.white)),
+            if (subtext.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: 1),
+                child: Text(
+                  subtext,
+                  style:
+                      TextStyle(fontSize: 10, fontWeight: FontWeight.w500, color: Colors.grey[600], letterSpacing: 1.5),
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }

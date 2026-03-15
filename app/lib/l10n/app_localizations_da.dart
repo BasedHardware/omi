@@ -8537,4 +8537,10 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get clearAll => 'Ryd alt';
+
+  @override
+  String get phoneKeypad => 'Tastatur';
+
+  @override
+  String get phoneHideKeypad => 'Skjul tastatur';
 }

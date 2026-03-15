@@ -8625,4 +8625,10 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get clearAll => 'Alles löschen';
+
+  @override
+  String get phoneKeypad => 'Tastatur';
+
+  @override
+  String get phoneHideKeypad => 'Tastatur ausblenden';
 }

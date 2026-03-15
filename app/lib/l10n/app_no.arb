@@ -2748,5 +2748,6 @@
     "safelyBackedUp": "Sikkert sikkerhetskopiert til telefonen din",
     "notYetSynced": "Ennå ikke synkronisert med telefonen din",
     "clearAll": "Tøm alt",
-    "dontShowAgain": "Ikke vis igjen"
+    "phoneKeypad": "Tastatur",
+    "phoneHideKeypad": "Skjul tastatur"
 }

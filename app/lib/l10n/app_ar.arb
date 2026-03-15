@@ -531,7 +531,7 @@
     "devicesFoundNearby": "{count} {count, plural, =1{جهاز} other{أجهزة}} تم العثور عليها بالقرب منك",
     "pairingSuccessful": "نجح الإقران",
     "errorConnectingAppleWatch": "خطأ في الاتصال بـ Apple Watch: {error}",
-    "dontShowAgain": "لا تظهر هذا مرة أخرى",
+    "dontShowAgain": "عدم الإظهار مجدداً",
     "iUnderstand": "أفهم",
     "enableBluetooth": "تمكين البلوتوث",
     "bluetoothNeeded": "يحتاج Omi إلى البلوتوث للاتصال بجهازك القابل للارتداء. يرجى تمكين البلوتوث والمحاولة مرة أخرى.",
@@ -2715,5 +2715,6 @@
     "safelyBackedUp": "تم النسخ الاحتياطي بأمان إلى هاتفك",
     "notYetSynced": "لم تتم المزامنة بعد مع هاتفك",
     "clearAll": "مسح الكل",
-    "dontShowAgain": "عدم الإظهار مجدداً"
+    "phoneKeypad": "لوحة المفاتيح",
+    "phoneHideKeypad": "إخفاء لوحة المفاتيح"
 }

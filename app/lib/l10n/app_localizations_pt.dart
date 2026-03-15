@@ -8556,4 +8556,10 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get clearAll => 'Limpar tudo';
+
+  @override
+  String get phoneKeypad => 'Teclado';
+
+  @override
+  String get phoneHideKeypad => 'Ocultar teclado';
 }

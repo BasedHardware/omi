@@ -8399,4 +8399,10 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get clearAll => '全部清除';
+
+  @override
+  String get phoneKeypad => '键盘';
+
+  @override
+  String get phoneHideKeypad => '隐藏键盘';
 }

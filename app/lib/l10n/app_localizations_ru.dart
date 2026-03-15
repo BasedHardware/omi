@@ -8581,4 +8581,10 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get clearAll => 'Очистить всё';
+
+  @override
+  String get phoneKeypad => 'Клавиатура';
+
+  @override
+  String get phoneHideKeypad => 'Скрыть клавиатуру';
 }

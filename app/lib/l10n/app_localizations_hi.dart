@@ -8533,4 +8533,10 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get clearAll => 'सब हटाएं';
+
+  @override
+  String get phoneKeypad => 'कीपैड';
+
+  @override
+  String get phoneHideKeypad => 'कीपैड छुपाएं';
 }

@@ -2790,5 +2790,6 @@
     "safelyBackedUp": "Dicadangkan dengan aman ke ponsel Anda",
     "notYetSynced": "Belum disinkronkan ke ponsel Anda",
     "clearAll": "Hapus semua",
-    "dontShowAgain": "Jangan tampilkan lagi"
+    "phoneKeypad": "Keypad",
+    "phoneHideKeypad": "Sembunyikan keypad"
 }

@@ -8551,4 +8551,10 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get clearAll => 'Tühjenda kõik';
+
+  @override
+  String get phoneKeypad => 'Klahvistik';
+
+  @override
+  String get phoneHideKeypad => 'Peida klahvistik';
 }

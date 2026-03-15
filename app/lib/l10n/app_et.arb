@@ -2748,5 +2748,6 @@
     "safelyBackedUp": "Turvaliselt teie telefonile varundatud",
     "notYetSynced": "Pole veel teie telefoniga sünkroniseeritud",
     "clearAll": "Tühjenda kõik",
-    "dontShowAgain": "Ära näita uuesti"
+    "phoneKeypad": "Klahvistik",
+    "phoneHideKeypad": "Peida klahvistik"
 }

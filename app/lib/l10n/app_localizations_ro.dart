@@ -8596,4 +8596,10 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get clearAll => 'Șterge tot';
+
+  @override
+  String get phoneKeypad => 'Tastatură';
+
+  @override
+  String get phoneHideKeypad => 'Ascunde tastatura';
 }

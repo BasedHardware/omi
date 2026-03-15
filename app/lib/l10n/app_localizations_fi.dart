@@ -8552,4 +8552,10 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get clearAll => 'Tyhjennä kaikki';
+
+  @override
+  String get phoneKeypad => 'Näppäimistö';
+
+  @override
+  String get phoneHideKeypad => 'Piilota näppäimistö';
 }

@@ -8409,4 +8409,10 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get clearAll => 'すべて削除';
+
+  @override
+  String get phoneKeypad => 'キーパッド';
+
+  @override
+  String get phoneHideKeypad => 'キーパッドを隠す';
 }
