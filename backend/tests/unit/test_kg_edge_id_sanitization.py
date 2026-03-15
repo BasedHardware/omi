@@ -105,3 +105,44 @@ class TestEdgeIdSanitization:
         doc_id = self.mock_edges_coll.document.call_args[0][0]
         assert '/' not in doc_id
         assert doc_id == 'src_has_a_tgt'
+
+    def test_empty_label_produces_valid_id(self):
+        """Empty label should produce a valid edge_id with no slash."""
+        edge_data = {
+            'source_id': 'abc',
+            'target_id': 'def',
+            'label': '',
+            'memory_ids': ['m1'],
+        }
+        result = upsert_knowledge_edge('uid-1', edge_data)
+        assert '/' not in result['id']
+        assert result['id'] == 'abc__def'
+
+    def test_label_only_slash_produces_valid_id(self):
+        """Label that is just '/' should be sanitized to '_'."""
+        edge_data = {
+            'source_id': 'abc',
+            'target_id': 'def',
+            'label': '/',
+            'memory_ids': ['m1'],
+        }
+        result = upsert_knowledge_edge('uid-1', edge_data)
+        assert '/' not in result['id']
+        assert result['id'] == 'abc___def'
+
+    def test_caller_provided_dotdot_id_unchanged(self):
+        """Caller-provided edge_id '..' is not a slash issue — passes through.
+
+        Note: '..' as a standalone Firestore doc ID is reserved, but in practice
+        edge IDs are always '{uuid}_{label}_{uuid}' format so '..' cannot occur
+        from normal construction. This test documents current behavior.
+        """
+        edge_data = {
+            'id': '..',
+            'source_id': 's',
+            'target_id': 't',
+            'label': 'x',
+            'memory_ids': ['m1'],
+        }
+        result = upsert_knowledge_edge('uid-1', edge_data)
+        assert result['id'] == '..'
