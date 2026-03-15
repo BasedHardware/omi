@@ -95,7 +95,7 @@ from utils.onboarding import OnboardingHandler
 
 from utils.aac import AACDecoder
 from utils.audio import AudioRingBuffer
-from utils.metrics import ACTIVE_WS_CONNECTIONS
+from utils.metrics import BACKEND_LISTEN_ACTIVE_WS_CONNECTIONS
 from utils.stt.speaker_embedding import (
     extract_embedding_from_bytes,
     compare_embeddings,
@@ -206,7 +206,7 @@ async def _stream_handler(
     This function is called by both _listen (for app clients) and web_listen_handler (for web clients).
     """
     session_id = str(uuid.uuid4())
-    ACTIVE_WS_CONNECTIONS.inc()
+    BACKEND_LISTEN_ACTIVE_WS_CONNECTIONS.inc()
     logger.info(
         f'_stream_handler {uid} {session_id} {language} {sample_rate} {codec} {include_speech_profile} {stt_service} {conversation_timeout} custom_stt={custom_stt_mode} onboarding={onboarding_mode}'
     )
@@ -2540,7 +2540,7 @@ async def _stream_handler(
     except Exception as e:
         logger.error(f"Error during WebSocket operation: {e} {uid} {session_id}")
     finally:
-        ACTIVE_WS_CONNECTIONS.dec()
+        BACKEND_LISTEN_ACTIVE_WS_CONNECTIONS.dec()
         if not use_custom_stt and last_usage_record_timestamp:
             transcription_seconds = int(time.time() - last_usage_record_timestamp)
             words_to_record = words_transcribed_since_last_record

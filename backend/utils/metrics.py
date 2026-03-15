@@ -1,9 +1,14 @@
 from prometheus_client import Gauge, generate_latest, CONTENT_TYPE_LATEST
 from fastapi import Response
 
-ACTIVE_WS_CONNECTIONS = Gauge(
+BACKEND_LISTEN_ACTIVE_WS_CONNECTIONS = Gauge(
     'backend_listen_active_ws_connections',
-    'Number of currently active WebSocket connections',
+    'Number of currently active WebSocket connections in backend-listen',
+)
+
+PUSHER_ACTIVE_WS_CONNECTIONS = Gauge(
+    'pusher_active_ws_connections',
+    'Number of currently active WebSocket connections in pusher',
 )
 
 
