@@ -296,9 +296,10 @@ async def auth_zomato(uid: str):
     )
 
 
+@app.get("/auth/callback")
 @app.get("/auth/zomato/callback")
 async def auth_callback(code: str, state: str):
-    """Exchange auth code for tokens. Called by the relay page after intercepting localhost redirect."""
+    """Exchange auth code for tokens. Called by the relay page or OAuthWebView after intercepting localhost redirect."""
     state_data = get_oauth_state(state)
     if not state_data:
         raise HTTPException(status_code=400, detail="Invalid or expired OAuth state")
