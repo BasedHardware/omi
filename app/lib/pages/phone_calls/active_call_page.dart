@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/backend/schema/phone_call.dart';
+import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/providers/phone_call_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/l10n_extensions.dart';
@@ -177,8 +178,8 @@ class _CallInfoHeader extends StatelessWidget {
 }
 
 class _LiveTranscriptView extends StatelessWidget {
-  final List<PhoneTranscriptSegment> segments;
-  final String Function(PhoneTranscriptSegment) getSpeakerLabel;
+  final List<TranscriptSegment> segments;
+  final String Function(TranscriptSegment) getSpeakerLabel;
 
   const _LiveTranscriptView({
     required this.segments,
@@ -208,7 +209,7 @@ class _LiveTranscriptView extends StatelessWidget {
           text: segment.text,
           speakerLabel: label,
           isUser: segment.isUser,
-          isFinal: segment.isFinal,
+          translations: segment.translations,
         );
       },
     );
@@ -219,13 +220,13 @@ class _TranscriptBubble extends StatelessWidget {
   final String text;
   final String speakerLabel;
   final bool isUser;
-  final bool isFinal;
+  final List<Translation> translations;
 
   const _TranscriptBubble({
     required this.text,
     required this.speakerLabel,
     required this.isUser,
-    required this.isFinal,
+    this.translations = const [],
   });
 
   @override
@@ -261,14 +262,30 @@ class _TranscriptBubble extends StatelessWidget {
                     bottomRight: isUser ? const Radius.circular(4) : const Radius.circular(16),
                   ),
                 ),
-                child: Text(
-                  text,
-                  style: TextStyle(
-                    fontSize: 15,
-                    color: Colors.white,
-                    fontStyle: isFinal ? FontStyle.normal : FontStyle.italic,
-                    height: 1.4,
-                  ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      text,
+                      style: const TextStyle(
+                        fontSize: 15,
+                        color: Colors.white,
+                        height: 1.4,
+                      ),
+                    ),
+                    if (translations.isNotEmpty) ...[
+                      const SizedBox(height: 6),
+                      ...translations.map((t) => Text(
+                            t.text,
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: Colors.white.withValues(alpha: 0.7),
+                              fontStyle: FontStyle.italic,
+                              height: 1.3,
+                            ),
+                          )),
+                    ],
+                  ],
                 ),
               ),
             ],
