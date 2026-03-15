@@ -236,6 +236,12 @@ class MixpanelManager {
 
   void phoneCallFailed({String? error}) => track('Phone Call Failed', properties: {'error': error ?? 'unknown'});
 
+  // Phone Calls Dialpad
+  void phoneCallDialpadOpened() => track('Phone Call Dialpad Opened');
+
+  void phoneCallDialpadDigitPressed(String digit) =>
+      track('Phone Call Dialpad Digit Pressed', properties: {'digit': digit});
+
   // Phone Calls Upsell
   void phoneCallUpsellShown({required String source}) =>
       track('Phone Call Upsell Shown', properties: {'source': source});
