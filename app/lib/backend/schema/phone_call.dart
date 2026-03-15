@@ -2,53 +2,6 @@ enum PhoneCallDirection { incoming, outgoing }
 
 enum PhoneCallState { idle, connecting, ringing, active, ended, failed }
 
-class PhoneTranscriptSegment {
-  final String id;
-  final String text;
-  final bool isUser;
-  final String? personId;
-  final double start;
-  final double end;
-  final bool isFinal;
-
-  PhoneTranscriptSegment({
-    required this.id,
-    required this.text,
-    required this.isUser,
-    this.personId,
-    required this.start,
-    required this.end,
-    this.isFinal = true,
-  });
-
-  factory PhoneTranscriptSegment.fromJson(Map<String, dynamic> json) {
-    return PhoneTranscriptSegment(
-      id: json['id'] as String,
-      text: json['text'] as String,
-      isUser: (json['is_user'] ?? false) as bool,
-      personId: json['person_id'] as String?,
-      start: double.tryParse(json['start'].toString()) ?? 0.0,
-      end: double.tryParse(json['end'].toString()) ?? 0.0,
-      isFinal: (json['is_final'] ?? true) as bool,
-    );
-  }
-
-  Map<String, dynamic> toJson() => {
-        'id': id,
-        'text': text,
-        'is_user': isUser,
-        'person_id': personId,
-        'start': start,
-        'end': end,
-        'is_final': isFinal,
-      };
-
-  String getSpeakerLabel(String? contactName, String phoneNumber) {
-    if (isUser) return 'You';
-    return contactName ?? phoneNumber;
-  }
-}
-
 class VerifiedPhoneNumber {
   final String id;
   final String phoneNumber;
