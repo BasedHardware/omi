@@ -398,6 +398,8 @@ class PhoneCallProvider extends ChangeNotifier {
   }
 
   void _handleTranscriptionMessage(String message) {
+    if (message == 'ping') return;
+
     try {
       var data = jsonDecode(message);
 
