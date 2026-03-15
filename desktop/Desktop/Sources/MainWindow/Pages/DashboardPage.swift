@@ -204,9 +204,18 @@ struct DashboardPage: View {
     private var dashboardWidgets: some View {
         VStack(alignment: .leading, spacing: 24) {
             Grid(horizontalSpacing: 16, verticalSpacing: 16) {
-                // Top row: Score + Goals
+                // Top row: Tasks + Goals
                 GridRow {
-                    ScoreWidget(scoreResponse: viewModel.scoreResponse)
+                    TasksWidget(
+                        overdueTasks: viewModel.overdueTasks,
+                        todaysTasks: viewModel.todaysTasks,
+                        recentTasks: viewModel.recentTasks,
+                        onToggleCompletion: { task in
+                            Task {
+                                await viewModel.toggleTaskCompletion(task)
+                            }
+                        }
+                    )
                         .frame(minWidth: 0, maxWidth: .infinity)
 
                     GoalsWidget(
@@ -232,22 +241,6 @@ struct DashboardPage: View {
                             }
                         }
                     )
-                    .frame(minWidth: 0, maxWidth: .infinity)
-                }
-
-                // Bottom row: Tasks (full width)
-                GridRow {
-                    TasksWidget(
-                        overdueTasks: viewModel.overdueTasks,
-                        todaysTasks: viewModel.todaysTasks,
-                        recentTasks: viewModel.recentTasks,
-                        onToggleCompletion: { task in
-                            Task {
-                                await viewModel.toggleTaskCompletion(task)
-                            }
-                        }
-                    )
-                    .gridCellColumns(2)
                     .frame(minWidth: 0, maxWidth: .infinity)
                 }
             }
