@@ -1,5 +1,6 @@
 package com.friend.ios
 
+import android.app.Activity
 import android.content.Context
 import android.media.AudioManager
 import android.util.Log
@@ -19,7 +20,8 @@ import io.flutter.plugin.common.MethodChannel
  * Integrates with Twilio Voice SDK for VoIP calling with real-time audio capture.
  */
 class PhoneCallsPlugin private constructor(
-    private val context: Context
+    private val context: Context,
+    private val activity: Activity?
 ) : MethodChannel.MethodCallHandler, EventChannel.StreamHandler {
 
     private var eventSink: EventChannel.EventSink? = null
@@ -36,7 +38,8 @@ class PhoneCallsPlugin private constructor(
         private const val EVENT_CHANNEL = "com.omi/phone_calls/events"
 
         fun registerWith(flutterEngine: FlutterEngine, context: Context) {
-            val instance = PhoneCallsPlugin(context)
+            val activity = context as? Activity
+            val instance = PhoneCallsPlugin(context, activity)
 
             // Wire audio data callback to stream captured audio to Flutter
             instance.audioDevice.onAudioData = { data, channel ->
@@ -69,6 +72,7 @@ class PhoneCallsPlugin private constructor(
 
         override fun onConnectFailure(call: Call, callException: CallException) {
             Log.e(TAG, "Call failed to connect: ${callException.message}")
+            resetAudioMode()
             sendCallStateEvent("failed")
             activeCall = null
             currentCallId = null
@@ -77,6 +81,7 @@ class PhoneCallsPlugin private constructor(
         override fun onConnected(call: Call) {
             Log.d(TAG, "Call connected")
             activeCall = call
+            setAudioModeInCommunication()
             sendCallStateEvent("active")
         }
 
@@ -91,6 +96,7 @@ class PhoneCallsPlugin private constructor(
         }
 
         override fun onDisconnected(call: Call, callException: CallException?) {
+            resetAudioMode()
             if (callException != null) {
                 Log.e(TAG, "Call disconnected with error: ${callException.message}")
                 sendCallStateEvent("failed")
@@ -159,10 +165,13 @@ class PhoneCallsPlugin private constructor(
     }
 
     private fun handleEndCall(result: MethodChannel.Result) {
-        activeCall?.disconnect()
-        sendCallStateEvent("ended")
-        activeCall = null
-        currentCallId = null
+        if (activeCall == null) {
+            resetAudioMode()
+            sendCallStateEvent("ended")
+        } else {
+            // onDisconnected callback will handle resetAudioMode + state event
+            activeCall?.disconnect()
+        }
         result.success(null)
     }
 
@@ -179,8 +188,52 @@ class PhoneCallsPlugin private constructor(
         isSpeakerOn = speakerOn
 
         val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
-        audioManager.isSpeakerphoneOn = speakerOn
+        if (speakerOn) {
+            // Disable Bluetooth SCO when switching to speaker
+            if (audioManager.isBluetoothScoOn) {
+                audioManager.stopBluetoothSco()
+                audioManager.isBluetoothScoOn = false
+            }
+            audioManager.isSpeakerphoneOn = true
+        } else {
+            audioManager.isSpeakerphoneOn = false
+            // Re-enable Bluetooth SCO if available
+            if (audioManager.isBluetoothScoAvailableOffCall) {
+                audioManager.startBluetoothSco()
+                audioManager.isBluetoothScoOn = true
+            }
+        }
         result.success(null)
+    }
+
+    // MARK: - Audio Mode
+
+    private fun setAudioModeInCommunication() {
+        val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+        audioManager.mode = AudioManager.MODE_IN_COMMUNICATION
+        audioManager.isSpeakerphoneOn = false
+        activity?.volumeControlStream = AudioManager.STREAM_VOICE_CALL
+
+        // Route to Bluetooth headset if one is connected
+        if (audioManager.isBluetoothScoAvailableOffCall || audioManager.isBluetoothScoOn) {
+            audioManager.startBluetoothSco()
+            audioManager.isBluetoothScoOn = true
+        }
+    }
+
+    private fun resetAudioMode() {
+        val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+
+        // Stop Bluetooth SCO if it was started
+        if (audioManager.isBluetoothScoOn) {
+            audioManager.stopBluetoothSco()
+            audioManager.isBluetoothScoOn = false
+        }
+
+        audioManager.mode = AudioManager.MODE_NORMAL
+        audioManager.isSpeakerphoneOn = false
+        isSpeakerOn = false
+        activity?.volumeControlStream = AudioManager.USE_DEFAULT_STREAM_TYPE
     }
 
     // MARK: - Event Sending
