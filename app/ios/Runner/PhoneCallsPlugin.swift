@@ -75,6 +75,8 @@ class PhoneCallsPlugin: NSObject, FlutterPlugin {
             handleToggleMute(call, result: result)
         case "toggleSpeaker":
             handleToggleSpeaker(call, result: result)
+        case "sendDtmf":
+            handleSendDtmf(call, result: result)
         default:
             result(FlutterMethodNotImplemented)
         }
@@ -218,6 +220,16 @@ class PhoneCallsPlugin: NSObject, FlutterPlugin {
             print("PhoneCallsPlugin: speaker toggle error: \(error)")
         }
 
+        result(nil)
+    }
+
+    private func handleSendDtmf(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
+        guard let args = call.arguments as? [String: Any],
+              let digits = args["digits"] as? String else {
+            result(nil)
+            return
+        }
+        activeCall?.sendDigits(digits)
         result(nil)
     }
 
