@@ -252,6 +252,11 @@ env:
         key: SERVICE_ACCOUNT_JSON
   - name: GOOGLE_CLOUD_PROJECT
     value: "based-hardware"
+  - name: METRICS_SECRET
+    valueFrom:
+      secretKeyRef:
+        name: dev-omi-backend-secrets
+        key: METRICS_SECRET
 
 resources:
   # We usually recommend not to specify default resources and to leave this as a conscious

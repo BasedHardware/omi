@@ -291,6 +291,11 @@ env:
         key: TWILIO_TWIML_APP_SID
   - name: VAD_GATE_MODE
     value: "active"
+  - name: METRICS_SECRET
+    valueFrom:
+      secretKeyRef:
+        name: dev-omi-backend-secrets
+        key: METRICS_SECRET
 
 resources:
   # We usually recommend not to specify default resources and to leave this as a conscious
