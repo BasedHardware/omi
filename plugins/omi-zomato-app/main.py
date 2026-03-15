@@ -261,9 +261,88 @@ async def generic_tool_endpoint(tool_name: str, request: Request):
 # ============================================
 
 
+@app.get("/.well-known/omi-tools.json")
+async def omi_tools_manifest():
+    """Omi Chat Tools Manifest endpoint."""
+    return {
+        "tools": [
+            {
+                "name": "search_restaurants",
+                "description": "Search for restaurants nearby. Use this when the user wants to find places to eat, order food, or is looking for a specific cuisine or restaurant.",
+                "endpoint": "/tools/search_restaurants",
+                "method": "POST",
+                "parameters": {
+                    "properties": {
+                        "query": {
+                            "type": "string",
+                            "description": "Search query (e.g., restaurant name, cuisine type, dish)",
+                        },
+                        "location": {"type": "string", "description": "Location or area to search in"},
+                    },
+                    "required": ["query"],
+                },
+                "auth_required": True,
+                "status_message": "Searching restaurants on Zomato...",
+            },
+            {
+                "name": "get_restaurant_menu",
+                "description": "Browse a restaurant's menu to see available items, prices, and ratings. Use this after the user has selected a restaurant.",
+                "endpoint": "/tools/get_restaurant_menu",
+                "method": "POST",
+                "parameters": {
+                    "properties": {
+                        "restaurant_id": {"type": "string", "description": "The restaurant ID to fetch menu for"},
+                    },
+                    "required": ["restaurant_id"],
+                },
+                "auth_required": True,
+                "status_message": "Loading menu...",
+            },
+            {
+                "name": "add_to_cart",
+                "description": "Add an item to the user's Zomato cart. Use this when the user wants to order a specific dish.",
+                "endpoint": "/tools/add_to_cart",
+                "method": "POST",
+                "parameters": {
+                    "properties": {
+                        "item_id": {"type": "string", "description": "The menu item ID to add"},
+                        "quantity": {"type": "integer", "description": "Number of items to add (default: 1)"},
+                    },
+                    "required": ["item_id"],
+                },
+                "auth_required": True,
+                "status_message": "Adding to cart...",
+            },
+            {
+                "name": "get_cart",
+                "description": "View the current contents of the user's Zomato cart including items, quantities, and total price.",
+                "endpoint": "/tools/get_cart",
+                "method": "POST",
+                "parameters": {"properties": {}, "required": []},
+                "auth_required": True,
+                "status_message": "Loading your cart...",
+            },
+            {
+                "name": "place_order",
+                "description": "Place a food order from the current cart. Use this when the user confirms they want to order.",
+                "endpoint": "/tools/place_order",
+                "method": "POST",
+                "parameters": {
+                    "properties": {
+                        "delivery_address": {"type": "string", "description": "Delivery address for the order"},
+                    },
+                    "required": [],
+                },
+                "auth_required": True,
+                "status_message": "Placing your order...",
+            },
+        ]
+    }
+
+
 @app.get("/tools")
 async def list_tools():
-    """Discover and return available Zomato MCP tools."""
+    """Discover and return available Zomato MCP tools (dynamic from MCP server)."""
     try:
         tools = await discover_tools()
         return {"tools": tools}
