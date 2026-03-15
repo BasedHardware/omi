@@ -80,8 +80,11 @@ async def landing():
 # ============================================
 
 
+LOCALHOST_REDIRECT_URI = "http://localhost/callback"
+
+
 async def _get_oauth_config() -> dict:
-    """Get or discover OAuth metadata and register a client. Cached."""
+    """Get or discover OAuth metadata and register a client with localhost redirect. Cached."""
     if _oauth_cache.get("metadata") and _oauth_cache.get("client"):
         return _oauth_cache
 
@@ -91,21 +94,18 @@ async def _get_oauth_config() -> dict:
 
     _oauth_cache["metadata"] = metadata
 
-    redirect_uri = f"{APP_BASE_URL}/auth/zomato/callback"
-
-    # Try dynamic client registration
+    # Register with localhost redirect URI (Zomato only whitelists localhost)
     if metadata.get("registration_endpoint"):
         try:
             client = await register_oauth_client(
                 metadata["registration_endpoint"],
-                redirect_uri,
+                LOCALHOST_REDIRECT_URI,
                 metadata.get("scopes_supported"),
             )
             _oauth_cache["client"] = client
         except Exception as e:
             logger.warning(f"Dynamic client registration failed: {e}")
 
-    # Fall back to env var credentials
     if not _oauth_cache.get("client"):
         client_id = os.getenv("ZOMATO_CLIENT_ID")
         if not client_id:
@@ -123,7 +123,12 @@ async def _get_oauth_config() -> dict:
 
 @app.get("/auth/zomato")
 async def auth_zomato(uid: str):
-    """Initiate Zomato OAuth flow for a user."""
+    """Serve a relay page that handles Zomato OAuth via localhost redirect interception.
+
+    Zomato only allows localhost redirect URIs. This page opens Zomato auth,
+    then intercepts the localhost redirect to capture the auth code and
+    sends it to our server for token exchange.
+    """
     config = await _get_oauth_config()
     metadata = config["metadata"]
     client = config["client"]
@@ -142,33 +147,168 @@ async def auth_zomato(uid: str):
         },
     )
 
-    redirect_uri = f"{APP_BASE_URL}/auth/zomato/callback"
     auth_url = build_authorization_url(
         metadata["authorization_endpoint"],
         client["client_id"],
-        redirect_uri,
+        LOCALHOST_REDIRECT_URI,
         state,
         metadata.get("scopes_supported"),
         code_challenge,
     )
 
-    return RedirectResponse(url=auth_url)
+    callback_url = f"{APP_BASE_URL}/auth/zomato/callback"
+
+    return HTMLResponse(
+        f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <title>Connect Zomato</title>
+        <style>
+            * {{ margin: 0; padding: 0; box-sizing: border-box; }}
+            body {{ font-family: -apple-system, BlinkMacSystemFont, sans-serif; background: #1a1a1a; color: #fff;
+                    display: flex; justify-content: center; align-items: center; min-height: 100vh; padding: 20px; }}
+            .container {{ max-width: 400px; text-align: center; }}
+            h1 {{ font-size: 24px; margin-bottom: 12px; }}
+            p {{ color: #aaa; margin-bottom: 24px; font-size: 14px; }}
+            .btn {{ display: inline-block; background: #e23744; color: #fff; padding: 14px 32px; border-radius: 8px;
+                    text-decoration: none; font-size: 16px; font-weight: 600; cursor: pointer; border: none; }}
+            .btn:hover {{ background: #c62d3a; }}
+            .status {{ margin-top: 20px; font-size: 14px; color: #aaa; }}
+            .spinner {{ display: none; margin: 20px auto; width: 30px; height: 30px; border: 3px solid #333;
+                        border-top-color: #e23744; border-radius: 50%; animation: spin 0.8s linear infinite; }}
+            @keyframes spin {{ to {{ transform: rotate(360deg); }} }}
+            .success {{ color: #4caf50; font-size: 18px; font-weight: 600; }}
+            .error {{ color: #e23744; }}
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <h1>Connect Zomato</h1>
+            <p id="msg">Tap below to authorize Omi to order food on your behalf.</p>
+            <button class="btn" id="authBtn" onclick="startAuth()">Authorize with Zomato</button>
+            <div class="spinner" id="spinner"></div>
+            <div class="status" id="status"></div>
+        </div>
+        <script>
+            const AUTH_URL = "{auth_url}";
+            const CALLBACK_URL = "{callback_url}";
+            let authWindow = null;
+            let pollTimer = null;
+
+            function startAuth() {{
+                document.getElementById('authBtn').style.display = 'none';
+                document.getElementById('spinner').style.display = 'block';
+                document.getElementById('status').textContent = 'Waiting for authorization...';
+
+                // Open Zomato auth in a new window/tab
+                authWindow = window.open(AUTH_URL, '_blank', 'width=500,height=700');
+
+                // If popup was blocked, redirect in same window with a different strategy
+                if (!authWindow || authWindow.closed) {{
+                    // Fall back: redirect in same window, user will need to come back
+                    document.getElementById('status').textContent = 'Redirecting to Zomato...';
+                    window.location.href = AUTH_URL;
+                    return;
+                }}
+
+                // Poll the popup location to catch localhost redirect
+                pollTimer = setInterval(checkPopup, 500);
+
+                // Also set a timeout
+                setTimeout(function() {{
+                    if (pollTimer) {{
+                        clearInterval(pollTimer);
+                        document.getElementById('spinner').style.display = 'none';
+                        document.getElementById('status').innerHTML =
+                            '<span class="error">Timed out. Please try again.</span>';
+                        document.getElementById('authBtn').style.display = 'inline-block';
+                    }}
+                }}, 300000); // 5 min timeout
+            }}
+
+            function checkPopup() {{
+                if (!authWindow || authWindow.closed) {{
+                    clearInterval(pollTimer);
+                    pollTimer = null;
+                    document.getElementById('spinner').style.display = 'none';
+                    document.getElementById('status').innerHTML =
+                        '<span class="error">Authorization window closed. Please try again.</span>';
+                    document.getElementById('authBtn').style.display = 'inline-block';
+                    return;
+                }}
+
+                try {{
+                    // Try to read the popup URL - this will throw cross-origin errors
+                    // until it redirects to localhost (which is a different kind of error)
+                    const popupUrl = authWindow.location.href;
+
+                    // If we can read it and it starts with localhost, we caught the redirect
+                    if (popupUrl && popupUrl.startsWith('http://localhost')) {{
+                        clearInterval(pollTimer);
+                        pollTimer = null;
+                        authWindow.close();
+
+                        // Extract code and state from the URL
+                        const url = new URL(popupUrl);
+                        const code = url.searchParams.get('code');
+                        const state = url.searchParams.get('state');
+
+                        if (code && state) {{
+                            document.getElementById('status').textContent = 'Completing setup...';
+                            exchangeCode(code, state);
+                        }} else {{
+                            document.getElementById('spinner').style.display = 'none';
+                            document.getElementById('status').innerHTML =
+                                '<span class="error">Authorization failed. No code received.</span>';
+                            document.getElementById('authBtn').style.display = 'inline-block';
+                        }}
+                    }}
+                }} catch (e) {{
+                    // Expected: cross-origin error while on Zomato's domain. Keep polling.
+                }}
+            }}
+
+            async function exchangeCode(code, state) {{
+                try {{
+                    const resp = await fetch(CALLBACK_URL + '?code=' + encodeURIComponent(code) + '&state=' + encodeURIComponent(state));
+                    if (resp.ok) {{
+                        document.getElementById('spinner').style.display = 'none';
+                        document.getElementById('msg').textContent = '';
+                        document.getElementById('status').innerHTML =
+                            '<span class="success">Zomato Connected!</span><br><br>You can now order food through Omi. Go back to the app.';
+                    }} else {{
+                        const err = await resp.text();
+                        throw new Error(err);
+                    }}
+                }} catch (e) {{
+                    document.getElementById('spinner').style.display = 'none';
+                    document.getElementById('status').innerHTML =
+                        '<span class="error">Setup failed: ' + e.message + '</span>';
+                    document.getElementById('authBtn').style.display = 'inline-block';
+                }}
+            }}
+        </script>
+    </body>
+    </html>
+    """
+    )
 
 
 @app.get("/auth/zomato/callback")
 async def auth_callback(code: str, state: str):
-    """Handle Zomato OAuth callback."""
+    """Exchange auth code for tokens. Called by the relay page after intercepting localhost redirect."""
     state_data = get_oauth_state(state)
     if not state_data:
         raise HTTPException(status_code=400, detail="Invalid or expired OAuth state")
 
     uid = state_data["uid"]
-    redirect_uri = f"{APP_BASE_URL}/auth/zomato/callback"
 
     tokens = await exchange_oauth_code(
         state_data["token_endpoint"],
         code,
-        redirect_uri,
+        LOCALHOST_REDIRECT_URI,
         state_data["client_id"],
         state_data.get("client_secret"),
         state_data.get("code_verifier"),
@@ -186,17 +326,7 @@ async def auth_callback(code: str, state: str):
 
     store_zomato_tokens(uid, token_data)
 
-    return HTMLResponse(
-        """
-        <html>
-        <head><title>Connected!</title></head>
-        <body style="font-family: sans-serif; max-width: 600px; margin: 50px auto; text-align: center;">
-            <h1>Zomato Connected!</h1>
-            <p>You can now order food through Omi. Go back to the app and start chatting!</p>
-        </body>
-        </html>
-        """
-    )
+    return JSONResponse({"status": "ok", "message": "Zomato connected successfully"})
 
 
 @app.get("/setup/zomato")
