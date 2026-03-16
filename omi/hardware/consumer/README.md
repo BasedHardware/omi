@@ -59,7 +59,7 @@ The firmware is open source and lives at [`omi/firmware/`](../../firmware/). Bui
 
 ## File Checksums (SHA-256)
 
-Use these checksums to verify file integrity against the original [Google Drive source](https://drive.google.com/drive/folders/1sl5V4StOxhEzqEKXIADl7JdM9rkdb7j4).
+Use these checksums to verify file integrity after cloning.
 
 ```
 sha256sum -c checksums.sha256
