@@ -105,6 +105,16 @@
         "group": "Hardware",
         "pages": [
           "doc/hardware/OmiConsumer",
+          {
+            "group": "CV1 Open Source",
+            "pages": [
+              "doc/hardware/consumer-cv1/index",
+              "doc/hardware/consumer-cv1/electronics",
+              "doc/hardware/consumer-cv1/mechanical",
+              "doc/hardware/consumer-cv1/assembly",
+              "doc/hardware/consumer-cv1/license"
+            ]
+          },
           "doc/hardware/DevKit2",
           "doc/hardware/DevKit1",
           "doc/hardware/PaintingOMI"
