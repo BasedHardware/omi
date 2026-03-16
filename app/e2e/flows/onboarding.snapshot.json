@@ -1,0 +1,191 @@
+{
+  "version": 1,
+  "flow": "onboarding",
+  "flowHash": "4d348bbc3ab15ad1",
+  "device": {
+    "model": "emulator-5554",
+    "resolution": "unknown"
+  },
+  "createdAt": "2026-03-16T02:29:09.628Z",
+  "runId": "EdaRFxU",
+  "totalDurationMs": 0,
+  "verifySteps": [
+    "S1",
+    "S4",
+    "S8",
+    "S9"
+  ],
+  "steps": {
+    "S1": {
+      "kind": "action",
+      "waitAfterMs": 500,
+      "durationMs": 0,
+      "command": "snapshot",
+      "ref": "e2",
+      "text": "Name field",
+      "type": "textfield",
+      "bounds": {
+        "x": 33,
+        "y": 732,
+        "width": 345,
+        "height": 61
+      },
+      "center": {
+        "x": 206,
+        "y": 763
+      }
+    },
+    "S2": {
+      "kind": "action",
+      "waitAfterMs": 500,
+      "durationMs": 0,
+      "command": "snapshot",
+      "ref": "e2",
+      "text": "English",
+      "type": "gesture",
+      "bounds": {
+        "x": 32,
+        "y": 728,
+        "width": 347,
+        "height": 66
+      },
+      "center": {
+        "x": 206,
+        "y": 761
+      }
+    },
+    "S3": {
+      "kind": "action",
+      "waitAfterMs": 500,
+      "durationMs": 0,
+      "command": "press",
+      "ref": "e3",
+      "text": "YouTube",
+      "type": "gesture",
+      "bounds": {
+        "x": 32,
+        "y": 630,
+        "width": 347,
+        "height": 48
+      },
+      "center": {
+        "x": 206,
+        "y": 654
+      }
+    },
+    "S4": {
+      "kind": "action",
+      "waitAfterMs": 500,
+      "durationMs": 0,
+      "command": "press",
+      "ref": "e2",
+      "text": "Background activity",
+      "type": "checkbox",
+      "bounds": {
+        "x": 306,
+        "y": 532,
+        "width": 48,
+        "height": 48
+      },
+      "center": {
+        "x": 330,
+        "y": 556
+      }
+    },
+    "S5": {
+      "kind": "action",
+      "waitAfterMs": 500,
+      "durationMs": 0,
+      "command": "press",
+      "ref": "e3",
+      "text": "Maybe Later",
+      "type": "button",
+      "bounds": {
+        "x": 153,
+        "y": 838,
+        "width": 105,
+        "height": 48
+      },
+      "center": {
+        "x": 206,
+        "y": 862
+      }
+    },
+    "S6": {
+      "kind": "action",
+      "waitAfterMs": 500,
+      "durationMs": 0,
+      "command": "press",
+      "ref": "e3",
+      "text": "Skip for now",
+      "type": "button",
+      "bounds": {
+        "x": 153,
+        "y": 834,
+        "width": 105,
+        "height": 48
+      },
+      "center": {
+        "x": 206,
+        "y": 858
+      }
+    },
+    "S7": {
+      "kind": "action",
+      "waitAfterMs": 500,
+      "durationMs": 0,
+      "command": "press",
+      "ref": "e3",
+      "text": "Continue",
+      "type": "button",
+      "bounds": {
+        "x": 24,
+        "y": 810,
+        "width": 363,
+        "height": 56
+      },
+      "center": {
+        "x": 206,
+        "y": 838
+      }
+    },
+    "S8": {
+      "kind": "action",
+      "waitAfterMs": 500,
+      "durationMs": 0,
+      "command": "press",
+      "ref": "e2",
+      "text": "Start Using Omi",
+      "type": "button",
+      "bounds": {
+        "x": 40,
+        "y": 802,
+        "width": 331,
+        "height": 56
+      },
+      "center": {
+        "x": 206,
+        "y": 830
+      }
+    },
+    "S9": {
+      "kind": "action",
+      "waitAfterMs": 500,
+      "durationMs": 0,
+      "command": "snapshot",
+      "ref": "e15",
+      "text": "Home tab",
+      "type": "gesture",
+      "bounds": {
+        "x": 20,
+        "y": 810,
+        "width": 73,
+        "height": 80
+      },
+      "center": {
+        "x": 57,
+        "y": 850
+      }
+    }
+  }
+}
