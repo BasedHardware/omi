@@ -18,7 +18,7 @@ users_collection = 'users'
 
 def _goal_dict(doc) -> Dict[str, Any]:
     """Convert a Firestore document to a goal dict, ensuring 'id' is always present."""
-    data = doc.to_dict()
+    data = doc.to_dict() or {}
     if not data.get('id'):
         data['id'] = doc.id
     return data
