@@ -1,0 +1,96 @@
+---
+title: "Assembly & BOM"
+description: "Bill of Materials and assembly reference for building the Omi from components."
+---
+
+## Bill of Materials
+
+The BOM contains 88 components across the mainboard, charger board, FPC, and mechanical assembly.
+
+**Download:**
+- [CSV format](https://github.com/BasedHardware/omi/blob/main/omi/hardware/consumer/bom/omi-bom.csv)
+- [XLSX format](https://github.com/BasedHardware/omi/blob/main/omi/hardware/consumer/bom/omi-bom.xlsx)
+
+### Key Components
+
+| Component | MPN | Manufacturer | Qty |
+|-----------|-----|--------------|-----|
+| Main SoC | nRF5340-CLAA | Nordic Semiconductor | 1 |
+| Wi-Fi IC | nRF7002-CEAA-R7 | Nordic Semiconductor | 1 |
+| Microphones | MMICT5838-00-012 | TDK | 2 |
+| 8GB NAND Flash | CSNP4GCR01-DPW | CS | 1 |
+| 6-axis IMU | LSM6DS3TR-C | STMicroelectronics | 1 |
+| Battery Charger | BQ25101YFPR | Texas Instruments | 1 |
+| DC-DC Buck | TPS628438YKAR | Texas Instruments | 1 |
+| Load Switch | TPS22916CYFPR | Texas Instruments | 2 |
+| RF Switch | FM8625H | FUMAN | 1 |
+| LDO 3.3V | SGM2036S-3.3XXDH4G/TR | SGMICRO | 1 |
+| LDO 1.8V | SGM2036S-1.8XXDH4G/TR | SGMICRO | 1 |
+| Crystal 40MHz | CJ17-400001010B20 | CJ | 1 |
+| Crystal 32MHz | 1S32000049 | Faith Long | 1 |
+| Crystal 32.768KHz | DST1610A | KDS | 1 |
+| Battery | GRP1654M1-1C-1S1P-3.7V-150mAh | GERUIPU | 1 |
+| Vibration Motor | LBM0525A4123F | LIDEWEI | 1 |
+| RGB LED | MHPA0606RGBDT | MEIHUA | 2 |
+| Pogo Pins (device) | CA02-PG07 | JINLANTIAN | 6 |
+| Pogo Pins (charger) | CA62-PG308 | JINLANTIAN | 2 |
+| Tactile Button | TS-1001S | JINBEILI | 1 |
+
+### Passive Components
+
+The mainboard uses 0201-size passives (resistors, capacitors) primarily from YAGEO and Murata. See the full BOM CSV for complete listings including designators.
+
+---
+
+## Assembly Reference
+
+### Exploded View
+
+The device consists of these main assemblies:
+1. **Front aluminium cover** (CNC machined)
+2. **LED light guide** (SLA/translucent)
+3. **Main frame** (SLA/translucent PC+ABS)
+4. **PCB mainboard** with microphones, SoC, flash
+5. **FPC** connecting to charging contacts
+6. **Battery** (150mAh LiPo)
+7. **Vibration motor**
+8. **Silicone pad**
+9. **Back aluminium cover** (CNC machined)
+
+### Reference Photos
+
+Assembly photos are in `assembly/photos/`:
+- `materials-labelled-exploded-view.jpg` — All components identified
+- `materials-labelled.jpg` — Materials and finish callouts
+- `components-disassembled.jpg` — Individual components laid out
+- `outer-aluminium-covers.jpg` — CNC aluminium cover detail
+
+### Additional Mechanical Parts
+
+| Part | Specification | Qty |
+|------|---------------|-----|
+| Dust filter | 5.8x4.0x0.1mm | 2 |
+| Double-sided tape (small) | D4xd1.5xH0.1mm | 2 |
+| Double-sided tape (large) | 14x12.5x0.1mm | 1 |
+| Phillips screws | CM1.2x5 | 3 |
+| N52 magnets | D3xH3mm | 4 |
+| Light pipe | PC, D6xH1.9mm (custom) | 1 |
+| S300 glue | 20g/pcs | 1 |
+| UV glue | DDY6203_6 | 1 |
+| Necklace rope | 2.5mm, L650mm | 1 |
+| Protection cover | 28.7x35.5x11mm (molded) | 1 |
+
+---
+
+## File Integrity
+
+All design files include SHA-256 checksums for verification against the original source files.
+
+```bash
+cd omi/hardware/consumer
+sha256sum -c checksums.sha256
+```
+
+<Card title="View Checksums" icon="fingerprint" href="https://github.com/BasedHardware/omi/blob/main/omi/hardware/consumer/checksums.sha256">
+  SHA-256 checksums for all 58 design files (ZIP, STEP, PDF, BOM, images)
+</Card>

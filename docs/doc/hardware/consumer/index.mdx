@@ -1,0 +1,79 @@
+---
+title: "Open Source Hardware"
+description: "Complete open-source design files for the Omi Consumer — PCB schematics, Gerbers, mechanical STEP files, BOM, and assembly guides."
+---
+
+## Omi Consumer Open Source Hardware
+
+The Omi Consumer is fully open source. All design files needed to study, modify, manufacture, and sell the hardware are available under the MIT license.
+
+<CardGroup cols={2}>
+  <Card title="Electronics" icon="microchip" href="/doc/hardware/consumer/electronics">
+    PCB schematics, Altium source, Gerber files for mainboard, charger, and FPC
+  </Card>
+  <Card title="Mechanical & Packaging" icon="cube" href="/doc/hardware/consumer/mechanical">
+    STEP files for enclosure, charger, foam inserts, and packaging
+  </Card>
+  <Card title="Assembly & BOM" icon="screwdriver-wrench" href="/doc/hardware/consumer/assembly">
+    88-component BOM with manufacturer part numbers and assembly photos
+  </Card>
+  <Card title="License" icon="scale-balanced" href="/doc/hardware/consumer/license">
+    MIT license — use, modify, and distribute freely
+  </Card>
+</CardGroup>
+
+---
+
+## Quick Specs
+
+| Component | Specification |
+|-----------|---------------|
+| Processor | nRF5340 dual-core Bluetooth LE SoC |
+| Wi-Fi | nRF7002 Wi-Fi 6 chip |
+| Audio | 2x TDK T5838 top-port PDM microphones |
+| Storage | 8GB NAND Flash (CSNP4GCR01) |
+| IMU | LSM6DS3TR-C 6-axis |
+| Battery | 3.7V 150mAh LiPo |
+| Charging | BQ25101 charger IC, magnetic pogo pins |
+| Form Factor | 25.5mm diameter wearable pendant |
+
+---
+
+## Repository Structure
+
+```
+omi/hardware/consumer/
+├── electrical/          # PCB design files
+│   ├── mainboard/       # nRF5340 + nRF7002 main board
+│   ├── charger-board/   # Magnetic charger dock
+│   └── fpc-board/       # Flexible printed circuit
+├── bom/                 # Bill of Materials (CSV + XLSX)
+├── mechanical/          # Enclosure & parts (STEP files)
+│   ├── assemblies/      # Full device + charger assembly
+│   ├── parts/           # Individual parts by process
+│   └── drawings/        # 2D technical drawings
+├── assembly/            # Assembly photos & instructions
+└── packaging/           # Retail packaging CAD & photos
+```
+
+---
+
+## How to Use These Files
+
+<Steps>
+  <Step title="Order PCBs">
+    Upload the Gerber ZIP files from `electrical/*/gerbers/` to your PCB manufacturer (JLCPCB, PCBWay, etc.)
+  </Step>
+  <Step title="Source Components">
+    Use the BOM CSV with manufacturer part numbers (MPN column) to order from Mouser, DigiKey, or LCSC
+  </Step>
+  <Step title="Manufacture Enclosure">
+    Use STEP files from `mechanical/parts/` — each subfolder indicates the manufacturing process (CNC, injection molding, SLA, silicone)
+  </Step>
+  <Step title="Assemble">
+    Reference the assembly photos and exploded views in `assembly/`
+  </Step>
+  <Step title="Flash Firmware">
+    Follow the [firmware compilation guide](/doc/developer/firmware/Compile_firmware) to build and flash
+  </Step>
+</Steps>
