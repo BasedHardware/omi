@@ -1,0 +1,121 @@
+# E2E Flow: Conversation Lifecycle — silence → processing → title/summary → list
+# Tests: recording active → silence timeout → backend processes → structured data → UI shows conversation
+# Core path: segments arrive → silence gap → lifecycle manager triggers → LLM summarizes → conversation in list
+
+version: 2
+name: conversation-lifecycle
+description: >
+  Full conversation lifecycle: audio streams with speech,
+  silence period exceeds conversation_timeout (120s),
+  backend lifecycle manager triggers processing,
+  LLM generates title/summary/action items,
+  conversation appears in app's conversation list as completed.
+app: com.friend.ios.dev
+evidence:
+  video: true
+covers:
+  - app/lib/providers/capture_provider.dart           # Client-side recording state
+  - app/lib/providers/conversation_provider.dart       # Conversation list management
+  - app/lib/pages/conversation_capturing/page.dart     # Live transcript UI
+  - app/lib/pages/conversations/conversations_page.dart  # Conversation list page
+preconditions:
+  - auth_ready
+  - microphone_permission
+
+steps:
+  - id: S1
+    name: Start phone mic recording
+    do: >
+      From home screen, tap the center record button to start phone mic recording.
+      Wait for the capturing page to appear with "listening" status.
+    expect:
+      - kind: text_visible
+        values: ["listening"]
+    evidence:
+      - screenshot: lifecycle-01-recording.webp
+
+  - id: S2
+    name: Generate speech for transcription
+    do: >
+      Produce speech input for at least 10 seconds.
+      On emulator: use adb to push an audio file to the mic input,
+      or speak into the host mic if audio passthrough is configured.
+      Verify transcript segments appear in the capturing page.
+    verify: true
+    evidence:
+      - screenshot: lifecycle-02-speech-segments.webp
+    note: >
+      Emulator mic simulation:
+        adb emu audio play /path/to/test-audio.wav
+      Or use text-to-speech on host and pipe to emulator audio.
+      Need enough content for LLM to generate meaningful title/summary.
+
+  - id: S3
+    name: Wait for silence timeout (conversation_timeout)
+    do: >
+      Stop all speech input and wait silently.
+      The backend conversation_timeout is 120 seconds by default.
+      After 120s of no new transcript segments, the lifecycle manager
+      triggers conversation processing.
+      UI may show "processing" or similar status change.
+    evidence:
+      - screenshot: lifecycle-03-silence-timeout.webp
+    note: >
+      Backend lifecycle manager runs every 5 seconds, checking:
+        if now - finished_at > conversation_timeout → process.
+      finished_at only updates when real transcript segments arrive,
+      not from silence keepalive bytes.
+      Total wait: ~120-130 seconds from last speech.
+
+  - id: S4
+    name: Verify conversation processing status
+    do: >
+      Observe the UI transition from recording/listening to processing.
+      The processing state shows in the conversations list as a
+      processing card with spinner or "Processing..." text.
+      ConversationStatus transitions: in_progress → processing.
+    expect:
+      - kind: text_visible
+        values: ["Processing", "processing"]
+    evidence:
+      - screenshot: lifecycle-04-processing.webp
+    note: >
+      Backend sends opcode 201 via WebSocket when conversation is created.
+      ConversationProvider receives it and adds to processingConversations.
+      LLM generates: title, overview, emoji, category, action items.
+
+  - id: S5
+    name: Verify completed conversation with structured data
+    do: >
+      Wait for processing to complete (10-30 seconds after trigger).
+      Navigate to conversations tab if not already there.
+      Verify the new conversation shows in the list with:
+      - A generated title (not empty — Flaw: empty title = discarded)
+      - Emoji indicator
+      - Timestamp
+    verify: true
+    expect:
+      - kind: text_visible
+        values: ["Completed"]
+    evidence:
+      - screenshot: lifecycle-05-completed.webp
+    note: >
+      If title is empty, conversation is treated as discarded
+      (_get_conversation_obj treats title=="" as discarded).
+      This is a known issue when audio content is too short/generic.
+
+  - id: S6
+    name: Open conversation detail and verify content
+    do: >
+      Tap the new conversation in the list to open the detail page.
+      Verify it contains:
+      - Summary tab with overview text
+      - Transcript tab with speaker-labeled segments
+      - Action items (if any were detected)
+    verify: true
+    evidence:
+      - screenshot: lifecycle-06-detail.webp
+    note: >
+      ConversationDetailPage shows tabs: Summary, Transcript, Action Items.
+      Transcript segments preserve speaker assignments from diarization.
+      Photos (if any) appear inline with transcript timeline.
