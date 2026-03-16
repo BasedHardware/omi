@@ -41,20 +41,19 @@ The Omi Consumer is fully open source. All design files needed to study, modify,
 
 ## Repository Structure
 
-```
-omi/hardware/consumer/
-├── electrical/          # PCB design files
-│   ├── mainboard/       # nRF5340 + nRF7002 main board
-│   ├── charger-board/   # Magnetic charger dock
-│   └── fpc-board/       # Flexible printed circuit
-├── bom/                 # Bill of Materials (CSV + XLSX)
-├── mechanical/          # Enclosure & parts (STEP files)
-│   ├── assemblies/      # Full device + charger assembly
-│   ├── parts/           # Individual parts by process
-│   └── drawings/        # 2D technical drawings
-├── assembly/            # Assembly photos & instructions
-└── packaging/           # Retail packaging CAD & photos
-```
+| Directory | Contents |
+|-----------|----------|
+| [`electrical/`](https://github.com/BasedHardware/omi/tree/main/omi/hardware/consumer/electrical) | PCB design files |
+| [`electrical/mainboard/`](https://github.com/BasedHardware/omi/tree/main/omi/hardware/consumer/electrical/mainboard) | nRF5340 + nRF7002 main board |
+| [`electrical/charger-board/`](https://github.com/BasedHardware/omi/tree/main/omi/hardware/consumer/electrical/charger-board) | Magnetic charger dock |
+| [`electrical/fpc-board/`](https://github.com/BasedHardware/omi/tree/main/omi/hardware/consumer/electrical/fpc-board) | Flexible printed circuit |
+| [`bom/`](https://github.com/BasedHardware/omi/tree/main/omi/hardware/consumer/bom) | Bill of Materials (CSV + XLSX) |
+| [`mechanical/`](https://github.com/BasedHardware/omi/tree/main/omi/hardware/consumer/mechanical) | Enclosure & parts (STEP files) |
+| [`mechanical/assemblies/`](https://github.com/BasedHardware/omi/tree/main/omi/hardware/consumer/mechanical/assemblies) | Full device + charger assembly |
+| [`mechanical/parts/`](https://github.com/BasedHardware/omi/tree/main/omi/hardware/consumer/mechanical/parts) | Individual parts by process |
+| [`mechanical/drawings/`](https://github.com/BasedHardware/omi/tree/main/omi/hardware/consumer/mechanical/drawings) | 2D technical drawings |
+| [`assembly/`](https://github.com/BasedHardware/omi/tree/main/omi/hardware/consumer/assembly) | Assembly photos & instructions |
+| [`packaging/`](https://github.com/BasedHardware/omi/tree/main/omi/hardware/consumer/packaging) | Retail packaging CAD & photos |
 
 ---
 
@@ -62,16 +61,16 @@ omi/hardware/consumer/
 
 <Steps>
   <Step title="Order PCBs">
-    Upload the Gerber ZIP files from `electrical/*/gerbers/` to your PCB manufacturer (JLCPCB, PCBWay, etc.)
+    Upload the Gerber ZIP files from [`electrical/*/gerbers/`](https://github.com/BasedHardware/omi/tree/main/omi/hardware/consumer/electrical) to your PCB manufacturer (JLCPCB, PCBWay, etc.)
   </Step>
   <Step title="Source Components">
-    Use the BOM CSV with manufacturer part numbers (MPN column) to order from Mouser, DigiKey, or LCSC
+    Use the [BOM CSV](https://github.com/BasedHardware/omi/blob/main/omi/hardware/consumer/bom/omi-bom.csv) with manufacturer part numbers (MPN column) to order from Mouser, DigiKey, or LCSC
   </Step>
   <Step title="Manufacture Enclosure">
-    Use STEP files from `mechanical/parts/` — each subfolder indicates the manufacturing process (CNC, injection molding, SLA, silicone)
+    Use STEP files from [`mechanical/parts/`](https://github.com/BasedHardware/omi/tree/main/omi/hardware/consumer/mechanical/parts) — each subfolder indicates the manufacturing process (CNC, injection molding, SLA, silicone)
   </Step>
   <Step title="Assemble">
-    Reference the assembly photos and exploded views in `assembly/`
+    Reference the assembly photos and exploded views in [`assembly/`](https://github.com/BasedHardware/omi/tree/main/omi/hardware/consumer/assembly)
   </Step>
   <Step title="Flash Firmware">
     Follow the [firmware compilation guide](/doc/developer/firmware/Compile_firmware) to build and flash
