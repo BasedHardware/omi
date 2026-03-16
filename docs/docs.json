@@ -106,13 +106,13 @@
         "pages": [
           "doc/hardware/OmiConsumer",
           {
-            "group": "CV1 Open Source",
+            "group": "Open Source Hardware",
             "pages": [
-              "doc/hardware/consumer-cv1/index",
-              "doc/hardware/consumer-cv1/electronics",
-              "doc/hardware/consumer-cv1/mechanical",
-              "doc/hardware/consumer-cv1/assembly",
-              "doc/hardware/consumer-cv1/license"
+              "doc/hardware/consumer/index",
+              "doc/hardware/consumer/electronics",
+              "doc/hardware/consumer/mechanical",
+              "doc/hardware/consumer/assembly",
+              "doc/hardware/consumer/license"
             ]
           },
           "doc/hardware/DevKit2",

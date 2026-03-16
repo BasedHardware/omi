@@ -1,6 +1,6 @@
-# Omi Consumer CV1 — Open Source Hardware
+# Omi Consumer — Open Source Hardware
 
-Complete hardware design files for the Omi Consumer Version 1 (CV1), the world's leading open-source AI wearable.
+Complete hardware design files for the Omi Consumer, the world's leading open-source AI wearable.
 
 Licensed under MIT (see [LICENSE](LICENSE)).
 
@@ -48,14 +48,14 @@ Licensed under MIT (see [LICENSE](LICENSE)).
 
 ## Firmware
 
-The CV1 firmware is open source and lives at [`omi/firmware/`](../../firmware/). Built on Zephyr RTOS with nRF Connect SDK.
+The firmware is open source and lives at [`omi/firmware/`](../../firmware/). Built on Zephyr RTOS with nRF Connect SDK.
 
 ## Getting Started
 
 1. **Build one**: Use the Gerber files to order PCBs, the BOM to source components, and the STEP files to manufacture the enclosure.
 2. **Modify the design**: Open Altium source files to customize the electronics, or edit STEP files to redesign the enclosure.
 3. **Flash firmware**: Follow the [firmware guide](https://docs.omi.me/doc/developer/firmware/Compile_firmware).
-4. **Documentation**: Visit [docs.omi.me](https://docs.omi.me/doc/hardware/consumer-cv1) for detailed guides.
+4. **Documentation**: Visit [docs.omi.me](https://docs.omi.me/doc/hardware/consumer) for detailed guides.
 
 ## Questions?
 

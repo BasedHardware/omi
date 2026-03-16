@@ -1,12 +1,12 @@
-# Bill of Materials — Omi CV1
+# Bill of Materials — Omi Consumer
 
-The BOM lists all 88 components needed to build one Omi CV1 device (mainboard + charger + mechanical parts).
+The BOM lists all 88 components needed to build one Omi device (mainboard + charger + mechanical parts).
 
 ## Files
 
-- `cv1-bom.csv` — Machine-readable CSV format
-- `cv1-bom.xlsx` — Spreadsheet format (cleaned)
-- `cv1-bom-original.xlsx` — Original manufacturer BOM
+- `omi-bom.csv` — Machine-readable CSV format
+- `omi-bom.xlsx` — Spreadsheet format (cleaned)
+- `omi-bom-original.xlsx` — Original manufacturer BOM
 
 ## Columns
 

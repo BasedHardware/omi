@@ -1,23 +1,23 @@
 ---
 title: "Open Source Hardware"
-description: "Complete open-source design files for the Omi Consumer CV1 — PCB schematics, Gerbers, mechanical STEP files, BOM, and assembly guides."
+description: "Complete open-source design files for the Omi Consumer — PCB schematics, Gerbers, mechanical STEP files, BOM, and assembly guides."
 ---
 
-## Omi CV1 Open Source Hardware
+## Omi Consumer Open Source Hardware
 
-The Omi Consumer Version 1 (CV1) is fully open source. All design files needed to study, modify, manufacture, and sell the hardware are available under the MIT license.
+The Omi Consumer is fully open source. All design files needed to study, modify, manufacture, and sell the hardware are available under the MIT license.
 
 <CardGroup cols={2}>
-  <Card title="Electronics" icon="microchip" href="/doc/hardware/consumer-cv1/electronics">
+  <Card title="Electronics" icon="microchip" href="/doc/hardware/consumer/electronics">
     PCB schematics, Altium source, Gerber files for mainboard, charger, and FPC
   </Card>
-  <Card title="Mechanical & Packaging" icon="cube" href="/doc/hardware/consumer-cv1/mechanical">
+  <Card title="Mechanical & Packaging" icon="cube" href="/doc/hardware/consumer/mechanical">
     STEP files for enclosure, charger, foam inserts, and packaging
   </Card>
-  <Card title="Assembly & BOM" icon="screwdriver-wrench" href="/doc/hardware/consumer-cv1/assembly">
+  <Card title="Assembly & BOM" icon="screwdriver-wrench" href="/doc/hardware/consumer/assembly">
     88-component BOM with manufacturer part numbers and assembly photos
   </Card>
-  <Card title="License" icon="scale-balanced" href="/doc/hardware/consumer-cv1/license">
+  <Card title="License" icon="scale-balanced" href="/doc/hardware/consumer/license">
     MIT license — use, modify, and distribute freely
   </Card>
 </CardGroup>
@@ -42,9 +42,9 @@ The Omi Consumer Version 1 (CV1) is fully open source. All design files needed t
 ## Repository Structure
 
 ```
-omi/hardware/consumer-cv1/
+omi/hardware/consumer/
 ├── electrical/          # PCB design files
-│   ├── mainboard/       # nRF5340 + nRF7002 main board (v1.1, v1.2)
+│   ├── mainboard/       # nRF5340 + nRF7002 main board
 │   ├── charger-board/   # Magnetic charger dock
 │   └── fpc-board/       # Flexible printed circuit
 ├── bom/                 # Bill of Materials (CSV + XLSX)
