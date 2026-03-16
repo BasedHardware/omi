@@ -1,0 +1,118 @@
+# E2E Flow: Phone Mic Capture — full recording lifecycle via phone microphone
+# Tests: record button → capturing page → live transcript → stop → conversation processed
+# Core path: user taps record → mic streams to backend WS → transcription appears → conversation created
+
+version: 2
+name: phone-mic-capture
+description: >
+  Complete phone mic recording flow: tap record button on home screen,
+  verify capturing page loads with live transcript area and waveform,
+  wait for transcription segments to appear, stop recording,
+  verify conversation processes and appears in conversation list.
+app: com.friend.ios.dev
+evidence:
+  video: true
+covers:
+  - app/lib/widgets/bottom_nav_bar.dart          # Record FAB button
+  - app/lib/pages/conversation_capturing/page.dart  # Capturing page UI
+  - app/lib/providers/capture_provider.dart       # Recording state machine
+  - app/lib/services/sockets/transcription_connection.dart  # WS to backend
+preconditions:
+  - auth_ready
+  - microphone_permission
+
+steps:
+  - id: S1
+    name: Verify home screen with record button
+    do: >
+      Confirm home screen is showing with the center record button visible.
+      The record button is the large circular FAB in the center of the bottom nav bar.
+      It should show a microphone icon (idle state).
+    verify: true
+    expect:
+      - kind: interactive_count
+        min: 15
+    evidence:
+      - screenshot: phone-mic-01-home.webp
+    note: >
+      Record button only appears when no Omi device is connected.
+      If device is paired, disconnect it first.
+
+  - id: S2
+    name: Tap record button to start phone mic recording
+    do: >
+      Tap the center record button (large circular GestureDetector in bottom nav).
+      The button should transition from microphone icon → spinner (initialising) → stop icon (recording).
+      App navigates to ConversationCapturingPage.
+    expect:
+      - kind: text_visible
+        values: ["listening"]
+    evidence:
+      - screenshot: phone-mic-02-recording-started.webp
+    note: >
+      State flow: RecordingState.stop → initialising → record.
+      CaptureProvider.streamRecording() starts WebSocket connection to transcription service.
+      Analytics: MixpanelManager().phoneMicRecordingStarted() fires.
+
+  - id: S3
+    name: Verify capturing page elements
+    do: >
+      Confirm the capturing page is displayed with:
+      - Header showing emoji status (🎙️ listening)
+      - Two tabs: Transcripts/Photos and Summary
+      - Process Now button (yellow/gold ElevatedButton)
+      - Mute/unmute circle button
+      - Bottom nav still visible
+    verify: true
+    expect:
+      - kind: interactive_count
+        min: 10
+    evidence:
+      - screenshot: phone-mic-03-capturing-page.webp
+
+  - id: S4
+    name: Wait for live transcription segments
+    do: >
+      Wait up to 30 seconds for transcript segments to appear in the transcript area.
+      Segments show as colored bubbles with speaker labels.
+      If no audio input is available, at minimum verify the capturing page stays stable
+      and the recording indicator remains active.
+    verify: true
+    evidence:
+      - screenshot: phone-mic-04-transcription.webp
+    note: >
+      Transcript segments arrive via WebSocket from backend transcription service.
+      Phone mic audio streams at 16kHz PCM via platform channel.
+      If backend is not connected, segments won't appear but UI should stay stable.
+
+  - id: S5
+    name: Tap Process Now to stop recording
+    do: >
+      Tap the "Process Now" button (yellow ElevatedButton at bottom of capturing page).
+      This triggers forceProcessingCurrentConversation() which:
+      1. Stops the recording
+      2. Sends remaining audio to backend
+      3. Creates a ServerConversation
+      4. Transitions to processing state
+    expect:
+      - kind: text_visible
+        values: ["Processing"]
+    evidence:
+      - screenshot: phone-mic-05-processing.webp
+    note: >
+      May show a confirmation dialog first ("Stop recording?").
+      If so, confirm the dialog to proceed.
+
+  - id: S6
+    name: Verify conversation created in list
+    do: >
+      After processing completes (may take 10-30s depending on audio length),
+      navigate back to the home/conversations tab.
+      Verify a new conversation appears in the list with status completed.
+    verify: true
+    evidence:
+      - screenshot: phone-mic-06-conversation-created.webp
+    note: >
+      ConversationProvider.processingConversations removes the item,
+      ConversationProvider.conversations gains it.
+      If processing fails silently (Flaw 5), conversation may not appear.
