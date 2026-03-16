@@ -1445,7 +1445,7 @@ extension APIClient {
 
 struct CreateMemoryResponse: Codable {
     let id: String
-    let message: String
+    let message: String?
 }
 
 struct MemoryStatusResponse: Codable {
