@@ -402,11 +402,9 @@ class AppState: ObservableObject {
   }
 
   private func loadEnvironment() {
-    let bundledEnvPath = Bundle.main.path(forResource: ".env", ofType: nil)
-
     // Try to load from .env file in various locations
     let envPaths = [
-      bundledEnvPath,
+      Bundle.main.path(forResource: ".env", ofType: nil),
       FileManager.default.currentDirectoryPath + "/.env",
       NSHomeDirectory() + "/.hartford.env",
       NSHomeDirectory() + "/.omi.env",
@@ -424,12 +422,6 @@ class AppState: ObservableObject {
             let key = String(parts[0]).trimmingCharacters(in: .whitespaces)
             // Skip comments
             guard !key.hasPrefix("#") else { continue }
-            if shouldSkipBundledAnthropicKey(
-              key: key, sourcePath: path, bundledEnvPath: bundledEnvPath)
-            {
-              log("  Skipped ANTHROPIC_API_KEY from bundled .env (prod safety)")
-              continue
-            }
             let value = String(parts[1]).trimmingCharacters(in: .whitespaces)
               .trimmingCharacters(in: CharacterSet(charactersIn: "\"'"))
             setenv(key, value, 1)
@@ -451,15 +443,6 @@ class AppState: ObservableObject {
     }
   }
 
-  private func shouldSkipBundledAnthropicKey(
-    key: String, sourcePath: String, bundledEnvPath: String?
-  ) -> Bool {
-    guard key == "ANTHROPIC_API_KEY" else { return false }
-    guard let bundledEnvPath, sourcePath == bundledEnvPath else { return false }
-    let bundleId = Bundle.main.bundleIdentifier ?? ""
-    let isProductionBundle = bundleId == "com.omi.computer-macos"
-    return isProductionBundle
-  }
 
   func openScreenRecordingPreferences() {
     ScreenCaptureService.openScreenRecordingPreferences()
