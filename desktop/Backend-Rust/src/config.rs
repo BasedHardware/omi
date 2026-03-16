@@ -64,6 +64,10 @@ pub struct Config {
     pub gce_source_image: String,
     /// GCS bucket for agent startup script (defaults to "based-hardware-agent")
     pub agent_gcs_bucket: String,
+    /// Deepgram API key for transcription (served to desktop clients)
+    pub deepgram_api_key: Option<String>,
+    /// Anthropic API key for chat (served to desktop clients)
+    pub anthropic_api_key: Option<String>,
 }
 
 impl Config {
@@ -123,6 +127,8 @@ impl Config {
             },
             agent_gcs_bucket: env::var("AGENT_GCS_BUCKET")
                 .unwrap_or_else(|_| "based-hardware-agent".to_string()),
+            deepgram_api_key: env::var("DEEPGRAM_API_KEY").ok(),
+            anthropic_api_key: env::var("ANTHROPIC_API_KEY").ok(),
         }
     }
 
