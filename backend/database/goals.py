@@ -16,6 +16,14 @@ goal_history_collection = 'goal_history'
 users_collection = 'users'
 
 
+def _goal_dict(doc) -> Dict[str, Any]:
+    """Convert a Firestore document to a goal dict, ensuring 'id' is always present."""
+    data = doc.to_dict() or {}
+    if not data.get('id'):
+        data['id'] = doc.id
+    return data
+
+
 def get_user_goal(uid: str) -> Optional[Dict[str, Any]]:
     """Get the current active goal for a user (backward compatibility - returns first active goal)."""
     user_ref = db.collection(users_collection).document(uid)
@@ -26,7 +34,7 @@ def get_user_goal(uid: str) -> Optional[Dict[str, Any]]:
     docs = list(query.stream())
 
     if docs:
-        return docs[0].to_dict()
+        return _goal_dict(docs[0])
     return None
 
 
@@ -40,7 +48,7 @@ def get_user_goals(uid: str, limit: int = 3) -> List[Dict[str, Any]]:
     docs = list(query.stream())
 
     # Sort in Python instead of Firestore (avoids composite index requirement)
-    goals = [doc.to_dict() for doc in docs]
+    goals = [_goal_dict(doc) for doc in docs]
     goals.sort(key=lambda x: x.get('created_at') or '', reverse=False)
 
     return goals
@@ -88,7 +96,7 @@ def update_goal(uid: str, goal_id: str, updates: Dict[str, Any]) -> Optional[Dic
     updates['updated_at'] = datetime.now(timezone.utc)
     goal_ref.update(updates)
 
-    return goal_ref.get().to_dict()
+    return _goal_dict(goal_ref.get())
 
 
 def update_goal_progress(uid: str, goal_id: str, current_value: float) -> Optional[Dict[str, Any]]:
@@ -106,7 +114,7 @@ def update_goal_progress(uid: str, goal_id: str, current_value: float) -> Option
     # Also save to history
     save_goal_progress_history(uid, goal_id, current_value)
 
-    return goal_ref.get().to_dict()
+    return _goal_dict(goal_ref.get())
 
 
 def save_goal_progress_history(uid: str, goal_id: str, value: float):
@@ -145,7 +153,7 @@ def get_all_goals(uid: str, include_inactive: bool = False) -> List[Dict[str, An
     else:
         query = goals_ref.where(filter=FieldFilter('is_active', '==', True))
 
-    return [doc.to_dict() for doc in query.stream()]
+    return [_goal_dict(doc) for doc in query.stream()]
 
 
 def delete_goal(uid: str, goal_id: str) -> bool:
