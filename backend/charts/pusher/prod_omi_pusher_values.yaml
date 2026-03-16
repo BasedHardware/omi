@@ -317,8 +317,8 @@ startupProbe:
 # This section is for setting up autoscaling more information can be found here: https://kubernetes.io/docs/concepts/workloads/autoscaling/
 autoscaling:
   enabled: true
-  minReplicas: 30
-  maxReplicas: 60
+  minReplicas: 20
+  maxReplicas: 40
   behavior:
     scaleDown:
       stabilizationWindowSeconds: 600
@@ -326,18 +326,39 @@ autoscaling:
       - type: Percent
         value: 20
         periodSeconds: 300
+      - type: Pods
+        value: 1
+        periodSeconds: 120
+      selectPolicy: Min
     scaleUp:
-      stabilizationWindowSeconds: 0
+      stabilizationWindowSeconds: 120
       policies:
       - type: Percent
-        value: 20
-        periodSeconds: 1
+        value: 30
+        periodSeconds: 60
       - type: Pods
-        value: 10
-        periodSeconds: 1
+        value: 5
+        periodSeconds: 60
       selectPolicy: Max
-  targetCPUUtilizationPercentage: 60
-  targetMemoryUtilizationPercentage: 60
+  # targetCPUUtilizationPercentage: 60
+  # targetMemoryUtilizationPercentage: 60
+  activeConnectionsPerPod: 20
+
+podDisruptionBudget:
+  minAvailable: "80%"
+  # maxUnavailable: "20%"
+
+strategy:
+  type: RollingUpdate
+  rollingUpdate:
+    maxUnavailable: 1
+    maxSurge: 2
+
+terminationGracePeriodSeconds: 120
+lifecycle:
+  preStop:
+    exec:
+      command: ["sh", "-c", "sleep 15"]
 
 # Additional volumes on the output Deployment definition.
 volumes: []
