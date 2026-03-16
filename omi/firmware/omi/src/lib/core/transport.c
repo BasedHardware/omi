@@ -26,10 +26,10 @@
 #ifdef CONFIG_OMI_ENABLE_MONITOR
 #include "monitor.h"
 #endif
+#include "rtc.h"
 #include "sd_card.h"
 #include "settings.h"
 #include "storage.h"
-#include "rtc.h"
 LOG_MODULE_REGISTER(transport, CONFIG_LOG_DEFAULT_LEVEL);
 
 #ifdef CONFIG_OMI_ENABLE_RFSW_CTRL
@@ -222,7 +222,7 @@ static ssize_t time_sync_write_handler(struct bt_conn *conn,
 
     LOG_INF("Time sync received: %u seconds", epoch_s);
 
-    int err = rtc_set_utc_time((uint64_t)epoch_s);
+    int err = rtc_set_utc_time((uint64_t) epoch_s);
     if (err) {
         LOG_ERR("Failed to set RTC time: %d", err);
         return BT_GATT_ERR(BT_ATT_ERR_UNLIKELY);
@@ -232,11 +232,8 @@ static ssize_t time_sync_write_handler(struct bt_conn *conn,
     return len;
 }
 
-static ssize_t time_sync_read_handler(struct bt_conn *conn,
-                                      const struct bt_gatt_attr *attr,
-                                      void *buf,
-                                      uint16_t len,
-                                      uint16_t offset)
+static ssize_t
+time_sync_read_handler(struct bt_conn *conn, const struct bt_gatt_attr *attr, void *buf, uint16_t len, uint16_t offset)
 {
     uint32_t epoch_s = get_utc_time();
     LOG_INF("Time sync read: %u seconds", epoch_s);
@@ -457,8 +454,8 @@ static void exchange_func(struct bt_conn *conn, uint8_t att_err, struct bt_gatt_
 //
 
 #ifdef CONFIG_OMI_ENABLE_BATTERY
-#define BATTERY_REFRESH_INTERVAL        10000 // 10 seconds
-#define CONFIG_OMI_BATTERY_CRITICAL_MV  3500  // mV
+#define BATTERY_REFRESH_INTERVAL 10000      // 10 seconds
+#define CONFIG_OMI_BATTERY_CRITICAL_MV 3500 // mV
 uint8_t battery_percentage = 0;
 void broadcast_battery_level(struct k_work *work_item);
 
@@ -533,12 +530,22 @@ static void _transport_connected(struct bt_conn *conn, uint8_t err)
     update_mtu(current_connection);
 
     is_connected = true;
+
+    // Notify SD module about BLE connection (flush current file)
+#ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
+    sd_notify_ble_state(true);
+    storage_auto_sync_start();
+#endif
 }
 
 static void _transport_disconnected(struct bt_conn *conn, uint8_t err)
 {
     is_connected = false;
+
+    // Notify SD module about BLE disconnection (create new file if current was deleted)
 #ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
+    storage_auto_sync_stop();
+    sd_notify_ble_state(false);
     storage_is_on = false;
 #endif
 
@@ -900,7 +907,8 @@ void pusher(void)
 #endif
         } else {
             // Connected but not subscribed, just sleep (buffer will be retried)
-            if (conn) bt_conn_unref(conn);
+            if (conn)
+                bt_conn_unref(conn);
             k_sleep(K_MSEC(10));
         }
     }

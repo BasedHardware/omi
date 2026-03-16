@@ -13,8 +13,30 @@ LOG_MODULE_REGISTER(rtc, CONFIG_LOG_DEFAULT_LEVEL);
 static uint64_t base_epoch_ms;
 static int64_t base_uptime_ms;
 static bool utc_valid;
+static uint64_t pending_epoch_to_persist;
+static struct k_work rtc_persist_work;
 
 static struct k_mutex rtc_lock;
+
+static void rtc_persist_work_handler(struct k_work *work)
+{
+    ARG_UNUSED(work);
+
+    uint64_t epoch_s;
+
+    k_mutex_lock(&rtc_lock, K_FOREVER);
+    epoch_s = pending_epoch_to_persist;
+    k_mutex_unlock(&rtc_lock);
+
+#ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
+    sd_notify_time_synced((uint32_t)epoch_s);
+#endif
+
+    int err = app_settings_save_rtc_epoch(epoch_s);
+    if (err) {
+        LOG_ERR("Failed to persist rtc_epoch (err %d)", err);
+    }
+}
 
 // Debug functions to format UTC datetime strings
 #ifdef CONFIG_LOG
@@ -124,13 +146,17 @@ int rtc_set_utc_time(uint64_t utc_epoch_s)
         return err;
     }
 
-#ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
-    /* Update SD card filename with correct timestamp after time sync */
-    sd_update_filename_after_timesync((uint32_t)utc_epoch_s);
-#endif
+    k_mutex_lock(&rtc_lock, K_FOREVER);
+    pending_epoch_to_persist = utc_epoch_s;
+    k_mutex_unlock(&rtc_lock);
 
-    /* Persist seconds for compatibility. */
-    return app_settings_save_rtc_epoch(utc_epoch_s);
+    /*
+     * Defer persistence and SD rename to system workqueue so BLE GATT callback
+     * stack stays small and cannot overflow on filesystem/settings operations.
+     */
+    k_work_submit(&rtc_persist_work);
+
+    return 0;
 }
 
 int rtc_set_utc_time_ms(uint64_t utc_epoch_ms)
@@ -168,6 +194,7 @@ void init_rtc(void)
     static bool initialized;
     if (!initialized) {
         k_mutex_init(&rtc_lock);
+        k_work_init(&rtc_persist_work, rtc_persist_work_handler);
         initialized = true;
     }
 
