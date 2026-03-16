@@ -231,6 +231,7 @@ See [docs/runbooks/logging.md](docs/runbooks/logging.md) for log commands.
 - Keep `AGENTS.md` synced with this file. Update both in the same commit.
 - Keep rules concise (one-line statements). No code examples or verbose prose in this file.
 - For significant changes to architecture, core flows, or APIs — update the Mintlify docs (`docs/`) in the same PR. Key files: `docs/doc/developer/backend/backend_deepdive.mdx` (architecture), `docs/doc/developer/backend/chat_system.mdx` (chat), `docs/doc/developer/backend/transcription.mdx` (STT pipeline).
+- If a PR modifies `routers/transcribe.py`, `routers/pusher.py`, `pusher/`, `utils/conversations/process_conversation.py`, or the WS event protocol — update `docs/doc/developer/backend/listen_pusher_pipeline.mdx` (sequence diagrams, timing constants, wire protocol) in the same PR.
 
 ## Testing
 Run `backend/test-preflight.sh` to verify environment. Run `backend/test.sh` (backend) or `app/test.sh` (app) before committing.
