@@ -1,0 +1,116 @@
+# E2E Flow: Offline Persistence (WAL) — audio buffered locally when WS down
+# Tests: device recording → WS disconnect → WAL stores audio → WS reconnects → WAL syncs
+# Core path: audio captured → network drops → local WAL buffering → network restores → batch upload
+
+version: 2
+name: offline-persistence-wal
+description: >
+  Offline audio persistence flow: Omi device records audio,
+  WebSocket disconnects (network loss), WAL stores Opus frames locally,
+  network restores, WAL syncs buffered audio to server in batches.
+app: com.friend.ios.dev
+evidence:
+  video: true
+covers:
+  - app/lib/providers/capture_provider.dart        # WAL support check, offline handling
+  - app/lib/services/wals/local_wal_sync.dart      # WAL batch upload, corruption check
+  - app/lib/services/wals/wal_storage.dart          # Local file storage for audio frames
+preconditions:
+  - auth_ready
+  - ble_on
+  - omi_device_connected
+
+steps:
+  - id: S1
+    name: Verify device recording with WAL enabled
+    do: >
+      Confirm Omi device is connected and recording.
+      WAL support should be enabled (requires DeviceType.omi or openglass + Opus codec).
+      Check Settings → Offline Sync page shows WAL status.
+    verify: true
+    evidence:
+      - screenshot: wal-01-recording-active.webp
+    note: >
+      WAL check at capture_provider.dart:664-667:
+        _isWalSupported = (device.type == DeviceType.omi || DeviceType.openglass)
+                          && codec.isOpusSupported()
+      Phone mic recording does NOT have WAL support (Flaw 10).
+
+  - id: S2
+    name: Simulate network disconnection
+    do: >
+      Disable network connectivity to force WebSocket disconnection.
+      Android: toggle airplane mode via ADB:
+        adb shell cmd connectivity airplane-mode enable
+      Or disable WiFi:
+        adb shell svc wifi disable
+      Verify the app detects the disconnection.
+    expect:
+      - kind: text_visible
+        values: ["offline", "reconnecting", "no connection"]
+    evidence:
+      - screenshot: wal-02-network-down.webp
+    note: >
+      CaptureProvider.onConnectionStateChanged(false) sets _isConnected = false.
+      WebSocket closes, but BLE audio from device continues arriving.
+      Audio frames should now be written to local WAL files.
+      Flaw 11: onConnectionStateChanged only updates boolean, no WS reconnect.
+
+  - id: S3
+    name: Verify WAL is buffering audio locally
+    do: >
+      While offline, verify that audio continues to be captured.
+      Navigate to Settings → Offline Sync to see WAL file count increasing.
+      WAL files are stored locally with WalStatus.miss (pending sync).
+    verify: true
+    evidence:
+      - screenshot: wal-03-wal-buffering.webp
+    note: >
+      WAL storage creates files in app's local directory.
+      Each WAL file contains Opus-encoded audio frames with timestamps.
+      Files accumulate while WS is down.
+
+  - id: S4
+    name: Restore network connectivity
+    do: >
+      Re-enable network:
+        adb shell cmd connectivity airplane-mode disable
+      Or re-enable WiFi:
+        adb shell svc wifi enable
+      Wait for WebSocket to reconnect and WAL sync to begin.
+    evidence:
+      - screenshot: wal-04-network-restored.webp
+    note: >
+      WAL sync should start automatically after connectivity restores.
+      local_wal_sync.dart processes WAL files in batches.
+      Flaw 7: If batch upload fails, error is logged but user not notified.
+      Flaw 8: Corrupted WAL files are silently skipped.
+
+  - id: S5
+    name: Verify WAL sync completes
+    do: >
+      Wait for WAL sync to complete. Check Settings → Offline Sync page.
+      WAL file count should decrease as files are uploaded.
+      All pending WALs should transition from 'miss' to 'synced'.
+    verify: true
+    evidence:
+      - screenshot: wal-05-sync-complete.webp
+    note: >
+      local_wal_sync.dart:468-481 handles batch upload.
+      On success: WAL status → synced, files cleaned up.
+      On failure: status stays miss, retry on next sync cycle.
+      Sync progress may show in UI via isSyncing flag.
+
+  - id: S6
+    name: Verify conversation created from synced audio
+    do: >
+      After WAL sync completes and enough audio has been processed,
+      verify that the backend creates a conversation from the buffered audio.
+      Check the conversations list for the new entry.
+    verify: true
+    evidence:
+      - screenshot: wal-06-conversation-from-wal.webp
+    note: >
+      Backend processes the uploaded WAL audio through the same pipeline
+      as live audio: transcription → diarization → conversation creation.
+      There may be a delay between sync completion and conversation appearance.
