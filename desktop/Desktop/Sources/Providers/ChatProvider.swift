@@ -1386,11 +1386,10 @@ A screenshot may be attached — use it silently only if relevant. Never mention
                 // Always trust the server value — it's the authoritative total
                 self.omiAICumulativeCostUsd = serverCost
                 log("ChatProvider: Seeded Omi AI cumulative cost from backend: $\(String(format: "%.4f", serverCost))")
-                // Auto-switch if already over threshold on startup
+                // Show upgrade prompt if over threshold but don't block chat
                 if self.bridgeMode == BridgeMode.omiAI.rawValue && serverCost >= 50.0 {
-                    log("ChatProvider: Omi AI cost already at $\(String(format: "%.2f", serverCost)) on startup — switching to user Claude account")
+                    log("ChatProvider: Omi AI cost at $\(String(format: "%.2f", serverCost)) on startup — showing upgrade prompt")
                     self.showOmiThresholdAlert = true
-                    Task { await self.switchBridgeMode(to: .userClaude) }
                 }
             }
         }
@@ -1821,11 +1820,9 @@ A screenshot may be attached — use it silently only if relevant. Never mention
             return
         }
 
-        // Guard: Block query if Omi account $50 usage threshold already reached
+        // Show upgrade prompt if over threshold but don't block the message
         if bridgeMode == BridgeMode.omiAI.rawValue && omiAICumulativeCostUsd >= 50.0 {
             showOmiThresholdAlert = true
-            Task { await self.switchBridgeMode(to: .userClaude) }
-            return
         }
 
         // Determine session ID based on mode
