@@ -228,36 +228,5 @@ See [docs/runbooks/logging.md](docs/runbooks/logging.md) for log commands.
 - Keep rules concise (one-line statements). No code examples or verbose prose in this file.
 - For significant changes to architecture, core flows, or APIs — update the Mintlify docs (`docs/`) in the same PR. Key files: `docs/doc/developer/backend/backend_deepdive.mdx` (architecture), `docs/doc/developer/backend/chat_system.mdx` (chat), `docs/doc/developer/backend/transcription.mdx` (STT pipeline).
 
-## Skills
-Available skills for Omi repo work. Use `omi-preflight` as the default entry point — it routes to the right skill.
-
-| Skill | When |
-|---|---|
-| omi-preflight | Default entry point for any Omi task |
-| omi-pr-workflow | Full issue-to-merge flow |
-| omi-issue-triage | Score and prioritize issues |
-| omi-pr-scan | Audit open PRs (stale drafts, missing tests) |
-| omi-pr-review-reviewer | Review PRs as principal engineer |
-| omi-pr-review-contributor | Fix review feedback on your PR |
-| omi-pr-review-tester | Add tests for PR changes |
-| omi-community-pr-review | Review external contributor PRs |
-| omi-pr-rescue | Rescue messy PRs (close, re-scope, restart) |
-| omi-team-delivery-pipeline | Team delivery: scope lock, queue, assign, execute, verify |
-| omi-combined-pr-verifier | Verify 2+ PRs combined in one branch |
-| omi-create-e2e-flow | Create and run e2e flow tests on VPS emulator (flow-walker + agent-flutter) |
-| omi-e2e-device-test | Full-stack validation on physical Android device |
-| omi-prod-feature-verify | Post-deploy user-facing validation |
-| omi-prod-deploy-monitor | Deployment monitoring with fixed cadence |
-| omi-dev-gke-deploy-verify | Dev GKE deploy + rollout verification |
-| omi-model-eval | A/B eval for model migrations (gpt-5.1 judge) |
-| omi-incident-detection | Detect and analyze production incidents |
-| omi-deep-rca | Deep root cause analysis with Codex consultation |
-| omi-cost-impact-verify | Verify backend cost impact (Deepgram usage) |
-| omi-deeplink-verification | Verify deep links, Universal Links, App Links |
-| omi-pr-evidence-upload | Upload PR evidence (screenshots, GIFs) to GCS |
-| add-a-new-localization-key-l10n-arb | Add l10n keys to ARB files |
-| omi-add-missing-language-keys-l10n | Localize hardcoded strings across all locales |
-| omi-l10n-weekly-audit | Weekly l10n audit and translation |
-
 ## Testing
 Run `backend/test-preflight.sh` to verify environment. Run `backend/test.sh` (backend) or `app/test.sh` (app) before committing.
