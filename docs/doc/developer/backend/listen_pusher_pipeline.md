@@ -87,8 +87,8 @@ sequenceDiagram
     alt Multi-channel
         Backend->>Backend: _process_conversation(current_conversation_id) ✅
         Backend->>Pusher: Send process_conversation request
-    else Single-channel (⚠️ BUG — no processing)
-        Note over Backend: ⚠️ No _process_conversation() call<br/>Conversation left in_progress
+    else Single-channel
+        Note over Backend: No explicit _process_conversation() call<br/>Relies on next session to pick up as stale
     end
 
     Backend->>Backend: Cancel ALL background tasks<br/>(including conversation_lifecycle_manager)
@@ -97,17 +97,6 @@ sequenceDiagram
 
     Note over Backend: Single-channel: conversation stays<br/>in_progress until next session<br/>picks it up as stale
 ```
-
-### Known bug (single-channel disconnect)
-
-On disconnect, the cleanup block at `routers/transcribe.py:~2611` cancels all
-background tasks — including `conversation_lifecycle_manager` — before it can
-call `_process_conversation()`. Multi-channel has an explicit call at line
-~2590, but single-channel does not. The conversation stays `in_progress` until
-the next session detects it as stale and processes it.
-
-**Fix**: Add `_process_conversation(current_conversation_id)` for single-channel
-before task cancellation, matching the multi-channel pattern.
 
 ## 4. Speaker ID Lifecycle (2-Session Flow)
 
@@ -214,11 +203,3 @@ sequenceDiagram
 | Pusher audio batch | 60s | pusher | GCS upload batch size |
 | Speaker match threshold | 0.45 | transcribe.py | Cosine distance cutoff |
 
-## 8. Known Issues
-
-| # | Severity | Issue | Status |
-|---|----------|-------|--------|
-| 1 | CRITICAL | Single-channel disconnect doesn't process conversation | Open — needs fix in transcribe.py cleanup |
-| 2 | MEDIUM | Empty title from LLM silently discards conversation | Open — Pydantic default `""` + `_get_conversation_obj` treats as discard |
-| 3 | LOW | GCS upload not testable in dev | By design |
-| 4 | LOW | wespeaker matches tones within threshold | Known model behavior, VAD mitigates |
