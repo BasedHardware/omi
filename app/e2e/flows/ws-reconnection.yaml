@@ -1,0 +1,103 @@
+# E2E Flow: WebSocket Reconnection — WS drops mid-recording → reconnect → audio resumes
+# Tests: recording active → WS disconnect → reconnect logic → recording resumes seamlessly
+# Core path: WS drops → onClosed handler → exponential backoff → new WS → audio continues
+
+version: 2
+name: ws-reconnection
+description: >
+  WebSocket reconnection during active recording: WS connection drops
+  mid-recording, app detects disconnection, reconnect logic fires with
+  exponential backoff, new WS established, audio streaming resumes.
+app: com.friend.ios.dev
+evidence:
+  video: true
+covers:
+  - app/lib/providers/capture_provider.dart              # onClosed handler, reconnect logic
+  - app/lib/services/sockets/transcription_connection.dart  # WS lifecycle management
+preconditions:
+  - auth_ready
+  - microphone_permission
+
+steps:
+  - id: S1
+    name: Start recording and verify WebSocket connected
+    do: >
+      Start phone mic recording by tapping the record button.
+      Wait for capturing page with "listening" status.
+      Verify transcript segments are flowing (WS is healthy).
+    expect:
+      - kind: text_visible
+        values: ["listening"]
+    evidence:
+      - screenshot: reconnect-01-recording.webp
+    note: >
+      WebSocket connects to backend /v4/listen endpoint.
+      Audio frames stream as binary messages.
+      Transcription segments return as JSON messages.
+
+  - id: S2
+    name: Simulate WebSocket disconnection
+    do: >
+      Force WebSocket disconnection by briefly disrupting network:
+        adb shell cmd connectivity airplane-mode enable
+        sleep 3
+        adb shell cmd connectivity airplane-mode disable
+      Or kill the backend WebSocket endpoint temporarily.
+      The WS should close, triggering onClosed() handler.
+    evidence:
+      - screenshot: reconnect-02-ws-dropped.webp
+    note: >
+      CaptureProvider.onClosed(int? closeCode) handles WS close.
+      Different close codes have different behaviors:
+        4002 → out of credits (Flaw 3: doesn't reset recording state)
+        1000 → normal close
+        null/other → unexpected disconnect, should trigger reconnect
+      Flaw 11: onConnectionStateChanged(true) doesn't trigger WS reconnect.
+
+  - id: S3
+    name: Verify reconnection logic activates
+    do: >
+      After network restores, monitor the app's reconnection behavior.
+      The app should attempt to re-establish the WebSocket connection.
+      Look for status changes: "reconnecting" → "listening".
+      Recording state should remain active (not reset to stop).
+    evidence:
+      - screenshot: reconnect-03-reconnecting.webp
+    note: >
+      Known gap: onConnectionStateChanged(true) only sets _isConnected=true
+      and calls notifyListeners(). It does NOT trigger WS reconnect.
+      The WS may stay dead until a manual action triggers reconnect.
+      If WAL is enabled (Omi device), audio is buffered locally during gap.
+      If WAL is NOT enabled (phone mic), audio is LOST during gap (Flaw 10).
+
+  - id: S4
+    name: Verify audio streaming resumes
+    do: >
+      Once WS reconnects, verify that:
+      1. New transcript segments start appearing
+      2. Recording indicator shows "listening" (not error state)
+      3. The capturing page is stable and responsive
+      If reconnection doesn't happen automatically, document the gap.
+    verify: true
+    evidence:
+      - screenshot: reconnect-04-resumed.webp
+    note: >
+      After reconnect, audio should flow again.
+      Any WAL-buffered audio syncs separately.
+      The transcript timeline may show a gap corresponding to the
+      disconnection period (audio during that time is lost for phone mic).
+
+  - id: S5
+    name: Verify conversation processes normally after reconnection
+    do: >
+      After recording resumes, either:
+      a) Tap "Process Now" to stop recording and verify conversation creates, or
+      b) Wait for silence timeout to trigger automatic processing.
+      Verify the conversation includes segments from both before and after the disconnect.
+    verify: true
+    evidence:
+      - screenshot: reconnect-05-conversation.webp
+    note: >
+      Conversation should contain all segments that were successfully
+      transcribed (before disconnect + after reconnect).
+      Segments during the gap are lost (phone mic) or synced later (WAL).
