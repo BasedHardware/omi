@@ -4571,4 +4571,22 @@ extension APIClient {
             return nil
         }
     }
+
+    // MARK: - API Keys
+
+    struct ApiKeysResponse: Decodable {
+        let deepgramApiKey: String?
+        let geminiApiKey: String?
+        let anthropicApiKey: String?
+
+        enum CodingKeys: String, CodingKey {
+            case deepgramApiKey = "deepgram_api_key"
+            case geminiApiKey = "gemini_api_key"
+            case anthropicApiKey = "anthropic_api_key"
+        }
+    }
+
+    func fetchApiKeys() async throws -> ApiKeysResponse {
+        return try await get("v1/config/api-keys")
+    }
 }
