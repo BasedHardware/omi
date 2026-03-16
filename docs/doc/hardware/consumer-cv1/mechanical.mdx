@@ -1,0 +1,102 @@
+---
+title: "Mechanical & Packaging"
+description: "STEP files for the Omi CV1 enclosure, charger dock, and retail packaging — organized by manufacturing process."
+---
+
+## Device Mechanical Design
+
+The Omi CV1 is a 25.5mm diameter wearable pendant with aluminium covers and a PC+ABS internal frame.
+
+### Full Assembly
+
+- `mechanical/assemblies/cv1-device-charger-assembly.step` — Complete device + charger dock STEP assembly
+
+### 2D Drawings
+
+- `mechanical/drawings/cv1-2d-drawings.pdf` — Technical drawings for all parts
+- `mechanical/drawings/manufacturing-specifications.png` — Manufacturing spec overview
+
+---
+
+## Parts by Manufacturing Process
+
+<AccordionGroup>
+  <Accordion title="CNC Machining" icon="gears">
+    Aluminium covers and copper touch pins.
+
+    | File | Description |
+    |------|-------------|
+    | `case-a.step` | Front cover (aluminium, D25.5mm) |
+    | `case-b.step` | Back cover (aluminium, D25.5mm) |
+    | `touchpin-1-v2.step` | Touch/charging pin 1 (copper, CNC) |
+    | `touchpin-2-v2.step` | Touch/charging pin 2 (copper, CNC) |
+    | `touchpin-1.step` | Touch pin 1 (conductive copper, earlier version) |
+    | `touchpin-2.step` | Touch pin 2 (conductive copper, earlier version) |
+    | `cnc-brass-copper-zinc-polished.zip` | Brass/copper variant with polished zinc finish |
+
+    **Material:** Aluminium (covers), Copper or Brass + Zinc plating (touch pins)
+  </Accordion>
+
+  <Accordion title="Injection Molding" icon="fill-drip">
+    Internal shell/wrapper.
+
+    | File | Description |
+    |------|-------------|
+    | `wrapper.step` | Main wrapper/shell |
+    | `wrapper-drawing.pdf` | Manufacturing drawing |
+
+    **Material:** PC+ABS
+  </Accordion>
+
+  <Accordion title="Silicone Molding" icon="droplet">
+    Internal cushioning pad.
+
+    | File | Description |
+    |------|-------------|
+    | `pad.step` | Internal pad |
+    | `pad-drawing.pdf` | Manufacturing drawing |
+
+    **Material:** Silicone, 50A or 80A durometer
+  </Accordion>
+
+  <Accordion title="SLA / Injection Molding (PC+ABS)" icon="print">
+    Frame, LED guide, charger cases, and internal parts.
+
+    | File | Description | Color/Finish |
+    |------|-------------|-------------|
+    | `frame-white-translucent.step` | Main frame | White translucent (or clear/transparent) |
+    | `led-guide-white-translucent.step` | LED light guide | White translucent |
+    | `charger-case-a-ceramic.step` | Charger top case | Ceramic-like finish (or white) |
+    | `charger-case-b-ceramic.step` | Charger bottom case | Ceramic-like finish (or white) |
+    | `enhance-plate-black.step` | Enhance plate | Black |
+    | `pad-ppt-grey.step` | PPT pad | Grey |
+    | `touchpin-2-sla-test.step` | Touch pin (SLA test variant) | Grey |
+
+    **Material:** PC+ABS, SLA resin, or MJF nylon depending on finish
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Packaging
+
+Retail packaging 3D models for manufacturing the box, foam inserts, and protective case.
+
+### CAD Files
+
+| File | Description |
+|------|-------------|
+| `packaging/cad/packaging-full-assembly.step` | Complete packaging assembly |
+| `packaging/cad/case-packaging.step` | Outer case |
+| `packaging/cad/sheet-metal-packaging.step` | Sheet metal insert |
+| `packaging/cad/foam/foam-assembly.step` | Foam insert assembly |
+| `packaging/cad/foam/foam-top.step` | Top foam piece |
+| `packaging/cad/foam/foam-bottom.step` | Bottom foam piece |
+| `packaging/cad/foam/foam-circle.step` | Circular foam cutout |
+| `packaging/cad/foam/foam-packaging.step` | Foam packaging shell |
+| `packaging/cad/foam/foam-drawing.pdf` | Foam manufacturing drawing |
+| `packaging/package-drawing.pdf` | Package technical drawing |
+
+### Reference Photos
+
+Photos of the assembled packaging are in `packaging/photos/` for manufacturing reference.

@@ -1,0 +1,92 @@
+---
+title: "Electronics"
+description: "PCB design files for the Omi CV1 mainboard, charger board, and flexible PCB — Altium source, Gerber files, and schematics."
+---
+
+## Board Overview
+
+The Omi CV1 uses three interconnected PCBs:
+
+| Board | Function | Latest Version |
+|-------|----------|---------------|
+| **Mainboard** | nRF5340 SoC, nRF7002 Wi-Fi, microphones, IMU, flash, battery management | v1.2 |
+| **Charger Board** | Magnetic dock with pogo pins, USB-C power, ESD protection | v1.0 |
+| **FPC** | Flexible cable connecting mainboard to charging contacts | v1.0 |
+
+---
+
+## Mainboard
+
+The main PCB carries all active electronics.
+
+**Key ICs:**
+- **nRF5340-CLAA** — Dual-core Bluetooth LE SoC (application + network cores)
+- **nRF7002-CEAA-R7** — Wi-Fi 6 companion IC
+- **CSNP4GCR01-DPW** — 8GB NAND Flash
+- **LSM6DS3TR-C** — 6-axis IMU
+- **BQ25101YFPR** — Li-Ion/Li-Poly battery charger
+- **TPS628438YKAR** — DC-DC buck converter
+- **2x MMICT5838-00-012** — TDK T5838 PDM microphones
+
+**Files:**
+
+<AccordionGroup>
+  <Accordion title="v1.2 (Latest)" icon="star">
+    - `electrical/mainboard/v1-2/schematic.pdf` — Full schematic
+    - `electrical/mainboard/v1-2/gerbers/` — Gerber + drill files for PCB fabrication
+    - `electrical/mainboard/v1-2/altium/` — Altium Designer source project
+  </Accordion>
+  <Accordion title="v1.1" icon="clock-rotate-left">
+    - `electrical/mainboard/v1-1/schematic.pdf` — Schematic
+    - `electrical/mainboard/v1-1/gerbers/` — Gerber files
+    - `electrical/mainboard/v1-1/altium/` — Altium source
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Charger Board
+
+Magnetic charging dock with USB-C input.
+
+**Key ICs:**
+- **TPS25200DRVR** — eFuse power manager (6.5V, 2.8A)
+- **TPD1E10B06DPYR** — ESD protection diode
+
+**Files:**
+- `electrical/charger-board/schematic.pdf`
+- `electrical/charger-board/gerbers/`
+- `electrical/charger-board/altium/`
+
+---
+
+## FPC (Flexible PCB)
+
+Connects the mainboard to the charging contact ring via a board-to-board connector.
+
+**Key Components:**
+- **ST-BTB-K3570606M** — BTB male connector (6+4P)
+- Charging contact ring (D9.9mm)
+
+**Files:**
+- `electrical/fpc-board/schematic.pdf`
+- `electrical/fpc-board/gerbers/`
+- `electrical/fpc-board/altium/`
+
+---
+
+## How to Order PCBs
+
+Upload the Gerber ZIP to any PCB manufacturer. Recommended specs:
+
+| Parameter | Value |
+|-----------|-------|
+| Layers | Check schematic (multi-layer) |
+| Thickness | 1.0mm (standard) |
+| Surface Finish | ENIG recommended |
+| Min Trace/Space | 0.1mm / 0.1mm |
+| Solder Mask | Both sides |
+
+<Card title="View Full BOM" icon="list" href="/doc/hardware/consumer-cv1/assembly">
+  See the complete Bill of Materials with all 88 components
+</Card>
