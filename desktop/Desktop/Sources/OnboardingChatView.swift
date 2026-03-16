@@ -108,6 +108,12 @@ struct OnboardingChatView: View {
     @State private var explorationCompleted = false
     @State private var explorationText = ""
     @State private var explorationTask: Task<Void, Never>?
+
+    // Gmail reading state (runs alongside exploration during onboarding)
+    @State private var gmailReadingRunning = false
+    @State private var gmailReadingCompleted = false
+    @State private var gmailReadingText = ""
+    @State private var gmailReadingTask: Task<Void, Never>?
     @State private var showSkipConfirmation = false
 
     // Timer to periodically check permission status
@@ -174,6 +180,18 @@ struct OnboardingChatView: View {
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .padding(.leading, 44) // align with message text
                             .id("exploration-card")
+                        }
+
+                        // Gmail insights card (appears alongside exploration)
+                        if !shouldHideExplorationCard && (gmailReadingRunning || (gmailReadingCompleted && !gmailReadingText.isEmpty)) {
+                            GmailInsightsCard(
+                                text: gmailReadingText,
+                                isRunning: gmailReadingRunning,
+                                isCompleted: gmailReadingCompleted
+                            )
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.leading, 44)
+                            .id("gmail-card")
                         }
 
                         // Typing indicator (floating, no avatar)
@@ -497,6 +515,7 @@ struct OnboardingChatView: View {
         ChatToolExecutor.onScanFilesCompleted = { [weak graphViewModel] fileCount in
             guard fileCount > 0 else { return }
             startExploration(fileCount: fileCount, graphViewModel: graphViewModel)
+            startGmailReading()
         }
 
         // Build onboarding system prompt
@@ -945,6 +964,10 @@ struct OnboardingChatView: View {
         }
         explorationBridge = nil
 
+        // Clean up Gmail reading
+        gmailReadingTask?.cancel()
+        gmailReadingTask = nil
+
         // Notify parent to advance to next step
         onComplete()
     }
@@ -993,6 +1016,7 @@ struct OnboardingChatView: View {
         if fileCount > 0 {
             log("OnboardingChat: Files already indexed (\(fileCount)), starting exploration on resume")
             startExploration(fileCount: fileCount, graphViewModel: graphViewModel)
+            startGmailReading()
         }
     }
 
@@ -1189,6 +1213,143 @@ struct OnboardingChatView: View {
                 }
             }
         }
+    }
+
+    // MARK: - Gmail Reading (Parallel Onboarding Task)
+
+    private func startGmailReading() {
+        guard !gmailReadingRunning && !gmailReadingCompleted else { return }
+        gmailReadingRunning = true
+        log("OnboardingChat: Starting Gmail reading in background")
+
+        gmailReadingTask = Task {
+            do {
+                let emails = try await GmailReaderService.shared.readRecentEmails(
+                    maxResults: 50, query: "newer_than:30d"
+                )
+                guard !emails.isEmpty else {
+                    log("OnboardingChat: No Gmail emails found, skipping synthesis")
+                    await MainActor.run {
+                        gmailReadingRunning = false
+                        gmailReadingCompleted = true
+                    }
+                    return
+                }
+                log("OnboardingChat: Fetched \(emails.count) Gmail emails, starting synthesis")
+
+                await MainActor.run {
+                    gmailReadingText = "Analyzing \(emails.count) emails..."
+                }
+
+                let result = await GmailReaderService.shared.synthesizeFromEmails(emails: emails)
+
+                let summaryText = result.profileSummary.isEmpty
+                    ? "Created \(result.memories) memories and \(result.tasks) tasks from your emails."
+                    : result.profileSummary
+
+                await MainActor.run {
+                    gmailReadingText = summaryText
+                    gmailReadingCompleted = true
+                    gmailReadingRunning = false
+                }
+
+                log("OnboardingChat: Gmail synthesis complete — \(result.memories) memories, \(result.tasks) tasks")
+
+                // Append Gmail insights to AI profile
+                let text = await MainActor.run { gmailReadingText }
+                if !text.isEmpty {
+                    let service = AIUserProfileService.shared
+                    let existingProfile = await service.getLatestProfile()
+                    if let existing = existingProfile, let profileId = existing.id {
+                        let updated = existing.profileText + "\n\n--- Gmail Insights ---\n" + text
+                        let success = await service.updateProfileText(id: profileId, newText: updated)
+                        log("OnboardingChat: Appended Gmail insights to AI profile (success=\(success))")
+                    }
+                }
+
+            } catch {
+                log("OnboardingChat: Gmail reading failed (non-fatal): \(error.localizedDescription)")
+                await MainActor.run {
+                    gmailReadingRunning = false
+                }
+            }
+        }
+    }
+}
+
+// MARK: - Gmail Insights Card
+
+struct GmailInsightsCard: View {
+    let text: String
+    let isRunning: Bool
+    let isCompleted: Bool
+
+    @State private var isExpanded = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Button(action: {
+                guard !text.isEmpty else { return }
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    isExpanded.toggle()
+                }
+            }) {
+                HStack(spacing: 8) {
+                    if isRunning {
+                        ProgressView()
+                            .controlSize(.mini)
+                    } else {
+                        Image(systemName: "envelope.open.fill")
+                            .font(.system(size: 12))
+                            .foregroundColor(OmiColors.purplePrimary)
+                    }
+
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(isRunning ? "Reading your emails..." : "Email Insights")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundColor(OmiColors.textPrimary)
+
+                        if !text.isEmpty {
+                            Text(String(text.prefix(100)).replacingOccurrences(of: "\n", with: " "))
+                                .font(.system(size: 12))
+                                .foregroundColor(OmiColors.textSecondary)
+                                .lineLimit(2)
+                        }
+                    }
+
+                    Spacer(minLength: 4)
+
+                    if !text.isEmpty {
+                        Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                            .font(.system(size: 10))
+                            .foregroundColor(OmiColors.textTertiary)
+                    }
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 10)
+            }
+            .buttonStyle(.plain)
+
+            if isExpanded && !text.isEmpty {
+                Divider()
+                    .padding(.horizontal, 10)
+
+                ScrollView {
+                    Markdown(text)
+                        .markdownTheme(.aiMessage())
+                        .textSelection(.enabled)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 10)
+                }
+                .frame(maxHeight: 300)
+            }
+        }
+        .background(OmiColors.backgroundTertiary.opacity(0.5))
+        .cornerRadius(12)
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(OmiColors.purplePrimary.opacity(0.2), lineWidth: 1)
+        )
     }
 }
 
