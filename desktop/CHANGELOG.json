@@ -1,5 +1,7 @@
 {
-  "unreleased": [],
+  "unreleased": [
+    "Fixed Gemini API key for proactive notifications (memory, tasks, advice, focus)"
+  ],
   "releases": [
     {
       "version": "0.11.109",
