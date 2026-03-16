@@ -448,7 +448,7 @@
     "exportConfiguration": "Konfiguráció exportálása",
     "bringYourOwn": "Hozd a sajátod",
     "payYourSttProvider": "Szabadon használd az omi-t. Csak az STT szolgáltatódnak fizetsz közvetlenül.",
-    "freeMinutesMonth": "1200 ingyenes perc/hónap tartalmazza. Korlátlan a következővel: ",
+    "freeMinutesMonth": "4800 ingyenes perc/hónap tartalmazza. Korlátlan a következővel: ",
     "omiUnlimited": "Omi Unlimited",
     "hostRequired": "Host szükséges",
     "validPortRequired": "Érvényes port szükséges",
@@ -1459,7 +1459,7 @@
     "accessesAndTriggeredBy": "{accessDescription} és {triggerDescription}.",
     "isTriggeredBy": "{triggerDescription}.",
     "noSpecificDataAccessConfigured": "Nincs beállítva specifikus adathozzáférés.",
-    "basicPlanDescription": "1200 prémium perc + korlátlan eszközön",
+    "basicPlanDescription": "4800 prémium perc + korlátlan eszközön",
     "minutes": "perc",
     "omiHas": "Omi:",
     "premiumMinutesUsed": "Prémium percek elhasználva.",
@@ -1929,7 +1929,7 @@
     "deviceMayWarmUp": "Az eszköz felmelegedhet hosszabb használat során.",
     "speedAccuracyLower": "A sebesség és pontosság alacsonyabb lehet, mint a felhőmodellekkel.",
     "cloudProvider": "Felhő szolgáltató",
-    "premiumMinutesMonth": "1200 prémium perc/hónap. Az Eszközön fül korlátlan ingyenes átírást kínál. ",
+    "premiumMinutesMonth": "4800 prémium perc/hónap. Az Eszközön fül korlátlan ingyenes átírást kínál. ",
     "viewUsage": "Használat megtekintése",
     "audioProcessedLocally": "A hang helyileg kerül feldolgozásra. Offline működik, privátabb, de több akkumulátort használ.",
     "languageLabel": "Nyelv",
@@ -2540,7 +2540,7 @@
     "@onDeviceSlower": {
         "description": "Warning about slower transcription"
     },
-    "premiumMinutesInfo": "1200 prémium perc/hónap. Az Eszközön fül korlátlan ingyenes átírást kínál.",
+    "premiumMinutesInfo": "4800 prémium perc/hónap. Az Eszközön fül korlátlan ingyenes átírást kínál.",
     "@premiumMinutesInfo": {
         "description": "Information about premium minutes"
     },
