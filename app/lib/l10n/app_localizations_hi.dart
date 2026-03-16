@@ -1453,7 +1453,7 @@ class AppLocalizationsHi extends AppLocalizations {
   String get payYourSttProvider => 'Omi का मुफ्त उपयोग करें। आप केवल सीधे STT प्रदाता को भुगतान करते हैं।';
 
   @override
-  String get freeMinutesMonth => '1,200 मुफ़्त मिनट/माह शामिल हैं।';
+  String get freeMinutesMonth => '4,800 मुफ़्त मिनट/माह शामिल हैं।';
 
   @override
   String get omiUnlimited => 'Omi असीमित';
@@ -4738,7 +4738,7 @@ class AppLocalizationsHi extends AppLocalizations {
   String get noSpecificDataAccessConfigured => 'कोई विशिष्ट डेटा एक्सेस कॉन्फ़िगर नहीं किया गया।';
 
   @override
-  String get basicPlanDescription => '1,200 प्रीमियम मिनट + डिवाइस पर असीमित';
+  String get basicPlanDescription => '4,800 प्रीमियम मिनट + डिवाइस पर असीमित';
 
   @override
   String get minutes => 'मिनट';
@@ -6066,7 +6066,7 @@ class AppLocalizationsHi extends AppLocalizations {
   String get cloudProvider => 'क्लाउड प्रदाता';
 
   @override
-  String get premiumMinutesInfo => '1,200 प्रीमियम मिनट/माह। ऑन-डिवाइस टैब असीमित मुफ्त ट्रांसक्रिप्शन प्रदान करता है।';
+  String get premiumMinutesInfo => '4,800 प्रीमियम मिनट/माह। ऑन-डिवाइस टैब असीमित मुफ्त ट्रांसक्रिप्शन प्रदान करता है।';
 
   @override
   String get viewUsage => 'उपयोग देखें';
@@ -6148,7 +6148,7 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get premiumMinutesMonth =>
-      '1,200 प्रीमियम मिनट/माह। ऑन-डिवाइस टैब असीमित मुफ्त ट्रांसक्रिप्शन प्रदान करता है। ';
+      '4,800 प्रीमियम मिनट/माह। ऑन-डिवाइस टैब असीमित मुफ्त ट्रांसक्रिप्शन प्रदान करता है। ';
 
   @override
   String get audioProcessedLocally =>

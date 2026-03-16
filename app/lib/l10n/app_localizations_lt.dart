@@ -1458,7 +1458,7 @@ class AppLocalizationsLt extends AppLocalizations {
   String get payYourSttProvider => 'Laisvai naudokite omi. Mokate tik savo STT teikėjui tiesiogiai.';
 
   @override
-  String get freeMinutesMonth => '1 200 nemokamų minučių per mėnesį įtraukta. Neribota su ';
+  String get freeMinutesMonth => '4 800 nemokamų minučių per mėnesį įtraukta. Neribota su ';
 
   @override
   String get omiUnlimited => 'Omi Unlimited';
@@ -4762,7 +4762,7 @@ class AppLocalizationsLt extends AppLocalizations {
   String get noSpecificDataAccessConfigured => 'Nenustatyta konkreti prieiga prie duomenų.';
 
   @override
-  String get basicPlanDescription => '1 200 premium minučių + neribota įrenginyje';
+  String get basicPlanDescription => '4 800 premium minučių + neribota įrenginyje';
 
   @override
   String get minutes => 'minučių';
@@ -6091,7 +6091,7 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get premiumMinutesInfo =>
-      '1 200 premium minučių per mėnesį. Įrenginio skirtukas siūlo neribotą nemokamą transkripciją.';
+      '4 800 premium minučių per mėnesį. Įrenginio skirtukas siūlo neribotą nemokamą transkripciją.';
 
   @override
   String get viewUsage => 'Peržiūrėti naudojimą';
@@ -6173,7 +6173,7 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get premiumMinutesMonth =>
-      '1200 premium minučių/mėn. Įrenginyje skirtukas siūlo neribotą nemokamą transkripciją. ';
+      '4800 premium minučių/mėn. Įrenginyje skirtukas siūlo neribotą nemokamą transkripciją. ';
 
   @override
   String get audioProcessedLocally =>

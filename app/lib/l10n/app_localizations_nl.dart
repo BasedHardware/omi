@@ -1464,7 +1464,7 @@ class AppLocalizationsNl extends AppLocalizations {
   String get payYourSttProvider => 'Gebruik Omi vrij. Je betaalt alleen je STT-provider rechtstreeks.';
 
   @override
-  String get freeMinutesMonth => '1.200 gratis minuten/maand inbegrepen. Onbeperkt met ';
+  String get freeMinutesMonth => '4.800 gratis minuten/maand inbegrepen. Onbeperkt met ';
 
   @override
   String get omiUnlimited => 'Omi Onbeperkt';
@@ -4777,7 +4777,7 @@ class AppLocalizationsNl extends AppLocalizations {
   String get noSpecificDataAccessConfigured => 'Geen specifieke gegevenstoegang geconfigureerd.';
 
   @override
-  String get basicPlanDescription => '1.200 premium minuten + onbeperkt op apparaat';
+  String get basicPlanDescription => '4.800 premium minuten + onbeperkt op apparaat';
 
   @override
   String get minutes => 'minuten';
@@ -6109,7 +6109,7 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get premiumMinutesInfo =>
-      '1.200 premium minuten/maand. Het On-Device tabblad biedt onbeperkte gratis transcriptie.';
+      '4.800 premium minuten/maand. Het On-Device tabblad biedt onbeperkte gratis transcriptie.';
 
   @override
   String get viewUsage => 'Bekijk gebruik';
@@ -6191,7 +6191,7 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get premiumMinutesMonth =>
-      '1.200 premium minuten/maand. Het tabblad On-device biedt onbeperkte gratis transcriptie. ';
+      '4.800 premium minuten/maand. Het tabblad On-device biedt onbeperkte gratis transcriptie. ';
 
   @override
   String get audioProcessedLocally =>

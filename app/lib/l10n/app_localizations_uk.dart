@@ -1462,7 +1462,7 @@ class AppLocalizationsUk extends AppLocalizations {
   String get payYourSttProvider => 'Вільно користуйтесь omi. Ви платите лише своєму STT-провайдеру безпосередньо.';
 
   @override
-  String get freeMinutesMonth => '1,200 безкоштовних хвилин/місяць включено. Необмежено з ';
+  String get freeMinutesMonth => '4,800 безкоштовних хвилин/місяць включено. Необмежено з ';
 
   @override
   String get omiUnlimited => 'Omi Безлімітний';
@@ -4768,7 +4768,7 @@ class AppLocalizationsUk extends AppLocalizations {
   String get noSpecificDataAccessConfigured => 'Конкретний доступ до даних не налаштовано.';
 
   @override
-  String get basicPlanDescription => '1 200 преміум хвилин + необмежено на пристрої';
+  String get basicPlanDescription => '4 800 преміум хвилин + необмежено на пристрої';
 
   @override
   String get minutes => 'хвилин';
@@ -6097,7 +6097,7 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get premiumMinutesInfo =>
-      '1200 преміум хвилин/місяць. Вкладка \"На пристрої\" пропонує необмежену транскрипцію.';
+      '4800 преміум хвилин/місяць. Вкладка \"На пристрої\" пропонує необмежену транскрипцію.';
 
   @override
   String get viewUsage => 'Переглянути використання';
@@ -6178,7 +6178,7 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get premiumMinutesMonth =>
-      '1200 преміум-хвилин/місяць. Вкладка На пристрої пропонує необмежену безкоштовну транскрипцію. ';
+      '4800 преміум-хвилин/місяць. Вкладка На пристрої пропонує необмежену безкоштовну транскрипцію. ';
 
   @override
   String get audioProcessedLocally =>
