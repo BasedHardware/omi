@@ -18,11 +18,12 @@ steps:
   - id: S1
     name: Verify home screen authenticated
     do: "Take screenshot and verify home screen is showing with bottom nav bar (4+ interactive widgets)"
+    verify: true
     expect:
       - kind: interactive_count
         min: 4
     evidence:
-      - screenshot: step-S1.png
+      - screenshot: step-S1.webp
 
   - id: S2
     name: Open settings drawer
@@ -31,16 +32,17 @@ steps:
       - kind: text_visible
         values: ["Settings"]
     evidence:
-      - screenshot: step-S2.png
+      - screenshot: step-S2.webp
 
   - id: S3
     name: Scroll to Sign Out
     do: "Scroll down in the settings drawer until Sign Out is visible at the bottom"
+    verify: true
     expect:
       - kind: text_visible
         values: ["Sign Out"]
     evidence:
-      - screenshot: step-S3.png
+      - screenshot: step-S3.webp
 
   - id: S4
     name: Tap Sign Out
@@ -49,14 +51,15 @@ steps:
       - kind: text_visible
         values: ["Sign Out?", "Are you sure you want to sign out?"]
     evidence:
-      - screenshot: step-S4.png
+      - screenshot: step-S4.webp
 
   - id: S5
     name: Confirm sign out
     do: "Tap Ok on the confirmation dialog"
+    verify: true
     expect:
       - kind: text_visible
         values: ["Get Started"]
     evidence:
-      - screenshot: step-S5.png
+      - screenshot: step-S5.webp
     note: "After sign out, app returns to onboarding Get Started screen"
