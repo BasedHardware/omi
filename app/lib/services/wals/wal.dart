@@ -9,24 +9,11 @@ const newFrameSyncDelaySeconds = 15;
 const framesPerFlashPage = 8;
 const secondsPerFlashPage = 1.4;
 
-enum WalStatus {
-  inProgress,
-  miss,
-  synced,
-  corrupted,
-}
+enum WalStatus { inProgress, miss, synced, corrupted }
 
-enum WalStorage {
-  mem,
-  disk,
-  sdcard,
-  flashPage,
-}
+enum WalStorage { mem, disk, sdcard, flashPage }
 
-enum SyncMethod {
-  ble,
-  wifi,
-}
+enum SyncMethod { ble, wifi }
 
 class WalStats {
   final int totalFiles;
@@ -140,8 +127,9 @@ class Wal {
       fileNum: json['file_num'] ?? 1,
       totalFrames: json['total_frames'] ?? 0,
       syncedFrameOffset: json['synced_frame_offset'] ?? 0,
-      originalStorage:
-          json['original_storage'] != null ? WalStorage.values.asNameMap()[json['original_storage']] : null,
+      originalStorage: json['original_storage'] != null
+          ? WalStorage.values.asNameMap()[json['original_storage']]
+          : null,
     );
   }
 

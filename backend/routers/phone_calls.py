@@ -13,7 +13,7 @@ from twilio.twiml.voice_response import VoiceResponse, Dial
 
 import database.phone_calls as phone_calls_db
 import database.users as users_db
-from models.users import PlanType
+from utils.subscription import is_paid_plan
 from utils.other import endpoints as auth
 from utils.other.endpoints import rate_limit_dependency
 from utils.twilio_service import (
@@ -36,10 +36,10 @@ def _redact_phone(number: str) -> str:
 
 
 def _require_unlimited_plan(uid: str):
-    """Raise 403 if the user is not on the unlimited plan."""
+    """Raise 403 if the user is not on a paid plan."""
     subscription = users_db.get_user_valid_subscription(uid)
-    if not subscription or subscription.plan != PlanType.unlimited:
-        raise HTTPException(status_code=403, detail="Phone calls require an Unlimited subscription")
+    if not subscription or not is_paid_plan(subscription.plan):
+        raise HTTPException(status_code=403, detail="Phone calls require a paid subscription")
 
 
 router = APIRouter()

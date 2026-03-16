@@ -2159,9 +2159,6 @@ workflows:
 
           # Write runtime .env from OMI_DESKTOP_APP_ENV secret (base64-encoded .env.app contents)
           echo "$OMI_DESKTOP_APP_ENV" | base64 --decode > "$APP_BUNDLE/Contents/Resources/.env"
-          # Never ship shared Anthropic API keys inside production app bundles.
-          # Anthropic access must come from backend or user OAuth mode.
-          sed -i '' '/^ANTHROPIC_API_KEY=/d' "$APP_BUNDLE/Contents/Resources/.env"
           echo "App bundle created: $APP_BUNDLE"
 
       - name: Sign app

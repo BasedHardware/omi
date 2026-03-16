@@ -1,6 +1,7 @@
 package com.friend.ios
 
 import android.content.Intent
+import android.os.Bundle
 import androidx.annotation.NonNull
 import android.Manifest
 import android.content.pm.PackageManager

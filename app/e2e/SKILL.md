@@ -270,38 +270,43 @@ cd app && bash setup.sh ios
 
 **Important:** Both platforms require completing the real sign-in and onboarding flows. Never bypass auth or onboarding — these are user-facing flows that must work correctly.
 
-## YAML Flow Schema
+## YAML Flow Schema (v2)
 
-Each flow file has these top-level keys:
+Each flow file uses schema v2:
 ```yaml
+version: 2
 name: string          # Flow identifier
 description: string   # What this flow covers
+app: com.friend.ios.dev
+evidence:
+  video: true
 covers: [string]      # Source files this flow exercises
-prerequisites: [string]  # Conditions required — see Prerequisites Reference above
-setup: normal | signed_out | { requires: condition }
+preconditions: [string]  # Conditions required — see Prerequisites Reference above
 steps: [Step]         # Ordered list of actions
 ```
 
-Each step can use these action keys (map to agent-flutter commands):
+Each step has these fields:
 
-| YAML Key | agent-flutter Command | Example |
-|----------|----------------------|---------|
-| `press: { type: X }` | `find type X press` | `press: { type: button }` |
-| `press: { type: X, hint: "..." }` | `find type X press` (hint helps identify which) | `press: { type: gesture, hint: "settings gear" }` |
-| `press: { bottom_nav_tab: N }` | `find type InkWell` at y>780, pick Nth | `press: { bottom_nav_tab: 0 }` |
-| `fill: { type: X, value: "..." }` | `find type X` then `fill @ref "value"` | `fill: { type: textfield, value: "test" }` |
-| `scroll: up\|down` | `agent-flutter scroll up\|down` | `scroll: down` |
-| `back: true` | `agent-flutter press` Android back / `adb shell input keyevent 4` | `back: true` |
-| `assert: { text, interactive_count, bottom_nav_tabs }` | `snapshot -i --json` then verify | `assert: { text: "Settings" }` |
-| `screenshot: name` | `agent-flutter screenshot /tmp/name.png` | `screenshot: home-view` |
-| `dismiss: true` | `agent-flutter dismiss` | `dismiss: true` |
-| `wait: { text: "..." }` | poll `snapshot` until text appears | `wait: { text: "Loading" }` |
-| `note: string` | No command — context for the agent | `note: "FAB is bottom-right"` |
-| `name: string` | No command — step label | `name: "Open settings"` |
+| Field | Required | Description |
+|-------|----------|-------------|
+| `id` | yes | Step ID (S1, S2, ...) |
+| `name` | yes | Short description |
+| `do` | yes | Instructions for executing |
+| `verify` | no | `true` = must be verified even during snapshot replay |
+| `expect` | no | Assertions (text_visible, interactive_count) |
+| `evidence` | no | Screenshot filename (`.webp` preferred) |
+| `note` | no | Edge case notes |
+
+Supported `expect` kinds:
+
+| Kind | Fields | Example |
+|------|--------|---------|
+| `text_visible` | `values: [string]` | Verify specific text appears |
+| `interactive_count` | `min: number` | Verify minimum interactive widgets |
 
 ## Navigation Graph (flow-walker verified)
 
-Real navigation edges verified by flow-walker run10 on Pixel 7a (24 screens, 39 edges, depth 2). Screen names mapped from fingerprint IDs to semantic names.
+Real navigation edges verified by flow-walker run11 on Pixel 7a (26 screens, 44 edges, depth 3). Screen names mapped from fingerprint IDs to semantic names.
 
 ```
 Home (24 elements: 17 gesture, 3 icon, 4 inkwell)
@@ -312,6 +317,8 @@ Home (24 elements: 17 gesture, 3 icon, 4 inkwell)
 │   │   ├── Language Settings (13 el: 10 gesture, 1 icon, 1 switch, 1 textbutton)
 │   │   │   ├── Sub-detail (5 el: 4 gesture, 1 icon)
 │   │   │   ├── Sub-settings (7 el: 1 elevated, 5 gesture, 1 icon)
+│   │   │   │   ├── Settings Confirmation (3 el: 1 gesture, 2 textbutton)
+│   │   │   │   └── Settings Form (16 el: 1 elevated, 9 gesture, 3 icon, 1 inkwell, 2 textfield)
 │   │   │   └── Filter Sheet (13 el: 6 gesture, 5 inkwell, 2 textbutton)
 │   │   └── Back → Home
 │   ├── Sub-detail (2 el: gesture, icon)
@@ -370,51 +377,18 @@ For flow-walker compatibility — maps auto-generated fingerprint names to seman
 | `485a8ce57ebc` | 9 | Memory Detail | memories |
 | `a6983264d893` | 7 | Category Page | memories |
 | `4450e0d3044e` | 18 | Memory Search | memories |
+| `35c0d8ed0daa` | 3 | Settings Confirmation | settings-profile |
+| `a864d8b70edf` | 16 | Settings Form | settings-profile |
 
-## Known Flows
+## Verified Flows (v2 flow-walker)
 
-34 reference flows in `app/e2e/flows/*.yaml` — consolidated from 25 manual flows + flow-walker run10 discoveries. Each flow lists `covers:` (source files), `prerequisites:`, and `steps:` (actions + assertions). Element counts verified against live app where available.
+Only flows that have been executed, verified, and pushed through the v2 flow-walker pipeline are listed here. Each has a `.snapshot.json` for fast replay.
 
-| Flow | Prerequisites | What it describes |
-|------|--------------|-------------------|
-| **Core Navigation** | | |
-| `flows/tab-navigation.yaml` | auth_ready | Bottom nav: switching between 4 tabs, scroll, return home |
-| `flows/home-navigation.yaml` | auth_ready | Home → Settings → scroll → back |
-| `flows/search.yaml` | auth_ready | Search icon → query → results → clear |
-| `flows/onboarding.yaml` | signed_out | Full 11-step onboarding: auth → name → language → permissions → complete |
-| **Main Tabs** | | |
-| `flows/conversations.yaml` | auth_ready | Conversations list, folder tabs, starred filter, daily score |
-| `flows/conversation-detail.yaml` | auth_ready | Conversation detail — transcript/summary/action items tabs, edit title, share |
-| `flows/conversation-capturing.yaml` | auth_ready, microphone_permission | Active recording — live transcript, waveform, stop, Ask Omi during capture |
-| `flows/action-items.yaml` | auth_ready | Task creation, categories, checkbox toggle, goal linking |
-| `flows/memories.yaml` | auth_ready | Memory search, graph view, category filter, add/edit memory |
-| `flows/memory-graph.yaml` | auth_ready | Knowledge graph visualization, node exploration |
-| `flows/apps.yaml` | auth_ready | App explore, search, categories, create custom app |
-| `flows/app-detail.yaml` | auth_ready | App detail — reviews, capabilities, install/enable |
-| `flows/chat.yaml` | auth_ready | Ask Omi → text/voice input → AI response |
-| `flows/record-conversation.yaml` | auth_ready, microphone_permission | Phone mic capture → live transcript → stop |
-| **Features** | | |
-| `flows/phone-calls.yaml` | auth_ready, phone_number_verified | Phone call settings, verified numbers management |
-| `flows/persona-profile.yaml` | auth_ready, developer_settings_enabled | AI clone profile via Developer Settings, social links |
-| `flows/speech-profile.yaml` | auth_ready, microphone_permission | Voice sample recording, question flow, progress |
-| `flows/device-management.yaml` | auth_ready, ble_on, omi_device_connected | Connected device info, firmware, SD card (**physical device only**) |
-| `flows/payments.yaml` | auth_ready | Payment methods, Stripe/PayPal setup |
-| `flows/referral-program.yaml` | auth_ready | Referral link, share, stats |
-| `flows/daily-summary.yaml` | auth_ready | Daily summary preferences and detail |
-| **Settings** | | |
-| `flows/settings-profile.yaml` | auth_ready | Profile: name, language, vocabulary, speech profile, privacy |
-| `flows/settings-notifications.yaml` | auth_ready | Frequency slider, daily summary toggle, time picker |
-| `flows/settings-developer.yaml` | auth_ready | STT provider, API keys, MCP keys |
-| `flows/settings-integrations.yaml` | auth_ready | Google Calendar, Gmail, Apple Health connect/disconnect |
-| `flows/task-integrations.yaml` | auth_ready | Todoist, Asana, ClickUp, Google Tasks task providers |
-| `flows/settings-device.yaml` | auth_ready | Device info, LED brightness, mic gain, double tap |
-| `flows/settings-sync.yaml` | auth_ready | Offline sync, local storage, recordings, fast transfer |
-| `flows/settings-plan-usage.yaml` | auth_ready | Current plan, usage stats, upgrade options |
-| `flows/settings-transcription.yaml` | auth_ready | Omi Cloud vs Custom STT, provider config, API keys |
-| `flows/settings-toggle.yaml` | auth_ready | Developer Settings switch toggle |
-| `flows/language-change.yaml` | auth_ready, adb_access | Profile → Language → picker → locale swap via shared_prefs |
-| `flows/data-privacy.yaml` | auth_ready | Data Privacy options and controls |
-| `flows/delete-account.yaml` | auth_ready | Delete Account — confirmation checkbox and safety gate |
+| Flow | Steps | Prerequisites | What it tests | Reports |
+|------|-------|--------------|---------------|---------|
+| `flows/login.yaml` | 5 | signed_out | Auth screen → Google Sign-In → consent → OAuth → home | [normal](https://flow-walker.beastoin.workers.dev/runs/hao5vbBsBI.html), [replay](https://flow-walker.beastoin.workers.dev/runs/-aeMGlV88w.html) |
+| `flows/onboarding.yaml` | 9 | signed_out + auth | Name → Language → Found Omi → Permissions → Review → Speech → Knowledge → Complete → Home | [normal](https://flow-walker.beastoin.workers.dev/runs/UHqa8Fysj2.html), [replay](https://flow-walker.beastoin.workers.dev/runs/B9Py6uoJaO.html) |
+| `flows/logout.yaml` | 5 | auth_ready | Home → Settings → Sign Out → Confirm → Auth screen | [normal](https://flow-walker.beastoin.workers.dev/runs/SH4MXH9gkv.html), [replay](https://flow-walker.beastoin.workers.dev/runs/NcZlCUW0W7.html) |
 
 When you modify a Dart file, check if any flow's `covers:` includes it. If so, that flow describes the user journey your change affects — use it to understand context and verify your work.
 

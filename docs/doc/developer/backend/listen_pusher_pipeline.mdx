@@ -1,0 +1,210 @@
+---
+title: "Listen + Pusher Pipeline"
+description: "Sequence diagrams for the /v4/listen WebSocket and Pusher processing pipeline"
+---
+
+# Listen + Pusher Pipeline — Sequence Diagrams
+
+> Last updated: 2026-03-16 (PR #5624 E2E testing)
+>
+> These diagrams document the real behavior observed during E2E testing with
+> live services (backend, pusher, Deepgram, embedding API). Update when the
+> pipeline changes.
+
+## 1. Connection + Streaming + Transcription
+
+```mermaid
+sequenceDiagram
+    participant Client
+    participant Backend as Backend (/v4/listen)
+    participant Deepgram
+    participant Pusher
+    participant Firestore
+
+    Client->>Backend: WS connect (uid, language, sample_rate, codec)
+    Backend->>Backend: Auth check (dev-token or Firebase)
+    Backend->>Firestore: Create stub conversation (status=in_progress)
+    Backend->>Deepgram: Open STT WebSocket
+    Backend->>Pusher: Open Pusher WebSocket
+    Backend-->>Client: {type: "service_status", status: "ready"}
+
+    Note over Backend: Start background tasks:<br/>conversation_lifecycle_manager (5s poll)<br/>speaker_identification_task<br/>stream_transcript_process
+
+    loop Audio Streaming
+        Client->>Backend: PCM audio bytes
+        Backend->>Backend: Update last_activity_time
+        Backend->>Deepgram: Forward audio
+        Deepgram-->>Backend: Transcript segments
+        Backend->>Backend: Update finished_at (only on real segments)
+        Backend->>Firestore: Write transcript_segments
+        Backend-->>Client: JSON array of segments [{id, text, speaker, ...}]
+    end
+```
+
+## 2. Conversation Lifecycle (Silence Timeout Path)
+
+This is the normal path when the client stays connected but stops speaking.
+
+```mermaid
+sequenceDiagram
+    participant Client
+    participant Backend as Backend
+    participant Pusher
+    participant OpenAI as OpenAI (LLM)
+    participant Firestore
+
+    Note over Client: Client stops sending audio<br/>(silence keepalive OK — doesn't update finished_at)
+
+    loop conversation_lifecycle_manager (every 5s)
+        Backend->>Firestore: Check finished_at on current conversation
+        Note over Backend: If now() - finished_at >= conversation_timeout (120s)
+    end
+
+    Backend->>Backend: _process_conversation(conversation_id)
+    Backend->>Firestore: Set status=processing
+    Backend->>Pusher: Send process_conversation request
+    Backend->>Firestore: Create new stub conversation
+
+    Pusher->>OpenAI: Generate title, overview, category, emoji, action_items
+    OpenAI-->>Pusher: Structured data
+    Pusher->>Firestore: Write structured data + set status=completed
+    Pusher->>OpenAI: Extract memories
+    Pusher->>Firestore: Save embedding vector
+    Pusher-->>Backend: Opcode 201 (conversation processed callback)
+
+    Backend-->>Client: {type: "memory_processing_started"}
+    Backend-->>Client: {type: "memory_created", memory: {...}}
+```
+
+## 3. Disconnect Path
+
+What happens when the WS connection closes.
+
+```mermaid
+sequenceDiagram
+    participant Client
+    participant Backend as Backend
+    participant Pusher
+
+    Client->>Backend: WS close (code=1000)
+    Backend->>Backend: Log "Client disconnected"
+
+    alt Multi-channel
+        Backend->>Backend: _process_conversation(current_conversation_id) ✅
+        Backend->>Pusher: Send process_conversation request
+    else Single-channel
+        Note over Backend: No explicit _process_conversation() call<br/>Relies on next session to pick up as stale
+    end
+
+    Backend->>Backend: Cancel ALL background tasks<br/>(including conversation_lifecycle_manager)
+    Backend->>Backend: Close Pusher socket
+    Backend->>Backend: Cleanup memory (clear caches, buffers)
+
+    Note over Backend: Single-channel: conversation stays<br/>in_progress until next session<br/>picks it up as stale
+```
+
+## 4. Speaker ID Lifecycle (2-Session Flow)
+
+Speaker identification requires two sessions: one to store the embedding, one
+to match against it.
+
+```mermaid
+sequenceDiagram
+    participant Client
+    participant Backend as Backend
+    participant Pusher
+    participant EmbeddingAPI as Embedding API (wespeaker)
+    participant Firestore
+
+    Note over Client: SESSION 1: Assign Speaker
+
+    Client->>Backend: Stream audio (speech segments)
+    Backend-->>Client: Transcript segments with speaker labels
+    Client->>Backend: POST /assign_speaker {segment_id, person_id}
+    Backend->>Backend: Queue speaker sample (opcode 105)
+    Backend->>Pusher: Forward speaker sample request
+
+    Note over Pusher: SPEAKER_SAMPLE_MIN_AGE = 120s<br/>SPEAKER_SAMPLE_PROCESS_INTERVAL = 15s
+
+    loop Speaker sample queue (every 15s)
+        Pusher->>Pusher: Check if sample age >= 120s
+    end
+
+    Pusher->>EmbeddingAPI: POST /v1/speakers/extract (audio bytes)
+    EmbeddingAPI-->>Pusher: 256-d embedding vector
+    Pusher->>Firestore: Store embedding in person.speech_samples[]
+
+    Note over Client: SESSION 2: Auto-Label
+
+    Client->>Backend: WS connect
+    Backend->>Firestore: Load person_embeddings_cache (once at session start)
+    Client->>Backend: Stream audio
+    Backend->>EmbeddingAPI: Extract embedding from current speech
+    EmbeddingAPI-->>Backend: 256-d embedding
+    Backend->>Backend: Cosine distance vs cached embeddings
+    Note over Backend: Match if distance < 0.45
+    Backend-->>Client: {type: "speaker_label_suggestion", person_id, distance}
+```
+
+## 5. Private Cloud Sync (Audio Upload)
+
+When `private_cloud_sync_enabled` is set for the user.
+
+```mermaid
+sequenceDiagram
+    participant Client
+    participant Backend as Backend
+    participant Pusher
+    participant GCS as Google Cloud Storage
+    participant Firestore
+
+    Client->>Backend: Stream audio
+    Backend->>Pusher: Forward audio bytes
+
+    loop Every 60s batch
+        Pusher->>Pusher: Encode audio to Opus
+        Pusher->>GCS: Upload audio chunk
+        Pusher->>Firestore: Append to conversation.audio_files[]
+    end
+
+    Note over Pusher: In LOCAL_DEVELOPMENT mode,<br/>GCS upload fails (no prod creds).<br/>Conversation lifecycle still works.
+```
+
+## 6. Event Wire Protocol
+
+### Server → Client (JSON over WS text frames)
+
+| Type | Format | Example |
+|------|--------|---------|
+| Transcripts | JSON array | `[{id, text, speaker, speaker_id, is_user, start, end}, ...]` |
+| Events | JSON object | `{type: "...", ...}` |
+| Keepalive | Plain text | `"ping"` (not JSON — filter before parsing) |
+
+### Event Types
+
+| Event | Fields | When |
+|-------|--------|------|
+| `service_status` | `{type, status: "ready"}` | After WS connect, services initialized |
+| `memory_processing_started` | `{type}` | Conversation sent to pusher for LLM |
+| `memory_created` | `{type, memory: {id, structured: {title, overview, ...}}}` | LLM processing complete |
+| `speaker_label_suggestion` | `{type, person_id, person_name, distance, segments}` | Speaker matched via embedding |
+
+### Client → Server
+
+| Type | Format | Notes |
+|------|--------|-------|
+| Audio | Binary frames | PCM16LE bytes |
+| Silence keepalive | `b'\x00' * 320` | Resets `last_activity_time` but NOT `finished_at` |
+
+## 7. Timing Constants
+
+| Constant | Value | Location | Purpose |
+|----------|-------|----------|---------|
+| `conversation_timeout` | 120s (min) | transcribe.py | Silence before lifecycle triggers |
+| `last_activity_time` timeout | 90s | transcribe.py | WS inactivity disconnect |
+| `SPEAKER_SAMPLE_MIN_AGE` | 120s | pusher.py:39 | Wait before extracting embedding |
+| `SPEAKER_SAMPLE_PROCESS_INTERVAL` | 15s | pusher.py:40 | Queue poll interval |
+| `lifecycle_manager` poll | 5s | transcribe.py:1683 | Check `finished_at` interval |
+| Pusher audio batch | 60s | pusher | GCS upload batch size |
+| Speaker match threshold | 0.45 | transcribe.py | Cosine distance cutoff |
+

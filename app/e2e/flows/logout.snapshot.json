@@ -1,0 +1,112 @@
+{
+  "version": 1,
+  "flow": "logout",
+  "flowHash": "5f2e2e1ccf1445cd",
+  "device": {
+    "model": "emulator-5554",
+    "resolution": "unknown"
+  },
+  "createdAt": "2026-03-16T02:29:09.803Z",
+  "runId": "I4Qh6GA",
+  "totalDurationMs": 0,
+  "verifySteps": [
+    "S1",
+    "S3",
+    "S5"
+  ],
+  "steps": {
+    "S1": {
+      "kind": "action",
+      "waitAfterMs": 500,
+      "durationMs": 0,
+      "command": "snapshot",
+      "ref": "e15",
+      "text": "Home tab",
+      "type": "gesture",
+      "bounds": {
+        "x": 20,
+        "y": 810,
+        "width": 73,
+        "height": 80
+      },
+      "center": {
+        "x": 57,
+        "y": 850
+      }
+    },
+    "S2": {
+      "kind": "action",
+      "waitAfterMs": 500,
+      "durationMs": 0,
+      "command": "press",
+      "ref": "e29",
+      "text": "Settings gear",
+      "type": "button",
+      "bounds": {
+        "x": 359,
+        "y": 59,
+        "width": 36,
+        "height": 36
+      },
+      "center": {
+        "x": 377,
+        "y": 77
+      }
+    },
+    "S3": {
+      "kind": "action",
+      "waitAfterMs": 500,
+      "durationMs": 0,
+      "command": "scroll",
+      "type": "scroll",
+      "bounds": {
+        "x": 0,
+        "y": 0,
+        "width": 411,
+        "height": 890
+      },
+      "center": {
+        "x": 206,
+        "y": 445
+      }
+    },
+    "S4": {
+      "kind": "action",
+      "waitAfterMs": 500,
+      "durationMs": 0,
+      "command": "press",
+      "ref": "e10",
+      "text": "Sign Out",
+      "type": "gesture",
+      "bounds": {
+        "x": 32,
+        "y": 757,
+        "width": 347,
+        "height": 61
+      },
+      "center": {
+        "x": 206,
+        "y": 788
+      }
+    },
+    "S5": {
+      "kind": "action",
+      "waitAfterMs": 500,
+      "durationMs": 0,
+      "command": "press",
+      "ref": "e2",
+      "text": "Ok",
+      "type": "button",
+      "bounds": {
+        "x": 279,
+        "y": 500,
+        "width": 64,
+        "height": 48
+      },
+      "center": {
+        "x": 311,
+        "y": 524
+      }
+    }
+  }
+}

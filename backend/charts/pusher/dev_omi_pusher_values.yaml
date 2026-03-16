@@ -33,7 +33,10 @@ serviceAccount:
 
 # This is for setting Kubernetes Annotations to a Pod.
 # For more information checkout: https://kubernetes.io/docs/concepts/overview/working-with-objects/annotations/
-podAnnotations: {}
+podAnnotations:
+  prometheus.io/scrape: "true"
+  prometheus.io/port: "8080"
+  prometheus.io/path: "/metrics"
 # This is for setting Kubernetes Labels to a Pod.
 # For more information checkout: https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/
 podLabels: {}
@@ -249,6 +252,11 @@ env:
         key: SERVICE_ACCOUNT_JSON
   - name: GOOGLE_CLOUD_PROJECT
     value: "based-hardware"
+  - name: METRICS_SECRET
+    valueFrom:
+      secretKeyRef:
+        name: dev-omi-backend-secrets
+        key: METRICS_SECRET
 
 resources:
   # We usually recommend not to specify default resources and to leave this as a conscious

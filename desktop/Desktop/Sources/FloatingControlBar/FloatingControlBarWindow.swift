@@ -2,8 +2,11 @@ import Cocoa
 import Combine
 import SwiftUI
 
-/// NSWindow subclass for the floating control bar.
-class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
+/// NSPanel subclass for the floating control bar.
+///
+/// Using a non-activating panel lets the Ask Omi shortcut focus the floating bar
+/// without surfacing the main Omi window when the app is already running.
+class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     private static let positionKey = "FloatingControlBarPosition"
     private static let sizeKey = "FloatingControlBarSize"
     private static let defaultSize = NSSize(width: 40, height: 10)
@@ -56,7 +59,7 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
 
         super.init(
             contentRect: initialRect,
-            styleMask: [.borderless],
+            styleMask: [.borderless, .nonactivatingPanel],
             backing: backingStoreType,
             defer: flag
         )
@@ -90,7 +93,7 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
     }
 
     override var canBecomeKey: Bool { true }
-    override var canBecomeMain: Bool { true }
+    override var canBecomeMain: Bool { false }
 
     override func keyDown(with event: NSEvent) {
         // Esc closes the AI conversation only — never hides the entire bar
@@ -575,6 +578,13 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
         resizeAnchored(to: targetSize, makeResizable: false, animated: animated, anchorTop: true)
     }
 
+    /// Restore the compact pill size when we temporarily surface the bar outside
+    /// of an active hover, notification, voice session, or AI conversation.
+    func normalizeForTemporaryShow() {
+        guard !state.showingAIConversation, !state.isVoiceListening, state.currentNotification == nil else { return }
+        resizeAnchored(to: Self.minBarSize, makeResizable: false, animated: false, anchorTop: true)
+    }
+
     private func resizeToResponseHeight(animated: Bool = false) {
         // Determine the 2× cap from the user's saved (or default) preferred height.
         let savedSize = UserDefaults.standard.string(forKey: FloatingControlBarWindow.sizeKey)
@@ -867,6 +877,7 @@ class FloatingControlBarManager {
     func showTemporarily() {
         guard window != nil else { return }
         log("FloatingControlBarManager: showTemporarily() — showing bar above Chrome")
+        window?.normalizeForTemporaryShow()
         window?.makeKeyAndOrderFront(nil)
     }
 
@@ -937,9 +948,8 @@ class FloatingControlBarManager {
     func openAIInput() {
         guard let window = window else { return }
 
-        // Activate only the app process so the floating bar can accept keyboard input
-        // without pulling the main Omi window in front of the current app.
-        NSRunningApplication.current.activate(options: [.activateIgnoringOtherApps])
+        // The bar is a non-activating panel, so it can become key for text input
+        // without surfacing the main Omi window.
 
         // If a conversation is already showing, just focus the follow-up input
         if window.state.showingAIConversation && window.state.showingAIResponse {

@@ -19,6 +19,7 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/apps/app_detail/reviews_list_page.dart';
 import 'package:omi/pages/apps/app_home_web_page.dart';
+import 'package:omi/pages/apps/oauth_webview_page.dart';
 import 'package:omi/pages/apps/markdown_viewer.dart';
 import 'package:omi/pages/apps/providers/add_app_provider.dart';
 import 'package:omi/pages/apps/widgets/full_screen_image_viewer.dart';
@@ -1386,8 +1387,27 @@ class _AppDetailPageState extends State<AppDetailPage> {
                                   );
                                   return;
                                 }
-                                await _launchUrlSafely(uri);
-                                checkSetupCompleted(autoInstallIfCompleted: true);
+                                // Use OAuth WebView to intercept localhost redirects
+                                // (MCP servers like Zomato, Swiggy only allow localhost callbacks)
+                                final appHomeUrl = app.externalIntegration?.appHomeUrl;
+                                if (appHomeUrl != null && appHomeUrl.isNotEmpty) {
+                                  final callbackUrl = '${appHomeUrl.replaceAll(RegExp(r'/+$'), '')}/auth/callback';
+                                  final result = await Navigator.of(context).push<bool>(
+                                    MaterialPageRoute(
+                                      builder: (ctx) => OAuthWebViewPage(
+                                        authUrl: rawUrl,
+                                        callbackBaseUrl: callbackUrl,
+                                        title: step.name,
+                                      ),
+                                    ),
+                                  );
+                                  if (result == true) {
+                                    checkSetupCompleted(autoInstallIfCompleted: true);
+                                  }
+                                } else {
+                                  await _launchUrlSafely(uri);
+                                  checkSetupCompleted(autoInstallIfCompleted: true);
+                                }
                               },
                               child: Padding(
                                 padding: const EdgeInsets.all(16.0),

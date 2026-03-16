@@ -97,8 +97,10 @@ struct OMIApp: App {
     }
 
     var body: some Scene {
+        let _ = Self.registerOpenMainWindowHandler(openWindow)
+
         // Main desktop window - same view for both modes, sidebar hidden in rewind mode
-        Window(windowTitle, id: "main") {
+        return Window(windowTitle, id: "main") {
             DesktopHomeView()
                 .withFontScaling()
                 .onAppear {
@@ -137,9 +139,15 @@ struct OMIApp: App {
         // Note: Menu bar is now handled by NSStatusBar in AppDelegate.setupMenuBar()
         // for better reliability on macOS Sequoia (SwiftUI MenuBarExtra had rendering issues)
     }
+
+    private static func registerOpenMainWindowHandler(_ openWindow: OpenWindowAction) {
+        AppDelegate.openMainWindow = { openWindow(id: "main") }
+    }
 }
 
 class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
+    static var openMainWindow: (() -> Void)?
+
     private var sentryHeartbeatTimer: Timer?
     private var globalHotkeyMonitor: Any?
     private var localHotkeyMonitor: Any?
@@ -152,6 +160,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         // Ignore SIGPIPE so broken-pipe writes return errors instead of crashing the app.
         // Without this, writing to a dead FFmpeg stdin or agent-bridge pipe kills the process.
         signal(SIGPIPE, SIG_IGN)
+
+        DesktopAutomationBridge.shared.startIfNeeded()
 
         // Strip com.apple.provenance xattrs that macOS adds when Sparkle extracts updates.
         // These break the code signature seal, causing the NEXT update to fail with
@@ -202,6 +212,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         // Initialize Sparkle auto-updater early so the 10-minute check timer starts at launch
         // Without this, the updater only starts when the user opens Settings or clicks "Check for Updates"
         _ = UpdaterViewModel.shared
+        UpdaterViewModel.shared.checkForUpdatesImmediatelyAfterLaunchIfNeeded()
 
         // Initialize Sentry for crash reporting and error tracking (including dev builds)
         let isDev = AnalyticsManager.isDevBuild
@@ -741,19 +752,29 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     @MainActor @objc private func openOmiFromMenu() {
         AnalyticsManager.shared.menuBarActionClicked(action: "open_omi")
         NSApp.activate(ignoringOtherApps: true)
-        var foundWindow = false
-        for window in NSApp.windows {
-            if window.title.hasPrefix("Omi") {
-                foundWindow = true
-                window.makeKeyAndOrderFront(nil)
-                window.appearance = NSAppearance(named: .darkAqua)
-            }
+        var foundWindow = revealMainWindowIfAvailable()
+        if !foundWindow {
+            Self.openMainWindow?()
+            foundWindow = revealMainWindowIfAvailable()
         }
         // Dock icon is always visible; just activate the app
         NSApp.activate(ignoringOtherApps: true)
         if !foundWindow {
             log("AppDelegate: [MENUBAR] WARNING - No Omi window found when opening from menu bar")
         }
+    }
+
+    @MainActor private func revealMainWindowIfAvailable() -> Bool {
+        for window in NSApp.windows {
+            let isRealAppWindow = window.frame.width > 300 && window.frame.height > 200
+            let isMenuBarPopover = window.title.hasPrefix("Item-")
+            if isRealAppWindow && !isMenuBarPopover {
+                window.makeKeyAndOrderFront(nil)
+                window.appearance = NSAppearance(named: .darkAqua)
+                return true
+            }
+        }
+        return false
     }
 
     @MainActor @objc private func checkForUpdates() {

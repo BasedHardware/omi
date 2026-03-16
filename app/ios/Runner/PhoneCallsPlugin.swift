@@ -75,6 +75,8 @@ class PhoneCallsPlugin: NSObject, FlutterPlugin {
             handleToggleMute(call, result: result)
         case "toggleSpeaker":
             handleToggleSpeaker(call, result: result)
+        case "sendDtmf":
+            handleSendDtmf(call, result: result)
         default:
             result(FlutterMethodNotImplemented)
         }
@@ -221,6 +223,16 @@ class PhoneCallsPlugin: NSObject, FlutterPlugin {
         result(nil)
     }
 
+    private func handleSendDtmf(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
+        guard let args = call.arguments as? [String: Any],
+              let digits = args["digits"] as? String else {
+            result(nil)
+            return
+        }
+        activeCall?.sendDigits(digits)
+        result(nil)
+    }
+
     // MARK: - Cleanup
 
     fileprivate func cleanup() {
@@ -351,7 +363,7 @@ extension PhoneCallsPlugin: CXProviderDelegate {
             try audioSession.setCategory(
                 .playAndRecord,
                 mode: .voiceChat,
-                options: [.allowBluetooth, .allowBluetoothA2DP, .defaultToSpeaker]
+                options: [.allowBluetooth, .allowBluetoothA2DP]
             )
             try audioSession.setPreferredSampleRate(48000)
             try audioSession.setPreferredIOBufferDuration(0.020)

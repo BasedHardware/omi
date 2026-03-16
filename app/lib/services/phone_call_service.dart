@@ -76,6 +76,15 @@ class PhoneCallService {
     }
   }
 
+  /// Send DTMF tones during an active call.
+  Future<void> sendDtmf(String digits) async {
+    try {
+      await _methodChannel.invokeMethod('sendDtmf', {'digits': digits});
+    } catch (e) {
+      Logger.error('PhoneCallService: sendDtmf error: $e');
+    }
+  }
+
   /// Start listening for call events from native side.
   void startListening() {
     _eventSubscription = _eventChannel.receiveBroadcastStream().listen(

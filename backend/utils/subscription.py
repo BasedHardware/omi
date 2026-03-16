@@ -1,7 +1,6 @@
 import os
 from datetime import datetime, timezone
 from typing import List
-import os
 import stripe
 
 import database.users as users_db
@@ -11,14 +10,39 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+PAID_PLAN_TYPES = {PlanType.unlimited, PlanType.pro}
+
+
+def is_paid_plan(plan: PlanType) -> bool:
+    return plan in PAID_PLAN_TYPES
+
+
+def get_paid_plan_definitions() -> list[dict]:
+    return [
+        {
+            "plan_type": PlanType.unlimited,
+            "plan_id": "unlimited",
+            "title": "Unlimited Plan",
+            "monthly_price_id": os.getenv('STRIPE_UNLIMITED_MONTHLY_PRICE_ID'),
+            "annual_price_id": os.getenv('STRIPE_UNLIMITED_ANNUAL_PRICE_ID'),
+            "annual_description": "Save 20% with annual billing.",
+        },
+        {
+            "plan_type": PlanType.pro,
+            "plan_id": "pro",
+            "title": "Omi Pro",
+            "monthly_price_id": os.getenv('STRIPE_PRO_MONTHLY_PRICE_ID'),
+            "annual_price_id": os.getenv('STRIPE_PRO_ANNUAL_PRICE_ID'),
+            "annual_description": "Save with annual billing.",
+        },
+    ]
+
 
 def get_plan_type_from_price_id(price_id: str) -> PlanType:
     """Determines the plan type based on the Stripe price ID."""
-    unlimited_monthly_price = os.getenv('STRIPE_UNLIMITED_MONTHLY_PRICE_ID')
-    unlimited_annual_price = os.getenv('STRIPE_UNLIMITED_ANNUAL_PRICE_ID')
-
-    if price_id in (unlimited_monthly_price, unlimited_annual_price):
-        return PlanType.unlimited
+    for definition in get_paid_plan_definitions():
+        if price_id in (definition["monthly_price_id"], definition["annual_price_id"]):
+            return definition["plan_type"]
     raise ValueError(f"Price ID {price_id} does not correspond to a known plan.")
 
 
@@ -46,7 +70,7 @@ def get_default_basic_subscription() -> Subscription:
 
 def get_plan_limits(plan: PlanType) -> PlanLimits:
     """Returns the PlanLimits object for the given plan."""
-    if plan == PlanType.unlimited:
+    if is_paid_plan(plan):
         return PlanLimits(
             transcription_seconds=None,
             words_transcribed=None,
@@ -58,6 +82,14 @@ def get_plan_limits(plan: PlanType) -> PlanLimits:
 
 def get_plan_features(plan: PlanType) -> List[str]:
     """Returns the list of feature strings for the given plan."""
+    if plan == PlanType.pro:
+        return [
+            "Automations",
+            "Vibe coding",
+            "Unlimited actions",
+            "Priority desktop AI features",
+        ]
+
     if plan == PlanType.unlimited:
         return [
             "Unlimited listening time",
@@ -109,7 +141,7 @@ def can_user_make_payment(uid: str, target_price_id: str = None) -> tuple[bool, 
         return True, "User can make payment"
 
     # If unlimited plan but inactive, user can pay
-    if subscription.plan == PlanType.unlimited and subscription.status == SubscriptionStatus.inactive:
+    if is_paid_plan(subscription.plan) and subscription.status == SubscriptionStatus.inactive:
         return True, "User can make payment"
 
     # If subscription is canceled (cancel_at_period_end=True), allow resubscription
@@ -118,10 +150,8 @@ def can_user_make_payment(uid: str, target_price_id: str = None) -> tuple[bool, 
         return True, "User can resubscribe (current subscription is scheduled for cancellation)"
 
     # If unlimited plan and active, check if this is a plan change
-    if subscription.plan == PlanType.unlimited and subscription.status == SubscriptionStatus.active:
+    if is_paid_plan(subscription.plan) and subscription.status == SubscriptionStatus.active:
         if subscription.current_period_end:
-            from datetime import datetime, timezone
-
             period_end_dt = datetime.fromtimestamp(subscription.current_period_end, tz=timezone.utc)
 
             # If subscription has expired, user can pay
@@ -209,7 +239,7 @@ def get_remaining_transcription_seconds(uid: str) -> int | None:
     if not subscription:
         # No subscription = use basic limits
         limits = get_basic_plan_limits()
-    elif subscription.plan == PlanType.unlimited:
+    elif is_paid_plan(subscription.plan):
         return None  # Unlimited
     else:
         limits = get_plan_limits(subscription.plan)
@@ -261,9 +291,9 @@ def reconcile_basic_plan_with_stripe(uid: str, subscription: Subscription | None
         except ValueError:
             plan_type = None
 
-        # If Stripe says this is actually an unlimited plan, fix our local record.
-        if plan_type == PlanType.unlimited:
-            subscription.plan = PlanType.unlimited
+        # If Stripe says this is actually a paid plan, fix our local record.
+        if plan_type and is_paid_plan(plan_type):
+            subscription.plan = plan_type
             subscription.status = SubscriptionStatus.active
             subscription.current_period_end = stripe_sub_dict.get('current_period_end')
             subscription.cancel_at_period_end = stripe_sub_dict.get('cancel_at_period_end', False)

@@ -7820,6 +7820,7 @@ impl FirestoreService {
         );
 
         let mut fields = json!({
+            "id": {"stringValue": &goal_id},
             "title": {"stringValue": title},
             "goal_type": {"stringValue": match goal_type {
                 GoalType::Boolean => "boolean",

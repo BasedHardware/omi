@@ -12,6 +12,7 @@ import 'package:omi/backend/http/api/phone_calls.dart' as api;
 import 'package:omi/backend/http/shared.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/phone_call.dart';
+import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/services/phone_call_service.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/logger.dart';
@@ -45,8 +46,8 @@ class PhoneCallProvider extends ChangeNotifier {
   Duration get callDuration => _callDuration;
 
   // Real-time transcript segments
-  final List<PhoneTranscriptSegment> _transcriptSegments = [];
-  List<PhoneTranscriptSegment> get transcriptSegments => List.unmodifiable(_transcriptSegments);
+  final List<TranscriptSegment> _transcriptSegments = [];
+  List<TranscriptSegment> get transcriptSegments => List.unmodifiable(_transcriptSegments);
 
   // WebSocket for transcription
   WebSocketChannel? _transcriptionSocket;
@@ -237,11 +238,17 @@ class PhoneCallProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  void sendDtmf(String digit) {
+    if (_callState == PhoneCallState.active) {
+      _nativeService.sendDtmf(digit);
+    }
+  }
+
   // ************************************************
   // ************* SPEAKER LABELS *******************
   // ************************************************
 
-  String getSpeakerLabel(PhoneTranscriptSegment segment) {
+  String getSpeakerLabel(TranscriptSegment segment) {
     if (segment.isUser) return 'You';
     return _contactName ?? _remoteNumber ?? 'Unknown';
   }
@@ -391,13 +398,15 @@ class PhoneCallProvider extends ChangeNotifier {
   }
 
   void _handleTranscriptionMessage(String message) {
+    if (message == 'ping') return;
+
     try {
       var data = jsonDecode(message);
 
       // Standard segment array format: [{id, text, is_user, speaker, start, end, ...}, ...]
       if (data is List) {
         for (var segmentJson in data) {
-          var segment = PhoneTranscriptSegment.fromJson(segmentJson as Map<String, dynamic>);
+          var segment = TranscriptSegment.fromJson(segmentJson as Map<String, dynamic>);
           var existingIndex = _transcriptSegments.indexWhere((s) => s.id == segment.id);
           if (existingIndex >= 0) {
             _transcriptSegments[existingIndex] = segment;
@@ -409,7 +418,19 @@ class PhoneCallProvider extends ChangeNotifier {
         return;
       }
 
-      // Ignore non-segment messages (ping, status events, etc.)
+      // Handle translation events
+      if (data is Map && data['type'] == 'translating') {
+        var segments = data['segments'] as List<dynamic>? ?? [];
+        for (var segmentJson in segments) {
+          var translated = TranscriptSegment.fromJson(segmentJson as Map<String, dynamic>);
+          var existingIndex = _transcriptSegments.indexWhere((s) => s.id == translated.id);
+          if (existingIndex >= 0) {
+            _transcriptSegments[existingIndex].translations = translated.translations;
+          }
+        }
+        if (segments.isNotEmpty) notifyListeners();
+        return;
+      }
     } catch (e) {
       Logger.error('PhoneCallProvider: failed to parse transcript message: $e');
     }

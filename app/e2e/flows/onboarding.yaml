@@ -1,8 +1,13 @@
 # E2E Flow: Onboarding — full new-user journey
-# Tests: 11-step onboarding wizard from auth to completion
+# Tests: Auth → Name → Language → Found Omi → Permissions → User Review → Speech Profile → Knowledge Graph → Complete
+# Note: Steps 6-7 (Welcome/FindDevices) are skipped by the app. UserReview jumps to SpeechProfile.
 
+version: 2
 name: onboarding
-description: Full onboarding flow from Get Started through auth, name, language, permissions, speech profile, to completion
+description: Full onboarding flow from auth through name, language, permissions, speech profile, to completion
+app: com.friend.ios.dev
+evidence:
+  video: true
 covers:
   - app/lib/pages/onboarding/wrapper.dart
   - app/lib/pages/onboarding/auth.dart
@@ -14,75 +19,81 @@ covers:
   - app/lib/pages/onboarding/speech_profile_widget.dart
   - app/lib/pages/onboarding/knowledge_graph_step.dart
   - app/lib/pages/onboarding/complete_screen.dart
-prerequisites:
-  - signed_out  # Fresh app state. Android: uninstall or clear data (Settings → Apps → Omi → Clear Data). iOS: delete and reinstall app. Must show Get Started screen.
-setup: signed_out
+preconditions:
+  - Fresh app state — clear data or reinstall. Must show auth screen after sign-out.
+  - Must be signed in (auth completed via login flow first)
 
 steps:
-  - name: Get Started screen
-    assert:
-      text: "Get Started"
-      interactive_count: { min: 1, hint: "ElevatedButton at bottom" }
-    screenshot: get-started
+  - id: S1
+    name: Name entry page
+    do: "Verify name entry page is showing after auth. Fill name field with 'Test User' and tap Continue."
+    verify: true
+    expect:
+      - kind: interactive_count
+        min: 2
+    evidence:
+      - screenshot: step-S1.webp
 
-  - name: Tap Get Started
-    press: { type: button, hint: "ElevatedButton — Get Started" }
-    screenshot: auth-page
+  - id: S2
+    name: Primary language selection
+    do: "Verify language selection page. English should be pre-selected or first in the list. Tap to select English, then tap Continue/Confirm."
+    expect:
+      - kind: text_visible
+        values: ["Tell us your primary language"]
+    evidence:
+      - screenshot: step-S2.webp
 
-  - name: Auth page — sign in options
-    assert:
-      text: "Sign in with Google"
-      interactive_count: { min: 2, hint: "Google button, possibly Apple button" }
-    note: "On Android, only Google sign-in shown. On iOS, both Apple and Google."
-    screenshot: auth-options
+  - id: S3
+    name: Found Omi / How did you hear about us
+    do: "Verify the 'How did you hear about Omi?' page. Tap Skip or select an option and Continue."
+    evidence:
+      - screenshot: step-S3.webp
 
-  - name: Sign in with Google
-    press: { type: button, hint: "ElevatedButton — Sign in with Google" }
-    note: "Triggers consent bottom sheet, then Google OAuth flow"
-    screenshot: after-auth
+  - id: S4
+    name: Permissions request
+    do: "Verify permissions page requesting microphone, notifications, location. Grant or skip permissions."
+    verify: true
+    evidence:
+      - screenshot: step-S4.webp
+    note: "System dialogs may appear. Use agent-flutter dismiss or ADB to handle permission prompts."
 
-  - name: Name entry page
-    assert:
-      interactive_count: { min: 2, hint: "text field + continue button" }
-    fill: { type: textfield, value: "Test User" }
-    screenshot: name-entry
+  - id: S5
+    name: User review page
+    do: "Verify the user review/survey page (Loving Omi?). Tap Skip or provide feedback and Continue."
+    evidence:
+      - screenshot: step-S5.webp
+    note: "This page skips directly to Speech Profile (steps 6-7 unused)"
 
-  - name: Submit name
-    press: { type: button, hint: "Continue/Next button" }
-    screenshot: after-name
+  - id: S6
+    name: Speech profile setup
+    do: "Verify speech profile page. Tap Skip to skip audio capture."
+    evidence:
+      - screenshot: step-S6.webp
+    note: "Can skip without recording. Skip goes to Knowledge Graph."
 
-  - name: Primary language selection
-    assert:
-      text: "Tell us your primary language"
-      interactive_count: { min: 3, hint: "search field + language rows + confirm" }
-    screenshot: language-selection
+  - id: S7
+    name: Knowledge graph preview
+    do: "Verify knowledge graph / memory graph preview page. Tap Continue or Skip."
+    evidence:
+      - screenshot: step-S7.webp
 
-  - name: Select English and confirm
-    press: { type: gesture, hint: "first InkWell language row — English" }
-    press: { type: button, hint: "Confirm button" }
-    screenshot: after-language
+  - id: S8
+    name: Onboarding complete
+    do: "Verify completion screen showing 'You are all set!' and 'Start Using Omi' button. Tap 'Start Using Omi'."
+    verify: true
+    expect:
+      - kind: text_visible
+        values: ["You are all set!"]
+    evidence:
+      - screenshot: step-S8.webp
 
-  - name: Found Omi / device discovery
-    note: "Shows device scanning or skip option"
-    screenshot: found-omi
-
-  - name: Permissions request
-    note: "Requests microphone, notifications, location permissions"
-    screenshot: permissions
-
-  - name: User review page
-    note: "Loving Omi? survey/rating page"
-    screenshot: user-review
-
-  - name: Speech profile setup
-    note: "Audio capture for speaker identification"
-    screenshot: speech-profile
-
-  - name: Knowledge graph preview
-    note: "Shows memory graph visualization"
-    screenshot: knowledge-graph
-
-  - name: Onboarding complete
-    assert:
-      interactive_count: { min: 1, hint: "Continue/Get Started button" }
-    screenshot: complete
+  - id: S9
+    name: Home screen
+    do: "Verify landing on home screen after completing onboarding"
+    verify: true
+    expect:
+      - kind: interactive_count
+        min: 4
+    evidence:
+      - screenshot: step-S9.webp
+    note: "Home screen with bottom nav bar (4 tabs) confirms onboarding complete"

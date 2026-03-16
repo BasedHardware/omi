@@ -205,7 +205,8 @@ class SDCardWalSyncImpl implements SDCardWalSync {
         timerStart = DateTime.now().millisecondsSinceEpoch ~/ 1000 - seconds;
       }
       Logger.debug(
-          'SDCardWalSync: totalBytes=$totalBytes storageOffset=$storageOffset frameLengthInBytes=${codec.getFramesLengthInBytes()} fps=${codec.getFramesPerSecond()} calculatedSeconds=$seconds timerStart=$timerStart now=${DateTime.now().millisecondsSinceEpoch ~/ 1000}');
+        'SDCardWalSync: totalBytes=$totalBytes storageOffset=$storageOffset frameLengthInBytes=${codec.getFramesLengthInBytes()} fps=${codec.getFramesPerSecond()} calculatedSeconds=$seconds timerStart=$timerStart now=${DateTime.now().millisecondsSinceEpoch ~/ 1000}',
+      );
 
       var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
       if (connection == null) {
@@ -215,20 +216,22 @@ class SDCardWalSyncImpl implements SDCardWalSync {
       var pd = await _device!.getDeviceInfo(connection);
       String deviceModel = pd.modelNumber.isNotEmpty ? pd.modelNumber : "Omi";
 
-      wals.add(Wal(
-        codec: codec,
-        timerStart: timerStart,
-        status: WalStatus.miss,
-        storage: WalStorage.sdcard,
-        seconds: seconds,
-        storageOffset: storageOffset,
-        storageTotalBytes: totalBytes,
-        fileNum: 1,
-        device: _device!.id,
-        deviceModel: deviceModel,
-        totalFrames: seconds * codec.getFramesPerSecond(),
-        syncedFrameOffset: 0,
-      ));
+      wals.add(
+        Wal(
+          codec: codec,
+          timerStart: timerStart,
+          status: WalStatus.miss,
+          storage: WalStorage.sdcard,
+          seconds: seconds,
+          storageOffset: storageOffset,
+          storageTotalBytes: totalBytes,
+          fileNum: 1,
+          device: _device!.id,
+          deviceModel: deviceModel,
+          totalFrames: seconds * codec.getFramesPerSecond(),
+          syncedFrameOffset: 0,
+        ),
+      );
     }
 
     return wals;
@@ -285,7 +288,8 @@ class SDCardWalSyncImpl implements SDCardWalSync {
       final firstFrame = chunk[0];
       final frameHex = firstFrame.take(8).map((b) => b.toRadixString(16).padLeft(2, '0')).join(' ');
       Logger.debug(
-          "SDCardWalSync _flushToDisk: ${chunk.length} frames, first frame size=${firstFrame.length}, hex: $frameHex");
+        "SDCardWalSync _flushToDisk: ${chunk.length} frames, first frame size=${firstFrame.length}, hex: $frameHex",
+      );
     }
 
     for (int i = 0; i < chunk.length; i++) {
@@ -307,7 +311,9 @@ class SDCardWalSyncImpl implements SDCardWalSync {
   }
 
   Future _readStorageBytesToFile(
-      Wal wal, Function(File f, int offset, int timerStart, int chunkFrames) callback) async {
+    Wal wal,
+    Function(File f, int offset, int timerStart, int chunkFrames) callback,
+  ) async {
     if (_supportsTimestampMarkers()) {
       return _readStorageBytesToFileWithMarkers(wal, callback);
     }
@@ -315,16 +321,16 @@ class SDCardWalSyncImpl implements SDCardWalSync {
   }
 
   Future _readStorageBytesToFileLegacy(
-      Wal wal, Function(File f, int offset, int timerStart, int chunkFrames) callback) async {
+    Wal wal,
+    Function(File f, int offset, int timerStart, int chunkFrames) callback,
+  ) async {
     var deviceId = wal.device;
     int fileNum = wal.fileNum;
     int offset = wal.storageOffset;
-    int timerStart = wal.timerStart;
 
     Logger.debug("_readStorageBytesToFileLegacy ${offset}");
 
     List<List<int>> bytesData = [];
-    var bytesLeft = 0;
     var chunkSize = sdcardChunkSizeSecs * 100;
     await _storageStream?.cancel();
     final completer = Completer<bool>();
@@ -332,78 +338,65 @@ class SDCardWalSyncImpl implements SDCardWalSync {
     bool firstDataReceived = false;
     Timer? timeoutTimer;
 
-    _storageStream = await _getBleStorageBytesListener(deviceId, onStorageBytesReceived: (List<int> value) async {
-      if (value.isEmpty || hasError) return;
+    _storageStream = await _getBleStorageBytesListener(
+      deviceId,
+      onStorageBytesReceived: (List<int> value) async {
+        if (value.isEmpty || hasError) return;
 
-      if (!firstDataReceived) {
-        firstDataReceived = true;
-        timeoutTimer?.cancel();
-        Logger.debug('First data received, timeout cancelled');
-      }
-
-      if (value.length == 1) {
-        Logger.debug('returned $value');
-        if (value[0] == 0) {
-          Logger.debug('good to go');
-        } else if (value[0] == 3) {
-          Logger.debug('bad file size. finishing...');
-        } else if (value[0] == 4) {
-          Logger.debug('file size is zero. going to next one....');
-          if (!completer.isCompleted) {
-            completer.complete(true);
-          }
-        } else if (value[0] == 100) {
-          Logger.debug('end');
-          if (!completer.isCompleted) {
-            completer.complete(true);
-          }
-        } else {
-          Logger.debug('Error bit returned');
-          if (!completer.isCompleted) {
-            completer.complete(true);
-          }
+        if (!firstDataReceived) {
+          firstDataReceived = true;
+          timeoutTimer?.cancel();
+          Logger.debug('First data received, timeout cancelled');
         }
-        return;
-      }
 
-      if (value.length == 83) {
-        var amount = value[3];
-        bytesData.add(value.sublist(4, 4 + amount));
-        offset += 80;
-      } else if (value.length == 440) {
-        var packageOffset = 0;
-        while (packageOffset < value.length - 1) {
-          var packageSize = value[packageOffset];
-          if (packageSize == 0) {
+        if (value.length == 1) {
+          Logger.debug('returned $value');
+          if (value[0] == 0) {
+            Logger.debug('good to go');
+          } else if (value[0] == 3) {
+            Logger.debug('bad file size. finishing...');
+          } else if (value[0] == 4) {
+            Logger.debug('file size is zero. going to next one....');
+            if (!completer.isCompleted) {
+              completer.complete(true);
+            }
+          } else if (value[0] == 100) {
+            Logger.debug('end');
+            if (!completer.isCompleted) {
+              completer.complete(true);
+            }
+          } else {
+            Logger.debug('Error bit returned');
+            if (!completer.isCompleted) {
+              completer.complete(true);
+            }
+          }
+          return;
+        }
+
+        if (value.length == 83) {
+          var amount = value[3];
+          bytesData.add(value.sublist(4, 4 + amount));
+          offset += 80;
+        } else if (value.length == 440) {
+          var packageOffset = 0;
+          while (packageOffset < value.length - 1) {
+            var packageSize = value[packageOffset];
+            if (packageSize == 0) {
+              packageOffset += packageSize + 1;
+              continue;
+            }
+            if (packageOffset + 1 + packageSize >= value.length) {
+              break;
+            }
+            var frame = value.sublist(packageOffset + 1, packageOffset + 1 + packageSize);
+            bytesData.add(frame);
             packageOffset += packageSize + 1;
-            continue;
           }
-          if (packageOffset + 1 + packageSize >= value.length) {
-            break;
-          }
-          var frame = value.sublist(packageOffset + 1, packageOffset + 1 + packageSize);
-          bytesData.add(frame);
-          packageOffset += packageSize + 1;
+          offset += value.length;
         }
-        offset += value.length;
-      }
-
-      if (bytesData.length - bytesLeft >= chunkSize) {
-        var chunk = bytesData.sublist(bytesLeft, bytesLeft + chunkSize);
-        bytesLeft += chunkSize;
-        timerStart += sdcardChunkSizeSecs;
-        try {
-          var file = await _flushToDisk(wal, chunk, timerStart);
-          await callback(file, offset, timerStart, chunkSize);
-        } catch (e) {
-          Logger.debug('Error in callback during chunking: $e');
-          hasError = true;
-          if (!completer.isCompleted) {
-            completer.completeError(e);
-          }
-        }
-      }
-    });
+      },
+    );
 
     await _writeToStorage(deviceId, fileNum, 0, offset);
 
@@ -426,18 +419,43 @@ class SDCardWalSyncImpl implements SDCardWalSync {
       timeoutTimer.cancel();
     }
 
-    if (!hasError && bytesLeft < bytesData.length - 1) {
-      var chunk = bytesData.sublist(bytesLeft);
-      timerStart += sdcardChunkSizeSecs;
-      var file = await _flushToDisk(wal, chunk, timerStart);
-      await callback(file, offset, timerStart, chunk.length);
+    // After download: compute accurate duration from actual frame count
+    if (!hasError && bytesData.isNotEmpty) {
+      int totalFrames = bytesData.length;
+      int accurateDuration = totalFrames ~/ wal.codec.getFramesPerSecond();
+      int timerStart = DateTime.now().millisecondsSinceEpoch ~/ 1000 - accurateDuration;
+
+      int bytesLeft = 0;
+      int chunkOffset = wal.storageOffset;
+      while (bytesData.length - bytesLeft >= chunkSize) {
+        var chunk = bytesData.sublist(bytesLeft, bytesLeft + chunkSize);
+        bytesLeft += chunkSize;
+        chunkOffset += chunkSize * wal.codec.getFramesLengthInBytes();
+        try {
+          var file = await _flushToDisk(wal, chunk, timerStart);
+          await callback(file, chunkOffset, timerStart, chunk.length);
+        } catch (e) {
+          Logger.debug('Error in callback during chunking: $e');
+          hasError = true;
+          break;
+        }
+        timerStart += chunk.length ~/ wal.codec.getFramesPerSecond();
+      }
+      if (!hasError && bytesLeft < bytesData.length) {
+        var chunk = bytesData.sublist(bytesLeft);
+        chunkOffset += chunk.length * wal.codec.getFramesLengthInBytes();
+        var file = await _flushToDisk(wal, chunk, timerStart);
+        await callback(file, chunkOffset, timerStart, chunk.length);
+      }
     }
 
     return;
   }
 
   Future _readStorageBytesToFileWithMarkers(
-      Wal wal, Function(File f, int offset, int timerStart, int chunkFrames) callback) async {
+    Wal wal,
+    Function(File f, int offset, int timerStart, int chunkFrames) callback,
+  ) async {
     var deviceId = wal.device;
     int fileNum = wal.fileNum;
     int offset = wal.storageOffset;
@@ -455,133 +473,137 @@ class SDCardWalSyncImpl implements SDCardWalSync {
     bool firstDataReceived = false;
     Timer? timeoutTimer;
 
-    _storageStream = await _getBleStorageBytesListener(deviceId, onStorageBytesReceived: (List<int> value) async {
-      if (value.isEmpty || hasError) return;
+    _storageStream = await _getBleStorageBytesListener(
+      deviceId,
+      onStorageBytesReceived: (List<int> value) async {
+        if (value.isEmpty || hasError) return;
 
-      if (!firstDataReceived) {
-        firstDataReceived = true;
-        timeoutTimer?.cancel();
-        Logger.debug('First data received, timeout cancelled');
-      }
-
-      if (value.length == 1) {
-        Logger.debug('returned $value');
-        if (value[0] == 0) {
-          Logger.debug('good to go');
-        } else if (value[0] == 3) {
-          Logger.debug('bad file size. finishing...');
-        } else if (value[0] == 4) {
-          Logger.debug('file size is zero. going to next one....');
-          if (!completer.isCompleted) {
-            completer.complete(true);
-          }
-        } else if (value[0] == 100) {
-          Logger.debug('end');
-          if (!completer.isCompleted) {
-            completer.complete(true);
-          }
-        } else {
-          Logger.debug('Error bit returned');
-          if (!completer.isCompleted) {
-            completer.complete(true);
-          }
+        if (!firstDataReceived) {
+          firstDataReceived = true;
+          timeoutTimer?.cancel();
+          Logger.debug('First data received, timeout cancelled');
         }
-        return;
-      }
 
-      if (value.length == 83) {
-        var amount = value[3];
-        bytesData.add(value.sublist(4, 4 + amount));
-        offset += 80;
-      } else if (value.length == 440) {
-        var packageOffset = 0;
-        while (packageOffset < value.length - 1) {
-          var packageSize = value[packageOffset];
-          if (packageSize == 0) {
-            packageOffset += 1;
-            continue;
-          }
-          // Timestamp marker: 0xFF followed by 4-byte little-endian epoch
-          if (packageSize == 0xFF && packageOffset + 5 <= value.length) {
-            var epoch = value[packageOffset + 1] |
-                (value[packageOffset + 2] << 8) |
-                (value[packageOffset + 3] << 16) |
-                (value[packageOffset + 4] << 24);
-            packageOffset += 5;
-            if (epoch > 0) {
-              timestampMarkers.add(MapEntry(bytesData.length, epoch));
-              Logger.debug('Timestamp marker: epoch=$epoch at frame ${bytesData.length}');
+        if (value.length == 1) {
+          Logger.debug('returned $value');
+          if (value[0] == 0) {
+            Logger.debug('good to go');
+          } else if (value[0] == 3) {
+            Logger.debug('bad file size. finishing...');
+          } else if (value[0] == 4) {
+            Logger.debug('file size is zero. going to next one....');
+            if (!completer.isCompleted) {
+              completer.complete(true);
             }
-            continue;
+          } else if (value[0] == 100) {
+            Logger.debug('end');
+            if (!completer.isCompleted) {
+              completer.complete(true);
+            }
+          } else {
+            Logger.debug('Error bit returned');
+            if (!completer.isCompleted) {
+              completer.complete(true);
+            }
           }
-          if (packageOffset + 1 + packageSize >= value.length) {
+          return;
+        }
+
+        if (value.length == 83) {
+          var amount = value[3];
+          bytesData.add(value.sublist(4, 4 + amount));
+          offset += 80;
+        } else if (value.length == 440) {
+          var packageOffset = 0;
+          while (packageOffset < value.length - 1) {
+            var packageSize = value[packageOffset];
+            if (packageSize == 0) {
+              packageOffset += 1;
+              continue;
+            }
+            // Timestamp marker: 0xFF followed by 4-byte little-endian epoch
+            if (packageSize == 0xFF && packageOffset + 5 <= value.length) {
+              var epoch =
+                  value[packageOffset + 1] |
+                  (value[packageOffset + 2] << 8) |
+                  (value[packageOffset + 3] << 16) |
+                  (value[packageOffset + 4] << 24);
+              packageOffset += 5;
+              if (epoch > 0) {
+                timestampMarkers.add(MapEntry(bytesData.length, epoch));
+                Logger.debug('Timestamp marker: epoch=$epoch at frame ${bytesData.length}');
+              }
+              continue;
+            }
+            if (packageOffset + 1 + packageSize >= value.length) {
+              break;
+            }
+            var frame = value.sublist(packageOffset + 1, packageOffset + 1 + packageSize);
+            bytesData.add(frame);
+            packageOffset += packageSize + 1;
+          }
+          offset += value.length;
+        }
+
+        // Find the next marker boundary (if any) after bytesLeft
+        int nextMarkerIdx = bytesData.length;
+        for (var m in timestampMarkers) {
+          if (m.key > bytesLeft) {
+            nextMarkerIdx = m.key;
             break;
           }
-          var frame = value.sublist(packageOffset + 1, packageOffset + 1 + packageSize);
-          bytesData.add(frame);
-          packageOffset += packageSize + 1;
         }
-        offset += value.length;
-      }
 
-      // Find the next marker boundary (if any) after bytesLeft
-      int nextMarkerIdx = bytesData.length;
-      for (var m in timestampMarkers) {
-        if (m.key > bytesLeft) {
-          nextMarkerIdx = m.key;
-          break;
-        }
-      }
-
-      // Chunk up to the next marker boundary or chunkSize, whichever comes first
-      while (bytesData.length - bytesLeft >= chunkSize && bytesLeft + chunkSize <= nextMarkerIdx) {
-        var chunk = bytesData.sublist(bytesLeft, bytesLeft + chunkSize);
-        var chunkFrames = chunk.length;
-        var chunkSecs = chunkFrames ~/ wal.codec.getFramesPerSecond();
-        bytesLeft += chunkSize;
-        try {
-          var file = await _flushToDisk(wal, chunk, timerStart);
-          await callback(file, offset, timerStart, chunkFrames);
-        } catch (e) {
-          Logger.debug('Error in callback during chunking: $e');
-          hasError = true;
-          if (!completer.isCompleted) {
-            completer.completeError(e);
-          }
-        }
-        timerStart += chunkSecs;
-      }
-
-      // If we've reached a marker boundary, flush remaining frames before it and advance timerStart
-      if (timestampMarkers.any((m) => m.key == nextMarkerIdx) &&
-          nextMarkerIdx <= bytesData.length &&
-          bytesLeft < nextMarkerIdx) {
-        var chunk = bytesData.sublist(bytesLeft, nextMarkerIdx);
-        var chunkFrames = chunk.length;
-        if (chunkFrames > 0) {
+        // Chunk up to the next marker boundary or chunkSize, whichever comes first
+        while (bytesData.length - bytesLeft >= chunkSize && bytesLeft + chunkSize <= nextMarkerIdx) {
+          var chunk = bytesData.sublist(bytesLeft, bytesLeft + chunkSize);
+          var chunkFrames = chunk.length;
           var chunkSecs = chunkFrames ~/ wal.codec.getFramesPerSecond();
-          bytesLeft = nextMarkerIdx;
+          bytesLeft += chunkSize;
           try {
             var file = await _flushToDisk(wal, chunk, timerStart);
             await callback(file, offset, timerStart, chunkFrames);
           } catch (e) {
-            Logger.debug('Error flushing segment at marker: $e');
+            Logger.debug('Error in callback during chunking: $e');
             hasError = true;
-            if (!completer.isCompleted) completer.completeError(e);
+            if (!completer.isCompleted) {
+              completer.completeError(e);
+            }
           }
           timerStart += chunkSecs;
-        } else {
-          bytesLeft = nextMarkerIdx;
         }
-        // Apply the marker's epoch
-        for (var m in timestampMarkers) {
-          if (m.key == nextMarkerIdx) {
-            timerStart = m.value;
-            break;
+
+        // If we've reached a marker boundary, flush remaining frames before it and advance timerStart
+        if (timestampMarkers.any((m) => m.key == nextMarkerIdx) &&
+            nextMarkerIdx <= bytesData.length &&
+            bytesLeft < nextMarkerIdx) {
+          var chunk = bytesData.sublist(bytesLeft, nextMarkerIdx);
+          var chunkFrames = chunk.length;
+          if (chunkFrames > 0) {
+            var chunkSecs = chunkFrames ~/ wal.codec.getFramesPerSecond();
+            bytesLeft = nextMarkerIdx;
+            try {
+              var file = await _flushToDisk(wal, chunk, timerStart);
+              await callback(file, offset, timerStart, chunkFrames);
+            } catch (e) {
+              Logger.debug('Error flushing segment at marker: $e');
+              hasError = true;
+              if (!completer.isCompleted) completer.completeError(e);
+            }
+            timerStart += chunkSecs;
+          } else {
+            bytesLeft = nextMarkerIdx;
+          }
+          // Apply the marker's epoch
+          for (var m in timestampMarkers) {
+            if (m.key == nextMarkerIdx) {
+              timerStart = m.value;
+              break;
+            }
           }
         }
-      }
-    });
+      },
+    );
 
     await _writeToStorage(deviceId, fileNum, 0, offset);
 
@@ -652,7 +674,8 @@ class SDCardWalSyncImpl implements SDCardWalSync {
     int totalBytesToDownload = wal.storageTotalBytes - wal.storageOffset;
 
     Logger.debug(
-        "SDCard Phase 1: Downloading ~${(totalBytesToDownload / 1024).toStringAsFixed(1)} KB to phone storage");
+      "SDCard Phase 1: Downloading ~${(totalBytesToDownload / 1024).toStringAsFixed(1)} KB to phone storage",
+    );
     DebugLogManager.logEvent('sdcard_ble_download_started', {
       'walId': wal.id,
       'totalBytes': totalBytesToDownload,
@@ -680,7 +703,8 @@ class SDCardWalSyncImpl implements SDCardWalSync {
         }
 
         Logger.debug(
-            "SDCard: Chunk $chunksDownloaded downloaded (ts: $timerStart, speed: ${_currentSpeedKBps.toStringAsFixed(1)} KB/s)");
+          "SDCard: Chunk $chunksDownloaded downloaded (ts: $timerStart, speed: ${_currentSpeedKBps.toStringAsFixed(1)} KB/s)",
+        );
       });
     } catch (e) {
       await _storageStream?.cancel();
@@ -736,7 +760,8 @@ class SDCardWalSyncImpl implements SDCardWalSync {
 
     await _localSync!.addExternalWal(localWal);
     Logger.debug(
-        "SDCard: Registered chunk (ts: $timerStart) with LocalWalSync - codec=${localWal.codec}, sampleRate=${localWal.sampleRate}, channel=${localWal.channel}");
+      "SDCard: Registered chunk (ts: $timerStart) with LocalWalSync - codec=${localWal.codec}, sampleRate=${localWal.sampleRate}, channel=${localWal.channel}",
+    );
   }
 
   @override
@@ -788,10 +813,14 @@ class SDCardWalSyncImpl implements SDCardWalSync {
           listener.onWalUpdated();
         });
 
-        resp.newConversationIds
-            .addAll(partialRes.newConversationIds.where((id) => !resp.newConversationIds.contains(id)));
-        resp.updatedConversationIds.addAll(partialRes.updatedConversationIds
-            .where((id) => !resp.updatedConversationIds.contains(id) && !resp.newConversationIds.contains(id)));
+        resp.newConversationIds.addAll(
+          partialRes.newConversationIds.where((id) => !resp.newConversationIds.contains(id)),
+        );
+        resp.updatedConversationIds.addAll(
+          partialRes.updatedConversationIds.where(
+            (id) => !resp.updatedConversationIds.contains(id) && !resp.newConversationIds.contains(id),
+          ),
+        );
 
         wal.status = WalStatus.synced;
       } catch (e) {
@@ -856,10 +885,14 @@ class SDCardWalSyncImpl implements SDCardWalSync {
         listener.onWalUpdated();
       });
 
-      resp.newConversationIds
-          .addAll(partialRes.newConversationIds.where((id) => !resp.newConversationIds.contains(id)));
-      resp.updatedConversationIds.addAll(partialRes.updatedConversationIds
-          .where((id) => !resp.updatedConversationIds.contains(id) && !resp.newConversationIds.contains(id)));
+      resp.newConversationIds.addAll(
+        partialRes.newConversationIds.where((id) => !resp.newConversationIds.contains(id)),
+      );
+      resp.updatedConversationIds.addAll(
+        partialRes.updatedConversationIds.where(
+          (id) => !resp.updatedConversationIds.contains(id) && !resp.newConversationIds.contains(id),
+        ),
+      );
 
       wal.status = WalStatus.synced;
     } catch (e) {
@@ -1082,7 +1115,8 @@ class SDCardWalSyncImpl implements SDCardWalSync {
         });
         if (errorCode != null) {
           debugPrint(
-              "SDCardWalSync WiFi: Setup failed with error code 0x${errorCode.code.toRadixString(16)}: ${errorCode.userMessage}");
+            "SDCardWalSync WiFi: Setup failed with error code 0x${errorCode.code.toRadixString(16)}: ${errorCode.userMessage}",
+          );
           connectionListener?.onConnectionFailed(errorCode.userMessage);
           throw WifiSyncException(errorMessage, errorCode: errorCode);
         } else {
@@ -1271,7 +1305,8 @@ class SDCardWalSyncImpl implements SDCardWalSync {
 
             // Timestamp marker: 0xFF followed by 4-byte little-endian epoch (firmware >= 3.0.16)
             if (useMarkers && packageSize == 0xFF && packageOffset + 5 <= bufferLength) {
-              var epoch = tcpBuffer[packageOffset + 1] |
+              var epoch =
+                  tcpBuffer[packageOffset + 1] |
                   (tcpBuffer[packageOffset + 2] << 8) |
                   (tcpBuffer[packageOffset + 3] << 16) |
                   (tcpBuffer[packageOffset + 4] << 24);
@@ -1325,7 +1360,8 @@ class SDCardWalSyncImpl implements SDCardWalSync {
             // Extract complete frame
             var frame = tcpBuffer.sublist(packageOffset + 1, packageOffset + 1 + packageSize);
 
-            bool validToc = frame.isNotEmpty &&
+            bool validToc =
+                frame.isNotEmpty &&
                 (frame[0] == 0xb8 ||
                     frame[0] == 0xb0 ||
                     frame[0] == 0xbc ||
@@ -1469,21 +1505,24 @@ class SDCardWalSyncImpl implements SDCardWalSync {
           }
         }
       } else {
-        // Legacy flush: simple chunking without marker awareness
+        // Legacy flush: compute accurate duration from actual frame count
+        int totalFrames = bytesData.length;
+        int accurateDuration = totalFrames ~/ wal.codec.getFramesPerSecond();
+        timerStart = DateTime.now().millisecondsSinceEpoch ~/ 1000 - accurateDuration;
+
         while (bytesData.length - bytesLeft >= chunkSize) {
           var chunk = bytesData.sublist(bytesLeft, bytesLeft + chunkSize);
           bytesLeft += chunkSize;
-          timerStart += sdcardChunkSizeSecs;
           try {
             var file = await _flushToDisk(wal, chunk, timerStart);
             await _registerSingleChunk(wal, file, timerStart, chunkSize);
           } catch (e) {
             Logger.debug('SDCardWalSync WiFi: Error flushing chunk: $e');
           }
+          timerStart += chunk.length ~/ wal.codec.getFramesPerSecond();
         }
         if (bytesLeft < bytesData.length) {
           var chunk = bytesData.sublist(bytesLeft);
-          timerStart += sdcardChunkSizeSecs;
           try {
             var file = await _flushToDisk(wal, chunk, timerStart);
             await _registerSingleChunk(wal, file, timerStart, chunk.length);

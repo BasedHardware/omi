@@ -64,6 +64,8 @@ Helm charts: `backend/charts/{backend-listen,pusher,diarizer,vad,deepgram-self-h
 
 Keep this map up to date. When adding, removing, or changing inter-service calls, update this section and the matching section in `CLAUDE.md`.
 
+If a PR changes how audio streaming, transcription, conversation lifecycle, speaker identification, or the listen/pusher WebSocket protocol works — update `docs/doc/developer/backend/listen_pusher_pipeline.mdx` in the same PR. This includes changes to timeouts, event types, processing flow, or inter-service communication between listen and pusher.
+
 ### App (Flutter)
 
 - All user-facing strings must use l10n (`context.l10n.keyName`). Add keys to ARB files using `jq` to avoid reading large files.
