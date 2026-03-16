@@ -38,9 +38,8 @@ from utils.llm.goals import extract_and_update_goal_progress
 from database.redis_db import try_acquire_goal_extraction_lock
 from utils.other import endpoints as auth, storage
 from utils.other.chat_file import FileChatTool
-from utils.retrieval.graph import execute_graph_chat, execute_graph_chat_stream, execute_persona_chat_stream
+from utils.retrieval.graph import execute_graph_chat, execute_chat_stream, execute_persona_chat_stream
 from utils.llm.usage_tracker import set_usage_context, reset_usage_context, Features
-from utils.retrieval.agentic import execute_agentic_chat, execute_agentic_chat_stream
 import logging
 
 logger = logging.getLogger(__name__)
@@ -179,8 +178,7 @@ def send_message(
         # Set usage context for streaming (can't use 'with' across yields)
         usage_token = set_usage_context(uid, Features.CHAT)
         try:
-            # Using the new agentic system via graph routing
-            async for chunk in execute_graph_chat_stream(
+            async for chunk in execute_chat_stream(
                 uid,
                 messages,
                 app,

@@ -2,6 +2,9 @@ import json
 import logging
 import os
 
+from dotenv import load_dotenv
+load_dotenv()  # No-op if .env doesn't exist (production); loads local dev secrets otherwise
+
 logging.basicConfig(level=logging.INFO)
 
 import firebase_admin
