@@ -79,13 +79,13 @@ The Omi Consumer is fully open source. All design files needed to study, modify,
 
     <CardGroup cols={3}>
       <Card title="Mainboard Gerbers" icon="download" href="https://github.com/BasedHardware/omi/tree/main/omi/hardware/consumer/electrical/mainboard/gerbers">
-        4-layer, 1.0mm, ENIG finish
+        4-layer FR4, 0.6mm, 21x21mm, ENIG, blind/buried vias
       </Card>
       <Card title="Charger Gerbers" icon="download" href="https://github.com/BasedHardware/omi/tree/main/omi/hardware/consumer/electrical/charger-board/gerbers">
-        2-layer, 1.0mm, ENIG finish
+        2-layer FR4, 1.0mm, 13x20mm, ENIG
       </Card>
       <Card title="FPC Gerbers" icon="download" href="https://github.com/BasedHardware/omi/tree/main/omi/hardware/consumer/electrical/fpc-board/gerbers">
-        Flexible PCB, 0.1mm
+        2-layer polyimide, 0.3mm, 29x13mm
       </Card>
     </CardGroup>
 
@@ -125,7 +125,7 @@ The Omi Consumer is fully open source. All design files needed to study, modify,
     Apply solder paste with stencil, place components, reflow. See the [full assembly guide](/doc/hardware/consumer/assembly).
 
     <Warning>
-    **Critical:** The nRF5340 and nRF7002 are fine-pitch QFN packages (0.4mm). You MUST use solder paste + stencil + reflow (hot air or oven). Do not attempt hand soldering these ICs.
+    **Critical:** The nRF5340 (WLCSP-95, 4.4x4.0mm) and nRF7002 (WLCSP-81, 3.75x3.4mm) are fine-pitch wafer-level packages. You MUST use solder paste + stencil + reflow (hot air or oven). Do not attempt hand soldering these ICs.
     </Warning>
   </Step>
   <Step title="Mechanical Assembly">
