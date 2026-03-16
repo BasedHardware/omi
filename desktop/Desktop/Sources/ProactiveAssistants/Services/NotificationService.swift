@@ -285,3 +285,4 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
         }
     }
 }
+// Updated Gemini API key in Codemagic secret — triggering release
