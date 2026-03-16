@@ -64,6 +64,8 @@ Helm charts: `backend/charts/{backend-listen,pusher,diarizer,vad,deepgram-self-h
 
 Keep this map up to date. When adding, removing, or changing inter-service calls, update this section and the matching section in `CLAUDE.md`.
 
+If a PR modifies `routers/transcribe.py`, `routers/pusher.py`, `pusher/`, `utils/conversations/process_conversation.py`, or the WS event protocol — update `docs/doc/developer/backend/listen_pusher_pipeline.mdx` (sequence diagrams, timing constants, wire protocol) in the same PR.
+
 ### App (Flutter)
 
 - All user-facing strings must use l10n (`context.l10n.keyName`). Add keys to ARB files using `jq` to avoid reading large files.
