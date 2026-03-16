@@ -64,7 +64,7 @@ Helm charts: `backend/charts/{backend-listen,pusher,diarizer,vad,deepgram-self-h
 
 Keep this map up to date. When adding, removing, or changing inter-service calls, update this section and the matching section in `CLAUDE.md`.
 
-If a PR modifies `routers/transcribe.py`, `routers/pusher.py`, `pusher/`, `utils/conversations/process_conversation.py`, or the WS event protocol — update `docs/doc/developer/backend/listen_pusher_pipeline.mdx` (sequence diagrams, timing constants, wire protocol) in the same PR.
+If a PR changes how audio streaming, transcription, conversation lifecycle, speaker identification, or the listen/pusher WebSocket protocol works — update `docs/doc/developer/backend/listen_pusher_pipeline.mdx` in the same PR. This includes changes to timeouts, event types, processing flow, or inter-service communication between listen and pusher.
 
 ### App (Flutter)
 
