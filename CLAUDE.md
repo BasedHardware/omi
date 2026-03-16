@@ -244,6 +244,7 @@ Available skills for Omi repo work. Use `omi-preflight` as the default entry poi
 | omi-pr-rescue | Rescue messy PRs (close, re-scope, restart) |
 | omi-team-delivery-pipeline | Team delivery: scope lock, queue, assign, execute, verify |
 | omi-combined-pr-verifier | Verify 2+ PRs combined in one branch |
+| omi-create-e2e-flow | Create and run e2e flow tests on VPS emulator (flow-walker + agent-flutter) |
 | omi-e2e-device-test | Full-stack validation on physical Android device |
 | omi-prod-feature-verify | Post-deploy user-facing validation |
 | omi-prod-deploy-monitor | Deployment monitoring with fixed cadence |
