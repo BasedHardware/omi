@@ -1,0 +1,99 @@
+# E2E Flow: BLE Audio Capture — Omi device recording lifecycle
+# Tests: device connect → BLE audio streams → WebSocket → transcription appears
+# Core path: Omi device pairs → BLE audio codec negotiated → audio streams to backend → live transcript
+
+version: 2
+name: ble-audio-capture
+description: >
+  BLE device recording flow: Omi device connects via BLE,
+  audio streams through Opus codec to backend WebSocket,
+  transcription segments appear in real-time,
+  conversation processes on silence timeout.
+app: com.friend.ios.dev
+evidence:
+  video: true
+covers:
+  - app/lib/providers/device_provider.dart        # BLE connection management
+  - app/lib/providers/capture_provider.dart        # Device recording state machine
+  - app/lib/services/devices/device_connection.dart  # BLE audio streaming
+  - app/lib/services/sockets/transcription_connection.dart  # WS to backend
+preconditions:
+  - auth_ready
+  - ble_on
+  - omi_device_connected
+
+steps:
+  - id: S1
+    name: Verify Omi device connected
+    do: >
+      Confirm the home screen shows the connected Omi device widget.
+      The device widget shows the device image with a pulsing blue dot overlay.
+      The center record FAB should NOT be visible (hidden when device connected).
+    verify: true
+    expect:
+      - kind: interactive_count
+        min: 10
+    evidence:
+      - screenshot: ble-01-device-connected.webp
+    note: >
+      DeviceProvider.isConnected must be true.
+      Device image varies by type: Omi, OmiGlass, or other.
+      Bottom nav hides record button when isOmiDeviceConnected is true.
+
+  - id: S2
+    name: Verify BLE audio streaming started
+    do: >
+      Once device is connected, CaptureProvider automatically starts
+      device recording (streamDeviceRecording).
+      The home screen should show a live capture card indicating active recording.
+      RecordingState should be deviceRecord.
+    expect:
+      - kind: text_visible
+        values: ["listening"]
+    evidence:
+      - screenshot: ble-02-streaming.webp
+    note: >
+      BLE audio uses Opus codec at 16kHz.
+      WAL (Write-Ahead Log) is enabled for Omi devices with Opus.
+      Audio frames arrive via BLE notifications and forward to WebSocket.
+
+  - id: S3
+    name: Verify live transcription appears
+    do: >
+      Wait up to 60 seconds for transcript segments to appear.
+      Segments show speaker labels and text bubbles.
+      The transcript area auto-scrolls as new segments arrive.
+    verify: true
+    evidence:
+      - screenshot: ble-03-transcription.webp
+    note: >
+      Backend receives Opus frames via WebSocket, decodes, sends to
+      Deepgram/Soniox for transcription, returns segments via same WS.
+      Speaker diarization runs in parallel.
+
+  - id: S4
+    name: Wait for conversation lifecycle timeout
+    do: >
+      Stop speaking and wait for the conversation_timeout (120s default).
+      The backend lifecycle manager detects silence and triggers conversation processing.
+      UI should transition from "listening" to "processing".
+    evidence:
+      - screenshot: ble-04-processing.webp
+    note: >
+      Backend checks: if now - finished_at > conversation_timeout,
+      calls _process_conversation(). finished_at only updates on real
+      transcript segments, not silence keepalive.
+
+  - id: S5
+    name: Verify conversation appears in list
+    do: >
+      After processing completes, verify a new conversation appears
+      in the conversations list with title, summary, and action items.
+      The conversation status should be 'completed'.
+    verify: true
+    evidence:
+      - screenshot: ble-05-conversation-created.webp
+    note: >
+      Conversation arrives via WebSocket opcode 201 from pusher service.
+      ConversationProvider adds it to conversations list.
+      Device continues listening for next conversation.
