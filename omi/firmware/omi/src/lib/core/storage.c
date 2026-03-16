@@ -15,6 +15,7 @@
 #include "sd_card.h"
 #include "transport.h"
 #include "utils.h"
+#include "mic.h"
 #ifdef CONFIG_OMI_ENABLE_WIFI
 #include "wifi.h"
 #endif
@@ -133,6 +134,39 @@ static struct bt_gatt_attr storage_service_attr[] = {
 
 struct bt_gatt_service storage_service = BT_GATT_SERVICE(storage_service_attr);
 
+#define STORAGE_NOTIFY_ATTR_INDEX 2
+#define STORAGE_WIFI_NOTIFY_ATTR_INDEX 8
+
+static inline int storage_notify(struct bt_conn *conn, const void *data, uint16_t len)
+{
+    if (!conn) {
+        return -ENOTCONN;
+    }
+
+    const struct bt_gatt_attr *attr = &storage_service.attrs[STORAGE_NOTIFY_ATTR_INDEX];
+    if (!bt_gatt_is_subscribed(conn, attr, BT_GATT_CCC_NOTIFY)) {
+        return -EACCES;
+    }
+
+    return bt_gatt_notify(conn, attr, data, len);
+}
+
+#ifdef CONFIG_OMI_ENABLE_WIFI
+static inline int storage_wifi_notify(struct bt_conn *conn, const void *data, uint16_t len)
+{
+    if (!conn) {
+        return -ENOTCONN;
+    }
+
+    const struct bt_gatt_attr *attr = &storage_service.attrs[STORAGE_WIFI_NOTIFY_ATTR_INDEX];
+    if (!bt_gatt_is_subscribed(conn, attr, BT_GATT_CCC_NOTIFY)) {
+        return -EACCES;
+    }
+
+    return bt_gatt_notify(conn, attr, data, len);
+}
+#endif
+
 bool storage_is_on = false;
 
 static void storage_config_changed_handler(const struct bt_gatt_attr *attr, uint16_t value)
@@ -141,10 +175,6 @@ static void storage_config_changed_handler(const struct bt_gatt_attr *attr, uint
     storage_is_on = true;
     if (value == BT_GATT_CCC_NOTIFY) {
         LOG_INF("Client subscribed for notifications");
-        /* Also trigger auto-sync in case subscription arrives after connect */
-        if (!auto_sync_active) {
-            auto_sync_requested = 1;
-        }
     } else if (value == 0) {
         LOG_INF("Client unsubscribed from notifications");
     } else {
@@ -191,6 +221,36 @@ static uint32_t offset = 0;
 static uint8_t stop_started = 0;
 static uint8_t delete_started = 0;
 uint32_t remaining_length = 0;
+static uint8_t last_storage_command = 0xFF;
+
+static void log_gatt_notify_failure(struct bt_conn *conn,
+                                    int err,
+                                    uint16_t payload_len,
+                                    uint16_t chunk_size,
+                                    uint32_t bytes_read,
+                                    uint32_t bytes_sent)
+{
+    uint16_t mtu = conn ? bt_gatt_get_mtu(conn) : 0;
+    uint16_t att_payload = (mtu > 3) ? (mtu - 3) : 0;
+
+    LOG_ERR("GATT notify err=%d cmd=0x%02X len=%u mtu=%u att=%u chunk=%u read=%u sent=%u rem=%u idx=%d off=%u file=%s",
+            err,
+            last_storage_command,
+            payload_len,
+            mtu,
+            att_payload,
+            chunk_size,
+            bytes_read,
+            bytes_sent,
+            remaining_length,
+            current_sync_file_index,
+            current_read_offset,
+            current_read_filename);
+
+    if (err == -EINVAL) {
+        LOG_ERR("EINVAL hints: CCC off, wrong attr, or payload > ATT (%u)", att_payload);
+    }
+}
 
 static int setup_storage_tx()
 {
@@ -277,7 +337,7 @@ static int send_file_list_response(struct bt_conn *conn)
 {
     if (sync_file_count == 0 && refresh_file_list_cache() < 0) {
         uint8_t error_resp[1] = {0xFF};
-        bt_gatt_notify(conn, &storage_service.attrs[1], error_resp, 1);
+        (void)storage_notify(conn, error_resp, 1);
         return -1;
     }
 
@@ -303,7 +363,7 @@ static int send_file_list_response(struct bt_conn *conn)
     }
 
     LOG_INF("Sending file list: %d files, %d bytes", sync_file_count, resp_len);
-    return bt_gatt_notify(conn, &storage_service.attrs[1], storage_buffer, resp_len);
+    return storage_notify(conn, storage_buffer, resp_len);
 }
 
 /**
@@ -366,6 +426,7 @@ static uint8_t parse_storage_command(void *buf, uint16_t len, struct bt_conn *co
     }
 
     const uint8_t command = ((uint8_t *) buf)[0];
+    last_storage_command = command;
     LOG_INF("Storage command: 0x%02X, len=%d", command, len);
 
     /* ===== NEW MULTI-FILE COMMANDS ===== */
@@ -473,7 +534,7 @@ static ssize_t storage_write_handler(struct bt_conn *conn,
     if (len < 1) {
         uint8_t result_buffer[1] = {INVALID_COMMAND};
         LOG_WRN("storage write with empty payload");
-        bt_gatt_notify(conn, &storage_service.attrs[1], &result_buffer, 1);
+        (void)storage_notify(conn, &result_buffer, 1);
         return len;
     }
 
@@ -486,7 +547,7 @@ static ssize_t storage_write_handler(struct bt_conn *conn,
     if (result != 0xFF) {
         uint8_t result_buffer[1] = {result};
         LOG_INF("length of storage write: %d, result: %d", len, result);
-        bt_gatt_notify(conn, &storage_service.attrs[1], &result_buffer, 1);
+        (void)storage_notify(conn, &result_buffer, 1);
     }
 
     k_msleep(500);
@@ -506,14 +567,14 @@ static ssize_t storage_wifi_handler(struct bt_conn *conn,
 
     if (len < 1) {
         result_buffer[0] = 1; // error: invalid length
-        bt_gatt_notify(conn, &storage_service.attrs[8], &result_buffer, 1);
+        (void)storage_wifi_notify(conn, &result_buffer, 1);
         return len;
     }
 
     if (wifi_is_hw_available() == false) {
         LOG_ERR("Wi-Fi hardware not available");
         result_buffer[0] = 0xFE; // error: hardware not available
-        bt_gatt_notify(conn, &storage_service.attrs[8], &result_buffer, 1);
+        (void)storage_wifi_notify(conn, &result_buffer, 1);
         return len;
     }
 
@@ -599,7 +660,7 @@ static ssize_t storage_wifi_handler(struct bt_conn *conn,
         break;
     }
 
-    bt_gatt_notify(conn, &storage_service.attrs[8], &result_buffer, 1);
+    (void)storage_wifi_notify(conn, &result_buffer, 1);
     return len;
 }
 #endif
@@ -679,14 +740,14 @@ static void write_to_gatt(struct bt_conn *conn)
                 uint32_t chunk = MIN(bytes_read - bytes_sent, (uint32_t) chunk_size);
                 memcpy(ble_notify_buf + 4, storage_buffer + bytes_sent, chunk);
 
-                err = bt_gatt_notify(conn, &storage_service.attrs[1], ble_notify_buf, 4 + chunk);
+                err = storage_notify(conn, ble_notify_buf, 4 + chunk);
                 if (err == -ENOMEM) {
                     /* TX buffer full — brief yield, then retry */
                     k_yield();
-                    err = bt_gatt_notify(conn, &storage_service.attrs[1], ble_notify_buf, 4 + chunk);
+                    err = storage_notify(conn, ble_notify_buf, 4 + chunk);
                     if (err == -ENOMEM) {
                         k_msleep(1);
-                        err = bt_gatt_notify(conn, &storage_service.attrs[1], ble_notify_buf, 4 + chunk);
+                        err = storage_notify(conn, ble_notify_buf, 4 + chunk);
                         if (err == -ENOMEM) {
                             consecutive_enomem++;
                             /* Force wait for BLE to drain, then retry this packet */
@@ -696,7 +757,7 @@ static void write_to_gatt(struct bt_conn *conn)
                     }
                 }
                 if (err && err != -ENOMEM) {
-                    LOG_ERR("GATT notify error: %d", err);
+                    log_gatt_notify_failure(conn, err, 4 + chunk, chunk_size, bytes_read, bytes_sent);
                     return;
                 }
 
@@ -717,13 +778,13 @@ static void write_to_gatt(struct bt_conn *conn)
             return;
         }
 
-        err = bt_gatt_notify(conn, &storage_service.attrs[1], storage_buffer, packet_size);
+        err = storage_notify(conn, storage_buffer, packet_size);
 
         current_read_offset = current_read_offset + packet_size;
         offset = current_read_offset;
 
         if (err) {
-            LOG_PRINTK("error writing to gatt: %d\n", err);
+            log_gatt_notify_failure(conn, err, packet_size, chunk_size, packet_size, 0);
         } else {
             remaining_length = remaining_length - packet_size;
         }
@@ -782,7 +843,7 @@ static void write_to_tcp()
         }
     } else {
         /* Legacy: raw audio data without timestamp */
-        uint32_t legacy_chunk = MIN(remaining_length, (uint32_t) chunk_size * 10);
+        uint32_t legacy_chunk = MIN(remaining_length, (uint32_t) SD_BLE_SIZE * 10);
         int ret = read_audio_data(current_read_filename, storage_buffer, legacy_chunk, current_read_offset);
         if (ret > 0) {
             current_read_offset += ret;
@@ -816,16 +877,12 @@ void storage_stop_transfer()
 
 void storage_auto_sync_start(void)
 {
-    auto_sync_requested = 1;
+    /* Auto-sync feature disabled. Manual sync only via storage commands. */
 }
 
 void storage_auto_sync_stop(void)
 {
-    auto_sync_active = false;
-    auto_sync_requested = 0;
-    if (remaining_length > 0) {
-        storage_stop_transfer();
-    }
+    /* Auto-sync feature disabled. */
 }
 
 void storage_write(void)
@@ -856,7 +913,7 @@ void storage_write(void)
                 offset = 0;
                 uint8_t result_buffer[1] = {200};
                 if (conn) {
-                    bt_gatt_notify(get_current_connection(), &storage_service.attrs[1], &result_buffer, 1);
+                    (void)storage_notify(get_current_connection(), &result_buffer, 1);
                 }
             }
             delete_started = 0;
@@ -951,7 +1008,7 @@ void storage_write(void)
             }
 
             if (conn) {
-                bt_gatt_notify(conn, &storage_service.attrs[1], &result, 1);
+                (void)storage_notify(conn, &result, 1);
             }
             LOG_INF("Delete file[%d] result: %d", idx, result);
         }
@@ -1147,7 +1204,7 @@ void storage_write(void)
                             /* BLE: notify completion (legacy or manual sync) */
                             LOG_PRINTK("done. attempting to download more files\n");
                             uint8_t stop_result[1] = {100};
-                            (void)bt_gatt_notify(get_current_connection(), &storage_service.attrs[1], &stop_result, 1);
+                            (void)storage_notify(get_current_connection(), &stop_result, 1);
                             k_msleep(10);
                         }
                     }
