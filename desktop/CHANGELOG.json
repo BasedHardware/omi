@@ -1,8 +1,13 @@
 {
-  "unreleased": [
-    "Fixed Gemini API key for proactive notifications (memory, tasks, advice, focus)"
-  ],
+  "unreleased": [],
   "releases": [
+    {
+      "version": "0.11.110",
+      "date": "2026-03-16",
+      "changes": [
+        "Fixed Gemini API key for proactive notifications (memory, tasks, advice, focus)"
+      ]
+    },
     {
       "version": "0.11.109",
       "date": "2026-03-16",
