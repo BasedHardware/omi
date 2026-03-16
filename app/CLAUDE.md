@@ -120,3 +120,28 @@ All API requests include: X-Request-Start-Time, X-App-Platform, X-Device-Id-Hash
 - See `e2e/SKILL.md` for navigation architecture, screen map, widget patterns, and 34 reference flows
 - See `e2e/flows/*.yaml` for individual flow definitions
 - agent-flutter (Marionette) for programmatic UI interaction — see root CLAUDE.md for setup
+
+### iOS Simulator Known Limitations
+
+| Issue | Workaround |
+|-------|-----------|
+| ASWebAuthenticationSession blocks Google Sign-In (system dialog, not automatable) | Use `FirebaseAuth.instance.signInWithCustomToken(token)` via VM Service evaluate |
+| `agent-flutter scroll` fails (uses ADB/transport.swipe, Simulator window disconnected) | Scroll via VM Service Dart evaluation: `pos.jumpTo()` on Scrollable widgets |
+| Simulator.app window shows Home Screen (not app) when booted via SSH user | Use `simctl screenshot` for true device state; use Marionette/VM Service for interaction |
+| No `simctl` touch/swipe API | VM Service evaluate for Flutter-level interaction; cliclick only works if Simulator window is synced |
+| iOS keychain persists through app uninstall | `xcrun simctl erase <UDID>` for full reset |
+| iOS onboarding is shorter than Android (language only → home) | Mark skipped steps as pass with platform note |
+
+**VM Service scroll expression** (target app root library):
+```dart
+(() { var count = 0; void visit(Element el) { if (el.widget is Scrollable) { try { final s = (el as StatefulElement).state as ScrollableState; final p = s.position; if (p.maxScrollExtent > 0 && p.pixels < p.maxScrollExtent) { p.jumpTo((p.pixels + 500).clamp(0.0, p.maxScrollExtent)); count++; } } catch (_) {} } el.visitChildren(visit); } WidgetsBinding.instance.rootElement?.visitChildren(visit); return count; })()
+```
+
+**iOS simulator auth** (VPS backend required — dev Firebase tokens rejected by prod API):
+```bash
+# .dev.env on Mac Mini must point to VPS backend
+API_BASE_URL=http://100.125.36.102:10230/
+USE_WEB_AUTH=false
+USE_AUTH_CUSTOM_TOKEN=true
+# Regenerate envied after .dev.env change, rebuild app
+```
