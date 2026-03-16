@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-import 'dart:math';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -380,7 +379,11 @@ class CaptureProvider extends ChangeNotifier
     if (_recordingDevice != null) {
       await _socket?.stop(reason: 'transcription settings changed');
       BleAudioCodec codec = await _getAudioCodec(_recordingDevice!.id);
-      await _initiateWebsocket(audioCodec: codec, force: true, source: _getConversationSourceFromDevice());
+      await _initiateWebsocket(
+        audioCodec: codec,
+        force: true,
+        source: _getConversationSourceFromDevice(),
+      );
       return;
     }
 
@@ -418,12 +421,7 @@ class CaptureProvider extends ChangeNotifier
   }) async {
     await _resetState();
     await _initiateWebsocket(
-      audioCodec: audioCodec,
-      sampleRate: sampleRate,
-      channels: channels,
-      isPcm: isPcm,
-      source: source,
-    );
+        audioCodec: audioCodec, sampleRate: sampleRate, channels: channels, isPcm: isPcm, source: source);
   }
 
   Future<void> _initiateWebsocket({
@@ -444,9 +442,8 @@ class CaptureProvider extends ChangeNotifier
     Logger.debug('Initiating WebSocket with: codec=$codec, sampleRate=$sampleRate, channels=$channels, isPcm=$isPcm');
 
     // Get language and custom STT config
-    String language = SharedPreferencesUtil().hasSetPrimaryLanguage
-        ? SharedPreferencesUtil().userPrimaryLanguage
-        : "multi";
+    String language =
+        SharedPreferencesUtil().hasSetPrimaryLanguage ? SharedPreferencesUtil().userPrimaryLanguage : "multi";
     final customSttConfig = SharedPreferencesUtil().customSttConfig;
 
     Logger.debug('Custom STT enabled: ${customSttConfig.isEnabled}, provider: ${customSttConfig.provider}');
@@ -460,13 +457,13 @@ class CaptureProvider extends ChangeNotifier
 
     // Connect to the transcript socket
     _socket = await ServiceManager.instance().socket.conversation(
-      codec: codec,
-      sampleRate: sampleRate,
-      language: language,
-      force: force,
-      source: source,
-      customSttConfig: effectiveConfig,
-    );
+          codec: codec,
+          sampleRate: sampleRate,
+          language: language,
+          force: force,
+          source: source,
+          customSttConfig: effectiveConfig,
+        );
     if (_socket == null) {
       _startKeepAliveServices();
       Logger.debug("Can not create new conversation socket");
@@ -528,166 +525,154 @@ class CaptureProvider extends ChangeNotifier
   Future streamButton(String deviceId) async {
     Logger.debug('streamButton in capture_provider');
     _bleButtonStream?.cancel();
-    _bleButtonStream = await _getBleButtonListener(
-      deviceId,
-      onButtonReceived: (List<int> value) {
-        final snapshot = List<int>.from(value);
-        if (snapshot.isEmpty || snapshot.length < 4) return;
-        var buttonState = ByteData.view(
-          Uint8List.fromList(snapshot.sublist(0, 4).reversed.toList()).buffer,
-        ).getUint32(0);
-        Logger.debug("device button $buttonState");
+    _bleButtonStream = await _getBleButtonListener(deviceId, onButtonReceived: (List<int> value) {
+      final snapshot = List<int>.from(value);
+      if (snapshot.isEmpty || snapshot.length < 4) return;
+      var buttonState = ByteData.view(Uint8List.fromList(snapshot.sublist(0, 4).reversed.toList()).buffer).getUint32(0);
+      Logger.debug("device button $buttonState");
 
-        // double tap
-        if (buttonState == 2) {
-          Logger.debug("Double tap detected");
+      // double tap
+      if (buttonState == 2) {
+        Logger.debug("Double tap detected");
 
-          // Guard: ignore if already processing a button event
-          if (_isProcessingButtonEvent) {
-            Logger.debug("Double tap: already processing, ignoring");
-            return;
-          }
+        // Guard: ignore if already processing a button event
+        if (_isProcessingButtonEvent) {
+          Logger.debug("Double tap: already processing, ignoring");
+          return;
+        }
 
-          int doubleTapAction = SharedPreferencesUtil().doubleTapAction;
+        int doubleTapAction = SharedPreferencesUtil().doubleTapAction;
 
-          if (doubleTapAction == 1) {
-            // Pause/resume recording
-            Logger.debug("Double tap: toggling pause/mute");
-            _isProcessingButtonEvent = true;
-            if (_isPaused) {
-              MixpanelManager().omiDoubleTap(feature: 'unmute');
-              resumeDeviceRecording()
-                  .then((_) {
-                    _isProcessingButtonEvent = false;
-                  })
-                  .catchError((e) {
-                    Logger.debug("Error resuming device recording: $e");
-                    _isProcessingButtonEvent = false;
-                  });
-            } else {
-              MixpanelManager().omiDoubleTap(feature: 'mute');
-              pauseDeviceRecording()
-                  .then((_) {
-                    _isProcessingButtonEvent = false;
-                  })
-                  .catchError((e) {
-                    Logger.debug("Error pausing device recording: $e");
-                    _isProcessingButtonEvent = false;
-                  });
-            }
-          } else if (doubleTapAction == 2) {
-            // Star ongoing conversation (doesn't end it)
-            Logger.debug("Double tap: marking conversation for starring");
-            if (!_starOngoingConversation) {
-              markConversationForStarring();
-              MixpanelManager().omiDoubleTap(feature: 'star_conversation');
-              // Haptic feedback to confirm
-              HapticFeedback.mediumImpact();
-            } else {
-              // Toggle off if already marked
-              unmarkConversationForStarring();
-              MixpanelManager().omiDoubleTap(feature: 'unstar_conversation');
-              HapticFeedback.lightImpact();
-            }
+        if (doubleTapAction == 1) {
+          // Pause/resume recording
+          Logger.debug("Double tap: toggling pause/mute");
+          _isProcessingButtonEvent = true;
+          if (_isPaused) {
+            MixpanelManager().omiDoubleTap(feature: 'unmute');
+            resumeDeviceRecording().then((_) {
+              _isProcessingButtonEvent = false;
+            }).catchError((e) {
+              Logger.debug("Error resuming device recording: $e");
+              _isProcessingButtonEvent = false;
+            });
           } else {
-            // End conversation and process (default)
-            Logger.debug("Double tap: processing conversation");
-            MixpanelManager().omiDoubleTap(feature: 'process_conversation');
-            forceProcessingCurrentConversation();
+            MixpanelManager().omiDoubleTap(feature: 'mute');
+            pauseDeviceRecording().then((_) {
+              _isProcessingButtonEvent = false;
+            }).catchError((e) {
+              Logger.debug("Error pausing device recording: $e");
+              _isProcessingButtonEvent = false;
+            });
           }
-          return;
-        }
-
-        // Single tap (buttonState == 1) - toggle voice question mode
-        // Tap once to start, tap again to end
-        if (buttonState == 1) {
-          debugPrint("Single tap detected");
-          if (_voiceCommandSession == null) {
-            // Start voice question session (new toggle mode)
-            debugPrint("Starting voice question session (toggle mode)");
-            _voiceCommandSession = DateTime.now();
-            _commandBytes = [];
-            _voiceSessionStartedByLegacyLongPress = false; // New toggle mode
-            _startVoiceCommandTimeout(deviceId);
-            _playSpeakerHaptic(deviceId, 1);
-          } else if (!_voiceSessionStartedByLegacyLongPress) {
-            // Only end on second tap if session was started by toggle mode (not legacy)
-            debugPrint("Ending voice question session (toggle mode)");
-            _endVoiceCommandSession(deviceId);
+        } else if (doubleTapAction == 2) {
+          // Star ongoing conversation (doesn't end it)
+          Logger.debug("Double tap: marking conversation for starring");
+          if (!_starOngoingConversation) {
+            markConversationForStarring();
+            MixpanelManager().omiDoubleTap(feature: 'star_conversation');
+            // Haptic feedback to confirm
+            HapticFeedback.mediumImpact();
+          } else {
+            // Toggle off if already marked
+            unmarkConversationForStarring();
+            MixpanelManager().omiDoubleTap(feature: 'unstar_conversation');
+            HapticFeedback.lightImpact();
           }
-          return;
+        } else {
+          // End conversation and process (default)
+          Logger.debug("Double tap: processing conversation");
+          MixpanelManager().omiDoubleTap(feature: 'process_conversation');
+          forceProcessingCurrentConversation();
         }
+        return;
+      }
 
-        // Legacy support: start long press (for voice commands) - older firmware
-        if (buttonState == 3 && _voiceCommandSession == null) {
-          debugPrint("Legacy: Long press start detected");
+      // Single tap (buttonState == 1) - toggle voice question mode
+      // Tap once to start, tap again to end
+      if (buttonState == 1) {
+        debugPrint("Single tap detected");
+        if (_voiceCommandSession == null) {
+          // Start voice question session (new toggle mode)
+          debugPrint("Starting voice question session (toggle mode)");
           _voiceCommandSession = DateTime.now();
           _commandBytes = [];
-          _voiceSessionStartedByLegacyLongPress = true; // Legacy hold-to-talk mode
+          _voiceSessionStartedByLegacyLongPress = false; // New toggle mode
           _startVoiceCommandTimeout(deviceId);
           _playSpeakerHaptic(deviceId, 1);
-        }
-
-        // Legacy support: release (end voice command) - older firmware
-        // Only end on release if session was started by legacy long press (buttonState 3)
-        if (buttonState == 5 && _voiceCommandSession != null && _voiceSessionStartedByLegacyLongPress) {
-          debugPrint("Legacy: Release detected - ending voice command");
+        } else if (!_voiceSessionStartedByLegacyLongPress) {
+          // Only end on second tap if session was started by toggle mode (not legacy)
+          debugPrint("Ending voice question session (toggle mode)");
           _endVoiceCommandSession(deviceId);
         }
-      },
-    );
+        return;
+      }
+
+      // Legacy support: start long press (for voice commands) - older firmware
+      if (buttonState == 3 && _voiceCommandSession == null) {
+        debugPrint("Legacy: Long press start detected");
+        _voiceCommandSession = DateTime.now();
+        _commandBytes = [];
+        _voiceSessionStartedByLegacyLongPress = true; // Legacy hold-to-talk mode
+        _startVoiceCommandTimeout(deviceId);
+        _playSpeakerHaptic(deviceId, 1);
+      }
+
+      // Legacy support: release (end voice command) - older firmware
+      // Only end on release if session was started by legacy long press (buttonState 3)
+      if (buttonState == 5 && _voiceCommandSession != null && _voiceSessionStartedByLegacyLongPress) {
+        debugPrint("Legacy: Release detected - ending voice command");
+        _endVoiceCommandSession(deviceId);
+      }
+    });
   }
 
   Future streamAudioToWs(String deviceId, BleAudioCodec codec) async {
     Logger.debug('streamAudioToWs in capture_provider');
     _bleBytesStream?.cancel();
     _startMetricsTracking();
-    _bleBytesStream = await _getBleAudioBytesListener(
-      deviceId,
-      onAudioBytesReceived: (List<int> value) {
-        final snapshot = List<int>.from(value);
-        if (snapshot.isEmpty || snapshot.length < 3) return;
+    _bleBytesStream = await _getBleAudioBytesListener(deviceId, onAudioBytesReceived: (List<int> value) {
+      final snapshot = List<int>.from(value);
+      if (snapshot.isEmpty || snapshot.length < 3) return;
 
-        // Track bytes received from BLE
-        _blesBytesReceived += snapshot.length;
+      // Track bytes received from BLE
+      _blesBytesReceived += snapshot.length;
 
-        // Command button triggered
-        bool voiceCommandSupported = _recordingDevice != null
-            ? (_recordingDevice?.type == DeviceType.omi || _recordingDevice?.type == DeviceType.openglass)
-            : false;
-        if (_voiceCommandSession != null && voiceCommandSupported) {
-          _commandBytes.add(snapshot.sublist(3));
-        }
+      // Command button triggered
+      bool voiceCommandSupported = _recordingDevice != null
+          ? (_recordingDevice?.type == DeviceType.omi || _recordingDevice?.type == DeviceType.openglass)
+          : false;
+      if (_voiceCommandSession != null && voiceCommandSupported) {
+        _commandBytes.add(snapshot.sublist(3));
+      }
 
-        // Local storage syncs
-        var checkWalSupported =
-            (_recordingDevice?.type == DeviceType.omi || _recordingDevice?.type == DeviceType.openglass) &&
-            codec.isOpusSupported() &&
-            (_socket?.state != SocketServiceState.connected || SharedPreferencesUtil().unlimitedLocalStorageEnabled);
-        if (checkWalSupported != _isWalSupported) {
-          setIsWalSupported(checkWalSupported);
-        }
+      // Local storage syncs
+      var checkWalSupported =
+          (_recordingDevice?.type == DeviceType.omi || _recordingDevice?.type == DeviceType.openglass) &&
+              codec.isOpusSupported() &&
+              (_socket?.state != SocketServiceState.connected || SharedPreferencesUtil().unlimitedLocalStorageEnabled);
+      if (checkWalSupported != _isWalSupported) {
+        setIsWalSupported(checkWalSupported);
+      }
+      if (_isWalSupported) {
+        _wal.getSyncs().phone.onByteStream(snapshot);
+      }
+
+      // Send WS
+      if (_socket?.state == SocketServiceState.connected) {
+        final paddingLeft =
+            (_recordingDevice?.type == DeviceType.omi || _recordingDevice?.type == DeviceType.openglass) ? 3 : 0;
+        final trimmedValue = paddingLeft > 0 ? value.sublist(paddingLeft) : value;
+        _socket?.send(trimmedValue);
+
+        // Track bytes sent to websocket
+        _wsSocketBytesSent += trimmedValue.length;
+
+        // Mark as synced
         if (_isWalSupported) {
-          _wal.getSyncs().phone.onByteStream(snapshot);
+          _wal.getSyncs().phone.onBytesSync(value);
         }
-
-        // Send WS
-        if (_socket?.state == SocketServiceState.connected) {
-          final paddingLeft =
-              (_recordingDevice?.type == DeviceType.omi || _recordingDevice?.type == DeviceType.openglass) ? 3 : 0;
-          final trimmedValue = paddingLeft > 0 ? value.sublist(paddingLeft) : value;
-          _socket?.send(trimmedValue);
-
-          // Track bytes sent to websocket
-          _wsSocketBytesSent += trimmedValue.length;
-
-          // Mark as synced
-          if (_isWalSupported) {
-            _wal.getSyncs().phone.onBytesSync(value);
-          }
-        }
-      },
-    );
+      }
+    });
     notifyListeners();
   }
 
@@ -758,9 +743,8 @@ class CaptureProvider extends ChangeNotifier
       return;
     }
     BleAudioCodec codec = await _getAudioCodec(_recordingDevice!.id);
-    var language = SharedPreferencesUtil().hasSetPrimaryLanguage
-        ? SharedPreferencesUtil().userPrimaryLanguage
-        : "multi";
+    var language =
+        SharedPreferencesUtil().hasSetPrimaryLanguage ? SharedPreferencesUtil().userPrimaryLanguage : "multi";
     final customSttConfig = SharedPreferencesUtil().customSttConfig;
     final sttConfigId = customSttConfig.sttConfigId;
 
@@ -806,41 +790,39 @@ class CaptureProvider extends ChangeNotifier
     if (connection == null) return;
 
     await connection.performCameraStartPhotoController();
-    _blePhotoStream = await connection.performGetImageListener(
-      onImageReceived: (orientedImage) async {
-        final rotatedImageBytes = rotateImage(orientedImage);
-        final String tempId = 'temp_img_${DateTime.now().millisecondsSinceEpoch}';
-        final String base64Image = base64Encode(rotatedImageBytes);
+    _blePhotoStream = await connection.performGetImageListener(onImageReceived: (orientedImage) async {
+      final rotatedImageBytes = rotateImage(orientedImage);
+      final String tempId = 'temp_img_${DateTime.now().millisecondsSinceEpoch}';
+      final String base64Image = base64Encode(rotatedImageBytes);
 
-        // Add placeholder to UI for immediate feedback
-        photos.add(ConversationPhoto(id: tempId, base64: base64Image, createdAt: DateTime.now()));
-        photos = List.from(photos);
-        notifyListeners();
+      // Add placeholder to UI for immediate feedback
+      photos.add(ConversationPhoto(id: tempId, base64: base64Image, createdAt: DateTime.now()));
+      photos = List.from(photos);
+      notifyListeners();
 
-        // Chunking Logic
-        const int chunkSize = 8192; // 8KB chunks
-        final totalChunks = (base64Image.length / chunkSize).ceil();
+      // Chunking Logic
+      const int chunkSize = 8192; // 8KB chunks
+      final totalChunks = (base64Image.length / chunkSize).ceil();
 
-        for (int i = 0; i < totalChunks; i++) {
-          final start = i * chunkSize;
-          final end = (start + chunkSize > base64Image.length) ? base64Image.length : start + chunkSize;
-          final chunk = base64Image.substring(start, end);
+      for (int i = 0; i < totalChunks; i++) {
+        final start = i * chunkSize;
+        final end = (start + chunkSize > base64Image.length) ? base64Image.length : start + chunkSize;
+        final chunk = base64Image.substring(start, end);
 
-          final payload = jsonEncode({
-            'type': 'image_chunk',
-            'id': tempId,
-            'index': i,
-            'total': totalChunks,
-            'data': chunk,
-          });
+        final payload = jsonEncode({
+          'type': 'image_chunk',
+          'id': tempId,
+          'index': i,
+          'total': totalChunks,
+          'data': chunk,
+        });
 
-          if (_socket?.state == SocketServiceState.connected) {
-            _socket?.send(payload); // Send the JSON string
-          }
-          await Future.delayed(const Duration(milliseconds: 20)); // Small delay to prevent flooding
+        if (_socket?.state == SocketServiceState.connected) {
+          _socket?.send(payload); // Send the JSON string
         }
-      },
-    );
+        await Future.delayed(const Duration(milliseconds: 20)); // Small delay to prevent flooding
+      }
+    });
     notifyListeners();
   }
 
@@ -986,22 +968,17 @@ class CaptureProvider extends ChangeNotifier
     await changeAudioRecordProfile(audioCodec: BleAudioCodec.pcm16, sampleRate: 16000);
 
     // record
-    await ServiceManager.instance().mic.start(
-      onByteReceived: (bytes) {
-        if (_socket?.state == SocketServiceState.connected) {
-          _socket?.send(bytes);
-        }
-      },
-      onRecording: () {
-        updateRecordingState(RecordingState.record);
-      },
-      onStop: () {
-        updateRecordingState(RecordingState.stop);
-      },
-      onInitializing: () {
-        updateRecordingState(RecordingState.initialising);
-      },
-    );
+    await ServiceManager.instance().mic.start(onByteReceived: (bytes) {
+      if (_socket?.state == SocketServiceState.connected) {
+        _socket?.send(bytes);
+      }
+    }, onRecording: () {
+      updateRecordingState(RecordingState.record);
+    }, onStop: () {
+      updateRecordingState(RecordingState.stop);
+    }, onInitializing: () {
+      updateRecordingState(RecordingState.initialising);
+    });
   }
 
   stopStreamRecording() async {
@@ -1067,71 +1044,68 @@ class CaptureProvider extends ChangeNotifier
     await changeAudioRecordProfile(audioCodec: BleAudioCodec.pcm16, sampleRate: 16000);
 
     await ServiceManager.instance().systemAudio.start(
-      onFormatReceived: (Map<String, dynamic> format) async {
-        // This callback is for information only, no action needed.
-      },
-      onByteReceived: _processSystemAudioByteReceived,
-      onRecording: () {
-        updateRecordingState(RecordingState.systemAudioRecord);
-        _startRecordingTimer();
-        Logger.debug('System audio recording started successfully.');
-      },
-      onStop: () {
-        if (_isPaused) {
-          updateRecordingState(RecordingState.pause);
-        } else {
-          updateRecordingState(RecordingState.stop);
-        }
-        _socket?.stop(reason: 'system audio stream ended from native');
-      },
-      onError: (error) {
-        Logger.debug('System audio capture error: $error');
-        AppSnackbar.showSnackbarError(
-          MyApp.navigatorKey.currentContext?.l10n.captureRecordingError(error) ??
-              'An error occurred during recording: $error',
+          onFormatReceived: (Map<String, dynamic> format) async {
+            // This callback is for information only, no action needed.
+          },
+          onByteReceived: _processSystemAudioByteReceived,
+          onRecording: () {
+            updateRecordingState(RecordingState.systemAudioRecord);
+            _startRecordingTimer();
+            Logger.debug('System audio recording started successfully.');
+          },
+          onStop: () {
+            if (_isPaused) {
+              updateRecordingState(RecordingState.pause);
+            } else {
+              updateRecordingState(RecordingState.stop);
+            }
+            _socket?.stop(reason: 'system audio stream ended from native');
+          },
+          onError: (error) {
+            Logger.debug('System audio capture error: $error');
+            AppSnackbar.showSnackbarError(MyApp.navigatorKey.currentContext?.l10n.captureRecordingError(error) ??
+                'An error occurred during recording: $error');
+            updateRecordingState(RecordingState.stop);
+          },
+          onSystemWillSleep: (wasRecording) {
+            Logger.debug('System will sleep - was recording: $wasRecording');
+          },
+          onSystemDidWake: (nativeIsRecording) async {
+            Logger.debug('[SystemWake] Native recording: $nativeIsRecording, Flutter state: $recordingState');
+
+            if (!nativeIsRecording && recordingState == RecordingState.systemAudioRecord) {
+              // Native stopped, sync Flutter state
+              updateRecordingState(RecordingState.stop);
+
+              // Auto-resume based on session flag (was recording before sleep?)
+              if (_shouldAutoResumeAfterWake) {
+                Logger.debug('[SystemWake] Auto-resuming recording (was recording before sleep)...');
+                await Future.delayed(const Duration(seconds: 2));
+                await streamSystemAudioRecording();
+              } else {
+                Logger.debug('[SystemWake] Not auto-resuming (user manually stopped)');
+              }
+            }
+          },
+          onScreenDidLock: (wasRecording) {
+            Logger.debug('Screen locked - was recording: $wasRecording');
+          },
+          onScreenDidUnlock: () {
+            Logger.debug('Screen unlocked');
+          },
+          onDisplaySetupInvalid: (reason) {
+            Logger.debug('Display setup invalid: $reason');
+            if (recordingState == RecordingState.systemAudioRecord) {
+              updateRecordingState(RecordingState.stop);
+              AppSnackbar.showSnackbarError(
+                  MyApp.navigatorKey.currentContext?.l10n.captureRecordingStoppedDisplayIssue(reason) ??
+                      'Recording stopped: $reason. You may need to reconnect external displays or restart recording.');
+            }
+          },
+          onMicrophoneDeviceChanged: _onMicrophoneDeviceChanged,
+          onMicrophoneStatus: _onMicrophoneStatus,
+          onStoppedAutomatically: _handleRecordingStoppedAutomatically,
         );
-        updateRecordingState(RecordingState.stop);
-      },
-      onSystemWillSleep: (wasRecording) {
-        Logger.debug('System will sleep - was recording: $wasRecording');
-      },
-      onSystemDidWake: (nativeIsRecording) async {
-        Logger.debug('[SystemWake] Native recording: $nativeIsRecording, Flutter state: $recordingState');
-
-        if (!nativeIsRecording && recordingState == RecordingState.systemAudioRecord) {
-          // Native stopped, sync Flutter state
-          updateRecordingState(RecordingState.stop);
-
-          // Auto-resume based on session flag (was recording before sleep?)
-          if (_shouldAutoResumeAfterWake) {
-            Logger.debug('[SystemWake] Auto-resuming recording (was recording before sleep)...');
-            await Future.delayed(const Duration(seconds: 2));
-            await streamSystemAudioRecording();
-          } else {
-            Logger.debug('[SystemWake] Not auto-resuming (user manually stopped)');
-          }
-        }
-      },
-      onScreenDidLock: (wasRecording) {
-        Logger.debug('Screen locked - was recording: $wasRecording');
-      },
-      onScreenDidUnlock: () {
-        Logger.debug('Screen unlocked');
-      },
-      onDisplaySetupInvalid: (reason) {
-        Logger.debug('Display setup invalid: $reason');
-        if (recordingState == RecordingState.systemAudioRecord) {
-          updateRecordingState(RecordingState.stop);
-          AppSnackbar.showSnackbarError(
-            MyApp.navigatorKey.currentContext?.l10n.captureRecordingStoppedDisplayIssue(reason) ??
-                'Recording stopped: $reason. You may need to reconnect external displays or restart recording.',
-          );
-        }
-      },
-      onMicrophoneDeviceChanged: _onMicrophoneDeviceChanged,
-      onMicrophoneStatus: _onMicrophoneStatus,
-      onStoppedAutomatically: _handleRecordingStoppedAutomatically,
-    );
   }
 
   Future<bool> _checkAndRequestSystemAudioPermissions() async {
@@ -1141,17 +1115,14 @@ class CaptureProvider extends ChangeNotifier
       if (micStatus == 'undetermined' || micStatus == 'unavailable') {
         final granted = await _screenCaptureChannel.invokeMethod('requestMicrophonePermission');
         if (!granted) {
-          AppSnackbar.showSnackbarError(
-            MyApp.navigatorKey.currentContext?.l10n.captureMicrophonePermissionRequired ??
-                'Microphone permission required',
-          );
+          AppSnackbar.showSnackbarError(MyApp.navigatorKey.currentContext?.l10n.captureMicrophonePermissionRequired ??
+              'Microphone permission required');
           return false;
         }
       } else if (micStatus == 'denied') {
         AppSnackbar.showSnackbarError(
-          MyApp.navigatorKey.currentContext?.l10n.captureMicrophonePermissionInSystemPreferences ??
-              'Grant microphone permission in System Preferences',
-        );
+            MyApp.navigatorKey.currentContext?.l10n.captureMicrophonePermissionInSystemPreferences ??
+                'Grant microphone permission in System Preferences');
         return false;
       }
     }
@@ -1162,9 +1133,8 @@ class CaptureProvider extends ChangeNotifier
       final granted = await _screenCaptureChannel.invokeMethod('requestScreenCapturePermission');
       if (!granted) {
         AppSnackbar.showSnackbarError(
-          MyApp.navigatorKey.currentContext?.l10n.captureScreenRecordingPermissionRequired ??
-              'Screen recording permission required',
-        );
+            MyApp.navigatorKey.currentContext?.l10n.captureScreenRecordingPermissionRequired ??
+                'Screen recording permission required');
         return false;
       }
     }
@@ -1200,8 +1170,7 @@ class CaptureProvider extends ChangeNotifier
   }
 
   void _onMicrophoneStatus(String deviceName, double micLevel, double systemAudioLevel) {
-    final bool needsUpdate =
-        microphoneName != deviceName ||
+    final bool needsUpdate = microphoneName != deviceName ||
         (microphoneLevel - micLevel).abs() > 0.001 ||
         (this.systemAudioLevel - systemAudioLevel).abs() > 0.001;
 
@@ -1349,30 +1318,9 @@ class CaptureProvider extends ChangeNotifier
 
     if (closeCode == 4002) {
       usageProvider?.markAsOutOfCreditsAndRefresh();
-      notifyListeners();
-      return; // No retry for out of credits
     }
 
     notifyListeners();
-
-    if (closeCode == 1012) {
-      // Server restart — moderate backoff 5-15s
-      _keepAliveTimer?.cancel();
-      final delay = Duration(seconds: 5 + Random().nextInt(10));
-      Logger.debug("[Provider] server restart (1012), reconnecting in ${delay.inSeconds}s");
-      _keepAliveTimer = Timer(delay, () => _startKeepAliveServices());
-      return;
-    }
-
-    if (closeCode == 1013) {
-      // Server overloaded — aggressive backoff 30-120s
-      _keepAliveTimer?.cancel();
-      final delay = Duration(seconds: 30 + Random().nextInt(90));
-      Logger.debug("[Provider] server overloaded (1013), reconnecting in ${delay.inSeconds}s");
-      _keepAliveTimer = Timer(delay, () => _startKeepAliveServices());
-      return;
-    }
-
     _startKeepAliveServices();
   }
 
@@ -1408,19 +1356,13 @@ class CaptureProvider extends ChangeNotifier
       }
       if (recordingState == RecordingState.record) {
         await _initiateWebsocket(
-          audioCodec: BleAudioCodec.pcm16,
-          sampleRate: 16000,
-          source: ConversationSource.phone.name,
-        );
+            audioCodec: BleAudioCodec.pcm16, sampleRate: 16000, source: ConversationSource.phone.name);
         return;
       }
       if (recordingState == RecordingState.systemAudioRecord && PlatformService.isDesktop) {
         Logger.debug("System audio socket disconnected, reconnecting...");
         await _initiateWebsocket(
-          audioCodec: BleAudioCodec.pcm16,
-          sampleRate: 16000,
-          source: ConversationSource.desktop.name,
-        );
+            audioCodec: BleAudioCodec.pcm16, sampleRate: 16000, source: ConversationSource.desktop.name);
         return;
       }
       // If we get here without reconnecting, schedule another attempt
@@ -1435,10 +1377,8 @@ class CaptureProvider extends ChangeNotifier
 
     if (err.toString().contains('Failed to find any displays or windows to capture')) {
       if (recordingState == RecordingState.systemAudioRecord) {
-        AppSnackbar.showSnackbarError(
-          MyApp.navigatorKey.currentContext?.l10n.captureDisplayDetectionFailed ??
-              'Display detection failed. Recording stopped.',
-        );
+        AppSnackbar.showSnackbarError(MyApp.navigatorKey.currentContext?.l10n.captureDisplayDetectionFailed ??
+            'Display detection failed. Recording stopped.');
         updateRecordingState(RecordingState.stop);
       }
     }
@@ -1524,7 +1464,9 @@ class CaptureProvider extends ChangeNotifier
       // Handle freemium threshold event via status field
       if (event.status == 'freemium_threshold_reached') {
         // Parse as FreemiumThresholdReachedEvent for consistent handling
-        final thresholdEvent = FreemiumThresholdReachedEvent.fromJson({'status_text': event.statusText});
+        final thresholdEvent = FreemiumThresholdReachedEvent.fromJson({
+          'status_text': event.statusText,
+        });
         _handleFreemiumThresholdReached(thresholdEvent);
         return;
       }
@@ -1571,11 +1513,7 @@ class CaptureProvider extends ChangeNotifier
     _resetStateVariables();
     conversationProvider!.addProcessingConversation(
       ServerConversation(
-        id: '0',
-        createdAt: DateTime.now(),
-        structured: Structured('', ''),
-        status: ConversationStatus.processing,
-      ),
+          id: '0', createdAt: DateTime.now(), structured: Structured('', ''), status: ConversationStatus.processing),
     );
     processInProgressConversation().then((result) {
       if (result == null || result.conversation == null) {
@@ -1666,7 +1604,12 @@ class CaptureProvider extends ChangeNotifier
     final isUser = event.personId == 'user';
     if (!isUser && event.personId.isNotEmpty && SharedPreferencesUtil().getPersonById(event.personId) == null) {
       SharedPreferencesUtil().addCachedPerson(
-        Person(id: event.personId, name: event.personName, createdAt: DateTime.now(), updatedAt: DateTime.now()),
+        Person(
+          id: event.personId,
+          name: event.personName,
+          createdAt: DateTime.now(),
+          updatedAt: DateTime.now(),
+        ),
       );
     }
 
@@ -1684,11 +1627,7 @@ class CaptureProvider extends ChangeNotifier
   }
 
   Future<void> assignSpeakerToConversation(
-    int speakerId,
-    String personId,
-    String personName,
-    List<String> segmentIds,
-  ) async {
+      int speakerId, String personId, String personName, List<String> segmentIds) async {
     if (segmentIds.isEmpty) return;
 
     taggingSegmentIds = List.from(segmentIds);
@@ -1710,7 +1649,12 @@ class CaptureProvider extends ChangeNotifier
           finalPersonId != 'user' &&
           SharedPreferencesUtil().getPersonById(finalPersonId) == null) {
         SharedPreferencesUtil().addCachedPerson(
-          Person(id: finalPersonId, name: personName, createdAt: DateTime.now(), updatedAt: DateTime.now()),
+          Person(
+            id: finalPersonId,
+            name: personName,
+            createdAt: DateTime.now(),
+            updatedAt: DateTime.now(),
+          ),
         );
       }
 
