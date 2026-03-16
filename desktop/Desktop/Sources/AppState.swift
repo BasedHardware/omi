@@ -422,6 +422,13 @@ class AppState: ObservableObject {
             let key = String(parts[0]).trimmingCharacters(in: .whitespaces)
             // Skip comments
             guard !key.hasPrefix("#") else { continue }
+            // API keys are fetched from the backend at runtime (APIKeyService).
+            // Load them from .env as a fallback — APIKeyService.fetchKeys() will
+            // overwrite them with backend-provided keys once auth is ready.
+            let backendServedKeys = ["DEEPGRAM_API_KEY", "GEMINI_API_KEY", "ANTHROPIC_API_KEY"]
+            if backendServedKeys.contains(key) {
+              log("  Set \(key)=*** (fallback, will be overwritten by backend)")
+            }
             let value = String(parts[1]).trimmingCharacters(in: .whitespaces)
               .trimmingCharacters(in: CharacterSet(charactersIn: "\"'"))
             setenv(key, value, 1)
@@ -435,12 +442,7 @@ class AppState: ObservableObject {
       }
     }
 
-    // Log final state of important keys
-    if getenv("DEEPGRAM_API_KEY") != nil {
-      log("DEEPGRAM_API_KEY is set")
-    } else {
-      log("WARNING: DEEPGRAM_API_KEY is NOT set")
-    }
+    log("Environment loaded (API keys will be fetched from backend after auth)")
   }
 
 

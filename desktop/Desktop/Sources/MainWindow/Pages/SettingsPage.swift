@@ -261,6 +261,7 @@ struct SettingsContentView: View {
         case preferences = "Preferences"
         case troubleshooting = "Troubleshooting"
         case gmailReader = "Gmail Reader"
+        case developerKeys = "Developer API Keys"
 
         var icon: String {
             switch self {
@@ -277,6 +278,7 @@ struct SettingsContentView: View {
             case .preferences: return "slider.horizontal.3"
             case .troubleshooting: return "wrench.and.screwdriver"
             case .gmailReader: return "envelope.fill"
+            case .developerKeys: return "key"
             }
         }
     }
@@ -294,6 +296,11 @@ struct SettingsContentView: View {
     @State private var gmailLastFetched: Date?
     @State private var isDeletingAccount: Bool = false
     @State private var deleteAccountError: String?
+
+    // Developer API Key overrides
+    @AppStorage("dev_deepgram_api_key") private var devDeepgramKey: String = ""
+    @AppStorage("dev_gemini_api_key") private var devGeminiKey: String = ""
+    @AppStorage("dev_anthropic_api_key") private var devAnthropicKey: String = ""
 
     init(
         appState: AppState,
@@ -2513,6 +2520,8 @@ struct SettingsContentView: View {
             troubleshootingSubsection
             advancedCategoryHeader(title: "Gmail Reader", icon: "envelope.fill")
             gmailReaderSubsection
+            advancedCategoryHeader(title: "Developer API Keys", icon: "key")
+            developerKeysSubsection
         }
     }
 
@@ -4100,6 +4109,79 @@ struct SettingsContentView: View {
         formatter.dateStyle = .short
         formatter.timeStyle = .short
         return formatter
+    }
+
+    // MARK: - Developer API Keys Subsection
+
+    private var developerKeysSubsection: some View {
+        VStack(spacing: 20) {
+            settingsCard(settingId: "advanced.devkeys.info") {
+                HStack(spacing: 12) {
+                    Image(systemName: "info.circle")
+                        .foregroundColor(OmiColors.textTertiary)
+                    Text("Override backend-provided API keys with your own. Leave blank to use default keys.")
+                        .scaledFont(size: 13)
+                        .foregroundColor(OmiColors.textTertiary)
+                    Spacer()
+                }
+            }
+
+            developerKeyField(
+                title: "Deepgram API Key",
+                subtitle: "For transcription",
+                settingId: "advanced.devkeys.deepgram",
+                value: $devDeepgramKey
+            )
+
+            developerKeyField(
+                title: "Gemini API Key",
+                subtitle: "For proactive AI (memory, tasks, advice, focus)",
+                settingId: "advanced.devkeys.gemini",
+                value: $devGeminiKey
+            )
+
+            developerKeyField(
+                title: "Anthropic API Key",
+                subtitle: "For chat (Claude)",
+                settingId: "advanced.devkeys.anthropic",
+                value: $devAnthropicKey
+            )
+
+            if !devDeepgramKey.isEmpty || !devGeminiKey.isEmpty || !devAnthropicKey.isEmpty {
+                settingsCard(settingId: "advanced.devkeys.clear") {
+                    HStack {
+                        Spacer()
+                        Button(action: {
+                            devDeepgramKey = ""
+                            devGeminiKey = ""
+                            devAnthropicKey = ""
+                        }) {
+                            Text("Clear All Custom Keys")
+                                .scaledFont(size: 13, weight: .medium)
+                                .foregroundColor(.red)
+                        }
+                        .buttonStyle(.plain)
+                        Spacer()
+                    }
+                }
+            }
+        }
+    }
+
+    private func developerKeyField(title: String, subtitle: String, settingId: String, value: Binding<String>) -> some View {
+        settingsCard(settingId: settingId) {
+            VStack(alignment: .leading, spacing: 8) {
+                Text(title)
+                    .scaledFont(size: 14, weight: .medium)
+                    .foregroundColor(OmiColors.textPrimary)
+                Text(subtitle)
+                    .scaledFont(size: 12)
+                    .foregroundColor(OmiColors.textTertiary)
+                SecureField("Leave blank for default", text: value)
+                    .textFieldStyle(.roundedBorder)
+                    .scaledFont(size: 13)
+            }
+        }
     }
 
     private func tierPickerRow(tier: Int, label: String, subtitle: String) -> some View {
