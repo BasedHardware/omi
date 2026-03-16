@@ -27,11 +27,12 @@ steps:
   - id: S1
     name: Name entry page
     do: "Verify name entry page is showing after auth. Fill name field with 'Test User' and tap Continue."
+    verify: true
     expect:
       - kind: interactive_count
         min: 2
     evidence:
-      - screenshot: step-S1.png
+      - screenshot: step-S1.webp
 
   - id: S2
     name: Primary language selection
@@ -40,56 +41,59 @@ steps:
       - kind: text_visible
         values: ["Tell us your primary language"]
     evidence:
-      - screenshot: step-S2.png
+      - screenshot: step-S2.webp
 
   - id: S3
     name: Found Omi / How did you hear about us
     do: "Verify the 'How did you hear about Omi?' page. Tap Skip or select an option and Continue."
     evidence:
-      - screenshot: step-S3.png
+      - screenshot: step-S3.webp
 
   - id: S4
     name: Permissions request
     do: "Verify permissions page requesting microphone, notifications, location. Grant or skip permissions."
+    verify: true
     evidence:
-      - screenshot: step-S4.png
+      - screenshot: step-S4.webp
     note: "System dialogs may appear. Use agent-flutter dismiss or ADB to handle permission prompts."
 
   - id: S5
     name: User review page
     do: "Verify the user review/survey page (Loving Omi?). Tap Skip or provide feedback and Continue."
     evidence:
-      - screenshot: step-S5.png
+      - screenshot: step-S5.webp
     note: "This page skips directly to Speech Profile (steps 6-7 unused)"
 
   - id: S6
     name: Speech profile setup
     do: "Verify speech profile page. Tap Skip to skip audio capture."
     evidence:
-      - screenshot: step-S6.png
+      - screenshot: step-S6.webp
     note: "Can skip without recording. Skip goes to Knowledge Graph."
 
   - id: S7
     name: Knowledge graph preview
     do: "Verify knowledge graph / memory graph preview page. Tap Continue or Skip."
     evidence:
-      - screenshot: step-S7.png
+      - screenshot: step-S7.webp
 
   - id: S8
     name: Onboarding complete
     do: "Verify completion screen showing 'You are all set!' and 'Start Using Omi' button. Tap 'Start Using Omi'."
+    verify: true
     expect:
       - kind: text_visible
         values: ["You are all set!"]
     evidence:
-      - screenshot: step-S8.png
+      - screenshot: step-S8.webp
 
   - id: S9
     name: Home screen
     do: "Verify landing on home screen after completing onboarding"
+    verify: true
     expect:
       - kind: interactive_count
         min: 4
     evidence:
-      - screenshot: step-S9.png
+      - screenshot: step-S9.webp
     note: "Home screen with bottom nav bar (4 tabs) confirms onboarding complete"
