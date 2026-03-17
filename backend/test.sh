@@ -54,3 +54,4 @@ pytest tests/unit/test_listen_pipeline.py -v
 pytest tests/unit/test_fair_use_models.py -v
 pytest tests/unit/test_fair_use_engine.py -v
 pytest tests/unit/test_abuse_detection.py -v
+pytest tests/unit/test_fair_use_async.py -v
