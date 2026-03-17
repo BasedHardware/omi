@@ -5,7 +5,7 @@ import logging
 import os
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Header, HTTPException, Query
 
 import database.fair_use as fair_use_db
 from utils.other.endpoints import get_current_user_uid
@@ -18,8 +18,9 @@ router = APIRouter()
 ADMIN_KEY = os.getenv('ADMIN_KEY', '')
 
 
-def _verify_admin_key(secret_key: str) -> None:
-    if not ADMIN_KEY or not hmac.compare_digest(secret_key, ADMIN_KEY):
+def _verify_admin_key(x_admin_key: str = Header(..., alias='X-Admin-Key')) -> None:
+    """Validate admin key from request header using constant-time comparison."""
+    if not ADMIN_KEY or not hmac.compare_digest(x_admin_key, ADMIN_KEY):
         raise HTTPException(status_code=403, detail='Invalid admin key')
 
 
@@ -30,21 +31,18 @@ def _verify_admin_key(secret_key: str) -> None:
 
 @router.get('/v1/admin/fair-use/flagged', tags=['admin'])
 def get_flagged_users(
-    secret_key: str = Query(...),
+    _: None = Depends(_verify_admin_key),
     stage: Optional[str] = None,
     limit: int = Query(default=50, le=200),
 ):
     """Get users with active fair-use enforcement."""
-    _verify_admin_key(secret_key)
     users = fair_use_db.get_flagged_users(stage_filter=stage, limit=limit)
     return {'users': users, 'fair_use_enabled': FAIR_USE_ENABLED}
 
 
 @router.get('/v1/admin/fair-use/user/{uid}', tags=['admin'])
-def get_user_fair_use_detail(uid: str, secret_key: str = Query(...)):
+def get_user_fair_use_detail(uid: str, _: None = Depends(_verify_admin_key)):
     """Get detailed fair-use state and events for a specific user."""
-    _verify_admin_key(secret_key)
-
     state = fair_use_db.get_fair_use_state(uid)
     events = fair_use_db.get_fair_use_events(uid, limit=50)
     speech = get_rolling_speech_ms(uid)
@@ -63,26 +61,23 @@ def get_user_fair_use_detail(uid: str, secret_key: str = Query(...)):
 
 
 @router.post('/v1/admin/fair-use/user/{uid}/resolve-event/{event_id}', tags=['admin'])
-def resolve_event(uid: str, event_id: str, secret_key: str = Query(...), notes: str = Query(default='')):
+def resolve_event(uid: str, event_id: str, _: None = Depends(_verify_admin_key), notes: str = Query(default='')):
     """Mark a fair-use event as resolved."""
-    _verify_admin_key(secret_key)
     fair_use_db.resolve_fair_use_event(uid, event_id, admin_uid='admin', notes=notes)
     return {'status': 'resolved'}
 
 
 @router.post('/v1/admin/fair-use/user/{uid}/reset', tags=['admin'])
-def reset_user_fair_use(uid: str, secret_key: str = Query(...)):
+def reset_user_fair_use(uid: str, _: None = Depends(_verify_admin_key)):
     """Reset a user's fair-use state to clean."""
-    _verify_admin_key(secret_key)
     fair_use_db.reset_fair_use_state(uid, admin_uid='admin')
     invalidate_enforcement_cache(uid)
     return {'status': 'reset'}
 
 
 @router.post('/v1/admin/fair-use/user/{uid}/set-stage', tags=['admin'])
-def set_user_stage(uid: str, stage: str = Query(...), secret_key: str = Query(...)):
+def set_user_stage(uid: str, stage: str = Query(...), _: None = Depends(_verify_admin_key)):
     """Manually set a user's enforcement stage."""
-    _verify_admin_key(secret_key)
     valid_stages = {'none', 'warning', 'throttle', 'restrict'}
     if stage not in valid_stages:
         raise HTTPException(status_code=400, detail=f'Invalid stage. Must be one of: {valid_stages}')
