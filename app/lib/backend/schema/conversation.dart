@@ -324,6 +324,7 @@ class ServerConversation {
     if (source == ConversationSource.openglass) return 'OmiGlass';
     if (source == ConversationSource.sdcard) return 'SD Card';
     if (discarded) return 'Discarded';
+    if (structured.category.isEmpty) return 'Other';
     return structured.category.substring(0, 1).toUpperCase() + structured.category.substring(1);
   }
 
