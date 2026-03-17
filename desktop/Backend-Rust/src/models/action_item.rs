@@ -84,6 +84,9 @@ pub struct UpdateActionItemRequest {
     pub description: Option<String>,
     /// New due date
     pub due_at: Option<DateTime<Utc>>,
+    /// Explicitly clear due date (required because due_at=null and missing are both None in Rust)
+    #[serde(default)]
+    pub clear_due_at: Option<bool>,
     /// New priority: "high", "medium", "low"
     pub priority: Option<String>,
     /// New category: "work", "personal", "health", etc.

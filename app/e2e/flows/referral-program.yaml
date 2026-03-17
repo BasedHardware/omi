@@ -1,0 +1,37 @@
+# E2E Flow: Referral Program page
+# Tests: navigation to referral, share link, referral stats
+
+name: referral-program
+description: Settings → Referral Program — view referral link, share, check referral stats
+covers:
+  - app/lib/pages/referral/referral_page.dart
+  - app/lib/pages/settings/settings_drawer.dart
+prerequisites:
+  - auth_ready  # User completed real sign-in (Google/Apple) and onboarding. Android: `bash setup.sh android`. iOS: `bash setup.sh ios`. App must show home screen.
+setup: normal
+
+steps:
+  - name: Open settings drawer
+    press: { type: button, position: rightmost }
+    screenshot: settings-drawer
+
+  - name: Scroll to find Referral Program
+    scroll: down
+    screenshot: settings-scrolled
+
+  - name: Tap Referral Program
+    press: { type: gesture, hint: "Referral Program row in settings drawer" }
+    screenshot: referral-page
+
+  - name: Verify referral page
+    assert:
+      interactive_count: { min: 2 }
+    note: >
+      Shows referral link, share button, and referral stats
+      (number of referrals, rewards earned).
+
+  - name: Back to settings
+    back: true
+
+  - name: Close settings
+    back: true

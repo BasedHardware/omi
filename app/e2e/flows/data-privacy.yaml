@@ -1,0 +1,40 @@
+# E2E Flow: Data Privacy settings
+# Tests: navigation to data privacy, privacy options
+
+name: data-privacy
+description: Settings → Profile → Data Privacy — privacy options and data controls
+covers:
+  - app/lib/pages/settings/data_privacy_page.dart
+  - app/lib/pages/settings/profile.dart
+prerequisites:
+  - auth_ready  # User completed real sign-in (Google/Apple) and onboarding. Android: `bash setup.sh android`. iOS: `bash setup.sh ios`. App must show home screen.
+setup: normal
+
+steps:
+  - name: Open settings drawer
+    press: { type: button, position: rightmost }
+
+  - name: Open Profile
+    press: { type: gesture, hint: "Profile row — 1st item in settings" }
+
+  - name: Scroll to find Data Privacy
+    scroll: down
+    screenshot: profile-scrolled
+
+  - name: Tap Data Privacy
+    press: { type: gesture, hint: "Data Privacy row in profile" }
+    screenshot: data-privacy-page
+
+  - name: Verify data privacy page
+    assert:
+      interactive_count: { min: 3 }
+    note: "Shows privacy options, data sharing controls, and export options"
+
+  - name: Back to profile
+    back: true
+
+  - name: Back to settings
+    back: true
+
+  - name: Close settings
+    back: true

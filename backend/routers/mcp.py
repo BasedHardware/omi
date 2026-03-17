@@ -199,7 +199,7 @@ def get_conversation_by_id(conversation_id: str, uid: str = Depends(get_uid_from
         raise HTTPException(status_code=404, detail="Conversation not found")
 
     if conversation.get('is_locked', False):
-        raise HTTPException(status_code=402, detail="Unlimited Plan Required to access this conversation.")
+        raise HTTPException(status_code=402, detail="A paid plan is required to access this conversation.")
 
     _add_speaker_names_to_segments(uid, [conversation])
 

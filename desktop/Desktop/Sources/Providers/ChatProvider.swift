@@ -1386,11 +1386,10 @@ A screenshot may be attached — use it silently only if relevant. Never mention
                 // Always trust the server value — it's the authoritative total
                 self.omiAICumulativeCostUsd = serverCost
                 log("ChatProvider: Seeded Omi AI cumulative cost from backend: $\(String(format: "%.4f", serverCost))")
-                // Auto-switch if already over threshold on startup
+                // Show upgrade prompt if over threshold but don't block chat
                 if self.bridgeMode == BridgeMode.omiAI.rawValue && serverCost >= 50.0 {
-                    log("ChatProvider: Omi AI cost already at $\(String(format: "%.2f", serverCost)) on startup — switching to user Claude account")
+                    log("ChatProvider: Omi AI cost at $\(String(format: "%.2f", serverCost)) on startup — showing upgrade prompt")
                     self.showOmiThresholdAlert = true
-                    Task { await self.switchBridgeMode(to: .userClaude) }
                 }
             }
         }
@@ -1821,11 +1820,9 @@ A screenshot may be attached — use it silently only if relevant. Never mention
             return
         }
 
-        // Guard: Block query if Omi account $50 usage threshold already reached
+        // Show upgrade prompt if over threshold but don't block the message
         if bridgeMode == BridgeMode.omiAI.rawValue && omiAICumulativeCostUsd >= 50.0 {
             showOmiThresholdAlert = true
-            Task { await self.switchBridgeMode(to: .userClaude) }
-            return
         }
 
         // Determine session ID based on mode
@@ -2129,10 +2126,9 @@ A screenshot may be attached — use it silently only if relevant. Never mention
             if isOmiMode {
                 sessionTokensUsed += queryResult.inputTokens + queryResult.outputTokens
                 omiAICumulativeCostUsd += queryResult.costUsd
-                // Auto-switch to the user's Claude account when the $50 Omi usage threshold is reached
+                // Show the upgrade flow when the free Omi usage threshold is reached.
                 if omiAICumulativeCostUsd >= 50.0 {
                     showOmiThresholdAlert = true
-                    Task { await self.switchBridgeMode(to: .userClaude) }
                 }
             }
 
@@ -2250,8 +2246,30 @@ A screenshot may be attached — use it silently only if relevant. Never mention
     /// Update message text (replaces entire text)
     private func updateMessage(id: String, text: String) {
         if let index = messages.firstIndex(where: { $0.id == id }) {
-            messages[index].text = text
+            if messages[index].sender == .ai {
+                messages[index].text = normalizeAssistantSentenceSpacing(text)
+            } else {
+                messages[index].text = text
+            }
         }
+    }
+
+    /// Normalize missing spaces after sentence punctuation in assistant messages.
+    /// Example: "Hello.World" -> "Hello. World", "Great!Lets go" -> "Great! Lets go"
+    private func normalizeAssistantSentenceSpacing(_ text: String) -> String {
+        var normalized = text
+
+        if let punctuationUpper = try? NSRegularExpression(pattern: #"([.!?])(?=[A-Z])"#) {
+            let range = NSRange(normalized.startIndex..., in: normalized)
+            normalized = punctuationUpper.stringByReplacingMatches(in: normalized, options: [], range: range, withTemplate: "$1 ")
+        }
+
+        if let punctuationQuotedUpper = try? NSRegularExpression(pattern: #"([.!?])(?=[\"“'‘][A-Z])"#) {
+            let range = NSRange(normalized.startIndex..., in: normalized)
+            normalized = punctuationQuotedUpper.stringByReplacingMatches(in: normalized, options: [], range: range, withTemplate: "$1 ")
+        }
+
+        return normalized
     }
 
     /// Append text to a streaming message via a buffer that flushes at ~100ms intervals.
@@ -2287,12 +2305,18 @@ A screenshot may be attached — use it silently only if relevant. Never mention
             streamingTextBuffer = ""
 
             messages[index].text += buffered
+            if messages[index].sender == .ai {
+                messages[index].text = normalizeAssistantSentenceSpacing(messages[index].text)
+            }
 
             if let lastBlockIndex = messages[index].contentBlocks.indices.last,
                case .text(let blockId, let existing) = messages[index].contentBlocks[lastBlockIndex] {
-                messages[index].contentBlocks[lastBlockIndex] = .text(id: blockId, text: existing + buffered)
+                let merged = existing + buffered
+                let blockText = messages[index].sender == .ai ? normalizeAssistantSentenceSpacing(merged) : merged
+                messages[index].contentBlocks[lastBlockIndex] = .text(id: blockId, text: blockText)
             } else {
-                messages[index].contentBlocks.append(.text(id: UUID().uuidString, text: buffered))
+                let blockText = messages[index].sender == .ai ? normalizeAssistantSentenceSpacing(buffered) : buffered
+                messages[index].contentBlocks.append(.text(id: UUID().uuidString, text: blockText))
             }
         }
 

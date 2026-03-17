@@ -1,0 +1,40 @@
+# E2E Flow: Task Integrations — Todoist, Asana, ClickUp, Google Tasks
+# Tests: integration list, connect flows
+
+name: task-integrations
+description: Settings → Integrations → Task providers — connect/disconnect Todoist, Asana, ClickUp, Google Tasks
+covers:
+  - app/lib/pages/settings/task_integrations_page.dart
+  - app/lib/pages/settings/todoist_settings_page.dart
+  - app/lib/pages/settings/asana_settings_page.dart
+  - app/lib/pages/settings/clickup_settings_page.dart
+  - app/lib/pages/settings/google_tasks_settings_page.dart
+  - app/lib/pages/settings/integrations_page.dart
+prerequisites:
+  - auth_ready  # User completed real sign-in (Google/Apple) and onboarding. Android: `bash setup.sh android`. iOS: `bash setup.sh ios`. App must show home screen.
+setup: normal
+
+steps:
+  - name: Open settings drawer
+    press: { type: button, position: rightmost }
+
+  - name: Tap Integrations
+    press: { type: gesture, hint: "Integrations row in settings" }
+    screenshot: integrations-page
+
+  - name: Verify integrations page
+    assert:
+      interactive_count: { min: 3 }
+    note: >
+      Shows integration categories: Calendar, Task management,
+      Health, and other service connections.
+
+  - name: Scroll to task integrations
+    scroll: down
+    screenshot: task-integrations
+
+  - name: Back to settings
+    back: true
+
+  - name: Close settings
+    back: true

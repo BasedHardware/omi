@@ -39,7 +39,7 @@ export function BetaRibbon() {
           <span>Feedback</span>
         </a>
         <a
-          href="https://discord.gg/omidotme"
+          href="http://discord.omi.me"
           target="_blank"
           rel="noopener noreferrer"
           className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-bg-tertiary/80 backdrop-blur-sm text-text-tertiary hover:text-purple-primary hover:bg-bg-tertiary transition-colors text-xs"

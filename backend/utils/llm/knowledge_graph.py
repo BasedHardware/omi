@@ -70,7 +70,7 @@ Extract entities and relationships. If no meaningful patterns found, return empt
 
 def extract_knowledge_from_memory(
     uid: str, memory_content: str, memory_id: str, user_name: str = "User"
-) -> Dict[str, Any]:
+) -> Optional[Dict[str, Any]]:
     existing_nodes = kg_db.get_knowledge_nodes(uid)
     existing_nodes_summary = []
     for node in existing_nodes:
@@ -149,7 +149,7 @@ def extract_knowledge_from_memory(
 
     except Exception:
         logging.exception(f"Error extracting knowledge graph from memory_id: {memory_id}")
-        return {'nodes': [], 'edges': []}
+        return None
 
 
 def rebuild_knowledge_graph(uid: str, memories: List[Dict[str, Any]], user_name: str = "User") -> Dict[str, Any]:

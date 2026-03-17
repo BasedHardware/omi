@@ -3,6 +3,7 @@ from collections import Counter, defaultdict
 from typing import List, Tuple
 
 import database.users as users_db
+from database.auth import get_user_name
 from database.conversations import get_conversations_by_id
 from database.vector_db import query_vectors
 from models.conversation import Conversation
@@ -51,15 +52,15 @@ def retrieve_memories_for_topics(uid: str, topics: List[str], dates_range: List)
 
 
 def get_better_conversation_chunk(
-    memory: Conversation, topics: List[str], context_data: dict, people: List[Person] = None
+    memory: Conversation, topics: List[str], context_data: dict, people: List[Person] = None, user_name: str = None
 ) -> str:
     logger.info(f'get_better_memory_chunk {memory.id} {topics}')
     conversation = TranscriptSegment.segments_as_string(
-        memory.transcript_segments, include_timestamps=True, people=people
+        memory.transcript_segments, include_timestamps=True, people=people, user_name=user_name
     )
     if num_tokens_from_string(conversation) < 250:
-        return Conversation.conversations_to_string([memory], people=people)
-    chunk = chunk_extraction(memory.transcript_segments, topics, people=people)
+        return Conversation.conversations_to_string([memory], people=people, user_name=user_name)
+    chunk = chunk_extraction(memory.transcript_segments, topics, people=people, user_name=user_name)
     if not chunk or len(chunk) < 10:
         return
     context_data[memory.id] = chunk
@@ -93,18 +94,22 @@ def retrieve_rag_conversation_context(uid: str, memory: Conversation) -> Tuple[s
         people_data = users_db.get_people_by_ids(uid, list(set(all_person_ids)))
         people = [Person(**p) for p in people_data]
 
+    user_name = get_user_name(uid, use_default=False)
+
     if memories_id_to_topics:
         # TODO: restore sorthing here
         context_data = {}
         threads = []
         for memory in memories:
             topics = memories_id_to_topics.get(memory.id, [])
-            t = threading.Thread(target=get_better_conversation_chunk, args=(memory, topics, context_data, people))
+            t = threading.Thread(
+                target=get_better_conversation_chunk, args=(memory, topics, context_data, people, user_name)
+            )
             threads.append(t)
         [t.start() for t in threads]
         [t.join() for t in threads]
         context_str = '\n'.join(context_data.values()).strip()
     else:
-        context_str = Conversation.conversations_to_string(memories, people=people)
+        context_str = Conversation.conversations_to_string(memories, people=people, user_name=user_name)
 
     return context_str, (memories if context_str else [])

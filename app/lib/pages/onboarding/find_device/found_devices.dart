@@ -162,12 +162,16 @@ class _FoundDevicesState extends State<FoundDevices> {
       return; // No warning needed for this device type
     }
 
-    // Check if user has already acknowledged this device type
-    final prefKey = 'firmware_warning_acknowledged_${device.type.toString()}';
-    final alreadyAcknowledged = SharedPreferencesUtil().getBool(prefKey) ?? false;
+    // Critical firmware warnings (e.g. unsupported encrypted firmware) always show,
+    // regardless of prior acknowledgment. Only skip for non-critical compatibility notes.
+    final isCritical = device.type == DeviceType.bee && device.isBeeFirmwareUnsupported;
 
-    if (alreadyAcknowledged) {
-      return; // User already acknowledged this warning
+    if (!isCritical) {
+      final prefKey = 'firmware_warning_acknowledged_${device.type.toString()}';
+      final alreadyAcknowledged = SharedPreferencesUtil().getBool(prefKey) ?? false;
+      if (alreadyAcknowledged) {
+        return; // User already acknowledged this warning
+      }
     }
 
     bool dontShowAgain = false;
@@ -180,14 +184,17 @@ class _FoundDevicesState extends State<FoundDevices> {
       builder: (dialogContext) => ConfirmationDialog(
         title: device.getFirmwareWarningTitle(),
         description: warningMessage,
-        checkboxText: context.l10n.dontShowAgain,
+        checkboxText: isCritical ? null : context.l10n.dontShowAgain,
         checkboxValue: dontShowAgain,
-        onCheckboxChanged: (value) {
-          dontShowAgain = value;
-        },
+        onCheckboxChanged: isCritical
+            ? null
+            : (value) {
+                dontShowAgain = value;
+              },
         confirmText: context.l10n.iUnderstand,
         onConfirm: () {
-          if (dontShowAgain) {
+          if (!isCritical && dontShowAgain) {
+            final prefKey = 'firmware_warning_acknowledged_${device.type.toString()}';
             SharedPreferencesUtil().saveBool(prefKey, true);
           }
           Navigator.pop(dialogContext);
@@ -309,7 +316,8 @@ class _FoundDevicesState extends State<FoundDevices> {
 
                     // Show firmware warning after successful connection
                     if (provider.isConnected) {
-                      await _showFirmwareWarningIfNeeded(device);
+                      final connectedDevice = provider.deviceProvider?.connectedDevice ?? device;
+                      await _showFirmwareWarningIfNeeded(connectedDevice);
                     }
                   }
                 }

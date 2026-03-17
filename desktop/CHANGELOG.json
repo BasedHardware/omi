@@ -1,14 +1,272 @@
 {
-  "unreleased": [
-    "Rewind timeline now shows full day with oldest screenshots on the left and newest on the right",
-    "Consolidated Advanced settings into a single scrollable page and removed Device section from settings",
-    "Floating bar now follows your active app across monitors",
-    "Screenshots now capture the screen where your cursor is, not just the primary display",
-    "Fixed focus notifications not detecting distractions like YouTube and TikTok",
-    "Improved advice/tips quality with better prompts",
-    "Removed notification sound from focus alerts"
-  ],
+  "unreleased": [],
   "releases": [
+    {
+      "version": "0.11.116",
+      "date": "2026-03-17",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.115",
+      "date": "2026-03-17",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.114",
+      "date": "2026-03-17",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.113",
+      "date": "2026-03-16",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.112",
+      "date": "2026-03-16",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.111",
+      "date": "2026-03-16",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.110",
+      "date": "2026-03-16",
+      "changes": [
+        "Fixed Gemini API key for proactive notifications (memory, tasks, advice, focus)"
+      ]
+    },
+    {
+      "version": "0.11.109",
+      "date": "2026-03-16",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.108",
+      "date": "2026-03-16",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.107",
+      "date": "2026-03-16",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.106",
+      "date": "2026-03-15",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.105",
+      "date": "2026-03-15",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.104",
+      "date": "2026-03-15",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.103",
+      "date": "2026-03-15",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.102",
+      "date": "2026-03-14",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.101",
+      "date": "2026-03-14",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.100",
+      "date": "2026-03-14",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.99",
+      "date": "2026-03-14",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.98",
+      "date": "2026-03-13",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.97",
+      "date": "2026-03-13",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.96",
+      "date": "2026-03-13",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.95",
+      "date": "2026-03-13",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.94",
+      "date": "2026-03-13",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.93",
+      "date": "2026-03-13",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.92",
+      "date": "2026-03-12",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.91",
+      "date": "2026-03-10",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.90",
+      "date": "2026-03-09",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.89",
+      "date": "2026-03-09",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.88",
+      "date": "2026-03-09",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.87",
+      "date": "2026-03-09",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.86",
+      "date": "2026-03-08",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.85",
+      "date": "2026-03-08",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.84",
+      "date": "2026-03-08",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.83",
+      "date": "2026-03-08",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.82",
+      "date": "2026-03-07",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.81",
+      "date": "2026-03-07",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.80",
+      "date": "2026-03-07",
+      "changes": [
+        "Rewind timeline now shows full day with oldest screenshots on the left and newest on the right",
+        "Consolidated Advanced settings into a single scrollable page and removed Device section from settings",
+        "Floating bar now follows your active app across monitors",
+        "Screenshots now capture the screen where your cursor is, not just the primary display",
+        "Fixed focus notifications not detecting distractions like YouTube and TikTok",
+        "Improved advice/tips quality with better prompts",
+        "Removed notification sound from focus alerts",
+        "Improved onboarding: added voice input step, use real floating bar for CMD+Enter demo, clearer key combination hints"
+      ]
+    },
     {
       "version": "0.11.48",
       "date": "2026-03-03",

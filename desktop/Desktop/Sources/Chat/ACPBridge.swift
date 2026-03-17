@@ -827,9 +827,17 @@ actor ACPBridge {
 
     // 3. Check relative to current working directory
     let cwdPath = FileManager.default.currentDirectoryPath
-    let cwdScript = (cwdPath as NSString).appendingPathComponent("acp-bridge/dist/index.js")
-    if FileManager.default.fileExists(atPath: cwdScript) {
-      return cwdScript
+    let cwdCandidates = [
+      "acp-bridge/dist/index.js",
+      "desktop/acp-bridge/dist/index.js",
+      "../desktop/acp-bridge/dist/index.js",
+    ]
+    for relativePath in cwdCandidates {
+      let candidate = (cwdPath as NSString).appendingPathComponent(relativePath)
+      let resolved = (candidate as NSString).standardizingPath
+      if FileManager.default.fileExists(atPath: resolved) {
+        return resolved
+      }
     }
 
     return nil

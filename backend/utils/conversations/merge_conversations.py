@@ -26,6 +26,7 @@ from utils.other.storage import (
     list_audio_chunks,
     storage_client,
     private_cloud_sync_bucket,
+    _get_extension_for_path,
 )
 import logging
 
@@ -332,13 +333,14 @@ def _copy_audio_chunks_for_merge(
 
     Audio chunks are stored in GCS at:
         chunks/{uid}/{conversation_id}/{timestamp}.bin  (or .enc for encrypted)
+        chunks/{uid}/{conversation_id}/{first_ts}-{last_ts}.batch.bin  (batch blobs)
 
-    The timestamps in chunk filenames are absolute Unix timestamps (when chunk was recorded).
-    We keep the original timestamps since they represent the actual recording time.
+    The filenames contain absolute Unix timestamps (when chunk was recorded).
+    We preserve original filenames to maintain both single-chunk and batch blob naming.
 
     Strategy:
     - Copy all chunks from all conversations to new conversation path
-    - Keep original timestamps (they're absolute, not relative)
+    - Preserve original filenames (handles single and batch blobs)
     - Create AudioFile records from the copied chunks
 
     Args:
@@ -360,13 +362,10 @@ def _copy_audio_chunks_for_merge(
             chunks = list_audio_chunks(uid, conv_id)
             for chunk in chunks:
                 has_chunks = True
-                original_ts = chunk['timestamp']
 
-                # Determine extension from original path
-                ext = 'enc' if chunk['path'].endswith('.enc') else 'bin'
-
-                # Copy to new path with same timestamp (it's absolute Unix time)
-                new_path = f'chunks/{uid}/{new_conversation_id}/{original_ts:.3f}.{ext}'
+                # Preserve original filename (handles both single and batch blob naming)
+                original_filename = chunk['path'].split('/')[-1]
+                new_path = f'chunks/{uid}/{new_conversation_id}/{original_filename}'
                 source_blob = bucket.blob(chunk['path'])
                 bucket.copy_blob(source_blob, bucket, new_path)
 

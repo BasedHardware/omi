@@ -1,0 +1,42 @@
+# E2E Flow: Memory Graph visualization
+# Tests: graph view, node interaction, navigation back
+# Discovered by: flow-walker run10 via memories tab depth-2 exploration
+
+name: memory-graph
+description: Memories → Graph — knowledge graph visualization, node exploration
+covers:
+  - app/lib/pages/memories/widgets/memory_graph_page.dart
+  - app/lib/pages/memories/page.dart
+prerequisites:
+  - auth_ready  # User completed real sign-in (Google/Apple) and onboarding. Android: `bash setup.sh android`. iOS: `bash setup.sh ios`. App must show home screen.
+setup: normal
+note: "More useful when memories exist — graph shows nodes and connections"
+
+steps:
+  - name: Navigate to Memories tab
+    press: { bottom_nav_tab: 2 }
+    screenshot: memories-tab
+
+  - name: Tap graph button
+    press: { type: gesture, hint: "graph icon button — near search bar, opens memory graph" }
+    screenshot: memory-graph
+
+  - name: Verify graph page
+    assert:
+      interactive_count: { min: 2 }
+    note: >
+      Shows interactive knowledge graph visualization.
+      Nodes represent memories, edges show connections.
+      Can pinch-zoom and pan the graph.
+
+  - name: Tap a graph node (if any exist)
+    press: { type: gesture, hint: "graph node — opens memory detail" }
+    screenshot: graph-node-detail
+
+  - name: Back from node detail
+    back: true
+
+  - name: Back to memories
+    back: true
+    assert:
+      bottom_nav_tabs: { min: 4 }

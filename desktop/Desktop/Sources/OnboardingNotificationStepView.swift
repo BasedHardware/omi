@@ -4,6 +4,7 @@ import SwiftUI
 /// Uses a static example tip — no Gemini call needed.
 struct OnboardingNotificationStepView: View {
     @ObservedObject var appState: AppState
+    @ObservedObject var chatProvider: ChatProvider
     var onContinue: () -> Void
     var onSkip: () -> Void
 
@@ -94,7 +95,7 @@ struct OnboardingNotificationStepView: View {
                         Image(systemName: "bell.badge.fill")
                             .foregroundColor(OmiColors.purplePrimary)
                             .font(.system(size: 12))
-                        Text("Notification sent to your Mac")
+                        Text("Notification shown below Ask omi")
                             .font(.system(size: 12))
                             .foregroundColor(OmiColors.textTertiary)
                     }
@@ -117,6 +118,9 @@ struct OnboardingNotificationStepView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(OmiColors.backgroundPrimary)
         .onAppear {
+            FloatingControlBarManager.shared.setup(appState: appState, chatProvider: chatProvider)
+            FloatingControlBarManager.shared.showTemporarily()
+
             // Show the notification preview after a brief delay
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
                 withAnimation(.spring(response: 0.5, dampingFraction: 0.8)) {

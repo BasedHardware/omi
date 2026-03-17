@@ -580,4 +580,12 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
       await deleteWal(wal);
     }
   }
+
+  @override
+  Future<void> deleteAllPendingWals() async {
+    final pendingWals = _wals.where((w) => w.status == WalStatus.miss || w.status == WalStatus.corrupted).toList();
+    for (final wal in pendingWals) {
+      await deleteWal(wal);
+    }
+  }
 }

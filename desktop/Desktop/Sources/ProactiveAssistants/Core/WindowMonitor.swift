@@ -49,6 +49,11 @@ class WindowMonitor {
         return ScreenCaptureService.getActiveWindowInfo()
     }
 
+    /// Async active window lookup with timeout and cache fallback.
+    static func getActiveWindowInfoAsync() async -> (appName: String?, windowTitle: String?, windowID: CGWindowID?) {
+        return await ScreenCaptureService.getActiveWindowInfoAsync()
+    }
+
     /// Instance method for getting active window info
     func getActiveWindowInfo() -> (appName: String?, windowTitle: String?, windowID: CGWindowID?) {
         return Self.getActiveWindowInfoStatic()

@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -16,6 +17,7 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/services/auth_service.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/geolocation.dart';
@@ -40,7 +42,7 @@ import 'package:omi/utils/debug_log_manager.dart';
 import 'package:omi/utils/enums.dart';
 import 'package:omi/utils/image/image_utils.dart';
 import 'package:omi/utils/l10n_extensions.dart';
-import 'package:omi/utils/logger.dart';
+import 'package:omi/services/battery_widget_service.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 import 'package:omi/main.dart';
@@ -1338,6 +1340,12 @@ class CaptureProvider extends ChangeNotifier
         return;
       }
 
+      if (!AuthService.instance.isSignedIn()) {
+        Logger.debug("[Provider] keep alive - user not signed in, cancelling reconnect");
+        t.cancel();
+        return;
+      }
+
       if (_recordingDevice != null) {
         BleAudioCodec codec = await _getAudioCodec(_recordingDevice!.id);
         await _initiateWebsocket(audioCodec: codec, source: _getConversationSourceFromDevice());
@@ -1827,6 +1835,8 @@ class CaptureProvider extends ChangeNotifier
   Future<void> pauseDeviceRecording() async {
     if (_recordingDevice == null) return;
 
+    // Write mute state first — before BLE cancel which may fire other events
+    await BatteryWidgetService().updateMuteState(true);
     // Pause the BLE stream but keep the device connection
     await _bleBytesStream?.cancel();
     _isPaused = true;
@@ -1837,6 +1847,8 @@ class CaptureProvider extends ChangeNotifier
   Future<void> resumeDeviceRecording() async {
     if (_recordingDevice == null) return;
     _isPaused = false;
+    // Update widget immediately — don't wait for streaming setup
+    BatteryWidgetService().updateMuteState(false);
     // Resume streaming from the device
     await _initiateDeviceAudioStreaming();
 

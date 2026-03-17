@@ -91,9 +91,10 @@ export function GenerateSummaryButton({
     setIsMac(navigator.platform.toLowerCase().includes('mac'));
   }, []);
 
-  // Filter out apps that already have summaries
+  // Track which apps already have summaries (for visual indicator)
   const existingAppIds = new Set(existingAppResults.map(r => r.app_id));
-  const availableAppIds = suggestedAppIds.filter(id => !existingAppIds.has(id));
+  // Show all suggested apps (including ones with existing results) so users can re-select
+  const availableAppIds = suggestedAppIds;
 
   // Fetch app details when dropdown opens
   useEffect(() => {
@@ -460,9 +461,11 @@ export function GenerateSummaryButton({
                             </p>
                           )}
                         </div>
-                        {generating === app.id && (
+                        {generating === app.id ? (
                           <Loader2 className="w-4 h-4 animate-spin text-purple-primary flex-shrink-0" />
-                        )}
+                        ) : existingAppIds.has(app.id) ? (
+                          <span className="text-xs text-text-quaternary flex-shrink-0">Generated</span>
+                        ) : null}
                       </button>
                     ))}
                   </div>
@@ -508,9 +511,11 @@ export function GenerateSummaryButton({
                             </p>
                           )}
                         </div>
-                        {generating === app.id && (
+                        {generating === app.id ? (
                           <Loader2 className="w-4 h-4 animate-spin text-purple-primary flex-shrink-0" />
-                        )}
+                        ) : existingAppIds.has(app.id) ? (
+                          <span className="text-xs text-text-quaternary flex-shrink-0">Generated</span>
+                        ) : null}
                       </button>
                     ))}
                   </div>

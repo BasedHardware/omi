@@ -29,7 +29,8 @@ import 'package:omi/backend/http/api/announcements.dart';
 import 'package:omi/pages/announcements/changelog_sheet.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'device_settings.dart';
-import 'package:omi/pages/conversations/sync_page.dart';
+import 'phone_call_settings_page.dart';
+import '../conversations/sync_page.dart';
 
 enum SettingsMode {
   no_device,

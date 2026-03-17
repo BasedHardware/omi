@@ -1,10 +1,10 @@
-import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/services/devices/apple_watch_connection.dart';
+import 'package:omi/services/devices/bee_connection.dart';
 import 'package:omi/services/devices/device_connection.dart';
 import 'package:omi/services/devices/discovery/device_locator.dart';
 import 'package:omi/services/devices/fieldy_connection.dart';
@@ -491,8 +491,13 @@ class BtDevice {
     var manufacturerName = 'Bee';
 
     try {
-      // Bee devices don't have standard device info service
-      // Use defaults
+      if (conn is BeeDeviceConnection) {
+        final deviceInfo = await conn.getDeviceInfo();
+        modelNumber = deviceInfo['modelNumber'] ?? modelNumber;
+        firmwareRevision = deviceInfo['firmwareRevision'] ?? firmwareRevision;
+        hardwareRevision = deviceInfo['hardwareRevision'] ?? hardwareRevision;
+        manufacturerName = deviceInfo['manufacturerName'] ?? manufacturerName;
+      }
     } catch (e) {
       Logger.error('Error getting Bee device info: $e');
     }
@@ -610,16 +615,37 @@ class BtDevice {
     );
   }
 
+  bool get isBeeFirmwareUnsupported {
+    if (type != DeviceType.bee) return false;
+    final fw = firmwareRevision;
+    if (fw.isEmpty) return false;
+    final parts = fw.split('.');
+    if (parts.length < 3) return false;
+    try {
+      final major = int.parse(parts[0]);
+      final minor = int.parse(parts[1]);
+      final patch = int.parse(parts[2]);
+      // Unsupported if >= 0.6.1
+      if (major > 0) return true;
+      if (minor > 6) return true;
+      if (minor == 6 && patch >= 1) return true;
+      return false;
+    } catch (_) {
+      return false;
+    }
+  }
+
   /// Returns firmware warning title for this device type
   /// Empty string means no warning needed
   String getFirmwareWarningTitle() {
     switch (type) {
       case DeviceType.plaud:
-      case DeviceType.bee:
       case DeviceType.fieldy:
       case DeviceType.friendPendant:
       case DeviceType.limitless:
         return 'Compatibility Note';
+      case DeviceType.bee:
+        return isBeeFirmwareUnsupported ? 'Firmware Not Supported' : 'Compatibility Note';
       case DeviceType.omi:
       case DeviceType.openglass:
       case DeviceType.frame:
@@ -637,6 +663,11 @@ class BtDevice {
             'We recommend keeping your current firmware and not updating through the PLAUD app, as newer versions may affect compatibility.';
 
       case DeviceType.bee:
+        if (isBeeFirmwareUnsupported) {
+          return 'Your $name is running firmware v$firmwareRevision which uses encrypted audio that Omi cannot process.\n\n'
+              'Please downgrade your Bee firmware to a version below 0.6.1 for compatibility with Omi.\n\n'
+              'Audio capture will not work with the current firmware.';
+        }
         return 'Your $name\'s current firmware works great with Omi.\n\n'
             'We recommend keeping your current firmware and not updating through the Bee app, as newer versions may affect compatibility.\n\n'
             'For the best experience, please keep your current firmware version.';

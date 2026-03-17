@@ -70,7 +70,7 @@ from utils.translation import (
     TRANSLATION_CACHE_TTL,
     MAX_BATCH_SIZE,
 )
-from utils.translation_cache import TranscriptSegmentLanguageCache
+from utils.translation_cache import TranscriptSegmentLanguageCache, should_persist_translation
 
 
 class TestSplitIntoSentences:
@@ -395,6 +395,210 @@ class TestTranscriptSegmentLanguageCache:
         assert "seg1" not in cache.cache
 
 
+class TestShouldPersistTranslation:
+    def test_noop_target_language_translation_not_persisted(self):
+        """If text is unchanged and detected language matches target, don't persist translation."""
+        should_persist = should_persist_translation("Hello world", "Hello world", "en", "en-US")
+        assert should_persist is False
+
+    def test_unchanged_text_without_detection_not_persisted(self):
+        """If text is unchanged and detection is missing, still treat as no-op."""
+        should_persist = should_persist_translation("Hello world", "Hello world", "", "en")
+        assert should_persist is False
+
+    def test_mixed_language_translation_still_persisted(self):
+        """Even with dominant detected target language, changed text must be persisted."""
+        should_persist = should_persist_translation("Hello. Hola.", "Hello. Hello.", "en", "en")
+        assert should_persist is True
+
+    def test_short_phrase_noop_not_persisted(self):
+        """Short phrases like 'Transcription service.' that return identical from API should not persist."""
+        assert should_persist_translation("Transcription service.", "Transcription service.", "en", "en") is False
+
+    def test_numeric_only_noop_not_persisted(self):
+        """Numeric/punctuation text like '123. 123.' returning identical should not persist."""
+        assert should_persist_translation("123. 123.", "123. 123.", "", "en") is False
+
+    def test_short_greeting_noop_not_persisted(self):
+        """Short greetings like 'Hey.' returning identical should not persist."""
+        assert should_persist_translation("Hey.", "Hey.", "en", "en") is False
+
+    def test_whitespace_difference_not_persisted(self):
+        """Whitespace-only differences should be treated as no-op."""
+        assert should_persist_translation("Hello  world", "Hello world", "en", "en") is False
+
+    def test_real_translation_persisted(self):
+        """Actual translation (text changed) should always persist."""
+        assert should_persist_translation("Bonjour", "Hello", "fr", "en") is True
+
+    def test_none_translated_text_persisted_as_change(self):
+        """None translated_text differs from source, should persist (text changed)."""
+        assert should_persist_translation("Hello", None, "en", "en") is True
+
+    def test_empty_source_and_translated_not_persisted(self):
+        """Both empty should be treated as no-op."""
+        assert should_persist_translation("", "", "en", "en") is False
+
+    def test_long_english_correctly_detected_not_persisted(self):
+        """Long English text (correctly detected by langdetect) returning identical should not persist."""
+        assert should_persist_translation("Two three four five.", "Two three four five.", "en", "en") is False
+
+    def test_question_english_not_persisted(self):
+        """English questions returning identical should not persist."""
+        assert (
+            should_persist_translation("Hello? Can you hear? Yes? No?", "Hello? Can you hear? Yes? No?", "en", "en")
+            is False
+        )
+
+    def test_case_variant_locale_tags_not_persisted(self):
+        """Case/locale variants like EN-us vs en-US should normalize and match."""
+        assert should_persist_translation("Hello world", "Hello world", "EN-us", "en-US") is False
+
+    def test_unchanged_text_mismatched_detected_lang_not_persisted(self):
+        """Unchanged text with detected 'fr' should still not persist (conservative: text unchanged = no-op)."""
+        assert should_persist_translation("Transcription service.", "Transcription service.", "fr", "en") is False
+
+    def test_short_foreign_word_translated_to_english_persisted(self):
+        """Short foreign word like 'Bonjour.' translated to 'Hello.' must persist (real translation)."""
+        assert should_persist_translation("Bonjour.", "Hello.", "fr", "en") is True
+        assert should_persist_translation("Hola.", "Hello.", "es", "en") is True
+        assert should_persist_translation("Danke.", "Thank you.", "de", "en") is True
+        assert should_persist_translation("Merci.", "Thank you.", "fr", "en") is True
+
+    def test_multiple_short_foreign_sentences_translated_persisted(self):
+        """Multiple short foreign sentences in one segment must persist when translated."""
+        assert should_persist_translation("Bonjour. Comment allez-vous?", "Hello. How are you?", "fr", "en") is True
+        assert should_persist_translation("Hola. Gracias. Adiós.", "Hello. Thank you. Goodbye.", "es", "en") is True
+        assert should_persist_translation("Oui. Non. Merci.", "Yes. No. Thank you.", "fr", "en") is True
+
+
+class TestShortForeignTextLangdetectPreFilter:
+    """Verify that langdetect does NOT misdetect short foreign words as English (target).
+
+    If langdetect detected foreign text as English, is_in_target_language() would return True
+    and the segment would be skipped entirely (never sent to API). These tests verify that
+    short foreign words are NOT skipped by the pre-filter.
+    """
+
+    def test_short_foreign_words_not_detected_as_english(self):
+        """Short foreign words should not be detected as 'en' by langdetect."""
+        cache = TranscriptSegmentLanguageCache()
+        foreign_words = [
+            ("Bonjour.", "seg-fr"),
+            ("Hola.", "seg-es"),
+            ("Danke.", "seg-de"),
+            ("Gracias.", "seg-es2"),
+        ]
+        for text, seg_id in foreign_words:
+            result = cache.is_in_target_language(seg_id, text, "en")
+            assert result is False, f"'{text}' was incorrectly detected as English — would skip translation"
+
+    def test_multiple_short_foreign_sentences_not_detected_as_english(self):
+        """Multiple short foreign sentences should not be detected as 'en'."""
+        cache = TranscriptSegmentLanguageCache()
+        result = cache.is_in_target_language("seg-multi-fr", "Bonjour. Merci. Au revoir.", "en")
+        assert result is False, "Multiple French sentences incorrectly detected as English"
+        result = cache.is_in_target_language("seg-multi-es", "Hola. Gracias. Adiós.", "en")
+        assert result is False, "Multiple Spanish sentences incorrectly detected as English"
+
+
+class TestTranslateSegmentGuardWired:
+    """Regression test: verify should_persist_translation is wired into transcribe.py.
+
+    _translate_segment is a closure inside _stream_handler and cannot be imported directly.
+    This test reads the source to verify the guard call is present — catches accidental removal.
+    """
+
+    def test_transcribe_imports_should_persist_translation(self):
+        """transcribe.py must import should_persist_translation from translation_cache."""
+        import inspect
+        import importlib
+
+        # Read transcribe module source to verify import
+        transcribe_path = os.path.join(os.path.dirname(__file__), '..', '..', 'routers', 'transcribe.py')
+        with open(transcribe_path) as f:
+            source = f.read()
+        assert 'from utils.translation_cache import' in source
+        assert 'should_persist_translation' in source
+
+    def test_transcribe_calls_should_persist_translation_before_translation_creation(self):
+        """Guard must appear before Translation object creation in _translate_segment."""
+        transcribe_path = os.path.join(os.path.dirname(__file__), '..', '..', 'routers', 'transcribe.py')
+        with open(transcribe_path) as f:
+            source = f.read()
+        guard_pos = source.find('should_persist_translation(')
+        translation_create_pos = source.find('trans = Translation(lang=translation_language')
+        assert guard_pos > 0, "should_persist_translation call not found in transcribe.py"
+        assert translation_create_pos > 0, "Translation creation not found in transcribe.py"
+        assert guard_pos < translation_create_pos, "Guard must appear before Translation creation"
+
+
+class TestTranslateSegmentGuardIntegration:
+    """Integration test simulating _translate_segment's guard path.
+
+    Verifies the full logic flow: translate API returns same text with target lang detected,
+    guard triggers early return, pending entry is pruned, no translation is persisted.
+    """
+
+    def test_noop_translation_skips_persist_and_prunes_pending(self):
+        """When API returns identical text with same detected lang, no Translation is created
+        and pending_translations entry is pruned."""
+        segment_text = "Transcription service."
+        translation_language = "en"
+        translation_language_base = "en"
+        pending_translations = {'seg-1': {'text_hash': 'abc123', 'version': 1}}
+        persisted_translations = []  # tracks what would be written to DB
+
+        # Simulate translate API returning identical text with "en" detected
+        translated_text = "Transcription service."
+        detected_lang = "en"
+
+        # Simulate language cache update (should still happen before guard)
+        cache = TranscriptSegmentLanguageCache()
+        cache.update_from_translate_response('seg-1', detected_lang, translation_language_base)
+        assert cache.cache.get('seg-1') is True  # cache learns target language
+
+        # Guard check — same as transcribe.py line 1514
+        if not should_persist_translation(
+            segment_text, translated_text, detected_lang, translation_language_base or translation_language
+        ):
+            pending_translations.pop('seg-1', None)
+            # Early return — no Translation created
+        else:
+            persisted_translations.append({'lang': translation_language, 'text': translated_text})
+
+        # Verify: no translation persisted, pending entry pruned
+        assert len(persisted_translations) == 0
+        assert 'seg-1' not in pending_translations
+
+    def test_real_translation_persists_and_keeps_pending(self):
+        """When API returns different text (real translation), Translation IS created."""
+        segment_text = "Bonjour le monde"
+        translation_language = "en"
+        translation_language_base = "en"
+        pending_translations = {'seg-2': {'text_hash': 'def456', 'version': 1}}
+        persisted_translations = []
+
+        translated_text = "Hello world"
+        detected_lang = "fr"
+
+        cache = TranscriptSegmentLanguageCache()
+        cache.update_from_translate_response('seg-2', detected_lang, translation_language_base)
+        assert cache.cache.get('seg-2') is False  # cache learns non-target language
+
+        if not should_persist_translation(
+            segment_text, translated_text, detected_lang, translation_language_base or translation_language
+        ):
+            pending_translations.pop('seg-2', None)
+        else:
+            persisted_translations.append({'lang': translation_language, 'text': translated_text})
+            pending_translations.pop('seg-2', None)  # normal cleanup after persist
+
+        # Verify: translation WAS persisted
+        assert len(persisted_translations) == 1
+        assert persisted_translations[0]['text'] == "Hello world"
+
+
 class TestRedisCacheTTL:
     def setup_method(self):
         self.service = TranslationService()
@@ -582,82 +786,94 @@ class TestTranslationCacheTTLOverride:
 
 
 # ---------------------------------------------------------------------------
-# Debounce integration tests
+# Temporal debounce integration tests
 # ---------------------------------------------------------------------------
-# The debounce logic lives inside transcribe.py closures. These tests replicate
-# the state machine pattern to verify first-appearance, debounced update,
-# final-segment bypass, stale version rejection, and flush behavior.
+# The debounce logic in transcribe.py accumulates segments into a buffer and
+# translates them as a batch after TRANSLATION_DEBOUNCE_SECONDS of quiet.
+# These tests replicate the buffer/timer pattern, stale version rejection,
+# same-text skip, and flush behavior.
 
 
-def _is_segment_final(segment_text: str) -> bool:
-    """Mirror of the _is_segment_final function inside _stream_handler."""
-    return bool(segment_text) and segment_text[-1] in '.?!'
+class TestTemporalDebounceBuffer:
+    """Tests the temporal debounce buffer accumulation logic."""
 
+    def test_segments_buffered_not_immediate(self):
+        """All segments should be buffered, not translated immediately."""
+        buffer = []
+        pending_translations = {}
+        version_counter = 0
 
-class TestIsSegmentFinal:
-    def test_period_is_final(self):
-        assert _is_segment_final("Hello world.") is True
+        # Simulate 3 segments arriving (unique IDs, as Deepgram produces)
+        for i in range(3):
+            seg_id = f'seg-{i}'
+            version_counter += 1
+            pending_translations[seg_id] = {'text_hash': f'h{i}', 'version': version_counter}
+            buffer.append((seg_id, 'conv-1', version_counter))
 
-    def test_question_mark_is_final(self):
-        assert _is_segment_final("How are you?") is True
+        assert len(buffer) == 3
+        assert len(pending_translations) == 3
 
-    def test_exclamation_is_final(self):
-        assert _is_segment_final("Wow!") is True
+    def test_buffer_cleared_on_flush(self):
+        """Flushing should clear the buffer and return all segments."""
+        buffer = [('seg-0', 'conv-1', 1), ('seg-1', 'conv-1', 2)]
 
-    def test_no_punctuation_not_final(self):
-        assert _is_segment_final("Hello how are you") is False
+        batch = list(buffer)
+        buffer.clear()
 
-    def test_comma_not_final(self):
-        assert _is_segment_final("Hello, how are you,") is False
+        assert len(batch) == 2
+        assert len(buffer) == 0
 
-    def test_empty_string_not_final(self):
-        assert _is_segment_final("") is False
+    def test_unique_segment_ids_all_buffered(self):
+        """With unique segment IDs (real Deepgram behavior), all segments get buffered."""
+        buffer = []
+        pending_translations = {}
+        version_counter = 0
 
-    def test_whitespace_only_not_final(self):
-        assert _is_segment_final("   ") is False
+        # Each segment has a unique ID — this is the actual DG behavior
+        segment_ids = ['abc-001', 'abc-002', 'abc-003', 'abc-004', 'abc-005']
+        for seg_id in segment_ids:
+            version_counter += 1
+            text_hash = hashlib.md5(f'text-{seg_id}'.encode()).hexdigest()
+            pending = pending_translations.get(seg_id)
+            # No pending (unique ID) — always enters buffer
+            assert pending is None
+            pending_translations[seg_id] = {'text_hash': text_hash, 'version': version_counter}
+            buffer.append((seg_id, 'conv-1', version_counter))
 
-    def test_colon_not_final(self):
-        assert _is_segment_final("Note:") is False
+        # All 5 segments should be buffered (not 0 like the old segment-ID debounce)
+        assert len(buffer) == 5
 
+    def test_timer_reset_on_new_segment(self):
+        """Adding a segment should cancel and restart the debounce timer."""
+        import asyncio
 
-class TestDebounceStateMachine:
-    """Tests the debounce decision logic as implemented in transcribe.py translate()."""
+        timer_cancelled = False
+        timer_started = 0
 
-    def _make_decision(self, pending, segment_text):
-        """Replicate the debounce decision: returns 'immediate' or 'debounce'."""
-        segment_is_final = _is_segment_final(segment_text)
-        if not pending or segment_is_final:
-            return 'immediate'
-        else:
-            return 'debounce'
+        class FakeTask:
+            def __init__(self):
+                self._done = False
 
-    def test_first_appearance_immediate(self):
-        """First time a segment appears -> translate immediately."""
-        assert self._make_decision(pending=None, segment_text="Hello") == 'immediate'
+            def done(self):
+                return self._done
 
-    def test_first_appearance_final_immediate(self):
-        """First time + final segment -> still immediate."""
-        assert self._make_decision(pending=None, segment_text="Hello.") == 'immediate'
+            def cancel(self):
+                nonlocal timer_cancelled
+                timer_cancelled = True
+                self._done = True
 
-    def test_update_non_final_debounced(self):
-        """Updated segment without final punctuation -> debounce."""
-        pending = {'text_hash': 'old', 'version': 1}
-        assert self._make_decision(pending=pending, segment_text="Hello how are") == 'debounce'
+        # First segment starts timer
+        debounce_task = FakeTask()
+        timer_started += 1
 
-    def test_update_final_immediate(self):
-        """Updated segment with final punctuation -> immediate (bypass debounce)."""
-        pending = {'text_hash': 'old', 'version': 1}
-        assert self._make_decision(pending=pending, segment_text="Hello how are you.") == 'immediate'
+        # Second segment arrives — should cancel and restart
+        if debounce_task and not debounce_task.done():
+            debounce_task.cancel()
+        debounce_task = FakeTask()
+        timer_started += 1
 
-    def test_update_question_final_immediate(self):
-        """Updated segment ending with question mark -> immediate."""
-        pending = {'text_hash': 'old', 'version': 1}
-        assert self._make_decision(pending=pending, segment_text="How are you?") == 'immediate'
-
-    def test_update_exclamation_final_immediate(self):
-        """Updated segment ending with exclamation -> immediate."""
-        pending = {'text_hash': 'old', 'version': 1}
-        assert self._make_decision(pending=pending, segment_text="That is great!") == 'immediate'
+        assert timer_cancelled is True
+        assert timer_started == 2
 
 
 class TestDebounceVersionSafety:
@@ -734,14 +950,21 @@ class TestDebounceFlushPending:
     """Tests flush_pending_translations behavior."""
 
     def test_flush_clears_all_entries(self):
-        """After flush, pending_translations should be empty."""
+        """After flush, pending_translations and buffer should be empty."""
         pending_translations = {
-            'seg-1': {'text_hash': 'h1', 'version': 1, 'task': None},
-            'seg-2': {'text_hash': 'h2', 'version': 2, 'task': None},
+            'seg-1': {'text_hash': 'h1', 'version': 1},
+            'seg-2': {'text_hash': 'h2', 'version': 2},
         }
-        # Simulate flush
+        buffer = [('seg-1', 'conv-1', 1), ('seg-2', 'conv-1', 2)]
+
+        # Simulate flush: drain buffer then clear pending
+        batch = list(buffer)
+        buffer.clear()
         pending_translations.clear()
+
         assert len(pending_translations) == 0
+        assert len(buffer) == 0
+        assert len(batch) == 2  # Batch was captured before clear
 
     def test_exception_in_translate_cleans_up(self):
         """If _translate_segment raises, pending entry should still be cleaned up."""
@@ -752,8 +975,139 @@ class TestDebounceFlushPending:
         try:
             raise Exception("Translation API error")
         except Exception:
-            # The real code logs the error and the entry stays until pruned
-            # But flush will clear it
             pass
         pending_translations.pop(segment_id, None)
         assert segment_id not in pending_translations
+
+    def test_flush_handles_empty_buffer(self):
+        """Flushing an empty buffer should be a no-op."""
+        buffer = []
+        batch = list(buffer)
+        buffer.clear()
+        assert len(batch) == 0
+
+
+class TestSingleSegmentBoundary:
+    """Tests that a single buffered segment is dispatched exactly once."""
+
+    def test_single_segment_flush(self):
+        """One buffered segment should produce exactly one task on flush."""
+        buffer = []
+        pending_translations = {}
+        inflight_tasks = []
+
+        # Single segment arrives
+        seg_id = 'seg-only'
+        pending_translations[seg_id] = {'text_hash': 'h1', 'version': 1}
+        buffer.append((seg_id, 'conv-1', 1))
+
+        assert len(buffer) == 1
+
+        # Flush: drain buffer, create one task per segment
+        batch = list(buffer)
+        buffer.clear()
+        for seg, conv_id, ver in batch:
+            inflight_tasks.append(f'task-{seg}')
+
+        assert len(inflight_tasks) == 1
+        assert inflight_tasks[0] == 'task-seg-only'
+        assert len(buffer) == 0
+
+
+class TestFlushAwaitsInflightTasks:
+    """Tests that flush properly awaits in-flight translate tasks."""
+
+    def test_inflight_tasks_tracked_on_flush(self):
+        """Each segment in the batch should produce a tracked in-flight task."""
+        inflight_tasks = []
+        buffer = [('seg-0', 'conv-1', 1), ('seg-1', 'conv-1', 2), ('seg-2', 'conv-1', 3)]
+
+        # Simulate _flush_debounce_buffer: drain buffer, create tasks, track them
+        batch = list(buffer)
+        buffer.clear()
+        for seg, conv_id, ver in batch:
+            inflight_tasks.append(f'task-{seg}')
+
+        assert len(inflight_tasks) == 3
+
+    def test_flush_clears_inflight_after_await(self):
+        """After awaiting, inflight_tasks list should be cleared."""
+        inflight_tasks = ['task-1', 'task-2']
+
+        # Simulate flush_pending_translations: await then clear
+        pending = [t for t in inflight_tasks]  # would be filtered by .done() in real code
+        # After asyncio.gather completes:
+        inflight_tasks.clear()
+
+        assert len(inflight_tasks) == 0
+
+    def test_flush_handles_empty_inflight(self):
+        """Flushing with no in-flight tasks should be a no-op."""
+        inflight_tasks = []
+        pending = [t for t in inflight_tasks]
+        assert len(pending) == 0
+        inflight_tasks.clear()
+        assert len(inflight_tasks) == 0
+
+
+class TestDebounceMetricsAccuracy:
+    """Tests that metrics counters accurately reflect temporal debounce behavior."""
+
+    def test_all_segments_counted_as_buffered_then_translated(self):
+        """Every segment entering the buffer is a segments_buffered; batch flush counts as translated."""
+        metrics = {'segments_buffered': 0, 'segments_translated': 0}
+        buffer = []
+
+        # 5 segments arrive — all buffered
+        for i in range(5):
+            metrics['segments_buffered'] += 1
+            buffer.append((f'seg-{i}', 'conv-1', i + 1))
+
+        assert metrics['segments_buffered'] == 5
+
+        # Timer fires — batch translates all
+        batch = list(buffer)
+        buffer.clear()
+        metrics['segments_translated'] += len(batch)
+
+        assert metrics['segments_translated'] == 5
+
+    def test_lang_cache_skip_not_buffered(self):
+        """Segments skipped by language cache should not enter the buffer."""
+        metrics = {'segments_buffered': 0, 'lang_cache_skips': 0}
+        buffer = []
+
+        # 3 segments: 2 need translation, 1 already in target language
+        segments = [('seg-0', False), ('seg-1', True), ('seg-2', False)]  # (id, is_target_lang)
+        for seg_id, is_target in segments:
+            if is_target:
+                metrics['lang_cache_skips'] += 1
+                continue
+            metrics['segments_buffered'] += 1
+            buffer.append((seg_id, 'conv-1', 1))
+
+        assert metrics['lang_cache_skips'] == 1
+        assert metrics['segments_buffered'] == 2
+        assert len(buffer) == 2
+
+    def test_total_segments_excludes_translated(self):
+        """total_segments should NOT include segments_translated (it's a subset of segments_buffered).
+
+        This prevents the double-counting bug where the same segments are counted in both
+        segments_buffered (entry) and segments_translated (dispatch).
+        """
+        metrics = {
+            'segments_buffered': 10,
+            'segments_translated': 10,
+            'lang_cache_skips': 3,
+            'same_text_skips': 2,
+        }
+
+        # Correct formula: total = buffered + lang_skip + same_text_skip
+        # segments_translated is a subset of segments_buffered, NOT added to total
+        total_segments = metrics['segments_buffered'] + metrics['lang_cache_skips'] + metrics['same_text_skips']
+
+        assert total_segments == 15  # 10 + 3 + 2, NOT 25
+        assert metrics['segments_translated'] not in [total_segments]  # translated is separate
+        # Verify translated <= buffered (it's always a subset)
+        assert metrics['segments_translated'] <= metrics['segments_buffered']

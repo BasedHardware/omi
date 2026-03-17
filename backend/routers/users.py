@@ -48,6 +48,7 @@ from datetime import datetime, time, timedelta
 from models.users import WebhookType, UserSubscriptionResponse, SubscriptionPlan, PlanType, PricingOption
 from utils.apps import get_available_app_by_id
 from utils.subscription import (
+    get_paid_plan_definitions,
     get_plan_limits,
     get_plan_features,
     get_monthly_usage_for_subscription,
@@ -498,6 +499,7 @@ def set_user_language(data: dict, uid: str = Depends(auth.get_current_user_uid))
 class TranscriptionPreferencesResponse(BaseModel):
     single_language_mode: bool = False
     vocabulary: List[str] = []
+    language: str = ''
 
 
 class TranscriptionPreferencesUpdate(BaseModel):
@@ -768,62 +770,58 @@ def get_user_subscription_endpoint(uid: str = Depends(auth.get_current_user_uid)
 
     # Build available plans for upgrading
     available_plans: List[SubscriptionPlan] = []
-    monthly_price_id = os.getenv('STRIPE_UNLIMITED_MONTHLY_PRICE_ID')
-    annual_price_id = os.getenv('STRIPE_UNLIMITED_ANNUAL_PRICE_ID')
+    for definition in get_paid_plan_definitions():
+        plan_prices: List[PricingOption] = []
+        monthly_price_id = definition["monthly_price_id"]
+        annual_price_id = definition["annual_price_id"]
 
-    unlimited_plan_prices: List[PricingOption] = []
-    if monthly_price_id:
-        try:
-            price_data = get_generic_cache(f'stripe_price:{monthly_price_id}')
-            if not price_data:
-                price = stripe_utils.stripe.Price.retrieve(monthly_price_id)
-                price_data = price.to_dict_recursive()
-                set_generic_cache(f'stripe_price:{monthly_price_id}', price_data, ttl=3600 * 24)  # 24 hours
+        if monthly_price_id:
+            try:
+                price_data = get_generic_cache(f'stripe_price:{monthly_price_id}')
+                if not price_data:
+                    price = stripe_utils.stripe.Price.retrieve(monthly_price_id)
+                    price_data = price.to_dict_recursive()
+                    set_generic_cache(f'stripe_price:{monthly_price_id}', price_data, ttl=3600 * 24)
 
-            unlimited_plan_prices.append(
-                PricingOption(
-                    id=price_data['id'],
-                    title="Monthly",
-                    price_string=f"${price_data['unit_amount'] / 100:.2f}/{price_data['recurring']['interval']}",
-                    description="Billed monthly. Cancel anytime.",
+                plan_prices.append(
+                    PricingOption(
+                        id=price_data['id'],
+                        title="Monthly",
+                        price_string=f"${price_data['unit_amount'] / 100:.2f}/{price_data['recurring']['interval']}",
+                        description="Billed monthly. Cancel anytime.",
+                    )
+                )
+            except Exception as e:
+                logger.error(f"Error retrieving monthly price from Stripe for {definition['plan_id']}: {e}")
+
+        if annual_price_id:
+            try:
+                price_data = get_generic_cache(f'stripe_price:{annual_price_id}')
+                if not price_data:
+                    price = stripe_utils.stripe.Price.retrieve(annual_price_id)
+                    price_data = price.to_dict_recursive()
+                    set_generic_cache(f'stripe_price:{annual_price_id}', price_data, ttl=3600 * 24)
+
+                plan_prices.append(
+                    PricingOption(
+                        id=price_data['id'],
+                        title="Annual",
+                        price_string=f"${price_data['unit_amount'] / 100:.2f}/{price_data['recurring']['interval']}",
+                        description=definition["annual_description"],
+                    )
+                )
+            except Exception as e:
+                logger.error(f"Error retrieving annual price from Stripe for {definition['plan_id']}: {e}")
+
+        if plan_prices:
+            available_plans.append(
+                SubscriptionPlan(
+                    id=definition["plan_id"],
+                    title=definition["title"],
+                    features=get_plan_features(definition["plan_type"]),
+                    prices=plan_prices,
                 )
             )
-        except Exception as e:
-            logger.error(f"Error retrieving monthly price from Stripe: {e}")
-
-    if annual_price_id:
-        try:
-            price_data = get_generic_cache(f'stripe_price:{annual_price_id}')
-            if not price_data:
-                price = stripe_utils.stripe.Price.retrieve(annual_price_id)
-                price_data = price.to_dict_recursive()
-                set_generic_cache(f'stripe_price:{annual_price_id}', price_data, ttl=3600 * 24)  # 24 hours
-
-            unlimited_plan_prices.append(
-                PricingOption(
-                    id=price_data['id'],
-                    title="Annual",
-                    price_string=f"${price_data['unit_amount'] / 100:.2f}/{price_data['recurring']['interval']}",
-                    description="Save 20% with annual billing.",
-                )
-            )
-        except Exception as e:
-            logger.error(f"Error retrieving annual price from Stripe: {e}")
-
-    if unlimited_plan_prices:
-        available_plans.append(
-            SubscriptionPlan(
-                id="unlimited",
-                title="Unlimited",
-                features=[
-                    "Unlimited listening time",
-                    "Unlimited words transcribed",
-                    "Unlimited insights",
-                    "Unlimited memories",
-                ],
-                prices=unlimited_plan_prices,
-            )
-        )
 
     return UserSubscriptionResponse(
         subscription=subscription,
@@ -936,24 +934,20 @@ def test_daily_summary(request: TestDailySummaryRequest = None, uid: str = Depen
                 start_of_day = user_tz.localize(datetime.combine(target_date, time.min))
                 end_of_day = user_tz.localize(datetime.combine(target_date, time.max))
             else:
-                # Use past 24 hours
+                # Use local day boundaries (midnight-to-midnight)
                 now_in_user_tz = datetime.now(user_tz)
-                end_date_utc = now_in_user_tz.astimezone(pytz.utc)
-                start_date_utc = (now_in_user_tz - timedelta(hours=24)).astimezone(pytz.utc)
 
-                # Determine display date based on current hour
+                # Determine which calendar day to summarize
                 if now_in_user_tz.hour < 12:
                     display_date = now_in_user_tz.date() - timedelta(days=1)
                 else:
                     display_date = now_in_user_tz.date()
                 date_str = display_date.strftime('%Y-%m-%d')
-                # Skip the conversion below since we already have UTC times
-                start_of_day = None
-                end_of_day = None
+                start_of_day = user_tz.localize(datetime.combine(display_date, time.min))
+                end_of_day = user_tz.localize(datetime.combine(display_date, time.max))
 
-            if start_of_day and end_of_day:
-                start_date_utc = start_of_day.astimezone(pytz.utc)
-                end_date_utc = end_of_day.astimezone(pytz.utc)
+            start_date_utc = start_of_day.astimezone(pytz.utc)
+            end_date_utc = end_of_day.astimezone(pytz.utc)
         except Exception as e:
             raise HTTPException(status_code=500, detail=f'Timezone error: {str(e)}')
     else:
@@ -963,16 +957,14 @@ def test_daily_summary(request: TestDailySummaryRequest = None, uid: str = Depen
             start_date_utc = datetime.combine(target_date, time.min).replace(tzinfo=pytz.utc)
             end_date_utc = datetime.combine(target_date, time.max).replace(tzinfo=pytz.utc)
         else:
-            # Use past 24 hours
-            end_date_utc = now_utc
-            start_date_utc = now_utc - timedelta(hours=24)
-
-            # Determine display date based on current hour
+            # Use UTC day boundaries
             if now_utc.hour < 12:
                 display_date = now_utc.date() - timedelta(days=1)
             else:
                 display_date = now_utc.date()
             date_str = display_date.strftime('%Y-%m-%d')
+            start_date_utc = datetime.combine(display_date, time.min).replace(tzinfo=pytz.utc)
+            end_date_utc = datetime.combine(display_date, time.max).replace(tzinfo=pytz.utc)
 
     # Get conversations for the date
     conversations_data = conversations_db.get_conversations(uid, start_date=start_date_utc, end_date=end_date_utc)

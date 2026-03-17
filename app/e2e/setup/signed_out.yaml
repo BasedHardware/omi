@@ -1,0 +1,21 @@
+# Setup Flow: signed_out — Reset app to fresh unauthenticated state
+# Automatically run by flow-walker when a flow's signed_out prerequisite is not met.
+# Clears app data and restarts — user will see Get Started screen.
+
+name: setup-signed-out
+description: Clear app data and restart to Get Started screen
+
+steps:
+  - name: Clear app data
+    adb: "shell pm clear com.friend.ios.dev"
+    wait: 2
+
+  - name: Launch app
+    adb: "shell monkey -p com.friend.ios.dev -c android.intent.category.LAUNCHER 1"
+    wait: 4
+    screenshot: fresh-launch
+
+  - name: Verify Get Started screen
+    assert:
+      text_visible: ["Get Started"]
+    screenshot: get-started

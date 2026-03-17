@@ -1,0 +1,65 @@
+# E2E Flow: Logout — sign out from authenticated state
+# Tests: Settings drawer → Sign Out → confirmation dialog → returns to auth screen
+
+version: 2
+name: logout
+description: Sign out from an authenticated session via Settings drawer
+app: com.friend.ios.dev
+evidence:
+  video: true
+covers:
+  - app/lib/pages/settings/settings_drawer.dart
+  - app/lib/widgets/dialog.dart
+  - app/lib/services/auth_service.dart
+preconditions:
+  - App must be authenticated and on home screen (signed_in state)
+
+steps:
+  - id: S1
+    name: Verify home screen authenticated
+    do: "Take screenshot and verify home screen is showing with bottom nav bar (4+ interactive widgets)"
+    verify: true
+    expect:
+      - kind: interactive_count
+        min: 4
+    evidence:
+      - screenshot: step-S1.webp
+
+  - id: S2
+    name: Open settings drawer
+    do: "Tap the settings gear icon (rightmost IconButton in top bar)"
+    expect:
+      - kind: text_visible
+        values: ["Settings"]
+    evidence:
+      - screenshot: step-S2.webp
+
+  - id: S3
+    name: Scroll to Sign Out
+    do: "Scroll down in the settings drawer until Sign Out is visible at the bottom"
+    verify: true
+    expect:
+      - kind: text_visible
+        values: ["Sign Out"]
+    evidence:
+      - screenshot: step-S3.webp
+
+  - id: S4
+    name: Tap Sign Out
+    do: "Tap the Sign Out menu item"
+    expect:
+      - kind: text_visible
+        values: ["Sign Out?", "Are you sure you want to sign out?"]
+    evidence:
+      - screenshot: step-S4.webp
+
+  - id: S5
+    name: Confirm sign out
+    do: "Tap Ok on the confirmation dialog"
+    verify: true
+    expect:
+      - kind: text_visible
+        values: ["Get Started"]
+    evidence:
+      - screenshot: step-S5.webp
+    note: "After sign out, app returns to onboarding Get Started screen"

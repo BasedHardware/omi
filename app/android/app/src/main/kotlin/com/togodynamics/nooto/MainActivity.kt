@@ -1,6 +1,7 @@
 package com.togodynamics.nooto
 
 import android.content.Intent
+import android.os.Bundle
 import androidx.annotation.NonNull
 import android.Manifest
 import android.content.pm.PackageManager
@@ -19,6 +20,9 @@ class MainActivity: FlutterActivity() {
 
         // Register WiFi Network Plugin
         WifiNetworkPlugin.registerWith(flutterEngine, this)
+
+        // Register Phone Calls Plugin
+        PhoneCallsPlugin.registerWith(flutterEngine, this)
 
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL).setMethodCallHandler {
             call, result ->

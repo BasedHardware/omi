@@ -173,12 +173,14 @@ async def _get_live_desktop_releases(platform: str) -> List[Dict]:
         if channel not in VALID_CHANNELS:
             channel = "beta"
 
-        desktop_releases.append({
-            "release": release,
-            "version_info": version_info,
-            "metadata": kv,
-            "channel": channel,
-        })
+        desktop_releases.append(
+            {
+                "release": release,
+                "version_info": version_info,
+                "metadata": kv,
+                "channel": channel,
+            }
+        )
 
     desktop_releases.sort(key=lambda x: x["release"].get("published_at", ""), reverse=True)
     return desktop_releases
@@ -297,17 +299,19 @@ async def get_desktop_appcast_xml(platform: str = Query(default="macos", pattern
                 seen_channels.discard(channel)
                 continue
 
-            items.append({
-                "version": version_info["version"],
-                "shortVersion": version_info["build"],
-                "changes": changes,
-                "date": release.get("published_at"),
-                "mandatory": mandatory,
-                "url": download_url,
-                "platform": platform,
-                "edSignature": ed_signature,
-                "channel": channel,
-            })
+            items.append(
+                {
+                    "version": version_info["version"],
+                    "shortVersion": version_info["build"],
+                    "changes": changes,
+                    "date": release.get("published_at"),
+                    "mandatory": mandatory,
+                    "url": download_url,
+                    "platform": platform,
+                    "edSignature": ed_signature,
+                    "channel": channel,
+                }
+            )
 
         xml_content = _generate_appcast_xml(items, platform)
 
@@ -329,12 +333,22 @@ async def download_latest_desktop_release(
 ):
     """
     Redirect to the latest desktop release DMG installer.
-    Resolves from GitHub release assets filtered by channel.
+    Stable resolves from the latest stable-tagged release.
+    Beta always resolves from the newest desktop GitHub release, regardless of channel metadata.
     Defaults to stable channel (for macos.omi.me). Use channel=beta for QA.
     """
     desktop_releases = await _get_live_desktop_releases(platform)
     if not desktop_releases:
         raise HTTPException(status_code=404, detail=f"No live desktop releases found for platform: {platform}")
+
+    if channel == "beta":
+        # Beta downloads should always expose the newest GitHub desktop build,
+        # even if the release-channel promotion metadata is stale.
+        for entry in desktop_releases:
+            dmg_url = _get_dmg_download_url(entry["release"])
+            if dmg_url:
+                return RedirectResponse(url=dmg_url, status_code=302)
+        raise HTTPException(status_code=404, detail="No DMG installer found for latest beta release")
 
     # Find latest release matching the requested channel
     for entry in desktop_releases:
@@ -352,6 +366,17 @@ async def download_latest_desktop_release(
                 return RedirectResponse(url=dmg_url, status_code=302)
 
     raise HTTPException(status_code=404, detail=f"No DMG installer found for channel: {channel}")
+
+
+@router.get("/v2/desktop/download/beta")
+async def download_beta_desktop_release(
+    platform: str = Query(default="macos", pattern="^(macos|windows|linux)$"),
+):
+    """
+    Redirect to the latest beta desktop release DMG installer.
+    Convenience endpoint for macos.omi.me/beta (URL map can't add query params).
+    """
+    return await download_latest_desktop_release(platform=platform, channel="beta")
 
 
 @router.post("/v2/desktop/clear-cache")

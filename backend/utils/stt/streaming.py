@@ -316,6 +316,7 @@ async def process_audio_dg(
     model: str = 'nova-2-general',
     keywords: List[str] = [],
     vad_gate=None,
+    is_active: Optional[Callable[[], bool]] = None,
 ):
     """Create a Deepgram streaming connection.
 
@@ -383,9 +384,12 @@ async def process_audio_dg(
         logger.error(f"Error: {error}")
 
     logger.info("Connecting to Deepgram")  # Log before connection attempt
-    dg_connection = connect_to_deepgram_with_backoff(
-        on_message, on_error, language, sample_rate, channels, model, keywords
+    dg_connection = await connect_to_deepgram_with_backoff(
+        on_message, on_error, language, sample_rate, channels, model, keywords, is_active=is_active
     )
+
+    if dg_connection is None:
+        return None
 
     # Wrap with VAD gate if provided
     if vad_gate is not None:
@@ -400,7 +404,7 @@ def calculate_backoff_with_jitter(attempt, base_delay=1000, max_delay=32000):
     return backoff
 
 
-def connect_to_deepgram_with_backoff(
+async def connect_to_deepgram_with_backoff(
     on_message,
     on_error,
     language: str,
@@ -409,9 +413,13 @@ def connect_to_deepgram_with_backoff(
     model: str,
     keywords: List[str] = [],
     retries=3,
+    is_active: Optional[Callable[[], bool]] = None,
 ):
     logger.info("connect_to_deepgram_with_backoff")
     for attempt in range(retries):
+        if is_active is not None and not is_active():
+            logger.warning("Session ended, aborting Deepgram retry")
+            return None
         try:
             return connect_to_deepgram(on_message, on_error, language, sample_rate, channels, model, keywords)
         except Exception as error:
@@ -420,7 +428,7 @@ def connect_to_deepgram_with_backoff(
                 raise
         backoff_delay = calculate_backoff_with_jitter(attempt)
         logger.warning(f"Waiting {backoff_delay:.0f}ms before next retry...")
-        time.sleep(backoff_delay / 1000)  # Convert ms to seconds for sleep
+        await asyncio.sleep(backoff_delay / 1000)  # Convert ms to seconds for sleep
 
     raise Exception(f'Could not open socket: All retry attempts failed.')
 

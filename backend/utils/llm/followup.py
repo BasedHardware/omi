@@ -5,8 +5,12 @@ from models.transcript_segment import TranscriptSegment
 from utils.llm.clients import llm_mini
 
 
-def followup_question_prompt(segments: List[TranscriptSegment], people: Optional[List[Person]] = None):
-    transcript_str = TranscriptSegment.segments_as_string(segments, include_timestamps=False, people=people)
+def followup_question_prompt(
+    segments: List[TranscriptSegment], people: Optional[List[Person]] = None, user_name: str = None
+):
+    transcript_str = TranscriptSegment.segments_as_string(
+        segments, include_timestamps=False, people=people, user_name=user_name
+    )
     words = transcript_str.split()
     w_count = len(words)
     if w_count < 10:
@@ -24,7 +28,5 @@ def followup_question_prompt(segments: List[TranscriptSegment], people: Optional
 
         Output your response in plain text, without markdown.
         Output only the question, without context, be concise and straight to the point.
-        """.replace(
-        '    ', ''
-    ).strip()
+        """.replace('    ', '').strip()
     return llm_mini.invoke(prompt).content

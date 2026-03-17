@@ -7,7 +7,7 @@ logging.basicConfig(level=logging.INFO)
 import firebase_admin
 from fastapi import FastAPI
 
-from routers import pusher
+from routers import pusher, metrics
 
 if os.environ.get('SERVICE_ACCOUNT_JSON'):
     json_str = os.environ["SERVICE_ACCOUNT_JSON"]
@@ -33,6 +33,7 @@ else:
 
 app = FastAPI()
 app.include_router(pusher.router)
+app.include_router(metrics.router)
 
 
 @app.get("/health")

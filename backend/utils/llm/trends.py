@@ -2,6 +2,7 @@ from typing import List
 from pydantic import BaseModel, Field
 
 import database.users as users_db
+from database.auth import get_user_name
 from models.conversation import Conversation
 from models.other import Person
 from models.trend import (
@@ -36,7 +37,8 @@ def trends_extractor(uid: str, memory: Conversation) -> List[Item]:
         people_data = users_db.get_people_by_ids(uid, list(set(person_ids)))
         people = [Person(**p) for p in people_data]
 
-    transcript = memory.get_transcript(False, people=people)
+    user_name = get_user_name(uid, use_default=False)
+    transcript = memory.get_transcript(False, people=people, user_name=user_name)
     if len(transcript) == 0:
         return []
 
@@ -60,9 +62,7 @@ def trends_extractor(uid: str, memory: Conversation) -> List[Item]:
 
     Conversation:
     {transcript}
-    '''.replace(
-        '    ', ''
-    ).strip()
+    '''.replace('    ', '').strip()
     try:
         with_parser = llm_mini.with_structured_output(ExpectedOutput)
         response: ExpectedOutput = with_parser.invoke(prompt)

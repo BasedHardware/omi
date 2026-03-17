@@ -18,6 +18,7 @@ if project_root not in sys.path:
 
 from current import *
 from _shared import *
+from database.auth import get_user_name
 from models.chat import Message
 from models.conversation import Conversation
 from models.transcript_segment import TranscriptSegment
@@ -216,9 +217,9 @@ for message in get_messages():
                     col1, col2 = st.columns(2)
                     with col1:
                         st.markdown("**Raw Transcript Segments**")
-                        transcript = TranscriptSegment.segments_as_string(memory.transcript_segments).replace(
-                            '\n\n', '\n'
-                        )
+                        transcript = TranscriptSegment.segments_as_string(
+                            memory.transcript_segments, user_name=get_user_name(uid, use_default=False)
+                        ).replace('\n\n', '\n')
                         lines = transcript.count('\n')
                         ten_lines = transcript.split('\n')[:10]
                         st.text('\n'.join(ten_lines))

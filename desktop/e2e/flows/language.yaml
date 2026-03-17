@@ -1,0 +1,68 @@
+# E2E Flow: Language settings
+# Converted from flow2-language-settings.sh
+# Tests: settings navigation, radio buttons, picker interaction, back navigation
+
+name: language
+description: Language mode switching in Settings > Transcription — radio buttons, picker, back nav
+covers:
+  - Desktop/Sources/MainWindow/Pages/SettingsPage.swift
+  - Desktop/Sources/MainWindow/SettingsSidebar.swift
+  - Desktop/Sources/MainWindow/SidebarView.swift
+setup: normal
+bundle_id: com.omi.desktop-dev
+
+steps:
+  - name: Navigate to Settings
+    click: { type: image, label: "gearshape.fill" }
+    screenshot: settings-opened
+
+  - name: Verify Settings sidebar
+    assert: { text: "Settings" }
+
+  - name: Navigate to Transcription section
+    press: { text: "Transcription" }
+    screenshot: transcription-section
+
+  - name: Verify Language Mode card
+    assert: { text: "Language Mode" }
+
+  - name: Detect current language mode
+    get: { property: value, type: popupbutton }
+    save_as: current_mode
+    optional: true
+
+  - name: Switch to Single Language mode
+    click: { text_contains: "Single Language" }
+    screenshot: single-language-selected
+    assert:
+      type: popupbutton
+      min_count: 1
+    optional: true
+
+  - name: Read current language from picker
+    get: { property: value, type: popupbutton }
+    save_as: current_lang
+    optional: true
+
+  - name: Change language via picker
+    click: { type: popupbutton }
+    screenshot: picker-opened
+    click_menu_item:
+      try_labels:
+        - Spanish
+        - French
+        - Japanese
+        - German
+    screenshot: language-changed
+    optional: true
+
+  - name: Switch back to Auto-Detect mode
+    click: { text_contains: "Auto-Detect" }
+    screenshot: auto-detect-restored
+
+  - name: Navigate back from Settings
+    click:
+      text_contains: "Back"
+      fallback_label: "chevron.left"
+    assert: { type: image, label: "Home" }
+    screenshot: back-to-main

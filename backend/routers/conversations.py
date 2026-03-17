@@ -4,9 +4,11 @@ from datetime import datetime, timezone
 
 import database.conversations as conversations_db
 import database.action_items as action_items_db
+import database.memories as memories_db
 import database.redis_db as redis_db
 import database.users as users_db
-from database.vector_db import delete_vector
+from database.vector_db import delete_vector, delete_memory_vector
+from utils.other.storage import delete_conversation_audio_files
 from models.conversation import (
     BaseModel,
     CalendarMeetingContext,
@@ -51,7 +53,7 @@ def _get_valid_conversation_by_id(uid: str, conversation_id: str) -> dict:
         raise HTTPException(status_code=404, detail="Conversation not found")
 
     if conversation.get('is_locked', False):
-        raise HTTPException(status_code=402, detail="Unlimited Plan Required to access this conversation.")
+        raise HTTPException(status_code=402, detail="A paid plan is required to access this conversation.")
 
     return conversation
 
@@ -133,7 +135,7 @@ def get_conversations(
     if len(statuses) == 0:
         statuses = "processing,completed"
 
-    conversations = conversations_db.get_conversations(
+    conversations = conversations_db.get_conversations_without_photos(
         uid,
         limit,
         offset,
@@ -201,10 +203,29 @@ def get_conversation_transcripts_by_models(conversation_id: str, uid: str = Depe
 
 
 @router.delete("/v1/conversations/{conversation_id}", status_code=204, tags=['conversations'])
-def delete_conversation(conversation_id: str, uid: str = Depends(auth.get_current_user_uid)):
-    logger.info(f'delete_conversation {conversation_id} {uid}')
+def delete_conversation(
+    conversation_id: str,
+    background_tasks: BackgroundTasks,
+    cascade: bool = Query(False),
+    uid: str = Depends(auth.get_current_user_uid),
+):
+    logger.info(f'delete_conversation {conversation_id} {uid} cascade={cascade}')
     conversations_db.delete_conversation(uid, conversation_id)
     delete_vector(uid, conversation_id)
+
+    if cascade:
+        # Delete audio files
+        background_tasks.add_task(delete_conversation_audio_files, uid, conversation_id)
+
+        # Delete associated memories and their vectors
+        memory_ids = memories_db.get_memory_ids_for_conversation(uid, conversation_id)
+        memories_db.delete_memories_for_conversation(uid, conversation_id)
+        for memory_id in memory_ids:
+            background_tasks.add_task(delete_memory_vector, uid, memory_id)
+
+        # Delete associated action items
+        action_items_db.delete_action_items_for_conversation(uid, conversation_id)
+
     return {"status": "Ok"}
 
 

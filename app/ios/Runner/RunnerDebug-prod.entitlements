@@ -21,5 +21,9 @@
 	<true/>
 	<key>com.apple.developer.healthkit.access</key>
 	<array/>
+	<key>com.apple.security.application-groups</key>
+	<array>
+		<string>group.com.friend-app-with-wearable.ios12</string>
+	</array>
 </dict>
 </plist>

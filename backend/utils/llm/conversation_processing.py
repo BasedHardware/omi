@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import List, Optional, Tuple
 
 from langchain_core.output_parsers import PydanticOutputParser
@@ -527,13 +527,22 @@ def extract_action_items(
     DUE DATE EXTRACTION (CRITICAL):
     IMPORTANT: All due dates must be in the FUTURE and in UTC format with 'Z' suffix.
     IMPORTANT: When parsing dates, FIRST determine the DATE (today/tomorrow/specific date), THEN apply the TIME.
+    IMPORTANT: NEVER produce a due_at date that is in the past relative to {current_time}.
+
+    REFERENCE TIME SELECTION (CRITICAL):
+    - The conversation started at {started_at}, and the current time is {current_time}.
+    - If {started_at} is MORE than 7 days before {current_time}, this is a HISTORICAL conversation being reprocessed.
+      In this case, you MUST use {current_time} as your reference for resolving relative dates ("today", "tomorrow", "next week", etc.).
+      Do NOT resolve relative dates against the old conversation date.
+    - If {started_at} is WITHIN 7 days of {current_time}, use {started_at} as the reference time (normal behavior).
+    - Let REFERENCE_TIME = the chosen reference time based on the rule above.
 
     Step-by-step date parsing process:
     1. IDENTIFY THE DATE:
-       - "today" → current date from {started_at}
-       - "tomorrow" → next day from {started_at}
-       - "Monday", "Tuesday", etc. → next occurrence of that weekday
-       - "next week" → same day next week
+       - "today" → current date from REFERENCE_TIME
+       - "tomorrow" → next day from REFERENCE_TIME
+       - "Monday", "Tuesday", etc. → next occurrence of that weekday from REFERENCE_TIME
+       - "next week" → same day next week from REFERENCE_TIME
        - Specific date (e.g., "March 15") → that date
 
     2. IDENTIFY THE TIME (if mentioned):
@@ -548,18 +557,21 @@ def extract_action_items(
 
     3. COMBINE DATE + TIME in user's timezone ({tz}), then convert to UTC with 'Z' suffix
 
+    4. VERIFY the resulting date is in the FUTURE relative to {current_time}. If not, do NOT include a due_at.
+
     Examples of CORRECT date parsing:
-    If {started_at} is "2025-10-03T13:25:00Z" (Oct 3, 6:55 PM IST) and {tz} is "Asia/Kolkata":
+    If REFERENCE_TIME is "2025-10-03T13:25:00Z" (Oct 3, 6:55 PM IST) and {tz} is "Asia/Kolkata":
     - "tomorrow before 10am" → DATE: Oct 4, TIME: 10:00 AM → "2025-10-04 10:00 IST" → Convert to UTC → "2025-10-04T04:30:00Z"
     - "today by evening" → DATE: Oct 3, TIME: 6:00 PM → "2025-10-03 18:00 IST" → Convert to UTC → "2025-10-03T12:30:00Z"
     - "tomorrow" → DATE: Oct 4, TIME: 11:59 PM (default) → "2025-10-04 23:59 IST" → Convert to UTC → "2025-10-04T18:29:00Z"
     - "by Monday at 2pm" → DATE: next Monday (Oct 6), TIME: 2:00 PM → "2025-10-06 14:00 IST" → Convert to UTC → "2025-10-06T08:30:00Z"
-    - "urgent" or "ASAP" → 2 hours from {started_at} → "2025-10-03T15:25:00Z"
+    - "urgent" or "ASAP" → 2 hours from REFERENCE_TIME → "2025-10-03T15:25:00Z"
 
     CRITICAL FORMAT: All due_at timestamps MUST be in UTC with 'Z' suffix (e.g., "2025-10-04T04:30:00Z")
     DO NOT include timezone offsets like "+05:30". Always convert to UTC and use 'Z' suffix.
 
-    Reference time: {started_at}
+    Conversation started at: {started_at}
+    Current time: {current_time}
     User timezone: {tz}
 
     {format_instructions}'''.replace(
@@ -572,6 +584,8 @@ def extract_action_items(
     prompt = ChatPromptTemplate.from_messages([('system', instructions_text), ('system', context_message)])
     chain = prompt | llm_medium_experiment.bind(prompt_cache_key="omi-extract-actions") | action_items_parser
 
+    current_time = datetime.now(timezone.utc)
+
     try:
         response = chain.invoke(
             {
@@ -579,16 +593,27 @@ def extract_action_items(
                 'format_instructions': action_items_parser.get_format_instructions(),
                 'language_code': language_code,
                 'started_at': started_at.isoformat(),
+                'current_time': current_time.isoformat(),
                 'tz': tz,
                 'existing_items_context': existing_items_context,
             }
         )
 
         # Set created_at for action items if not already set
-        now = datetime.now(timezone.utc)
+        now = current_time
         for action_item in response.action_items or []:
             if action_item.created_at is None:
                 action_item.created_at = now
+            # Post-extraction validation: clear due dates more than 1 day in the past
+            if action_item.due_at is not None:
+                due_utc = (
+                    action_item.due_at if action_item.due_at.tzinfo else action_item.due_at.replace(tzinfo=timezone.utc)
+                )
+                if due_utc < now - timedelta(days=1):
+                    logger.warning(
+                        f'Clearing past due_at {action_item.due_at.isoformat()} for action item: {action_item.description}'
+                    )
+                    action_item.due_at = None
 
         return response.action_items or []
 

@@ -1,5 +1,6 @@
 import Foundation
 import GRDB
+import AppKit
 
 /// Executes tool calls from Gemini and returns results
 /// Tools: execute_sql (read/write SQL on omi.db), semantic_search (vector similarity)
@@ -14,6 +15,8 @@ class ChatToolExecutor {
     static var onCompleteOnboarding: (() -> Void)?
     /// Called when AI invokes ask_followup — delivers quick-reply options to the UI
     static var onQuickReplyOptions: ((_ options: [String]) -> Void)?
+    /// Called when AI invokes ask_followup — delivers the question text to the UI
+    static var onQuickReplyQuestion: ((_ question: String) -> Void)?
     /// Called when AI invokes save_knowledge_graph — notifies the graph view to update
     static var onKnowledgeGraphUpdated: (() -> Void)?
     /// Called when scan_files completes — used to kick off parallel exploration
@@ -520,6 +523,10 @@ class ChatToolExecutor {
             }
 
         case "notifications":
+            if !isInstalledInApplications() {
+                NSWorkspace.shared.open(URL(fileURLWithPath: "/Applications"))
+                return "pending - move omi to /Applications first, reopen it, then retry notifications"
+            }
             appState.requestNotificationPermission()
             try? await Task.sleep(nanoseconds: 2_000_000_000)
             appState.checkNotificationPermission()
@@ -557,6 +564,11 @@ class ChatToolExecutor {
         }
     }
 
+    private static func isInstalledInApplications() -> Bool {
+        let path = Bundle.main.bundlePath
+        return path.hasPrefix("/Applications/") || path.contains("/Applications/")
+    }
+
     /// Check status of all macOS permissions
     private static func executeCheckPermissionStatus(_ args: [String: Any]) async -> String {
         guard let appState = onboardingAppState else {
@@ -585,35 +597,61 @@ class ChatToolExecutor {
     private static func executeScanFiles(_ args: [String: Any]) async -> String {
         let fm = FileManager.default
         let homeDir = fm.homeDirectoryForCurrentUser
-        let foldersToScan = ["Downloads", "Documents", "Desktop", "Developer", "Projects"]
-            .map { homeDir.appendingPathComponent($0) }
-            .filter { fm.fileExists(atPath: $0.path) }
+        let scanTargets: [(label: String, pathForUser: String, url: URL)] = {
+            var targets: [(String, String, URL)] = []
 
-        let applicationsURL = URL(fileURLWithPath: "/Applications")
-        var allFolders = foldersToScan
-        if fm.fileExists(atPath: applicationsURL.path) {
-            allFolders.append(applicationsURL)
-        }
+            let homeFolders = ["Downloads", "Documents", "Desktop", "Developer", "Projects"]
+            for folder in homeFolders {
+                let url = homeDir.appendingPathComponent(folder)
+                if fm.fileExists(atPath: url.path) {
+                    targets.append((folder, "~/\(folder)", url))
+                }
+            }
+
+            let applicationsURL = URL(fileURLWithPath: "/Applications")
+            if fm.fileExists(atPath: applicationsURL.path) {
+                targets.append(("Applications", "/Applications", applicationsURL))
+            }
+
+            // Apple Notes local stores (container + group container)
+            let notesCandidates: [(String, String, URL)] = [
+                (
+                    "Apple Notes (Container)",
+                    "~/Library/Containers/com.apple.Notes/Data/Library/Notes",
+                    homeDir.appendingPathComponent("Library/Containers/com.apple.Notes/Data/Library/Notes")
+                ),
+                (
+                    "Apple Notes (Group)",
+                    "~/Library/Group Containers/group.com.apple.notes",
+                    homeDir.appendingPathComponent("Library/Group Containers/group.com.apple.notes")
+                ),
+            ]
+            for candidate in notesCandidates where fm.fileExists(atPath: candidate.2.path) {
+                targets.append(candidate)
+            }
+
+            return targets
+        }()
 
         // Pre-check folder access — this triggers macOS TCC dialogs
         var deniedFolders: [String] = []
         var accessibleFolders: [URL] = []
-        for folder in allFolders {
+        for target in scanTargets {
             do {
                 _ = try fm.contentsOfDirectory(
-                    at: folder,
+                    at: target.url,
                     includingPropertiesForKeys: [.fileSizeKey],
                     options: [.skipsHiddenFiles]
                 )
-                accessibleFolders.append(folder)
+                accessibleFolders.append(target.url)
             } catch {
                 let nsError = error as NSError
                 if nsError.domain == NSCocoaErrorDomain && nsError.code == 257 {
                     // Permission denied — TCC dialog was shown or already denied
-                    deniedFolders.append(folder.lastPathComponent)
+                    deniedFolders.append(target.pathForUser)
                 } else {
                     // Other error (e.g. folder doesn't exist) — skip silently
-                    log("FileIndexer: Pre-check failed for \(folder.lastPathComponent): \(error.localizedDescription)")
+                    log("FileIndexer: Pre-check failed for \(target.label): \(error.localizedDescription)")
                 }
             }
         }
@@ -632,7 +670,7 @@ class ChatToolExecutor {
             out += "\n\n## FOLDER ACCESS DENIED\n"
             out += "The following folders were NOT scanned because the user didn't grant access:\n"
             for folder in deniedFolders {
-                out += "- ~/\(folder)\n"
+                out += "- \(folder)\n"
             }
             out += "\nTell the user to click 'Allow' on the macOS dialogs, then call scan_files again to pick up those folders."
         }
@@ -724,6 +762,31 @@ class ChatToolExecutor {
                     let appNames = apps.compactMap { ($0["filename"] as? String)?.replacingOccurrences(of: ".app", with: "") }
                     out += appNames.joined(separator: ", ")
                     out += "\n"
+                }
+
+                let taskCandidates = try Row.fetchAll(db, sql: """
+                    SELECT description, priority, source
+                    FROM action_items
+                    WHERE deleted = 0 AND completed = 0
+                    ORDER BY
+                        CASE priority
+                            WHEN 'high' THEN 0
+                            WHEN 'medium' THEN 1
+                            ELSE 2
+                        END,
+                        COALESCE(relevanceScore, 999) ASC,
+                        createdAt DESC
+                    LIMIT 8
+                """)
+
+                if !taskCandidates.isEmpty {
+                    out += "\n## Existing Task Candidates\n"
+                    for row in taskCandidates {
+                        let description = row["description"] as? String ?? ""
+                        let priority = row["priority"] as? String ?? "normal"
+                        let source = row["source"] as? String ?? "unknown"
+                        out += "- [\(priority)] \(description) (source: \(source))\n"
+                    }
                 }
 
                 log("Tool get_file_scan_results: \(totalCount) files, \(projectIndicators.count) projects, \(apps.count) apps")
@@ -852,6 +915,7 @@ class ChatToolExecutor {
 
         // Notify the UI to render quick-reply buttons
         onQuickReplyOptions?(options)
+        onQuickReplyQuestion?(question)
 
         return "Presented to user: \"\(question)\" with options: \(options.joined(separator: ", "))"
     }
@@ -888,6 +952,7 @@ class ChatToolExecutor {
         onboardingAppState = nil
         onCompleteOnboarding = nil
         onQuickReplyOptions = nil
+        onQuickReplyQuestion = nil
         onKnowledgeGraphUpdated = nil
         onScanFilesCompleted = nil
         fileScanFileCount = 0

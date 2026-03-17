@@ -277,7 +277,7 @@ def execute_tool(user_id: str, tool_name: str, arguments: dict) -> dict:
             raise ToolExecutionError("Conversation not found", code=-32001)
 
         if conversation.get('is_locked', False):
-            raise ToolExecutionError("Unlimited Plan Required to access this conversation.", code=-32002)
+            raise ToolExecutionError("A paid plan is required to access this conversation.", code=-32002)
 
         return {"conversation": conversation}
 

@@ -193,7 +193,8 @@ def upsert_knowledge_edge(uid: str, edge_data: Dict[str, Any]) -> Dict[str, Any]
     edge_id = edge_data.get('id')
     if not edge_id:
         edge_id = f"{edge_data['source_id']}_{edge_data['label']}_{edge_data['target_id']}"
-        edge_data['id'] = edge_id
+    edge_id = edge_id.replace('/', '_')
+    edge_data['id'] = edge_id
 
     edge_ref = edges_ref.document(edge_id)
     existing = edge_ref.get()

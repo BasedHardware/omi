@@ -160,7 +160,7 @@ export function BetaWelcomeModal() {
                     <span>feedback.omi.me</span>
                   </a>
                   <a
-                    href="https://discord.gg/omidotme"
+                    href="http://discord.omi.me"
                     target="_blank"
                     rel="noopener noreferrer"
                     className="flex items-center gap-1.5 text-sm text-text-tertiary hover:text-purple-primary transition-colors"

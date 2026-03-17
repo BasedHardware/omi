@@ -1,0 +1,64 @@
+# E2E Flow: Login — sign in with Google from auth screen
+# Tests: Auth screen → Google Sign-In → consent → OAuth → home screen
+
+version: 2
+name: login
+description: Sign in with Google from the auth screen to reach home
+app: com.friend.ios.dev
+evidence:
+  video: true
+covers:
+  - app/lib/pages/onboarding/auth.dart
+  - app/lib/pages/onboarding/wrapper.dart
+  - app/lib/providers/auth_provider.dart
+  - app/lib/services/auth_service.dart
+  - app/lib/widgets/consent_bottom_sheet.dart
+preconditions:
+  - App must be signed out, showing auth screen with Sign in with Google button
+
+steps:
+  - id: S1
+    name: Auth screen — verify sign-in options
+    do: "Verify the auth screen is showing with Sign in with Google button"
+    verify: true
+    expect:
+      - kind: text_visible
+        values: ["Sign in with Google"]
+    evidence:
+      - screenshot: step-S1.webp
+
+  - id: S2
+    name: Tap Sign in with Google
+    do: "Tap the Sign in with Google button"
+    verify: true
+    expect:
+      - kind: text_visible
+        values: ["Data & Privacy", "Continue with Google"]
+    evidence:
+      - screenshot: step-S2.webp
+    note: "Shows ConsentBottomSheet with data & privacy notices"
+
+  - id: S3
+    name: Continue through consent
+    do: "Tap 'Continue with Google' button on consent bottom sheet to proceed to Google OAuth"
+    evidence:
+      - screenshot: step-S3.webp
+    note: "Opens Google account picker (system UI via Chrome Custom Tab)"
+
+  - id: S4
+    name: Select Google account
+    do: "Select the test Google account from the account picker"
+    evidence:
+      - screenshot: step-S4.webp
+    note: "If previously signed in, account is cached and shown directly. Use ADB/UIAutomator for system UI."
+
+  - id: S5
+    name: Post-auth landing
+    do: "Wait for OAuth redirect and verify landing on home screen or onboarding continuation"
+    verify: true
+    expect:
+      - kind: interactive_count
+        min: 3
+    evidence:
+      - screenshot: step-S5.webp
+    note: "If onboarding complete, lands on home. If first-time after logout, may land on name entry."

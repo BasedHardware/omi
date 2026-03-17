@@ -10075,6 +10075,234 @@
   "@apiEnvSavedRestartRequired": {
     "description": "Snackbar message after saving API environment preference"
   },
+  "shared": "Shared",
+  "onlyYouCanSeeConversation": "Only you can see this conversation",
+  "anyoneWithLinkCanView": "Anyone with the link can view",
+  "tasksCleanTodayTitle": "Clean today's tasks?",
+  "@tasksCleanTodayTitle": {
+    "description": "Confirmation dialog title for cleaning today task deadlines"
+  },
+  "tasksCleanTodayMessage": "This will only remove deadlines",
+  "@tasksCleanTodayMessage": {
+    "description": "Confirmation dialog message for cleaning today task deadlines"
+  },
+  "tasksOverdue": "Overdue",
+  "phoneCallsWithOmi": "Phone Calls with Omi",
+  "phoneCallsSubtitle": "Make calls with real-time transcription",
+  "phoneSetupStep1Title": "Verify your phone number",
+  "phoneSetupStep1Subtitle": "We'll call you to confirm it's yours",
+  "phoneSetupStep2Title": "Enter a verification code",
+  "phoneSetupStep2Subtitle": "A short code you'll type on the call",
+  "phoneSetupStep3Title": "Start calling your contacts",
+  "phoneSetupStep3Subtitle": "With live transcription built in",
+  "phoneGetStarted": "Get Started",
+  "callRecordingConsentDisclaimer": "Call recording may require consent in your jurisdiction",
+  "enterYourNumber": "Enter your number",
+  "phoneNumberCallerIdHint": "Once verified, this becomes your caller ID",
+  "phoneNumberHint": "Phone number",
+  "failedToStartVerification": "Failed to start verification",
+  "phoneContinue": "Continue",
+  "verifyYourNumber": "Verify your number",
+  "answerTheCallFrom": "Answer the call from",
+  "onTheCallEnterThisCode": "On the call, enter this code",
+  "followTheVoiceInstructions": "Follow the voice instructions",
+  "statusCalling": "Calling...",
+  "statusCallInProgress": "Call in progress",
+  "statusVerifiedLabel": "Verified",
+  "statusCallMissed": "Call missed",
+  "statusTimedOut": "Timed out",
+  "phoneTryAgain": "Try Again",
+  "phonePageTitle": "Phone",
+  "phoneContactsTab": "Contacts",
+  "phoneKeypadTab": "Keypad",
+  "grantContactsAccess": "Grant access to your contacts",
+  "phoneAllow": "Allow",
+  "phoneSearchHint": "Search",
+  "phoneNoContactsFound": "No contacts found",
+  "phoneEnterNumber": "Enter number",
+  "failedToStartCall": "Failed to start call",
+  "callStateConnecting": "Connecting...",
+  "callStateRinging": "Ringing...",
+  "callStateEnded": "Call Ended",
+  "callStateFailed": "Call Failed",
+  "transcriptPlaceholder": "Transcript will appear here...",
+  "phoneUnmute": "Unmute",
+  "phoneMute": "Mute",
+  "phoneSpeaker": "Speaker",
+  "phoneEndCall": "End",
+  "phoneCallSettingsTitle": "Phone Call Settings",
+  "yourVerifiedNumbers": "Your Verified Numbers",
+  "verifiedNumbersDescription": "When you call someone, they'll see this number on their phone",
+  "noVerifiedNumbers": "No verified numbers",
+  "deletePhoneNumberConfirm": "Delete {phoneNumber}?",
+  "@deletePhoneNumberConfirm": {
+    "placeholders": {
+      "phoneNumber": {
+        "type": "String"
+      }
+    }
+  },
+  "deletePhoneNumberWarning": "You'll need to verify again to make calls",
+  "phoneDeleteButton": "Delete",
+  "verifiedMinutesAgo": "Verified {minutes}m ago",
+  "@verifiedMinutesAgo": {
+    "placeholders": {
+      "minutes": {
+        "type": "int"
+      }
+    }
+  },
+  "verifiedHoursAgo": "Verified {hours}h ago",
+  "@verifiedHoursAgo": {
+    "placeholders": {
+      "hours": {
+        "type": "int"
+      }
+    }
+  },
+  "verifiedDaysAgo": "Verified {days}d ago",
+  "@verifiedDaysAgo": {
+    "placeholders": {
+      "days": {
+        "type": "int"
+      }
+    }
+  },
+  "verifiedOnDate": "Verified on {date}",
+  "@verifiedOnDate": {
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "verifiedFallback": "Verified",
+  "callAlreadyInProgress": "A call is already in progress",
+  "failedToGetCallToken": "Failed to get call token. Verify your phone number first.",
+  "failedToInitializeCallService": "Failed to initialize call service",
+  "speakerLabelYou": "You",
+  "speakerLabelUnknown": "Unknown",
+  "showDailyScoreOnHomepage": "Show Daily Score on homepage",
+  "@showDailyScoreOnHomepage": {
+    "description": "Description for show daily score toggle in developer settings"
+  },
+  "showTasksOnHomepage": "Show Tasks on homepage",
+  "@showTasksOnHomepage": {
+    "description": "Description for show tasks toggle in developer settings"
+  },
+  "phoneCallsUnlimitedOnly": "Phone Calls via Omi",
+  "@phoneCallsUnlimitedOnly": {
+    "description": "Title for the phone calls upsell sheet shown to non-unlimited users"
+  },
+  "phoneCallsUpsellSubtitle": "Make calls through Omi and get real-time transcription, automatic summaries, and more. Available exclusively for Unlimited plan subscribers.",
+  "@phoneCallsUpsellSubtitle": {
+    "description": "Subtitle explaining phone calls feature on upsell sheet"
+  },
+  "phoneCallsUpsellFeature1": "Real-time transcription of every call",
+  "@phoneCallsUpsellFeature1": {
+    "description": "Phone calls upsell feature 1"
+  },
+  "phoneCallsUpsellFeature2": "Automatic call summaries and action items",
+  "@phoneCallsUpsellFeature2": {
+    "description": "Phone calls upsell feature 2"
+  },
+  "phoneCallsUpsellFeature3": "Recipients see your real number, not a random one",
+  "@phoneCallsUpsellFeature3": {
+    "description": "Phone calls upsell feature 3"
+  },
+  "phoneCallsUpsellFeature4": "Your calls stay private and secure",
+  "@phoneCallsUpsellFeature4": {
+    "description": "Phone calls upsell feature 4"
+  },
+  "phoneCallsUpgradeButton": "Upgrade to Unlimited",
+  "@phoneCallsUpgradeButton": {
+    "description": "Button text to upgrade to unlimited plan from phone calls upsell"
+  },
+  "phoneCallsMaybeLater": "Maybe later",
+  "@phoneCallsMaybeLater": {
+    "description": "Dismiss button text on phone calls upsell sheet"
+  },
+  "deleteSynced": "Delete Synced",
+  "@deleteSynced": {
+    "description": "Menu option to delete synced recordings"
+  },
+  "deleteSyncedFiles": "Delete Synced Recordings",
+  "@deleteSyncedFiles": {
+    "description": "Dialog title for deleting synced files"
+  },
+  "deleteSyncedFilesMessage": "These recordings have already been synced to your phone. This cannot be undone.",
+  "@deleteSyncedFilesMessage": {
+    "description": "Confirmation message for deleting synced files"
+  },
+  "syncedFilesDeleted": "Synced recordings deleted",
+  "@syncedFilesDeleted": {
+    "description": "Snackbar message after synced files deleted"
+  },
+  "deletePending": "Delete Pending",
+  "@deletePending": {
+    "description": "Menu option to delete pending recordings"
+  },
+  "deletePendingFiles": "Delete Pending Recordings",
+  "@deletePendingFiles": {
+    "description": "Dialog title for deleting pending files"
+  },
+  "deletePendingFilesWarning": "These recordings have NOT been synced to your phone and will be permanently lost. This cannot be undone.",
+  "@deletePendingFilesWarning": {
+    "description": "Warning message for deleting pending files"
+  },
+  "pendingFilesDeleted": "Pending recordings deleted",
+  "@pendingFilesDeleted": {
+    "description": "Snackbar message after pending files deleted"
+  },
+  "deleteAllFiles": "Delete All Recordings",
+  "@deleteAllFiles": {
+    "description": "Dialog title for deleting all files"
+  },
+  "deleteAll": "Delete All",
+  "@deleteAll": {
+    "description": "Menu option to delete all recordings"
+  },
+  "deleteAllFilesWarning": "This will delete both synced and pending recordings. Pending recordings have NOT been synced and will be permanently lost. This cannot be undone.",
+  "@deleteAllFilesWarning": {
+    "description": "Warning message for deleting all files"
+  },
+  "allFilesDeleted": "All recordings deleted",
+  "@allFilesDeleted": {
+    "description": "Snackbar message after all files deleted"
+  },
+  "nFiles": "{count} recordings",
+  "@nFiles": {
+    "description": "Count of files",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "manageStorage": "Manage Storage",
+  "@manageStorage": {
+    "description": "Menu option and sheet title for managing recording storage"
+  },
+  "safelyBackedUp": "Safely backed up to your phone",
+  "@safelyBackedUp": {
+    "description": "Description for synced files in manage storage sheet"
+  },
+  "notYetSynced": "Not yet synced to your phone",
+  "@notYetSynced": {
+    "description": "Description for pending files in manage storage sheet"
+  },
+  "clearAll": "Clear All",
+  "@clearAll": {
+    "description": "Button label to clear all files"
+  },
+  "phoneKeypad": "Keypad",
+  "@phoneKeypad": {
+    "description": "Label for the keypad/dialpad button during an active phone call"
+  },
+  "phoneHideKeypad": "Hide Keypad",
+  "@phoneHideKeypad": {
+    "description": "Label for the button to dismiss the in-call keypad"
+  },
   "officialTeamName": "Nooto Team",
   "conversationsEmptyStateMessage": "Start a conversation with Nooto or record one with your device"
 }

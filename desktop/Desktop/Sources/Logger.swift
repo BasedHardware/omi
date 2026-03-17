@@ -157,12 +157,22 @@ func logError(_ message: String, error: Error? = nil) {
     breadcrumb.message = fullMessage
     SentrySDK.addBreadcrumb(breadcrumb)
 
-    // Capture the error in Sentry (skip intentional cancellations — they're noise)
+    // Capture error context in Sentry without passing the raw Swift Error object.
+    // Some Swift-native error payloads can crash inside Sentry's reflection path.
     let isCancelledRequest = (error as? URLError)?.code == .cancelled ||
         (error as NSError?)?.domain == NSURLErrorDomain && (error as NSError?)?.code == NSURLErrorCancelled
     if let error = error, !isCancelledRequest {
-        SentrySDK.capture(error: error) { scope in
-            scope.setContext(value: ["message": message], key: "app_context")
+        let nsError = error as NSError
+        let errorType = String(reflecting: type(of: error))
+        SentrySDK.capture(message: fullMessage) { scope in
+            scope.setLevel(.error)
+            scope.setContext(value: [
+                "message": message,
+                "error_type": errorType,
+                "error_domain": nsError.domain,
+                "error_code": nsError.code,
+                "localized_description": errorDesc,
+            ], key: "app_context")
         }
     } else if error == nil {
         SentrySDK.capture(message: fullMessage) { scope in

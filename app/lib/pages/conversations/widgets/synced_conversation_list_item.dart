@@ -62,7 +62,7 @@ class _SyncedConversationListItemState extends State<SyncedConversationListItem>
     return GestureDetector(
       onTap: () async {
         context.read<ConversationDetailProvider>().updateConversation(widget.conversation.id, widget.date);
-        Provider.of<ConversationProvider>(context, listen: false).onConversationTap(widget.conversationIdx);
+        Provider.of<ConversationProvider>(context, listen: false).onConversationTap(widget.conversation.id);
         routeToPage(
           context,
           ConversationDetailPage(conversation: widget.conversation, isFromOnboarding: false),

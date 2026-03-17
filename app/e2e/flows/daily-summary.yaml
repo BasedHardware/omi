@@ -1,0 +1,33 @@
+# E2E Flow: Daily Summary settings and detail
+# Tests: daily summary settings, detail view
+
+name: daily-summary
+description: Settings → Daily Summary — view and configure daily summary preferences, view summary detail
+covers:
+  - app/lib/pages/settings/daily_summary_settings_page.dart
+  - app/lib/pages/settings/daily_summary_detail_page.dart
+prerequisites:
+  - auth_ready  # User completed real sign-in (Google/Apple) and onboarding. Android: `bash setup.sh android`. iOS: `bash setup.sh ios`. App must show home screen.
+setup: normal
+
+steps:
+  - name: Open settings drawer
+    press: { type: button, position: rightmost }
+
+  - name: Scroll to find daily summary option
+    scroll: down
+    screenshot: settings-scrolled
+
+  - name: Tap Notifications
+    press: { type: gesture, hint: "Notifications row in settings" }
+    screenshot: notifications-page
+
+  - name: Toggle daily summary on
+    press: { type: switch, index: 0, hint: "Daily Summary toggle switch" }
+    screenshot: daily-summary-enabled
+
+  - name: Back to settings
+    back: true
+
+  - name: Close settings
+    back: true

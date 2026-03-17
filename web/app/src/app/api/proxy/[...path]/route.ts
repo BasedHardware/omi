@@ -142,9 +142,6 @@ async function handleRequest(
       ) {
         // Static reference data - cache for 1 hour
         cacheHeaders['Cache-Control'] = 'public, max-age=3600, stale-while-revalidate=86400';
-      } else if (path.includes('folders') && request.method === 'GET') {
-        // User folders - cache briefly with revalidation
-        cacheHeaders['Cache-Control'] = 'private, max-age=60, stale-while-revalidate=300';
       }
 
       return NextResponse.json(data, {

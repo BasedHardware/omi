@@ -642,12 +642,19 @@ class MessageProvider extends ChangeNotifier {
           flushBuffer();
           agentLog('[MessageProvider] think: ${chunk.text.length > 100 ? chunk.text.substring(0, 100) : chunk.text}');
           message.thinkings.add(chunk.text);
+          if (message.text.isNotEmpty) {
+            agentThinkingAfterText = true;
+          }
           notifyListeners();
           continue;
         }
 
         if (chunk.type == MessageChunkType.data) {
           if (chunkCount <= 3) agentLog('[MessageProvider] first data chunk received');
+          if (agentThinkingAfterText) {
+            agentThinkingAfterText = false;
+            notifyListeners();
+          }
           textBuffer += chunk.text;
           timer ??= Timer.periodic(const Duration(milliseconds: 100), (_) {
             flushBuffer();

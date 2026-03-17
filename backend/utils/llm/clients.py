@@ -1,6 +1,7 @@
 import os
 from typing import List
 
+import anthropic
 import httpx
 from langchain_core.output_parsers import PydanticOutputParser
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
@@ -8,6 +9,12 @@ import tiktoken
 
 from models.conversation import Structured
 from utils.llm.usage_tracker import get_usage_callback
+
+# Anthropic client for chat agent
+anthropic_client = anthropic.AsyncAnthropic()  # uses ANTHROPIC_API_KEY env var
+
+ANTHROPIC_AGENT_MODEL = "claude-opus-4-6"
+ANTHROPIC_AGENT_COMPLEX_MODEL = "claude-opus-4-6"
 
 # Get the usage tracking callback
 _usage_callback = get_usage_callback()

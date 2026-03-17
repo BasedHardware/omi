@@ -13,24 +13,36 @@ import {
 import { cn } from '@/lib/utils';
 import { deleteConversation, reprocessConversation } from '@/lib/api';
 import type { Conversation, TranscriptSegment } from '@/types/conversation';
+import type { Person } from '@/types/user';
 import { MixpanelManager } from '@/lib/analytics/mixpanel';
 
 interface ConversationActionsMenuProps {
   conversation: Conversation;
+  people?: Person[];
   onConversationUpdate?: (conversation: Conversation) => void;
   onDelete?: () => void;
   className?: string;
 }
 
 /**
- * Generate transcript text from segments
+ * Generate transcript text from segments, resolving speaker names from people list
  */
-function generateTranscript(segments: TranscriptSegment[]): string {
+function generateTranscript(segments: TranscriptSegment[], people?: Person[]): string {
   if (!segments || segments.length === 0) return '';
 
   return segments
     .map((segment) => {
-      const speaker = segment.is_user ? 'You' : `Speaker ${segment.speaker_id}`;
+      let speaker: string;
+      if (segment.is_user) {
+        speaker = 'You';
+      } else if (segment.person_id && people) {
+        const person = people.find((p) => p.id === segment.person_id);
+        speaker = person ? person.name : (segment.speaker_name || `Speaker ${segment.speaker_id}`);
+      } else if (segment.speaker_name) {
+        speaker = segment.speaker_name;
+      } else {
+        speaker = `Speaker ${segment.speaker_id}`;
+      }
       return `${speaker}: ${segment.text}`;
     })
     .join('\n\n');
@@ -48,6 +60,7 @@ function getSummaryContent(conversation: Conversation): string {
 
 export function ConversationActionsMenu({
   conversation,
+  people,
   onConversationUpdate,
   onDelete,
   className,
@@ -75,7 +88,7 @@ export function ConversationActionsMenu({
   }, [isOpen]);
 
   const handleCopyTranscript = async () => {
-    const transcript = generateTranscript(conversation.transcript_segments);
+    const transcript = generateTranscript(conversation.transcript_segments, people);
     if (!transcript) return;
 
     await navigator.clipboard.writeText(transcript);

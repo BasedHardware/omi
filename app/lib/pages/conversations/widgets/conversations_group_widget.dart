@@ -19,7 +19,10 @@ class ConversationsGroupWidget extends StatelessWidget {
           DateListItem(date: date, isFirst: isFirst),
           ...conversations.map((conversation) {
             return ConversationListItem(
-                conversation: conversation, conversationIdx: conversations.indexOf(conversation), date: date);
+                key: ValueKey(conversation.id),
+                conversation: conversation,
+                conversationIdx: conversations.indexOf(conversation),
+                date: date);
           }),
           const SizedBox(height: 10),
         ],

@@ -60,6 +60,11 @@ struct SettingsSearchItem: Identifiable {
         SettingsSearchItem(name: "Account", subtitle: "Your profile and email", keywords: ["profile", "email"], section: .account, icon: "person.circle", settingId: "account.account"),
         SettingsSearchItem(name: "Sign Out", subtitle: "Sign out of your omi account", keywords: ["sign out", "log out", "logout", "signout"], section: .account, icon: "person.circle", settingId: "account.signout"),
 
+        // Plan and Usage
+        SettingsSearchItem(name: "Plan and Usage", subtitle: "Subscription status and usage limits", keywords: ["subscription", "billing", "plan", "usage", "stripe", "pro", "unlimited"], section: .planUsage, icon: "creditcard", settingId: "planusage.overview"),
+        SettingsSearchItem(name: "Current Plan", subtitle: "See your current subscription and renewal status", keywords: ["current plan", "renewal", "billing"], section: .planUsage, icon: "creditcard", settingId: "planusage.current"),
+        SettingsSearchItem(name: "Upgrade Plan", subtitle: "Buy Unlimited Plan or Omi Pro", keywords: ["upgrade", "buy", "pricing", "checkout", "pro", "unlimited"], section: .planUsage, icon: "creditcard", settingId: "planusage.purchase"),
+
         // AI Chat
         SettingsSearchItem(name: "AI Chat", subtitle: "Configure AI assistant settings", keywords: ["claude", "chat settings"], section: .aiChat, icon: "cpu", settingId: "aichat.aichat"),
         SettingsSearchItem(name: "Ask Mode", subtitle: "Show an Ask/Act toggle in the chat to control tool use", keywords: ["ask", "act", "read only", "mode toggle"], section: .aiChat, icon: "cpu", settingId: "aichat.askmode"),
@@ -317,6 +322,7 @@ struct SettingsSidebarItem: View {
         case .notifications: return "bell"
         case .privacy: return "lock.shield"
         case .account: return "person.circle"
+        case .planUsage: return "creditcard"
         case .aiChat: return "cpu"
         case .advanced: return "chart.bar"
         case .about: return "info.circle"

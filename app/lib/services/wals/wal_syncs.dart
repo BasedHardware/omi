@@ -138,6 +138,12 @@ class WalSyncs implements IWalSync {
     await _flashPageSync.deleteAllSyncedWals();
   }
 
+  Future<void> deleteAllPendingWals() async {
+    await _phoneSync.deleteAllPendingWals();
+    await _sdcardSync.deleteAllPendingWals();
+    await _flashPageSync.deleteAllPendingWals();
+  }
+
   @override
   void start() {
     _phoneSync.start();

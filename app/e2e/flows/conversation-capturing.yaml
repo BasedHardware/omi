@@ -1,0 +1,45 @@
+# E2E Flow: Conversation Capturing — live recording with phone mic
+# Tests: capturing page, live transcript, waveform, stop recording
+# Discovered by: flow-walker run10 (screen-gesture-19: 2 elevated, 1 FAB, 9 gesture, 1 icon, 5 inkwell, 1 textfield)
+
+name: conversation-capturing
+description: Active recording page — live transcript, waveform, stop button, Ask Omi during recording
+covers:
+  - app/lib/pages/conversation_capturing/page.dart
+  - app/lib/pages/home/page.dart
+prerequisites:
+  - auth_ready  # User completed real sign-in (Google/Apple) and onboarding. Android: `bash setup.sh android`. iOS: `bash setup.sh ios`. App must show home screen.
+  - microphone_permission  # Grant when app prompts. Android pre-grant: `adb shell pm grant com.friend.ios.dev android.permission.RECORD_AUDIO`. iOS: tap Allow on permission dialog.
+setup: normal
+
+steps:
+  - name: Verify home screen
+    assert:
+      interactive_count: { min: 20 }
+    screenshot: home-before-record
+
+  - name: Tap center record button
+    press: { type: gesture, hint: "record button — center of bottom bar, large circular button" }
+    screenshot: capturing-started
+
+  - name: Verify capturing page
+    assert:
+      interactive_count: { min: 15, verified: "flow-walker run10: 19 elements (2 elevated, 1 FAB, 9 gesture, 1 icon, 5 inkwell, 1 textfield)" }
+    note: >
+      Capturing page shows: live transcript area, audio waveform,
+      stop button (ElevatedButton), Ask Omi text field,
+      bottom nav still visible (5 InkWell — 4 tabs + center record).
+
+  - name: Wait for transcript activity
+    wait: { timeout: 5000, hint: "live transcript text appears" }
+    screenshot: live-transcript
+
+  - name: Stop recording
+    press: { type: button, hint: "stop/finish button — ElevatedButton" }
+    screenshot: recording-stopped
+
+  - name: Verify return to home or processing
+    note: "After stop, may show processing screen briefly before returning to home"
+    assert:
+      bottom_nav_tabs: { min: 4 }
+    screenshot: after-recording
