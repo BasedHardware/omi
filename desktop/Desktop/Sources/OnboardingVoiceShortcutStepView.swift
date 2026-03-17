@@ -76,7 +76,7 @@ struct OnboardingVoiceShortcutStepView: View {
           .lineSpacing(2)
 
         Text(
-          "Hold the key you want to use for voice questions, ask something like \"What's on my screen?\", then release to send. If the preview reacts on the right, you're set. If not, switch to another key."
+          "Hold the key you want to use for voice questions, then release to send. Try asking \"What's on my screen?\" If the preview reacts on the right, you're set. If not, switch to another key."
         )
         .font(.system(size: 16))
         .foregroundColor(OmiColors.textSecondary)
