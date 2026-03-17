@@ -6,9 +6,9 @@
     "model": "unknown",
     "resolution": "unknown"
   },
-  "createdAt": "2026-03-16T06:47:24.410Z",
-  "runId": "r9E3ous",
-  "totalDurationMs": 58496,
+  "createdAt": "2026-03-16T07:05:45.550Z",
+  "runId": "-NI87aU",
+  "totalDurationMs": 56,
   "verifySteps": [
     "S1",
     "S3",
@@ -28,7 +28,7 @@
     "S2": {
       "kind": "action",
       "waitAfterMs": 200,
-      "durationMs": 56013,
+      "durationMs": 8,
       "ref": "e2",
       "text": "English",
       "type": "InkWell"
@@ -36,7 +36,7 @@
     "S3": {
       "kind": "verify",
       "waitAfterMs": 200,
-      "durationMs": 10
+      "durationMs": 3
     },
     "S4": {
       "kind": "verify",
@@ -46,27 +46,27 @@
     "S5": {
       "kind": "verify",
       "waitAfterMs": 200,
-      "durationMs": 6
+      "durationMs": 4
     },
     "S6": {
       "kind": "verify",
       "waitAfterMs": 200,
-      "durationMs": 5
+      "durationMs": 3
     },
     "S7": {
       "kind": "verify",
       "waitAfterMs": 200,
-      "durationMs": 8
+      "durationMs": 4
     },
     "S8": {
       "kind": "verify",
       "waitAfterMs": 200,
-      "durationMs": 5
+      "durationMs": 3
     },
     "S9": {
       "kind": "action",
       "waitAfterMs": 500,
-      "durationMs": 2422,
+      "durationMs": 6,
       "ref": "screen",
       "text": "Home screen",
       "type": "Screen"
