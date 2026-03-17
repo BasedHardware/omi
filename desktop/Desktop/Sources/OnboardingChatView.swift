@@ -279,6 +279,7 @@ struct OnboardingChatView: View {
                                 case "notifications": return !appState.hasNotificationPermission
                                 case "accessibility": return !appState.hasAccessibilityPermission
                                 case "automation": return !appState.hasAutomationPermission
+                                case "full_disk_access": return !appState.hasFullDiskAccess
                                 default: return false
                                 }
                             }()
@@ -414,6 +415,7 @@ struct OnboardingChatView: View {
             appState.checkMicrophonePermission()
             appState.checkAccessibilityPermission()
             appState.checkAutomationPermission()
+            appState.checkFullDiskAccess()
         }
         // When a pending permission is granted, bring app to front and notify the AI
         .onChange(of: appState.hasScreenRecordingPermission) { _, granted in
@@ -430,6 +432,9 @@ struct OnboardingChatView: View {
         }
         .onChange(of: appState.hasAutomationPermission) { _, granted in
             if granted { handlePermissionGranted("automation", label: "Automation") }
+        }
+        .onChange(of: appState.hasFullDiskAccess) { _, granted in
+            if granted { handlePermissionGranted("full_disk_access", label: "Full Disk Access") }
         }
     }
 
@@ -461,6 +466,8 @@ struct OnboardingChatView: View {
                 return "x-apple.systempreferences:com.apple.preference.security?Privacy_Automation"
             case "notifications":
                 return "x-apple.systempreferences:com.apple.preference.security?Privacy_Notifications"
+            case "full_disk_access":
+                return "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles"
             default:
                 return nil
             }
