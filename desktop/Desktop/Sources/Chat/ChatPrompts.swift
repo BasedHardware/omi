@@ -688,9 +688,9 @@ struct ChatPrompts {
     After reply, call `save_knowledge_graph` with the chosen goal as a concept node connected to the user.
 
     STEP 3 — FILE SCAN (AFTER GOAL)
-    Tell the user you'll scan files, then call `scan_files`. A folder access guide image is shown automatically in the UI.
-    This tool BLOCKS until the scan is complete. macOS may show folder access dialogs — the guide image helps the user click Allow.
-    If any folders were denied access, tell the user and call `scan_files` again after they allow.
+    First, check if Full Disk Access is granted by calling `check_permission_status`. If `full_disk_access` is "not_granted", request it with `request_permission(type: "full_disk_access")`. This opens System Settings — tell the user to toggle Full Disk Access on for omi. This single permission replaces needing to approve each folder separately. WAIT for the permission to be granted before proceeding.
+    Once Full Disk Access is granted (or if it was already granted), tell the user you'll scan files, then call `scan_files`.
+    This tool BLOCKS until the scan is complete.
     After scan, call `save_knowledge_graph` with tools, languages, frameworks, and notable notes/projects found (5-20 nodes).
 
     STEP 4 — FILE DISCOVERIES + TASK CANDIDATES
@@ -792,12 +792,11 @@ struct ChatPrompts {
     - Scans ~/Downloads, ~/Documents, ~/Desktop, ~/Developer, ~/Projects, and /Applications.
     - Returns file type breakdown, projects, recent files, installed apps.
     - Returns existing task candidates when available, so you can connect tasks to the user's goals.
-    - Also reports which folders were DENIED access (user didn't click Allow on the macOS dialog).
-    - If folders were denied, tell the user to click Allow, then call scan_files AGAIN to pick up those folders.
+    - IMPORTANT: Request `full_disk_access` permission BEFORE calling scan_files to avoid per-folder dialogs.
 
     **check_permission_status**: Check which macOS permissions are already granted.
     - No parameters.
-    - Returns JSON with status of all 5 permissions.
+    - Returns JSON with status of all 6 permissions (screen_recording, microphone, notifications, accessibility, automation, full_disk_access).
     - Call this BEFORE requesting any permissions.
 
     **ask_followup**: Present a question with clickable quick-reply buttons to the user.
@@ -808,8 +807,9 @@ struct ChatPrompts {
     - ALWAYS wait for the user's reply after calling this tool.
 
     **request_permission**: Request a specific macOS permission from the user.
-    - Parameters: type (required) — one of: screen_recording, microphone, notifications, accessibility, automation
-    - Triggers the macOS system permission dialog. Returns "granted", "pending - ...", or "denied".
+    - Parameters: type (required) — one of: screen_recording, microphone, notifications, accessibility, automation, full_disk_access
+    - Triggers the macOS system permission dialog (or opens System Settings for full_disk_access). Returns "granted", "pending - ...", or "denied".
+    - For full_disk_access: request this BEFORE scan_files — it replaces the need for individual folder access dialogs.
     - In Step 6, do NOT call this directly — use `ask_followup` with "Grant [X]" buttons instead. The UI handles triggering the permission.
 
     **set_user_preferences**: Save user preferences (language, name).
