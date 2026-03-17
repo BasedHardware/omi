@@ -43,6 +43,11 @@ let package = Package(
                 .process("GoogleService-Info.plist"),
                 .process("Resources")
             ]
+        ),
+        .testTarget(
+            name: "OmiComputerTests",
+            dependencies: ["Omi Computer"],
+            path: "Tests"
         )
     ]
 )
