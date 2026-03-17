@@ -25,19 +25,6 @@ struct FloatingControlBarView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .onHover { hovering in
-            // Resize window BEFORE updating SwiftUI state on expand so the expanded
-            // content never renders in a too-small window (which causes overflow).
-            if hovering {
-                (window as? FloatingControlBarWindow)?.resizeForHover(expanded: true)
-            }
-            withAnimation(.easeInOut(duration: 0.2)) {
-                isHovering = hovering
-            }
-            if !hovering {
-                (window as? FloatingControlBarWindow)?.resizeForHover(expanded: false)
-            }
-        }
         .animation(.spring(response: 0.35, dampingFraction: 0.82), value: state.currentNotification?.id)
     }
 
@@ -113,6 +100,22 @@ struct FloatingControlBarView: View {
         .clipped()
         .background(DraggableAreaView(targetWindow: window))
         .floatingBackground(cornerRadius: isHovering || state.showingAIConversation || state.isVoiceListening || state.isShowingNotification ? 20 : 5)
+        .onHover(perform: handleBarHover)
+    }
+
+    private func handleBarHover(_ hovering: Bool) {
+        state.isHoveringBar = hovering
+        // Resize window BEFORE updating SwiftUI state on expand so the expanded
+        // content never renders in a too-small window (which causes overflow).
+        if hovering {
+            (window as? FloatingControlBarWindow)?.resizeForHover(expanded: true)
+        }
+        withAnimation(.easeInOut(duration: 0.2)) {
+            isHovering = hovering
+        }
+        if !hovering {
+            (window as? FloatingControlBarWindow)?.resizeForHover(expanded: false)
+        }
     }
 
     private func notificationView(_ notification: FloatingBarNotification) -> some View {

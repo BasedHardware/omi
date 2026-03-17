@@ -573,7 +573,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         if state.isVoiceListening {
             targetSize = NSSize(width: Self.expandedWidth, height: Self.expandedBarSize.height)
         } else {
-            targetSize = frame.contains(NSEvent.mouseLocation) ? Self.expandedBarSize : Self.minBarSize
+            targetSize = state.isHoveringBar ? Self.expandedBarSize : Self.minBarSize
         }
         resizeAnchored(to: targetSize, makeResizable: false, animated: animated, anchorTop: true)
     }
