@@ -559,8 +559,22 @@ class ChatToolExecutor {
                 return "pending - user needs to toggle Automation for omi in System Settings"
             }
 
+        case "full_disk_access":
+            // Open System Settings to Full Disk Access pane
+            if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles") {
+                NSWorkspace.shared.open(url)
+            }
+            try? await Task.sleep(nanoseconds: 3_000_000_000)
+            appState.checkFullDiskAccess()
+            try? await Task.sleep(nanoseconds: 500_000_000)
+            if appState.hasFullDiskAccess {
+                return "granted"
+            } else {
+                return "pending - user needs to toggle Full Disk Access for omi in System Settings > Privacy & Security > Full Disk Access"
+            }
+
         default:
-            return "Error: unknown permission type '\(type)'. Valid types: screen_recording, microphone, notifications, accessibility, automation"
+            return "Error: unknown permission type '\(type)'. Valid types: screen_recording, microphone, notifications, accessibility, automation, full_disk_access"
         }
     }
 
@@ -584,6 +598,7 @@ class ChatToolExecutor {
             "notifications": appState.hasNotificationPermission ? "granted" : "not_granted",
             "accessibility": appState.hasAccessibilityPermission ? "granted" : "not_granted",
             "automation": appState.hasAutomationPermission ? "granted" : "not_granted",
+            "full_disk_access": appState.hasFullDiskAccess ? "granted" : "not_granted",
         ]
 
         if let data = try? JSONSerialization.data(withJSONObject: statuses, options: .prettyPrinted),
