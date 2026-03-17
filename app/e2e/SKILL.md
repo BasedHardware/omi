@@ -389,6 +389,7 @@ Only flows that have been executed, verified, and pushed through the v2 flow-wal
 | `flows/login.yaml` | 5 | signed_out | Auth screen → Google Sign-In → consent → OAuth → home | [normal](https://flow-walker.beastoin.workers.dev/runs/hao5vbBsBI.html), [replay](https://flow-walker.beastoin.workers.dev/runs/-aeMGlV88w.html) |
 | `flows/onboarding.yaml` | 9 | signed_out + auth | Name → Language → Found Omi → Permissions → Review → Speech → Knowledge → Complete → Home | [normal](https://flow-walker.beastoin.workers.dev/runs/UHqa8Fysj2.html), [replay](https://flow-walker.beastoin.workers.dev/runs/B9Py6uoJaO.html) |
 | `flows/logout.yaml` | 5 | auth_ready | Home → Settings → Sign Out → Confirm → Auth screen | [normal](https://flow-walker.beastoin.workers.dev/runs/SH4MXH9gkv.html), [replay](https://flow-walker.beastoin.workers.dev/runs/NcZlCUW0W7.html) |
+| `flows/ask-omi-chat.yaml` | 9 | auth_ready | Home → Ask Omi → Chat page → Type message → AI response → Chat apps drawer → Home | [normal](https://flow-walker.beastoin.workers.dev/runs/O5h8bR6izW.html) |
 
 When you modify a Dart file, check if any flow's `covers:` includes it. If so, that flow describes the user journey your change affects — use it to understand context and verify your work.
 
