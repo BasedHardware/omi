@@ -3,6 +3,7 @@ import logging
 import os
 
 from dotenv import load_dotenv
+
 load_dotenv()  # No-op if .env doesn't exist (production); loads local dev secrets otherwise
 
 logging.basicConfig(level=logging.INFO)
@@ -40,6 +41,7 @@ from routers import (
     developer,
     updates,
     calendar_meetings,
+    calendar_onboarding,
     imports,
     knowledge_graph,
     wrapped,
@@ -92,6 +94,7 @@ app.include_router(sync.router)
 app.include_router(apps.router)
 app.include_router(custom_auth.router)
 app.include_router(calendar_meetings.router)
+app.include_router(calendar_onboarding.router)
 app.include_router(oauth.router)  # Added oauth router (for Omi Apps)
 app.include_router(auth.router)  # Added auth router (for the main Omi App, this is the core auth router)
 

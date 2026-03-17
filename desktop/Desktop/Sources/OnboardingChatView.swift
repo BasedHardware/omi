@@ -114,6 +114,13 @@ struct OnboardingChatView: View {
     @State private var gmailReadingCompleted = false
     @State private var gmailReadingText = ""
     @State private var gmailReadingTask: Task<Void, Never>?
+
+    // Calendar reading state (runs alongside exploration during onboarding)
+    @State private var calendarReadingRunning = false
+    @State private var calendarReadingCompleted = false
+    @State private var calendarReadingText = ""
+    @State private var calendarReadingTask: Task<Void, Never>?
+
     @State private var showSkipConfirmation = false
 
     // Timer to periodically check permission status
@@ -192,6 +199,18 @@ struct OnboardingChatView: View {
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .padding(.leading, 44)
                             .id("gmail-card")
+                        }
+
+                        // Calendar insights card (appears alongside exploration)
+                        if !shouldHideExplorationCard && (calendarReadingRunning || (calendarReadingCompleted && !calendarReadingText.isEmpty)) {
+                            CalendarInsightsCard(
+                                text: calendarReadingText,
+                                isRunning: calendarReadingRunning,
+                                isCompleted: calendarReadingCompleted
+                            )
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.leading, 44)
+                            .id("calendar-card")
                         }
 
                         // Typing indicator (floating, no avatar)
@@ -516,6 +535,7 @@ struct OnboardingChatView: View {
             guard fileCount > 0 else { return }
             startExploration(fileCount: fileCount, graphViewModel: graphViewModel)
             startGmailReading()
+            startCalendarReading()
         }
 
         // Build onboarding system prompt
@@ -968,6 +988,10 @@ struct OnboardingChatView: View {
         gmailReadingTask?.cancel()
         gmailReadingTask = nil
 
+        // Clean up Calendar reading
+        calendarReadingTask?.cancel()
+        calendarReadingTask = nil
+
         // Notify parent to advance to next step
         onComplete()
     }
@@ -1017,6 +1041,7 @@ struct OnboardingChatView: View {
             log("OnboardingChat: Files already indexed (\(fileCount)), starting exploration on resume")
             startExploration(fileCount: fileCount, graphViewModel: graphViewModel)
             startGmailReading()
+            startCalendarReading()
         }
     }
 
@@ -1275,6 +1300,67 @@ struct OnboardingChatView: View {
             }
         }
     }
+
+    // MARK: - Calendar Reading (Parallel Onboarding Task)
+
+    private func startCalendarReading() {
+        guard !calendarReadingRunning && !calendarReadingCompleted else { return }
+        calendarReadingRunning = true
+        log("OnboardingChat: Starting Calendar reading in background")
+
+        calendarReadingTask = Task {
+            do {
+                let events = try await CalendarReaderService.shared.readEvents(
+                    daysBack: 90, daysForward: 14, maxResults: 200
+                )
+                guard !events.isEmpty else {
+                    log("OnboardingChat: No calendar events found, skipping synthesis")
+                    await MainActor.run {
+                        calendarReadingRunning = false
+                        calendarReadingCompleted = true
+                    }
+                    return
+                }
+                log("OnboardingChat: Fetched \(events.count) calendar events, starting synthesis")
+
+                await MainActor.run {
+                    calendarReadingText = "Analyzing \(events.count) calendar events..."
+                }
+
+                let result = await CalendarReaderService.shared.synthesizeFromEvents(events: events)
+
+                let summaryText = result.profileSummary.isEmpty
+                    ? "Created \(result.memories) memories and \(result.tasks) tasks from your calendar."
+                    : result.profileSummary
+
+                await MainActor.run {
+                    calendarReadingText = summaryText
+                    calendarReadingCompleted = true
+                    calendarReadingRunning = false
+                }
+
+                log("OnboardingChat: Calendar synthesis complete — \(result.memories) memories, \(result.tasks) tasks")
+
+                // Append Calendar insights to AI profile
+                let text = await MainActor.run { calendarReadingText }
+                if !text.isEmpty {
+                    let service = AIUserProfileService.shared
+                    let existingProfile = await service.getLatestProfile()
+                    if let existing = existingProfile, let profileId = existing.id {
+                        let updated = existing.profileText + "\n\n--- Calendar Insights ---\n" + text
+                        let success = await service.updateProfileText(id: profileId, newText: updated)
+                        log("OnboardingChat: Appended Calendar insights to AI profile (success=\(success))")
+                    }
+                }
+
+            } catch {
+                log("OnboardingChat: Calendar reading failed (non-fatal): \(error.localizedDescription)")
+                await MainActor.run {
+                    calendarReadingRunning = false
+                }
+            }
+        }
+    }
 }
 
 // MARK: - Gmail Insights Card
@@ -1306,6 +1392,82 @@ struct GmailInsightsCard: View {
 
                     VStack(alignment: .leading, spacing: 2) {
                         Text(isRunning ? "Reading your emails..." : "Email Insights")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundColor(OmiColors.textPrimary)
+
+                        if !text.isEmpty {
+                            Text(String(text.prefix(100)).replacingOccurrences(of: "\n", with: " "))
+                                .font(.system(size: 12))
+                                .foregroundColor(OmiColors.textSecondary)
+                                .lineLimit(2)
+                        }
+                    }
+
+                    Spacer(minLength: 4)
+
+                    if !text.isEmpty {
+                        Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                            .font(.system(size: 10))
+                            .foregroundColor(OmiColors.textTertiary)
+                    }
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 10)
+            }
+            .buttonStyle(.plain)
+
+            if isExpanded && !text.isEmpty {
+                Divider()
+                    .padding(.horizontal, 10)
+
+                ScrollView {
+                    Markdown(text)
+                        .markdownTheme(.aiMessage())
+                        .textSelection(.enabled)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 10)
+                }
+                .frame(maxHeight: 300)
+            }
+        }
+        .background(OmiColors.backgroundTertiary.opacity(0.5))
+        .cornerRadius(12)
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(OmiColors.purplePrimary.opacity(0.2), lineWidth: 1)
+        )
+    }
+}
+
+// MARK: - Calendar Insights Card
+
+struct CalendarInsightsCard: View {
+    let text: String
+    let isRunning: Bool
+    let isCompleted: Bool
+
+    @State private var isExpanded = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Button(action: {
+                guard !text.isEmpty else { return }
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    isExpanded.toggle()
+                }
+            }) {
+                HStack(spacing: 8) {
+                    if isRunning {
+                        ProgressView()
+                            .controlSize(.mini)
+                    } else {
+                        Image(systemName: "calendar.badge.checkmark")
+                            .font(.system(size: 12))
+                            .foregroundColor(OmiColors.purplePrimary)
+                    }
+
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(isRunning ? "Reading your calendar..." : "Calendar Insights")
                             .font(.system(size: 13, weight: .semibold))
                             .foregroundColor(OmiColors.textPrimary)
 

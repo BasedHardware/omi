@@ -261,6 +261,7 @@ struct SettingsContentView: View {
         case preferences = "Preferences"
         case troubleshooting = "Troubleshooting"
         case gmailReader = "Gmail Reader"
+        case calendarSync = "Calendar Sync"
         case developerKeys = "Developer API Keys"
 
         var icon: String {
@@ -278,6 +279,7 @@ struct SettingsContentView: View {
             case .preferences: return "slider.horizontal.3"
             case .troubleshooting: return "wrench.and.screwdriver"
             case .gmailReader: return "envelope.fill"
+            case .calendarSync: return "calendar"
             case .developerKeys: return "key"
             }
         }
@@ -294,6 +296,15 @@ struct SettingsContentView: View {
     @State private var gmailMemoriesSaved: Int = 0
     @State private var gmailReadError: String?
     @State private var gmailLastFetched: Date?
+
+    // Calendar Sync states
+    @State private var calendarEvents: [CalendarEvent] = []
+    @State private var isReadingCalendar: Bool = false
+    @State private var calendarMemoriesCreated: Int = 0
+    @State private var calendarTasksCreated: Int = 0
+    @State private var calendarSyncError: String?
+    @State private var calendarLastSynced: Date?
+
     @State private var isDeletingAccount: Bool = false
     @State private var deleteAccountError: String?
 
@@ -2520,6 +2531,8 @@ struct SettingsContentView: View {
             troubleshootingSubsection
             advancedCategoryHeader(title: "Gmail Reader", icon: "envelope.fill")
             gmailReaderSubsection
+            advancedCategoryHeader(title: "Calendar Sync", icon: "calendar")
+            calendarSyncSubsection
             advancedCategoryHeader(title: "Developer API Keys", icon: "key")
             developerKeysSubsection
         }
@@ -4101,6 +4114,105 @@ struct SettingsContentView: View {
         }
 
         isReadingGmail = false
+    }
+
+    // MARK: - Calendar Sync Subsection
+
+    private var calendarSyncSubsection: some View {
+        VStack(spacing: 20) {
+            settingsCard(settingId: "advanced.calendar.sync") {
+                HStack(spacing: 16) {
+                    Image(systemName: "calendar.badge.clock")
+                        .scaledFont(size: 16)
+                        .foregroundColor(OmiColors.textSecondary)
+                        .frame(width: 24, height: 24)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Sync Calendar")
+                            .scaledFont(size: 16, weight: .semibold)
+                            .foregroundColor(OmiColors.textPrimary)
+                        if let lastSynced = calendarLastSynced {
+                            Text("Last synced \(lastSynced, formatter: relativeDateFormatter)")
+                                .scaledFont(size: 13)
+                                .foregroundColor(OmiColors.textTertiary)
+                        } else {
+                            Text("Reads Google Calendar using browser cookies — no OAuth needed")
+                                .scaledFont(size: 13)
+                                .foregroundColor(OmiColors.textTertiary)
+                        }
+                    }
+                    Spacer()
+                    Button(action: { Task { await syncCalendar() } }) {
+                        if isReadingCalendar {
+                            ProgressView().scaleEffect(0.7).frame(width: 80, height: 22)
+                        } else {
+                            Text("Sync Calendar")
+                                .scaledFont(size: 13, weight: .medium)
+                                .foregroundColor(.white)
+                                .padding(.horizontal, 14)
+                                .padding(.vertical, 6)
+                                .background(RoundedRectangle(cornerRadius: 6).fill(OmiColors.purplePrimary))
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(isReadingCalendar)
+                    .accessibilityIdentifier("syncCalendarButton")
+                }
+            }
+            if let error = calendarSyncError {
+                settingsCard(settingId: "advanced.calendar.error") {
+                    HStack(spacing: 12) {
+                        Image(systemName: "exclamationmark.triangle.fill").foregroundColor(.orange)
+                        Text(error).scaledFont(size: 13).foregroundColor(OmiColors.textSecondary).lineLimit(3)
+                        Spacer()
+                    }
+                }
+            }
+            if calendarMemoriesCreated > 0 || calendarTasksCreated > 0 {
+                settingsCard(settingId: "advanced.calendar.saved") {
+                    HStack(spacing: 12) {
+                        Image(systemName: "checkmark.circle.fill").foregroundColor(.green)
+                        Text("\(calendarMemoriesCreated) memories and \(calendarTasksCreated) tasks created from \(calendarEvents.count) events")
+                            .scaledFont(size: 13).foregroundColor(OmiColors.textSecondary)
+                        Spacer()
+                    }
+                }
+            }
+            if !calendarEvents.isEmpty {
+                VStack(spacing: 8) {
+                    ForEach(calendarEvents.prefix(15)) { event in
+                        settingsCard(settingId: "advanced.calendar.event.\(event.id)") {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(event.summary).scaledFont(size: 14, weight: .medium).foregroundColor(OmiColors.textPrimary).lineLimit(1)
+                                Text(event.startTime).scaledFont(size: 12).foregroundColor(OmiColors.textSecondary).lineLimit(1)
+                                if !event.attendees.isEmpty {
+                                    Text("With: \(event.attendees.prefix(3).joined(separator: ", "))").scaledFont(size: 12).foregroundColor(OmiColors.textTertiary).lineLimit(1)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private func syncCalendar() async {
+        isReadingCalendar = true
+        calendarSyncError = nil
+        calendarMemoriesCreated = 0
+        calendarTasksCreated = 0
+        do {
+            let events = try await CalendarReaderService.shared.readEvents(daysBack: 30, daysForward: 14)
+            calendarEvents = events
+            calendarLastSynced = Date()
+            if !events.isEmpty {
+                let result = await CalendarReaderService.shared.synthesizeFromEvents(events: events)
+                calendarMemoriesCreated = result.memories
+                calendarTasksCreated = result.tasks
+            }
+        } catch {
+            calendarSyncError = error.localizedDescription
+        }
+        isReadingCalendar = false
     }
 
     private var relativeDateFormatter: DateFormatter {
