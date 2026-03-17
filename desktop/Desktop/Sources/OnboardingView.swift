@@ -15,8 +15,6 @@ struct OnboardingView: View {
   @StateObject private var graphViewModel = MemoryGraphViewModel()
   @State private var graphHasData = false
   @State private var showTrustPreview = true
-  @State private var showGraphHints = false
-  @State private var hintsHovered = false
 
   let steps = OnboardingFlow.steps
 
@@ -134,13 +132,9 @@ struct OnboardingView: View {
                 endPoint: .bottom
               )
             )
-            .onHover { hovering in
-              hintsHovered = hovering
-            }
-            .opacity(graphHasData && (showGraphHints || hintsHovered) ? 1 : 0)
-            .animation(.easeInOut(duration: 0.3), value: showGraphHints)
-            .animation(.easeInOut(duration: 0.3), value: hintsHovered)
+            .opacity(graphHasData && !showTrustPreview ? 1 : 0)
             .animation(.easeInOut(duration: 0.3), value: graphHasData)
+            .animation(.easeInOut(duration: 0.3), value: showTrustPreview)
           }
           .onAppear {
             showTrustPreview = true
@@ -222,13 +216,6 @@ struct OnboardingView: View {
     .foregroundColor(.white.opacity(0.5))
   }
 
-  private func flashGraphHints() {
-    showGraphHints = true
-    DispatchQueue.main.asyncAfter(deadline: .now() + 5) {
-      showGraphHints = false
-    }
-  }
-
   private func handleGraphDataArrival() {
     withAnimation(.easeIn(duration: 0.35)) {
       graphHasData = true
@@ -239,7 +226,6 @@ struct OnboardingView: View {
       withAnimation(.easeInOut(duration: 0.45)) {
         showTrustPreview = false
       }
-      flashGraphHints()
     }
   }
 
