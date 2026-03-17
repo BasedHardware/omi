@@ -161,8 +161,26 @@ actor CalendarReaderService {
                 onToolActivity: { @Sendable _, _, _, _ in }
             )
 
-            let responseText = result.text
+            var responseText = result.text
             log("CalendarReaderService: Synthesis raw response (\(responseText.count) chars): \(responseText.prefix(300))")
+
+            // Extract JSON from response — handle markdown code fences and leading text
+            if let jsonStart = responseText.range(of: "```json") {
+                responseText = String(responseText[jsonStart.upperBound...])
+                if let jsonEnd = responseText.range(of: "```") {
+                    responseText = String(responseText[..<jsonEnd.lowerBound])
+                }
+            } else if let jsonStart = responseText.range(of: "```") {
+                responseText = String(responseText[jsonStart.upperBound...])
+                if let jsonEnd = responseText.range(of: "```") {
+                    responseText = String(responseText[..<jsonEnd.lowerBound])
+                }
+            }
+            // Also try finding raw JSON object if there's leading text
+            if let braceStart = responseText.firstIndex(of: "{") {
+                responseText = String(responseText[braceStart...])
+            }
+            responseText = responseText.trimmingCharacters(in: .whitespacesAndNewlines)
 
             guard let jsonData = responseText.data(using: .utf8),
                 let parsed = try? JSONSerialization.jsonObject(with: jsonData) as? [String: Any]
