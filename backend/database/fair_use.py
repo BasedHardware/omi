@@ -78,6 +78,9 @@ def get_violation_counts(uid: str) -> dict:
         data = doc.to_dict()
         created = data.get('created_at')
         if created:
+            # Normalize to naive UTC for comparison (Firestore may return aware datetimes)
+            if isinstance(created, datetime) and created.tzinfo is not None:
+                created = created.replace(tzinfo=None)
             count_30d += 1
             if created >= cutoff_7d:
                 count_7d += 1
