@@ -348,3 +348,59 @@ class TestEnforcementCache:
     def test_invalidate_cache_deletes_keys(self):
         fair_use_mod.invalidate_enforcement_cache('user1')
         _mock_redis.delete.assert_called_once()
+
+
+class TestReleaseLock:
+    """Test atomic compare-and-delete lock release."""
+
+    def setup_method(self):
+        _mock_redis.reset_mock()
+
+    def test_release_calls_eval_with_lua_script(self):
+        fair_use_mod._release_lock('lock:key', 'token-123')
+        _mock_redis.eval.assert_called_once()
+        args = _mock_redis.eval.call_args
+        # Should pass key and token as arguments
+        assert args[0][1] == 1  # numkeys
+        assert args[0][2] == 'lock:key'
+        assert args[0][3] == 'token-123'
+
+
+class TestDatetimeNormalization:
+    """Test that timezone-aware Firestore datetimes don't break enforcement."""
+
+    def setup_method(self):
+        _mock_redis.reset_mock()
+        _fair_use_db.get_fair_use_state.reset_mock()
+        _fair_use_db.update_fair_use_state.reset_mock()
+
+    @patch.object(fair_use_mod, 'FAIR_USE_ENABLED', True)
+    @patch.object(fair_use_mod, 'FAIR_USE_KILL_SWITCH', False)
+    @patch.object(fair_use_mod, 'FAIR_USE_EXEMPT_UIDS', set())
+    @patch.object(fair_use_mod, 'get_enforcement_stage', return_value='restrict')
+    def test_aware_datetime_does_not_raise(self, _):
+        from datetime import timezone
+
+        # Simulate Firestore returning an aware datetime
+        aware_past = datetime.now(timezone.utc) - timedelta(days=1)
+        _fair_use_db.get_fair_use_state.return_value = {'restrict_until': aware_past}
+
+        # Should not raise TypeError from naive/aware comparison
+        result = fair_use_mod.is_hard_restricted('user1')
+        assert result is False  # Expired restriction
+        _fair_use_db.update_fair_use_state.assert_called_once()
+
+    @patch.object(fair_use_mod, 'FAIR_USE_ENABLED', True)
+    @patch.object(fair_use_mod, 'FAIR_USE_KILL_SWITCH', False)
+    @patch.object(fair_use_mod, 'FAIR_USE_EXEMPT_UIDS', set())
+    @patch.object(fair_use_mod, 'get_enforcement_stage', return_value='restrict')
+    @patch.object(fair_use_mod, 'get_rolling_speech_ms')
+    def test_aware_future_datetime_still_restricts(self, mock_speech, _):
+        from datetime import timezone
+
+        aware_future = datetime.now(timezone.utc) + timedelta(days=7)
+        _fair_use_db.get_fair_use_state.return_value = {'restrict_until': aware_future}
+        mock_speech.return_value = {'daily_ms': 8000000, 'three_day_ms': 0, 'weekly_ms': 0}
+
+        result = fair_use_mod.is_hard_restricted('user1')
+        assert result is True
