@@ -6,7 +6,14 @@ rules:
     - name:
         as: "backend_listen_active_ws_connections_per_pod"
       seriesQuery: 'backend_listen_active_ws_connections'
-      metricsQuery: 'avg(backend_listen_active_ws_connections)'
+      metricsQuery: 'avg(backend_listen_active_ws_connections{job="backend-listen-metrics"})'
+      resources:
+        overrides:
+          namespace: { resource: "namespace" }
+    - name:
+        as: "pusher_active_ws_connections_per_pod"
+      seriesQuery: 'pusher_active_ws_connections'
+      metricsQuery: 'avg(pusher_active_ws_connections{job="pusher-metrics"})'
       resources:
         overrides:
           namespace: { resource: "namespace" }
