@@ -141,7 +141,7 @@ class BeeDeviceConnection extends CustomDeviceConnection {
   Future<Map<String, String>> getDeviceInfo() async {
     return {
       'modelNumber': 'Bee',
-      'firmwareRevision': _cachedFirmwareVersion ?? '1.0.0',
+      'firmwareRevision': _cachedFirmwareVersion ?? '0.6.0',
       'hardwareRevision': '1.0.0',
       'manufacturerName': 'Bee',
     };
