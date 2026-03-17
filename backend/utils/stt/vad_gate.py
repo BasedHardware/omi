@@ -332,6 +332,10 @@ class VADStreamingGate:
         self._last_send_wall_time: Optional[float] = None  # For keepalive timing
         self._keepalive_count = 0
 
+        # Fair-use speech accumulator (#5746)
+        self._speech_ms_total: float = 0.0
+        self._speech_ms_delta: float = 0.0
+
     def activate(self) -> None:
         """Switch from shadow to active mode (used after speech profile completes).
 
@@ -463,6 +467,10 @@ class VADStreamingGate:
         if is_speech:
             self._last_speech_ms = self._audio_cursor_ms
             self._chunks_speech += 1
+            # Fair-use speech accumulator (#5746) — only count active mode speech
+            if self.mode == 'active':
+                self._speech_ms_total += chunk_ms
+                self._speech_ms_delta += chunk_ms
         else:
             self._chunks_silence += 1
 
@@ -617,6 +625,17 @@ class VADStreamingGate:
         # Fallback: send everything
         return GateOutput(audio_to_send=pcm_data, is_speech=is_speech)
 
+    def consume_speech_ms_delta(self) -> int:
+        """Consume and reset the speech_ms delta since last call.
+
+        Used by the usage recording loop to periodically flush speech_ms
+        to Redis/Firestore for fair-use tracking (#5746).
+        Thread-safe: called from the same asyncio task that feeds audio.
+        """
+        delta = int(self._speech_ms_delta)
+        self._speech_ms_delta = 0.0
+        return delta
+
     def get_metrics(self) -> dict:
         """Return gate metrics for logging/monitoring."""
         total = self._chunks_total or 1
@@ -634,6 +653,7 @@ class VADStreamingGate:
             'bytes_skipped': bytes_skipped,
             'bytes_saved_ratio': bytes_skipped / total_bytes,
             'keepalive_count': self._keepalive_count,
+            'speech_ms_total': self._speech_ms_total,
             'state': self._state.value,
             'mode': self.mode,
         }
