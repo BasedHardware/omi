@@ -983,15 +983,36 @@ class AppState: ObservableObject {
     }
   }
 
-  /// Check Full Disk Access by testing read access to a TCC-protected path.
+  /// Check Full Disk Access by querying the user's TCC database for kTCCServiceSystemPolicyAllFiles.
   func checkFullDiskAccess() {
+    guard let bundleId = Bundle.main.bundleIdentifier else { return }
     let home = FileManager.default.homeDirectoryForCurrentUser.path
-    // ~/Library/Mail is TCC-protected and only accessible with Full Disk Access
-    let testPath = "\(home)/Library/Mail"
-    let granted = FileManager.default.isReadableFile(atPath: testPath)
-    if granted != hasFullDiskAccess {
-      hasFullDiskAccess = granted
-      log("Full Disk Access: \(granted ? "granted" : "not granted")")
+    let tccPath = "\(home)/Library/Application Support/com.apple.TCC/TCC.db"
+
+    let process = Process()
+    process.executableURL = URL(fileURLWithPath: "/usr/bin/sqlite3")
+    process.arguments = [
+      tccPath,
+      "SELECT auth_value FROM access WHERE service='kTCCServiceSystemPolicyAllFiles' AND client='\(bundleId)' LIMIT 1;",
+    ]
+    let pipe = Pipe()
+    process.standardOutput = pipe
+    process.standardError = Pipe()
+    do {
+      try process.run()
+      process.waitUntilExit()
+      let output = String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)?
+        .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+      let granted = output == "2"
+      if granted != hasFullDiskAccess {
+        hasFullDiskAccess = granted
+        log("Full Disk Access: \(granted ? "granted" : "not granted")")
+      }
+    } catch {
+      if hasFullDiskAccess {
+        hasFullDiskAccess = false
+        log("Full Disk Access: check failed, assuming not granted")
+      }
     }
   }
 
@@ -2625,6 +2646,12 @@ class AppState: ObservableObject {
     // Clear onboarding chat persistence and messages
     OnboardingChatPersistence.clear()
     log("Cleared onboarding chat persistence")
+
+    // Clear local knowledge graph so the onboarding chart starts fresh
+    Task {
+      await KnowledgeGraphStorage.shared.clearAll()
+      log("Cleared local knowledge graph storage")
+    }
 
     // Clear persisted backend chat messages so onboarding does not resume old history.
     // Onboarding currently uses the default chat message stream.
