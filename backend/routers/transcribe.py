@@ -87,6 +87,16 @@ from utils.stt.streaming import (
     send_initial_file_path,
 )
 from utils.stt.vad_gate import VADStreamingGate, VAD_GATE_MODE, is_gate_enabled
+from utils.fair_use import (
+    FAIR_USE_ENABLED,
+    FAIR_USE_CHECK_INTERVAL_SECONDS,
+    record_speech_ms,
+    check_soft_caps,
+    get_enforcement_stage,
+    get_user_vad_threshold_delta,
+    is_hard_restricted,
+    trigger_classifier_if_needed,
+)
 from utils.subscription import has_transcription_credits, get_remaining_transcription_seconds
 from utils.translation import TranslationService
 from utils.translation_cache import TranscriptSegmentLanguageCache, should_persist_translation
@@ -387,11 +397,15 @@ async def _stream_handler(
     remaining_seconds_cache_ts: float = 0.0
     remaining_seconds_cache_initialized = False
 
+    # Fair-use state (#5746)
+    fair_use_last_check_ts: float = 0.0
+
     async def _record_usage_periodically():
         nonlocal websocket_active, last_usage_record_timestamp, words_transcribed_since_last_record
         nonlocal last_audio_received_time, last_transcript_time, user_has_credits
         nonlocal freemium_threshold_sent
         nonlocal remaining_seconds_cache, remaining_seconds_cache_ts, remaining_seconds_cache_initialized
+        nonlocal fair_use_last_check_ts
 
         while websocket_active:
             await asyncio.sleep(60)
@@ -402,6 +416,16 @@ async def _stream_handler(
                 continue
 
             transcription_seconds = 0
+            speech_seconds_delta = 0
+
+            # Consume speech_ms delta from VAD gate (#5746)
+            if vad_gate is not None:
+                speech_ms = vad_gate.consume_speech_ms_delta()
+                speech_seconds_delta = speech_ms // 1000
+                # Record to Redis for rolling window tracking
+                if FAIR_USE_ENABLED and speech_ms > 0:
+                    record_speech_ms(uid, speech_ms)
+
             if last_usage_record_timestamp:
                 current_time = time.time()
                 transcription_seconds = int(current_time - last_usage_record_timestamp)
@@ -409,9 +433,33 @@ async def _stream_handler(
                 words_to_record = words_transcribed_since_last_record
                 words_transcribed_since_last_record = 0  # reset
 
-                if transcription_seconds > 0 or words_to_record > 0:
-                    record_usage(uid, transcription_seconds=transcription_seconds, words_transcribed=words_to_record)
+                if transcription_seconds > 0 or words_to_record > 0 or speech_seconds_delta > 0:
+                    record_usage(
+                        uid,
+                        transcription_seconds=transcription_seconds,
+                        words_transcribed=words_to_record,
+                        speech_seconds=speech_seconds_delta,
+                    )
                 last_usage_record_timestamp = current_time
+
+            # Fair-use soft cap check (every FAIR_USE_CHECK_INTERVAL_SECONDS) (#5746)
+            now_ts = time.time()
+            if FAIR_USE_ENABLED and now_ts - fair_use_last_check_ts >= FAIR_USE_CHECK_INTERVAL_SECONDS:
+                fair_use_last_check_ts = now_ts
+                try:
+                    triggered_caps = check_soft_caps(uid)
+                    if triggered_caps:
+                        logger.info(
+                            f'fair_use: soft cap triggered for {uid} session={session_id} caps={triggered_caps}'
+                        )
+                        asyncio.create_task(trigger_classifier_if_needed(uid, triggered_caps, session_id))
+
+                    # Check hard restriction
+                    if is_hard_restricted(uid):
+                        user_has_credits = False
+                        logger.info(f'fair_use: hard restrict active for {uid} session={session_id}')
+                except Exception as e:
+                    logger.error(f'fair_use: cap check error for {uid}: {e}')
 
             # Freemium: Check remaining credits with local cache (#5439)
             # Refresh from Firestore only every CREDITS_REFRESH_SECONDS; decrement locally between refreshes
@@ -917,6 +965,28 @@ async def _stream_handler(
                         uid=uid,
                         session_id=session_id,
                     )
+                    # Apply per-user VAD threshold delta for throttled users (#5746)
+                    if FAIR_USE_ENABLED:
+                        try:
+                            vad_delta = get_user_vad_threshold_delta(uid)
+                            if vad_delta > 0:
+                                from utils.fair_use import FAIR_USE_VAD_THRESHOLD_MAX
+
+                                new_threshold = min(
+                                    vad_gate._speech_threshold + vad_delta,
+                                    FAIR_USE_VAD_THRESHOLD_MAX,
+                                )
+                                vad_gate._speech_threshold = new_threshold
+                                logger.info(
+                                    'fair_use: VAD threshold adjusted to %.3f (delta=%.3f) uid=%s session=%s',
+                                    new_threshold,
+                                    vad_delta,
+                                    uid,
+                                    session_id,
+                                )
+                        except Exception as e:
+                            logger.error(f'fair_use: VAD threshold adjustment error: {e} {uid} {session_id}')
+
                     logger.info(
                         'VAD gate initialized mode=%s preseconds=%s codec=%s sample_rate=%s uid=%s session=%s',
                         gate_mode,
