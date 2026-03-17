@@ -226,22 +226,15 @@ actor CalendarReaderService {
 
     private func fetchCalendarViaCookies(daysBack: Int, daysForward: Int, maxResults: Int) throws -> [CalendarEvent] {
         // Build browser configs as JSON for Python
+        // Pass the ORIGINAL db path — Python opens it read-only to avoid WAL/journal corruption from file copy
         var browserConfigs: [[String: String]] = []
         for browser in CalBrowserConfig.allBrowsers() {
             guard FileManager.default.fileExists(atPath: browser.cookiePath) else { continue }
             guard let password = getKeychainPassword(service: browser.keychainService) else { continue }
 
-            let tmpPath = "/tmp/omi_cal_cookies_\(browser.name)_\(Int(Date().timeIntervalSince1970)).db"
-            do {
-                try FileManager.default.copyItem(atPath: browser.cookiePath, toPath: tmpPath)
-            } catch {
-                log("CalendarReaderService: Failed to copy \(browser.name) cookies: \(error)")
-                continue
-            }
-
             browserConfigs.append([
                 "name": browser.name,
-                "db_path": tmpPath,
+                "db_path": browser.cookiePath,
                 "password": password,
             ])
         }
@@ -258,13 +251,7 @@ actor CalendarReaderService {
             throw CalendarReaderError.networkError("Failed to serialize browser configs")
         }
 
-        defer {
-            for config in browserConfigs {
-                if let path = config["db_path"] {
-                    try? FileManager.default.removeItem(atPath: path)
-                }
-            }
-        }
+        // No temp file cleanup needed — we read the original DB directly in read-only mode
 
         let pythonScript = """
 import sys, json, sqlite3, hashlib, time, urllib.request, urllib.error
@@ -297,7 +284,7 @@ def decrypt_cookies(db_path, password):
     key = hashlib.pbkdf2_hmac('sha1', password.encode('utf-8'), b'saltysalt', 1003, dklen=16)
     iv = b' ' * 16
     try:
-        conn = sqlite3.connect(db_path)
+        conn = sqlite3.connect(f'file:{db_path}?mode=ro&immutable=1', uri=True, timeout=5)
         c = conn.cursor()
         c.execute('SELECT value FROM meta WHERE key="version"')
         row = c.fetchone()
@@ -484,6 +471,15 @@ sys.exit(0)
 
         do {
             try process.run()
+            // Timeout after 60 seconds to avoid hanging
+            let deadline = DispatchTime.now() + .seconds(60)
+            DispatchQueue.global().async {
+                let _ = DispatchQueue.global().asyncAfter(deadline: deadline) {
+                    if process.isRunning {
+                        process.terminate()
+                    }
+                }
+            }
             process.waitUntilExit()
         } catch {
             throw CalendarReaderError.networkError("Failed to run Python: \(error.localizedDescription)")
