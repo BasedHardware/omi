@@ -444,10 +444,19 @@ for browser in browsers:
             'is_all_day': 'date' in start and 'dateTime' not in start,
         })
 
-    print(json.dumps({'ok': True, 'browser': browser['name'], 'events': result_events, 'count': len(result_events)}))
+    # Write to temp file to avoid pipe buffer truncation with large event lists
+    import tempfile
+    outfile = tempfile.mktemp(suffix='.json', prefix='omi_cal_')
+    with open(outfile, 'w') as f:
+        json.dump({'ok': True, 'browser': browser['name'], 'events': result_events, 'count': len(result_events)}, f)
+    print(outfile)
     sys.exit(0)
 
-print(json.dumps({'ok': False, 'error': 'No browser with valid Google session found'}))
+import tempfile
+outfile = tempfile.mktemp(suffix='.json', prefix='omi_cal_')
+with open(outfile, 'w') as f:
+    json.dump({'ok': False, 'error': 'No browser with valid Google session found'}, f)
+print(outfile)
 sys.exit(0)
 """
 
@@ -469,28 +478,59 @@ sys.exit(0)
         process.standardOutput = pipe
         process.standardError = errPipe
 
+        // Read pipe data asynchronously to avoid deadlock
+        // (waitUntilExit blocks if pipe buffers are full)
+        var outputData = Data()
+        var errData = Data()
+        let outputSem = DispatchSemaphore(value: 0)
+        let errSem = DispatchSemaphore(value: 0)
+        pipe.fileHandleForReading.readabilityHandler = { handle in
+            let d = handle.availableData
+            if d.isEmpty {
+                pipe.fileHandleForReading.readabilityHandler = nil
+                outputSem.signal()
+            } else {
+                outputData.append(d)
+            }
+        }
+        errPipe.fileHandleForReading.readabilityHandler = { handle in
+            let d = handle.availableData
+            if d.isEmpty {
+                errPipe.fileHandleForReading.readabilityHandler = nil
+                errSem.signal()
+            } else {
+                errData.append(d)
+            }
+        }
+
         do {
             try process.run()
-            // Timeout after 60 seconds to avoid hanging
-            let deadline = DispatchTime.now() + .seconds(60)
-            DispatchQueue.global().async {
-                let _ = DispatchQueue.global().asyncAfter(deadline: deadline) {
-                    if process.isRunning {
-                        process.terminate()
-                    }
-                }
+            // Timeout after 60 seconds
+            DispatchQueue.global().asyncAfter(deadline: .now() + .seconds(60)) {
+                if process.isRunning { process.terminate() }
             }
             process.waitUntilExit()
         } catch {
             throw CalendarReaderError.networkError("Failed to run Python: \(error.localizedDescription)")
         }
 
-        let output = pipe.fileHandleForReading.readDataToEndOfFile()
-        let errOutput = String(data: errPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+        // Wait for pipe reads to finish (max 5s after process exit)
+        _ = outputSem.wait(timeout: .now() + .seconds(5))
+        _ = errSem.wait(timeout: .now() + .seconds(5))
+
+        let errOutput = String(data: errData, encoding: .utf8) ?? ""
         if !errOutput.isEmpty {
             log("CalendarReaderService: Python stderr: \(errOutput.prefix(500))")
         }
 
+        // Python writes JSON to a temp file and prints the path to stdout
+        let outputPath = String(data: outputData, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !outputPath.isEmpty, FileManager.default.fileExists(atPath: outputPath) else {
+            throw CalendarReaderError.networkError("Python did not produce output file (stdout: \(outputPath.prefix(200)))")
+        }
+        defer { try? FileManager.default.removeItem(atPath: outputPath) }
+
+        let output = try Data(contentsOf: URL(fileURLWithPath: outputPath))
         guard let json = try? JSONSerialization.jsonObject(with: output) as? [String: Any] else {
             let raw = String(data: output, encoding: .utf8) ?? "(empty)"
             throw CalendarReaderError.networkError("Python returned invalid JSON: \(raw.prefix(200))")
