@@ -1,12 +1,14 @@
 """Admin endpoints for fair-use abuse management."""
 
+import hmac
 import logging
 import os
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 import database.fair_use as fair_use_db
+from utils.other.endpoints import get_current_user_uid
 from utils.fair_use import get_rolling_speech_ms, invalidate_enforcement_cache, FAIR_USE_ENABLED
 
 logger = logging.getLogger(__name__)
@@ -17,7 +19,7 @@ ADMIN_KEY = os.getenv('ADMIN_KEY', '')
 
 
 def _verify_admin_key(secret_key: str) -> None:
-    if not ADMIN_KEY or secret_key != ADMIN_KEY:
+    if not ADMIN_KEY or not hmac.compare_digest(secret_key, ADMIN_KEY):
         raise HTTPException(status_code=403, detail='Invalid admin key')
 
 
@@ -102,12 +104,8 @@ def set_user_stage(uid: str, stage: str = Query(...), secret_key: str = Query(..
 
 
 @router.get('/v1/fair-use/status', tags=['fair_use'])
-def get_my_fair_use_status(uid: str = Query(...)):
-    """User-facing endpoint: see your own fair-use status and speech usage.
-
-    Note: In production, uid comes from auth middleware, not query param.
-    This is simplified for the initial implementation.
-    """
+def get_my_fair_use_status(uid: str = Depends(get_current_user_uid)):
+    """User-facing endpoint: see your own fair-use status and speech usage."""
     state = fair_use_db.get_fair_use_state(uid)
     speech = get_rolling_speech_ms(uid)
 
