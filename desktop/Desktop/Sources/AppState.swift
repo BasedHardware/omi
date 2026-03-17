@@ -95,6 +95,7 @@ class AppState: ObservableObject {
   private var isCheckingAutomationPermission = false  // Prevent concurrent checks (retry path has a 1s sleep)
   @Published var hasAccessibilityPermission = false
   @Published var isAccessibilityBroken = false  // TCC says yes but AX calls actually fail (common after macOS updates/app re-signs)
+  @Published var hasFullDiskAccess = false
 
   /// True if notifications are enabled but won't show visual banners
   var isNotificationBannerDisabled: Bool {
@@ -627,6 +628,7 @@ class AppState: ObservableObject {
     checkMicrophonePermission()
     checkSystemAudioPermission()
     checkAccessibilityPermission()
+    checkFullDiskAccess()
     // One-time startup diagnostic for accessibility
     let osVersion = ProcessInfo.processInfo.operatingSystemVersion
     let bundleId = Bundle.main.bundleIdentifier ?? "unknown"
@@ -978,6 +980,18 @@ class AppState: ObservableObject {
         hasAccessibilityPermission = false
         isAccessibilityBroken = false
       }
+    }
+  }
+
+  /// Check Full Disk Access by testing read access to a TCC-protected path.
+  func checkFullDiskAccess() {
+    let home = FileManager.default.homeDirectoryForCurrentUser.path
+    // ~/Library/Mail is TCC-protected and only accessible with Full Disk Access
+    let testPath = "\(home)/Library/Mail"
+    let granted = FileManager.default.isReadableFile(atPath: testPath)
+    if granted != hasFullDiskAccess {
+      hasFullDiskAccess = granted
+      log("Full Disk Access: \(granted ? "granted" : "not granted")")
     }
   }
 
