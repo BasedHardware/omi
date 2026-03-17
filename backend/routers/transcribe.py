@@ -90,6 +90,7 @@ from utils.stt.vad_gate import VADStreamingGate, VAD_GATE_MODE, is_gate_enabled
 from utils.fair_use import (
     FAIR_USE_ENABLED,
     FAIR_USE_CHECK_INTERVAL_SECONDS,
+    FAIR_USE_VAD_THRESHOLD_MAX,
     record_speech_ms,
     check_soft_caps,
     get_enforcement_stage,
@@ -399,13 +400,14 @@ async def _stream_handler(
 
     # Fair-use state (#5746)
     fair_use_last_check_ts: float = 0.0
+    fair_use_restricted: bool = False
 
     async def _record_usage_periodically():
         nonlocal websocket_active, last_usage_record_timestamp, words_transcribed_since_last_record
         nonlocal last_audio_received_time, last_transcript_time, user_has_credits
         nonlocal freemium_threshold_sent
         nonlocal remaining_seconds_cache, remaining_seconds_cache_ts, remaining_seconds_cache_initialized
-        nonlocal fair_use_last_check_ts
+        nonlocal fair_use_last_check_ts, fair_use_restricted
 
         while websocket_active:
             await asyncio.sleep(60)
@@ -456,8 +458,10 @@ async def _stream_handler(
 
                     # Check hard restriction
                     if is_hard_restricted(uid):
-                        user_has_credits = False
+                        fair_use_restricted = True
                         logger.info(f'fair_use: hard restrict active for {uid} session={session_id}')
+                    else:
+                        fair_use_restricted = False
                 except Exception as e:
                     logger.error(f'fair_use: cap check error for {uid}: {e}')
 
@@ -970,8 +974,6 @@ async def _stream_handler(
                         try:
                             vad_delta = get_user_vad_threshold_delta(uid)
                             if vad_delta > 0:
-                                from utils.fair_use import FAIR_USE_VAD_THRESHOLD_MAX
-
                                 new_threshold = min(
                                     vad_gate._speech_threshold + vad_delta,
                                     FAIR_USE_VAD_THRESHOLD_MAX,
@@ -2072,9 +2074,9 @@ async def _stream_handler(
             if transcript_segments:
                 await websocket.send_json([segment.dict() for segment in updated_segments])
 
-                if transcript_send is not None and user_has_credits:
+                if transcript_send is not None and user_has_credits and not fair_use_restricted:
                     transcript_send([segment.dict() for segment in transcript_segments])
-                elif not PUSHER_ENABLED and user_has_credits:
+                elif not PUSHER_ENABLED and user_has_credits and not fair_use_restricted:
                     # Fallback: trigger realtime integrations directly when pusher is disabled
                     try:
                         await trigger_realtime_integrations(
