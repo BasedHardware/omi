@@ -2030,7 +2030,34 @@ extension APIClient {
             throw APIError.httpError(statusCode: (response as? HTTPURLResponse)?.statusCode ?? 0)
         }
 
-        return try decoder.decode(Goal.self, from: data)
+        let goal = try decoder.decode(Goal.self, from: data)
+        goalsCache = nil
+        return goal
+    }
+
+    /// Updates editable goal fields.
+    func updateGoal(goalId: String, title: String, currentValue: Double, targetValue: Double) async throws -> Goal {
+        struct UpdateGoalRequest: Encodable {
+            let title: String
+            let currentValue: Double
+            let targetValue: Double
+
+            enum CodingKeys: String, CodingKey {
+                case title
+                case currentValue = "current_value"
+                case targetValue = "target_value"
+            }
+        }
+
+        let request = UpdateGoalRequest(
+            title: title,
+            currentValue: currentValue,
+            targetValue: targetValue
+        )
+
+        let goal: Goal = try await patch("v1/goals/\(goalId)", body: request)
+        goalsCache = nil
+        return goal
     }
 
     /// Gets completed goals for history
