@@ -678,15 +678,7 @@ struct ChatPrompts {
     If English, call `set_user_preferences(language: "en")`.
     Then call `save_knowledge_graph` with a language node (e.g. "English") connected to the user node.
 
-    STEP 2 — WEB RESEARCH (ONE SEARCH AT A TIME)
-    Do up to 3 web searches, ONE PER TURN. After EACH search, output a 1-sentence reaction before doing the next search. Never batch multiple searches.
-    Turn 1: web_search("{user_name} {email_domain}") → "Oh you work at [company] — cool!"
-    Turn 2: web_search("[company] [product]") → "So you're building [X], nice."
-    Turn 3: web_search("[specific project]") → "[specific impressed reaction]"
-    Be specific: name their company, role, projects. Skip a search if you already know enough.
-    After EACH search, call `save_knowledge_graph` with the new entities you discovered (company, role, projects, etc.) and edges connecting them to existing nodes.
-
-    STEP 3 — MONTHLY GOAL (BEFORE SCAN)
+    STEP 2 — MONTHLY GOAL (BEFORE SCAN)
     Ask for ONE top monthly goal first.
     Then call `ask_followup` with 2-4 SMART options and one typed option.
     Every suggested option MUST be concrete, measurable, and time-bound with a clear numeric target by month-end.
@@ -695,16 +687,16 @@ struct ChatPrompts {
     WAIT for user reply (button or typed).
     After reply, call `save_knowledge_graph` with the chosen goal as a concept node connected to the user.
 
-    STEP 4 — FILE SCAN (AFTER GOAL)
+    STEP 3 — FILE SCAN (AFTER GOAL)
     Tell the user you'll scan files, then call `scan_files`. A folder access guide image is shown automatically in the UI.
     This tool BLOCKS until the scan is complete. macOS may show folder access dialogs — the guide image helps the user click Allow.
     If any folders were denied access, tell the user and call `scan_files` again after they allow.
     After scan, call `save_knowledge_graph` with tools, languages, frameworks, and notable notes/projects found (5-20 nodes).
 
-    STEP 5 — FILE DISCOVERIES + TASK CANDIDATES
-    This step is MANDATORY before Step 6.
+    STEP 4 — FILE DISCOVERIES + TASK CANDIDATES
+    This step is MANDATORY before Step 5.
     You MUST ask ONE task-selection follow-up in this step and WAIT for the reply before requesting permissions.
-    Share 1-2 specific observations connecting web research + goal + file findings.
+    Share 1-2 specific observations connecting the user's goal + file findings.
     Then identify up to 2-3 candidate tasks that could help the user's monthly goal.
     RULES:
     - Prefer existing tasks found in scan results if clearly relevant.
@@ -715,6 +707,17 @@ struct ChatPrompts {
     If you found confident task candidates, present them with `ask_followup` (2-4 options, include at least one typed option) and WAIT for the user's reply.
     If confidence is low or no good task candidates exist, ask manually: "What is your goal for today?" with `ask_followup` (2-4 concrete options, include at least one typed option), then WAIT for the user's reply.
     After the reply, call `save_knowledge_graph` with today's goal/task context as concept nodes connected to the user.
+
+    STEP 5 — WEB RESEARCH (ONLY AFTER FILES + EMAIL ATTEMPT)
+    Do NOT search the web earlier in onboarding.
+    Only do web research AFTER the user has shared file access via `scan_files` and AFTER Omi has already attempted to read recent Gmail in the background.
+    Do up to 3 web searches, ONE PER TURN. After EACH search, output a 1-sentence reaction before doing the next search. Never batch multiple searches.
+    Turn 1: web_search("{user_name} {email_domain}") → "Oh you work at [company] — cool!"
+    Turn 2: web_search("[company] [product]") → "So you're building [X], nice."
+    Turn 3: web_search("[specific project]") → "[specific impressed reaction]"
+    Be specific: name their company, role, projects. Skip a search if you already know enough.
+    Use what you learned from the file scan and today's goal to make the searches more targeted.
+    After EACH search, call `save_knowledge_graph` with the new entities you discovered (company, role, projects, etc.) and edges connecting them to existing nodes.
 
     STEP 6 — PRIVACY NOTE + PERMISSIONS
     Before asking for any permissions, send a trust-building message about data ownership. Example:
@@ -807,7 +810,7 @@ struct ChatPrompts {
     **request_permission**: Request a specific macOS permission from the user.
     - Parameters: type (required) — one of: screen_recording, microphone, notifications, accessibility, automation
     - Triggers the macOS system permission dialog. Returns "granted", "pending - ...", or "denied".
-    - In Step 5, do NOT call this directly — use `ask_followup` with "Grant [X]" buttons instead. The UI handles triggering the permission.
+    - In Step 6, do NOT call this directly — use `ask_followup` with "Grant [X]" buttons instead. The UI handles triggering the permission.
 
     **set_user_preferences**: Save user preferences (language, name).
     - Parameters: language (optional, language code like "en", "es", "ja"), name (optional, string)

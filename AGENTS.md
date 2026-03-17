@@ -118,6 +118,7 @@ Key rules:
 - 15 commands: `doctor`, `connect`, `disconnect`, `status`, `snapshot`, `press`, `click`, `fill`, `get`, `find`, `screenshot`, `is`, `wait`, `scroll`, `schema`.
 - Works with any macOS app (SwiftUI, AppKit, Electron) — zero app-side setup.
 - Dev bundle ID: `com.omi.desktop-dev`. Prod: `com.omi.computer-macos`.
+- If you launch a custom-named desktop test build, keep the dev bundle identifier aligned with the app name. Example: `search.app` should use a matching dev bundle ID like `com.omi.search`, not `com.omi.desktop-dev`.
 - App flows & exploration skill: See `desktop/e2e/SKILL.md` for navigation architecture, interaction patterns, and reference flows.
 - Full command reference: `agent-swift --help` or `agent-swift schema`.
 - When asked to build or rebuild the desktop app for testing, don't stop at a successful compile: launch the dev app, interact with it programmatically to confirm it actually runs, and report any environment blocker if full interaction is impossible.
