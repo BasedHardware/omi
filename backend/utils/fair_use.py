@@ -10,12 +10,39 @@ import asyncio
 import logging
 import os
 import time
+import uuid
 from datetime import datetime, timedelta
 
 import database.fair_use as fair_use_db
 import database.users as users_db
 from database.redis_db import r as redis_client
 from models.fair_use import AbuseType, FairUseStage, SoftCapTrigger
+
+# Lazy imports to avoid circular dependency chains at module load time.
+# classify_user_purpose → database.conversations → utils.encryption (needs env var at import).
+# send_notification → Firebase messaging setup.
+# Both are only called in async runtime paths, never at import time.
+_classify_user_purpose = None
+_send_notification = None
+
+
+def _get_classify_user_purpose():
+    global _classify_user_purpose
+    if _classify_user_purpose is None:
+        from utils.llm.abuse_detection import classify_user_purpose
+
+        _classify_user_purpose = classify_user_purpose
+    return _classify_user_purpose
+
+
+def _get_send_notification():
+    global _send_notification
+    if _send_notification is None:
+        from utils.notifications import send_notification
+
+        _send_notification = send_notification
+    return _send_notification
+
 
 logger = logging.getLogger(__name__)
 
@@ -57,6 +84,21 @@ def _redis_key(uid: str) -> str:
 def _classifier_lock_key(uid: str) -> str:
     """Redis key to deduplicate concurrent classifier runs."""
     return f'fair_use:classifier_lock:{uid}'
+
+
+# Lua script for atomic compare-and-delete (prevents deleting a lock owned by another worker)
+_RELEASE_LOCK_SCRIPT = """
+if redis.call("get", KEYS[1]) == ARGV[1] then
+    return redis.call("del", KEYS[1])
+else
+    return 0
+end
+"""
+
+
+def _release_lock(key: str, token: str) -> None:
+    """Release a Redis lock only if we still own it (compare-and-delete)."""
+    redis_client.eval(_RELEASE_LOCK_SCRIPT, 1, key, token)
 
 
 # ---------------------------------------------------------------------------
@@ -348,6 +390,9 @@ def is_hard_restricted(uid: str) -> bool:
     state = fair_use_db.get_fair_use_state(uid)
     restrict_until = state.get('restrict_until')
     if restrict_until and isinstance(restrict_until, datetime):
+        # Normalize to naive UTC for comparison (Firestore may return aware datetimes)
+        if restrict_until.tzinfo is not None:
+            restrict_until = restrict_until.replace(tzinfo=None)
         if datetime.utcnow() > restrict_until:
             # Restriction expired, reset to throttle
             fair_use_db.update_fair_use_state(uid, {'stage': 'throttle', 'restrict_until': None})
@@ -376,10 +421,11 @@ async def trigger_classifier_if_needed(uid: str, triggered_caps: list, session_i
     Runs asynchronously — does not block the WebSocket path.
     """
     lock_key = _classifier_lock_key(uid)
+    lock_token = str(uuid.uuid4())
 
     try:
         # Acquire lock with 5-minute TTL (deduplicate within window)
-        acquired = redis_client.set(lock_key, '1', nx=True, ex=300)
+        acquired = redis_client.set(lock_key, lock_token, nx=True, ex=300)
         if not acquired:
             logger.info(f'fair_use: classifier already running/recent for {uid}')
             return
@@ -388,10 +434,7 @@ async def trigger_classifier_if_needed(uid: str, triggered_caps: list, session_i
         return
 
     try:
-        # Import here to avoid circular imports (llm module imports from utils)
-        from utils.llm.abuse_detection import classify_user_purpose
-
-        classifier_result = await classify_user_purpose(uid)
+        classifier_result = await _get_classify_user_purpose()(uid)
         escalation = escalate_enforcement(uid, triggered_caps, classifier_result)
 
         logger.info(
@@ -411,16 +454,15 @@ async def trigger_classifier_if_needed(uid: str, triggered_caps: list, session_i
     except Exception as e:
         logger.error(f'fair_use: classifier/escalation error for {uid}: {e}')
     finally:
+        # Compare-and-delete: only release lock if we still own it
         try:
-            redis_client.delete(lock_key)
+            _release_lock(lock_key, lock_token)
         except Exception:
             pass
 
 
 async def _send_fair_use_notification(uid: str, action: str) -> None:
     """Send in-app push notification about fair-use enforcement."""
-    from utils.notifications import send_notification
-
     titles = {
         'warning': 'Fair Use Notice',
         'throttle': 'Transcription Quality Reduced',
@@ -445,4 +487,4 @@ async def _send_fair_use_notification(uid: str, action: str) -> None:
     title = titles.get(action, 'Fair Use Notice')
     body = bodies.get(action, '')
     if body:
-        send_notification(uid, title, body, data={'type': 'fair_use', 'action': action})
+        _get_send_notification()(uid, title, body, data={'type': 'fair_use', 'action': action})
