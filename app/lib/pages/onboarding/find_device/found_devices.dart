@@ -309,7 +309,8 @@ class _FoundDevicesState extends State<FoundDevices> {
 
                     // Show firmware warning after successful connection
                     if (provider.isConnected) {
-                      await _showFirmwareWarningIfNeeded(device);
+                      final connectedDevice = provider.deviceProvider?.connectedDevice ?? device;
+                      await _showFirmwareWarningIfNeeded(connectedDevice);
                     }
                   }
                 }
