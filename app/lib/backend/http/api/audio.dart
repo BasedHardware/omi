@@ -95,3 +95,45 @@ Future<List<AudioFileUrlInfo>> getConversationAudioSignedUrls(String conversatio
     return [];
   }
 }
+
+/// List all conversations with audio files for the current user.
+Future<List<Map<String, dynamic>>> listUserAudioFiles() async {
+  try {
+    final headers = await buildHeaders(requireAuthCheck: true);
+    final response = await makeApiCall(
+      url: '${Env.apiBaseUrl}v1/sync/audio',
+      headers: headers,
+      method: 'GET',
+      body: '',
+    );
+
+    if (response == null || response.statusCode != 200) {
+      return [];
+    }
+
+    final decoded = jsonDecode(response.body) as Map<String, dynamic>;
+    return (decoded['conversations'] as List<dynamic>?)
+            ?.cast<Map<String, dynamic>>() ??
+        [];
+  } catch (e) {
+    Logger.debug('Error listing user audio files: $e');
+    return [];
+  }
+}
+
+/// Delete all private cloud audio files for the current user.
+Future<bool> deleteAllUserAudio() async {
+  try {
+    final headers = await buildHeaders(requireAuthCheck: true);
+    final response = await makeApiCall(
+      url: '${Env.apiBaseUrl}v1/sync/audio',
+      headers: headers,
+      method: 'DELETE',
+      body: '',
+    );
+    return response?.statusCode == 200;
+  } catch (e) {
+    Logger.debug('Error deleting all user audio: $e');
+    return false;
+  }
+}
