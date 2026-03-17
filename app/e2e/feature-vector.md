@@ -49,15 +49,15 @@ Prioritized feature map to guide flow-walker E2E coverage of core Omi mobile app
 
 | # | Feature | Layer | Priority | Walker | Coverage Status |
 |---|---------|-------|----------|--------|-----------------|
-| 14 | **Memory review/approval** | memory (4) | 12 | 1 | ❌ GAP |
+| 14 | **Memory review/approval** | memory (4) | 12 | 1 | ⚠️ NO UI — backend API exists but Flutter app has no review buttons (user_review field unused in UI) |
 | 15 | Memory categories & filter | memory (4) | 8 | 2 | ⚠️ partial |
-| 16 | **Add/edit memory manually** | memory (4) | 8 | 2 | ❌ GAP |
+| 16 | Add/edit memory manually | memory (4) | 8 | 2 | ✅ flow: add-edit-memory.yaml (7 steps) |
 | 17 | Memory graph visualization | memory (4) | 8 | 2 | ✅ flow: memory-graph.yaml (stub) |
-| 18 | **Custom vocabulary** | understand (4) | 8 | 2 | ❌ GAP |
-| 19 | **Speaker identification (People)** | understand (4) | 8 | 1 | ❌ GAP |
-| 20 | **Goals tracking** | intelligence (3) | 6 | 2 | ❌ GAP |
-| 21 | **Conversation sharing/export** | retrieval-action (3) | 6 | 2 | ❌ GAP |
-| 22 | **Conversation folders** | retrieval-action (3) | 6 | 2 | ❌ GAP |
+| 18 | Custom vocabulary | understand (4) | 8 | 2 | ✅ flow: custom-vocabulary.yaml (7 steps) |
+| 19 | Speaker identification (People) | understand (4) | 8 | 1 | ✅ flow: speaker-identification.yaml (9 steps) |
+| 20 | Goals tracking | intelligence (3) | 6 | 2 | ✅ flow: goals-tracking.yaml (7 steps) |
+| 21 | Conversation sharing/export | retrieval-action (3) | 6 | 2 | ✅ flow: conversation-sharing.yaml (8 steps) |
+| 22 | Conversation folders | retrieval-action (3) | 6 | 2 | ✅ flow: conversation-folders.yaml (10 steps) |
 | 23 | App marketplace browse | retrieval-action (3) | 6 | 2 | ✅ flow: apps-marketplace.yaml (7 steps) |
 | 24 | App detail & install | retrieval-action (3) | 6 | 2 | ✅ flow: apps-marketplace.yaml |
 | 25 | Offline sync UI | capture (5) | 10 | 2 | ✅ covered |
@@ -77,17 +77,13 @@ Prioritized feature map to guide flow-walker E2E coverage of core Omi mobile app
 
 ---
 
-## Coverage Gaps (core features, reachable, no flow coverage)
+## Remaining Gaps
 
-| Rank | Feature | Priority | Walker Score | Navigation Path | Blocker |
-|------|---------|----------|--------------|-----------------|---------|
-| 1 | Memory review/approval | 12 | 1 | Conversation processing → auto-created memories → review dialog | Needs recent conversation with extractable facts |
-| 2 | Custom vocabulary | 8 | 2 | Settings → Profile → Custom Vocabulary | Needs scroll in Profile page |
-| 3 | Add/edit memory manually | 8 | 2 | Memories tab → FAB → dialog | Needs text input |
-| 4 | Speaker identification (People) | 8 | 1 | Settings → Profile → Identifying Others | Needs scroll + conversation with multiple speakers |
-| 5 | Goals tracking | 6 | 2 | Home → Goals widget → Add Goal | Needs text input |
-| 6 | Conversation sharing/export | 6 | 2 | Conv detail → share button → share sheet | Share sheet is system UI |
-| 7 | Conversation folders | 6 | 2 | Home → folder tabs above conversation list | Needs existing conversations |
+| Rank | Feature | Priority | Blocker | Notes |
+|------|---------|----------|---------|-------|
+| 1 | Memory review/approval | 12 | **No Flutter UI exists** | Backend has POST /v3/memories/{id}/review endpoint and user_review field, but no approve/reject buttons in Flutter app. Cannot create flow for non-existent UI. |
+| 2 | Memory categories & filter | 8 | Partial coverage | Covered in memories.yaml but filter toggles not fully exercised |
+| 3 | Task management (create via FAB) | 9 | Partial coverage | Action items list covered but task creation form needs text input |
 
 ---
 
@@ -114,11 +110,22 @@ Prioritized feature map to guide flow-walker E2E coverage of core Omi mobile app
 | Category | Total Features | Covered | Gaps |
 |----------|---------------|---------|------|
 | Core Daily (capture, intelligence) | 13 | 12 | 1 (task mgmt partial) |
-| Core Weekly (memory, understand, retrieval) | 12 | 5 | 7 |
+| Core Weekly (memory, understand, retrieval) | 12 | 11 | 1 (memory review — no UI) |
 | Setup & Auth | 8 | 7 | 1 (calendar OAuth) |
-| **Total** | **33** | **24** | **9** |
+| **Total** | **33** | **30** | **3** |
 
-### What Changed (2026-03-17 update)
+### What Changed (2026-03-17 update #2)
+- **6 new flows added closing all actionable gaps**:
+  - conversation-folders.yaml (10 steps) — folder tabs, create/filter/delete
+  - goals-tracking.yaml (7 steps) — create/track/edit/delete goals
+  - add-edit-memory.yaml (7 steps) — create/edit/delete memories via FAB
+  - custom-vocabulary.yaml (7 steps) — add/delete transcription vocabulary
+  - conversation-sharing.yaml (8 steps) — share link, copy transcript, visibility
+  - speaker-identification.yaml (9 steps) — people management, name speakers
+- **Memory review/approval reclassified**: Not a gap but a missing Flutter UI feature (backend exists, app doesn't expose it)
+- **Coverage: 30/33 features** (91%) — remaining 3 are partial/blocked, not actionable gaps
+
+### What Changed (2026-03-17 update #1)
 - **BLE device flows promoted to CORE DAILY** — device-connect and device-capture proved automatable on physical Pixel 7a with real Omi device (were scored walker=0, now walker=1)
 - **3 new flows added**: phone-capture, device-capture, device-connect (15 + 10 + 10 = 29 new steps)
 - **Auth flows added to vector**: login, logout, onboarding (previously unlisted)
