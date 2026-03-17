@@ -1,9 +1,15 @@
+import 'dart:async';
+
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
+import 'package:omi/services/devices.dart';
 import 'package:omi/services/devices/custom_connection.dart';
 import 'package:omi/services/devices/models.dart';
 
+const int beeCmdGetFirmwareVersion = 0xC005;
+
 class BeeDeviceConnection extends CustomDeviceConnection {
   final _audioBuffer = <int>[];
+  String? _cachedFirmwareVersion;
 
   BeeDeviceConnection(super.device, super.transport);
 
@@ -83,10 +89,59 @@ class BeeDeviceConnection extends CustomDeviceConnection {
     return {'level': payload[0], 'is_charging': payload[1] != 0};
   }
 
+  @override
+  Future<void> connect({
+    Function(String deviceId, DeviceConnectionState state)? onConnectionStateChanged,
+  }) async {
+    await super.connect(onConnectionStateChanged: onConnectionStateChanged);
+    await _queryFirmwareVersion();
+    if (_cachedFirmwareVersion != null) {
+      device = device.copyWith(firmwareRevision: _cachedFirmwareVersion);
+    }
+  }
+
+  Future<void> _queryFirmwareVersion() async {
+    try {
+      final response = await sendFirmwareCommand();
+      if (response != null && response.length >= 3) {
+        final patch = response[0];
+        final minor = response[1];
+        final major = response[2];
+        _cachedFirmwareVersion = '$major.$minor.$patch';
+      }
+    } catch (_) {
+      // Ignore errors during firmware query
+    }
+  }
+
+  Future<List<int>?> sendFirmwareCommand() async {
+    final completer = Completer<List<int>>();
+    late final StreamSubscription sub;
+
+    sub = transport.getCharacteristicStream(serviceUuid, controlCharacteristicUuid).listen((data) {
+      final response = parseResponse(data);
+      if (response['type'] == 'response' && response['code'] == beeCmdGetFirmwareVersion) {
+        if (!completer.isCompleted) {
+          completer.complete(response['payload'] as List<int>);
+        }
+      }
+    });
+
+    try {
+      final command = encodeCommand(beeCmdGetFirmwareVersion, []);
+      await transport.writeCharacteristic(serviceUuid, controlCharacteristicUuid, command);
+      return await completer.future.timeout(const Duration(seconds: 5));
+    } on TimeoutException {
+      return null;
+    } finally {
+      await sub.cancel();
+    }
+  }
+
   Future<Map<String, String>> getDeviceInfo() async {
     return {
       'modelNumber': 'Bee',
-      'firmwareRevision': '1.0.0',
+      'firmwareRevision': _cachedFirmwareVersion ?? '1.0.0',
       'hardwareRevision': '1.0.0',
       'manufacturerName': 'Bee',
     };
