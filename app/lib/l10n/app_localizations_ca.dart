@@ -8654,6 +8654,6 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String fairUseCaseRefCopied(String caseRef) {
-    return '$caseRef copied';
+    return '$caseRef copiat';
   }
 }

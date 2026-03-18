@@ -2762,5 +2762,14 @@
   "fairUse3Day": "3 hari bergulir",
   "fairUseWeekly": "Mingguan bergulir",
   "fairUseAboutTitle": "Tentang Penggunaan Saksama",
-  "fairUseAboutBody": "Omi direka untuk perbualan peribadi, mesyuarat dan interaksi secara langsung. Penggunaan diukur berdasarkan masa pertuturan sebenar yang dikesan, bukan masa sambungan. Jika penggunaan melebihi corak biasa dengan ketara untuk kandungan bukan peribadi, pelarasan mungkin dikenakan."
+  "fairUseAboutBody": "Omi direka untuk perbualan peribadi, mesyuarat dan interaksi secara langsung. Penggunaan diukur berdasarkan masa pertuturan sebenar yang dikesan, bukan masa sambungan. Jika penggunaan melebihi corak biasa dengan ketara untuk kandungan bukan peribadi, pelarasan mungkin dikenakan.",
+  "fairUseCaseRefCopied": "{caseRef} disalin",
+  "@fairUseCaseRefCopied": {
+    "description": "Snackbar message when case reference is copied",
+    "placeholders": {
+      "caseRef": {
+        "type": "String"
+      }
+    }
+  }
 }

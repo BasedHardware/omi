@@ -2731,5 +2731,14 @@
   "fairUse3Day": "Últims 3 dies",
   "fairUseWeekly": "Setmanal",
   "fairUseAboutTitle": "Sobre l'ús raonable",
-  "fairUseAboutBody": "Omi està dissenyat per a converses personals, reunions i interaccions en directe. L'ús es mesura pel temps real de parla detectat, no pel temps de connexió. Si l'ús supera significativament els patrons normals per a contingut no personal, es podrien aplicar ajustos."
+  "fairUseAboutBody": "Omi està dissenyat per a converses personals, reunions i interaccions en directe. L'ús es mesura pel temps real de parla detectat, no pel temps de connexió. Si l'ús supera significativament els patrons normals per a contingut no personal, es podrien aplicar ajustos.",
+  "fairUseCaseRefCopied": "{caseRef} copiat",
+  "@fairUseCaseRefCopied": {
+    "description": "Snackbar message when case reference is copied",
+    "placeholders": {
+      "caseRef": {
+        "type": "String"
+      }
+    }
+  }
 }

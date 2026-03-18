@@ -8620,6 +8620,6 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String fairUseCaseRefCopied(String caseRef) {
-    return '$caseRef copied';
+    return '$caseRef nokopēts';
   }
 }

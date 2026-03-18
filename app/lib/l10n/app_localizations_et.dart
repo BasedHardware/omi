@@ -8600,6 +8600,6 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String fairUseCaseRefCopied(String caseRef) {
-    return '$caseRef copied';
+    return '$caseRef kopeeritud';
   }
 }
