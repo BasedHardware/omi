@@ -4649,11 +4649,15 @@ extension APIClient {
         let deepgramApiKey: String?
         let geminiApiKey: String?
         let anthropicApiKey: String?
+        let firebaseApiKey: String?
+        let googleCalendarApiKey: String?
 
         enum CodingKeys: String, CodingKey {
             case deepgramApiKey = "deepgram_api_key"
             case geminiApiKey = "gemini_api_key"
             case anthropicApiKey = "anthropic_api_key"
+            case firebaseApiKey = "firebase_api_key"
+            case googleCalendarApiKey = "google_calendar_api_key"
         }
     }
 
