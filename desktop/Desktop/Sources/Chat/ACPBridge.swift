@@ -860,9 +860,13 @@ enum BridgeError: LocalizedError {
   var errorDescription: String? {
     switch self {
     case .nodeNotFound:
-      return "Node.js not found. Please reinstall the app."
+      return AnalyticsManager.isDevBuild
+        ? "Node.js not found. Run ./run.sh to set up AI components."
+        : "Node.js not found. Please reinstall the app."
     case .bridgeScriptNotFound:
-      return "AI components missing. Please reinstall the app."
+      return AnalyticsManager.isDevBuild
+        ? "AI components missing. Run ./run.sh to install the ACP bridge."
+        : "AI components missing. Please reinstall the app."
     case .notRunning:
       return "AI is not running. Try sending your message again."
     case .encodingError:
