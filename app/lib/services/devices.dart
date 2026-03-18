@@ -65,7 +65,7 @@ class DeviceService implements IDeviceService {
 
 
   final List<DeviceDiscoverer> _discoverers = [
-    Platform.isIOS ? NativeBluetoothDiscoverer() : BluetoothDeviceDiscoverer(),
+    (Platform.isIOS || Platform.isAndroid) ? NativeBluetoothDiscoverer() : BluetoothDeviceDiscoverer(),
     AppleWatchDiscoverer(),
   ];
 
