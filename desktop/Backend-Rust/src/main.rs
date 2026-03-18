@@ -131,14 +131,15 @@ async fn main() {
     }
 
     // Initialize Firestore
+    let firestore_project_id = config.firebase_project_id.clone().unwrap_or_else(|| "based-hardware".to_string());
     let firestore = match FirestoreService::new(
-        config.firebase_project_id.clone().unwrap_or_else(|| "based-hardware".to_string()),
+        firestore_project_id.clone(),
         config.encryption_secret.clone(),
     ).await {
         Ok(fs) => Arc::new(fs),
         Err(e) => {
             tracing::warn!("Failed to initialize Firestore: {} - using placeholder", e);
-            Arc::new(FirestoreService::new("based-hardware".to_string(), config.encryption_secret.clone()).await.unwrap())
+            Arc::new(FirestoreService::new(firestore_project_id, config.encryption_secret.clone()).await.unwrap())
         }
     };
 
