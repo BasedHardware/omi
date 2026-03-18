@@ -651,6 +651,15 @@ struct DesktopHomeView: View {
         selectedIndex = SidebarNavItem.tasks.rawValue
       }
     }
+    .onReceive(NotificationCenter.default.publisher(for: .navigateToSidebarItem)) { notification in
+      if let rawValue = notification.userInfo?["rawValue"] as? Int,
+        let item = SidebarNavItem(rawValue: rawValue)
+      {
+        withAnimation(.easeInOut(duration: 0.2)) {
+          selectedIndex = item.rawValue
+        }
+      }
+    }
     .onChange(of: selectedIndex) { oldValue, newValue in
       // Track the previous index when navigating to settings
       if newValue == SidebarNavItem.settings.rawValue
