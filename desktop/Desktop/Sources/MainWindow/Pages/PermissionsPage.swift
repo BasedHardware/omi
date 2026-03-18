@@ -353,7 +353,7 @@ struct MicrophonePermissionSection: View {
             }
 
             Button(action: {
-                NSApp.activate(ignoringOtherApps: true)
+                NSApp.activate()
                 appState.requestMicrophonePermission()
             }) {
                 HStack(spacing: 8) {
@@ -826,7 +826,7 @@ struct NotificationPermissionSection: View {
             }
 
             Button(action: {
-                NSApp.activate(ignoringOtherApps: true)
+                NSApp.activate()
                 appState.requestNotificationPermission()
             }) {
                 HStack(spacing: 8) {
