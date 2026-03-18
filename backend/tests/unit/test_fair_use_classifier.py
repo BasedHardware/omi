@@ -1,4 +1,4 @@
-"""Tests for the LLM abuse detection classifier (utils/llm/abuse_detection.py)."""
+"""Tests for the LLM fair-use classifier (utils/llm/fair_use_classifier.py)."""
 
 import json
 import sys
@@ -32,19 +32,19 @@ _llm_clients = types.ModuleType('utils.llm.clients')
 _llm_clients.llm_mini = MagicMock()
 sys.modules.setdefault('utils.llm.clients', _llm_clients)
 
-import utils.llm.abuse_detection as abuse_mod
+import utils.llm.fair_use_classifier as classifier_mod
 
 
 class TestSelectRecipes:
     """Test dynamic recipe selection based on conversation patterns."""
 
     def test_empty_conversations_returns_empty(self):
-        result = abuse_mod._select_recipes([])
+        result = classifier_mod._select_recipes([])
         assert result == ""
 
     def test_long_sessions_trigger_audiobook_recipe(self):
         summaries = [{'title': f'Session {i}', 'duration_minutes': 90, 'category': 'other'} for i in range(5)]
-        result = abuse_mod._select_recipes(summaries)
+        result = classifier_mod._select_recipes(summaries)
         assert 'Audiobook Detection' in result
 
     def test_uniform_durations_trigger_prerecorded_recipe(self):
@@ -52,17 +52,17 @@ class TestSelectRecipes:
         summaries = [
             {'title': f'Session {i}', 'duration_minutes': 30 + (i % 3), 'category': 'other'} for i in range(10)
         ]
-        result = abuse_mod._select_recipes(summaries)
+        result = classifier_mod._select_recipes(summaries)
         assert 'Pre-recorded Content Detection' in result
 
     def test_medium_sessions_trigger_podcast_recipe(self):
         summaries = [{'title': f'Episode {i}', 'duration_minutes': 45, 'category': 'media'} for i in range(6)]
-        result = abuse_mod._select_recipes(summaries)
+        result = classifier_mod._select_recipes(summaries)
         assert 'Podcast Detection' in result
 
     def test_high_count_few_categories_trigger_commercial_recipe(self):
         summaries = [{'title': f'Call {i}', 'duration_minutes': 10, 'category': 'business'} for i in range(25)]
-        result = abuse_mod._select_recipes(summaries)
+        result = classifier_mod._select_recipes(summaries)
         assert 'Commercial Use Detection' in result
 
     def test_varied_normal_usage_triggers_no_special_recipe(self):
@@ -71,7 +71,7 @@ class TestSelectRecipes:
             {'title': 'Lunch chat', 'duration_minutes': 45, 'category': 'personal'},
             {'title': 'Project review', 'duration_minutes': 60, 'category': 'work'},
         ]
-        result = abuse_mod._select_recipes(summaries)
+        result = classifier_mod._select_recipes(summaries)
         assert result == ""
 
 
@@ -80,7 +80,7 @@ class TestPrepareConversationSummaries:
 
     def test_empty_conversations(self):
         _conversations_db.get_conversations.return_value = []
-        result = abuse_mod._prepare_conversation_summaries('user1')
+        result = classifier_mod._prepare_conversation_summaries('user1')
         assert result == []
 
     def test_extracts_metadata_correctly(self):
@@ -95,7 +95,7 @@ class TestPrepareConversationSummaries:
                 'created_at': now,
             }
         ]
-        result = abuse_mod._prepare_conversation_summaries('user1')
+        result = classifier_mod._prepare_conversation_summaries('user1')
         assert len(result) == 1
         assert result[0]['title'] == 'My Meeting'
         assert result[0]['category'] == 'work'
@@ -112,7 +112,7 @@ class TestPrepareConversationSummaries:
                 'created_at': datetime.utcnow(),
             }
         ]
-        result = abuse_mod._prepare_conversation_summaries('user1')
+        result = classifier_mod._prepare_conversation_summaries('user1')
         assert len(result) == 1
         assert result[0]['title'] == ''
         assert result[0]['duration_minutes'] == 0
@@ -129,7 +129,7 @@ class TestPrepareConversationSummaries:
                 'created_at': datetime.utcnow(),
             }
         ]
-        result = abuse_mod._prepare_conversation_summaries('user1')
+        result = classifier_mod._prepare_conversation_summaries('user1')
         assert len(result[0]['overview']) == 200
 
 
@@ -139,9 +139,9 @@ class TestClassifyUserPurpose:
     @pytest.mark.asyncio
     async def test_returns_default_when_no_conversations(self):
         _conversations_db.get_conversations.return_value = []
-        result = await abuse_mod.classify_user_purpose('user1')
-        assert result['abuse_score'] == 0.0
-        assert result['abuse_type'] == 'none'
+        result = await classifier_mod.classify_user_purpose('user1')
+        assert result['misuse_score'] == 0.0
+        assert result['usage_type'] == 'none'
 
     @pytest.mark.asyncio
     async def test_parses_llm_response_correctly(self):
@@ -160,8 +160,8 @@ class TestClassifyUserPurpose:
         llm_response = MagicMock()
         llm_response.content = json.dumps(
             {
-                'abuse_score': 0.92,
-                'abuse_type': 'audiobook',
+                'misuse_score': 0.92,
+                'usage_type': 'audiobook',
                 'confidence': 0.95,
                 'evidence': [{'conversation_id': 'conv-1', 'title': 'Harry Potter Chapter 12', 'reason': 'Book title'}],
                 'reasoning': 'Clear audiobook pattern',
@@ -169,10 +169,10 @@ class TestClassifyUserPurpose:
         )
         _llm_clients.llm_mini.ainvoke = AsyncMock(return_value=llm_response)
 
-        result = await abuse_mod.classify_user_purpose('user1')
+        result = await classifier_mod.classify_user_purpose('user1')
 
-        assert result['abuse_score'] == pytest.approx(0.92)
-        assert result['abuse_type'] == 'audiobook'
+        assert result['misuse_score'] == pytest.approx(0.92)
+        assert result['usage_type'] == 'audiobook'
         assert result['confidence'] == pytest.approx(0.95)
         assert len(result['evidence']) == 1
 
@@ -191,11 +191,11 @@ class TestClassifyUserPurpose:
         ]
 
         llm_response = MagicMock()
-        llm_response.content = '```json\n{"abuse_score": 0.1, "abuse_type": "none", "confidence": 0.9, "evidence": [], "reasoning": "Normal"}\n```'
+        llm_response.content = '```json\n{"misuse_score": 0.1, "usage_type": "none", "confidence": 0.9, "evidence": [], "reasoning": "Normal"}\n```'
         _llm_clients.llm_mini.ainvoke = AsyncMock(return_value=llm_response)
 
-        result = await abuse_mod.classify_user_purpose('user1')
-        assert result['abuse_score'] == pytest.approx(0.1)
+        result = await classifier_mod.classify_user_purpose('user1')
+        assert result['misuse_score'] == pytest.approx(0.1)
 
     @pytest.mark.asyncio
     async def test_clamps_score_to_valid_range(self):
@@ -213,12 +213,12 @@ class TestClassifyUserPurpose:
 
         llm_response = MagicMock()
         llm_response.content = json.dumps(
-            {'abuse_score': 1.5, 'abuse_type': 'none', 'confidence': -0.2, 'evidence': [], 'reasoning': ''}
+            {'misuse_score': 1.5, 'usage_type': 'none', 'confidence': -0.2, 'evidence': [], 'reasoning': ''}
         )
         _llm_clients.llm_mini.ainvoke = AsyncMock(return_value=llm_response)
 
-        result = await abuse_mod.classify_user_purpose('user1')
-        assert result['abuse_score'] == 1.0
+        result = await classifier_mod.classify_user_purpose('user1')
+        assert result['misuse_score'] == 1.0
         assert result['confidence'] == 0.0
 
     @pytest.mark.asyncio
@@ -239,9 +239,9 @@ class TestClassifyUserPurpose:
         llm_response.content = 'This is not JSON at all'
         _llm_clients.llm_mini.ainvoke = AsyncMock(return_value=llm_response)
 
-        result = await abuse_mod.classify_user_purpose('user1')
-        assert result['abuse_score'] == 0.0
-        assert result['abuse_type'] == 'none'
+        result = await classifier_mod.classify_user_purpose('user1')
+        assert result['misuse_score'] == 0.0
+        assert result['usage_type'] == 'none'
 
     @pytest.mark.asyncio
     async def test_returns_default_on_llm_error(self):
@@ -258,5 +258,5 @@ class TestClassifyUserPurpose:
         ]
         _llm_clients.llm_mini.ainvoke = AsyncMock(side_effect=Exception('LLM timeout'))
 
-        result = await abuse_mod.classify_user_purpose('user1')
-        assert result['abuse_score'] == 0.0
+        result = await classifier_mod.classify_user_purpose('user1')
+        assert result['misuse_score'] == 0.0

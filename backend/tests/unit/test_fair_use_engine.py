@@ -1,4 +1,4 @@
-"""Tests for the fair-use anti-abuse engine (utils/fair_use.py)."""
+"""Tests for the fair-use engine (utils/fair_use.py)."""
 
 import sys
 import types
@@ -191,12 +191,12 @@ class TestEscalateEnforcement:
     @patch.object(
         fair_use_mod, 'get_rolling_speech_ms', return_value={'daily_ms': 0, 'three_day_ms': 0, 'weekly_ms': 0}
     )
-    def test_none_to_warning_on_high_abuse_score(self, _):
+    def test_none_to_warning_on_high_misuse_score(self, _):
         _fair_use_db.get_fair_use_state.return_value = {'stage': 'none'}
         _fair_use_db.get_violation_counts.return_value = {'violation_count_7d': 0, 'violation_count_30d': 0}
 
         triggered = [{'trigger': SoftCapTrigger.DAILY, 'speech_ms': 8000000, 'threshold_ms': 7200000}]
-        classifier = {'abuse_score': 0.85, 'abuse_type': 'audiobook'}
+        classifier = {'misuse_score': 0.85, 'usage_type': 'audiobook'}
 
         result = fair_use_mod.escalate_enforcement('user1', triggered, classifier)
 
@@ -207,12 +207,12 @@ class TestEscalateEnforcement:
     @patch.object(
         fair_use_mod, 'get_rolling_speech_ms', return_value={'daily_ms': 0, 'three_day_ms': 0, 'weekly_ms': 0}
     )
-    def test_none_stays_none_on_low_abuse_score(self, _):
+    def test_none_stays_none_on_low_misuse_score(self, _):
         _fair_use_db.get_fair_use_state.return_value = {'stage': 'none'}
         _fair_use_db.get_violation_counts.return_value = {'violation_count_7d': 0, 'violation_count_30d': 0}
 
         triggered = [{'trigger': SoftCapTrigger.DAILY, 'speech_ms': 8000000, 'threshold_ms': 7200000}]
-        classifier = {'abuse_score': 0.3, 'abuse_type': 'none'}
+        classifier = {'misuse_score': 0.3, 'usage_type': 'none'}
 
         result = fair_use_mod.escalate_enforcement('user1', triggered, classifier)
 
@@ -228,7 +228,7 @@ class TestEscalateEnforcement:
         _fair_use_db.get_violation_counts.return_value = {'violation_count_7d': 3, 'violation_count_30d': 5}
 
         triggered = [{'trigger': SoftCapTrigger.DAILY, 'speech_ms': 8000000, 'threshold_ms': 7200000}]
-        classifier = {'abuse_score': 0.9, 'abuse_type': 'podcast'}
+        classifier = {'misuse_score': 0.9, 'usage_type': 'podcast'}
 
         result = fair_use_mod.escalate_enforcement('user1', triggered, classifier)
 
@@ -238,12 +238,12 @@ class TestEscalateEnforcement:
     @patch.object(
         fair_use_mod, 'get_rolling_speech_ms', return_value={'daily_ms': 0, 'three_day_ms': 0, 'weekly_ms': 0}
     )
-    def test_throttle_to_restrict_on_persistent_abuse(self, _):
+    def test_throttle_to_restrict_on_persistent_misuse(self, _):
         _fair_use_db.get_fair_use_state.return_value = {'stage': 'throttle'}
         _fair_use_db.get_violation_counts.return_value = {'violation_count_7d': 4, 'violation_count_30d': 8}
 
         triggered = [{'trigger': SoftCapTrigger.WEEKLY, 'speech_ms': 40000000, 'threshold_ms': 36000000}]
-        classifier = {'abuse_score': 0.95, 'abuse_type': 'commercial'}
+        classifier = {'misuse_score': 0.95, 'usage_type': 'commercial'}
 
         result = fair_use_mod.escalate_enforcement('user1', triggered, classifier)
 
@@ -258,7 +258,7 @@ class TestEscalateEnforcement:
         _fair_use_db.get_violation_counts.return_value = {'violation_count_7d': 1, 'violation_count_30d': 1}
 
         triggered = [{'trigger': SoftCapTrigger.DAILY, 'speech_ms': 8000000, 'threshold_ms': 7200000}]
-        classifier = {'abuse_score': 0.9, 'abuse_type': 'audiobook'}
+        classifier = {'misuse_score': 0.9, 'usage_type': 'audiobook'}
 
         result = fair_use_mod.escalate_enforcement('user1', triggered, classifier)
 
@@ -274,7 +274,7 @@ class TestEscalateEnforcement:
         _fair_use_db.get_violation_counts.return_value = {'violation_count_7d': 0, 'violation_count_30d': 0}
 
         triggered = [{'trigger': SoftCapTrigger.DAILY, 'speech_ms': 8000000, 'threshold_ms': 7200000}]
-        classifier = {'abuse_score': 0.7, 'abuse_type': 'audiobook'}
+        classifier = {'misuse_score': 0.7, 'usage_type': 'audiobook'}
 
         result = fair_use_mod.escalate_enforcement('user1', triggered, classifier)
 
@@ -290,7 +290,7 @@ class TestEscalateEnforcement:
         _fair_use_db.get_violation_counts.return_value = {'violation_count_7d': 0, 'violation_count_30d': 0}
 
         triggered = [{'trigger': SoftCapTrigger.DAILY, 'speech_ms': 8000000, 'threshold_ms': 7200000}]
-        classifier = {'abuse_score': 0.69, 'abuse_type': 'audiobook'}
+        classifier = {'misuse_score': 0.69, 'usage_type': 'audiobook'}
 
         result = fair_use_mod.escalate_enforcement('user1', triggered, classifier)
 

@@ -53,7 +53,7 @@ from fastapi.testclient import TestClient
 import utils.fair_use as fair_use
 
 # Import the router
-from routers.admin_abuse import router as admin_router
+from routers.fair_use_admin import router as admin_router
 from utils.other.endpoints import get_current_user_uid
 
 app = FastAPI()

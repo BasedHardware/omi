@@ -53,7 +53,7 @@ pytest tests/unit/test_kg_edge_id_sanitization.py -v
 pytest tests/unit/test_listen_pipeline.py -v
 pytest tests/unit/test_fair_use_models.py -v
 pytest tests/unit/test_fair_use_engine.py -v
-pytest tests/unit/test_abuse_detection.py -v
+pytest tests/unit/test_fair_use_classifier.py -v
 pytest tests/unit/test_fair_use_async.py -v
 
 # Fair-use integration tests (require Redis; skip gracefully if unavailable)

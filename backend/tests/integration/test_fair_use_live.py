@@ -195,11 +195,11 @@ class TestEscalationLive:
     """Test the full escalation state machine with real Redis + in-memory Firestore."""
 
     def test_escalate_to_warning(self):
-        """First violation with high abuse score escalates to warning."""
+        """First violation with high misuse score escalates to warning."""
         fair_use.record_speech_ms(TEST_UID, 11000)
         triggered = fair_use.check_soft_caps(TEST_UID)
 
-        classifier_result = {'abuse_score': 0.9, 'abuse_type': 'audiobook'}
+        classifier_result = {'misuse_score': 0.9, 'usage_type': 'audiobook'}
         result = fair_use.escalate_enforcement(TEST_UID, triggered, classifier_result)
 
         assert result['action'] == 'warning'
@@ -207,11 +207,11 @@ class TestEscalationLive:
         assert _mem_db.states[TEST_UID]['stage'] == 'warning'
 
     def test_no_escalation_low_score(self):
-        """Low abuse score should not escalate."""
+        """Low misuse score should not escalate."""
         fair_use.record_speech_ms(TEST_UID, 11000)
         triggered = fair_use.check_soft_caps(TEST_UID)
 
-        classifier_result = {'abuse_score': 0.3, 'abuse_type': 'none'}
+        classifier_result = {'misuse_score': 0.3, 'usage_type': 'none'}
         result = fair_use.escalate_enforcement(TEST_UID, triggered, classifier_result)
 
         assert result['action'] == 'none'
@@ -231,7 +231,7 @@ class TestEscalationLive:
         fair_use.record_speech_ms(TEST_UID, 11000)
         triggered = fair_use.check_soft_caps(TEST_UID)
 
-        classifier_result = {'abuse_score': 0.85, 'abuse_type': 'audiobook'}
+        classifier_result = {'misuse_score': 0.85, 'usage_type': 'audiobook'}
         result = fair_use.escalate_enforcement(TEST_UID, triggered, classifier_result)
 
         assert result['action'] == 'throttle'
@@ -253,7 +253,7 @@ class TestEscalationLive:
         fair_use.record_speech_ms(TEST_UID, 31000)
         triggered = fair_use.check_soft_caps(TEST_UID)
 
-        classifier_result = {'abuse_score': 0.92, 'abuse_type': 'audiobook'}
+        classifier_result = {'misuse_score': 0.92, 'usage_type': 'audiobook'}
         result = fair_use.escalate_enforcement(TEST_UID, triggered, classifier_result)
 
         assert result['action'] == 'restrict'
@@ -438,7 +438,7 @@ class TestFullFlowEndToEnd:
 
     def test_full_escalation_lifecycle(self):
         """Walk through the entire lifecycle: none → warning → throttle → restrict → expire."""
-        classifier_high = {'abuse_score': 0.9, 'abuse_type': 'audiobook'}
+        classifier_high = {'misuse_score': 0.9, 'usage_type': 'audiobook'}
 
         # Step 1: Record speech over daily cap
         fair_use.record_speech_ms(TEST_UID, 11000)
@@ -483,7 +483,7 @@ class TestFullFlowEndToEnd:
 
     def test_events_recorded_throughout(self):
         """Verify events are recorded for each escalation step."""
-        classifier_high = {'abuse_score': 0.9, 'abuse_type': 'audiobook'}
+        classifier_high = {'misuse_score': 0.9, 'usage_type': 'audiobook'}
 
         fair_use.record_speech_ms(TEST_UID, 31000)
         triggered = fair_use.check_soft_caps(TEST_UID)

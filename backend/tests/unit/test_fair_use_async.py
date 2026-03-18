@@ -66,7 +66,7 @@ class TestTriggerClassifierIfNeeded:
     @patch.object(fair_use_mod, '_send_fair_use_notification', new_callable=AsyncMock)
     async def test_runs_classifier_and_escalates(self, mock_notify, mock_escalate, mock_get_classify):
         _redis().set.return_value = True  # Lock acquired
-        mock_classify = AsyncMock(return_value={'abuse_score': 0.9, 'abuse_type': 'audiobook'})
+        mock_classify = AsyncMock(return_value={'misuse_score': 0.9, 'usage_type': 'audiobook'})
         mock_get_classify.return_value = mock_classify
         mock_escalate.return_value = {'action': 'warning', 'previous_stage': 'none', 'new_stage': 'warning'}
 
@@ -96,7 +96,7 @@ class TestTriggerClassifierIfNeeded:
     @patch.object(fair_use_mod, '_send_fair_use_notification', new_callable=AsyncMock)
     async def test_no_notification_when_no_action(self, mock_notify, mock_escalate, mock_get_classify):
         _redis().set.return_value = True
-        mock_classify = AsyncMock(return_value={'abuse_score': 0.1, 'abuse_type': 'none'})
+        mock_classify = AsyncMock(return_value={'misuse_score': 0.1, 'usage_type': 'none'})
         mock_get_classify.return_value = mock_classify
         mock_escalate.return_value = {'action': 'none', 'previous_stage': 'none', 'new_stage': 'none'}
 

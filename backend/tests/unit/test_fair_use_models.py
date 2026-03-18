@@ -3,7 +3,7 @@
 from datetime import datetime
 
 from models.fair_use import (
-    AbuseType,
+    UsageType,
     ClassifierEvidence,
     ClassifierResult,
     FairUseEvent,
@@ -21,10 +21,10 @@ class TestEnums:
         assert FairUseStage.THROTTLE.value == 'throttle'
         assert FairUseStage.RESTRICT.value == 'restrict'
 
-    def test_abuse_types(self):
-        assert AbuseType.AUDIOBOOK.value == 'audiobook'
-        assert AbuseType.PODCAST.value == 'podcast'
-        assert AbuseType.COMMERCIAL.value == 'commercial'
+    def test_usage_types(self):
+        assert UsageType.AUDIOBOOK.value == 'audiobook'
+        assert UsageType.PODCAST.value == 'podcast'
+        assert UsageType.COMMERCIAL.value == 'commercial'
 
     def test_soft_cap_triggers(self):
         assert SoftCapTrigger.DAILY.value == 'daily'
@@ -35,20 +35,20 @@ class TestEnums:
 class TestClassifierResult:
     def test_defaults(self):
         result = ClassifierResult()
-        assert result.abuse_score == 0.0
-        assert result.abuse_type == AbuseType.NONE
+        assert result.misuse_score == 0.0
+        assert result.usage_type == UsageType.NONE
         assert result.confidence == 0.0
         assert result.evidence == []
 
     def test_with_evidence(self):
         evidence = ClassifierEvidence(conversation_id='conv-1', title='Chapter 12', reason='Book title')
         result = ClassifierResult(
-            abuse_score=0.9,
-            abuse_type=AbuseType.AUDIOBOOK,
+            misuse_score=0.9,
+            usage_type=UsageType.AUDIOBOOK,
             confidence=0.95,
             evidence=[evidence],
         )
-        assert result.abuse_score == 0.9
+        assert result.misuse_score == 0.9
         assert len(result.evidence) == 1
         assert result.evidence[0].conversation_id == 'conv-1'
 
