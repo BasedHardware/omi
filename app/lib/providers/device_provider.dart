@@ -228,7 +228,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   Future periodicConnect(String printer, {bool boundDeviceOnly = false}) async {
     _reconnectionTimer?.cancel();
 
-    if (Platform.isIOS) {
+    if (Platform.isIOS || Platform.isAndroid) {
       final pairedDeviceId = SharedPreferencesUtil().btDevice.id;
 
       // Already connected — nothing to do
@@ -236,12 +236,12 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
 
       // Known device — use native chipset-level reconnection (no scanning, no polling)
       if (pairedDeviceId.isNotEmpty) {
-        Logger.debug('periodicConnect (iOS native): requesting chipset-level reconnect for $pairedDeviceId');
+        Logger.debug('periodicConnect (native): requesting chipset-level reconnect for $pairedDeviceId');
         try {
           BleHostApi().reconnectKnownPeripheral(pairedDeviceId);
           return;
         } catch (e) {
-          Logger.debug('periodicConnect (iOS native): reconnect failed: $e, falling back to scan');
+          Logger.debug('periodicConnect (native): reconnect failed: $e, falling back to scan');
         }
       }
 
