@@ -327,6 +327,18 @@ if [ -f "$BACKEND_DIR/.env" ]; then
         substep "Bootstrapped FIREBASE_API_KEY from backend .env"
     fi
 fi
+# Bootstrap OMI_AUTH_URL — the auth backend is a separate Cloud Run service
+# (not part of the desktop Rust backend). Read from backend .env if set,
+# otherwise use the default Cloud Run auth service.
+if ! grep -q "^OMI_AUTH_URL=" "$APP_BUNDLE/Contents/Resources/.env"; then
+    AUTH_URL=""
+    if [ -f "$BACKEND_DIR/.env" ]; then
+        AUTH_URL=$(grep "^OMI_AUTH_URL=" "$BACKEND_DIR/.env" | head -1 | cut -d= -f2-)
+    fi
+    AUTH_URL="${AUTH_URL:-https://omi-desktop-auth-208440318997.us-central1.run.app/}"
+    echo "OMI_AUTH_URL=$AUTH_URL" >> "$APP_BUNDLE/Contents/Resources/.env"
+    substep "Set OMI_AUTH_URL=$AUTH_URL"
+fi
 
 substep "Copying app icon"
 cp -f omi_icon.icns "$APP_BUNDLE/Contents/Resources/OmiIcon.icns" 2>/dev/null || true
