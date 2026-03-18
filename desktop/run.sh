@@ -165,7 +165,7 @@ elif [ ! -f "google-credentials.json" ] && [ -f "../Backend/google-credentials.j
 fi
 
 # Force local backend to use prod Firestore credentials for testing.
-CREDS_PATH="$BACKEND_DIR/google-credentials.json"
+CREDS_PATH="$(pwd)/google-credentials.json"
 if [ ! -f "$CREDS_PATH" ]; then
     echo "Missing credentials file: $CREDS_PATH"
     exit 1
