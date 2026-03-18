@@ -76,6 +76,8 @@ class TestTriggerClassifierIfNeeded:
         mock_classify.assert_called_once_with('user1')
         mock_escalate.assert_called_once()
         mock_notify.assert_called_once_with('user1', 'warning', case_ref='FU-TEST01')
+        # Lock should NOT be released on success (5-min TTL cooldown prevents repeated LLM calls)
+        _redis().eval.assert_not_called()
 
     @pytest.mark.asyncio
     @patch.object(fair_use_mod, 'FAIR_USE_ENABLED', True)
