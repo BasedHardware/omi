@@ -1,4 +1,27 @@
-"""Firestore CRUD for fair-use tracking."""
+"""Firestore CRUD for fair-use tracking.
+
+Required Firestore composite indexes (create before deploying):
+
+1. Collection group: fair_use_state
+   Fields: stage (Ascending), updated_at (Descending)
+   Scope: Collection group
+   Used by: get_flagged_users() — admin dashboard
+
+2. Collection group: fair_use_events
+   Fields: case_ref (Ascending)
+   Scope: Collection group
+   Used by: lookup_case(), get_public_case_status() — case reference lookup
+
+Create via gcloud:
+  gcloud firestore indexes composite create --project=<PROJECT> \\
+    --collection-group=fair_use_state \\
+    --field-config=field-path=stage,order=ascending \\
+    --field-config=field-path=updated_at,order=descending
+
+  gcloud firestore indexes composite create --project=<PROJECT> \\
+    --collection-group=fair_use_events \\
+    --field-config=field-path=case_ref,order=ascending
+"""
 
 import logging
 import uuid
