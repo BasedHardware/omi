@@ -12,6 +12,7 @@ import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/gen/pigeon_communicator.g.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/main.dart';
 import 'package:omi/providers/base_provider.dart';
@@ -509,6 +510,20 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
 
       connectingToDeviceId = device.id;
       notifyListeners();
+
+      // On Android, associate via CompanionDeviceManager BEFORE GATT connection.
+      // Device must still be advertising for the system chooser to find it.
+      // Stop our scan first so CompanionDeviceManager's scan doesn't conflict.
+      if (Platform.isAndroid) {
+        try {
+          BleHostApi().stopScan();
+          final associatedAddress = await BleHostApi().requestCompanionDeviceAssociation(device.id);
+          Logger.debug('CompanionDeviceManager association result: $associatedAddress');
+        } catch (e) {
+          Logger.debug('CompanionDeviceManager association failed (non-fatal): $e');
+        }
+      }
+
       await ServiceManager.instance().device.ensureConnection(device.id, force: true);
       Logger.debug('Connected to device: ${device.name}');
       deviceId = device.id;
@@ -531,6 +546,7 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
       await Future.delayed(const Duration(seconds: 2));
       SharedPreferencesUtil().btDevice = connectedDevice!;
       SharedPreferencesUtil().deviceName = connectedDevice.name;
+
       foundDevicesMap.clear();
       deviceList.clear();
       if (isFromOnboarding) {
