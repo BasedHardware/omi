@@ -15,11 +15,13 @@ Required Firestore composite indexes (create before deploying):
 Create via gcloud:
   gcloud firestore indexes composite create --project=<PROJECT> \\
     --collection-group=fair_use_state \\
+    --query-scope=collection-group \\
     --field-config=field-path=stage,order=ascending \\
     --field-config=field-path=updated_at,order=descending
 
   gcloud firestore indexes composite create --project=<PROJECT> \\
     --collection-group=fair_use_events \\
+    --query-scope=collection-group \\
     --field-config=field-path=case_ref,order=ascending
 """
 
