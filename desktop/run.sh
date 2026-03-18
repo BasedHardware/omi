@@ -310,6 +310,15 @@ if grep -q "^OMI_API_URL=" "$APP_BUNDLE/Contents/Resources/.env"; then
 else
     echo "OMI_API_URL=$TUNNEL_URL" >> "$APP_BUNDLE/Contents/Resources/.env"
 fi
+# Bootstrap FIREBASE_API_KEY from backend .env so auth can restore on launch
+# (before APIKeyService.fetchKeys() has a chance to fetch it from the backend)
+if [ -f "$BACKEND_DIR/.env" ]; then
+    FIREBASE_KEY=$(grep "^FIREBASE_API_KEY=" "$BACKEND_DIR/.env" | head -1 | cut -d= -f2-)
+    if [ -n "$FIREBASE_KEY" ] && ! grep -q "^FIREBASE_API_KEY=" "$APP_BUNDLE/Contents/Resources/.env"; then
+        echo "FIREBASE_API_KEY=$FIREBASE_KEY" >> "$APP_BUNDLE/Contents/Resources/.env"
+        substep "Bootstrapped FIREBASE_API_KEY from backend .env"
+    fi
+fi
 
 substep "Copying app icon"
 cp -f omi_icon.icns "$APP_BUNDLE/Contents/Resources/OmiIcon.icns" 2>/dev/null || true
