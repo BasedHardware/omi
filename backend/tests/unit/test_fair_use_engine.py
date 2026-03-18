@@ -47,7 +47,9 @@ class TestRecordSpeechMs:
 
     def setup_method(self):
         _mock_redis.reset_mock()
+        _mock_redis.pipeline.side_effect = None
         _mock_redis.pipeline.return_value = MagicMock()
+        _mock_redis.zrangebyscore.return_value = []
 
     @patch.object(fair_use_mod, 'FAIR_USE_ENABLED', True)
     def test_records_positive_speech(self):
@@ -84,6 +86,29 @@ class TestRecordSpeechMs:
         _mock_redis.pipeline.side_effect = Exception('Redis down')
         # Should not raise
         fair_use_mod.record_speech_ms('user1', 5000)
+
+    @patch.object(fair_use_mod, 'FAIR_USE_ENABLED', True)
+    def test_prunes_stale_hash_fields(self):
+        """Stale bucket hash fields are pruned alongside stale zset members."""
+        pipe = MagicMock()
+        _mock_redis.pipeline.return_value = pipe
+        # Simulate stale members returned by zrangebyscore
+        _mock_redis.zrangebyscore.return_value = [b'100', b'101']
+        fair_use_mod.record_speech_ms('user1', 5000)
+        # hdel should be called to prune the stale hash fields
+        pipe.hdel.assert_called_once()
+        args = pipe.hdel.call_args[0]
+        assert '100' in args
+        assert '101' in args
+
+    @patch.object(fair_use_mod, 'FAIR_USE_ENABLED', True)
+    def test_no_hdel_when_no_stale_members(self):
+        """No hdel when there are no stale bucket members to prune."""
+        pipe = MagicMock()
+        _mock_redis.pipeline.return_value = pipe
+        _mock_redis.zrangebyscore.return_value = []
+        fair_use_mod.record_speech_ms('user1', 5000)
+        assert not pipe.hdel.called
 
 
 class TestGetRollingSpeechMs:
