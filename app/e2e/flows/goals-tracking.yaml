@@ -60,7 +60,7 @@ steps:
         min: 4
     evidence:
       - screenshot: step-S4.webp
-    note: "Slider interaction triggers updateGoalProgress() which updates currentValue. Progress updates are sent to the backend API. The slider is interactive and provides real-time visual feedback. Color transitions from gray (low) through orange, amber, lime to green (high)."
+    note: "Slider interaction triggers updateGoalProgress() which updates currentValue. Progress updates are sent to the backend API. The slider is interactive and provides real-time visual feedback. Color transitions from gray (low) through orange, amber, lime to green (high). ADB drag: `adb shell input swipe <startX> <sliderY> <endX> <sliderY> 500` — startX=left edge of progress bar, endX=30% across, sliderY=goal item vertical center."
 
   - id: S5
     name: Tap goal to edit details
@@ -93,4 +93,4 @@ steps:
         min: 4
     evidence:
       - screenshot: step-S7.webp
-    note: "Swipe-to-delete uses Dismissible widget. deleteGoal() optimistically removes locally, then calls API. Analytics tracks goal deletion. The '+' button reappears since count < 3."
+    note: "Swipe-to-delete uses Dismissible widget. deleteGoal() optimistically removes locally, then calls API. Analytics tracks goal deletion. The '+' button reappears since count < 3. ADB swipe: `adb shell input swipe <rightX> <goalY> <leftX> <goalY> 300` — swipe right-to-left across goal card (e.g. x=900→200) to trigger Dismissible."
