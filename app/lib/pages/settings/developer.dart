@@ -1888,8 +1888,8 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
 // ============================================================
 // Manual Firmware Flash Page
 // ============================================================
- 
-class _ManualFirmwareFlashPage extends StatefulWidget {
+
+class _ManualFirmwareFlashPage extends StatefulWidget { 
   final String zipFilePath;
   final String fileName;
   final BtDevice device;
