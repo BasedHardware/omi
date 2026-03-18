@@ -8557,4 +8557,44 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get phoneHideKeypad => 'Peida klahvistik';
+
+  @override
+  String get fairUsePolicy => 'Õiglane kasutus';
+
+  @override
+  String get fairUseLoadError => 'Õiglase kasutuse olekut ei õnnestunud laadida. Palun proovige uuesti.';
+
+  @override
+  String get fairUseStatusNormal => 'Teie kasutus on tavapiirides.';
+
+  @override
+  String get fairUseStageNormal => 'Tavaline';
+
+  @override
+  String get fairUseStageWarning => 'Hoiatus';
+
+  @override
+  String get fairUseStageThrottle => 'Piiratud';
+
+  @override
+  String get fairUseStageRestrict => 'Keelatud';
+
+  @override
+  String get fairUseSpeechUsage => 'Kõne kasutus';
+
+  @override
+  String get fairUseToday => 'Täna';
+
+  @override
+  String get fairUse3Day => '3-päevane periood';
+
+  @override
+  String get fairUseWeekly => 'Nädalane periood';
+
+  @override
+  String get fairUseAboutTitle => 'Õiglase kasutuse kohta';
+
+  @override
+  String get fairUseAboutBody =>
+      'Omi on loodud isiklikeks vestlusteks, koosolekuteks ja reaalajas suhtluseks. Kasutust mõõdetakse tuvastatud tegeliku kõneaja, mitte ühenduse aja järgi. Kui kasutus ületab oluliselt tavapäraseid mustreid mitteisikliku sisu puhul, võidakse rakendada kohandusi.';
 }

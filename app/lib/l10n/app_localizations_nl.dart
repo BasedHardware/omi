@@ -8587,4 +8587,44 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get phoneHideKeypad => 'Toetsenbord verbergen';
+
+  @override
+  String get fairUsePolicy => 'Redelijk gebruik';
+
+  @override
+  String get fairUseLoadError => 'Kan de status van redelijk gebruik niet laden. Probeer het opnieuw.';
+
+  @override
+  String get fairUseStatusNormal => 'Uw gebruik is binnen de normale grenzen.';
+
+  @override
+  String get fairUseStageNormal => 'Normaal';
+
+  @override
+  String get fairUseStageWarning => 'Waarschuwing';
+
+  @override
+  String get fairUseStageThrottle => 'Beperkt';
+
+  @override
+  String get fairUseStageRestrict => 'Geblokkeerd';
+
+  @override
+  String get fairUseSpeechUsage => 'Spraakgebruik';
+
+  @override
+  String get fairUseToday => 'Vandaag';
+
+  @override
+  String get fairUse3Day => '3-daags voortschrijdend';
+
+  @override
+  String get fairUseWeekly => 'Wekelijks voortschrijdend';
+
+  @override
+  String get fairUseAboutTitle => 'Over redelijk gebruik';
+
+  @override
+  String get fairUseAboutBody =>
+      'Omi is ontworpen voor persoonlijke gesprekken, vergaderingen en live interacties. Het gebruik wordt gemeten aan de hand van de werkelijke gedetecteerde spreektijd, niet de verbindingstijd. Als het gebruik de normale patronen voor niet-persoonlijke inhoud aanzienlijk overschrijdt, kunnen aanpassingen worden toegepast.';
 }

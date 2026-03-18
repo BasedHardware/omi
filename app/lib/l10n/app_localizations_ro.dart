@@ -8602,4 +8602,44 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get phoneHideKeypad => 'Ascunde tastatura';
+
+  @override
+  String get fairUsePolicy => 'Utilizare echitabilă';
+
+  @override
+  String get fairUseLoadError => 'Nu s-a putut încărca starea de utilizare echitabilă. Vă rugăm să încercați din nou.';
+
+  @override
+  String get fairUseStatusNormal => 'Utilizarea dvs. este în limitele normale.';
+
+  @override
+  String get fairUseStageNormal => 'Normal';
+
+  @override
+  String get fairUseStageWarning => 'Avertisment';
+
+  @override
+  String get fairUseStageThrottle => 'Limitat';
+
+  @override
+  String get fairUseStageRestrict => 'Blocat';
+
+  @override
+  String get fairUseSpeechUsage => 'Utilizare vocală';
+
+  @override
+  String get fairUseToday => 'Astăzi';
+
+  @override
+  String get fairUse3Day => '3 zile consecutive';
+
+  @override
+  String get fairUseWeekly => 'Săptămânal';
+
+  @override
+  String get fairUseAboutTitle => 'Despre utilizarea echitabilă';
+
+  @override
+  String get fairUseAboutBody =>
+      'Omi este conceput pentru conversații personale, întâlniri și interacțiuni în direct. Utilizarea este măsurată prin timpul real de vorbire detectat, nu prin timpul de conexiune. Dacă utilizarea depășește semnificativ tiparele normale pentru conținut non-personal, se pot aplica ajustări.';
 }

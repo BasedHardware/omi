@@ -8556,4 +8556,44 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get phoneHideKeypad => 'Skrýt klávesnici';
+
+  @override
+  String get fairUsePolicy => 'Spravedlivé používání';
+
+  @override
+  String get fairUseLoadError => 'Nepodařilo se načíst stav spravedlivého používání. Zkuste to prosím znovu.';
+
+  @override
+  String get fairUseStatusNormal => 'Vaše používání je v normálních mezích.';
+
+  @override
+  String get fairUseStageNormal => 'Normální';
+
+  @override
+  String get fairUseStageWarning => 'Upozornění';
+
+  @override
+  String get fairUseStageThrottle => 'Omezeno';
+
+  @override
+  String get fairUseStageRestrict => 'Zakázáno';
+
+  @override
+  String get fairUseSpeechUsage => 'Využití řeči';
+
+  @override
+  String get fairUseToday => 'Dnes';
+
+  @override
+  String get fairUse3Day => '3denní období';
+
+  @override
+  String get fairUseWeekly => 'Týdenní období';
+
+  @override
+  String get fairUseAboutTitle => 'O spravedlivém používání';
+
+  @override
+  String get fairUseAboutBody =>
+      'Omi je navržen pro osobní konverzace, schůzky a živé interakce. Používání se měří skutečným detekovaným časem řeči, nikoli časem připojení. Pokud používání výrazně překročí běžné vzorce pro neosobní obsah, mohou být provedeny úpravy.';
 }

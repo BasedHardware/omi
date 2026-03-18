@@ -8558,4 +8558,44 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get phoneHideKeypad => 'Piilota näppäimistö';
+
+  @override
+  String get fairUsePolicy => 'Kohtuullinen käyttö';
+
+  @override
+  String get fairUseLoadError => 'Kohtuullisen käytön tilaa ei voitu ladata. Yritä uudelleen.';
+
+  @override
+  String get fairUseStatusNormal => 'Käyttösi on normaalien rajojen sisällä.';
+
+  @override
+  String get fairUseStageNormal => 'Normaali';
+
+  @override
+  String get fairUseStageWarning => 'Varoitus';
+
+  @override
+  String get fairUseStageThrottle => 'Rajoitettu';
+
+  @override
+  String get fairUseStageRestrict => 'Estetty';
+
+  @override
+  String get fairUseSpeechUsage => 'Puheen käyttö';
+
+  @override
+  String get fairUseToday => 'Tänään';
+
+  @override
+  String get fairUse3Day => '3 päivän jakso';
+
+  @override
+  String get fairUseWeekly => 'Viikkojakso';
+
+  @override
+  String get fairUseAboutTitle => 'Tietoa kohtuullisesta käytöstä';
+
+  @override
+  String get fairUseAboutBody =>
+      'Omi on suunniteltu henkilökohtaisiin keskusteluihin, kokouksiin ja reaaliaikaiseen vuorovaikutukseen. Käyttöä mitataan havaitun todellisen puheajan, ei yhteysajan perusteella. Jos käyttö ylittää merkittävästi normaalit mallit ei-henkilökohtaisen sisällön osalta, säätöjä voidaan soveltaa.';
 }

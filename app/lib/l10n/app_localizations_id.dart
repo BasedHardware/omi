@@ -8569,4 +8569,44 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get phoneHideKeypad => 'Sembunyikan keypad';
+
+  @override
+  String get fairUsePolicy => 'Penggunaan Wajar';
+
+  @override
+  String get fairUseLoadError => 'Tidak dapat memuat status penggunaan wajar. Silakan coba lagi.';
+
+  @override
+  String get fairUseStatusNormal => 'Penggunaan Anda dalam batas normal.';
+
+  @override
+  String get fairUseStageNormal => 'Normal';
+
+  @override
+  String get fairUseStageWarning => 'Peringatan';
+
+  @override
+  String get fairUseStageThrottle => 'Dibatasi';
+
+  @override
+  String get fairUseStageRestrict => 'Diblokir';
+
+  @override
+  String get fairUseSpeechUsage => 'Penggunaan Ucapan';
+
+  @override
+  String get fairUseToday => 'Hari ini';
+
+  @override
+  String get fairUse3Day => '3 hari bergulir';
+
+  @override
+  String get fairUseWeekly => 'Mingguan bergulir';
+
+  @override
+  String get fairUseAboutTitle => 'Tentang Penggunaan Wajar';
+
+  @override
+  String get fairUseAboutBody =>
+      'Omi dirancang untuk percakapan pribadi, rapat, dan interaksi langsung. Penggunaan diukur berdasarkan waktu bicara nyata yang terdeteksi, bukan waktu koneksi. Jika penggunaan secara signifikan melebihi pola normal untuk konten non-pribadi, penyesuaian dapat diterapkan.';
 }
