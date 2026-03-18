@@ -443,7 +443,7 @@ struct DesktopHomeView: View {
     let activateApp = notification.userInfo?["activateApp"] as? Bool ?? true
 
     if activateApp {
-      NSApp.activate(ignoringOtherApps: true)
+      NSApp.activate()
       if let window = NSApp.windows.first(where: { $0.title.lowercased().hasPrefix("omi") }) {
         window.makeKeyAndOrderFront(nil)
       }
