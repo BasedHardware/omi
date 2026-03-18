@@ -164,13 +164,21 @@ elif [ ! -f "google-credentials.json" ] && [ -f "../Backend/google-credentials.j
     ln -sf "../Backend/google-credentials.json" "google-credentials.json"
 fi
 
-# Force local backend to use prod Firestore credentials for testing.
-CREDS_PATH="$(pwd)/google-credentials.json"
+# Set Firestore credentials for local backend.
+CREDS_PATH="$BACKEND_DIR/google-credentials.json"
 if [ ! -f "$CREDS_PATH" ]; then
     echo "Missing credentials file: $CREDS_PATH"
     exit 1
 fi
 export GOOGLE_APPLICATION_CREDENTIALS="$CREDS_PATH"
+# Read FIREBASE_PROJECT_ID from: shell env > backend .env > "based-hardware" default.
+# This ensures the project ID matches the service account credentials.
+if [ -z "$FIREBASE_PROJECT_ID" ] && [ -f "$BACKEND_DIR/.env" ]; then
+    ENV_PROJECT_ID=$(grep "^FIREBASE_PROJECT_ID=" "$BACKEND_DIR/.env" | head -1 | cut -d= -f2-)
+    if [ -n "$ENV_PROJECT_ID" ]; then
+        export FIREBASE_PROJECT_ID="$ENV_PROJECT_ID"
+    fi
+fi
 export FIREBASE_PROJECT_ID="${FIREBASE_PROJECT_ID:-based-hardware}"
 substep "Using Firestore creds: $GOOGLE_APPLICATION_CREDENTIALS"
 substep "Using Firebase project: $FIREBASE_PROJECT_ID"
