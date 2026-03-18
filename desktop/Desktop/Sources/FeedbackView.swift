@@ -30,7 +30,7 @@ class FeedbackWindow {
 
     window = newWindow
 
-    NSApp.activate(ignoringOtherApps: true)
+    NSApp.activate()
   }
 }
 
