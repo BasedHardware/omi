@@ -247,7 +247,7 @@ Respond with ONLY the JSON output, no other text."""
         result['abuse_type'] = result.get('abuse_type', 'none')
         result['evidence'] = result.get('evidence', [])[:10]  # Cap evidence entries
         result['model'] = CLASSIFIER_MODEL
-        result['prompt_version'] = 'v1'
+        result['prompt_version'] = 'v2'
 
         return result
 
