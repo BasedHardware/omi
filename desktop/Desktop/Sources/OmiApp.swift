@@ -137,6 +137,53 @@ struct OMIApp: App {
           resetWindowToDefaultSize()
         }
       }
+
+      // Sidebar navigation shortcuts: Cmd+1..6 for main pages, Cmd+, for Settings
+      CommandGroup(after: .sidebar) {
+        Button("Dashboard") {
+          NotificationCenter.default.post(name: .navigateToSidebarItem, object: nil,
+            userInfo: ["rawValue": SidebarNavItem.dashboard.rawValue])
+        }
+        .keyboardShortcut("1", modifiers: .command)
+
+        Button("Chat") {
+          NotificationCenter.default.post(name: .navigateToSidebarItem, object: nil,
+            userInfo: ["rawValue": SidebarNavItem.chat.rawValue])
+        }
+        .keyboardShortcut("2", modifiers: .command)
+
+        Button("Memories") {
+          NotificationCenter.default.post(name: .navigateToSidebarItem, object: nil,
+            userInfo: ["rawValue": SidebarNavItem.memories.rawValue])
+        }
+        .keyboardShortcut("3", modifiers: .command)
+
+        Button("Tasks") {
+          NotificationCenter.default.post(name: .navigateToSidebarItem, object: nil,
+            userInfo: ["rawValue": SidebarNavItem.tasks.rawValue])
+        }
+        .keyboardShortcut("4", modifiers: .command)
+
+        Button("Rewind") {
+          NotificationCenter.default.post(name: .navigateToSidebarItem, object: nil,
+            userInfo: ["rawValue": SidebarNavItem.rewind.rawValue])
+        }
+        .keyboardShortcut("5", modifiers: .command)
+
+        Button("Apps") {
+          NotificationCenter.default.post(name: .navigateToSidebarItem, object: nil,
+            userInfo: ["rawValue": SidebarNavItem.apps.rawValue])
+        }
+        .keyboardShortcut("6", modifiers: .command)
+
+        Divider()
+
+        Button("Settings") {
+          NotificationCenter.default.post(name: .navigateToSidebarItem, object: nil,
+            userInfo: ["rawValue": SidebarNavItem.settings.rawValue])
+        }
+        .keyboardShortcut(",", modifiers: .command)
+      }
     }
 
     // Note: Menu bar is now handled by NSStatusBar in AppDelegate.setupMenuBar()
