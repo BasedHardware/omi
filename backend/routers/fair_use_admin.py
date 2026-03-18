@@ -6,11 +6,11 @@ import logging
 import os
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
 
 import database.fair_use as fair_use_db
 from database._client import db
-from utils.other.endpoints import get_current_user_uid
+from utils.other.endpoints import get_current_user_uid, rate_limit_dependency
 from utils.fair_use import (
     get_rolling_speech_ms,
     invalidate_enforcement_cache,
@@ -129,7 +129,11 @@ SUPPORT_EMAIL = 'team@basedhardware.com'
 # ---------------------------------------------------------------------------
 
 
-@router.get('/v1/fair-use/case/{case_ref}/status', tags=['fair_use'])
+@router.get(
+    '/v1/fair-use/case/{case_ref}/status',
+    tags=['fair_use'],
+    dependencies=[Depends(rate_limit_dependency('fair_use_case_status', requests_per_window=10, window_seconds=60))],
+)
 def get_public_case_status(case_ref: str):
     """Public unauthenticated endpoint: look up case status by reference.
 
