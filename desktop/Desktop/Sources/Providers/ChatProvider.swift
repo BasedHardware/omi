@@ -1660,6 +1660,8 @@ A screenshot may be attached — use it silently only if relevant. Never mention
     private func pollForNewMessages() async {
         // Skip if user is signed out (tokens are cleared)
         guard AuthState.shared.isSignedIn else { return }
+        // Skip if in auth backoff period (recent 401 errors)
+        guard !AuthBackoffTracker.shared.shouldSkipRequest() else { return }
         // Skip if we're actively sending. Note: isSending is released *before* the AI
         // message is saved to the backend (to unblock the next query). This means the
         // poll can run while saveMessage() is still in-flight — see the race note below.
@@ -1727,7 +1729,11 @@ A screenshot may be attached — use it silently only if relevant. Never mention
                 messages.append(contentsOf: genuinelyNewMessages)
                 messages.sort(by: { $0.createdAt < $1.createdAt })
             }
+            AuthBackoffTracker.shared.reportSuccess()
         } catch {
+            if case APIError.unauthorized = error {
+                AuthBackoffTracker.shared.reportAuthFailure()
+            }
             // Silent failure — polling errors shouldn't disrupt the user
             logError("ChatProvider poll failed", error: error)
         }
