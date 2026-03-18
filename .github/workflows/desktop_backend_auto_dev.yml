@@ -5,6 +5,7 @@ on:
     branches: [ "main" ]
     paths:
       - 'desktop/Backend-Rust/**'
+  workflow_dispatch:
 
 env:
   SERVICE: desktop-backend
