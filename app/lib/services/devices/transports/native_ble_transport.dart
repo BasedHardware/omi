@@ -228,6 +228,7 @@ class NativeBleTransport extends DeviceTransport {
       _activeSubscriptionKeys.addAll(_streamControllers.keys);
 
       _closeAllStreams();
+      _services = []; // Clear so reconnect waits for fresh discovery
       _updateState(DeviceTransportState.disconnected);
 
       // Fail pending completers
@@ -240,13 +241,19 @@ class NativeBleTransport extends DeviceTransport {
     }
   }
 
+  bool _isResubscribing = false;
+
   Future<void> _resubscribeAfterReconnect() async {
+    if (_isResubscribing) return;
+    _isResubscribing = true;
     try {
-      // Re-discover services
-      _servicesCompleter = Completer<List<BleService>>();
-      _hostApi.discoverServices(_peripheralUuid);
-      _services = await _servicesCompleter!.future.timeout(const Duration(seconds: 15));
-      _servicesCompleter = null;
+      // Wait for native to complete its connect → MTU → discoverServices flow
+      // Native fires onServicesDiscovered automatically, so just wait for it
+      if (_services.isEmpty) {
+        _servicesCompleter = Completer<List<BleService>>();
+        _services = await _servicesCompleter!.future.timeout(const Duration(seconds: 15));
+        _servicesCompleter = null;
+      }
 
       // Re-create stream controllers and re-subscribe to previously active characteristics
       for (final key in _activeSubscriptionKeys) {
@@ -263,6 +270,8 @@ class NativeBleTransport extends DeviceTransport {
       print('[NativeBleTransport] Failed to re-subscribe after reconnect: $e');
       _servicesCompleter = null;
       _updateState(DeviceTransportState.disconnected);
+    } finally {
+      _isResubscribing = false;
     }
   }
 
