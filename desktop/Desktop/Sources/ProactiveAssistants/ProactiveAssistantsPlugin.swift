@@ -289,7 +289,7 @@ public class ProactiveAssistantsPlugin: NSObject {
 
                 // Retry authorization after a short delay
                 DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
-                    NSApp.activate(ignoringOtherApps: true)
+                    NSApp.activate()
                     UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { granted, error in
                         if let error = error {
                             log("Notification retry after repair failed: \(error.localizedDescription)")
