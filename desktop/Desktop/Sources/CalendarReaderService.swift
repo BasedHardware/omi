@@ -399,7 +399,7 @@ def fetch_calendar_events(jar, cookies_list, days_back, days_forward, max_result
         f"https://clients6.google.com/calendar/v3/calendars/primary/events"
         f"?timeMin={time_min}&timeMax={time_max}"
         f"&singleEvents=true&orderBy=startTime&maxResults={max_results}"
-        f"&key={os.environ.get('GOOGLE_CALENDAR_API_KEY', 'AIzaSyBNlYH01_9Hc5S1J9vuFmu2nUqBZJNAXxs')}"
+        f"&key={os.environ.get('GOOGLE_CALENDAR_API_KEY', '')}"
     )
 
     opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(jar))
