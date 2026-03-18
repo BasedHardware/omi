@@ -206,4 +206,4 @@ class TestUserFacingEndpoint:
         assert resp.status_code == 200
         data = resp.json()
         assert data['stage'] == 'restrict'
-        assert 'support@omi.me' in data['message']
+        assert 'team@basedhardware.com' in data['message']
