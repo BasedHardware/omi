@@ -141,7 +141,9 @@ def get_flagged_users(stage_filter: Optional[str] = None, limit: int = 100) -> l
     if stage_filter:
         query = query.where('stage', '==', stage_filter)
     else:
-        query = query.where('stage', '!=', 'none')
+        # Use 'in' filter instead of '!=' to allow order_by on 'updated_at'
+        # Firestore requires first order_by to match the inequality field
+        query = query.where('stage', 'in', ['warning', 'throttle', 'restrict'])
 
     query = query.order_by('updated_at', direction=firestore.Query.DESCENDING).limit(limit)
 
