@@ -1,0 +1,71 @@
+# E2E Flow: Tasks — task management with filtering, creation, and completion
+# Tests: Tasks list, filter groups, create task, toggle completion, category views
+# Core feature: action items extracted from conversations and screen activity
+
+version: 2
+name: tasks
+description: Tasks flow — navigate to Tasks page, browse categorized tasks (today/tomorrow/later/no deadline), filter by status/category/source/priority, create manual task, toggle completion
+app: com.omi.desktop-dev
+evidence:
+  video: true
+covers:
+  - desktop/Desktop/Sources/MainWindow/Pages/TasksPage.swift
+  - desktop/Desktop/Sources/Providers/TasksStore.swift
+preconditions:
+  - auth_ready  # User signed in and onboarding completed. App shows main window.
+
+steps:
+  - id: S1
+    name: Navigate to Tasks page
+    do: "Click Tasks in sidebar: agent-swift find key sidebar_tasks click. Verify the Tasks page opens showing task categories (Today, Tomorrow, Later, No Deadline) and a search/filter bar at top."
+    verify: true
+    expect:
+      - kind: interactive_count
+        min: 5
+    evidence:
+      - screenshot: step-S1.webp
+    note: "Tasks is index 4 in sidebar (SidebarNavItem.tasks). TasksPage has 6 filter groups: Status, Date Range, Category, Source, Priority, Origin. Tasks sorted into TaskCategory by due date."
+
+  - id: S2
+    name: Apply a filter
+    do: "Click the filter/funnel icon to open filter options. Select 'Status' group and toggle 'Todo' filter to show only incomplete tasks. Verify the task list updates to hide completed items."
+    verify: true
+    expect:
+      - kind: interactive_count
+        min: 3
+    evidence:
+      - screenshot: step-S2.webp
+    note: "TaskFilterTag enum has 25+ filter options across 6 groups. Filters are combinable. SavedFilterView supports saving custom filter combinations to UserDefaults (JSON encoded)."
+
+  - id: S3
+    name: Create a manual task
+    do: "Click the FAB (floating action button, '+' icon) to open the task creation form. Enter title 'Review desktop app flows', optionally set a due date and priority. Save the task."
+    verify: true
+    expect:
+      - kind: interactive_count
+        min: 3
+    evidence:
+      - screenshot: step-S3.webp
+    note: "Manual task creation via FAB. New tasks get source='manual' and appear in the appropriate category based on due date. TasksStore handles local + API sync."
+
+  - id: S4
+    name: Toggle task completion
+    do: "Find the task 'Review desktop app flows' (or any task in the list). Click the checkbox to mark it complete. Verify the task shows as completed with a checkmark or strikethrough styling."
+    verify: true
+    expect:
+      - kind: interactive_count
+        min: 3
+    evidence:
+      - screenshot: step-S4.webp
+    note: "toggleTask in TasksStore optimistically updates local state, then syncs to API. Completed tasks move to 'Done' filter category."
+
+  - id: S5
+    name: Clear filter and verify all tasks
+    do: "Clear the active filter to show all tasks again. Verify tasks from all categories (Today, Tomorrow, Later, No Deadline) are visible, including both completed and incomplete items."
+    verify: true
+    expect:
+      - kind: interactive_count
+        min: 3
+    evidence:
+      - screenshot: step-S5.webp
+    note: "Clearing filters restores the default view showing all task categories. Verify the manually created task appears in the correct section."
