@@ -248,9 +248,9 @@ struct SettingsContentView: View {
     }
 
     enum AdvancedSubsection: String, CaseIterable {
+        case resetOnboarding = "Reset Onboarding"
         case aiUserProfile = "AI User Profile"
         case stats = "Your Stats"
-        case featureTiers = "Feature Tiers"
         case focusAssistant = "Focus Assistant"
         case taskAssistant = "Task Assistant"
         case adviceAssistant = "Advice Assistant"
@@ -266,9 +266,9 @@ struct SettingsContentView: View {
 
         var icon: String {
             switch self {
+            case .resetOnboarding: return "arrow.counterclockwise"
             case .aiUserProfile: return "brain"
             case .stats: return "chart.bar"
-            case .featureTiers: return "lock.shield"
             case .focusAssistant: return "eye.fill"
             case .taskAssistant: return "checklist"
             case .adviceAssistant: return "lightbulb.fill"
@@ -403,8 +403,8 @@ struct SettingsContentView: View {
             loadSubscriptionInfo()
             // Sync transcription state with appState
             isTranscribing = appState.isTranscribing
-            // Sync floating bar state
-            showAskOmiBar = FloatingControlBarManager.shared.isVisible
+            // Sync floating bar state with persisted preference (not transient visibility)
+            showAskOmiBar = FloatingControlBarManager.shared.isEnabled
             // Refresh notification permission state
             appState.checkNotificationPermission()
         }
@@ -2505,12 +2505,12 @@ struct SettingsContentView: View {
 
     private var advancedSection: some View {
         VStack(spacing: 24) {
+            advancedCategoryHeader(title: "Reset Onboarding", icon: "arrow.counterclockwise")
+            resetOnboardingSubsection
             advancedCategoryHeader(title: "AI User Profile", icon: "brain")
             aiUserProfileSubsection
             advancedCategoryHeader(title: "Your Stats", icon: "chart.bar")
             statsSubsection
-            advancedCategoryHeader(title: "Feature Tiers", icon: "lock.shield")
-            featureTiersSubsection
             advancedCategoryHeader(title: "Focus Assistant", icon: "eye.fill")
             focusAssistantSubsection
             advancedCategoryHeader(title: "Task Assistant", icon: "checklist")
@@ -3935,8 +3935,14 @@ struct SettingsContentView: View {
                 Text("This will re-scan your files and update your AI profile with the latest information about your projects and interests.")
             }
 
-            // Reset Onboarding
-            settingsCard(settingId: "advanced.troubleshooting.resetonboarding") {
+        }
+    }
+
+    // MARK: - Reset Onboarding Subsection
+
+    private var resetOnboardingSubsection: some View {
+        VStack(spacing: 20) {
+            settingsCard(settingId: "advanced.resetonboarding") {
                 HStack(spacing: 16) {
                     Image(systemName: "arrow.counterclockwise")
                         .scaledFont(size: 16)
