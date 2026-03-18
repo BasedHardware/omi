@@ -9,8 +9,16 @@ from typing import Optional
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
 
 import database.fair_use as fair_use_db
+from database._client import db
 from utils.other.endpoints import get_current_user_uid
-from utils.fair_use import get_rolling_speech_ms, invalidate_enforcement_cache, FAIR_USE_ENABLED
+from utils.fair_use import (
+    get_rolling_speech_ms,
+    invalidate_enforcement_cache,
+    FAIR_USE_ENABLED,
+    FAIR_USE_DAILY_SPEECH_MS,
+    FAIR_USE_3DAY_SPEECH_MS,
+    FAIR_USE_WEEKLY_SPEECH_MS,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -98,6 +106,21 @@ def set_user_stage(uid: str, stage: str = Query(...), admin_id: str = Depends(_v
     return {'status': 'updated', 'stage': stage}
 
 
+@router.get('/v1/admin/fair-use/case/{case_ref}', tags=['admin'])
+def lookup_case(case_ref: str, admin_id: str = Depends(_verify_admin_key)):
+    """Look up a fair-use event by case reference (for support team)."""
+    # Search across all users' events for this case_ref
+    query = db.collection_group('fair_use_events').where('case_ref', '==', case_ref).limit(1)
+    for doc in query.stream():
+        data = doc.to_dict()
+        path_parts = doc.reference.path.split('/')
+        if len(path_parts) >= 2:
+            data['uid'] = path_parts[1]
+        data['event_id'] = doc.id
+        return data
+    raise HTTPException(status_code=404, detail=f'Case {case_ref} not found')
+
+
 # ---------------------------------------------------------------------------
 # Support: user-facing endpoint to see their own fair-use status
 # ---------------------------------------------------------------------------
@@ -110,29 +133,49 @@ def get_my_fair_use_status(uid: str = Depends(get_current_user_uid)):
     speech = get_rolling_speech_ms(uid)
 
     stage = state.get('stage', 'none')
+    case_ref = state.get('last_case_ref', '')
+
+    daily_ms = speech.get('daily_ms', 0)
+    three_day_ms = speech.get('three_day_ms', 0)
+    weekly_ms = speech.get('weekly_ms', 0)
+
     return {
         'stage': stage,
-        'speech_hours_today': round(speech.get('daily_ms', 0) / 3600000, 2),
-        'speech_hours_3day': round(speech.get('three_day_ms', 0) / 3600000, 2),
-        'speech_hours_weekly': round(speech.get('weekly_ms', 0) / 3600000, 2),
-        'message': _user_facing_message(stage),
+        'case_ref': case_ref,
+        'speech_hours_today': round(daily_ms / 3600000, 2),
+        'speech_hours_3day': round(three_day_ms / 3600000, 2),
+        'speech_hours_weekly': round(weekly_ms / 3600000, 2),
+        'limits': {
+            'daily_hours': round(FAIR_USE_DAILY_SPEECH_MS / 3600000, 2),
+            'three_day_hours': round(FAIR_USE_3DAY_SPEECH_MS / 3600000, 2),
+            'weekly_hours': round(FAIR_USE_WEEKLY_SPEECH_MS / 3600000, 2),
+        },
+        'usage_pct': {
+            'daily': round(daily_ms / FAIR_USE_DAILY_SPEECH_MS * 100, 1) if FAIR_USE_DAILY_SPEECH_MS else 0,
+            'three_day': round(three_day_ms / FAIR_USE_3DAY_SPEECH_MS * 100, 1) if FAIR_USE_3DAY_SPEECH_MS else 0,
+            'weekly': round(weekly_ms / FAIR_USE_WEEKLY_SPEECH_MS * 100, 1) if FAIR_USE_WEEKLY_SPEECH_MS else 0,
+        },
+        'message': _user_facing_message(stage, case_ref),
     }
 
 
-def _user_facing_message(stage: str) -> str:
+def _user_facing_message(stage: str, case_ref: str = '') -> str:
+    ref_note = f' Your case reference is {case_ref}.' if case_ref else ''
     messages = {
         'none': 'Your usage is within normal limits.',
         'warning': (
             'Your usage is higher than typical. Omi is designed for personal conversations. '
-            'If non-personal content transcription continues, your service may be adjusted.'
+            f'If non-personal content transcription continues, your service may be adjusted.{ref_note}'
         ),
         'throttle': (
             'Your transcription quality has been temporarily reduced due to high non-personal usage. '
-            'This will reset automatically. Contact support at support@omi.me if you believe this is an error.'
+            'This will reset automatically. Contact support at support@omi.me if you believe this is an error. '
+            f'Please quote your case reference when contacting support.{ref_note}'
         ),
         'restrict': (
             'Your cloud transcription is temporarily limited. On-device transcription continues normally. '
-            'Contact support at support@omi.me to discuss your usage and resolve this.'
+            'Contact support at support@omi.me to discuss your usage and resolve this. '
+            f'Please quote your case reference when contacting support.{ref_note}'
         ),
     }
     return messages.get(stage, messages['none'])
