@@ -179,7 +179,12 @@ if [ -z "$FIREBASE_PROJECT_ID" ] && [ -f "$BACKEND_DIR/.env" ]; then
         export FIREBASE_PROJECT_ID="$ENV_PROJECT_ID"
     fi
 fi
-export FIREBASE_PROJECT_ID="${FIREBASE_PROJECT_ID:-based-hardware}"
+if [ -z "$FIREBASE_PROJECT_ID" ]; then
+    echo "ERROR: FIREBASE_PROJECT_ID is not set. Add it to $BACKEND_DIR/.env or export it."
+    echo "  For prod: FIREBASE_PROJECT_ID=based-hardware"
+    echo "  For dev:  FIREBASE_PROJECT_ID=based-hardware-dev"
+    exit 1
+fi
 # When using a dev Firestore project with the prod auth service, auth tokens
 # are minted for "based-hardware" (prod). Set FIREBASE_AUTH_PROJECT_ID so the
 # backend validates tokens against prod while keeping Firestore on dev.
