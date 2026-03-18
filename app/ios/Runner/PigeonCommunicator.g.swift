@@ -663,6 +663,11 @@ protocol BleHostApi {
   /// Register a characteristic UUID as an audio stream. Notifications for this
   /// characteristic will be batched when audio batching is enabled.
   func registerAudioCharacteristic(characteristicUuid: String) throws
+  /// (Android only) Initiate CompanionDeviceManager association for a device.
+  /// Shows the system chooser dialog filtered to this device's address.
+  /// Returns the associated device address on success, empty string on failure/cancel.
+  /// On iOS, returns empty string (state restoration handles background reconnection).
+  func requestCompanionDeviceAssociation(deviceAddress: String, completion: @escaping (Result<String, Error>) -> Void)
 }
 
 /// Generated setup class from Pigeon to handle messages through the `binaryMessenger`.
@@ -896,6 +901,27 @@ class BleHostApiSetup {
       }
     } else {
       registerAudioCharacteristicChannel.setMessageHandler(nil)
+    }
+    /// (Android only) Initiate CompanionDeviceManager association for a device.
+    /// Shows the system chooser dialog filtered to this device's address.
+    /// Returns the associated device address on success, empty string on failure/cancel.
+    /// On iOS, returns empty string (state restoration handles background reconnection).
+    let requestCompanionDeviceAssociationChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.omi_pigeon.BleHostApi.requestCompanionDeviceAssociation\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
+    if let api = api {
+      requestCompanionDeviceAssociationChannel.setMessageHandler { message, reply in
+        let args = message as! [Any?]
+        let deviceAddressArg = args[0] as! String
+        api.requestCompanionDeviceAssociation(deviceAddress: deviceAddressArg) { result in
+          switch result {
+          case .success(let res):
+            reply(wrapResult(res))
+          case .failure(let error):
+            reply(wrapError(error))
+          }
+        }
+      }
+    } else {
+      requestCompanionDeviceAssociationChannel.setMessageHandler(nil)
     }
   }
 }
