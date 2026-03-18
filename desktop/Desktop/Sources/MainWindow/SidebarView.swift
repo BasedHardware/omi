@@ -451,7 +451,8 @@ struct SidebarView: View {
     private var headerSection: some View {
         HStack(spacing: 12) {
             // Omi logo icon - using the herologo from Resources
-            if let logoImage = NSImage(contentsOf: Bundle.resourceBundle.url(forResource: "herologo", withExtension: "png")!) {
+            if let logoURL = Bundle.resourceBundle.url(forResource: "herologo", withExtension: "png"),
+               let logoImage = NSImage(contentsOf: logoURL) {
                 Image(nsImage: logoImage)
                     .resizable()
                     .aspectRatio(contentMode: .fit)
