@@ -18,10 +18,13 @@ import database.users as users_db
 from database.redis_db import r as redis_client
 from models.fair_use import UsageType, FairUseStage, SoftCapTrigger
 
-# Lazy imports to avoid circular dependency chains at module load time.
-# classify_user_purpose → database.conversations → utils.encryption (needs env var at import).
-# send_notification → Firebase messaging setup.
+# Lazy imports — NOT circular deps, but import-time side-effect avoidance.
+# classify_user_purpose → database.conversations → utils.encryption
+#   encryption.py raises ValueError at import if ENCRYPTION_SECRET env var is missing/short.
+# send_notification → firebase_admin.messaging
+#   Requires Firebase app to be initialized before import.
 # Both are only called in async runtime paths, never at import time.
+# Moving to top-level would break any context where this module loads before env/Firebase init.
 _classify_user_purpose = None
 _send_notification = None
 
@@ -135,7 +138,13 @@ def record_speech_ms(uid: str, speech_ms: int) -> None:
 
         # Prune old zset members older than retention window
         cutoff_ts = now - FAIR_USE_REDIS_RETENTION_SECONDS
+        # First, get stale members so we can also prune the hash (#5748 reviewer fix)
+        stale_members = redis_client.zrangebyscore(zset_key, 0, cutoff_ts)
         pipe.zremrangebyscore(zset_key, 0, cutoff_ts)
+        # Prune matching hash fields to prevent unbounded growth
+        if stale_members:
+            stale_fields = [m.decode() if isinstance(m, bytes) else m for m in stale_members]
+            pipe.hdel(bucket_key, *stale_fields)
 
         pipe.execute()
     except Exception as e:
