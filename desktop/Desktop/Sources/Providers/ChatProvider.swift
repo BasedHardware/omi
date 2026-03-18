@@ -753,7 +753,7 @@ A screenshot may be attached — use it silently only if relevant. Never mention
         }
 
         sessions = []
-        sessionsLoadError = lastError?.localizedDescription ?? "Unknown error"
+        sessionsLoadError = lastError?.localizedDescription ?? "Failed to load chats. Check your connection and try again."
     }
 
     /// Toggle the starred filter and reload sessions
@@ -1649,7 +1649,7 @@ A screenshot may be attached — use it silently only if relevant. Never mention
         }
 
         messages = []
-        sessionsLoadError = lastError?.localizedDescription ?? "Unknown error"
+        sessionsLoadError = lastError?.localizedDescription ?? "Failed to load messages. Check your connection and try again."
         isLoading = false
     }
 
