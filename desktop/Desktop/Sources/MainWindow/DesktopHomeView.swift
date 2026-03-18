@@ -540,7 +540,6 @@ struct DesktopHomeView: View {
             isCollapsed: $isSidebarCollapsed,
             appState: appState
           )
-          .clickThrough(enabled: !isInSettings)
           .opacity(isInSettings ? 0 : 1)
           .allowsHitTesting(!isInSettings)
         }
