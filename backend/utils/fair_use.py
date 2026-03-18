@@ -339,7 +339,7 @@ def escalate_enforcement(uid: str, triggered_caps: list, classifier_result: dict
         fair_use_db.update_fair_use_state(uid, update)
         invalidate_enforcement_cache(uid)
 
-    # Record the event
+    # Record the event (create_fair_use_event auto-generates a case_ref)
     speech = get_rolling_speech_ms(uid)
     event_data = {
         'session_id': '',
@@ -356,6 +356,12 @@ def escalate_enforcement(uid: str, triggered_caps: list, classifier_result: dict
         'new_stage': new_stage,
     }
     event_id = fair_use_db.create_fair_use_event(uid, event_data)
+
+    # Store latest case_ref on user state for quick lookup by user/support
+    if action != 'none':
+        events = fair_use_db.get_fair_use_events(uid, limit=1)
+        if events and events[0].get('case_ref'):
+            fair_use_db.update_fair_use_state(uid, {'last_case_ref': events[0]['case_ref']})
 
     return {
         'action': action,
@@ -441,7 +447,10 @@ async def trigger_classifier_if_needed(uid: str, triggered_caps: list, session_i
 
         # Send notification if action was taken
         if escalation['action'] != 'none':
-            await _send_fair_use_notification(uid, escalation['action'])
+            # Fetch the case_ref from the just-created event
+            latest_events = fair_use_db.get_fair_use_events(uid, limit=1)
+            case_ref = latest_events[0].get('case_ref', '') if latest_events else ''
+            await _send_fair_use_notification(uid, escalation['action'], case_ref=case_ref)
 
     except Exception as e:
         logger.error(f'fair_use: classifier/escalation error for {uid}: {e}')
@@ -453,30 +462,38 @@ async def trigger_classifier_if_needed(uid: str, triggered_caps: list, session_i
             pass
 
 
-async def _send_fair_use_notification(uid: str, action: str) -> None:
+async def _send_fair_use_notification(uid: str, action: str, case_ref: str = '') -> None:
     """Send in-app push notification about fair-use enforcement."""
     titles = {
         'warning': 'Fair Use Notice',
         'throttle': 'Transcription Quality Reduced',
         'restrict': 'Transcription Limit Reached',
     }
+
+    ref_suffix = f' Reference: {case_ref}' if case_ref else ''
+
     bodies = {
         'warning': (
             'Your speech usage is unusually high. Omi is designed for personal conversations. '
             'If this continues, transcription quality may be reduced. '
-            'Check Settings > Plan & Usage for details.'
+            f'Check Settings > Plan & Usage for details.{ref_suffix}'
         ),
         'throttle': (
             'Due to high non-conversational usage, your transcription quality has been temporarily reduced. '
-            'This will reset automatically. Contact support if you believe this is an error.'
+            'This will reset automatically. Contact support@omi.me if you believe this is an error. '
+            f'Quote your case reference when contacting support.{ref_suffix}'
         ),
         'restrict': (
             'Your cloud transcription has been temporarily limited due to repeated fair-use violations. '
-            'On-device transcription continues normally. Contact support to resolve.'
+            'On-device transcription continues normally. Contact support@omi.me to resolve. '
+            f'Quote your case reference when contacting support.{ref_suffix}'
         ),
     }
 
     title = titles.get(action, 'Fair Use Notice')
     body = bodies.get(action, '')
     if body:
-        _get_send_notification()(uid, title, body, data={'type': 'fair_use', 'action': action})
+        data = {'type': 'fair_use', 'action': action}
+        if case_ref:
+            data['case_ref'] = case_ref
+        _get_send_notification()(uid, title, body, data=data)
