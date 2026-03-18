@@ -12,8 +12,11 @@ pub struct Config {
     pub gemini_api_key: Option<String>,
     /// Google Application Credentials path for Firestore
     pub google_application_credentials: Option<String>,
-    /// Firebase project ID
+    /// Firebase project ID (used for Firestore)
     pub firebase_project_id: Option<String>,
+    /// Firebase project ID for auth token validation (defaults to firebase_project_id)
+    /// Set this when OAuth tokens come from a different project than your Firestore
+    pub firebase_auth_project_id: Option<String>,
     /// Firebase Web API key (for identity toolkit)
     pub firebase_api_key: Option<String>,
     /// Base API URL (for OAuth callbacks)
@@ -82,6 +85,7 @@ impl Config {
             google_application_credentials: env::var("GOOGLE_APPLICATION_CREDENTIALS").ok(),
             firebase_project_id: env::var("FIREBASE_PROJECT_ID").ok()
                 .or_else(|| env::var("GCP_PROJECT_ID").ok()),
+            firebase_auth_project_id: env::var("FIREBASE_AUTH_PROJECT_ID").ok(),
             firebase_api_key: env::var("FIREBASE_API_KEY").ok(),
             base_api_url: env::var("BASE_API_URL").ok(),
             apple_client_id: env::var("APPLE_CLIENT_ID").ok(),
