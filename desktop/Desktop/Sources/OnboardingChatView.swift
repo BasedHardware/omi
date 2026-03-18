@@ -124,6 +124,10 @@ struct OnboardingChatView: View {
   @State private var showSkipConfirmation = false
   @State private var recoveredOnboardingFallbackTask: Task<Void, Never>?
 
+  // Permission help notification state
+  @State private var permissionHelpTask: Task<Void, Never>?
+  @State private var permissionHelpShownFor: Set<String> = []  // permissions that already got a help notification
+
   // Timer to periodically check permission status
   let permissionCheckTimer = Timer.publish(every: 1.0, on: .main, in: .common).autoconnect()
 
@@ -465,8 +469,14 @@ struct OnboardingChatView: View {
     .onChange(of: quickReplyOptions) { _, _ in
       scheduleRecoveredOnboardingFallback()
     }
-    .onChange(of: pendingPermissionType) { _, _ in
+    .onChange(of: pendingPermissionType) { _, newValue in
       scheduleRecoveredOnboardingFallback()
+      // Start or cancel permission help timer
+      if let permType = newValue {
+        startPermissionHelpTimer(for: permType)
+      } else {
+        cancelPermissionHelpTimer()
+      }
     }
     .onChange(of: explorationRunning) { _, _ in
       scheduleRecoveredOnboardingFallback()
@@ -525,6 +535,117 @@ struct OnboardingChatView: View {
       Task {
         await chatProvider.sendMessage("Grant \(label) — done!")
       }
+    }
+  }
+
+  // MARK: - Permission Help Notifications
+
+  /// Start a 15-second timer for the given permission. If the permission is still not granted
+  /// when the timer fires, take a screenshot, ask Gemini for help, and show the result as
+  /// a floating bar notification.
+  private func startPermissionHelpTimer(for permissionType: String) {
+    cancelPermissionHelpTimer()
+
+    // Only show one help notification per permission type
+    guard !permissionHelpShownFor.contains(permissionType) else { return }
+
+    permissionHelpTask = Task {
+      try? await Task.sleep(nanoseconds: 15_000_000_000)  // 15 seconds
+      guard !Task.isCancelled else { return }
+
+      // Check if the permission is still pending
+      guard pendingPermissionType == permissionType else { return }
+
+      // Mark this permission so we don't spam
+      permissionHelpShownFor.insert(permissionType)
+
+      await showPermissionHelpNotification(for: permissionType)
+    }
+  }
+
+  private func cancelPermissionHelpTimer() {
+    permissionHelpTask?.cancel()
+    permissionHelpTask = nil
+  }
+
+  /// Take a screenshot, send it to Gemini with context about the permission, and show
+  /// the AI's guidance as a floating bar notification.
+  private func showPermissionHelpNotification(for permissionType: String) async {
+    let permissionLabel = permissionDisplayName(permissionType)
+
+    // Take a screenshot (off main thread to avoid blocking UI)
+    let screenshotData: Data? = await Task.detached {
+      guard let url = ScreenCaptureManager.captureScreen() else { return nil }
+      return try? Data(contentsOf: url)
+    }.value
+
+    let helpText: String
+    if let imageData = screenshotData {
+      // Ask Gemini for help using the screenshot
+      do {
+        let gemini = try GeminiClient()
+        let prompt =
+          "The user is trying to grant \(permissionLabel) permission to the Omi app on macOS. Here is a screenshot of their current screen. Give them a brief, specific instruction on where to click or what to do next to grant this permission. Be concise — max 2 sentences."
+        let systemPrompt =
+          "You are a helpful macOS support assistant. Give brief, actionable instructions for granting macOS permissions. Never use technical jargon. Always refer to visible UI elements by their exact labels."
+
+        helpText = try await gemini.sendImageTextRequest(
+          prompt: prompt,
+          imageData: imageData,
+          systemPrompt: systemPrompt
+        )
+      } catch {
+        log("OnboardingChat: Permission help Gemini call failed: \(error.localizedDescription)")
+        helpText = fallbackPermissionHelp(for: permissionType)
+      }
+    } else {
+      log("OnboardingChat: Screenshot failed for permission help, using fallback")
+      helpText = fallbackPermissionHelp(for: permissionType)
+    }
+
+    // Ensure the floating bar is set up (it's normally created in later onboarding steps)
+    FloatingControlBarManager.shared.setup(appState: appState, chatProvider: chatProvider)
+    FloatingControlBarManager.shared.showTemporarily()
+
+    // Show the notification via the floating bar
+    FloatingControlBarManager.shared.showNotification(
+      title: "Need help with \(permissionLabel)?",
+      message: helpText,
+      assistantId: "onboarding",
+      sound: .none
+    )
+  }
+
+  /// Human-readable name for a permission type string
+  private func permissionDisplayName(_ type: String) -> String {
+    switch type {
+    case "screen_recording": return "Screen Recording"
+    case "microphone": return "Microphone"
+    case "notifications": return "Notifications"
+    case "accessibility": return "Accessibility"
+    case "automation": return "Automation"
+    case "full_disk_access": return "Full Disk Access"
+    default: return type
+    }
+  }
+
+  /// Fallback help text when screenshot or Gemini call fails
+  private func fallbackPermissionHelp(for permissionType: String) -> String {
+    switch permissionType {
+    case "screen_recording":
+      return "Open System Settings > Privacy & Security > Screen Recording, then toggle on Omi."
+    case "microphone":
+      return "Open System Settings > Privacy & Security > Microphone, then toggle on Omi."
+    case "accessibility":
+      return "Open System Settings > Privacy & Security > Accessibility, then toggle on Omi."
+    case "automation":
+      return "Open System Settings > Privacy & Security > Automation, then toggle on Omi."
+    case "notifications":
+      return "Open System Settings > Notifications, find Omi, and enable Allow Notifications."
+    case "full_disk_access":
+      return "Open System Settings > Privacy & Security > Full Disk Access, then toggle on Omi."
+    default:
+      return "Open System Settings > Privacy & Security and grant the permission to Omi."
     }
   }
 
@@ -1130,6 +1251,9 @@ struct OnboardingChatView: View {
     // Clean up Calendar reading
     calendarReadingTask?.cancel()
     calendarReadingTask = nil
+
+    // Clean up permission help timer
+    cancelPermissionHelpTimer()
 
     // Notify parent to advance to next step
     onComplete()

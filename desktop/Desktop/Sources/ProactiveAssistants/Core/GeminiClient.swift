@@ -364,6 +364,80 @@ actor GeminiClient {
     throw lastError!
   }
 
+  /// Send an image + text request to the Gemini API and return plain text (no structured output).
+  /// Retries up to 2 times for transient errors (3 total attempts).
+  /// - Parameters:
+  ///   - prompt: Text prompt to send alongside the image
+  ///   - imageData: JPEG image data to analyze
+  ///   - systemPrompt: System instructions for the model
+  /// - Returns: The plain-text response from the model
+  func sendImageTextRequest(
+    prompt: String,
+    imageData: Data,
+    systemPrompt: String
+  ) async throws -> String {
+    let maxRetries = 2
+    var lastError: Error?
+
+    for attempt in 0...maxRetries {
+      do {
+        let requestBody: Data = try autoreleasepool {
+          let base64Data = imageData.base64EncodedString()
+
+          let request = GeminiRequest(
+            contents: [
+              GeminiRequest.Content(parts: [
+                GeminiRequest.Part(text: prompt),
+                GeminiRequest.Part(mimeType: "image/jpeg", data: base64Data),
+              ])
+            ],
+            systemInstruction: GeminiRequest.SystemInstruction(
+              parts: [GeminiRequest.SystemInstruction.TextPart(text: systemPrompt)]
+            ),
+            generationConfig: nil
+          )
+
+          return try JSONEncoder().encode(request)
+        }
+
+        let url = URL(
+          string:
+            "https://generativelanguage.googleapis.com/v1beta/models/\(model):generateContent?key=\(apiKey)"
+        )!
+        var urlRequest = URLRequest(url: url)
+        urlRequest.httpMethod = "POST"
+        urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        urlRequest.timeoutInterval = 30
+        urlRequest.httpBody = requestBody
+
+        let (data, _) = try await URLSession.shared.data(for: urlRequest)
+
+        let response = try JSONDecoder().decode(GeminiResponse.self, from: data)
+
+        if let error = response.error {
+          try throwAPIError(error.message)
+        }
+
+        guard let text = response.candidates?.first?.content?.parts?.first?.text else {
+          try throwBlockedOrInvalidResponse(
+            blockReason: response.promptFeedback?.blockReason,
+            finishReason: response.candidates?.first?.finishReason
+          )
+        }
+
+        return text
+      } catch {
+        lastError = error
+        guard attempt < maxRetries && isTransientError(error) else {
+          throw error
+        }
+        await retryBackoff(attempt: attempt, error: error)
+      }
+    }
+
+    throw lastError!
+  }
+
   /// Send a text-only request to the Gemini API
   /// Retries up to 2 times for transient errors (3 total attempts).
   /// - Parameters:

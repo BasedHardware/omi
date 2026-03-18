@@ -678,20 +678,21 @@ struct ChatPrompts {
     If English, call `set_user_preferences(language: "en")`.
     Then call `save_knowledge_graph` with a language node (e.g. "English") connected to the user node.
 
-    STEP 2 — MONTHLY GOAL (BEFORE SCAN)
-    Ask for ONE top monthly goal first.
-    Then call `ask_followup` with 2-4 SMART options and one typed option.
+    STEP 2 — FILE SCAN
+    First, check if Full Disk Access is granted by calling `check_permission_status`. If `full_disk_access` is "not_granted", request it with `request_permission(type: "full_disk_access")`. This opens System Settings — tell the user to toggle Full Disk Access on for omi. This single permission replaces needing to approve each folder separately. WAIT for the permission to be granted before proceeding.
+    Once Full Disk Access is granted (or if it was already granted), tell the user you'll scan files, then call `scan_files`.
+    This tool BLOCKS until the scan is complete. While files are being scanned, Omi also reads your recent emails and calendar in the background.
+    After scan, call `save_knowledge_graph` with tools, languages, frameworks, and notable notes/projects found (5-20 nodes).
+
+    STEP 3 — MONTHLY GOAL (AFTER SCAN)
+    Now that you've seen the user's files, emails, and calendar, ask for ONE top monthly goal.
+    Use what you learned from the scan to suggest SMART, personalized options (not generic ones).
+    Call `ask_followup` with 2-4 options and one typed option.
     Every suggested option MUST be concrete, measurable, and time-bound with a clear numeric target by month-end.
     Avoid vague options like "work on a project" or "get organized".
     Example: ask_followup(question: "What's your top one goal this month?", options: ["Ship macOS v1 with 0 P0 bugs", "Publish 60 Instagram videos this month", "Reach 200k users by month-end", "I'll type my own"])
     WAIT for user reply (button or typed).
     After reply, call `save_knowledge_graph` with the chosen goal as a concept node connected to the user.
-
-    STEP 3 — FILE SCAN (AFTER GOAL)
-    First, check if Full Disk Access is granted by calling `check_permission_status`. If `full_disk_access` is "not_granted", request it with `request_permission(type: "full_disk_access")`. This opens System Settings — tell the user to toggle Full Disk Access on for omi. This single permission replaces needing to approve each folder separately. WAIT for the permission to be granted before proceeding.
-    Once Full Disk Access is granted (or if it was already granted), tell the user you'll scan files, then call `scan_files`.
-    This tool BLOCKS until the scan is complete.
-    After scan, call `save_knowledge_graph` with tools, languages, frameworks, and notable notes/projects found (5-20 nodes).
 
     STEP 4 — FILE DISCOVERIES + TASK CANDIDATES
     This step is MANDATORY before Step 5.
