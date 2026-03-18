@@ -228,7 +228,8 @@ actor AgentVMService {
 
         log("AgentVMService: Uploading compressed database to \(vmIP)...")
 
-        guard let uploadURL = URL(string: "http://\(vmIP):8080/upload") else {
+        // Send token both as query param (backward compat) and header (preferred)
+        guard let uploadURL = URL(string: "http://\(vmIP):8080/upload?token=\(authToken)") else {
             log("AgentVMService: Invalid upload URL for IP \(vmIP)")
             try? FileManager.default.removeItem(at: tempGzPath)
             return
@@ -278,7 +279,8 @@ actor AgentVMService {
     private func sendFirebaseToken(vmIP: String, authToken: String) async {
         do {
             let idToken = try await AuthService.shared.getIdToken()
-            guard let url = URL(string: "http://\(vmIP):8080/auth") else { return }
+            // Send token both as query param (backward compat) and header (preferred)
+            guard let url = URL(string: "http://\(vmIP):8080/auth?token=\(authToken)") else { return }
             var request = URLRequest(url: url)
             request.httpMethod = "POST"
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
