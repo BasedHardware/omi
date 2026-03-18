@@ -230,10 +230,11 @@ actor AgentSyncService {
 
         do {
             let idToken = try await AuthService.shared.getIdToken()
-            guard let url = URL(string: "http://\(vmIP):8080/auth?token=\(authToken)") else { return }
+            guard let url = URL(string: "http://\(vmIP):8080/auth") else { return }
             var request = URLRequest(url: url)
             request.httpMethod = "POST"
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.setValue("Bearer \(authToken)", forHTTPHeaderField: "Authorization")
             request.timeoutInterval = 15
 
             let body: [String: String] = ["firebaseToken": idToken]
@@ -358,7 +359,7 @@ actor AgentSyncService {
     private func pushRows(_ table: String, _ rows: [[String: Any]]) async -> PushResult {
         guard let vmIP = vmIP, let authToken = authToken else { return .networkError }
 
-        guard let url = URL(string: "http://\(vmIP):8080/sync?token=\(authToken)") else {
+        guard let url = URL(string: "http://\(vmIP):8080/sync") else {
             log("AgentSync: invalid sync URL for vmIP=\(vmIP), skipping push")
             return .httpError
         }
@@ -366,6 +367,7 @@ actor AgentSyncService {
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("Bearer \(authToken)", forHTTPHeaderField: "Authorization")
         request.timeoutInterval = 30
 
         let payload: [String: Any] = ["table": table, "rows": rows]
