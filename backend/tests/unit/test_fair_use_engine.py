@@ -274,10 +274,10 @@ class TestIsHardRestricted:
     @patch.object(fair_use_mod, 'FAIR_USE_ENABLED', True)
     @patch.object(fair_use_mod, 'FAIR_USE_KILL_SWITCH', False)
     @patch.object(fair_use_mod, 'FAIR_USE_EXEMPT_UIDS', set())
-    @patch.object(fair_use_mod, 'get_enforcement_stage', return_value='restrict')
     @patch.object(fair_use_mod, 'get_rolling_speech_ms')
-    def test_restricted_user_over_cap_is_hard_restricted(self, mock_speech, _):
+    def test_restricted_user_over_cap_is_hard_restricted(self, mock_speech):
         _fair_use_db.get_fair_use_state.return_value = {
+            'stage': 'restrict',
             'restrict_until': datetime.utcnow() + timedelta(days=7),
         }
         mock_speech.return_value = {'daily_ms': 8000000, 'three_day_ms': 0, 'weekly_ms': 0}
@@ -287,10 +287,10 @@ class TestIsHardRestricted:
     @patch.object(fair_use_mod, 'FAIR_USE_ENABLED', True)
     @patch.object(fair_use_mod, 'FAIR_USE_KILL_SWITCH', False)
     @patch.object(fair_use_mod, 'FAIR_USE_EXEMPT_UIDS', set())
-    @patch.object(fair_use_mod, 'get_enforcement_stage', return_value='restrict')
     @patch.object(fair_use_mod, 'get_rolling_speech_ms')
-    def test_restricted_user_under_cap_is_not_hard_restricted(self, mock_speech, _):
+    def test_restricted_user_under_cap_is_not_hard_restricted(self, mock_speech):
         _fair_use_db.get_fair_use_state.return_value = {
+            'stage': 'restrict',
             'restrict_until': datetime.utcnow() + timedelta(days=7),
         }
         mock_speech.return_value = {'daily_ms': 1000, 'three_day_ms': 1000, 'weekly_ms': 1000}
@@ -300,8 +300,8 @@ class TestIsHardRestricted:
     @patch.object(fair_use_mod, 'FAIR_USE_ENABLED', True)
     @patch.object(fair_use_mod, 'FAIR_USE_KILL_SWITCH', False)
     @patch.object(fair_use_mod, 'FAIR_USE_EXEMPT_UIDS', set())
-    @patch.object(fair_use_mod, 'get_enforcement_stage', return_value='warning')
-    def test_non_restricted_user_is_not_hard_restricted(self, _):
+    def test_non_restricted_user_is_not_hard_restricted(self):
+        _fair_use_db.get_fair_use_state.return_value = {'stage': 'warning'}
         assert fair_use_mod.is_hard_restricted('user1') is False
 
     @patch.object(fair_use_mod, 'FAIR_USE_ENABLED', False)
@@ -317,9 +317,9 @@ class TestIsHardRestricted:
     @patch.object(fair_use_mod, 'FAIR_USE_ENABLED', True)
     @patch.object(fair_use_mod, 'FAIR_USE_KILL_SWITCH', False)
     @patch.object(fair_use_mod, 'FAIR_USE_EXEMPT_UIDS', set())
-    @patch.object(fair_use_mod, 'get_enforcement_stage', return_value='restrict')
-    def test_expired_restriction_resets_to_throttle(self, _):
+    def test_expired_restriction_resets_to_throttle(self):
         _fair_use_db.get_fair_use_state.return_value = {
+            'stage': 'restrict',
             'restrict_until': datetime.utcnow() - timedelta(days=1),  # Expired
         }
         result = fair_use_mod.is_hard_restricted('user1')
@@ -377,13 +377,12 @@ class TestDatetimeNormalization:
     @patch.object(fair_use_mod, 'FAIR_USE_ENABLED', True)
     @patch.object(fair_use_mod, 'FAIR_USE_KILL_SWITCH', False)
     @patch.object(fair_use_mod, 'FAIR_USE_EXEMPT_UIDS', set())
-    @patch.object(fair_use_mod, 'get_enforcement_stage', return_value='restrict')
-    def test_aware_datetime_does_not_raise(self, _):
+    def test_aware_datetime_does_not_raise(self):
         from datetime import timezone
 
         # Simulate Firestore returning an aware datetime
         aware_past = datetime.now(timezone.utc) - timedelta(days=1)
-        _fair_use_db.get_fair_use_state.return_value = {'restrict_until': aware_past}
+        _fair_use_db.get_fair_use_state.return_value = {'stage': 'restrict', 'restrict_until': aware_past}
 
         # Should not raise TypeError from naive/aware comparison
         result = fair_use_mod.is_hard_restricted('user1')
@@ -393,13 +392,12 @@ class TestDatetimeNormalization:
     @patch.object(fair_use_mod, 'FAIR_USE_ENABLED', True)
     @patch.object(fair_use_mod, 'FAIR_USE_KILL_SWITCH', False)
     @patch.object(fair_use_mod, 'FAIR_USE_EXEMPT_UIDS', set())
-    @patch.object(fair_use_mod, 'get_enforcement_stage', return_value='restrict')
     @patch.object(fair_use_mod, 'get_rolling_speech_ms')
-    def test_aware_future_datetime_still_restricts(self, mock_speech, _):
+    def test_aware_future_datetime_still_restricts(self, mock_speech):
         from datetime import timezone
 
         aware_future = datetime.now(timezone.utc) + timedelta(days=7)
-        _fair_use_db.get_fair_use_state.return_value = {'restrict_until': aware_future}
+        _fair_use_db.get_fair_use_state.return_value = {'stage': 'restrict', 'restrict_until': aware_future}
         mock_speech.return_value = {'daily_ms': 8000000, 'three_day_ms': 0, 'weekly_ms': 0}
 
         result = fair_use_mod.is_hard_restricted('user1')
