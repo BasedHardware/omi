@@ -5,6 +5,7 @@ actor GoalsAIService {
   static let shared = GoalsAIService()
 
   private var geminiClient: GeminiClient?
+  private var geminiClientInitAttempted = false
 
   struct NormalizedGoalInput {
     let title: String
@@ -14,11 +15,24 @@ actor GoalsAIService {
   }
 
   private init() {
+    // Don't eagerly initialize GeminiClient here — the API key may not
+    // be available yet (fetched async by APIKeyService after app launch).
+    // Instead, lazy-initialize on first use via getGeminiClient().
+  }
+
+  /// Lazy-initialize the GeminiClient on first use so the API key
+  /// (set by APIKeyService.fetchKeys()) is available.
+  private func getGeminiClient() -> GeminiClient? {
+    if let client = geminiClient { return client }
+    guard !geminiClientInitAttempted else { return nil }
+    geminiClientInitAttempted = true
     do {
-      self.geminiClient = try GeminiClient(model: "gemini-pro-latest")
+      let client = try GeminiClient(model: "gemini-pro-latest")
+      geminiClient = client
+      return client
     } catch {
       log("GoalsAIService: Failed to initialize GeminiClient: \(error)")
-      self.geminiClient = nil
+      return nil
     }
   }
 
@@ -39,7 +53,7 @@ actor GoalsAIService {
   /// Normalize free-form onboarding goal input into structured goal fields.
   /// Example: "My goal is 200k users" -> title: "200k users", goalType: .numeric, targetValue: 200000, unit: "users"
   func normalizeOnboardingGoalInput(_ rawInput: String) async -> NormalizedGoalInput? {
-    guard let client = geminiClient else { return nil }
+    guard let client = getGeminiClient() else { return nil }
 
     struct Response: Codable {
       let title: String
@@ -221,7 +235,7 @@ actor GoalsAIService {
 
   /// Automatically generate and create a goal based on rich user context
   func generateGoal() async throws -> Goal {
-    guard let client = geminiClient else {
+    guard let client = getGeminiClient() else {
       throw GoalsAIError.clientNotInitialized
     }
 
@@ -315,7 +329,7 @@ actor GoalsAIService {
 
   /// Get AI-generated actionable advice for achieving a goal
   func getGoalAdvice(goal: Goal) async throws -> String {
-    guard let client = geminiClient else {
+    guard let client = getGeminiClient() else {
       throw GoalsAIError.clientNotInitialized
     }
 
@@ -403,7 +417,7 @@ actor GoalsAIService {
   func extractProgress(text: String, goal: Goal, updateIfFound: Bool = true) async throws
     -> ProgressExtraction?
   {
-    guard let client = geminiClient else {
+    guard let client = getGeminiClient() else {
       throw GoalsAIError.clientNotInitialized
     }
 
