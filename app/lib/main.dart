@@ -194,13 +194,13 @@ Future _init() async {
     ble.FlutterBluePlus.setLogLevel(ble.LogLevel.info, color: true);
   }
 
-  // Register native BLE bridge on iOS (must be before any BLE operations)
-  if (PlatformService.isIOS) {
+  // Register native BLE bridge on iOS and Android (must be before any BLE operations)
+  if (PlatformService.isIOS || PlatformService.isAndroid) {
     BleFlutterApi.setUp(BleBridge.instance);
 
     // Handle state restoration — iOS may restore peripherals after app relaunch
     BleBridge.instance.stateRestoredCallback = (List<String> peripheralUuids) {
-      Logger.debug('main: iOS restored ${peripheralUuids.length} BLE peripherals');
+      Logger.debug('main: restored ${peripheralUuids.length} BLE peripherals');
       // The DeviceProvider will pick up the connection via NativeBleTransport
       // when it initializes and calls periodicConnect.
     };
