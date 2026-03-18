@@ -462,7 +462,7 @@ class AppState: ObservableObject {
 
         if settings.authorizationStatus == .notDetermined {
           // First time - show the system prompt
-          NSApp.activate(ignoringOtherApps: true)
+          NSApp.activate()
           UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge])
           { [weak self] granted, error in
             if let error = error {
@@ -2534,7 +2534,7 @@ class AppState: ObservableObject {
   /// Request microphone permission
   func requestMicrophonePermission() {
     // Activate app to ensure permission dialog appears
-    NSApp.activate(ignoringOtherApps: true)
+    NSApp.activate()
 
     log(
       "Requesting microphone permission, current status: \(AudioCaptureService.authorizationStatus().rawValue)"
