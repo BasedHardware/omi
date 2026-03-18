@@ -989,6 +989,14 @@ async def _stream_handler(
                         except Exception as e:
                             logger.error(f'fair_use: VAD threshold adjustment error: {e} {uid} {session_id}')
 
+                        # Check hard restriction at session start to avoid 5-min startup leak window
+                        try:
+                            if is_hard_restricted(uid):
+                                fair_use_restricted = True
+                                logger.info(f'fair_use: session start hard restrict for {uid} session={session_id}')
+                        except Exception as e:
+                            logger.error(f'fair_use: session start restrict check error: {e} {uid} {session_id}')
+
                     logger.info(
                         'VAD gate initialized mode=%s preseconds=%s codec=%s sample_rate=%s uid=%s session=%s',
                         gate_mode,
@@ -2281,7 +2289,7 @@ async def _stream_handler(
             # Use event-based routing instead of time-based
             profile_complete = speech_profile_complete.is_set()
 
-            if dg_socket is not None:
+            if dg_socket is not None and not fair_use_restricted:
                 if profile_complete or not deepgram_profile_socket:
                     dg_socket.send(chunk)
                     if deepgram_profile_socket:
@@ -2377,8 +2385,8 @@ async def _stream_handler(
                         # Resample to TARGET_SAMPLE_RATE for STT
                         pcm_16k = resample_pcm(bytes(audio_data), sample_rate, TARGET_SAMPLE_RATE)
 
-                        # Send to per-channel STT
-                        if stt_sockets_multi[ch_idx]:
+                        # Send to per-channel STT (skip if fair-use restricted to save STT cost)
+                        if stt_sockets_multi[ch_idx] and not fair_use_restricted:
                             try:
                                 if stt_service == STTService.deepgram:
                                     stt_sockets_multi[ch_idx].send(pcm_16k)
@@ -2443,8 +2451,9 @@ async def _stream_handler(
                         if audio_ring_buffer is not None:
                             audio_ring_buffer.write(data, last_audio_received_time)
 
-                        if not use_custom_stt:
+                        if not use_custom_stt and not fair_use_restricted:
                             # VAD gating is handled inside GatedDeepgramSocket.send()
+                            # Skip STT entirely when fair-use restricted to save Deepgram cost
                             stt_audio_buffer.extend(data)
                             await flush_stt_buffer()
 
