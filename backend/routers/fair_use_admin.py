@@ -1,4 +1,4 @@
-"""Admin endpoints for fair-use abuse management."""
+"""Admin endpoints for fair-use management."""
 
 import hashlib
 import hmac
