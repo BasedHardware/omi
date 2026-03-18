@@ -110,10 +110,7 @@ class ConnectionGuideSheet extends StatelessWidget {
       constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.85),
       decoration: const BoxDecoration(
         color: ResponsiveHelper.backgroundSecondary,
-        borderRadius: BorderRadius.only(
-          topLeft: Radius.circular(24),
-          topRight: Radius.circular(24),
-        ),
+        borderRadius: BorderRadius.only(topLeft: Radius.circular(24), topRight: Radius.circular(24)),
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -123,20 +120,13 @@ class ConnectionGuideSheet extends StatelessWidget {
             margin: const EdgeInsets.only(top: 12),
             width: 40,
             height: 4,
-            decoration: BoxDecoration(
-              color: ResponsiveHelper.textTertiary,
-              borderRadius: BorderRadius.circular(2),
-            ),
+            decoration: BoxDecoration(color: ResponsiveHelper.textTertiary, borderRadius: BorderRadius.circular(2)),
           ),
           const SizedBox(height: 20),
           // Title
           Text(
             context.l10n.connectionGuide,
-            style: const TextStyle(
-              color: ResponsiveHelper.textPrimary,
-              fontSize: 20,
-              fontWeight: FontWeight.w600,
-            ),
+            style: const TextStyle(color: ResponsiveHelper.textPrimary, fontSize: 20, fontWeight: FontWeight.w600),
           ),
           const SizedBox(height: 24),
           // Device grid
@@ -180,10 +170,7 @@ class ConnectionGuideSheet extends StatelessWidget {
       onTap: () => _onDeviceTapped(context, product),
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 12),
-        decoration: BoxDecoration(
-          color: ResponsiveHelper.backgroundTertiary,
-          borderRadius: BorderRadius.circular(16),
-        ),
+        decoration: BoxDecoration(color: ResponsiveHelper.backgroundTertiary, borderRadius: BorderRadius.circular(16)),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -194,11 +181,7 @@ class ConnectionGuideSheet extends StatelessWidget {
             const SizedBox(height: 12),
             Text(
               product.name,
-              style: const TextStyle(
-                color: ResponsiveHelper.textSecondary,
-                fontSize: 14,
-                fontWeight: FontWeight.w500,
-              ),
+              style: const TextStyle(color: ResponsiveHelper.textSecondary, fontSize: 14, fontWeight: FontWeight.w500),
               textAlign: TextAlign.center,
               maxLines: 2,
               overflow: TextOverflow.ellipsis,

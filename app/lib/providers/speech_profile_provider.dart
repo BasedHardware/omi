@@ -23,20 +23,10 @@ import 'package:omi/utils/constants.dart';
 import 'package:omi/utils/logger.dart';
 
 /// Enum for loading text states in speech profile
-enum SpeechProfileLoadingState {
-  uploading,
-  memorizing,
-  personalizing,
-  allSet,
-}
+enum SpeechProfileLoadingState { uploading, memorizing, personalizing, allSet }
 
 /// Enum for progress message states in speech profile
-enum SpeechProfileProgressState {
-  keepSpeaking,
-  keepGoing,
-  almostThere,
-  soClose,
-}
+enum SpeechProfileProgressState { keepSpeaking, keepGoing, almostThere, soClose }
 
 class SpeechProfileProvider extends ChangeNotifier
     with MessageNotifierMixin
@@ -180,13 +170,17 @@ class SpeechProfileProvider extends ChangeNotifier
   }
 
   Future<void> _initiateWebsocket({required BleAudioCodec codec, int? sampleRate, bool force = false}) async {
-    String language =
-        SharedPreferencesUtil().hasSetPrimaryLanguage ? SharedPreferencesUtil().userPrimaryLanguage : "multi";
+    String language = SharedPreferencesUtil().hasSetPrimaryLanguage
+        ? SharedPreferencesUtil().userPrimaryLanguage
+        : "multi";
     int rate = sampleRate ?? (codec.isOpusSupported() ? 16000 : 8000);
 
-    _socket = await ServiceManager.instance()
-        .socket
-        .speechProfile(codec: codec, sampleRate: rate, language: language, force: force);
+    _socket = await ServiceManager.instance().socket.speechProfile(
+      codec: codec,
+      sampleRate: rate,
+      language: language,
+      force: force,
+    );
     if (_socket == null) {
       throw Exception("Can not create new speech profile socket");
     }
@@ -368,13 +362,10 @@ class SpeechProfileProvider extends ChangeNotifier
     int speakersCount = userSegments.map((e) => e.speaker).toSet().length;
     Logger.debug('_validateSingleSpeaker speakers count: $speakersCount');
     if (speakersCount > 1) {
-      var speakerToWords = userSegments.fold<Map<int, int>>(
-        {},
-        (previousValue, element) {
-          previousValue[element.speakerId] = (previousValue[element.speakerId] ?? 0) + element.text.split(' ').length;
-          return previousValue;
-        },
-      );
+      var speakerToWords = userSegments.fold<Map<int, int>>({}, (previousValue, element) {
+        previousValue[element.speakerId] = (previousValue[element.speakerId] ?? 0) + element.text.split(' ').length;
+        return previousValue;
+      });
       Logger.debug('speakerToWords: $speakerToWords');
       if (speakerToWords.values.every((element) => element / userSegments.length > 0.08)) {
         notifyError('MULTIPLE_SPEAKERS');

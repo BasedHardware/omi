@@ -51,8 +51,12 @@ class ConversationsListWidget extends StatelessWidget {
   final List<SyncedConversationPointer> conversations;
   final String title;
   final bool showReprocess;
-  const ConversationsListWidget(
-      {super.key, required this.conversations, required this.title, required this.showReprocess});
+  const ConversationsListWidget({
+    super.key,
+    required this.conversations,
+    required this.title,
+    required this.showReprocess,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -62,31 +66,23 @@ class ConversationsListWidget extends StatelessWidget {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        const SizedBox(
-          height: 18,
-        ),
-        Text(
-          title,
-          style: const TextStyle(color: Colors.white, fontSize: 20),
-        ),
-        const SizedBox(
-          height: 10,
-        ),
+        const SizedBox(height: 18),
+        Text(title, style: const TextStyle(color: Colors.white, fontSize: 20)),
+        const SizedBox(height: 10),
         ListView.separated(
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
           itemBuilder: (ctx, i) {
             var convo = conversations[i];
             return SyncedConversationListItem(
-                conversation: convo.conversation,
-                date: convo.key,
-                conversationIdx: convo.index,
-                showReprocess: showReprocess);
+              conversation: convo.conversation,
+              date: convo.key,
+              conversationIdx: convo.index,
+              showReprocess: showReprocess,
+            );
           },
           separatorBuilder: (ctx, i) {
-            return const SizedBox(
-              height: 10,
-            );
+            return const SizedBox(height: 10);
           },
           itemCount: conversations.length,
         ),

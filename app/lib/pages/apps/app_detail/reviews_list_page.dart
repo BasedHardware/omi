@@ -79,10 +79,7 @@ class _ReviewsListPageState extends State<ReviewsListPage> {
                     hintStyle: TextStyle(color: Colors.grey.shade500),
                     filled: true,
                     fillColor: Colors.black.withOpacity(0.3),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(8),
-                      borderSide: BorderSide.none,
-                    ),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
                     contentPadding: const EdgeInsets.all(12),
                   ),
                 ),
@@ -93,10 +90,7 @@ class _ReviewsListPageState extends State<ReviewsListPage> {
         actions: [
           TextButton(
             onPressed: isSubmitting.value ? null : () => Navigator.pop(context),
-            child: Text(
-              context.l10n.cancel,
-              style: TextStyle(color: Colors.grey.shade400),
-            ),
+            child: Text(context.l10n.cancel, style: TextStyle(color: Colors.grey.shade400)),
           ),
           ValueListenableBuilder<bool>(
             valueListenable: isSubmitting,
@@ -109,9 +103,11 @@ class _ReviewsListPageState extends State<ReviewsListPage> {
                         isSubmitting.value = true;
                         try {
                           await replyToAppReview(widget.app.id, controller.text.trim(), review.uid);
-                          context
-                              .read<AppProvider>()
-                              .updateLocalAppReviewResponse(widget.app.id, controller.text.trim(), review.uid);
+                          context.read<AppProvider>().updateLocalAppReviewResponse(
+                            widget.app.id,
+                            controller.text.trim(),
+                            review.uid,
+                          );
                           review.response = controller.text.trim();
                           review.respondedAt = DateTime.now();
                           if (mounted) {
@@ -137,10 +133,7 @@ class _ReviewsListPageState extends State<ReviewsListPage> {
                           isSubmitting.value = false;
                         }
                       },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.deepPurple,
-                  foregroundColor: Colors.white,
-                ),
+                style: ElevatedButton.styleFrom(backgroundColor: Colors.deepPurple, foregroundColor: Colors.white),
                 child: submitting
                     ? const SizedBox(
                         width: 16,
@@ -189,10 +182,7 @@ class _ReviewsListPageState extends State<ReviewsListPage> {
           width: 36,
           height: 36,
           margin: const EdgeInsets.all(8),
-          decoration: BoxDecoration(
-            color: Colors.grey.withOpacity(0.3),
-            shape: BoxShape.circle,
-          ),
+          decoration: BoxDecoration(color: Colors.grey.withOpacity(0.3), shape: BoxShape.circle),
           child: IconButton(
             padding: EdgeInsets.zero,
             onPressed: () => Navigator.pop(context),
@@ -254,18 +244,11 @@ class _ReviewsListPageState extends State<ReviewsListPage> {
                       padding: const EdgeInsets.only(top: 60.0),
                       child: Column(
                         children: [
-                          Icon(
-                            FontAwesomeIcons.star,
-                            size: 48,
-                            color: Colors.grey.shade600,
-                          ),
+                          Icon(FontAwesomeIcons.star, size: 48, color: Colors.grey.shade600),
                           const SizedBox(height: 16),
                           Text(
                             context.l10n.noReviewsFound,
-                            style: TextStyle(
-                              color: Colors.grey.shade400,
-                              fontSize: 16,
-                            ),
+                            style: TextStyle(color: Colors.grey.shade400, fontSize: 16),
                           ),
                         ],
                       ),
@@ -296,10 +279,7 @@ class _ReviewsListPageState extends State<ReviewsListPage> {
         decoration: BoxDecoration(
           color: selected ? Colors.deepPurple : Colors.grey.shade800.withOpacity(0.5),
           borderRadius: BorderRadius.circular(20),
-          border: Border.all(
-            color: selected ? Colors.deepPurple : Colors.grey.shade700,
-            width: 1,
-          ),
+          border: Border.all(color: selected ? Colors.deepPurple : Colors.grey.shade700, width: 1),
         ),
         child: Text(
           label,
@@ -346,18 +326,11 @@ class _ReviewsListPageState extends State<ReviewsListPage> {
                       return Container(
                         width: 40,
                         height: 40,
-                        decoration: BoxDecoration(
-                          color: Colors.grey.shade800,
-                          shape: BoxShape.circle,
-                        ),
+                        decoration: BoxDecoration(color: Colors.grey.shade800, shape: BoxShape.circle),
                         child: Center(
                           child: Text(
                             initial,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 18,
-                              fontWeight: FontWeight.w600,
-                            ),
+                            style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
                           ),
                         ),
                       );
@@ -375,19 +348,12 @@ class _ReviewsListPageState extends State<ReviewsListPage> {
                       children: [
                         Text(
                           displayName,
-                          style: const TextStyle(
-                            color: Colors.grey,
-                            fontSize: 14,
-                            fontWeight: FontWeight.w500,
-                          ),
+                          style: const TextStyle(color: Colors.grey, fontSize: 14, fontWeight: FontWeight.w500),
                         ),
                         const SizedBox(width: 8),
                         Text(
                           timeago.format(review.ratedAt),
-                          style: TextStyle(
-                            color: Colors.grey.shade700,
-                            fontSize: 12,
-                          ),
+                          style: TextStyle(color: Colors.grey.shade700, fontSize: 12),
                         ),
                       ],
                     ),
@@ -413,24 +379,14 @@ class _ReviewsListPageState extends State<ReviewsListPage> {
           // Review text
           if (review.review.isNotEmpty) ...[
             const SizedBox(height: 12),
-            Text(
-              review.review.decodeString,
-              style: const TextStyle(
-                color: Colors.grey,
-                fontSize: 14,
-                height: 1.4,
-              ),
-            ),
+            Text(review.review.decodeString, style: const TextStyle(color: Colors.grey, fontSize: 14, height: 1.4)),
           ],
           // Owner response
           if (review.response.isNotEmpty) ...[
             const SizedBox(height: 16),
             Container(
               padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.black.withOpacity(0.3),
-                borderRadius: BorderRadius.circular(12),
-              ),
+              decoration: BoxDecoration(color: Colors.black.withOpacity(0.3), borderRadius: BorderRadius.circular(12)),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -438,20 +394,13 @@ class _ReviewsListPageState extends State<ReviewsListPage> {
                     children: [
                       Text(
                         widget.app.author,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                        ),
+                        style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600),
                       ),
                       if (review.respondedAt != null) ...[
                         const SizedBox(width: 8),
                         Text(
                           timeago.format(review.respondedAt!),
-                          style: TextStyle(
-                            color: Colors.grey.shade600,
-                            fontSize: 11,
-                          ),
+                          style: TextStyle(color: Colors.grey.shade600, fontSize: 11),
                         ),
                       ],
                     ],
@@ -459,11 +408,7 @@ class _ReviewsListPageState extends State<ReviewsListPage> {
                   const SizedBox(height: 6),
                   Text(
                     review.response.decodeString,
-                    style: TextStyle(
-                      color: Colors.grey.shade300,
-                      fontSize: 13,
-                      height: 1.4,
-                    ),
+                    style: TextStyle(color: Colors.grey.shade300, fontSize: 13, height: 1.4),
                   ),
                 ],
               ),

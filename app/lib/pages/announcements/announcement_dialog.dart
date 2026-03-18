@@ -9,12 +9,7 @@ class AnnouncementDialog extends StatelessWidget {
   final VoidCallback? onDismiss;
   final VoidCallback? onCTAPressed;
 
-  const AnnouncementDialog({
-    super.key,
-    required this.announcement,
-    this.onDismiss,
-    this.onCTAPressed,
-  });
+  const AnnouncementDialog({super.key, required this.announcement, this.onDismiss, this.onCTAPressed});
 
   /// Show the announcement dialog.
   /// Returns true if the CTA button was clicked, false otherwise.
@@ -57,11 +52,7 @@ class AnnouncementDialog extends StatelessWidget {
           color: const Color(0xFF1C1C1E),
           borderRadius: BorderRadius.circular(24),
           boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.4),
-              blurRadius: 30,
-              offset: const Offset(0, 10),
-            ),
+            BoxShadow(color: Colors.black.withValues(alpha: 0.4), blurRadius: 30, offset: const Offset(0, 10)),
           ],
         ),
         child: ClipRRect(
@@ -95,17 +86,10 @@ class AnnouncementDialog extends StatelessWidget {
                     // Body
                     Text(
                       content.body,
-                      style: TextStyle(
-                        color: Colors.grey.shade400,
-                        fontSize: 15,
-                        height: 1.5,
-                      ),
+                      style: TextStyle(color: Colors.grey.shade400, fontSize: 15, height: 1.5),
                       textAlign: TextAlign.center,
                     ),
-                    if (content.cta != null) ...[
-                      const SizedBox(height: 28),
-                      _buildCTAButton(context, content.cta!),
-                    ],
+                    if (content.cta != null) ...[const SizedBox(height: 28), _buildCTAButton(context, content.cta!)],
                     const SizedBox(height: 8),
                     // Dismiss text button
                     TextButton(
@@ -113,13 +97,7 @@ class AnnouncementDialog extends StatelessWidget {
                         onDismiss?.call();
                         Navigator.pop(context);
                       },
-                      child: Text(
-                        'Maybe Later',
-                        style: TextStyle(
-                          color: Colors.grey.shade500,
-                          fontSize: 14,
-                        ),
-                      ),
+                      child: Text('Maybe Later', style: TextStyle(color: Colors.grey.shade500, fontSize: 14)),
                     ),
                   ],
                 ),
@@ -141,11 +119,7 @@ class AnnouncementDialog extends StatelessWidget {
             onDismiss?.call();
             Navigator.pop(context);
           },
-          icon: Icon(
-            Icons.close,
-            color: Colors.grey.shade500,
-            size: 24,
-          ),
+          icon: Icon(Icons.close, color: Colors.grey.shade500, size: 24),
         ),
       ),
     );
@@ -162,21 +136,12 @@ class AnnouncementDialog extends StatelessWidget {
           placeholder: (context, url) => Container(
             height: 180,
             color: const Color(0xFF2A2A2E),
-            child: const Center(
-              child: CircularProgressIndicator(
-                color: Colors.white54,
-                strokeWidth: 2,
-              ),
-            ),
+            child: const Center(child: CircularProgressIndicator(color: Colors.white54, strokeWidth: 2)),
           ),
           errorWidget: (context, url, error) => Container(
             height: 180,
             color: const Color(0xFF2A2A2E),
-            child: const Icon(
-              Icons.campaign_outlined,
-              color: Colors.white54,
-              size: 48,
-            ),
+            child: const Icon(Icons.campaign_outlined, color: Colors.white54, size: 48),
           ),
         ),
         // Close button overlaid on image
@@ -185,20 +150,13 @@ class AnnouncementDialog extends StatelessWidget {
           right: 8,
           child: Builder(
             builder: (ctx) => Container(
-              decoration: BoxDecoration(
-                color: Colors.black.withValues(alpha: 0.5),
-                shape: BoxShape.circle,
-              ),
+              decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.5), shape: BoxShape.circle),
               child: IconButton(
                 onPressed: () {
                   onDismiss?.call();
                   Navigator.pop(ctx);
                 },
-                icon: const Icon(
-                  Icons.close,
-                  color: Colors.white70,
-                  size: 20,
-                ),
+                icon: const Icon(Icons.close, color: Colors.white70, size: 20),
                 padding: const EdgeInsets.all(8),
                 constraints: const BoxConstraints(),
               ),
@@ -222,18 +180,10 @@ class AnnouncementDialog extends StatelessWidget {
         style: ElevatedButton.styleFrom(
           backgroundColor: Colors.white,
           foregroundColor: Colors.black,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(26),
-          ),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(26)),
           elevation: 0,
         ),
-        child: Text(
-          cta.text,
-          style: const TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
+        child: Text(cta.text, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
       ),
     );
   }

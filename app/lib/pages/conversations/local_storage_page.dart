@@ -32,9 +32,7 @@ class _LocalStoragePageState extends State<LocalStoragePage> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(
-              value ? context.l10n.localStorageEnabled : context.l10n.localStorageDisabled,
-            ),
+            content: Text(value ? context.l10n.localStorageEnabled : context.l10n.localStorageDisabled),
             backgroundColor: Colors.green,
           ),
         );
@@ -43,10 +41,7 @@ class _LocalStoragePageState extends State<LocalStoragePage> {
       setState(() => _isSaving = false);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(context.l10n.failedToUpdateSettings(e.toString())),
-            backgroundColor: Colors.red,
-          ),
+          SnackBar(content: Text(context.l10n.failedToUpdateSettings(e.toString())), backgroundColor: Colors.red),
         );
       }
     }
@@ -58,8 +53,10 @@ class _LocalStoragePageState extends State<LocalStoragePage> {
       builder: (context) => AlertDialog(
         backgroundColor: const Color(0xFF1C1C1E),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Text(context.l10n.privacyNotice,
-            style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600)),
+        title: Text(
+          context.l10n.privacyNotice,
+          style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
+        ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -76,7 +73,10 @@ class _LocalStoragePageState extends State<LocalStoragePage> {
           ),
           TextButton(
             onPressed: () => Navigator.of(context).pop(true),
-            child: Text(context.l10n.enable, style: const TextStyle(color: Colors.deepPurpleAccent, fontWeight: FontWeight.w600)),
+            child: Text(
+              context.l10n.enable,
+              style: const TextStyle(color: Colors.deepPurpleAccent, fontWeight: FontWeight.w600),
+            ),
           ),
         ],
       ),
@@ -103,8 +103,10 @@ class _LocalStoragePageState extends State<LocalStoragePage> {
           icon: _buildFaIcon(FontAwesomeIcons.chevronLeft, size: 18, color: Colors.white),
           onPressed: () => Navigator.of(context).pop(),
         ),
-        title: Text(context.l10n.storeAudioOnPhone,
-            style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600)),
+        title: Text(
+          context.l10n.storeAudioOnPhone,
+          style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
+        ),
         centerTitle: true,
       ),
       body: SingleChildScrollView(
@@ -114,10 +116,7 @@ class _LocalStoragePageState extends State<LocalStoragePage> {
           children: [
             Container(
               padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: const Color(0xFF1C1C1E),
-                borderRadius: BorderRadius.circular(20),
-              ),
+              decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(20)),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -128,11 +127,7 @@ class _LocalStoragePageState extends State<LocalStoragePage> {
                       Expanded(
                         child: Text(
                           context.l10n.storeAudioOnPhone,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 18,
-                            fontWeight: FontWeight.w600,
-                          ),
+                          style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
                         ),
                       ),
                       Container(
@@ -155,11 +150,7 @@ class _LocalStoragePageState extends State<LocalStoragePage> {
                   const SizedBox(height: 20),
                   Text(
                     context.l10n.storeAudioDescription,
-                    style: TextStyle(
-                      color: Colors.grey.shade400,
-                      fontSize: 14,
-                      height: 1.5,
-                    ),
+                    style: TextStyle(color: Colors.grey.shade400, fontSize: 14, height: 1.5),
                   ),
                   const SizedBox(height: 24),
                   const Divider(height: 1, color: Color(0xFF3C3C43)),
@@ -169,11 +160,7 @@ class _LocalStoragePageState extends State<LocalStoragePage> {
                     children: [
                       Text(
                         context.l10n.enableLocalStorage,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 16,
-                          fontWeight: FontWeight.w500,
-                        ),
+                        style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w500),
                       ),
                       Transform.scale(
                         scale: 0.85,

@@ -13,10 +13,7 @@ class MergeCompletedEvent {
   final String mergedConversationId;
   final List<String> removedConversationIds;
 
-  MergeCompletedEvent({
-    required this.mergedConversationId,
-    required this.removedConversationIds,
-  });
+  MergeCompletedEvent({required this.mergedConversationId, required this.removedConversationIds});
 }
 
 /// Handler for conversation merge FCM notifications
@@ -52,13 +49,13 @@ class MergeNotificationHandler {
 
     Logger.debug('[MergeNotification] Merge completed: $mergedConversationId, removed: $removedIds');
     Logger.debug(
-        '[MergeNotification] Broadcasting event to stream (hasListener: ${_mergeCompletedController.hasListener})');
+      '[MergeNotification] Broadcasting event to stream (hasListener: ${_mergeCompletedController.hasListener})',
+    );
 
     // Broadcast the event so providers can update their state
-    _mergeCompletedController.add(MergeCompletedEvent(
-      mergedConversationId: mergedConversationId,
-      removedConversationIds: removedIds,
-    ));
+    _mergeCompletedController.add(
+      MergeCompletedEvent(mergedConversationId: mergedConversationId, removedConversationIds: removedIds),
+    );
     Logger.debug('[MergeNotification] Event broadcasted');
 
     // Show notification if app was in background
@@ -87,7 +84,8 @@ class MergeNotificationHandler {
           id: notificationId,
           channelKey: channelKey,
           title: '✅ ${ctx?.l10n.mergeConversationsSuccessTitle ?? 'Conversations Merged Successfully'}',
-          body: ctx?.l10n.mergeConversationsSuccessBody(totalCount) ??
+          body:
+              ctx?.l10n.mergeConversationsSuccessBody(totalCount) ??
               '$totalCount conversations have been merged successfully',
           payload: {
             'merged_conversation_id': mergedConversationId,

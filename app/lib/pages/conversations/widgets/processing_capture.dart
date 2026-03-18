@@ -34,53 +34,52 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<CaptureProvider>(builder: (context, provider, child) {
-      var topConvoId = (provider.conversationProvider?.conversations ?? []).isNotEmpty
-          ? provider.conversationProvider!.conversations.first.id
-          : null;
+    return Consumer<CaptureProvider>(
+      builder: (context, provider, child) {
+        var topConvoId = (provider.conversationProvider?.conversations ?? []).isNotEmpty
+            ? provider.conversationProvider!.conversations.first.id
+            : null;
 
-      var header = _getConversationHeader(context);
-      if (header == null) {
-        return const SizedBox.shrink();
-      }
+        var header = _getConversationHeader(context);
+        if (header == null) {
+          return const SizedBox.shrink();
+        }
 
-      return GestureDetector(
-        onTap: () async {
-          if (provider.segments.isEmpty && provider.photos.isEmpty) return;
-          MixpanelManager().liveTranscriptCardClicked(
-            hasSegments: provider.segments.isNotEmpty,
-            hasPhotos: provider.photos.isNotEmpty,
-            segmentCount: provider.segments.length,
-            photoCount: provider.photos.length,
-          );
-          routeToPage(context, ConversationCapturingPage(topConversationId: topConvoId));
-        },
-        child: Container(
-          margin: const EdgeInsets.fromLTRB(16, 12, 16, 12),
-          width: double.maxFinite,
-          decoration: BoxDecoration(
-            color: const Color(0xFF1F1F25),
-            borderRadius: BorderRadius.circular(24),
-          ),
-          child: Padding(
-            padding: EdgeInsets.fromLTRB(
-              10,
-              18,
-              10,
-              (provider.segments.isNotEmpty || provider.photos.isNotEmpty) ? 22 : 16,
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Use unified recording UI for all recording types
-                _buildUnifiedRecordingUI(provider, header),
-              ],
+        return GestureDetector(
+          onTap: () async {
+            if (provider.segments.isEmpty && provider.photos.isEmpty) return;
+            MixpanelManager().liveTranscriptCardClicked(
+              hasSegments: provider.segments.isNotEmpty,
+              hasPhotos: provider.photos.isNotEmpty,
+              segmentCount: provider.segments.length,
+              photoCount: provider.photos.length,
+            );
+            routeToPage(context, ConversationCapturingPage(topConversationId: topConvoId));
+          },
+          child: Container(
+            margin: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+            width: double.maxFinite,
+            decoration: BoxDecoration(color: const Color(0xFF1F1F25), borderRadius: BorderRadius.circular(24)),
+            child: Padding(
+              padding: EdgeInsets.fromLTRB(
+                10,
+                18,
+                10,
+                (provider.segments.isNotEmpty || provider.photos.isNotEmpty) ? 22 : 16,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Use unified recording UI for all recording types
+                  _buildUnifiedRecordingUI(provider, header),
+                ],
+              ),
             ),
           ),
-        ),
-      );
-    });
+        );
+      },
+    );
   }
 
   _toggleRecording(BuildContext context, CaptureProvider provider) async {
@@ -152,12 +151,14 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
     bool isHavingDesireDevice = SharedPreferencesUtil().btDevice.id.isNotEmpty;
     bool isHavingRecordingDevice = captureProvider.havingRecordingDevice;
 
-    bool isUsingPhoneMic = captureProvider.recordingState == RecordingState.record ||
+    bool isUsingPhoneMic =
+        captureProvider.recordingState == RecordingState.record ||
         captureProvider.recordingState == RecordingState.initialising ||
         captureProvider.recordingState == RecordingState.pause;
 
     // Check if any recording is active (phone mic, system audio, or device recording)
-    bool isAnyRecordingActive = captureProvider.recordingState == RecordingState.record ||
+    bool isAnyRecordingActive =
+        captureProvider.recordingState == RecordingState.record ||
         captureProvider.recordingState == RecordingState.systemAudioRecord ||
         captureProvider.recordingState == RecordingState.deviceRecord ||
         captureProvider.recordingState == RecordingState.initialising ||
@@ -194,10 +195,7 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
           const Icon(Icons.record_voice_over),
           const SizedBox(width: 12),
           Container(
-            decoration: BoxDecoration(
-              color: const Color(0xFF35343B),
-              borderRadius: BorderRadius.circular(16),
-            ),
+            decoration: BoxDecoration(color: const Color(0xFF35343B), borderRadius: BorderRadius.circular(16)),
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             child: Text(
               context.l10n.waitingForDevice,
@@ -215,10 +213,7 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
           const Icon(Icons.record_voice_over),
           const SizedBox(width: 12),
           Container(
-            decoration: BoxDecoration(
-              color: const Color(0xFF35343B),
-              borderRadius: BorderRadius.circular(16),
-            ),
+            decoration: BoxDecoration(color: const Color(0xFF35343B), borderRadius: BorderRadius.circular(16)),
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             child: Text(
               (isHavingTranscript || isHavingPhotos) ? context.l10n.inProgress : context.l10n.saySomething,
@@ -270,11 +265,7 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
               ),
               if (statusIndicator != null) ...[
                 const SizedBox(width: 8),
-                SizedBox(
-                  width: 16,
-                  height: 16,
-                  child: statusIndicator,
-                )
+                SizedBox(width: 16, height: 16, child: statusIndicator),
               ],
             ],
           )
@@ -292,9 +283,11 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
   }
 
   Widget _buildUnifiedRecordingUI(CaptureProvider provider, Widget? header) {
-    bool isDeviceRecording = provider.havingRecordingDevice &&
+    bool isDeviceRecording =
+        provider.havingRecordingDevice &&
         (provider.recordingState == RecordingState.deviceRecord || provider.recordingState == RecordingState.pause);
-    bool isPhoneRecording = provider.recordingState == RecordingState.record ||
+    bool isPhoneRecording =
+        provider.recordingState == RecordingState.record ||
         provider.recordingState == RecordingState.systemAudioRecord ||
         provider.recordingState == RecordingState.initialising ||
         _isPhoneMicPaused;
@@ -320,20 +313,13 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
           // Left: Status tag
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            decoration: BoxDecoration(
-              color: const Color(0xFF35343B),
-              borderRadius: BorderRadius.circular(20),
-            ),
+            decoration: BoxDecoration(color: const Color(0xFF35343B), borderRadius: BorderRadius.circular(20)),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
                   statusText,
-                  style: const TextStyle(
-                    color: Color(0xFFC9CBCF),
-                    fontSize: 14,
-                    fontWeight: FontWeight.w500,
-                  ),
+                  style: const TextStyle(color: Color(0xFFC9CBCF), fontSize: 14, fontWeight: FontWeight.w500),
                 ),
                 const SizedBox(width: 6),
                 Container(
@@ -359,19 +345,11 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const FaIcon(
-                    FontAwesomeIcons.solidStar,
-                    size: 12,
-                    color: Colors.amber,
-                  ),
+                  const FaIcon(FontAwesomeIcons.solidStar, size: 12, color: Colors.amber),
                   const SizedBox(width: 4),
                   Text(
                     context.l10n.starred,
-                    style: const TextStyle(
-                      color: Colors.amber,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w500,
-                    ),
+                    style: const TextStyle(color: Colors.amber, fontSize: 12, fontWeight: FontWeight.w500),
                   ),
                 ],
               ),
@@ -382,26 +360,15 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
             const SizedBox(width: 8),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-              decoration: BoxDecoration(
-                color: const Color(0xFF35343B),
-                borderRadius: BorderRadius.circular(20),
-              ),
+              decoration: BoxDecoration(color: const Color(0xFF35343B), borderRadius: BorderRadius.circular(20)),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const FaIcon(
-                    FontAwesomeIcons.camera,
-                    size: 12,
-                    color: Color(0xFFC9CBCF),
-                  ),
+                  const FaIcon(FontAwesomeIcons.camera, size: 12, color: Color(0xFFC9CBCF)),
                   const SizedBox(width: 6),
                   Text(
                     '${provider.photos.length}',
-                    style: const TextStyle(
-                      color: Color(0xFFC9CBCF),
-                      fontSize: 13,
-                      fontWeight: FontWeight.w500,
-                    ),
+                    style: const TextStyle(color: Color(0xFFC9CBCF), fontSize: 13, fontWeight: FontWeight.w500),
                   ),
                 ],
               ),
@@ -449,22 +416,22 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
                 decoration: BoxDecoration(
                   color: isPaused
                       ? isDeviceRecording
-                          ? const Color(0xFFFE5D50)
-                          : const Color(0xFF7C3AED)
+                            ? const Color(0xFFFE5D50)
+                            : const Color(0xFF7C3AED)
                       : isDeviceRecording
-                          ? const Color(0xFF35343B)
-                          : const Color(0xFFFF9500),
+                      ? const Color(0xFF35343B)
+                      : const Color(0xFFFF9500),
                   shape: BoxShape.circle,
                 ),
                 child: Center(
                   child: FaIcon(
                     isPaused
                         ? isDeviceRecording
-                            ? FontAwesomeIcons.microphoneSlash
-                            : FontAwesomeIcons.play
+                              ? FontAwesomeIcons.microphoneSlash
+                              : FontAwesomeIcons.play
                         : isDeviceRecording
-                            ? FontAwesomeIcons.microphone
-                            : FontAwesomeIcons.pause,
+                        ? FontAwesomeIcons.microphone
+                        : FontAwesomeIcons.pause,
                     color: Colors.white,
                     size: 12,
                   ),
@@ -488,10 +455,7 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
         );
       }
 
-      return Padding(
-        padding: const EdgeInsets.only(left: 8, right: 6),
-        child: statusRow,
-      );
+      return Padding(padding: const EdgeInsets.only(left: 8, right: 6), child: statusRow);
     } else {
       // For non-recording states, show the original header-based UI
       return Column(
@@ -581,8 +545,12 @@ class _PausedStatusIndicatorState extends State<PausedStatusIndicator> with Sing
   }
 }
 
-getPhoneMicRecordingButton(BuildContext context, VoidCallback toggleRecordingCb, RecordingState currentActualState,
-    {bool isPhoneMicPaused = false}) {
+getPhoneMicRecordingButton(
+  BuildContext context,
+  VoidCallback toggleRecordingCb,
+  RecordingState currentActualState, {
+  bool isPhoneMicPaused = false,
+}) {
   if (SharedPreferencesUtil().btDevice.id.isNotEmpty && (!PlatformService.isDesktop)) {
     // If a BT device is configured and we are NOT on desktop, don't show this button.
     return const SizedBox.shrink();
@@ -605,14 +573,7 @@ getPhoneMicRecordingButton(BuildContext context, VoidCallback toggleRecordingCb,
   if (isDesktop) {
     if (isLoading) {
       text = context.l10n.initialisingSystemAudio;
-      icon = const SizedBox(
-        height: 8,
-        width: 8,
-        child: CircularProgressIndicator(
-          strokeWidth: 2,
-          color: Colors.white,
-        ),
-      );
+      icon = const SizedBox(height: 8, width: 8, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white));
     } else if (currentActualState == RecordingState.systemAudioRecord) {
       text = context.l10n.stopRecording;
       icon = const Icon(Icons.stop, color: Colors.red, size: 12);
@@ -624,27 +585,15 @@ getPhoneMicRecordingButton(BuildContext context, VoidCallback toggleRecordingCb,
     // Phone Mic
     if (isLoading) {
       text = context.l10n.initialisingRecorder;
-      icon = const SizedBox(
-        height: 8,
-        width: 8,
-        child: CircularProgressIndicator(
-          strokeWidth: 2,
-          color: Colors.white,
-        ),
-      );
+      icon = const SizedBox(height: 8, width: 8, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white));
     } else if (currentActualState == RecordingState.record) {
       text = context.l10n.pauseRecording;
       icon = Container(
         margin: const EdgeInsets.only(right: 4),
         width: 24,
         height: 24,
-        decoration: const BoxDecoration(
-          color: Colors.orange,
-          shape: BoxShape.circle,
-        ),
-        child: const Center(
-          child: Icon(Icons.pause, color: Colors.white, size: 14),
-        ),
+        decoration: const BoxDecoration(color: Colors.orange, shape: BoxShape.circle),
+        child: const Center(child: Icon(Icons.pause, color: Colors.white, size: 14)),
       );
     } else if (isPhoneMicPaused) {
       text = context.l10n.resumeRecording;
@@ -656,9 +605,7 @@ getPhoneMicRecordingButton(BuildContext context, VoidCallback toggleRecordingCb,
           color: Color(0xFF7C3AED), // Deep purple
           shape: BoxShape.circle,
         ),
-        child: const Center(
-          child: Icon(Icons.play_arrow, color: Colors.white, size: 14),
-        ),
+        child: const Center(child: Icon(Icons.play_arrow, color: Colors.white, size: 14)),
       );
     } else {
       text = context.l10n.continueRecording;
@@ -691,9 +638,7 @@ Widget getProcessingConversationsWidget(List<ServerConversation> conversations) 
     return const SliverToBoxAdapter(child: SizedBox.shrink());
   }
   // Show only the first (most recent) processing conversation
-  return SliverToBoxAdapter(
-    child: ProcessingConversationWidget(conversation: conversations.first),
-  );
+  return SliverToBoxAdapter(child: ProcessingConversationWidget(conversation: conversations.first));
 }
 
 // PROCESSING CONVERSATION
@@ -701,10 +646,7 @@ Widget getProcessingConversationsWidget(List<ServerConversation> conversations) 
 class ProcessingConversationWidget extends StatefulWidget {
   final ServerConversation conversation;
 
-  const ProcessingConversationWidget({
-    super.key,
-    required this.conversation,
-  });
+  const ProcessingConversationWidget({super.key, required this.conversation});
 
   @override
   State<ProcessingConversationWidget> createState() => _ProcessingConversationWidgetState();
@@ -715,21 +657,13 @@ class _ProcessingConversationWidgetState extends State<ProcessingConversationWid
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: () async {
-        routeToPage(
-          context,
-          ProcessingConversationPage(
-            conversation: widget.conversation,
-          ),
-        );
+        routeToPage(context, ProcessingConversationPage(conversation: widget.conversation));
       },
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
         child: Container(
           width: double.maxFinite,
-          decoration: BoxDecoration(
-            color: const Color(0xFF1F1F25),
-            borderRadius: BorderRadius.circular(24.0),
-          ),
+          decoration: BoxDecoration(color: const Color(0xFF1F1F25), borderRadius: BorderRadius.circular(24.0)),
           // Static skeleton - no animation to save CPU/battery
           child: Padding(
             padding: const EdgeInsets.all(16),
@@ -759,11 +693,7 @@ class _ProcessingConversationWidgetState extends State<ProcessingConversationWid
                       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                       child: Text(
                         context.l10n.processing,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 14,
-                          fontWeight: FontWeight.w500,
-                        ),
+                        style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w500),
                       ),
                     ),
                     const Spacer(),
@@ -771,10 +701,7 @@ class _ProcessingConversationWidgetState extends State<ProcessingConversationWid
                     Container(
                       width: 50,
                       height: 14,
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF2A2A32),
-                        borderRadius: BorderRadius.circular(4),
-                      ),
+                      decoration: BoxDecoration(color: const Color(0xFF2A2A32), borderRadius: BorderRadius.circular(4)),
                     ),
                   ],
                 ),
@@ -783,10 +710,7 @@ class _ProcessingConversationWidgetState extends State<ProcessingConversationWid
                 Container(
                   width: double.maxFinite,
                   height: 16,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF2A2A32),
-                    borderRadius: BorderRadius.circular(4),
-                  ),
+                  decoration: BoxDecoration(color: const Color(0xFF2A2A32), borderRadius: BorderRadius.circular(4)),
                 ),
               ],
             ),

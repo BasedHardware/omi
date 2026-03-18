@@ -126,7 +126,7 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
         '10k',
         '100k',
         'mrr',
-        'arr'
+        'arr',
       ]: '🚀',
       ['startup', 'launch', 'business', 'company']: '🏆',
       ['invest', 'stock', 'crypto', 'trading']: '📈',
@@ -197,10 +197,7 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
     final goalsProvider = Provider.of<GoalsProvider>(context, listen: false);
     if (goalsProvider.goals.length >= _maxGoals) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(context.l10n.maximumGoalsAllowed(_maxGoals)),
-          backgroundColor: Colors.orange,
-        ),
+        SnackBar(content: Text(context.l10n.maximumGoalsAllowed(_maxGoals)), backgroundColor: Colors.orange),
       );
       return;
     }
@@ -240,9 +237,7 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
 
     return StatefulBuilder(
       builder: (context, setSheetState) => Padding(
-        padding: EdgeInsets.only(
-          bottom: MediaQuery.of(context).viewInsets.bottom,
-        ),
+        padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
         child: Container(
           decoration: const BoxDecoration(
             color: Color(0xFF1A1A1A),
@@ -257,18 +252,11 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
                   width: 40,
                   height: 4,
                   margin: const EdgeInsets.only(bottom: 20),
-                  decoration: BoxDecoration(
-                    color: Colors.grey.shade700,
-                    borderRadius: BorderRadius.circular(2),
-                  ),
+                  decoration: BoxDecoration(color: Colors.grey.shade700, borderRadius: BorderRadius.circular(2)),
                 ),
                 Text(
                   isNew ? context.l10n.addGoal : context.l10n.editGoal,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 18,
-                    fontWeight: FontWeight.w600,
-                  ),
+                  style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
                 ),
                 const SizedBox(height: 24),
                 // Emoji selector - only show when editing (not when creating new)
@@ -276,13 +264,7 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        context.l10n.icon,
-                        style: TextStyle(
-                          color: Colors.white.withOpacity(0.5),
-                          fontSize: 12,
-                        ),
-                      ),
+                      Text(context.l10n.icon, style: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 12)),
                       const SizedBox(height: 8),
                       SizedBox(
                         height: 44,
@@ -305,12 +287,11 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
                                 decoration: BoxDecoration(
                                   color: isSelected ? Colors.white.withOpacity(0.15) : Colors.white.withOpacity(0.05),
                                   borderRadius: BorderRadius.circular(12),
-                                  border:
-                                      isSelected ? Border.all(color: Colors.white.withOpacity(0.3), width: 2) : null,
+                                  border: isSelected
+                                      ? Border.all(color: Colors.white.withOpacity(0.3), width: 2)
+                                      : null,
                                 ),
-                                child: Center(
-                                  child: Text(emoji, style: const TextStyle(fontSize: 22)),
-                                ),
+                                child: Center(child: Text(emoji, style: const TextStyle(fontSize: 22))),
                               ),
                             );
                           },
@@ -324,13 +305,7 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      context.l10n.goalTitle,
-                      style: TextStyle(
-                        color: Colors.white.withOpacity(0.5),
-                        fontSize: 12,
-                      ),
-                    ),
+                    Text(context.l10n.goalTitle, style: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 12)),
                     const SizedBox(height: 8),
                     TextField(
                       controller: _titleController,
@@ -359,10 +334,7 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
                         children: [
                           Text(
                             context.l10n.current,
-                            style: TextStyle(
-                              color: Colors.white.withOpacity(0.5),
-                              fontSize: 12,
-                            ),
+                            style: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 12),
                           ),
                           const SizedBox(height: 8),
                           TextField(
@@ -389,10 +361,7 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
                         children: [
                           Text(
                             context.l10n.target,
-                            style: TextStyle(
-                              color: Colors.white.withOpacity(0.5),
-                              fontSize: 12,
-                            ),
+                            style: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 12),
                           ),
                           const SizedBox(height: 8),
                           TextField(
@@ -446,9 +415,7 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
                           backgroundColor: const Color(0xFF22C55E),
                           foregroundColor: Colors.white,
                           padding: const EdgeInsets.symmetric(vertical: 14),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                         ),
                         child: Text(isNew ? context.l10n.addGoal : context.l10n.save),
                       ),
@@ -473,12 +440,7 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
 
     if (existingGoal != null) {
       // Update existing goal via provider
-      await goalsProvider.updateGoal(
-        existingGoal.id,
-        title: title,
-        currentValue: current,
-        targetValue: target,
-      );
+      await goalsProvider.updateGoal(existingGoal.id, title: title, currentValue: current, targetValue: target);
 
       MixpanelManager().goalUpdated(goalId: existingGoal.id, source: 'home');
       // Save emoji
@@ -496,8 +458,12 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
       );
 
       if (created != null) {
-        MixpanelManager()
-            .goalCreated(goalId: created.id, titleLength: title.length, targetValue: target, source: 'home');
+        MixpanelManager().goalCreated(
+          goalId: created.id,
+          titleLength: title.length,
+          targetValue: target,
+          source: 'home',
+        );
         setState(() {
           _goalEmojis[created.id] = smartEmoji;
         });
@@ -559,11 +525,7 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
                   children: [
                     Text(
                       context.l10n.goals,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 18,
-                        fontWeight: FontWeight.w600,
-                      ),
+                      style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
                     ),
                     if (goals.length < _maxGoals)
                       GestureDetector(
@@ -571,15 +533,8 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
                         child: Container(
                           width: 32,
                           height: 32,
-                          decoration: BoxDecoration(
-                            color: Colors.grey.withValues(alpha: 0.12),
-                            shape: BoxShape.circle,
-                          ),
-                          child: Icon(
-                            Icons.add,
-                            size: 18,
-                            color: Colors.grey[400],
-                          ),
+                          decoration: BoxDecoration(color: Colors.grey.withValues(alpha: 0.12), shape: BoxShape.circle),
+                          child: Icon(Icons.add, size: 18, color: Colors.grey[400]),
                         ),
                       ),
                   ],
@@ -623,10 +578,7 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
         },
         child: Container(
           margin: EdgeInsets.only(bottom: isLast ? 0 : 12),
-          decoration: BoxDecoration(
-            color: const Color(0xFF1F1F25),
-            borderRadius: BorderRadius.circular(24),
-          ),
+          decoration: BoxDecoration(color: const Color(0xFF1F1F25), borderRadius: BorderRadius.circular(24)),
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
           child: Row(
             children: [
@@ -639,9 +591,7 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
                   color: Colors.white.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: Center(
-                  child: Text(emoji, style: const TextStyle(fontSize: 18)),
-                ),
+                child: Center(child: Text(emoji, style: const TextStyle(fontSize: 18))),
               ),
               // Content
               Expanded(
@@ -650,11 +600,7 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
                   children: [
                     Text(
                       goal.title,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w500,
-                      ),
+                      style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w500),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),

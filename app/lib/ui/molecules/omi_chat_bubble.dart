@@ -10,12 +10,7 @@ class OmiChatBubble extends AdaptiveWidget {
   final Widget child;
   final EdgeInsets padding;
 
-  const OmiChatBubble({
-    super.key,
-    required this.type,
-    required this.child,
-    this.padding = const EdgeInsets.all(16),
-  });
+  const OmiChatBubble({super.key, required this.type, required this.child, this.padding = const EdgeInsets.all(16)});
 
   @override
   Widget buildDesktop(BuildContext context) => _base();
@@ -31,17 +26,8 @@ class OmiChatBubble extends AdaptiveWidget {
             ? const Color.fromARGB(255, 255, 255, 255).withOpacity(0.05)
             : ResponsiveHelper.purplePrimary.withOpacity(0.15),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: ResponsiveHelper.backgroundTertiary.withOpacity(0.3),
-          width: 1,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
+        border: Border.all(color: ResponsiveHelper.backgroundTertiary.withOpacity(0.3), width: 1),
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 8, offset: const Offset(0, 2))],
       ),
       padding: padding,
       child: child,

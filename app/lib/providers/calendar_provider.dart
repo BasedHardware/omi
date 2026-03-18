@@ -160,7 +160,7 @@ class CalendarProvider extends ChangeNotifier {
     // Preserve meetingId from previous syncs
     final meetingIdMap = {
       for (var m in _upcomingMeetings)
-        if (m.meetingId != null) m.id: m.meetingId
+        if (m.meetingId != null) m.id: m.meetingId,
     };
 
     // Update meetings list, preserving meetingIds
@@ -191,7 +191,8 @@ class CalendarProvider extends ChangeNotifier {
       final alreadySyncedIds = _upcomingMeetings.where((m) => m.meetingId != null).map((m) => m.id).toSet();
 
       Logger.debug(
-          'CalendarProvider: Syncing ${_upcomingMeetings.length} meetings (${alreadySyncedIds.length} already synced)');
+        'CalendarProvider: Syncing ${_upcomingMeetings.length} meetings (${alreadySyncedIds.length} already synced)',
+      );
 
       for (final meeting in _upcomingMeetings) {
         // Skip if we've already synced this calendar event in this session
@@ -202,10 +203,7 @@ class CalendarProvider extends ChangeNotifier {
         try {
           // Convert participants
           final participants = meeting.participants.map((p) {
-            return MeetingParticipant(
-              name: p.name,
-              email: p.email,
-            );
+            return MeetingParticipant(name: p.name, email: p.email);
           }).toList();
 
           // Store meeting in backend (backend handles create vs update based on calendar_event_id)

@@ -45,36 +45,21 @@ class OmiEmptyState extends StatelessWidget {
             // Icon bubble.
             Container(
               padding: EdgeInsets.all(iconPadding),
-              decoration: BoxDecoration(
-                color: color.withOpacity(0.2),
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: Icon(
-                icon,
-                size: iconSize,
-                color: color,
-              ),
+              decoration: BoxDecoration(color: color.withOpacity(0.2), borderRadius: BorderRadius.circular(20)),
+              child: Icon(icon, size: iconSize, color: color),
             ),
             const SizedBox(height: 24),
             Text(
               title,
               textAlign: TextAlign.center,
-              style: const TextStyle(
-                color: ResponsiveHelper.textPrimary,
-                fontSize: 18,
-                fontWeight: FontWeight.w600,
-              ),
+              style: const TextStyle(color: ResponsiveHelper.textPrimary, fontSize: 18, fontWeight: FontWeight.w600),
             ),
             if (message != null) ...[
               const SizedBox(height: 8),
               Text(
                 message!,
                 textAlign: TextAlign.center,
-                style: const TextStyle(
-                  color: ResponsiveHelper.textSecondary,
-                  fontSize: 14,
-                  height: 1.5,
-                ),
+                style: const TextStyle(color: ResponsiveHelper.textSecondary, fontSize: 14, height: 1.5),
               ),
             ],
           ],

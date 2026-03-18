@@ -14,11 +14,7 @@ class CapabilityAppsPage extends StatefulWidget {
   final AppCapability capability;
   final List<App> apps;
 
-  const CapabilityAppsPage({
-    super.key,
-    required this.capability,
-    required this.apps,
-  });
+  const CapabilityAppsPage({super.key, required this.capability, required this.apps});
 
   @override
   State<CapabilityAppsPage> createState() => _CapabilityAppsPageState();
@@ -177,10 +173,7 @@ class _CapabilityAppsPageState extends State<CapabilityAppsPage> {
     return SingleChildScrollView(
       physics: const NeverScrollableScrollPhysics(),
       child: Column(
-        children: [
-          ...List.generate(3, (_) => _buildShimmerCategorySection()),
-          const SizedBox(height: 100),
-        ],
+        children: [...List.generate(3, (_) => _buildShimmerCategorySection()), const SizedBox(height: 100)],
       ),
     );
   }
@@ -193,11 +186,7 @@ class _CapabilityAppsPageState extends State<CapabilityAppsPage> {
         backgroundColor: Theme.of(context).colorScheme.primary,
         title: Text(
           widget.capability.getLocalizedTitle(context),
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 18,
-            fontWeight: FontWeight.w600,
-          ),
+          style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
         ),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios, color: Colors.white),
@@ -218,11 +207,7 @@ class _CapabilityAppsPageState extends State<CapabilityAppsPage> {
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Icon(
-                            Icons.apps_outlined,
-                            size: 64,
-                            color: Colors.grey.shade600,
-                          ),
+                          Icon(Icons.apps_outlined, size: 64, color: Colors.grey.shade600),
                           const SizedBox(height: 16),
                           const Text(
                             'No apps found',
@@ -249,10 +234,7 @@ class _CapabilityAppsPageState extends State<CapabilityAppsPage> {
 
                         if (apps.isEmpty) return const SizedBox.shrink();
 
-                        return CapabilityCategorySection(
-                          categoryName: categoryTitle,
-                          apps: apps,
-                        );
+                        return CapabilityCategorySection(categoryName: categoryTitle, apps: apps);
                       },
                     ),
             ),

@@ -30,17 +30,8 @@ class OmiEditDialog {
           decoration: BoxDecoration(
             color: ResponsiveHelper.backgroundSecondary,
             borderRadius: BorderRadius.circular(16),
-            border: Border.all(
-              color: ResponsiveHelper.backgroundTertiary,
-              width: 1,
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.3),
-                blurRadius: 24,
-                offset: const Offset(0, 12),
-              ),
-            ],
+            border: Border.all(color: ResponsiveHelper.backgroundTertiary, width: 1),
+            boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.3), blurRadius: 24, offset: const Offset(0, 12))],
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -56,11 +47,7 @@ class OmiEditDialog {
                       color: iconColor.withOpacity(0.1),
                       borderRadius: BorderRadius.circular(12),
                     ),
-                    child: Icon(
-                      icon,
-                      size: 24,
-                      color: iconColor,
-                    ),
+                    child: Icon(icon, size: 24, color: iconColor),
                   ),
                   const SizedBox(width: 16),
                   Expanded(
@@ -75,13 +62,7 @@ class OmiEditDialog {
                             color: ResponsiveHelper.textPrimary,
                           ),
                         ),
-                        Text(
-                          subtitle,
-                          style: const TextStyle(
-                            fontSize: 14,
-                            color: ResponsiveHelper.textSecondary,
-                          ),
-                        ),
+                        Text(subtitle, style: const TextStyle(fontSize: 14, color: ResponsiveHelper.textSecondary)),
                       ],
                     ),
                   ),
@@ -93,21 +74,12 @@ class OmiEditDialog {
               // Field label
               Text(
                 fieldLabel,
-                style: const TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w500,
-                  color: ResponsiveHelper.textPrimary,
-                ),
+                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: ResponsiveHelper.textPrimary),
               ),
               const SizedBox(height: 8),
 
               // Input field using OmiMultilineInput
-              OmiMultilineInput(
-                controller: controller,
-                hint: fieldHint,
-                minLines: 1,
-                maxLines: maxLines,
-              ),
+              OmiMultilineInput(controller: controller, hint: fieldHint, minLines: 1, maxLines: maxLines),
 
               const SizedBox(height: 28),
 
@@ -122,22 +94,11 @@ class OmiEditDialog {
                         style: OutlinedButton.styleFrom(
                           backgroundColor: Colors.transparent,
                           foregroundColor: ResponsiveHelper.textSecondary,
-                          side: const BorderSide(
-                            color: ResponsiveHelper.backgroundTertiary,
-                            width: 1,
-                          ),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
+                          side: const BorderSide(color: ResponsiveHelper.backgroundTertiary, width: 1),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                           padding: const EdgeInsets.symmetric(vertical: 16),
                         ),
-                        child: Text(
-                          cancelLabel,
-                          style: const TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
+                        child: Text(cancelLabel, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
                       ),
                     ),
                   ),
@@ -159,18 +120,10 @@ class OmiEditDialog {
                           foregroundColor: Colors.white,
                           elevation: 0,
                           shadowColor: Colors.transparent,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                           padding: const EdgeInsets.symmetric(vertical: 16),
                         ),
-                        child: Text(
-                          confirmLabel,
-                          style: const TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
+                        child: Text(confirmLabel, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
                       ),
                     ),
                   ),

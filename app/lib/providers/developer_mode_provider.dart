@@ -236,9 +236,7 @@ class DeveloperModeProvider extends BaseProvider {
     );
     setIsLoading(false);
     notifyListeners();
-    AppSnackbar.showSnackbar(
-      MyApp.navigatorKey.currentContext?.l10n.devModeSettingsSaved ?? 'Settings saved!',
-    );
+    AppSnackbar.showSnackbar(MyApp.navigatorKey.currentContext?.l10n.devModeSettingsSaved ?? 'Settings saved!');
   }
 
   void setIsLoading(bool value) {

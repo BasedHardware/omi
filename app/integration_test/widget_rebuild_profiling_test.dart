@@ -109,11 +109,14 @@ void main() {
       final afterMetricsUnrelated = unrelatedWidgetRebuilds;
 
       debugPrint(
-          '      CaptureWidget rebuilds: $afterMetricsCapture (diff: ${afterMetricsCapture - initialCaptureRebuilds})');
+        '      CaptureWidget rebuilds: $afterMetricsCapture (diff: ${afterMetricsCapture - initialCaptureRebuilds})',
+      );
       debugPrint(
-          '      BatteryWidget rebuilds: $afterMetricsBattery (diff: ${afterMetricsBattery - initialBatteryRebuilds})');
+        '      BatteryWidget rebuilds: $afterMetricsBattery (diff: ${afterMetricsBattery - initialBatteryRebuilds})',
+      );
       debugPrint(
-          '      UnrelatedWidget (Consumer) rebuilds: $afterMetricsUnrelated (diff: ${afterMetricsUnrelated - initialUnrelatedRebuilds})');
+        '      UnrelatedWidget (Consumer) rebuilds: $afterMetricsUnrelated (diff: ${afterMetricsUnrelated - initialUnrelatedRebuilds})',
+      );
 
       // === TEST 2: Simulate 10 segment additions ===
       debugPrint('');
@@ -129,9 +132,11 @@ void main() {
       final afterSegmentsBattery = batteryWidgetRebuilds;
 
       debugPrint(
-          '      CaptureWidget rebuilds: $afterSegmentsCapture (diff: ${afterSegmentsCapture - afterMetricsCapture})');
+        '      CaptureWidget rebuilds: $afterSegmentsCapture (diff: ${afterSegmentsCapture - afterMetricsCapture})',
+      );
       debugPrint(
-          '      BatteryWidget rebuilds: $afterSegmentsBattery (diff: ${afterSegmentsBattery - afterMetricsBattery})');
+        '      BatteryWidget rebuilds: $afterSegmentsBattery (diff: ${afterSegmentsBattery - afterMetricsBattery})',
+      );
 
       // === TEST 3: Simulate 10 battery updates ===
       debugPrint('');
@@ -149,9 +154,11 @@ void main() {
       final finalUnrelatedRebuilds = unrelatedWidgetRebuilds;
 
       debugPrint(
-          '      CaptureWidget rebuilds: $finalCaptureRebuilds (diff: ${finalCaptureRebuilds - afterSegmentsCapture})');
+        '      CaptureWidget rebuilds: $finalCaptureRebuilds (diff: ${finalCaptureRebuilds - afterSegmentsCapture})',
+      );
       debugPrint(
-          '      BatteryWidget rebuilds: $finalBatteryRebuilds (diff: ${finalBatteryRebuilds - afterSegmentsBattery})');
+        '      BatteryWidget rebuilds: $finalBatteryRebuilds (diff: ${finalBatteryRebuilds - afterSegmentsBattery})',
+      );
 
       // === SUMMARY ===
       debugPrint('');
@@ -166,11 +173,14 @@ void main() {
       final unrelatedFromMetrics = afterMetricsUnrelated - initialUnrelatedRebuilds;
 
       debugPrint(
-          '║ CaptureWidget       │ ${finalCaptureRebuilds.toString().padLeft(5)} │ ${captureFromMetrics.toString().padLeft(12)} │ 0 (Selector)   ║');
+        '║ CaptureWidget       │ ${finalCaptureRebuilds.toString().padLeft(5)} │ ${captureFromMetrics.toString().padLeft(12)} │ 0 (Selector)   ║',
+      );
       debugPrint(
-          '║ BatteryWidget       │ ${finalBatteryRebuilds.toString().padLeft(5)} │ ${batteryFromMetrics.toString().padLeft(12)} │ 0 (Selector)   ║');
+        '║ BatteryWidget       │ ${finalBatteryRebuilds.toString().padLeft(5)} │ ${batteryFromMetrics.toString().padLeft(12)} │ 0 (Selector)   ║',
+      );
       debugPrint(
-          '║ UnrelatedWidget     │ ${finalUnrelatedRebuilds.toString().padLeft(5)} │ ${unrelatedFromMetrics.toString().padLeft(12)} │ 50 (Consumer)  ║');
+        '║ UnrelatedWidget     │ ${finalUnrelatedRebuilds.toString().padLeft(5)} │ ${unrelatedFromMetrics.toString().padLeft(12)} │ 50 (Consumer)  ║',
+      );
       debugPrint('╚══════════════════════════════════════════════════════════════╝');
 
       // Verify Selector behavior
@@ -179,10 +189,16 @@ void main() {
       expect(unrelatedFromMetrics, equals(50), reason: 'Consumer widget SHOULD rebuild on every notifyListeners()');
 
       // Verify targeted rebuilds work
-      expect(afterSegmentsCapture - afterMetricsCapture, equals(10),
-          reason: 'CaptureWidget should rebuild exactly 10 times for 10 segment additions');
-      expect(finalBatteryRebuilds - afterSegmentsBattery, equals(10),
-          reason: 'BatteryWidget should rebuild exactly 10 times for 10 battery changes');
+      expect(
+        afterSegmentsCapture - afterMetricsCapture,
+        equals(10),
+        reason: 'CaptureWidget should rebuild exactly 10 times for 10 segment additions',
+      );
+      expect(
+        finalBatteryRebuilds - afterSegmentsBattery,
+        equals(10),
+        reason: 'BatteryWidget should rebuild exactly 10 times for 10 battery changes',
+      );
 
       debugPrint('');
       debugPrint('╔══════════════════════════════════════════════════════════════╗');

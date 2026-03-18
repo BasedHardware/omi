@@ -10,15 +10,16 @@ class InfoCardWidget extends StatelessWidget {
   final List<String>? capabilityChips;
   final List<String>? connectionChips;
   final int? maxLines;
-  const InfoCardWidget(
-      {super.key,
-      required this.onTap,
-      required this.title,
-      required this.description,
-      required this.showChips,
-      this.capabilityChips,
-      this.connectionChips,
-      this.maxLines});
+  const InfoCardWidget({
+    super.key,
+    required this.onTap,
+    required this.title,
+    required this.description,
+    required this.showChips,
+    this.capabilityChips,
+    this.connectionChips,
+    this.maxLines,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -42,13 +43,13 @@ class InfoCardWidget extends StatelessWidget {
           children: [
             Row(
               children: [
-                Text(title, style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600)),
+                Text(
+                  title,
+                  style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
+                ),
                 const Spacer(),
                 (maxLines != null || description.decodeString.characters.length > 200)
-                    ? const Icon(
-                        Icons.arrow_forward,
-                        size: 20,
-                      )
+                    ? const Icon(Icons.arrow_forward, size: 20)
                     : const SizedBox.shrink(),
               ],
             ),
@@ -57,8 +58,8 @@ class InfoCardWidget extends StatelessWidget {
               maxLines != null
                   ? description.decodeString
                   : (description.decodeString.characters.length > 200
-                      ? '${description.decodeString.characters.take(200).toString().trim()}...'
-                      : description.decodeString),
+                        ? '${description.decodeString.characters.take(200).toString().trim()}...'
+                        : description.decodeString),
               style: const TextStyle(color: Colors.grey, fontSize: 15, height: 1.4),
               maxLines: maxLines,
               overflow: maxLines != null ? TextOverflow.ellipsis : null,
@@ -69,18 +70,13 @@ class InfoCardWidget extends StatelessWidget {
                 spacing: 8,
                 runSpacing: 8,
                 children: capabilityChips!
-                    .map((chip) => Chip(
-                          label: Text(
-                            chip,
-                            style: const TextStyle(color: Colors.white),
-                          ),
-                          backgroundColor: Colors.transparent,
-                          shape: StadiumBorder(
-                            side: BorderSide(
-                              color: Color(0xFF35343B),
-                            ),
-                          ),
-                        ))
+                    .map(
+                      (chip) => Chip(
+                        label: Text(chip, style: const TextStyle(color: Colors.white)),
+                        backgroundColor: Colors.transparent,
+                        shape: StadiumBorder(side: BorderSide(color: Color(0xFF35343B))),
+                      ),
+                    )
                     .toList(),
               ),
             ],
@@ -90,18 +86,13 @@ class InfoCardWidget extends StatelessWidget {
                 spacing: 8,
                 runSpacing: 8,
                 children: connectionChips!
-                    .map((chip) => Chip(
-                          label: Text(
-                            chip,
-                            style: const TextStyle(color: Colors.white),
-                          ),
-                          backgroundColor: Colors.transparent,
-                          shape: StadiumBorder(
-                            side: BorderSide(
-                              color: Color(0xFF35343B),
-                            ),
-                          ),
-                        ))
+                    .map(
+                      (chip) => Chip(
+                        label: Text(chip, style: const TextStyle(color: Colors.white)),
+                        backgroundColor: Colors.transparent,
+                        shape: StadiumBorder(side: BorderSide(color: Color(0xFF35343B))),
+                      ),
+                    )
                     .toList(),
               ),
             ],

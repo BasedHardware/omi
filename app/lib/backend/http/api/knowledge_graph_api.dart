@@ -24,12 +24,7 @@ class KnowledgeGraphApi {
   }
 
   static Future<Map<String, dynamic>> rebuildKnowledgeGraph() async {
-    final response = await makeApiCall(
-      url: '$_baseUrl/rebuild',
-      headers: {},
-      body: '{}',
-      method: 'POST',
-    );
+    final response = await makeApiCall(url: '$_baseUrl/rebuild', headers: {}, body: '{}', method: 'POST');
 
     if (response != null && response.statusCode == 200) {
       return jsonDecode(response.body);
@@ -39,12 +34,7 @@ class KnowledgeGraphApi {
   }
 
   static Future<void> deleteKnowledgeGraph() async {
-    final response = await makeApiCall(
-      url: _baseUrl,
-      headers: {},
-      body: '{}',
-      method: 'DELETE',
-    );
+    final response = await makeApiCall(url: _baseUrl, headers: {}, body: '{}', method: 'DELETE');
 
     if (response == null || response.statusCode != 200) {
       throw Exception('Failed to delete knowledge graph: ${response?.body}');

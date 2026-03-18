@@ -46,9 +46,7 @@ class AppleHealthService {
     if (!isAvailable) return null;
 
     try {
-      final result = await _channel.invokeMethod('getHealthSummary', {
-        'days': days,
-      });
+      final result = await _channel.invokeMethod('getHealthSummary', {'days': days});
 
       if (result is Map) {
         return Map<String, dynamic>.from(result);
@@ -187,9 +185,7 @@ class AppleHealthService {
       }
 
       // Build the request body matching the backend schema
-      final requestData = <String, dynamic>{
-        'period_days': days,
-      };
+      final requestData = <String, dynamic>{'period_days': days};
 
       // Steps
       if (summary['totalSteps'] != null) {
@@ -245,12 +241,7 @@ class AppleHealthService {
   }
 }
 
-enum AppleHealthResult {
-  success,
-  failed,
-  permissionDenied,
-  unsupported,
-}
+enum AppleHealthResult { success, failed, permissionDenied, unsupported }
 
 extension AppleHealthResultExtension on AppleHealthResult {
   String get message {

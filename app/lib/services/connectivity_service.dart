@@ -13,10 +13,7 @@ class ConnectivityService {
     useDefaultOptions: false,
     checkInterval: const Duration(seconds: 10),
     customCheckOptions: [
-      InternetCheckOption(
-        uri: Uri.parse('https://one.one.one.one'),
-        timeout: const Duration(seconds: 3),
-      ),
+      InternetCheckOption(uri: Uri.parse('https://one.one.one.one'), timeout: const Duration(seconds: 3)),
       InternetCheckOption(
         uri: Uri.parse('https://api.omi.me/v1/health'),
         timeout: const Duration(seconds: 3),

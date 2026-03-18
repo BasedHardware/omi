@@ -67,9 +67,7 @@ class _DailySummarySettingsPageState extends State<DailySummarySettingsPage> {
     await showModalBottomSheet(
       context: context,
       backgroundColor: const Color(0xFF1C1C1E),
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
       builder: (context) {
         int tempHour = _selectedHour;
         return StatefulBuilder(
@@ -84,18 +82,11 @@ class _DailySummarySettingsPageState extends State<DailySummarySettingsPage> {
                     children: [
                       TextButton(
                         onPressed: () => Navigator.pop(context),
-                        child: Text(
-                          context.l10n.cancel,
-                          style: TextStyle(color: Colors.grey.shade400, fontSize: 16),
-                        ),
+                        child: Text(context.l10n.cancel, style: TextStyle(color: Colors.grey.shade400, fontSize: 16)),
                       ),
                       Text(
                         context.l10n.selectTime,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 17,
-                          fontWeight: FontWeight.w600,
-                        ),
+                        style: const TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w600),
                       ),
                       TextButton(
                         onPressed: () {
@@ -112,9 +103,7 @@ class _DailySummarySettingsPageState extends State<DailySummarySettingsPage> {
                   const SizedBox(height: 8),
                   Expanded(
                     child: CupertinoTheme(
-                      data: const CupertinoThemeData(
-                        brightness: Brightness.dark,
-                      ),
+                      data: const CupertinoThemeData(brightness: Brightness.dark),
                       child: CupertinoPicker(
                         scrollController: FixedExtentScrollController(initialItem: tempHour),
                         itemExtent: 44,
@@ -127,10 +116,7 @@ class _DailySummarySettingsPageState extends State<DailySummarySettingsPage> {
                           return Center(
                             child: Text(
                               '$hour12:00 $period',
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 20,
-                              ),
+                              style: const TextStyle(color: Colors.white, fontSize: 20),
                             ),
                           );
                         }),
@@ -177,9 +163,7 @@ class _DailySummarySettingsPageState extends State<DailySummarySettingsPage> {
       showDialog(
         context: context,
         barrierDismissible: false,
-        builder: (context) => const Center(
-          child: CircularProgressIndicator(color: Colors.white),
-        ),
+        builder: (context) => const Center(child: CircularProgressIndicator(color: Colors.white)),
       );
 
       final summaryId = await generateDailySummary(date: dateStr);
@@ -256,11 +240,7 @@ class _DailySummarySettingsPageState extends State<DailySummarySettingsPage> {
                     padding: const EdgeInsets.only(bottom: 20),
                     child: Text(
                       context.l10n.dailySummaryDescription,
-                      style: TextStyle(
-                        color: Colors.grey.shade400,
-                        fontSize: 14,
-                        height: 1.5,
-                      ),
+                      style: TextStyle(color: Colors.grey.shade400, fontSize: 14, height: 1.5),
                     ),
                   ),
                   // Combined settings card
@@ -274,21 +254,14 @@ class _DailySummarySettingsPageState extends State<DailySummarySettingsPage> {
   Widget _buildSettingsCard() {
     return Container(
       padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: const Color(0xFF1C1C1E),
-        borderRadius: BorderRadius.circular(20),
-      ),
+      decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(20)),
       child: Column(
         children: [
           // Enable toggle row
           _buildSettingRow(
             icon: FontAwesomeIcons.bell,
             title: context.l10n.dailySummary,
-            trailing: Switch(
-              value: _enabled,
-              onChanged: _updateEnabled,
-              activeColor: const Color(0xFF6366F1),
-            ),
+            trailing: Switch(value: _enabled, onChanged: _updateEnabled, activeColor: const Color(0xFF6366F1)),
           ),
 
           Padding(
@@ -311,17 +284,10 @@ class _DailySummarySettingsPageState extends State<DailySummarySettingsPage> {
                   children: [
                     Text(
                       _formatHourDisplay(_selectedHour),
-                      style: TextStyle(
-                        color: Colors.grey.shade400,
-                        fontSize: 16,
-                      ),
+                      style: TextStyle(color: Colors.grey.shade400, fontSize: 16),
                     ),
                     const SizedBox(width: 6),
-                    Icon(
-                      Icons.chevron_right,
-                      color: Colors.grey.shade600,
-                      size: 20,
-                    ),
+                    Icon(Icons.chevron_right, color: Colors.grey.shade600, size: 20),
                   ],
                 ),
               ),
@@ -332,31 +298,20 @@ class _DailySummarySettingsPageState extends State<DailySummarySettingsPage> {
     );
   }
 
-  Widget _buildSettingRow({
-    required IconData icon,
-    required String title,
-    required Widget trailing,
-  }) {
+  Widget _buildSettingRow({required IconData icon, required String title, required Widget trailing}) {
     return Row(
       children: [
         Container(
           width: 40,
           height: 40,
-          decoration: BoxDecoration(
-            color: const Color(0xFF2A2A2E),
-            borderRadius: BorderRadius.circular(10),
-          ),
+          decoration: BoxDecoration(color: const Color(0xFF2A2A2E), borderRadius: BorderRadius.circular(10)),
           child: Center(child: FaIcon(icon, color: Colors.grey.shade400, size: 16)),
         ),
         const SizedBox(width: 14),
         Expanded(
           child: Text(
             title,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 16,
-              fontWeight: FontWeight.w500,
-            ),
+            style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w500),
           ),
         ),
         trailing,

@@ -25,12 +25,7 @@ class _LanguageSettingsPageState extends State<LanguageSettingsPage> {
       padding: const EdgeInsets.only(left: 4, bottom: 8),
       child: Text(
         title,
-        style: TextStyle(
-          color: Colors.grey.shade500,
-          fontSize: 13,
-          fontWeight: FontWeight.w600,
-          letterSpacing: 0.5,
-        ),
+        style: TextStyle(color: Colors.grey.shade500, fontSize: 13, fontWeight: FontWeight.w600, letterSpacing: 0.5),
       ),
     );
   }
@@ -38,10 +33,7 @@ class _LanguageSettingsPageState extends State<LanguageSettingsPage> {
   Widget _buildAppInterfaceCard(LocaleProvider localeProvider) {
     return Container(
       padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: const Color(0xFF1C1C1E),
-        borderRadius: BorderRadius.circular(14),
-      ),
+      decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(14)),
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: () => _showAppLanguageSelectionSheet(localeProvider),
@@ -50,17 +42,8 @@ class _LanguageSettingsPageState extends State<LanguageSettingsPage> {
             Container(
               width: 40,
               height: 40,
-              decoration: BoxDecoration(
-                color: const Color(0xFF2A2A2E),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Center(
-                child: FaIcon(
-                  FontAwesomeIcons.textHeight,
-                  color: Colors.grey.shade400,
-                  size: 16,
-                ),
-              ),
+              decoration: BoxDecoration(color: const Color(0xFF2A2A2E), borderRadius: BorderRadius.circular(10)),
+              child: Center(child: FaIcon(FontAwesomeIcons.textHeight, color: Colors.grey.shade400, size: 16)),
             ),
             const SizedBox(width: 14),
             Expanded(
@@ -69,30 +52,19 @@ class _LanguageSettingsPageState extends State<LanguageSettingsPage> {
                 children: [
                   Text(
                     context.l10n.appLanguage,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 16,
-                      fontWeight: FontWeight.w500,
-                    ),
+                    style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w500),
                   ),
                   const SizedBox(height: 2),
                   Text(
                     localeProvider.locale != null
                         ? LocaleProvider.getDisplayName(localeProvider.locale!)
                         : context.l10n.systemDefault,
-                    style: TextStyle(
-                      color: Colors.grey.shade500,
-                      fontSize: 13,
-                    ),
+                    style: TextStyle(color: Colors.grey.shade500, fontSize: 13),
                   ),
                 ],
               ),
             ),
-            FaIcon(
-              FontAwesomeIcons.chevronRight,
-              color: Colors.grey.shade600,
-              size: 14,
-            ),
+            FaIcon(FontAwesomeIcons.chevronRight, color: Colors.grey.shade600, size: 14),
           ],
         ),
       ),
@@ -106,11 +78,11 @@ class _LanguageSettingsPageState extends State<LanguageSettingsPage> {
   ) {
     final languageName = homeProvider.userPrimaryLanguage.isNotEmpty
         ? homeProvider.availableLanguages.entries
-            .firstWhere(
-              (element) => element.value == homeProvider.userPrimaryLanguage,
-              orElse: () => MapEntry(context.l10n.notSet, ''),
-            )
-            .key
+              .firstWhere(
+                (element) => element.value == homeProvider.userPrimaryLanguage,
+                orElse: () => MapEntry(context.l10n.notSet, ''),
+              )
+              .key
         : context.l10n.notSet;
 
     final isUpdatingTranslation = userProvider.isUpdatingSingleLanguageMode;
@@ -118,10 +90,7 @@ class _LanguageSettingsPageState extends State<LanguageSettingsPage> {
 
     return Container(
       padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: const Color(0xFF1C1C1E),
-        borderRadius: BorderRadius.circular(14),
-      ),
+      decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(14)),
       child: Column(
         children: [
           // Speech Language Row
@@ -133,17 +102,8 @@ class _LanguageSettingsPageState extends State<LanguageSettingsPage> {
                 Container(
                   width: 40,
                   height: 40,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF2A2A2E),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Center(
-                    child: FaIcon(
-                      FontAwesomeIcons.microphone,
-                      color: Colors.grey.shade400,
-                      size: 16,
-                    ),
-                  ),
+                  decoration: BoxDecoration(color: const Color(0xFF2A2A2E), borderRadius: BorderRadius.circular(10)),
+                  child: Center(child: FaIcon(FontAwesomeIcons.microphone, color: Colors.grey.shade400, size: 16)),
                 ),
                 const SizedBox(width: 14),
                 Expanded(
@@ -152,20 +112,10 @@ class _LanguageSettingsPageState extends State<LanguageSettingsPage> {
                     children: [
                       Text(
                         context.l10n.primaryLanguage,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 16,
-                          fontWeight: FontWeight.w500,
-                        ),
+                        style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w500),
                       ),
                       const SizedBox(height: 2),
-                      Text(
-                        languageName,
-                        style: TextStyle(
-                          color: Colors.grey.shade500,
-                          fontSize: 13,
-                        ),
-                      ),
+                      Text(languageName, style: TextStyle(color: Colors.grey.shade500, fontSize: 13)),
                     ],
                   ),
                 ),
@@ -179,11 +129,7 @@ class _LanguageSettingsPageState extends State<LanguageSettingsPage> {
                     ),
                   )
                 else
-                  FaIcon(
-                    FontAwesomeIcons.chevronRight,
-                    color: Colors.grey.shade600,
-                    size: 14,
-                  ),
+                  FaIcon(FontAwesomeIcons.chevronRight, color: Colors.grey.shade600, size: 14),
               ],
             ),
           ),
@@ -199,17 +145,8 @@ class _LanguageSettingsPageState extends State<LanguageSettingsPage> {
               Container(
                 width: 40,
                 height: 40,
-                decoration: BoxDecoration(
-                  color: const Color(0xFF2A2A2E),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Center(
-                  child: FaIcon(
-                    FontAwesomeIcons.language,
-                    color: Colors.grey.shade400,
-                    size: 16,
-                  ),
-                ),
+                decoration: BoxDecoration(color: const Color(0xFF2A2A2E), borderRadius: BorderRadius.circular(10)),
+                child: Center(child: FaIcon(FontAwesomeIcons.language, color: Colors.grey.shade400, size: 16)),
               ),
               const SizedBox(width: 14),
               Expanded(
@@ -218,20 +155,10 @@ class _LanguageSettingsPageState extends State<LanguageSettingsPage> {
                   children: [
                     Text(
                       context.l10n.automaticTranslation,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 16,
-                        fontWeight: FontWeight.w500,
-                      ),
+                      style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w500),
                     ),
                     const SizedBox(height: 2),
-                    Text(
-                      context.l10n.detectLanguages,
-                      style: TextStyle(
-                        color: Colors.grey.shade500,
-                        fontSize: 13,
-                      ),
-                    ),
+                    Text(context.l10n.detectLanguages, style: TextStyle(color: Colors.grey.shade500, fontSize: 13)),
                   ],
                 ),
               ),
@@ -268,11 +195,7 @@ class _LanguageSettingsPageState extends State<LanguageSettingsPage> {
       padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
       child: Text(
         context.l10n.languageSettingsHelperText,
-        style: TextStyle(
-          color: Colors.grey.shade600,
-          fontSize: 12,
-          height: 1.4,
-        ),
+        style: TextStyle(color: Colors.grey.shade600, fontSize: 12, height: 1.4),
       ),
     );
   }
@@ -284,9 +207,7 @@ class _LanguageSettingsPageState extends State<LanguageSettingsPage> {
     showModalBottomSheet(
       context: context,
       backgroundColor: const Color(0xFF1C1C1E),
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-      ),
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
       builder: (context) {
         return SafeArea(
           child: Column(
@@ -296,18 +217,11 @@ class _LanguageSettingsPageState extends State<LanguageSettingsPage> {
                 margin: const EdgeInsets.only(top: 12, bottom: 16),
                 width: 36,
                 height: 4,
-                decoration: BoxDecoration(
-                  color: const Color(0xFF3C3C43),
-                  borderRadius: BorderRadius.circular(2),
-                ),
+                decoration: BoxDecoration(color: const Color(0xFF3C3C43), borderRadius: BorderRadius.circular(2)),
               ),
               Text(
                 context.l10n.appLanguage,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 17,
-                  fontWeight: FontWeight.w600,
-                ),
+                style: const TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w600),
               ),
               const SizedBox(height: 16),
               Flexible(
@@ -350,9 +264,7 @@ class _LanguageSettingsPageState extends State<LanguageSettingsPage> {
     showModalBottomSheet(
       context: context,
       backgroundColor: const Color(0xFF1C1C1E),
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-      ),
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
       isScrollControlled: true,
       builder: (sheetContext) {
         return StatefulBuilder(
@@ -369,18 +281,11 @@ class _LanguageSettingsPageState extends State<LanguageSettingsPage> {
                       margin: const EdgeInsets.only(top: 12, bottom: 16),
                       width: 36,
                       height: 4,
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF3C3C43),
-                        borderRadius: BorderRadius.circular(2),
-                      ),
+                      decoration: BoxDecoration(color: const Color(0xFF3C3C43), borderRadius: BorderRadius.circular(2)),
                     ),
                     Text(
                       context.l10n.selectLanguage,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 17,
-                        fontWeight: FontWeight.w600,
-                      ),
+                      style: const TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w600),
                     ),
                     const SizedBox(height: 16),
                     Expanded(
@@ -411,8 +316,10 @@ class _LanguageSettingsPageState extends State<LanguageSettingsPage> {
                                     });
                                     try {
                                       final userProvider = Provider.of<UserProvider>(context, listen: false);
-                                      final success = await homeProvider.updateUserPrimaryLanguage(entry.value,
-                                          userProvider: userProvider);
+                                      final success = await homeProvider.updateUserPrimaryLanguage(
+                                        entry.value,
+                                        userProvider: userProvider,
+                                      );
                                       if (success) {
                                         captureProvider.onRecordProfileSettingChanged();
                                         MixpanelManager().languageChanged(entry.value);
@@ -454,11 +361,7 @@ class _LanguageSettingsPageState extends State<LanguageSettingsPage> {
         ),
         title: Text(
           context.l10n.languageTitle,
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 18,
-            fontWeight: FontWeight.w600,
-          ),
+          style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
         ),
         centerTitle: true,
       ),

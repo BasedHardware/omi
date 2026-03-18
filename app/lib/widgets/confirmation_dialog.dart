@@ -65,11 +65,7 @@ class _ConfirmationDialogState extends State<ConfirmationDialog> {
         contentPadding: const EdgeInsets.only(top: 20, left: 24, right: 24, bottom: 10),
         title: Text(
           widget.title,
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 18,
-            fontWeight: FontWeight.w600,
-          ),
+          style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
         ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
@@ -79,10 +75,7 @@ class _ConfirmationDialogState extends State<ConfirmationDialog> {
             Text(
               widget.description,
               textAlign: TextAlign.start,
-              style: TextStyle(
-                color: Colors.grey.shade200,
-                fontSize: 14,
-              ),
+              style: TextStyle(color: Colors.grey.shade200, fontSize: 14),
             ),
             if (widget.checkboxText != null && widget.checkboxText!.isNotEmpty) ...[
               const SizedBox(height: 20),
@@ -93,32 +86,19 @@ class _ConfirmationDialogState extends State<ConfirmationDialog> {
                   Theme(
                     data: Theme.of(context).copyWith(
                       checkboxTheme: CheckboxThemeData(
-                        fillColor: MaterialStateProperty.resolveWith<Color>(
-                          (Set<MaterialState> states) {
-                            if (states.contains(MaterialState.selected)) {
-                              return Colors.deepPurple;
-                            }
-                            return Colors.grey.shade700;
-                          },
-                        ),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(4),
-                        ),
+                        fillColor: MaterialStateProperty.resolveWith<Color>((Set<MaterialState> states) {
+                          if (states.contains(MaterialState.selected)) {
+                            return Colors.deepPurple;
+                          }
+                          return Colors.grey.shade700;
+                        }),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
                       ),
                     ),
-                    child: Checkbox(
-                      value: _checkboxValue,
-                      onChanged: _updateCheckboxValue,
-                    ),
+                    child: Checkbox(value: _checkboxValue, onChanged: _updateCheckboxValue),
                   ),
                   const SizedBox(width: 8),
-                  Text(
-                    widget.checkboxText!,
-                    style: TextStyle(
-                      color: Colors.grey.shade300,
-                      fontSize: 14,
-                    ),
-                  ),
+                  Text(widget.checkboxText!, style: TextStyle(color: Colors.grey.shade300, fontSize: 14)),
                 ],
               ),
             ],
@@ -140,9 +120,7 @@ class _ConfirmationDialogState extends State<ConfirmationDialog> {
               foregroundColor: Colors.white,
               backgroundColor: Colors.deepPurple,
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
-              ),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
             ),
             child: Text(widget.confirmText ?? context.l10n.confirm),
           ),
@@ -152,11 +130,7 @@ class _ConfirmationDialogState extends State<ConfirmationDialog> {
       return CupertinoAlertDialog(
         title: Text(
           widget.title,
-          style: const TextStyle(
-            fontSize: 18,
-            fontWeight: FontWeight.w600,
-            color: Colors.white,
-          ),
+          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: Colors.white),
         ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
@@ -166,10 +140,7 @@ class _ConfirmationDialogState extends State<ConfirmationDialog> {
             Text(
               widget.description,
               textAlign: TextAlign.start,
-              style: TextStyle(
-                fontSize: 14,
-                color: Colors.grey.shade200,
-              ),
+              style: TextStyle(fontSize: 14, color: Colors.grey.shade200),
             ),
             if (widget.checkboxText != null && widget.checkboxText!.isNotEmpty) ...[
               const SizedBox(height: 20),
@@ -183,13 +154,7 @@ class _ConfirmationDialogState extends State<ConfirmationDialog> {
                     activeColor: Colors.deepPurple,
                   ),
                   const SizedBox(width: 8),
-                  Text(
-                    widget.checkboxText!,
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: Colors.grey.shade300,
-                    ),
-                  ),
+                  Text(widget.checkboxText!, style: TextStyle(fontSize: 14, color: Colors.grey.shade300)),
                 ],
               ),
             ],
@@ -202,10 +167,7 @@ class _ConfirmationDialogState extends State<ConfirmationDialog> {
               isDestructiveAction: false,
               child: Text(
                 widget.cancelText ?? context.l10n.cancel,
-                style: TextStyle(
-                  fontSize: 16,
-                  color: Colors.grey.shade300,
-                ),
+                style: TextStyle(fontSize: 16, color: Colors.grey.shade300),
               ),
             ),
           CupertinoDialogAction(
@@ -213,11 +175,7 @@ class _ConfirmationDialogState extends State<ConfirmationDialog> {
             isDefaultAction: true,
             child: Text(
               widget.confirmText ?? context.l10n.confirm,
-              style: const TextStyle(
-                fontSize: 16,
-                color: Colors.deepPurple,
-                fontWeight: FontWeight.w600,
-              ),
+              style: const TextStyle(fontSize: 16, color: Colors.deepPurple, fontWeight: FontWeight.w600),
             ),
           ),
         ],

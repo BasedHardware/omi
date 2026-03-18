@@ -42,15 +42,9 @@ void main() {
               child: Container(
                 width: 300,
                 height: 100,
-                decoration: BoxDecoration(
-                  color: const Color(0xFF2A2A32),
-                  borderRadius: BorderRadius.circular(16),
-                ),
+                decoration: BoxDecoration(color: const Color(0xFF2A2A32), borderRadius: BorderRadius.circular(16)),
                 child: const Center(
-                  child: Text(
-                    'Processing...',
-                    style: TextStyle(color: Colors.white, fontSize: 16),
-                  ),
+                  child: Text('Processing...', style: TextStyle(color: Colors.white, fontSize: 16)),
                 ),
               ),
             ),
@@ -91,15 +85,9 @@ void main() {
                 child: Container(
                   width: 300,
                   height: 100,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF2A2A32),
-                    borderRadius: BorderRadius.circular(16),
-                  ),
+                  decoration: BoxDecoration(color: const Color(0xFF2A2A32), borderRadius: BorderRadius.circular(16)),
                   child: const Center(
-                    child: Text(
-                      'Processing...',
-                      style: TextStyle(color: Colors.white, fontSize: 16),
-                    ),
+                    child: Text('Processing...', style: TextStyle(color: Colors.white, fontSize: 16)),
                   ),
                 ),
               ),
@@ -143,15 +131,9 @@ void main() {
                   child: Container(
                     width: 300,
                     height: 100,
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF2A2A32),
-                      borderRadius: BorderRadius.circular(16),
-                    ),
+                    decoration: BoxDecoration(color: const Color(0xFF2A2A32), borderRadius: BorderRadius.circular(16)),
                     child: const Center(
-                      child: Text(
-                        'Processing...',
-                        style: TextStyle(color: Colors.white, fontSize: 16),
-                      ),
+                      child: Text('Processing...', style: TextStyle(color: Colors.white, fontSize: 16)),
                     ),
                   ),
                 ),
@@ -187,11 +169,14 @@ void main() {
       debugPrint('║ Widget Type              │ Frames (10s) │ Frames/sec         ║');
       debugPrint('╠══════════════════════════════════════════════════════════════╣');
       debugPrint(
-          '║ Static (baseline)        │ ${staticTimings.length.toString().padLeft(12)} │ ${(staticTimings.length / 10).toStringAsFixed(1).padLeft(10)}/s       ║');
+        '║ Static (baseline)        │ ${staticTimings.length.toString().padLeft(12)} │ ${(staticTimings.length / 10).toStringAsFixed(1).padLeft(10)}/s       ║',
+      );
       debugPrint(
-          '║ Shimmer                  │ ${shimmerTimings.length.toString().padLeft(12)} │ ${(shimmerTimings.length / 10).toStringAsFixed(1).padLeft(10)}/s       ║');
+        '║ Shimmer                  │ ${shimmerTimings.length.toString().padLeft(12)} │ ${(shimmerTimings.length / 10).toStringAsFixed(1).padLeft(10)}/s       ║',
+      );
       debugPrint(
-          '║ Shimmer+RepaintBoundary  │ ${boundaryTimings.length.toString().padLeft(12)} │ ${(boundaryTimings.length / 10).toStringAsFixed(1).padLeft(10)}/s       ║');
+        '║ Shimmer+RepaintBoundary  │ ${boundaryTimings.length.toString().padLeft(12)} │ ${(boundaryTimings.length / 10).toStringAsFixed(1).padLeft(10)}/s       ║',
+      );
       debugPrint('╚══════════════════════════════════════════════════════════════╝');
 
       // Calculate overhead
@@ -202,7 +187,8 @@ void main() {
       debugPrint('Analysis:');
       debugPrint('  Shimmer overhead: +$shimmerOverhead frames (+${(shimmerOverhead / 10).toStringAsFixed(1)}/s)');
       debugPrint(
-          '  RepaintBoundary effect: ${boundaryOverhead < shimmerOverhead ? "Reduced by ${shimmerOverhead - boundaryOverhead} frames" : "No significant reduction"}');
+        '  RepaintBoundary effect: ${boundaryOverhead < shimmerOverhead ? "Reduced by ${shimmerOverhead - boundaryOverhead} frames" : "No significant reduction"}',
+      );
 
       // Verify shimmer causes more frames
       if (shimmerTimings.length > staticTimings.length * 2) {
@@ -356,10 +342,7 @@ void main() {
                                 color: const Color(0xFF35343B),
                                 borderRadius: BorderRadius.circular(16),
                               ),
-                              child: const Text(
-                                'Processing...',
-                                style: TextStyle(color: Colors.white70, fontSize: 14),
-                              ),
+                              child: const Text('Processing...', style: TextStyle(color: Colors.white70, fontSize: 14)),
                             ),
                           ],
                         ),

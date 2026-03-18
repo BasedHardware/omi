@@ -22,7 +22,7 @@ class AppDialog {
             TextButton(
               onPressed: () => onCancel?.call() ?? Navigator.pop(context),
               child: Text(localizedOkText, style: const TextStyle(color: Colors.white)),
-            )
+            ),
           ]
         : [
             TextButton(
@@ -31,26 +31,13 @@ class AppDialog {
             ),
             TextButton(
               onPressed: () => onConfirm?.call() ?? Navigator.pop(context),
-              child: Text(
-                localizedOkText,
-                style: const TextStyle(
-                  color: Colors.white,
-                ),
-              ),
+              child: Text(localizedOkText, style: const TextStyle(color: Colors.white)),
             ),
           ];
     if (Platform.isIOS) {
-      return CupertinoAlertDialog(
-        title: Text(title),
-        content: Text(content),
-        actions: actions,
-      );
+      return CupertinoAlertDialog(title: Text(title), content: Text(content), actions: actions);
     }
-    return AlertDialog(
-      title: Text(title),
-      content: Text(content),
-      actions: actions,
-    );
+    return AlertDialog(title: Text(title), content: Text(content), actions: actions);
   }
 
   static void show({

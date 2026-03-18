@@ -51,10 +51,7 @@ class CompositeTranscriptionSocket implements IPureSocket {
     CustomSttLogService.instance.info('Composite', 'Connecting both sockets...');
     _status = PureSocketStatus.connecting;
 
-    final results = await Future.wait([
-      primarySocket.connect(),
-      secondarySocket.connect(),
-    ]);
+    final results = await Future.wait([primarySocket.connect(), secondarySocket.connect()]);
 
     final primaryOk = results[0] && primarySocket.status == PureSocketStatus.connected;
     final secondaryOk = results[1] && secondarySocket.status == PureSocketStatus.connected;
@@ -71,10 +68,7 @@ class CompositeTranscriptionSocket implements IPureSocket {
     }
 
     // Either failed - disconnect both and fail
-    CustomSttLogService.instance.error(
-      'Composite',
-      'Connection failed - primary: $primaryOk, secondary: $secondaryOk',
-    );
+    CustomSttLogService.instance.error('Composite', 'Connection failed - primary: $primaryOk, secondary: $secondaryOk');
     DebugLogManager.logWarning('composite_socket_connect_failed', {
       'primary_ok': primaryOk,
       'secondary_ok': secondaryOk,
@@ -88,10 +82,7 @@ class CompositeTranscriptionSocket implements IPureSocket {
 
   /// Disconnect both sockets without triggering composite callbacks
   Future<void> _disconnectBothQuietly() async {
-    await Future.wait([
-      primarySocket.disconnect(),
-      secondarySocket.disconnect(),
-    ]);
+    await Future.wait([primarySocket.disconnect(), secondarySocket.disconnect()]);
   }
 
   @override
@@ -110,10 +101,7 @@ class CompositeTranscriptionSocket implements IPureSocket {
     CustomSttLogService.instance.info('Composite', 'Stopping...');
     DebugLogManager.logEvent('composite_socket_stopping', {});
 
-    await Future.wait([
-      primarySocket.stop(),
-      secondarySocket.stop(),
-    ]);
+    await Future.wait([primarySocket.stop(), secondarySocket.stop()]);
 
     _status = PureSocketStatus.disconnected;
   }
@@ -128,10 +116,7 @@ class CompositeTranscriptionSocket implements IPureSocket {
       'Composite',
       '$name socket closed (code: $closeCode), disconnecting composite',
     );
-    DebugLogManager.logEvent('composite_socket_child_closed', {
-      'child_socket': name,
-      'close_code': closeCode ?? -1,
-    });
+    DebugLogManager.logEvent('composite_socket_child_closed', {'child_socket': name, 'close_code': closeCode ?? -1});
 
     _status = PureSocketStatus.disconnected;
     _disconnectBothQuietly();
@@ -145,9 +130,7 @@ class CompositeTranscriptionSocket implements IPureSocket {
     }
 
     CustomSttLogService.instance.error('Composite', '$name socket error: $err');
-    DebugLogManager.logError(err, trace, 'composite_socket_child_error', {
-      'child_socket': name,
-    });
+    DebugLogManager.logError(err, trace, 'composite_socket_child_error', {'child_socket': name});
 
     _status = PureSocketStatus.disconnected;
     _disconnectBothQuietly();
@@ -175,10 +158,7 @@ class CompositeTranscriptionSocket implements IPureSocket {
     try {
       dynamic segments = message is String ? jsonDecode(message) : message;
 
-      final payload = <String, dynamic>{
-        'type': suggestedTranscriptType,
-        'segments': segments,
-      };
+      final payload = <String, dynamic>{'type': suggestedTranscriptType, 'segments': segments};
 
       if (sttProvider != null) {
         payload['stt_provider'] = sttProvider;

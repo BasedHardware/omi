@@ -14,11 +14,7 @@ class CategoryAppsPage extends StatefulWidget {
   final Category category;
   final List<App> apps;
 
-  const CategoryAppsPage({
-    super.key,
-    required this.category,
-    required this.apps,
-  });
+  const CategoryAppsPage({super.key, required this.category, required this.apps});
 
   @override
   State<CategoryAppsPage> createState() => _CategoryAppsPageState();
@@ -36,10 +32,7 @@ class _CategoryAppsPageState extends State<CategoryAppsPage> {
     _totalCount = widget.apps.length;
 
     // Track category page opened
-    MixpanelManager().appsCategoryPageOpened(
-      category: widget.category.title,
-      appCount: widget.apps.length,
-    );
+    MixpanelManager().appsCategoryPageOpened(category: widget.category.title, appCount: widget.apps.length);
 
     _fetchCategoryApps();
   }
@@ -93,11 +86,7 @@ class _CategoryAppsPageState extends State<CategoryAppsPage> {
               children: [
                 Text(
                   _isLoading ? '' : '$_totalCount app${_totalCount == 1 ? '' : 's'}',
-                  style: TextStyle(
-                    fontSize: 16,
-                    color: Colors.grey.shade400,
-                    fontWeight: FontWeight.w500,
-                  ),
+                  style: TextStyle(fontSize: 16, color: Colors.grey.shade400, fontWeight: FontWeight.w500),
                 ),
                 const Spacer(),
               ],
@@ -105,55 +94,38 @@ class _CategoryAppsPageState extends State<CategoryAppsPage> {
           ),
           Expanded(
             child: _isLoading
-                ? const Center(
-                    child: CircularProgressIndicator(
-                      color: Colors.deepPurpleAccent,
+                ? const Center(child: CircularProgressIndicator(color: Colors.deepPurpleAccent))
+                : _apps.isEmpty
+                ? Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.folder_open_outlined, size: 64, color: Colors.grey.shade600),
+                        const SizedBox(height: 16),
+                        Text(
+                          'No apps in this category yet',
+                          style: TextStyle(fontSize: 18, color: Colors.grey.shade400),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Check back later for new apps',
+                          style: TextStyle(fontSize: 14, color: Colors.grey.shade500),
+                        ),
+                      ],
                     ),
                   )
-                : _apps.isEmpty
-                    ? Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(
-                              Icons.folder_open_outlined,
-                              size: 64,
-                              color: Colors.grey.shade600,
-                            ),
-                            const SizedBox(height: 16),
-                            Text(
-                              'No apps in this category yet',
-                              style: TextStyle(
-                                fontSize: 18,
-                                color: Colors.grey.shade400,
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              'Check back later for new apps',
-                              style: TextStyle(
-                                fontSize: 14,
-                                color: Colors.grey.shade500,
-                              ),
-                            ),
-                          ],
-                        ),
-                      )
-                    : ListView.separated(
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                        itemCount: _apps.length,
-                        itemBuilder: (context, index) {
-                          final app = _apps[index];
-                          final allApps = context.read<AppProvider>().apps;
-                          final originalIndex = allApps.indexWhere((a) => a.id == app.id);
+                : ListView.separated(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    itemCount: _apps.length,
+                    itemBuilder: (context, index) {
+                      final app = _apps[index];
+                      final allApps = context.read<AppProvider>().apps;
+                      final originalIndex = allApps.indexWhere((a) => a.id == app.id);
 
-                          return AppListItem(
-                            app: app,
-                            index: originalIndex >= 0 ? originalIndex : index,
-                          );
-                        },
-                        separatorBuilder: (context, index) => const SizedBox(height: 8),
-                      ),
+                      return AppListItem(app: app, index: originalIndex >= 0 ? originalIndex : index);
+                    },
+                    separatorBuilder: (context, index) => const SizedBox(height: 8),
+                  ),
           ),
         ],
       ),

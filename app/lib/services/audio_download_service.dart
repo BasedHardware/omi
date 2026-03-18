@@ -8,11 +8,7 @@ import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/utils/audio/wav_combiner.dart';
 import 'package:omi/utils/logger.dart';
 
-enum AudioDownloadStage {
-  preparing,
-  downloading,
-  processing,
-}
+enum AudioDownloadStage { preparing, downloading, processing }
 
 class AudioDownloadService {
   final http.Client _client = http.Client();
@@ -94,11 +90,7 @@ class AudioDownloadService {
     }
   }
 
-  Future<File> _downloadFile(
-    String url,
-    String path, {
-    void Function(double)? onProgress,
-  }) async {
+  Future<File> _downloadFile(String url, String path, {void Function(double)? onProgress}) async {
     final request = http.Request('GET', Uri.parse(url));
     final response = await _client.send(request);
 
