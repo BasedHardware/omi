@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
 import 'package:omi/l10n/app_localizations.dart';
 
@@ -62,12 +61,12 @@ Widget buildUsageBarHarness({
           ),
           const SizedBox(height: 6),
           ClipRRect(
-            borderRadius: BorderRadius.circular(4),
+            borderRadius: BorderRadius.circular(3),
             child: LinearProgressIndicator(
               value: (pct / 100).clamp(0.0, 1.0),
               backgroundColor: const Color(0xFF2C2C2E),
               valueColor: AlwaysStoppedAnimation<Color>(barColor),
-              minHeight: 6,
+              minHeight: 4,
             ),
           ),
         ],
@@ -79,8 +78,8 @@ Widget buildUsageBarHarness({
 // ---------------------------------------------------------------------------
 // Harness that renders the page body for a given _status map, bypassing the
 // HTTP call.  We replicate the build logic from FairUsePage so that the full
-// card tree (stage card, usage section, message card, info section) is
-// testable.
+// widget tree (status banner, usage section, message banner, about footer)
+// is testable.
 // ---------------------------------------------------------------------------
 
 /// A widget that mimics FairUsePage's success render for a given [status] map.
@@ -93,32 +92,6 @@ class FairUseSuccessHarness extends StatelessWidget {
     final l10n = AppLocalizations.of(context);
     final stage = status['stage'] as String? ?? 'none';
     final caseRef = status['case_ref'] as String? ?? '';
-
-    Color stageColor;
-    IconData stageIcon;
-    String stageLabel;
-
-    switch (stage) {
-      case 'warning':
-        stageColor = const Color(0xFFFBBF24);
-        stageIcon = FontAwesomeIcons.triangleExclamation;
-        stageLabel = l10n.fairUseStageWarning;
-        break;
-      case 'throttle':
-        stageColor = const Color(0xFFF97316);
-        stageIcon = FontAwesomeIcons.gaugeHigh;
-        stageLabel = l10n.fairUseStageThrottle;
-        break;
-      case 'restrict':
-        stageColor = const Color(0xFFEF4444);
-        stageIcon = FontAwesomeIcons.ban;
-        stageLabel = l10n.fairUseStageRestrict;
-        break;
-      default:
-        stageColor = const Color(0xFF34D399);
-        stageIcon = FontAwesomeIcons.solidCircleCheck;
-        stageLabel = l10n.fairUseStageNormal;
-    }
 
     final usagePct = status['usage_pct'] as Map<String, dynamic>? ?? {};
     final limits = status['limits'] as Map<String, dynamic>? ?? {};
@@ -135,58 +108,8 @@ class FairUseSuccessHarness extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // ---------- stage card ----------
-            Container(
-              key: const Key('stage_card'),
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: const Color(0xFF1C1C1E),
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: stageColor.withValues(alpha: 0.3)),
-              ),
-              child: Column(
-                children: [
-                  FaIcon(stageIcon, color: stageColor, size: 32),
-                  const SizedBox(height: 12),
-                  Text(
-                    stageLabel,
-                    style: TextStyle(color: stageColor, fontSize: 18, fontWeight: FontWeight.w600),
-                  ),
-                  if (caseRef.isNotEmpty) ...[
-                    const SizedBox(height: 8),
-                    GestureDetector(
-                      onTap: () {
-                        Clipboard.setData(ClipboardData(text: caseRef));
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text(l10n.fairUseCaseRefCopied(caseRef)),
-                            duration: const Duration(seconds: 2),
-                            backgroundColor: const Color(0xFF2C2C2E),
-                          ),
-                        );
-                      },
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                        decoration:
-                            BoxDecoration(color: const Color(0xFF2C2C2E), borderRadius: BorderRadius.circular(8)),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(
-                              caseRef,
-                              style: const TextStyle(color: Color(0xFF8E8E93), fontSize: 13, fontFamily: 'monospace'),
-                            ),
-                            const SizedBox(width: 6),
-                            const Icon(Icons.copy, size: 14, color: Color(0xFF8E8E93)),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-            const SizedBox(height: 16),
+            // ---------- status banner (only for elevated stages) ----------
+            if (stage != 'none') _buildStatusBanner(context, l10n, stage, caseRef),
             // ---------- usage section ----------
             Container(
               key: const Key('usage_section'),
@@ -196,54 +119,130 @@ class FairUseSuccessHarness extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(l10n.fairUseSpeechUsage,
-                      style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600)),
+                      style: const TextStyle(color: Color(0xFF8E8E93), fontSize: 13, fontWeight: FontWeight.w500)),
                   const SizedBox(height: 16),
                   _bar(l10n.fairUseToday, speechToday, (limits['daily_hours'] as num?)?.toDouble() ?? 2.0,
                       (usagePct['daily'] as num?)?.toDouble() ?? 0),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 14),
                   _bar(l10n.fairUse3Day, speech3day, (limits['three_day_hours'] as num?)?.toDouble() ?? 8.0,
                       (usagePct['three_day'] as num?)?.toDouble() ?? 0),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 14),
                   _bar(l10n.fairUseWeekly, speechWeekly, (limits['weekly_hours'] as num?)?.toDouble() ?? 10.0,
                       (usagePct['weekly'] as num?)?.toDouble() ?? 0),
                 ],
               ),
             ),
-            const SizedBox(height: 16),
-            // ---------- message card ----------
+            // ---------- message banner ----------
             if (message.isNotEmpty)
-              Container(
-                key: const Key('message_card'),
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(16)),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const FaIcon(FontAwesomeIcons.circleInfo, color: Color(0xFF8E8E93), size: 16),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Text(message, style: const TextStyle(color: Color(0xFFCCCCCC), fontSize: 14, height: 1.4)),
-                    ),
-                  ],
+              Padding(
+                key: const Key('message_banner'),
+                padding: const EdgeInsets.only(top: 12),
+                child: Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(12)),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Icon(Icons.info_outline, color: Color(0xFF8E8E93), size: 16),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child:
+                            Text(message, style: const TextStyle(color: Color(0xFFAAAAAA), fontSize: 13, height: 1.4)),
+                      ),
+                    ],
+                  ),
                 ),
               ),
-            const SizedBox(height: 16),
-            // ---------- info section ----------
-            Container(
-              key: const Key('info_section'),
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(16)),
+            const SizedBox(height: 24),
+            // ---------- about footer ----------
+            Padding(
+              key: const Key('about_footer'),
+              padding: const EdgeInsets.symmetric(horizontal: 4),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(l10n.fairUseAboutTitle,
-                      style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600)),
-                  const SizedBox(height: 8),
+                      style: const TextStyle(color: Color(0xFF636366), fontSize: 12, fontWeight: FontWeight.w500)),
+                  const SizedBox(height: 4),
                   Text(l10n.fairUseAboutBody,
-                      style: const TextStyle(color: Color(0xFF8E8E93), fontSize: 13, height: 1.5)),
+                      style: const TextStyle(color: Color(0xFF48484A), fontSize: 12, height: 1.4)),
                 ],
               ),
             ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildStatusBanner(BuildContext context, AppLocalizations l10n, String stage, String caseRef) {
+    Color dotColor;
+    String stageLabel;
+
+    switch (stage) {
+      case 'warning':
+        dotColor = const Color(0xFFFBBF24);
+        stageLabel = l10n.fairUseStageWarning;
+        break;
+      case 'throttle':
+        dotColor = const Color(0xFFF97316);
+        stageLabel = l10n.fairUseStageThrottle;
+        break;
+      case 'restrict':
+        dotColor = const Color(0xFFEF4444);
+        stageLabel = l10n.fairUseStageRestrict;
+        break;
+      default:
+        return const SizedBox.shrink();
+    }
+
+    return Padding(
+      key: const Key('status_banner'),
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(
+          color: dotColor.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Row(
+          children: [
+            Container(
+              key: const Key('status_dot'),
+              width: 8,
+              height: 8,
+              decoration: BoxDecoration(color: dotColor, shape: BoxShape.circle),
+            ),
+            const SizedBox(width: 10),
+            Text(
+              stageLabel,
+              style: TextStyle(color: dotColor, fontSize: 14, fontWeight: FontWeight.w500),
+            ),
+            const Spacer(),
+            if (caseRef.isNotEmpty)
+              GestureDetector(
+                onTap: () {
+                  Clipboard.setData(ClipboardData(text: caseRef));
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(l10n.fairUseCaseRefCopied(caseRef)),
+                      duration: const Duration(seconds: 2),
+                      backgroundColor: const Color(0xFF2C2C2E),
+                    ),
+                  );
+                },
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      caseRef,
+                      style: const TextStyle(color: Color(0xFF8E8E93), fontSize: 12, fontFamily: 'monospace'),
+                    ),
+                    const SizedBox(width: 4),
+                    const Icon(Icons.copy, size: 12, color: Color(0xFF8E8E93)),
+                  ],
+                ),
+              ),
           ],
         ),
       ),
@@ -265,12 +264,12 @@ class FairUseSuccessHarness extends StatelessWidget {
         ),
         const SizedBox(height: 6),
         ClipRRect(
-          borderRadius: BorderRadius.circular(4),
+          borderRadius: BorderRadius.circular(3),
           child: LinearProgressIndicator(
             value: (pct / 100).clamp(0.0, 1.0),
             backgroundColor: const Color(0xFF2C2C2E),
             valueColor: AlwaysStoppedAnimation<Color>(barColor),
-            minHeight: 6,
+            minHeight: 4,
           ),
         ),
       ],
@@ -295,10 +294,8 @@ class FairUseErrorHarness extends StatelessWidget {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const FaIcon(FontAwesomeIcons.circleExclamation, color: Colors.red, size: 40),
-              const SizedBox(height: 16),
               Text(l10n.fairUseLoadError,
-                  style: const TextStyle(color: Colors.white, fontSize: 16), textAlign: TextAlign.center),
+                  style: const TextStyle(color: Color(0xFF8E8E93), fontSize: 15), textAlign: TextAlign.center),
               const SizedBox(height: 16),
               TextButton(
                 onPressed: onRetry,
@@ -341,15 +338,9 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   // -----------------------------------------------------------------------
-  // 1. Loading state — uses a harness that renders the exact loading UI
-  //    from FairUsePage (CircularProgressIndicator on black background).
-  //    We cannot use the real FairUsePage here because initState() fires
-  //    getFairUseStatus() which resolves immediately in the test env.
+  // 1. Loading state
   // -----------------------------------------------------------------------
   group('Loading state', () {
-    // Note: CircularProgressIndicator has an infinite animation, so we use
-    // pump() (single frame) rather than pumpAndSettle() which would time out.
-
     testWidgets('shows CircularProgressIndicator', (tester) async {
       await tester.pumpWidget(buildTestApp(const FairUseLoadingHarness()));
       await tester.pump();
@@ -382,14 +373,13 @@ void main() {
   });
 
   // -----------------------------------------------------------------------
-  // 2. Error state — uses harness to render the identical error UI.
+  // 2. Error state
   // -----------------------------------------------------------------------
   group('Error state', () {
-    testWidgets('displays error icon and message', (tester) async {
+    testWidgets('displays error message text', (tester) async {
       await tester.pumpWidget(buildTestApp(const FairUseErrorHarness()));
       await tester.pumpAndSettle();
 
-      expect(find.byIcon(FontAwesomeIcons.circleExclamation), findsOneWidget);
       expect(find.text('Unable to load fair use status. Please try again.'), findsOneWidget);
     });
 
@@ -411,9 +401,10 @@ void main() {
   });
 
   // -----------------------------------------------------------------------
-  // 3. Success render — stage cards for each stage value.
+  // 3. Success render — minimal status banner for elevated stages,
+  //    no banner for normal state.
   // -----------------------------------------------------------------------
-  group('Success render - stage cards', () {
+  group('Success render - status banner', () {
     Map<String, dynamic> makeStatus({
       String stage = 'none',
       String caseRef = '',
@@ -431,36 +422,35 @@ void main() {
       };
     }
 
-    testWidgets('stage=none shows Normal label and check icon', (tester) async {
+    testWidgets('stage=none shows no status banner', (tester) async {
       await tester.pumpWidget(buildTestApp(FairUseSuccessHarness(status: makeStatus(stage: 'none'))));
       await tester.pumpAndSettle();
 
-      expect(find.text('Normal'), findsOneWidget);
-      expect(find.byIcon(FontAwesomeIcons.solidCircleCheck), findsOneWidget);
+      expect(find.byKey(const Key('status_banner')), findsNothing);
     });
 
-    testWidgets('stage=warning shows Warning label and triangle icon', (tester) async {
+    testWidgets('stage=warning shows Warning label with colored dot', (tester) async {
       await tester.pumpWidget(buildTestApp(FairUseSuccessHarness(status: makeStatus(stage: 'warning'))));
       await tester.pumpAndSettle();
 
       expect(find.text('Warning'), findsOneWidget);
-      expect(find.byIcon(FontAwesomeIcons.triangleExclamation), findsOneWidget);
+      expect(find.byKey(const Key('status_dot')), findsOneWidget);
     });
 
-    testWidgets('stage=throttle shows Throttled label and gauge icon', (tester) async {
+    testWidgets('stage=throttle shows Throttled label with colored dot', (tester) async {
       await tester.pumpWidget(buildTestApp(FairUseSuccessHarness(status: makeStatus(stage: 'throttle'))));
       await tester.pumpAndSettle();
 
       expect(find.text('Throttled'), findsOneWidget);
-      expect(find.byIcon(FontAwesomeIcons.gaugeHigh), findsOneWidget);
+      expect(find.byKey(const Key('status_dot')), findsOneWidget);
     });
 
-    testWidgets('stage=restrict shows Restricted label and ban icon', (tester) async {
+    testWidgets('stage=restrict shows Restricted label with colored dot', (tester) async {
       await tester.pumpWidget(buildTestApp(FairUseSuccessHarness(status: makeStatus(stage: 'restrict'))));
       await tester.pumpAndSettle();
 
       expect(find.text('Restricted'), findsOneWidget);
-      expect(find.byIcon(FontAwesomeIcons.ban), findsOneWidget);
+      expect(find.byKey(const Key('status_dot')), findsOneWidget);
     });
 
     testWidgets('renders usage section header', (tester) async {
@@ -495,33 +485,33 @@ void main() {
       expect(find.byType(LinearProgressIndicator), findsNWidgets(3));
     });
 
-    testWidgets('renders About Fair Use section', (tester) async {
+    testWidgets('renders About Fair Use footer', (tester) async {
       await tester.pumpWidget(buildTestApp(FairUseSuccessHarness(status: makeStatus())));
       await tester.pumpAndSettle();
 
       expect(find.text('About Fair Use'), findsOneWidget);
     });
 
-    testWidgets('message card shown when message is non-empty', (tester) async {
+    testWidgets('message banner shown when message is non-empty', (tester) async {
       await tester.pumpWidget(
         buildTestApp(FairUseSuccessHarness(status: makeStatus(message: 'Your usage is elevated'))),
       );
       await tester.pumpAndSettle();
 
       expect(find.text('Your usage is elevated'), findsOneWidget);
-      expect(find.byIcon(FontAwesomeIcons.circleInfo), findsOneWidget);
+      expect(find.byIcon(Icons.info_outline), findsOneWidget);
     });
 
-    testWidgets('message card hidden when message is empty', (tester) async {
+    testWidgets('message banner hidden when message is empty', (tester) async {
       await tester.pumpWidget(buildTestApp(FairUseSuccessHarness(status: makeStatus(message: ''))));
       await tester.pumpAndSettle();
 
-      expect(find.byKey(const Key('message_card')), findsNothing);
+      expect(find.byKey(const Key('message_banner')), findsNothing);
     });
 
-    testWidgets('case_ref shown when non-empty', (tester) async {
+    testWidgets('case_ref shown when non-empty on elevated stage', (tester) async {
       await tester.pumpWidget(
-        buildTestApp(FairUseSuccessHarness(status: makeStatus(caseRef: 'CASE-1234'))),
+        buildTestApp(FairUseSuccessHarness(status: makeStatus(stage: 'warning', caseRef: 'CASE-1234'))),
       );
       await tester.pumpAndSettle();
 
@@ -530,9 +520,18 @@ void main() {
     });
 
     testWidgets('case_ref hidden when empty', (tester) async {
-      await tester.pumpWidget(buildTestApp(FairUseSuccessHarness(status: makeStatus(caseRef: ''))));
+      await tester.pumpWidget(buildTestApp(FairUseSuccessHarness(status: makeStatus(stage: 'warning', caseRef: ''))));
       await tester.pumpAndSettle();
 
+      expect(find.byIcon(Icons.copy), findsNothing);
+    });
+
+    testWidgets('no copy icon in normal stage (no banner)', (tester) async {
+      await tester
+          .pumpWidget(buildTestApp(FairUseSuccessHarness(status: makeStatus(stage: 'none', caseRef: 'CASE-999'))));
+      await tester.pumpAndSettle();
+
+      // case_ref is not shown because status banner is hidden for 'none'
       expect(find.byIcon(Icons.copy), findsNothing);
     });
   });
