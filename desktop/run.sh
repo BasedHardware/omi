@@ -180,6 +180,13 @@ if [ -z "$FIREBASE_PROJECT_ID" ] && [ -f "$BACKEND_DIR/.env" ]; then
     fi
 fi
 export FIREBASE_PROJECT_ID="${FIREBASE_PROJECT_ID:-based-hardware}"
+# When using a dev Firestore project with the prod auth service, auth tokens
+# are minted for "based-hardware" (prod). Set FIREBASE_AUTH_PROJECT_ID so the
+# backend validates tokens against prod while keeping Firestore on dev.
+if [ "$FIREBASE_PROJECT_ID" != "based-hardware" ] && [ -z "$FIREBASE_AUTH_PROJECT_ID" ]; then
+    export FIREBASE_AUTH_PROJECT_ID="based-hardware"
+    substep "Auth project split: tokens validated against based-hardware (prod), Firestore on $FIREBASE_PROJECT_ID"
+fi
 substep "Using Firestore creds: $GOOGLE_APPLICATION_CREDENTIALS"
 substep "Using Firebase project: $FIREBASE_PROJECT_ID"
 
