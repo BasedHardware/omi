@@ -52,7 +52,7 @@ async fn get_advice(
     State(state): State<AppState>,
     user: AuthUser,
     Query(query): Query<GetAdviceQuery>,
-) -> Json<Vec<AdviceDB>> {
+) -> Result<Json<Vec<AdviceDB>>, (StatusCode, String)> {
     tracing::info!(
         "Getting advice for user {} with limit={}, offset={}, category={:?}, include_dismissed={}",
         user.uid,
@@ -73,10 +73,10 @@ async fn get_advice(
         )
         .await
     {
-        Ok(advice) => Json(advice),
+        Ok(advice) => Ok(Json(advice)),
         Err(e) => {
             tracing::error!("Failed to get advice: {}", e);
-            Json(vec![])
+            Err((StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to get advice: {}", e)))
         }
     }
 }

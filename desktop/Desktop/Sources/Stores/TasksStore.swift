@@ -559,6 +559,13 @@ class TasksStore: ObservableObject {
                 if response.items.count < batchSize { break }
             }
 
+            // Safety guard: if the API returned zero tasks, skip reconciliation.
+            // This prevents a backend error (200 with empty list) from wiping all local tasks.
+            if allApiIds.isEmpty {
+                log("TasksStore: Reconciliation skipped — API returned zero task IDs (possible backend error)")
+                return
+            }
+
             let deleted = try await ActionItemStorage.shared.hardDeleteAbsentTasks(apiIds: allApiIds)
             lastReconciliationDate = Date()
 
