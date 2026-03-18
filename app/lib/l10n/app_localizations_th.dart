@@ -8555,4 +8555,9 @@ class AppLocalizationsTh extends AppLocalizations {
   @override
   String get fairUseAboutBody =>
       'Omi ออกแบบมาสำหรับการสนทนาส่วนตัว การประชุม และการโต้ตอบสด การใช้งานวัดจากเวลาพูดจริงที่ตรวจพบ ไม่ใช่เวลาเชื่อมต่อ หากการใช้งานเกินรูปแบบปกติอย่างมากสำหรับเนื้อหาที่ไม่ใช่ส่วนบุคคล อาจมีการปรับเปลี่ยน';
+
+  @override
+  String fairUseCaseRefCopied(String caseRef) {
+    return 'คัดลอก $caseRef แล้ว';
+  }
 }

@@ -8603,4 +8603,9 @@ class AppLocalizationsSv extends AppLocalizations {
   @override
   String get fairUseAboutBody =>
       'Omi är utformat för personliga samtal, möten och liveinteraktioner. Användningen mäts efter faktisk detekterad taltid, inte anslutningstid. Om användningen avsevärt överstiger normala mönster för icke-personligt innehåll kan justeringar tillämpas.';
+
+  @override
+  String fairUseCaseRefCopied(String caseRef) {
+    return '$caseRef kopierat';
+  }
 }

@@ -8602,4 +8602,9 @@ class AppLocalizationsVi extends AppLocalizations {
   @override
   String get fairUseAboutBody =>
       'Omi được thiết kế cho các cuộc trò chuyện cá nhân, cuộc họp và tương tác trực tiếp. Mức sử dụng được đo bằng thời gian nói thực tế được phát hiện, không phải thời gian kết nối. Nếu mức sử dụng vượt quá đáng kể các mẫu bình thường cho nội dung không cá nhân, có thể áp dụng các điều chỉnh.';
+
+  @override
+  String fairUseCaseRefCopied(String caseRef) {
+    return 'Đã sao chép $caseRef';
+  }
 }

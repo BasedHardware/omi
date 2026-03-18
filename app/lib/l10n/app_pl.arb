@@ -2797,5 +2797,14 @@
   "fairUse3Day": "3-dniowy okres",
   "fairUseWeekly": "Tygodniowy okres",
   "fairUseAboutTitle": "O uczciwym korzystaniu",
-  "fairUseAboutBody": "Omi jest zaprojektowany do osobistych rozmów, spotkań i interakcji na żywo. Użytkowanie mierzone jest na podstawie wykrytego rzeczywistego czasu mowy, a nie czasu połączenia. Jeśli użytkowanie znacząco przekracza normalne wzorce dla treści nieosobistych, mogą zostać zastosowane korekty."
+  "fairUseAboutBody": "Omi jest zaprojektowany do osobistych rozmów, spotkań i interakcji na żywo. Użytkowanie mierzone jest na podstawie wykrytego rzeczywistego czasu mowy, a nie czasu połączenia. Jeśli użytkowanie znacząco przekracza normalne wzorce dla treści nieosobistych, mogą zostać zastosowane korekty.",
+  "fairUseCaseRefCopied": "{caseRef} skopiowano",
+  "@fairUseCaseRefCopied": {
+    "description": "Snackbar message when case reference is copied",
+    "placeholders": {
+      "caseRef": {
+        "type": "String"
+      }
+    }
+  }
 }

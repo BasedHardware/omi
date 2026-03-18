@@ -8541,4 +8541,9 @@ class AppLocalizationsAr extends AppLocalizations {
   @override
   String get fairUseAboutBody =>
       'تم تصميم Omi للمحادثات الشخصية والاجتماعات والتفاعلات المباشرة. يُقاس الاستخدام بوقت الكلام الفعلي المكتشف وليس بوقت الاتصال. إذا تجاوز الاستخدام بشكل كبير الأنماط الطبيعية لمحتوى غير شخصي، فقد يتم تطبيق تعديلات.';
+
+  @override
+  String fairUseCaseRefCopied(String caseRef) {
+    return 'تم نسخ $caseRef';
+  }
 }

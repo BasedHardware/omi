@@ -8598,4 +8598,9 @@ class AppLocalizationsFi extends AppLocalizations {
   @override
   String get fairUseAboutBody =>
       'Omi on suunniteltu henkilökohtaisiin keskusteluihin, kokouksiin ja reaaliaikaiseen vuorovaikutukseen. Käyttöä mitataan havaitun todellisen puheajan, ei yhteysajan perusteella. Jos käyttö ylittää merkittävästi normaalit mallit ei-henkilökohtaisen sisällön osalta, säätöjä voidaan soveltaa.';
+
+  @override
+  String fairUseCaseRefCopied(String caseRef) {
+    return '$caseRef kopioitu';
+  }
 }

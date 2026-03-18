@@ -8609,4 +8609,9 @@ class AppLocalizationsId extends AppLocalizations {
   @override
   String get fairUseAboutBody =>
       'Omi dirancang untuk percakapan pribadi, rapat, dan interaksi langsung. Penggunaan diukur berdasarkan waktu bicara nyata yang terdeteksi, bukan waktu koneksi. Jika penggunaan secara signifikan melebihi pola normal untuk konten non-pribadi, penyesuaian dapat diterapkan.';
+
+  @override
+  String fairUseCaseRefCopied(String caseRef) {
+    return '$caseRef disalin';
+  }
 }

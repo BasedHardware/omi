@@ -8457,4 +8457,9 @@ class AppLocalizationsKo extends AppLocalizations {
   @override
   String get fairUseAboutBody =>
       'Omi는 개인 대화, 회의 및 실시간 상호작용을 위해 설계되었습니다. 사용량은 연결 시간이 아닌 감지된 실제 발화 시간으로 측정됩니다. 비개인적 콘텐츠에 대해 정상 패턴을 크게 초과하는 사용이 있을 경우 조정이 적용될 수 있습니다.';
+
+  @override
+  String fairUseCaseRefCopied(String caseRef) {
+    return '$caseRef 복사됨';
+  }
 }

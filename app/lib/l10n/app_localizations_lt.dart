@@ -8607,4 +8607,9 @@ class AppLocalizationsLt extends AppLocalizations {
   @override
   String get fairUseAboutBody =>
       'Omi sukurtas asmeniniams pokalbiams, susitikimams ir tiesioginei sąveikai. Naudojimas matuojamas pagal aptiktą tikrąjį kalbos laiką, o ne prisijungimo laiką. Jei naudojimas žymiai viršija įprastus modelius ne asmeniniam turiniui, gali būti taikomi koregavimai.';
+
+  @override
+  String fairUseCaseRefCopied(String caseRef) {
+    return '$caseRef copied';
+  }
 }

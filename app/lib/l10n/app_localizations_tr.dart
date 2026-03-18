@@ -8612,4 +8612,9 @@ class AppLocalizationsTr extends AppLocalizations {
   @override
   String get fairUseAboutBody =>
       'Omi kişisel konuşmalar, toplantılar ve canlı etkileşimler için tasarlanmıştır. Kullanım, bağlantı süresine değil, tespit edilen gerçek konuşma süresine göre ölçülür. Kullanım, kişisel olmayan içerik için normal kalıpları önemli ölçüde aşarsa, düzenlemeler uygulanabilir.';
+
+  @override
+  String fairUseCaseRefCopied(String caseRef) {
+    return '$caseRef kopyalandı';
+  }
 }

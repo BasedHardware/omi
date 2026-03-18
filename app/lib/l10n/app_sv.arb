@@ -2762,5 +2762,14 @@
   "fairUse3Day": "3-dagars rullande",
   "fairUseWeekly": "Veckovis rullande",
   "fairUseAboutTitle": "Om rimlig användning",
-  "fairUseAboutBody": "Omi är utformat för personliga samtal, möten och liveinteraktioner. Användningen mäts efter faktisk detekterad taltid, inte anslutningstid. Om användningen avsevärt överstiger normala mönster för icke-personligt innehåll kan justeringar tillämpas."
+  "fairUseAboutBody": "Omi är utformat för personliga samtal, möten och liveinteraktioner. Användningen mäts efter faktisk detekterad taltid, inte anslutningstid. Om användningen avsevärt överstiger normala mönster för icke-personligt innehåll kan justeringar tillämpas.",
+  "fairUseCaseRefCopied": "{caseRef} kopierat",
+  "@fairUseCaseRefCopied": {
+    "description": "Snackbar message when case reference is copied",
+    "placeholders": {
+      "caseRef": {
+        "type": "String"
+      }
+    }
+  }
 }

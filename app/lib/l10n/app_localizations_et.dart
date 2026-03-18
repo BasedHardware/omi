@@ -8597,4 +8597,9 @@ class AppLocalizationsEt extends AppLocalizations {
   @override
   String get fairUseAboutBody =>
       'Omi on loodud isiklikeks vestlusteks, koosolekuteks ja reaalajas suhtluseks. Kasutust mõõdetakse tuvastatud tegeliku kõneaja, mitte ühenduse aja järgi. Kui kasutus ületab oluliselt tavapäraseid mustreid mitteisikliku sisu puhul, võidakse rakendada kohandusi.';
+
+  @override
+  String fairUseCaseRefCopied(String caseRef) {
+    return '$caseRef copied';
+  }
 }

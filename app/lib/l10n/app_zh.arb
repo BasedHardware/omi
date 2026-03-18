@@ -2784,5 +2784,14 @@
   "fairUse3Day": "3天滚动",
   "fairUseWeekly": "每周滚动",
   "fairUseAboutTitle": "关于公平使用",
-  "fairUseAboutBody": "Omi 专为个人对话、会议和实时互动而设计。使用量按检测到的实际语音时间衡量，而非连接时间。如果使用量明显超出非个人内容的正常模式，可能会进行调整。"
+  "fairUseAboutBody": "Omi 专为个人对话、会议和实时互动而设计。使用量按检测到的实际语音时间衡量，而非连接时间。如果使用量明显超出非个人内容的正常模式，可能会进行调整。",
+  "fairUseCaseRefCopied": "{caseRef} 已复制",
+  "@fairUseCaseRefCopied": {
+    "description": "Snackbar message when case reference is copied",
+    "placeholders": {
+      "caseRef": {
+        "type": "String"
+      }
+    }
+  }
 }

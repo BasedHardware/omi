@@ -2762,5 +2762,14 @@
   "fairUse3Day": "3 zile consecutive",
   "fairUseWeekly": "Săptămânal",
   "fairUseAboutTitle": "Despre utilizarea echitabilă",
-  "fairUseAboutBody": "Omi este conceput pentru conversații personale, întâlniri și interacțiuni în direct. Utilizarea este măsurată prin timpul real de vorbire detectat, nu prin timpul de conexiune. Dacă utilizarea depășește semnificativ tiparele normale pentru conținut non-personal, se pot aplica ajustări."
+  "fairUseAboutBody": "Omi este conceput pentru conversații personale, întâlniri și interacțiuni în direct. Utilizarea este măsurată prin timpul real de vorbire detectat, nu prin timpul de conexiune. Dacă utilizarea depășește semnificativ tiparele normale pentru conținut non-personal, se pot aplica ajustări.",
+  "fairUseCaseRefCopied": "{caseRef} copiat",
+  "@fairUseCaseRefCopied": {
+    "description": "Snackbar message when case reference is copied",
+    "placeholders": {
+      "caseRef": {
+        "type": "String"
+      }
+    }
+  }
 }

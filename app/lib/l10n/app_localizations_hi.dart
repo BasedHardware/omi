@@ -8579,4 +8579,9 @@ class AppLocalizationsHi extends AppLocalizations {
   @override
   String get fairUseAboutBody =>
       'Omi व्यक्तिगत वार्तालाप, बैठकों और लाइव इंटरैक्शन के लिए डिज़ाइन किया गया है। उपयोग को वास्तविक पहचानी गई वाक् समय से मापा जाता है, कनेक्शन समय से नहीं। यदि उपयोग गैर-व्यक्तिगत सामग्री के लिए सामान्य पैटर्न से काफी अधिक हो जाता है, तो समायोजन लागू हो सकते हैं।';
+
+  @override
+  String fairUseCaseRefCopied(String caseRef) {
+    return '$caseRef कॉपी किया गया';
+  }
 }

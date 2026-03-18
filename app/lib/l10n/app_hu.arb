@@ -2858,5 +2858,14 @@
   "fairUse3Day": "3 napos gördülő",
   "fairUseWeekly": "Heti gördülő",
   "fairUseAboutTitle": "A méltányos használatról",
-  "fairUseAboutBody": "Az Omi személyes beszélgetésekhez, megbeszélésekhez és élő interakciókhoz készült. A használatot a ténylegesen észlelt beszédidő alapján mérik, nem a csatlakozási idő alapján. Ha a használat jelentősen meghaladja a nem személyes tartalom normális mintáit, módosítások alkalmazhatók."
+  "fairUseAboutBody": "Az Omi személyes beszélgetésekhez, megbeszélésekhez és élő interakciókhoz készült. A használatot a ténylegesen észlelt beszédidő alapján mérik, nem a csatlakozási idő alapján. Ha a használat jelentősen meghaladja a nem személyes tartalom normális mintáit, módosítások alkalmazhatók.",
+  "fairUseCaseRefCopied": "{caseRef} másolva",
+  "@fairUseCaseRefCopied": {
+    "description": "Snackbar message when case reference is copied",
+    "placeholders": {
+      "caseRef": {
+        "type": "String"
+      }
+    }
+  }
 }

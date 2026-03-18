@@ -8594,4 +8594,9 @@ class AppLocalizationsNo extends AppLocalizations {
   @override
   String get fairUseAboutBody =>
       'Omi er designet for personlige samtaler, møter og direkte interaksjoner. Bruken måles etter faktisk oppdaget taletid, ikke tilkoblingstid. Hvis bruken vesentlig overstiger normale mønstre for ikke-personlig innhold, kan justeringer gjelde.';
+
+  @override
+  String fairUseCaseRefCopied(String caseRef) {
+    return '$caseRef copied';
+  }
 }

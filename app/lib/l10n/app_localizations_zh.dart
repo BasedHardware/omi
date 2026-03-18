@@ -8444,4 +8444,9 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get fairUseAboutBody => 'Omi 专为个人对话、会议和实时互动而设计。使用量按检测到的实际语音时间衡量，而非连接时间。如果使用量明显超出非个人内容的正常模式，可能会进行调整。';
+
+  @override
+  String fairUseCaseRefCopied(String caseRef) {
+    return '$caseRef 已复制';
+  }
 }

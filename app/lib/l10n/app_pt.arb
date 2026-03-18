@@ -2798,5 +2798,14 @@
   "fairUse3Day": "3 dias contínuos",
   "fairUseWeekly": "Semanal contínuo",
   "fairUseAboutTitle": "Sobre o uso justo",
-  "fairUseAboutBody": "O Omi é projetado para conversas pessoais, reuniões e interações ao vivo. O uso é medido pelo tempo real de fala detectado, não pelo tempo de conexão. Se o uso exceder significativamente os padrões normais para conteúdo não pessoal, ajustes podem ser aplicados."
+  "fairUseAboutBody": "O Omi é projetado para conversas pessoais, reuniões e interações ao vivo. O uso é medido pelo tempo real de fala detectado, não pelo tempo de conexão. Se o uso exceder significativamente os padrões normais para conteúdo não pessoal, ajustes podem ser aplicados.",
+  "fairUseCaseRefCopied": "{caseRef} copiado",
+  "@fairUseCaseRefCopied": {
+    "description": "Snackbar message when case reference is copied",
+    "placeholders": {
+      "caseRef": {
+        "type": "String"
+      }
+    }
+  }
 }

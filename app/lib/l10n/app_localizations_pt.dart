@@ -8602,4 +8602,9 @@ class AppLocalizationsPt extends AppLocalizations {
   @override
   String get fairUseAboutBody =>
       'O Omi é projetado para conversas pessoais, reuniões e interações ao vivo. O uso é medido pelo tempo real de fala detectado, não pelo tempo de conexão. Se o uso exceder significativamente os padrões normais para conteúdo não pessoal, ajustes podem ser aplicados.';
+
+  @override
+  String fairUseCaseRefCopied(String caseRef) {
+    return '$caseRef copiado';
+  }
 }

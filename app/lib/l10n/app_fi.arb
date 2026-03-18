@@ -2762,5 +2762,14 @@
   "fairUse3Day": "3 päivän jakso",
   "fairUseWeekly": "Viikkojakso",
   "fairUseAboutTitle": "Tietoa kohtuullisesta käytöstä",
-  "fairUseAboutBody": "Omi on suunniteltu henkilökohtaisiin keskusteluihin, kokouksiin ja reaaliaikaiseen vuorovaikutukseen. Käyttöä mitataan havaitun todellisen puheajan, ei yhteysajan perusteella. Jos käyttö ylittää merkittävästi normaalit mallit ei-henkilökohtaisen sisällön osalta, säätöjä voidaan soveltaa."
+  "fairUseAboutBody": "Omi on suunniteltu henkilökohtaisiin keskusteluihin, kokouksiin ja reaaliaikaiseen vuorovaikutukseen. Käyttöä mitataan havaitun todellisen puheajan, ei yhteysajan perusteella. Jos käyttö ylittää merkittävästi normaalit mallit ei-henkilökohtaisen sisällön osalta, säätöjä voidaan soveltaa.",
+  "fairUseCaseRefCopied": "{caseRef} kopioitu",
+  "@fairUseCaseRefCopied": {
+    "description": "Snackbar message when case reference is copied",
+    "placeholders": {
+      "caseRef": {
+        "type": "String"
+      }
+    }
+  }
 }

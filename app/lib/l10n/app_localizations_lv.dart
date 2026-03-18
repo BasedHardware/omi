@@ -8617,4 +8617,9 @@ class AppLocalizationsLv extends AppLocalizations {
   @override
   String get fairUseAboutBody =>
       'Omi ir izstrādāts personīgām sarunām, sanāksmēm un tiešsaistes mijiedarbībai. Lietojums tiek mērīts pēc konstatētā reālā runas laika, nevis savienojuma laika. Ja lietojums ievērojami pārsniedz parastos modeļus nepersoniskam saturam, var tikt piemēroti pielāgojumi.';
+
+  @override
+  String fairUseCaseRefCopied(String caseRef) {
+    return '$caseRef copied';
+  }
 }

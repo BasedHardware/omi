@@ -2797,5 +2797,14 @@
   "fairUse3Day": "3 günlük süre",
   "fairUseWeekly": "Haftalık süre",
   "fairUseAboutTitle": "Adil Kullanım Hakkında",
-  "fairUseAboutBody": "Omi kişisel konuşmalar, toplantılar ve canlı etkileşimler için tasarlanmıştır. Kullanım, bağlantı süresine değil, tespit edilen gerçek konuşma süresine göre ölçülür. Kullanım, kişisel olmayan içerik için normal kalıpları önemli ölçüde aşarsa, düzenlemeler uygulanabilir."
+  "fairUseAboutBody": "Omi kişisel konuşmalar, toplantılar ve canlı etkileşimler için tasarlanmıştır. Kullanım, bağlantı süresine değil, tespit edilen gerçek konuşma süresine göre ölçülür. Kullanım, kişisel olmayan içerik için normal kalıpları önemli ölçüde aşarsa, düzenlemeler uygulanabilir.",
+  "fairUseCaseRefCopied": "{caseRef} kopyalandı",
+  "@fairUseCaseRefCopied": {
+    "description": "Snackbar message when case reference is copied",
+    "placeholders": {
+      "caseRef": {
+        "type": "String"
+      }
+    }
+  }
 }

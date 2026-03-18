@@ -8589,4 +8589,9 @@ class AppLocalizationsSk extends AppLocalizations {
   @override
   String get fairUseAboutBody =>
       'Omi je navrhnutý pre osobné konverzácie, stretnutia a živé interakcie. Používanie sa meria skutočným detegovaným časom reči, nie časom pripojenia. Ak používanie výrazne prekročí bežné vzory pre neosobný obsah, môžu sa uplatniť úpravy.';
+
+  @override
+  String fairUseCaseRefCopied(String caseRef) {
+    return '$caseRef skopírované';
+  }
 }

@@ -8596,4 +8596,9 @@ class AppLocalizationsCs extends AppLocalizations {
   @override
   String get fairUseAboutBody =>
       'Omi je navržen pro osobní konverzace, schůzky a živé interakce. Používání se měří skutečným detekovaným časem řeči, nikoli časem připojení. Pokud používání výrazně překročí běžné vzorce pro neosobní obsah, mohou být provedeny úpravy.';
+
+  @override
+  String fairUseCaseRefCopied(String caseRef) {
+    return '$caseRef zkopírováno';
+  }
 }

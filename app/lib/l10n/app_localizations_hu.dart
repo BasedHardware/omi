@@ -8637,4 +8637,9 @@ class AppLocalizationsHu extends AppLocalizations {
   @override
   String get fairUseAboutBody =>
       'Az Omi személyes beszélgetésekhez, megbeszélésekhez és élő interakciókhoz készült. A használatot a ténylegesen észlelt beszédidő alapján mérik, nem a csatlakozási idő alapján. Ha a használat jelentősen meghaladja a nem személyes tartalom normális mintáit, módosítások alkalmazhatók.';
+
+  @override
+  String fairUseCaseRefCopied(String caseRef) {
+    return '$caseRef másolva';
+  }
 }
