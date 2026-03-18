@@ -95,9 +95,13 @@ async fn main() {
     }
 
     // Initialize Firebase Auth
-    let firebase_auth = Arc::new(FirebaseAuth::new(
-        config.firebase_project_id.clone().unwrap_or_else(|| "based-hardware".to_string()),
-    ));
+    // Auth token validation may use a different project than Firestore.
+    // Cloud Run OAuth issues tokens for "based-hardware" (prod), so local dev
+    // needs FIREBASE_AUTH_PROJECT_ID=based-hardware while keeping Firestore on dev.
+    let auth_project_id = config.firebase_auth_project_id.clone()
+        .or_else(|| config.firebase_project_id.clone())
+        .unwrap_or_else(|| "based-hardware".to_string());
+    let firebase_auth = Arc::new(FirebaseAuth::new(auth_project_id));
 
     // Refresh Firebase keys with retry (transient network failures at startup)
     {
