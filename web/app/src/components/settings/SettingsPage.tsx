@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Image from 'next/image';
+import Link from 'next/link';
 import {
   User,
   Bell,
@@ -2523,7 +2524,7 @@ function AccountSection({
       {/* Fair Use */}
       <div id="fair-use" className="scroll-mt-4">
         <Card>
-          <a
+          <Link
             href="/fair-use"
             className="flex items-center justify-between py-2 text-text-primary hover:text-purple-400 transition-colors"
           >
@@ -2535,7 +2536,7 @@ function AccountSection({
               </div>
             </div>
             <ChevronRight className="w-4 h-4 text-text-quaternary" />
-          </a>
+          </Link>
         </Card>
       </div>
 

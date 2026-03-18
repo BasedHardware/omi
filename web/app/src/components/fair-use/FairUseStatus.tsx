@@ -124,9 +124,13 @@ export function FairUseStatus() {
   }, []);
 
   const copyRef = async (ref: string) => {
-    await navigator.clipboard.writeText(ref);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    try {
+      await navigator.clipboard.writeText(ref);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // Clipboard API may not be available in all contexts
+    }
   };
 
   if (isLoading) {
