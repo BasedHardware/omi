@@ -75,15 +75,22 @@ fi
 
 # Backend configuration (Rust)
 BACKEND_DIR="$(cd "$(dirname "$0")/Backend-Rust" && pwd)"
+AUTH_DIR="$(cd "$(dirname "$0")/Auth-Python" && pwd)"
 BACKEND_PID=""
+AUTH_PID=""
 TUNNEL_PID=""
 TUNNEL_URL="https://omi-dev.m13v.com"
+AUTH_PORT="${AUTH_PORT:-8079}"
 
-# Cleanup function to stop backend and tunnel on exit
+# Cleanup function to stop backend, auth, and tunnel on exit
 cleanup() {
     if [ -n "$TUNNEL_PID" ] && kill -0 "$TUNNEL_PID" 2>/dev/null; then
         echo "Stopping tunnel (PID: $TUNNEL_PID)..."
         kill "$TUNNEL_PID" 2>/dev/null || true
+    fi
+    if [ -n "$AUTH_PID" ] && kill -0 "$AUTH_PID" 2>/dev/null; then
+        echo "Stopping auth service (PID: $AUTH_PID)..."
+        kill "$AUTH_PID" 2>/dev/null || true
     fi
     if [ -n "$BACKEND_PID" ] && kill -0 "$BACKEND_PID" 2>/dev/null; then
         echo "Stopping backend (PID: $BACKEND_PID)..."
@@ -218,6 +225,41 @@ for i in {1..30}; do
     sleep 0.5
 done
 
+step "Starting Python auth service (port $AUTH_PORT)..."
+if [ -d "$AUTH_DIR" ]; then
+    # Set up venv if needed
+    if [ ! -d "$AUTH_DIR/.venv" ]; then
+        substep "Creating virtualenv..."
+        python3 -m venv "$AUTH_DIR/.venv"
+        "$AUTH_DIR/.venv/bin/pip" install -q -r "$AUTH_DIR/requirements.txt"
+    fi
+    # Copy .env from backend dir if auth doesn't have its own
+    if [ ! -f "$AUTH_DIR/.env" ] && [ -f "$BACKEND_DIR/.env" ]; then
+        substep "Using backend .env for auth service"
+    fi
+    # Auth service shares credentials with the Rust backend
+    export BASE_API_URL="http://localhost:$AUTH_PORT"
+    (
+        cd "$AUTH_DIR"
+        if [ -f "$BACKEND_DIR/.env" ]; then
+            set -a; source "$BACKEND_DIR/.env"; set +a
+        fi
+        export GOOGLE_APPLICATION_CREDENTIALS="$CREDS_PATH"
+        export BASE_API_URL="http://localhost:$AUTH_PORT"
+        .venv/bin/uvicorn main:app --host 0.0.0.0 --port "$AUTH_PORT" --log-level warning &
+        echo $!
+    ) &
+    AUTH_PID=$!
+    sleep 1
+    if curl -s "http://localhost:$AUTH_PORT/docs" > /dev/null 2>&1; then
+        substep "Auth service is ready on port $AUTH_PORT"
+    else
+        substep "Auth service starting (PID: $AUTH_PID)..."
+    fi
+else
+    substep "Auth-Python/ not found — skipping (auth will use OMI_AUTH_URL from .env)"
+fi
+
 # Check if another SwiftPM instance is running (will block our build)
 SWIFTPM_PID=$(pgrep -f "swiftpm-workspace-state|swift-build|swift-package" 2>/dev/null | head -1)
 if [ -n "$SWIFTPM_PID" ]; then
@@ -341,15 +383,18 @@ if [ -f "$BACKEND_DIR/.env" ]; then
         substep "Bootstrapped FIREBASE_API_KEY from backend .env"
     fi
 fi
-# Bootstrap OMI_AUTH_URL — the auth backend is a separate Cloud Run service
-# (not part of the desktop Rust backend). Read from backend .env if set,
-# otherwise use the default Cloud Run auth service.
+# Bootstrap OMI_AUTH_URL — for local dev, point to the local Python auth service.
+# For prod, set OMI_AUTH_URL explicitly in Backend-Rust/.env.
 if ! grep -q "^OMI_AUTH_URL=" "$APP_BUNDLE/Contents/Resources/.env"; then
     AUTH_URL=""
     if [ -f "$BACKEND_DIR/.env" ]; then
         AUTH_URL=$(grep "^OMI_AUTH_URL=" "$BACKEND_DIR/.env" | head -1 | cut -d= -f2-)
     fi
-    AUTH_URL="${AUTH_URL:-https://omi-desktop-auth-208440318997.us-central1.run.app/}"
+    if [ -z "$AUTH_URL" ]; then
+        # Default to local Python auth service
+        AUTH_URL="http://localhost:${AUTH_PORT}/"
+        substep "OMI_AUTH_URL not set — defaulting to local auth service: $AUTH_URL"
+    fi
     echo "OMI_AUTH_URL=$AUTH_URL" >> "$APP_BUNDLE/Contents/Resources/.env"
     substep "Set OMI_AUTH_URL=$AUTH_URL"
 fi
@@ -477,6 +522,7 @@ printf "  └─ done (%.2fs)\n" "$(echo "$NOW - $STEP_START_TIME" | bc)"
 echo ""
 echo "=== Services Running (total: ${TOTAL_TIME%.*}s) ==="
 echo "Backend:  http://localhost:8080 (PID: $BACKEND_PID)"
+echo "Auth:     http://localhost:$AUTH_PORT (PID: ${AUTH_PID:-none})"
 echo "Tunnel:   $TUNNEL_URL (PID: $TUNNEL_PID)"
 echo "App:      $APP_PATH (installed from $APP_BUNDLE)"
 if [ "${#AUTOMATION_ARGS[@]}" -gt 0 ]; then
