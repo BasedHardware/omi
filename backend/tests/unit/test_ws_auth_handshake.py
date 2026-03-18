@@ -116,9 +116,7 @@ class TestWebSocketAuthWithRateLimit(unittest.TestCase):
     def test_rate_limited_sends_close_1008(self, mock_verify, mock_lock):
         """Valid token but rate limited -> WebSocketDisconnect with code 1008."""
         with self.assertRaises(WebSocketDisconnect) as ctx:
-            with self.client.websocket_connect(
-                "/ws-ratelimited", headers={"Authorization": "Bearer valid_token"}
-            ):
+            with self.client.websocket_connect("/ws-ratelimited", headers={"Authorization": "Bearer valid_token"}):
                 self.fail("Expected WebSocket to be closed due to rate limit")
         self.assertEqual(ctx.exception.code, 1008)
         mock_verify.assert_called_once_with("valid_token")
@@ -139,14 +137,14 @@ class TestWebSocketAuthWithRateLimit(unittest.TestCase):
                 self.fail("Expected WebSocket to be closed by server")
         self.assertEqual(ctx.exception.code, 1008)
 
-    @patch('utils.other.endpoints.try_acquire_listen_lock', side_effect=WebSocketException(code=1008, reason='lock ws exc'))
+    @patch(
+        'utils.other.endpoints.try_acquire_listen_lock', side_effect=WebSocketException(code=1008, reason='lock ws exc')
+    )
     @patch('utils.other.endpoints.verify_token', return_value='test-uid-reraise')
     def test_ws_exception_from_lock_is_reraised(self, mock_verify, mock_lock):
         """WebSocketException from rate limiter is re-raised, not swallowed by fail-open handler."""
         with self.assertRaises(WebSocketDisconnect) as ctx:
-            with self.client.websocket_connect(
-                "/ws-ratelimited", headers={"Authorization": "Bearer valid_token"}
-            ):
+            with self.client.websocket_connect("/ws-ratelimited", headers={"Authorization": "Bearer valid_token"}):
                 self.fail("Expected WebSocket to be closed")
         self.assertEqual(ctx.exception.code, 1008)
 
