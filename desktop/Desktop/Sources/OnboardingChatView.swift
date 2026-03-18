@@ -661,6 +661,8 @@ struct OnboardingChatView: View {
             "accessibility": "accessibility",
             "automation": "automation",
             "screen recording": "screen_recording",
+            "full disk access": "full_disk_access",
+            "disk access": "full_disk_access",
         ]
         return mapping[name]
     }
@@ -1744,6 +1746,8 @@ struct OnboardingPermissionImage: View {
             return ("permissions", "gif")
         case "folder_access":
             return ("folder_access", "png")
+        case "full_disk_access":
+            return ("full_disk_access", "png")
         default:
             return nil
         }
