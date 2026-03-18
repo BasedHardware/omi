@@ -121,6 +121,47 @@ def lookup_case(case_ref: str, admin_id: str = Depends(_verify_admin_key)):
     raise HTTPException(status_code=404, detail=f'Case {case_ref} not found')
 
 
+SUPPORT_EMAIL = 'team@basedhardware.com'
+
+
+# ---------------------------------------------------------------------------
+# Public: unauthenticated case status lookup (for tracking page)
+# ---------------------------------------------------------------------------
+
+
+@router.get('/v1/fair-use/case/{case_ref}/status', tags=['fair_use'])
+def get_public_case_status(case_ref: str):
+    """Public unauthenticated endpoint: look up case status by reference.
+
+    Returns only non-sensitive info: stage, message, timestamps, support email.
+    No usage data or user identity exposed.
+    """
+    query = db.collection_group('fair_use_events').where('case_ref', '==', case_ref).limit(1)
+    for doc in query.stream():
+        data = doc.to_dict()
+        # Extract uid to get current enforcement stage
+        path_parts = doc.reference.path.split('/')
+        uid = path_parts[1] if len(path_parts) >= 2 else None
+
+        stage = 'none'
+        if uid:
+            state = fair_use_db.get_fair_use_state(uid)
+            stage = state.get('stage', 'none')
+
+        created_at = data.get('created_at')
+        updated_at = data.get('resolved_at') or created_at
+
+        return {
+            'case_ref': case_ref,
+            'stage': stage,
+            'message': _user_facing_message(stage, case_ref),
+            'created_at': str(created_at) if created_at else None,
+            'updated_at': str(updated_at) if updated_at else None,
+            'support_email': SUPPORT_EMAIL,
+        }
+    raise HTTPException(status_code=404, detail='Case not found')
+
+
 # ---------------------------------------------------------------------------
 # Support: user-facing endpoint to see their own fair-use status
 # ---------------------------------------------------------------------------
@@ -169,12 +210,12 @@ def _user_facing_message(stage: str, case_ref: str = '') -> str:
         ),
         'throttle': (
             'Your transcription quality has been temporarily reduced due to high non-personal usage. '
-            'This will reset automatically. Contact support at support@omi.me if you believe this is an error. '
+            'This will reset automatically. Contact support at team@basedhardware.com if you believe this is an error. '
             f'Please quote your case reference when contacting support.{ref_note}'
         ),
         'restrict': (
             'Your cloud transcription is temporarily limited. On-device transcription continues normally. '
-            'Contact support at support@omi.me to discuss your usage and resolve this. '
+            'Contact support at team@basedhardware.com to discuss your usage and resolve this. '
             f'Please quote your case reference when contacting support.{ref_note}'
         ),
     }
