@@ -10,6 +10,9 @@
     <uses-feature
         android:name="android.hardware.bluetooth_le"
         android:required="true" />
+    <uses-feature
+        android:name="android.software.companion_device_setup"
+        android:required="false" />
 
     <!-- New Bluetooth permissions in Android 12
     https://developer.android.com/about/versions/12/features/bluetooth-permissions -->
@@ -62,6 +65,8 @@
     <uses-permission android:name="android.permission.FOREGROUND_BLUETOOTH_CONNECT" />
     <uses-permission android:name="android.permission.FOREGROUND_BLUETOOTH_SCAN" />
     <uses-permission android:name="android.permission.FOREGROUND_CHANGE_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.REQUEST_COMPANION_RUN_IN_BACKGROUND" />
+    <uses-permission android:name="android.permission.REQUEST_COMPANION_START_FOREGROUND_SERVICES_FROM_BACKGROUND" />
 
     <uses-permission android:name="android.permission.READ_CALENDAR" />
     <uses-permission android:name="android.permission.WRITE_CALENDAR" />
@@ -171,6 +176,23 @@
             android:value="2" />
 
         <meta-data android:name="com.posthog.posthog.AUTO_INIT" android:value="false" />
-        
+
+        <!-- Native BLE Companion Service — receives OS-level device presence events -->
+        <service
+            android:name="com.friend.ios.BleCompanionService"
+            android:exported="true"
+            android:permission="android.permission.BIND_COMPANION_DEVICE_SERVICE">
+            <intent-filter>
+                <action android:name="android.companion.CompanionDeviceService.COMPANION_DEVICE_APPEARS" />
+                <action android:name="android.companion.CompanionDeviceService.COMPANION_DEVICE_DISAPPEARS" />
+            </intent-filter>
+        </service>
+
+        <!-- Native BLE Foreground Service — persistent BLE connection -->
+        <service
+            android:name="com.friend.ios.OmiBleForegroundService"
+            android:foregroundServiceType="connectedDevice"
+            android:exported="false" />
+
     </application>
 </manifest>
