@@ -27,7 +27,7 @@ _fair_use_db.update_fair_use_state = MagicMock()
 _fair_use_db.create_fair_use_event = MagicMock(return_value='evt-1')
 _fair_use_db.get_violation_counts = MagicMock(return_value={'violation_count_7d': 0, 'violation_count_30d': 0})
 _fair_use_db.get_flagged_users = MagicMock(return_value=[])
-_fair_use_db.get_fair_use_events = MagicMock(return_value=[])
+_fair_use_db.get_fair_use_events = MagicMock(return_value=[{'case_ref': 'FU-TEST01'}])
 _fair_use_db.resolve_fair_use_event = MagicMock()
 _fair_use_db.reset_fair_use_state = MagicMock()
 sys.modules.setdefault('database.fair_use', _fair_use_db)
@@ -75,7 +75,7 @@ class TestTriggerClassifierIfNeeded:
 
         mock_classify.assert_called_once_with('user1')
         mock_escalate.assert_called_once()
-        mock_notify.assert_called_once_with('user1', 'warning')
+        mock_notify.assert_called_once_with('user1', 'warning', case_ref='FU-TEST01')
 
     @pytest.mark.asyncio
     @patch.object(fair_use_mod, 'FAIR_USE_ENABLED', True)
