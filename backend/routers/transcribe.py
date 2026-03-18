@@ -2625,8 +2625,24 @@ async def _stream_handler(
         if not use_custom_stt and last_usage_record_timestamp:
             transcription_seconds = int(time.time() - last_usage_record_timestamp)
             words_to_record = words_transcribed_since_last_record
-            if transcription_seconds > 0 or words_to_record > 0:
-                record_usage(uid, transcription_seconds=transcription_seconds, words_transcribed=words_to_record)
+
+            # Flush any pending speech_ms delta to Redis (#5746 reviewer fix)
+            # Prevents short-session bypass: users reconnecting every <60s
+            # would never trigger the periodic flush in the usage loop.
+            speech_seconds_delta = 0
+            if vad_gate is not None:
+                speech_ms = vad_gate.consume_speech_ms_delta()
+                speech_seconds_delta = speech_ms // 1000
+                if FAIR_USE_ENABLED and speech_ms > 0:
+                    record_speech_ms(uid, speech_ms)
+
+            if transcription_seconds > 0 or words_to_record > 0 or speech_seconds_delta > 0:
+                record_usage(
+                    uid,
+                    transcription_seconds=transcription_seconds,
+                    words_transcribed=words_to_record,
+                    speech_seconds=speech_seconds_delta,
+                )
 
         # Flush pending debounced translations BEFORE setting websocket_active=False
         try:
