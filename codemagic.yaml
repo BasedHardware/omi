@@ -1838,13 +1838,22 @@ workflows:
   #   RELEASE_SECRET                  — shared secret for Firestore release registration API
   #   GCP_SERVICE_ACCOUNT_KEY         — base64 GCP service account JSON
   #                                     (needs: Cloud Run Admin, Storage Object Admin, GCR push)
-  #   OMI_DESKTOP_APP_ENV             — base64-encoded .env.app (runtime secrets bundled into .app)
+  #   OMI_DESKTOP_APP_ENV             — base64-encoded .env bundled into .app at build time
+  #                                     Contains ONLY: OMI_API_URL, FIREBASE_API_KEY (auth bootstrap),
+  #                                     MIXPANEL_PROJECT_TOKEN
+  #                                     REMOVED (now served by backend /v1/config/api-keys):
+  #                                       DEEPGRAM_API_KEY, GEMINI_API_KEY, ANTHROPIC_API_KEY,
+  #                                       GOOGLE_CALENDAR_API_KEY
   #   FIREBASE_PROJECT_ID, FIREBASE_API_KEY
   #   APPLE_CLIENT_ID, APPLE_TEAM_ID, APPLE_KEY_ID, APPLE_PRIVATE_KEY
   #   RESEND_API_KEY
   #   SENTRY_AUTH_TOKEN, SENTRY_ADMIN_UID, SENTRY_WEBHOOK_SECRET
   #   REDIS_DB_HOST, REDIS_DB_PORT, REDIS_DB_PASSWORD
   #   NOTE: MACOS_DEVELOPER_ID_P12/P12_PASSWORD must NOT be in this group — they live in appstore_credentials
+  #
+  # Cloud Run secrets (GCP Secret Manager, DESKTOP_ prefix to avoid conflicts with Python backend):
+  #   DESKTOP_DEEPGRAM_API_KEY, DESKTOP_ANTHROPIC_API_KEY, DESKTOP_GOOGLE_CALENDAR_API_KEY
+  #   (mapped to DEEPGRAM_API_KEY, ANTHROPIC_API_KEY, GOOGLE_CALENDAR_API_KEY inside the container)
   #
   # Re-uses from existing groups:
   #   app_env:            GEMINI_API_KEY, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET
