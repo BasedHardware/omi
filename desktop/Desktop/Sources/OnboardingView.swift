@@ -200,6 +200,10 @@ struct OnboardingView: View {
           onComplete: {
             AnalyticsManager.shared.onboardingStepCompleted(step: 4, stepName: "Tasks")
             handleOnboardingComplete()
+          },
+          onSkip: {
+            AnalyticsManager.shared.onboardingStepCompleted(step: 4, stepName: "Tasks_Skipped")
+            handleOnboardingComplete()
           }
         )
       }
