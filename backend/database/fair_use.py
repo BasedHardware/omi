@@ -45,8 +45,12 @@ def set_fair_use_stage(uid: str, stage: str, **kwargs) -> None:
 
 
 def _generate_case_ref() -> str:
-    """Generate a short human-readable case reference like FU-A1B2C3."""
-    return f'FU-{uuid.uuid4().hex[:6].upper()}'
+    """Generate a human-readable case reference like FU-A1B2C3D4E5F6.
+
+    Uses 12 hex chars from UUID4 (16^12 ≈ 281 trillion possibilities),
+    safe for public unauthenticated lookup without enumeration risk.
+    """
+    return f'FU-{uuid.uuid4().hex[:12].upper()}'
 
 
 def create_fair_use_event(uid: str, event_data: dict) -> str:
