@@ -5,6 +5,8 @@ import 'package:pigeon/pigeon.dart';
   dartOptions: DartOptions(),
   swiftOut: 'ios/Runner/PigeonCommunicator.g.swift',
   swiftOptions: SwiftOptions(),
+  kotlinOut: 'android/app/src/main/kotlin/com/friend/ios/PigeonCommunicator.g.kt',
+  kotlinOptions: KotlinOptions(package: 'com.friend.ios'),
   dartPackageName: 'omi_pigeon',
 ))
 
@@ -142,6 +144,14 @@ abstract class BleHostApi {
   /// characteristic will be batched when audio batching is enabled.
   @SwiftFunction('registerAudioCharacteristic(characteristicUuid:)')
   void registerAudioCharacteristic(String characteristicUuid);
+
+  /// (Android only) Initiate CompanionDeviceManager association for a device.
+  /// Shows the system chooser dialog filtered to this device's address.
+  /// Returns the associated device address on success, empty string on failure/cancel.
+  /// On iOS, returns empty string (state restoration handles background reconnection).
+  @async
+  @SwiftFunction('requestCompanionDeviceAssociation(deviceAddress:)')
+  String requestCompanionDeviceAssociation(String deviceAddress);
 }
 
 /// Swift → Dart: events pushed from the native BLE module to Flutter.
