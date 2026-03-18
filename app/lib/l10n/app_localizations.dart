@@ -17,7 +17,6 @@ import 'app_localizations_es.dart';
 import 'app_localizations_et.dart';
 import 'app_localizations_fi.dart';
 import 'app_localizations_fr.dart';
-import 'app_localizations_gu.dart';
 import 'app_localizations_hi.dart';
 import 'app_localizations_hu.dart';
 import 'app_localizations_id.dart';
@@ -157,8 +156,7 @@ abstract class AppLocalizations {
     Locale('tr'),
     Locale('uk'),
     Locale('vi'),
-    Locale('zh'),
-    Locale('gu')
+    Locale('zh')
   ];
 
   /// The app title displayed in various places
@@ -16123,8 +16121,7 @@ class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> 
         'tr',
         'uk',
         'vi',
-        'zh',
-        'gu'
+        'zh'
       ].contains(locale.languageCode);
 
   @override
@@ -16202,8 +16199,6 @@ AppLocalizations lookupAppLocalizations(Locale locale) {
       return AppLocalizationsVi();
     case 'zh':
       return AppLocalizationsZh();
-    case 'gu':
-      return AppLocalizationsGu();
   }
 
   throw FlutterError('AppLocalizations.delegate failed to load unsupported locale "$locale". This is likely '
