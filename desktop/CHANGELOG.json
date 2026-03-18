@@ -1,5 +1,8 @@
 {
-  "unreleased": [],
+  "unreleased": [
+    "Removed intro video from Rewind tab \u2014 screenshots are shown immediately",
+    "Fixed delayed screenshot capture after onboarding \u2014 first screenshot is now taken instantly"
+  ],
   "releases": [
     {
       "version": "0.11.133",
