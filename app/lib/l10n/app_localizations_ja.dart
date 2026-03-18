@@ -24,7 +24,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get deleteConversationTitle => '会話を削除しますか？';
 
   @override
-  String get deleteConversationMessage => 'この会話を削除してもよろしいですか？この操作は元に戻せません。';
+  String get deleteConversationMessage => '関連する記憶、タスク、音声ファイルも削除されます。この操作は元に戻せません。';
 
   @override
   String get confirm => '確認';
@@ -1439,7 +1439,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get payYourSttProvider => 'omiを無料で使用。STTプロバイダーに直接支払います。';
 
   @override
-  String get freeMinutesMonth => '月1,200分無料。無制限は';
+  String get freeMinutesMonth => '月4,800分無料。無制限は';
 
   @override
   String get omiUnlimited => 'Omi Unlimited';
@@ -1700,7 +1700,7 @@ class AppLocalizationsJa extends AppLocalizations {
   }
 
   @override
-  String get dontShowAgain => '再度表示しない';
+  String get dontShowAgain => '今後表示しない';
 
   @override
   String get iUnderstand => '理解しました';
@@ -2630,7 +2630,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get showAll => 'すべて表示 →';
 
   @override
-  String get noTasksForToday => '今日のタスクはありません。\\nOmiに他のタスクを尋ねるか、手動で作成してください。';
+  String get noTasksForToday => '今日のタスクはありません。\nOmiに他のタスクを尋ねるか、手動で作成してください。';
 
   @override
   String get dailyScore => 'デイリースコア';
@@ -4676,7 +4676,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get noSpecificDataAccessConfigured => '特定のデータアクセスは設定されていません。';
 
   @override
-  String get basicPlanDescription => '1,200プレミアム分 + デバイス無制限';
+  String get basicPlanDescription => '4,800プレミアム分 + デバイス無制限';
 
   @override
   String get minutes => '分';
@@ -5982,7 +5982,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get cloudProvider => 'クラウドプロバイダー';
 
   @override
-  String get premiumMinutesInfo => '月間1,200分のプレミアム利用可能。オンデバイスタブでは無制限の無料文字起こしが可能です。';
+  String get premiumMinutesInfo => '月間4,800分のプレミアム利用可能。オンデバイスタブでは無制限の無料文字起こしが可能です。';
 
   @override
   String get viewUsage => '使用状況を表示';
@@ -6060,7 +6060,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get batteryDrainSignificantly => 'バッテリー消費が大幅に増加します。';
 
   @override
-  String get premiumMinutesMonth => '月間1,200プレミアム分。オンデバイスタブでは無制限の無料文字起こしを提供。';
+  String get premiumMinutesMonth => '月間4,800プレミアム分。オンデバイスタブでは無制限の無料文字起こしを提供。';
 
   @override
   String get audioProcessedLocally => '音声はローカルで処理されます。オフラインで動作し、よりプライベートですが、バッテリー消費が増えます。';
@@ -8332,4 +8332,87 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get showTasksOnHomepage => 'ホームページにタスクを表示';
+
+  @override
+  String get phoneCallsUnlimitedOnly => 'Omiで電話をかける';
+
+  @override
+  String get phoneCallsUpsellSubtitle => 'Omiで通話し、リアルタイム文字起こし、自動要約などを取得。';
+
+  @override
+  String get phoneCallsUpsellFeature1 => 'すべての通話のリアルタイム文字起こし';
+
+  @override
+  String get phoneCallsUpsellFeature2 => '通話の自動要約とアクションアイテム';
+
+  @override
+  String get phoneCallsUpsellFeature3 => '受信者にはあなたの実際の番号が表示されます';
+
+  @override
+  String get phoneCallsUpsellFeature4 => '通話はプライベートで安全';
+
+  @override
+  String get phoneCallsUpgradeButton => 'Unlimitedにアップグレード';
+
+  @override
+  String get phoneCallsMaybeLater => 'また後で';
+
+  @override
+  String get deleteSynced => '同期済みを削除';
+
+  @override
+  String get deleteSyncedFiles => '同期済み録音を削除';
+
+  @override
+  String get deleteSyncedFilesMessage => 'これらの録音はすでにスマホに同期されています。この操作は取り消せません。';
+
+  @override
+  String get syncedFilesDeleted => '同期済み録音を削除しました';
+
+  @override
+  String get deletePending => '保留中を削除';
+
+  @override
+  String get deletePendingFiles => '保留中の録音を削除';
+
+  @override
+  String get deletePendingFilesWarning => 'これらの録音はスマホに同期されておらず、完全に失われます。この操作は取り消せません。';
+
+  @override
+  String get pendingFilesDeleted => '保留中の録音を削除しました';
+
+  @override
+  String get deleteAllFiles => 'すべての録音を削除';
+
+  @override
+  String get deleteAll => 'すべて削除';
+
+  @override
+  String get deleteAllFilesWarning => '同期済みと保留中の録音がすべて削除されます。保留中の録音は同期されておらず、完全に失われます。';
+
+  @override
+  String get allFilesDeleted => 'すべての録音を削除しました';
+
+  @override
+  String nFiles(int count) {
+    return '$count件の録音';
+  }
+
+  @override
+  String get manageStorage => 'ストレージを管理';
+
+  @override
+  String get safelyBackedUp => 'スマホに安全にバックアップ済み';
+
+  @override
+  String get notYetSynced => 'まだスマホに同期されていません';
+
+  @override
+  String get clearAll => 'すべて削除';
+
+  @override
+  String get phoneKeypad => 'キーパッド';
+
+  @override
+  String get phoneHideKeypad => 'キーパッドを隠す';
 }

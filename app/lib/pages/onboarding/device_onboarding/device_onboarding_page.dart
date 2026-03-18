@@ -36,45 +36,39 @@ class _DeviceOnboardingPageState extends State<DeviceOnboardingPage> with Single
     {
       'title': 'Charging Your Omi',
       'subtitle': 'Place your Omi on the charging dock. An orange light indicates that it\'s charging.',
-      'buttonText': 'Got it'
+      'buttonText': 'Got it',
     },
     {
       'title': 'Device Disconnected',
       'subtitle': 'When disconnected, your Omi will show a red light to indicate offline status.',
-      'buttonText': 'Understood'
+      'buttonText': 'Understood',
     },
     {
       'title': 'Device Connected',
       'subtitle': 'A blue light indicates that your Omi is connected and capturing conversations.',
-      'buttonText': 'Perfect'
+      'buttonText': 'Perfect',
     },
     {
       'title': 'Ask Questions',
       'subtitle': 'Long press Omi and speak out to ask questions. Omi will respond through notifications.',
-      'buttonText': 'Cool'
+      'buttonText': 'Cool',
     },
     {
       'title': 'Power Control',
       'subtitle': 'Short press the button to turn your Omi device on or off as needed.',
-      'buttonText': 'Let\'s Go!'
+      'buttonText': 'Let\'s Go!',
     },
   ];
 
   @override
   void initState() {
     super.initState();
-    _controller = AnimationController(
-      duration: const Duration(milliseconds: 600),
-      vsync: this,
-    )..repeat(reverse: true);
+    _controller = AnimationController(duration: const Duration(milliseconds: 600), vsync: this)..repeat(reverse: true);
 
     _arrowAnimation = Tween<double>(
       begin: 0,
       end: 4,
-    ).animate(CurvedAnimation(
-      parent: _controller,
-      curve: Curves.easeInOut,
-    ));
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeInOut));
 
     _initializeVideo();
   }
@@ -143,9 +137,7 @@ class _DeviceOnboardingPageState extends State<DeviceOnboardingPage> with Single
                               child: VideoPlayer(_videoController),
                             ),
                           )
-                        : Container(
-                            color: Colors.black,
-                          ),
+                        : Container(color: Colors.black),
                   ),
                 ),
 
@@ -155,10 +147,7 @@ class _DeviceOnboardingPageState extends State<DeviceOnboardingPage> with Single
                   padding: EdgeInsets.fromLTRB(32, 24, 32, 20),
                   decoration: const BoxDecoration(
                     color: Colors.black,
-                    borderRadius: BorderRadius.only(
-                      topLeft: Radius.circular(40),
-                      topRight: Radius.circular(40),
-                    ),
+                    borderRadius: BorderRadius.only(topLeft: Radius.circular(40), topRight: Radius.circular(40)),
                   ),
                   child: SafeArea(
                     top: false,
@@ -203,9 +192,7 @@ class _DeviceOnboardingPageState extends State<DeviceOnboardingPage> with Single
                             style: ElevatedButton.styleFrom(
                               backgroundColor: Colors.white,
                               foregroundColor: Colors.black,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(28),
-                              ),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
                             ),
                             child: Row(
                               mainAxisAlignment: MainAxisAlignment.center,
@@ -248,10 +235,7 @@ class _DeviceOnboardingPageState extends State<DeviceOnboardingPage> with Single
                   width: 36,
                   height: 36,
                   margin: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: Colors.grey.withValues(alpha: 0.3),
-                    shape: BoxShape.circle,
-                  ),
+                  decoration: BoxDecoration(color: Colors.grey.withValues(alpha: 0.3), shape: BoxShape.circle),
                   child: IconButton(
                     padding: EdgeInsets.zero,
                     onPressed: widget.onBack,

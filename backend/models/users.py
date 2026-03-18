@@ -15,6 +15,7 @@ class WebhookType(str, Enum):
 class PlanType(str, Enum):
     basic = 'basic'
     unlimited = 'unlimited'
+    pro = 'pro'
 
 
 class SubscriptionStatus(str, Enum):

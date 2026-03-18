@@ -25,7 +25,7 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get deleteConversationMessage =>
-      'Är du säker på att du vill ta bort denna konversation? Detta kan inte ångras.';
+      'Detta kommer också att radera tillhörande minnen, uppgifter och ljudfiler. Denna åtgärd kan inte ångras.';
 
   @override
   String get confirm => 'Bekräfta';
@@ -1462,7 +1462,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get payYourSttProvider => 'Använd Omi fritt. Du betalar bara din STT-leverantör direkt.';
 
   @override
-  String get freeMinutesMonth => '1 200 gratis minuter/månad ingår. Obegränsat med ';
+  String get freeMinutesMonth => '4 800 gratis minuter/månad ingår. Obegränsat med ';
 
   @override
   String get omiUnlimited => 'Omi Unlimited';
@@ -1711,12 +1711,7 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'ENHETER',
-      one: 'ENHET',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'ENHETER', one: 'ENHET');
     return '$count $_temp0 HITTAD(E) I NÄRHETEN';
   }
 
@@ -2676,7 +2671,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get showAll => 'Visa alla →';
 
   @override
-  String get noTasksForToday => 'Inga uppgifter för idag.\\nFråga Omi om fler uppgifter eller skapa manuellt.';
+  String get noTasksForToday => 'Inga uppgifter för idag.\nFråga Omi om fler uppgifter eller skapa manuellt.';
 
   @override
   String get dailyScore => 'DAGLIG POÄNG';
@@ -4765,7 +4760,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get noSpecificDataAccessConfigured => 'Ingen specifik dataåtkomst konfigurerad.';
 
   @override
-  String get basicPlanDescription => '1 200 premium-minuter + obegränsat på enheten';
+  String get basicPlanDescription => '4 800 premium-minuter + obegränsat på enheten';
 
   @override
   String get minutes => 'minuter';
@@ -6094,7 +6089,7 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get premiumMinutesInfo =>
-      '1 200 premiumminuter/månad. Fliken På enheten erbjuder obegränsad gratis transkription.';
+      '4 800 premiumminuter/månad. Fliken På enheten erbjuder obegränsad gratis transkription.';
 
   @override
   String get viewUsage => 'Visa användning';
@@ -6175,7 +6170,7 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get premiumMinutesMonth =>
-      '1 200 premiumminuter/månad. Fliken På enheten erbjuder obegränsad gratis transkription. ';
+      '4 800 premiumminuter/månad. Fliken På enheten erbjuder obegränsad gratis transkription. ';
 
   @override
   String get audioProcessedLocally => 'Ljud behandlas lokalt. Fungerar offline, mer privat, men använder mer batteri.';
@@ -8476,4 +8471,91 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get showTasksOnHomepage => 'Visa uppgifter på hemsidan';
+
+  @override
+  String get phoneCallsUnlimitedOnly => 'Telefonsamtal via Omi';
+
+  @override
+  String get phoneCallsUpsellSubtitle =>
+      'Ring via Omi och få transkription i realtid, automatiska sammanfattningar och mer.';
+
+  @override
+  String get phoneCallsUpsellFeature1 => 'Transkription i realtid av varje samtal';
+
+  @override
+  String get phoneCallsUpsellFeature2 => 'Automatiska samtalssammanfattningar och uppgifter';
+
+  @override
+  String get phoneCallsUpsellFeature3 => 'Mottagare ser ditt riktiga nummer, inte ett slumpmässigt';
+
+  @override
+  String get phoneCallsUpsellFeature4 => 'Dina samtal förblir privata och säkra';
+
+  @override
+  String get phoneCallsUpgradeButton => 'Uppgradera till Obegränsad';
+
+  @override
+  String get phoneCallsMaybeLater => 'Kanske senare';
+
+  @override
+  String get deleteSynced => 'Ta bort synkroniserade';
+
+  @override
+  String get deleteSyncedFiles => 'Radera synkroniserade inspelningar';
+
+  @override
+  String get deleteSyncedFilesMessage =>
+      'Dessa inspelningar har redan synkroniserats med din telefon. Detta kan inte ångras.';
+
+  @override
+  String get syncedFilesDeleted => 'Synkroniserade inspelningar raderade';
+
+  @override
+  String get deletePending => 'Ta bort väntande';
+
+  @override
+  String get deletePendingFiles => 'Radera väntande inspelningar';
+
+  @override
+  String get deletePendingFilesWarning =>
+      'Dessa inspelningar har INTE synkroniserats med din telefon och kommer att förloras permanent. Detta kan inte ångras.';
+
+  @override
+  String get pendingFilesDeleted => 'Väntande inspelningar raderade';
+
+  @override
+  String get deleteAllFiles => 'Radera alla inspelningar';
+
+  @override
+  String get deleteAll => 'Ta bort alla';
+
+  @override
+  String get deleteAllFilesWarning =>
+      'Detta raderar synkroniserade och väntande inspelningar. Väntande inspelningar har INTE synkroniserats och kommer att förloras permanent.';
+
+  @override
+  String get allFilesDeleted => 'Alla inspelningar raderade';
+
+  @override
+  String nFiles(int count) {
+    return '$count inspelningar';
+  }
+
+  @override
+  String get manageStorage => 'Hantera lagring';
+
+  @override
+  String get safelyBackedUp => 'Säkerhetskopierat till din telefon';
+
+  @override
+  String get notYetSynced => 'Inte synkroniserat med din telefon ännu';
+
+  @override
+  String get clearAll => 'Rensa allt';
+
+  @override
+  String get phoneKeypad => 'Knappsats';
+
+  @override
+  String get phoneHideKeypad => 'Dölj knappsats';
 }

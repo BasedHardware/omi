@@ -138,6 +138,12 @@ class WalSyncs implements IWalSync {
     await _flashPageSync.deleteAllSyncedWals();
   }
 
+  Future<void> deleteAllPendingWals() async {
+    await _phoneSync.deleteAllPendingWals();
+    await _sdcardSync.deleteAllPendingWals();
+    await _flashPageSync.deleteAllPendingWals();
+  }
+
   @override
   void start() {
     _phoneSync.start();
@@ -225,10 +231,14 @@ class WalSyncs implements IWalSync {
     progress?.onWalSyncedProgress(0.0, phase: SyncPhase.uploadingToCloud);
     var partialRes = await _phoneSync.syncAll(progress: progress);
     if (partialRes != null) {
-      resp.newConversationIds
-          .addAll(partialRes.newConversationIds.where((id) => !resp.newConversationIds.contains(id)));
-      resp.updatedConversationIds.addAll(partialRes.updatedConversationIds
-          .where((id) => !resp.updatedConversationIds.contains(id) && !resp.newConversationIds.contains(id)));
+      resp.newConversationIds.addAll(
+        partialRes.newConversationIds.where((id) => !resp.newConversationIds.contains(id)),
+      );
+      resp.updatedConversationIds.addAll(
+        partialRes.updatedConversationIds.where(
+          (id) => !resp.updatedConversationIds.contains(id) && !resp.newConversationIds.contains(id),
+        ),
+      );
     }
 
     DebugLogManager.logEvent('sync_completed', {

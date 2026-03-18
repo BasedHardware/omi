@@ -86,13 +86,7 @@ class _AiAppGeneratorPageState extends State<AiAppGeneratorPage> {
                           color: const Color(0xFF1C1C1E),
                           borderRadius: BorderRadius.circular(18),
                         ),
-                        child: const Center(
-                          child: FaIcon(
-                            FontAwesomeIcons.xmark,
-                            color: Colors.white,
-                            size: 16,
-                          ),
-                        ),
+                        child: const Center(child: FaIcon(FontAwesomeIcons.xmark, color: Colors.white, size: 16)),
                       ),
                     ),
                   ],
@@ -109,10 +103,7 @@ class _AiAppGeneratorPageState extends State<AiAppGeneratorPage> {
                           // "Try something like..." text
                           Text(
                             context.l10n.trySomethingLike,
-                            style: TextStyle(
-                              color: Colors.grey.shade500,
-                              fontSize: 15,
-                            ),
+                            style: TextStyle(color: Colors.grey.shade500, fontSize: 15),
                           ),
                           const SizedBox(height: 20),
 
@@ -133,10 +124,7 @@ class _AiAppGeneratorPageState extends State<AiAppGeneratorPage> {
                                     padding: const EdgeInsets.symmetric(horizontal: 20),
                                     itemCount: provider.samplePrompts.length,
                                     itemBuilder: (context, index) {
-                                      return _buildSuggestionCard(
-                                        provider.samplePrompts[index],
-                                        provider,
-                                      );
+                                      return _buildSuggestionCard(provider.samplePrompts[index], provider);
                                     },
                                   ),
                           ),
@@ -149,10 +137,7 @@ class _AiAppGeneratorPageState extends State<AiAppGeneratorPage> {
                               child: Text(
                                 provider.errorMessage!,
                                 textAlign: TextAlign.center,
-                                style: const TextStyle(
-                                  color: Color(0xFFDC2626),
-                                  fontSize: 14,
-                                ),
+                                style: const TextStyle(color: Color(0xFFDC2626), fontSize: 14),
                               ),
                             ),
                           ],
@@ -206,10 +191,7 @@ class _AiAppGeneratorPageState extends State<AiAppGeneratorPage> {
                         color: const Color(0xFF2A2A2E),
                         borderRadius: BorderRadius.circular(24),
                         image: provider.generatedIconBytes != null
-                            ? DecorationImage(
-                                image: MemoryImage(provider.generatedIconBytes!),
-                                fit: BoxFit.cover,
-                              )
+                            ? DecorationImage(image: MemoryImage(provider.generatedIconBytes!), fit: BoxFit.cover)
                             : null,
                       ),
                       child: provider.generatedIconBytes == null
@@ -272,11 +254,7 @@ class _AiAppGeneratorPageState extends State<AiAppGeneratorPage> {
                 provider.generatedName != null
                     ? Text(
                         provider.generatedName!,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 22,
-                          fontWeight: FontWeight.w600,
-                        ),
+                        style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w600),
                         textAlign: TextAlign.center,
                       )
                     : ShimmerWithTimeout(
@@ -285,10 +263,7 @@ class _AiAppGeneratorPageState extends State<AiAppGeneratorPage> {
                         child: Container(
                           height: 24,
                           width: 160,
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(6),
-                          ),
+                          decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(6)),
                         ),
                       ),
                 const SizedBox(height: 12),
@@ -303,11 +278,7 @@ class _AiAppGeneratorPageState extends State<AiAppGeneratorPage> {
                         ),
                         child: Text(
                           provider.getCategoryDisplayName(),
-                          style: const TextStyle(
-                            color: Color(0xFF8B5CF6),
-                            fontSize: 12,
-                            fontWeight: FontWeight.w500,
-                          ),
+                          style: const TextStyle(color: Color(0xFF8B5CF6), fontSize: 12, fontWeight: FontWeight.w500),
                         ),
                       )
                     : ShimmerWithTimeout(
@@ -316,10 +287,7 @@ class _AiAppGeneratorPageState extends State<AiAppGeneratorPage> {
                         child: Container(
                           height: 28,
                           width: 100,
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(12),
-                          ),
+                          decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12)),
                         ),
                       ),
               ],
@@ -359,30 +327,27 @@ class _AiAppGeneratorPageState extends State<AiAppGeneratorPage> {
                             color: isCompleted
                                 ? const Color(0xFF6366F1)
                                 : isActive
-                                    ? const Color(0xFF6366F1).withOpacity(0.2)
-                                    : const Color(0xFF2A2A2E),
+                                ? const Color(0xFF6366F1).withOpacity(0.2)
+                                : const Color(0xFF2A2A2E),
                             border: isActive ? Border.all(color: const Color(0xFF6366F1), width: 2) : null,
                           ),
                           child: Center(
                             child: isCompleted
                                 ? const FaIcon(FontAwesomeIcons.check, color: Colors.white, size: 12)
                                 : isActive
-                                    ? const SizedBox(
-                                        width: 14,
-                                        height: 14,
-                                        child: CircularProgressIndicator(
-                                          strokeWidth: 2,
-                                          valueColor: AlwaysStoppedAnimation(Color(0xFF6366F1)),
-                                        ),
-                                      )
-                                    : Container(
-                                        width: 8,
-                                        height: 8,
-                                        decoration: BoxDecoration(
-                                          shape: BoxShape.circle,
-                                          color: Colors.grey.shade600,
-                                        ),
-                                      ),
+                                ? const SizedBox(
+                                    width: 14,
+                                    height: 14,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      valueColor: AlwaysStoppedAnimation(Color(0xFF6366F1)),
+                                    ),
+                                  )
+                                : Container(
+                                    width: 8,
+                                    height: 8,
+                                    decoration: BoxDecoration(shape: BoxShape.circle, color: Colors.grey.shade600),
+                                  ),
                           ),
                         ),
                         const SizedBox(width: 14),
@@ -407,10 +372,7 @@ class _AiAppGeneratorPageState extends State<AiAppGeneratorPage> {
                                   highlightColor: Colors.grey.shade400,
                                   child: Text(
                                     context.l10n.processing,
-                                    style: TextStyle(
-                                      color: Colors.grey.shade500,
-                                      fontSize: 12,
-                                    ),
+                                    style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
                                   ),
                                 ),
                               ],
@@ -478,13 +440,7 @@ class _AiAppGeneratorPageState extends State<AiAppGeneratorPage> {
                           color: const Color(0xFF2A2A2E),
                           borderRadius: BorderRadius.circular(20),
                         ),
-                        child: Text(
-                          cap,
-                          style: const TextStyle(
-                            color: Colors.white70,
-                            fontSize: 13,
-                          ),
-                        ),
+                        child: Text(cap, style: const TextStyle(color: Colors.white70, fontSize: 13)),
                       );
                     }).toList(),
                   ),
@@ -501,22 +457,14 @@ class _AiAppGeneratorPageState extends State<AiAppGeneratorPage> {
       width: 260,
       margin: const EdgeInsets.only(right: 12),
       padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: const Color(0xFF1C1C1E),
-        borderRadius: BorderRadius.circular(16),
-      ),
+      decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(16)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Text(
             title,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 16,
-              fontWeight: FontWeight.w500,
-              height: 1.4,
-            ),
+            style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w500, height: 1.4),
             maxLines: 3,
             overflow: TextOverflow.ellipsis,
           ),
@@ -530,27 +478,16 @@ class _AiAppGeneratorPageState extends State<AiAppGeneratorPage> {
             },
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-              decoration: BoxDecoration(
-                color: const Color(0xFF2A2A2E),
-                borderRadius: BorderRadius.circular(20),
-              ),
+              decoration: BoxDecoration(color: const Color(0xFF2A2A2E), borderRadius: BorderRadius.circular(20)),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(
                     context.l10n.tryIt,
-                    style: TextStyle(
-                      color: Colors.grey.shade400,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w500,
-                    ),
+                    style: TextStyle(color: Colors.grey.shade400, fontSize: 14, fontWeight: FontWeight.w500),
                   ),
                   const SizedBox(width: 4),
-                  FaIcon(
-                    FontAwesomeIcons.chevronRight,
-                    color: Colors.grey.shade400,
-                    size: 12,
-                  ),
+                  FaIcon(FontAwesomeIcons.chevronRight, color: Colors.grey.shade400, size: 12),
                 ],
               ),
             ),
@@ -568,47 +505,32 @@ class _AiAppGeneratorPageState extends State<AiAppGeneratorPage> {
         width: 260,
         margin: const EdgeInsets.only(right: 12),
         padding: const EdgeInsets.all(20),
-        decoration: BoxDecoration(
-          color: const Color(0xFF1C1C1E),
-          borderRadius: BorderRadius.circular(16),
-        ),
+        decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(16)),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Container(
               height: 16,
               width: 200,
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(4),
-              ),
+              decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(4)),
             ),
             const SizedBox(height: 10),
             Container(
               height: 16,
               width: 160,
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(4),
-              ),
+              decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(4)),
             ),
             const SizedBox(height: 10),
             Container(
               height: 16,
               width: 120,
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(4),
-              ),
+              decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(4)),
             ),
             const Spacer(),
             Container(
               height: 36,
               width: 80,
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(20),
-              ),
+              decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20)),
             ),
           ],
         ),
@@ -624,10 +546,7 @@ class _AiAppGeneratorPageState extends State<AiAppGeneratorPage> {
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
       child: Container(
         padding: EdgeInsets.only(left: 20, right: (hasText || isGenerating) ? 12 : 20, top: 6, bottom: 6),
-        decoration: BoxDecoration(
-          color: const Color(0xFF1C1C1E),
-          borderRadius: BorderRadius.circular(28),
-        ),
+        decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(28)),
         child: Row(
           children: [
             // Text input
@@ -642,10 +561,7 @@ class _AiAppGeneratorPageState extends State<AiAppGeneratorPage> {
                           provider.state == GenerationState.generatingApp
                               ? context.l10n.creatingYourApp
                               : context.l10n.generatingIcon,
-                          style: const TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w500,
-                          ),
+                          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
                         ),
                       ),
                     )
@@ -655,17 +571,10 @@ class _AiAppGeneratorPageState extends State<AiAppGeneratorPage> {
                       maxLines: 3,
                       minLines: 1,
                       textInputAction: TextInputAction.newline,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 16,
-                        height: 1.6,
-                      ),
+                      style: const TextStyle(color: Colors.white, fontSize: 16, height: 1.6),
                       decoration: InputDecoration(
                         hintText: context.l10n.whatShouldWeMake,
-                        hintStyle: TextStyle(
-                          color: Colors.grey.shade600,
-                          fontSize: 16,
-                        ),
+                        hintStyle: TextStyle(color: Colors.grey.shade600, fontSize: 16),
                         border: InputBorder.none,
                         contentPadding: const EdgeInsets.symmetric(vertical: 8),
                       ),
@@ -697,13 +606,7 @@ class _AiAppGeneratorPageState extends State<AiAppGeneratorPage> {
                           color: const Color(0xFF6366F1),
                           borderRadius: BorderRadius.circular(22),
                         ),
-                        child: const Center(
-                          child: FaIcon(
-                            FontAwesomeIcons.arrowUp,
-                            color: Colors.white,
-                            size: 18,
-                          ),
-                        ),
+                        child: const Center(child: FaIcon(FontAwesomeIcons.arrowUp, color: Colors.white, size: 18)),
                       ),
                     ),
             ],
@@ -733,31 +636,19 @@ class _AiAppGeneratorPageState extends State<AiAppGeneratorPage> {
                         color: const Color(0xFF1C1C1E),
                         borderRadius: BorderRadius.circular(18),
                       ),
-                      child: const Center(
-                        child: FaIcon(
-                          FontAwesomeIcons.arrowLeft,
-                          color: Colors.white,
-                          size: 16,
-                        ),
-                      ),
+                      child: const Center(child: FaIcon(FontAwesomeIcons.arrowLeft, color: Colors.white, size: 16)),
                     ),
                   ),
                   const Spacer(),
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                     decoration: BoxDecoration(
-                      gradient: const LinearGradient(
-                        colors: [Color(0xFFFF6B35), Color(0xFFFF8C42)],
-                      ),
+                      gradient: const LinearGradient(colors: [Color(0xFFFF6B35), Color(0xFFFF8C42)]),
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: const Text(
                       'BETA',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 10,
-                        fontWeight: FontWeight.w700,
-                      ),
+                      style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w700),
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -773,13 +664,7 @@ class _AiAppGeneratorPageState extends State<AiAppGeneratorPage> {
                         color: const Color(0xFF1C1C1E),
                         borderRadius: BorderRadius.circular(18),
                       ),
-                      child: const Center(
-                        child: FaIcon(
-                          FontAwesomeIcons.xmark,
-                          color: Colors.white,
-                          size: 16,
-                        ),
-                      ),
+                      child: const Center(child: FaIcon(FontAwesomeIcons.xmark, color: Colors.white, size: 16)),
                     ),
                   ),
                 ],
@@ -818,10 +703,7 @@ class _AiAppGeneratorPageState extends State<AiAppGeneratorPage> {
 
     return Container(
       padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: const Color(0xFF1C1C1E),
-        borderRadius: BorderRadius.circular(20),
-      ),
+      decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(20)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -842,16 +724,11 @@ class _AiAppGeneratorPageState extends State<AiAppGeneratorPage> {
                         color: const Color(0xFF2A2A2E),
                         borderRadius: BorderRadius.circular(24),
                         image: provider.generatedIconBytes != null
-                            ? DecorationImage(
-                                image: MemoryImage(provider.generatedIconBytes!),
-                                fit: BoxFit.cover,
-                              )
+                            ? DecorationImage(image: MemoryImage(provider.generatedIconBytes!), fit: BoxFit.cover)
                             : null,
                       ),
                       child: provider.generatedIconBytes == null
-                          ? const Center(
-                              child: FaIcon(FontAwesomeIcons.cube, color: Colors.grey, size: 32),
-                            )
+                          ? const Center(child: FaIcon(FontAwesomeIcons.cube, color: Colors.grey, size: 32))
                           : null,
                     ),
                     Positioned(
@@ -872,11 +749,7 @@ class _AiAppGeneratorPageState extends State<AiAppGeneratorPage> {
                               ),
                             ],
                           ),
-                          child: const FaIcon(
-                            FontAwesomeIcons.arrowsRotate,
-                            color: Colors.white,
-                            size: 14,
-                          ),
+                          child: const FaIcon(FontAwesomeIcons.arrowsRotate, color: Colors.white, size: 14),
                         ),
                       ),
                     ),
@@ -896,20 +769,12 @@ class _AiAppGeneratorPageState extends State<AiAppGeneratorPage> {
                         children: [
                           Text(
                             provider.generatedName ?? context.l10n.appName,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 20,
-                              fontWeight: FontWeight.w700,
-                            ),
+                            style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w700),
                           ),
                           const SizedBox(height: 4),
                           Text(
                             provider.getCategoryDisplayName(),
-                            style: TextStyle(
-                              color: Colors.grey.shade400,
-                              fontSize: 14,
-                              fontWeight: FontWeight.w500,
-                            ),
+                            style: TextStyle(color: Colors.grey.shade400, fontSize: 14, fontWeight: FontWeight.w500),
                           ),
                         ],
                       ),
@@ -958,11 +823,7 @@ class _AiAppGeneratorPageState extends State<AiAppGeneratorPage> {
                               child: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  const FaIcon(
-                                    FontAwesomeIcons.dollarSign,
-                                    color: Color(0xFF22C55E),
-                                    size: 12,
-                                  ),
+                                  const FaIcon(FontAwesomeIcons.dollarSign, color: Color(0xFF22C55E), size: 12),
                                   Text(
                                     '\$${provider.price.toStringAsFixed(0)} / Month',
                                     style: const TextStyle(
@@ -1007,11 +868,7 @@ class _AiAppGeneratorPageState extends State<AiAppGeneratorPage> {
             children: [
               const Text(
                 'Description',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 16,
-                  fontWeight: FontWeight.w700,
-                ),
+                style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w700),
               ),
               const SizedBox(height: 10),
               GestureDetector(
@@ -1022,11 +879,7 @@ class _AiAppGeneratorPageState extends State<AiAppGeneratorPage> {
                 },
                 child: Text(
                   provider.generatedDescription ?? '',
-                  style: TextStyle(
-                    color: Colors.grey.shade400,
-                    fontSize: 14,
-                    height: 1.6,
-                  ),
+                  style: TextStyle(color: Colors.grey.shade400, fontSize: 14, height: 1.6),
                   maxLines: _isDescriptionExpanded ? null : 3,
                   overflow: _isDescriptionExpanded ? TextOverflow.visible : TextOverflow.ellipsis,
                 ),
@@ -1040,11 +893,7 @@ class _AiAppGeneratorPageState extends State<AiAppGeneratorPage> {
           if (hasMemories || hasChat) ...[
             const Text(
               'Features',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 16,
-                fontWeight: FontWeight.w700,
-              ),
+              style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w700),
             ),
             const SizedBox(height: 12),
 
@@ -1057,20 +906,14 @@ class _AiAppGeneratorPageState extends State<AiAppGeneratorPage> {
 
             // Chat feature
             if (hasChat)
-              _buildFeatureRow(
-                icon: FontAwesomeIcons.comments,
-                description: context.l10n.customChatbotPersonality,
-              ),
+              _buildFeatureRow(icon: FontAwesomeIcons.comments, description: context.l10n.customChatbotPersonality),
           ],
         ],
       ),
     );
   }
 
-  Widget _buildFeatureRow({
-    required IconData icon,
-    required String description,
-  }) {
+  Widget _buildFeatureRow({required IconData icon, required String description}) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8),
       child: Row(
@@ -1078,27 +921,14 @@ class _AiAppGeneratorPageState extends State<AiAppGeneratorPage> {
           Container(
             width: 40,
             height: 40,
-            decoration: const BoxDecoration(
-              color: Color(0xFF2A2A2E),
-              shape: BoxShape.circle,
-            ),
-            child: Center(
-              child: FaIcon(
-                icon,
-                color: Colors.white,
-                size: 16,
-              ),
-            ),
+            decoration: const BoxDecoration(color: Color(0xFF2A2A2E), shape: BoxShape.circle),
+            child: Center(child: FaIcon(icon, color: Colors.white, size: 16)),
           ),
           const SizedBox(width: 14),
           Expanded(
             child: Text(
               description,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 15,
-                fontWeight: FontWeight.w600,
-              ),
+              style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w600),
             ),
           ),
         ],
@@ -1109,10 +939,7 @@ class _AiAppGeneratorPageState extends State<AiAppGeneratorPage> {
   Widget _buildAppSettings(AiAppGeneratorProvider provider) {
     return Container(
       padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: const Color(0xFF1C1C1E),
-        borderRadius: BorderRadius.circular(20),
-      ),
+      decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(20)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -1146,35 +973,21 @@ class _AiAppGeneratorPageState extends State<AiAppGeneratorPage> {
             const SizedBox(height: 16),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-              decoration: BoxDecoration(
-                color: const Color(0xFF2A2A2E),
-                borderRadius: BorderRadius.circular(14),
-              ),
+              decoration: BoxDecoration(color: const Color(0xFF2A2A2E), borderRadius: BorderRadius.circular(14)),
               child: Row(
                 children: [
                   const Text(
                     '\$',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 20,
-                      fontWeight: FontWeight.w600,
-                    ),
+                    style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w600),
                   ),
                   const SizedBox(width: 8),
                   Expanded(
                     child: TextField(
                       keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 20,
-                        fontWeight: FontWeight.w600,
-                      ),
+                      style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w600),
                       decoration: InputDecoration(
                         hintText: context.l10n.pricePlaceholder,
-                        hintStyle: TextStyle(
-                          color: Colors.grey.shade600,
-                          fontSize: 20,
-                        ),
+                        hintStyle: TextStyle(color: Colors.grey.shade600, fontSize: 20),
                         border: InputBorder.none,
                         isDense: true,
                         contentPadding: EdgeInsets.zero,
@@ -1185,13 +998,7 @@ class _AiAppGeneratorPageState extends State<AiAppGeneratorPage> {
                       },
                     ),
                   ),
-                  Text(
-                    context.l10n.perMonthLabel,
-                    style: TextStyle(
-                      color: Colors.grey.shade500,
-                      fontSize: 14,
-                    ),
-                  ),
+                  Text(context.l10n.perMonthLabel, style: TextStyle(color: Colors.grey.shade500, fontSize: 14)),
                 ],
               ),
             ),
@@ -1214,10 +1021,7 @@ class _AiAppGeneratorPageState extends State<AiAppGeneratorPage> {
         Container(
           width: 40,
           height: 40,
-          decoration: BoxDecoration(
-            color: const Color(0xFF2A2A2E),
-            borderRadius: BorderRadius.circular(10),
-          ),
+          decoration: BoxDecoration(color: const Color(0xFF2A2A2E), borderRadius: BorderRadius.circular(10)),
           child: Center(child: FaIcon(icon, color: Colors.grey.shade400, size: 16)),
         ),
         const SizedBox(width: 14),
@@ -1227,28 +1031,14 @@ class _AiAppGeneratorPageState extends State<AiAppGeneratorPage> {
             children: [
               Text(
                 title,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 16,
-                  fontWeight: FontWeight.w500,
-                ),
+                style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w500),
               ),
               const SizedBox(height: 2),
-              Text(
-                subtitle,
-                style: TextStyle(
-                  color: Colors.grey.shade500,
-                  fontSize: 13,
-                ),
-              ),
+              Text(subtitle, style: TextStyle(color: Colors.grey.shade500, fontSize: 13)),
             ],
           ),
         ),
-        Switch(
-          value: value,
-          onChanged: onChanged,
-          activeColor: activeColor,
-        ),
+        Switch(value: value, onChanged: onChanged, activeColor: activeColor),
       ],
     );
   }
@@ -1282,11 +1072,7 @@ class _AiAppGeneratorPageState extends State<AiAppGeneratorPage> {
                     const SizedBox(width: 12),
                     Text(
                       context.l10n.creating,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 17,
-                        fontWeight: FontWeight.w600,
-                      ),
+                      style: const TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w600),
                     ),
                   ],
                 )
@@ -1297,11 +1083,7 @@ class _AiAppGeneratorPageState extends State<AiAppGeneratorPage> {
                     const SizedBox(width: 10),
                     Text(
                       context.l10n.createApp,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 17,
-                        fontWeight: FontWeight.w600,
-                      ),
+                      style: const TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w600),
                     ),
                   ],
                 ),

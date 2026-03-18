@@ -39,9 +39,11 @@ void main() {
     });
 
     test('returns true when data is non-empty', () {
-      final wal = _makeWal(data: [
-        [1, 2, 3]
-      ]);
+      final wal = _makeWal(
+        data: [
+          [1, 2, 3],
+        ],
+      );
       expect(player.canPlayOrShare(wal), isTrue);
     });
 
@@ -54,7 +56,7 @@ void main() {
       final wal = _makeWal(
         filePath: null,
         data: [
-          [0xFF]
+          [0xFF],
         ],
       );
       expect(player.canPlayOrShare(wal), isTrue);
@@ -64,7 +66,7 @@ void main() {
       final wal = _makeWal(
         filePath: '/audio.wav',
         data: [
-          [1]
+          [1],
         ],
         storage: WalStorage.sdcard,
       );

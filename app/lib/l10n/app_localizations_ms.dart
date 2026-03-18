@@ -25,7 +25,7 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get deleteConversationMessage =>
-      'Adakah anda pasti mahu memadam perbualan ini? Tindakan ini tidak boleh dibatalkan.';
+      'Ini juga akan memadam kenangan, tugasan dan fail audio yang berkaitan. Tindakan ini tidak boleh dibatalkan.';
 
   @override
   String get confirm => 'Sahkan';
@@ -1466,7 +1466,7 @@ class AppLocalizationsMs extends AppLocalizations {
   String get payYourSttProvider => 'Gunakan omi secara bebas. Anda hanya membayar penyedia STT anda secara langsung.';
 
   @override
-  String get freeMinutesMonth => '1,200 minit percuma/bulan disertakan. Tanpa had dengan ';
+  String get freeMinutesMonth => '4,800 minit percuma/bulan disertakan. Tanpa had dengan ';
 
   @override
   String get omiUnlimited => 'Omi Tanpa Had';
@@ -1715,12 +1715,7 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'PERANTI',
-      one: 'PERANTI',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'PERANTI', one: 'PERANTI');
     return '$count $_temp0 DIJUMPAI BERDEKATAN';
   }
 
@@ -2682,7 +2677,7 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get noTasksForToday =>
-      'Tiada tugasan untuk hari ini.\\nTanya Omi untuk lebih banyak tugasan atau cipta secara manual.';
+      'Tiada tugasan untuk hari ini.\nTanya Omi untuk lebih banyak tugasan atau cipta secara manual.';
 
   @override
   String get dailyScore => 'SKOR HARIAN';
@@ -4780,7 +4775,7 @@ class AppLocalizationsMs extends AppLocalizations {
   String get noSpecificDataAccessConfigured => 'Tiada akses data khusus dikonfigurasi.';
 
   @override
-  String get basicPlanDescription => '1,200 minit premium + tanpa had pada peranti';
+  String get basicPlanDescription => '4,800 minit premium + tanpa had pada peranti';
 
   @override
   String get minutes => 'minit';
@@ -6110,7 +6105,7 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get premiumMinutesInfo =>
-      '1,200 minit premium/bulan. Tab Pada-Peranti menawarkan transkripsi percuma tanpa had.';
+      '4,800 minit premium/bulan. Tab Pada-Peranti menawarkan transkripsi percuma tanpa had.';
 
   @override
   String get viewUsage => 'Lihat penggunaan';
@@ -6192,7 +6187,7 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get premiumMinutesMonth =>
-      '1,200 minit premium/bulan. Tab Pada Peranti menawarkan transkripsi percuma tanpa had. ';
+      '4,800 minit premium/bulan. Tab Pada Peranti menawarkan transkripsi percuma tanpa had. ';
 
   @override
   String get audioProcessedLocally =>
@@ -8497,4 +8492,90 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get showTasksOnHomepage => 'Tunjukkan Tugasan di laman utama';
+
+  @override
+  String get phoneCallsUnlimitedOnly => 'Panggilan Telefon melalui Omi';
+
+  @override
+  String get phoneCallsUpsellSubtitle =>
+      'Buat panggilan melalui Omi dan dapatkan transkripsi masa nyata, ringkasan automatik dan banyak lagi.';
+
+  @override
+  String get phoneCallsUpsellFeature1 => 'Transkripsi masa nyata setiap panggilan';
+
+  @override
+  String get phoneCallsUpsellFeature2 => 'Ringkasan panggilan automatik dan item tindakan';
+
+  @override
+  String get phoneCallsUpsellFeature3 => 'Penerima melihat nombor sebenar anda, bukan rawak';
+
+  @override
+  String get phoneCallsUpsellFeature4 => 'Panggilan anda kekal peribadi dan selamat';
+
+  @override
+  String get phoneCallsUpgradeButton => 'Naik taraf ke Unlimited';
+
+  @override
+  String get phoneCallsMaybeLater => 'Mungkin nanti';
+
+  @override
+  String get deleteSynced => 'Padam yang disegerakkan';
+
+  @override
+  String get deleteSyncedFiles => 'Padam rakaman disegerakkan';
+
+  @override
+  String get deleteSyncedFilesMessage => 'Rakaman ini telah disegerakkan ke telefon anda. Ini tidak boleh dibuat asal.';
+
+  @override
+  String get syncedFilesDeleted => 'Rakaman disegerakkan dipadam';
+
+  @override
+  String get deletePending => 'Padam yang belum selesai';
+
+  @override
+  String get deletePendingFiles => 'Padam rakaman tertangguh';
+
+  @override
+  String get deletePendingFilesWarning =>
+      'Rakaman ini BELUM disegerakkan ke telefon anda dan akan hilang secara kekal. Ini tidak boleh dibuat asal.';
+
+  @override
+  String get pendingFilesDeleted => 'Rakaman tertangguh dipadam';
+
+  @override
+  String get deleteAllFiles => 'Padam semua rakaman';
+
+  @override
+  String get deleteAll => 'Padam semua';
+
+  @override
+  String get deleteAllFilesWarning =>
+      'Ini akan memadam rakaman disegerakkan dan tertangguh. Rakaman tertangguh BELUM disegerakkan dan akan hilang secara kekal.';
+
+  @override
+  String get allFilesDeleted => 'Semua rakaman dipadam';
+
+  @override
+  String nFiles(int count) {
+    return '$count rakaman';
+  }
+
+  @override
+  String get manageStorage => 'Urus storan';
+
+  @override
+  String get safelyBackedUp => 'Disandarkan dengan selamat ke telefon anda';
+
+  @override
+  String get notYetSynced => 'Belum disegerakkan ke telefon anda';
+
+  @override
+  String get clearAll => 'Kosongkan semua';
+
+  @override
+  String get phoneKeypad => 'Pad kekunci';
+
+  @override
+  String get phoneHideKeypad => 'Sembunyikan pad kekunci';
 }

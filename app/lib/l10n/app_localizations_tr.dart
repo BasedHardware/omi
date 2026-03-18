@@ -24,7 +24,8 @@ class AppLocalizationsTr extends AppLocalizations {
   String get deleteConversationTitle => 'Konuşma Silinsin mi?';
 
   @override
-  String get deleteConversationMessage => 'Bu konuşmayı silmek istediğinizden emin misiniz? Bu işlem geri alınamaz.';
+  String get deleteConversationMessage =>
+      'Bu işlem ilişkili anıları, görevleri ve ses dosyalarını da silecektir. Bu işlem geri alınamaz.';
 
   @override
   String get confirm => 'Onayla';
@@ -1464,7 +1465,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String get payYourSttProvider => 'Omi\'yi özgürce kullanın. Sadece STT sağlayıcınıza doğrudan ödeme yaparsınız.';
 
   @override
-  String get freeMinutesMonth => 'Ayda 1.200 ücretsiz dakika dahildir. ';
+  String get freeMinutesMonth => 'Ayda 4.800 ücretsiz dakika dahildir. ';
 
   @override
   String get omiUnlimited => 'Omi Sınırsız';
@@ -1713,12 +1714,7 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'CİHAZ',
-      one: 'CİHAZ',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'CİHAZ', one: 'CİHAZ');
     return '$count $_temp0 YAKINLARDA BULUNDU';
   }
 
@@ -1731,7 +1727,7 @@ class AppLocalizationsTr extends AppLocalizations {
   }
 
   @override
-  String get dontShowAgain => 'Bir daha gösterme';
+  String get dontShowAgain => 'Tekrar gösterme';
 
   @override
   String get iUnderstand => 'Anlıyorum';
@@ -2678,7 +2674,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String get showAll => 'Hepsini göster →';
 
   @override
-  String get noTasksForToday => 'Bugün için görev yok.\\nDaha fazla görev için Omi\'ye sorun veya manuel oluşturun.';
+  String get noTasksForToday => 'Bugün için görev yok.\nDaha fazla görev için Omi\'ye sorun veya manuel oluşturun.';
 
   @override
   String get dailyScore => 'GÜNLÜK SKOR';
@@ -4772,7 +4768,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String get noSpecificDataAccessConfigured => 'Belirli veri erişimi yapılandırılmamış.';
 
   @override
-  String get basicPlanDescription => '1.200 premium dakika + cihazda sınırsız';
+  String get basicPlanDescription => '4.800 premium dakika + cihazda sınırsız';
 
   @override
   String get minutes => 'dakika';
@@ -6101,7 +6097,7 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get premiumMinutesInfo =>
-      'Ayda 1.200 premium dakika. Cihaz Üzerinde sekmesi sınırsız ücretsiz transkripsiyon sunar.';
+      'Ayda 4.800 premium dakika. Cihaz Üzerinde sekmesi sınırsız ücretsiz transkripsiyon sunar.';
 
   @override
   String get viewUsage => 'Kullanımı görüntüle';
@@ -6182,7 +6178,7 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get premiumMinutesMonth =>
-      'Ayda 1.200 premium dakika. Cihaz Üzerinde sekmesi sınırsız ücretsiz transkripsiyon sunar. ';
+      'Ayda 4.800 premium dakika. Cihaz Üzerinde sekmesi sınırsız ücretsiz transkripsiyon sunar. ';
 
   @override
   String get audioProcessedLocally =>
@@ -8485,4 +8481,90 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get showTasksOnHomepage => 'Ana sayfada görevleri göster';
+
+  @override
+  String get phoneCallsUnlimitedOnly => 'Omi ile Telefon Aramaları';
+
+  @override
+  String get phoneCallsUpsellSubtitle =>
+      'Omi üzerinden arama yapın ve gerçek zamanlı transkripsiyon, otomatik özetler ve daha fazlasını alın.';
+
+  @override
+  String get phoneCallsUpsellFeature1 => 'Her aramanın gerçek zamanlı transkripsiyonu';
+
+  @override
+  String get phoneCallsUpsellFeature2 => 'Otomatik arama özetleri ve görevler';
+
+  @override
+  String get phoneCallsUpsellFeature3 => 'Alıcılar rastgele değil, gerçek numaranızı görür';
+
+  @override
+  String get phoneCallsUpsellFeature4 => 'Aramalarınız gizli ve güvenli kalır';
+
+  @override
+  String get phoneCallsUpgradeButton => 'Sınırsız\'a yükselt';
+
+  @override
+  String get phoneCallsMaybeLater => 'Belki daha sonra';
+
+  @override
+  String get deleteSynced => 'Senkronize edilenleri sil';
+
+  @override
+  String get deleteSyncedFiles => 'Senkronize kayıtları sil';
+
+  @override
+  String get deleteSyncedFilesMessage => 'Bu kayıtlar zaten telefonunuzla senkronize edildi. Bu geri alınamaz.';
+
+  @override
+  String get syncedFilesDeleted => 'Senkronize kayıtlar silindi';
+
+  @override
+  String get deletePending => 'Bekleyenleri sil';
+
+  @override
+  String get deletePendingFiles => 'Bekleyen kayıtları sil';
+
+  @override
+  String get deletePendingFilesWarning =>
+      'Bu kayıtlar telefonunuzla senkronize EDİLMEDİ ve kalıcı olarak kaybolacak. Bu geri alınamaz.';
+
+  @override
+  String get pendingFilesDeleted => 'Bekleyen kayıtlar silindi';
+
+  @override
+  String get deleteAllFiles => 'Tüm kayıtları sil';
+
+  @override
+  String get deleteAll => 'Tümünü sil';
+
+  @override
+  String get deleteAllFilesWarning =>
+      'Bu, senkronize ve bekleyen kayıtları silecek. Bekleyen kayıtlar senkronize EDİLMEDİ ve kalıcı olarak kaybolacak.';
+
+  @override
+  String get allFilesDeleted => 'Tüm kayıtlar silindi';
+
+  @override
+  String nFiles(int count) {
+    return '$count kayıt';
+  }
+
+  @override
+  String get manageStorage => 'Depolamayı yönet';
+
+  @override
+  String get safelyBackedUp => 'Telefonunuza güvenli şekilde yedeklendi';
+
+  @override
+  String get notYetSynced => 'Henüz telefonunuzla senkronize edilmedi';
+
+  @override
+  String get clearAll => 'Tümünü temizle';
+
+  @override
+  String get phoneKeypad => 'Tuş takımı';
+
+  @override
+  String get phoneHideKeypad => 'Tuş takımını gizle';
 }

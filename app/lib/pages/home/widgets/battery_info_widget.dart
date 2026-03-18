@@ -31,59 +31,54 @@ class BatteryInfoWidget extends StatelessWidget {
             if (connectedDevice != null) {
               return GestureDetector(
                 onTap: () {
-                  routeToPage(
-                    context,
-                    const ConnectedDevice(),
-                  );
+                  routeToPage(context, const ConnectedDevice());
                   MixpanelManager().batteryIndicatorClicked();
                 },
                 child: Container(
-                    height: 36,
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF1F1F25),
-                      borderRadius: BorderRadius.circular(18),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.center,
-                      children: [
-                        // Add device icon
-                        SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: Image.asset(
-                            DeviceUtils.getDeviceImagePath(
-                              deviceType: connectedDevice.type,
-                              modelNumber: connectedDevice.modelNumber,
-                              deviceName: connectedDevice.name,
-                            ),
-                            fit: BoxFit.contain,
+                  height: 36,
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
+                  decoration: BoxDecoration(color: const Color(0xFF1F1F25), borderRadius: BorderRadius.circular(18)),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      // Add device icon
+                      SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: Image.asset(
+                          DeviceUtils.getDeviceImagePath(
+                            deviceType: connectedDevice.type,
+                            modelNumber: connectedDevice.modelNumber,
+                            deviceName: connectedDevice.name,
+                          ),
+                          fit: BoxFit.contain,
+                        ),
+                      ),
+                      // Only show battery indicator and percentage when battery level is valid (> 0)
+                      if (batteryLevel > 0) ...[
+                        const SizedBox(width: 6.0),
+                        Container(
+                          width: 8,
+                          height: 8,
+                          decoration: BoxDecoration(
+                            color: batteryLevel > 75
+                                ? const Color.fromARGB(255, 0, 255, 8)
+                                : batteryLevel > 20
+                                ? Colors.yellow.shade700
+                                : Colors.red,
+                            shape: BoxShape.circle,
                           ),
                         ),
-                        // Only show battery indicator and percentage when battery level is valid (> 0)
-                        if (batteryLevel > 0) ...[
-                          const SizedBox(width: 6.0),
-                          Container(
-                            width: 8,
-                            height: 8,
-                            decoration: BoxDecoration(
-                              color: batteryLevel > 75
-                                  ? const Color.fromARGB(255, 0, 255, 8)
-                                  : batteryLevel > 20
-                                      ? Colors.yellow.shade700
-                                      : Colors.red,
-                              shape: BoxShape.circle,
-                            ),
-                          ),
-                          const SizedBox(width: 6.0),
-                          Text(
-                            '$batteryLevel%',
-                            style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
-                          ),
-                        ],
+                        const SizedBox(width: 6.0),
+                        Text(
+                          '$batteryLevel%',
+                          style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
+                        ),
                       ],
-                    )),
+                    ],
+                  ),
+                ),
               );
             } else if (SharedPreferencesUtil().btDevice.id.isNotEmpty) {
               // Device is paired but disconnected
@@ -94,10 +89,7 @@ class BatteryInfoWidget extends StatelessWidget {
                 child: Container(
                   height: 36,
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF1F1F25),
-                    borderRadius: BorderRadius.circular(18),
-                  ),
+                  decoration: BoxDecoration(color: const Color(0xFF1F1F25), borderRadius: BorderRadius.circular(18)),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.center,
@@ -113,11 +105,7 @@ class BatteryInfoWidget extends StatelessWidget {
                               fit: BoxFit.contain,
                             ),
                             // Slash line across the image
-                            Positioned.fill(
-                              child: CustomPaint(
-                                painter: SlashLinePainter(),
-                              ),
-                            ),
+                            Positioned.fill(child: CustomPaint(painter: SlashLinePainter())),
                           ],
                         ),
                       ),
@@ -143,35 +131,28 @@ class BatteryInfoWidget extends StatelessWidget {
                 child: Container(
                   height: 36,
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF1F1F25),
-                    borderRadius: BorderRadius.circular(18),
-                  ),
+                  decoration: BoxDecoration(color: const Color(0xFF1F1F25), borderRadius: BorderRadius.circular(18)),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
-                      Image.asset(
-                        Assets.images.logoTransparent.path,
-                        width: 16,
-                        height: 16,
-                      ),
+                      Image.asset(Assets.images.logoTransparent.path, width: 16, height: 16),
                       isMemoriesPage ? const SizedBox(width: 6) : const SizedBox.shrink(),
                       isConnecting && isMemoriesPage
                           ? Text(
                               context.l10n.searching,
-                              style:
-                                  Theme.of(context).textTheme.bodyMedium!.copyWith(color: Colors.white, fontSize: 12),
+                              style: Theme.of(
+                                context,
+                              ).textTheme.bodyMedium!.copyWith(color: Colors.white, fontSize: 12),
                             )
                           : isMemoriesPage
-                              ? Text(
-                                  context.l10n.connectDevice,
-                                  style: Theme.of(context)
-                                      .textTheme
-                                      .bodyMedium!
-                                      .copyWith(color: Colors.white, fontSize: 12),
-                                )
-                              : const SizedBox.shrink(),
+                          ? Text(
+                              context.l10n.connectDevice,
+                              style: Theme.of(
+                                context,
+                              ).textTheme.bodyMedium!.copyWith(color: Colors.white, fontSize: 12),
+                            )
+                          : const SizedBox.shrink(),
                     ],
                   ),
                 ),

@@ -24,18 +24,12 @@ class _DeviceSelectionPageState extends State<DeviceSelectionPage> with SingleTi
   @override
   void initState() {
     super.initState();
-    _controller = AnimationController(
-      duration: const Duration(milliseconds: 600),
-      vsync: this,
-    )..repeat(reverse: true);
+    _controller = AnimationController(duration: const Duration(milliseconds: 600), vsync: this)..repeat(reverse: true);
 
     _arrowAnimation = Tween<double>(
       begin: 0,
       end: 4,
-    ).animate(CurvedAnimation(
-      parent: _controller,
-      curve: Curves.easeInOut,
-    ));
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeInOut));
 
     _initializeVideo();
   }
@@ -101,9 +95,7 @@ class _DeviceSelectionPageState extends State<DeviceSelectionPage> with SingleTi
                               child: VideoPlayer(_videoController),
                             ),
                           )
-                        : Container(
-                            color: Colors.white,
-                          ),
+                        : Container(color: Colors.white),
                   ),
                 ),
 
@@ -113,10 +105,7 @@ class _DeviceSelectionPageState extends State<DeviceSelectionPage> with SingleTi
                   padding: EdgeInsets.fromLTRB(32, 24, 32, 20),
                   decoration: const BoxDecoration(
                     color: Colors.white,
-                    borderRadius: BorderRadius.only(
-                      topLeft: Radius.circular(40),
-                      topRight: Radius.circular(40),
-                    ),
+                    borderRadius: BorderRadius.only(topLeft: Radius.circular(40), topRight: Radius.circular(40)),
                   ),
                   child: SafeArea(
                     top: false,
@@ -163,9 +152,7 @@ class _DeviceSelectionPageState extends State<DeviceSelectionPage> with SingleTi
                             style: ElevatedButton.styleFrom(
                               backgroundColor: Colors.black,
                               foregroundColor: Colors.white,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(28),
-                              ),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
                             ),
                             child: Row(
                               mainAxisAlignment: MainAxisAlignment.center,

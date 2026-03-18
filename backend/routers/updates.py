@@ -333,12 +333,22 @@ async def download_latest_desktop_release(
 ):
     """
     Redirect to the latest desktop release DMG installer.
-    Resolves from GitHub release assets filtered by channel.
+    Stable resolves from the latest stable-tagged release.
+    Beta always resolves from the newest desktop GitHub release, regardless of channel metadata.
     Defaults to stable channel (for macos.omi.me). Use channel=beta for QA.
     """
     desktop_releases = await _get_live_desktop_releases(platform)
     if not desktop_releases:
         raise HTTPException(status_code=404, detail=f"No live desktop releases found for platform: {platform}")
+
+    if channel == "beta":
+        # Beta downloads should always expose the newest GitHub desktop build,
+        # even if the release-channel promotion metadata is stale.
+        for entry in desktop_releases:
+            dmg_url = _get_dmg_download_url(entry["release"])
+            if dmg_url:
+                return RedirectResponse(url=dmg_url, status_code=302)
+        raise HTTPException(status_code=404, detail="No DMG installer found for latest beta release")
 
     # Find latest release matching the requested channel
     for entry in desktop_releases:

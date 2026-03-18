@@ -321,6 +321,7 @@ class AuthService {
 
         AnalyticsManager.shared.identify()
         AnalyticsManager.shared.signInCompleted(provider: "apple")
+        Task { await APIKeyService.shared.fetchKeys() }
 
         if !AnalyticsManager.isDevBuild {
             let sentryUser = User(userId: userId)
@@ -436,6 +437,7 @@ class AuthService {
             // (identify must happen before events for PostHog person profiles to work)
             AnalyticsManager.shared.identify()
             AnalyticsManager.shared.signInCompleted(provider: provider)
+            Task { await APIKeyService.shared.fetchKeys() }
 
             // Set Sentry user context for error tracking (skip in dev builds)
             if !AnalyticsManager.isDevBuild {
@@ -1010,6 +1012,7 @@ class AuthService {
 
         try Auth.auth().signOut()
         isSignedIn = false
+        APIKeyService.shared.clear()
         // Clear saved auth state and tokens
         saveAuthState(isSignedIn: false, email: nil, userId: nil)
         clearTokens()

@@ -25,7 +25,7 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get deleteConversationMessage =>
-      'Ești sigur că vrei să ștergi această conversație? Această acțiune nu poate fi anulată.';
+      'Aceasta va șterge și amintirile, sarcinile și fișierele audio asociate. Această acțiune nu poate fi anulată.';
 
   @override
   String get confirm => 'Confirmă';
@@ -1468,7 +1468,7 @@ class AppLocalizationsRo extends AppLocalizations {
   String get payYourSttProvider => 'Folosește Omi liber. Plătești doar furnizorul STT direct.';
 
   @override
-  String get freeMinutesMonth => '1.200 de minute gratuite/lună incluse. Nelimitat cu ';
+  String get freeMinutesMonth => '4.800 de minute gratuite/lună incluse. Nelimitat cu ';
 
   @override
   String get omiUnlimited => 'Omi Nelimitat';
@@ -1718,12 +1718,7 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'DISPOZITIVE',
-      one: 'DISPOZITIV',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'DISPOZITIVE', one: 'DISPOZITIV');
     return '$count $_temp0 GĂSIT(E) ÎN APROPIERE';
   }
 
@@ -2687,7 +2682,7 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get noTasksForToday =>
-      'Nicio sarcină pentru astăzi.\\nÎntrebați Omi pentru mai multe sarcini sau creați manual.';
+      'Nicio sarcină pentru astăzi.\nÎntrebați Omi pentru mai multe sarcini sau creați manual.';
 
   @override
   String get dailyScore => 'SCOR ZILNIC';
@@ -4787,7 +4782,7 @@ class AppLocalizationsRo extends AppLocalizations {
   String get noSpecificDataAccessConfigured => 'Niciun acces specific la date configurat.';
 
   @override
-  String get basicPlanDescription => '1.200 minute premium + nelimitat pe dispozitiv';
+  String get basicPlanDescription => '4.800 minute premium + nelimitat pe dispozitiv';
 
   @override
   String get minutes => 'minute';
@@ -6119,7 +6114,7 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get premiumMinutesInfo =>
-      '1.200 minute premium/lună. Fila Pe dispozitiv oferă transcriere gratuită nelimitată.';
+      '4.800 minute premium/lună. Fila Pe dispozitiv oferă transcriere gratuită nelimitată.';
 
   @override
   String get viewUsage => 'Vizualizați utilizarea';
@@ -6202,7 +6197,7 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get premiumMinutesMonth =>
-      '1.200 minute premium/lună. Fila Pe dispozitiv oferă transcriere gratuită nelimitată. ';
+      '4.800 minute premium/lună. Fila Pe dispozitiv oferă transcriere gratuită nelimitată. ';
 
   @override
   String get audioProcessedLocally =>
@@ -8515,4 +8510,91 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get showTasksOnHomepage => 'Afișați sarcinile pe pagina principală';
+
+  @override
+  String get phoneCallsUnlimitedOnly => 'Apeluri telefonice prin Omi';
+
+  @override
+  String get phoneCallsUpsellSubtitle =>
+      'Efectuați apeluri prin Omi și obțineți transcriere în timp real, rezumate automate și multe altele.';
+
+  @override
+  String get phoneCallsUpsellFeature1 => 'Transcriere în timp real a fiecărui apel';
+
+  @override
+  String get phoneCallsUpsellFeature2 => 'Rezumate automate ale apelurilor și sarcini';
+
+  @override
+  String get phoneCallsUpsellFeature3 => 'Destinatarii văd numărul dvs. real, nu unul aleatoriu';
+
+  @override
+  String get phoneCallsUpsellFeature4 => 'Apelurile dvs. rămân private și sigure';
+
+  @override
+  String get phoneCallsUpgradeButton => 'Treceți la Nelimitat';
+
+  @override
+  String get phoneCallsMaybeLater => 'Poate mai târziu';
+
+  @override
+  String get deleteSynced => 'Șterge sincronizate';
+
+  @override
+  String get deleteSyncedFiles => 'Șterge înregistrările sincronizate';
+
+  @override
+  String get deleteSyncedFilesMessage =>
+      'Aceste înregistrări sunt deja sincronizate cu telefonul dvs. Aceasta nu poate fi anulată.';
+
+  @override
+  String get syncedFilesDeleted => 'Înregistrările sincronizate au fost șterse';
+
+  @override
+  String get deletePending => 'Șterge în așteptare';
+
+  @override
+  String get deletePendingFiles => 'Șterge înregistrările în așteptare';
+
+  @override
+  String get deletePendingFilesWarning =>
+      'Aceste înregistrări NU sunt sincronizate cu telefonul dvs. și vor fi pierdute permanent. Aceasta nu poate fi anulată.';
+
+  @override
+  String get pendingFilesDeleted => 'Înregistrările în așteptare au fost șterse';
+
+  @override
+  String get deleteAllFiles => 'Șterge toate înregistrările';
+
+  @override
+  String get deleteAll => 'Șterge tot';
+
+  @override
+  String get deleteAllFilesWarning =>
+      'Aceasta va șterge înregistrările sincronizate și în așteptare. Înregistrările în așteptare NU sunt sincronizate și vor fi pierdute permanent.';
+
+  @override
+  String get allFilesDeleted => 'Toate înregistrările au fost șterse';
+
+  @override
+  String nFiles(int count) {
+    return '$count înregistrări';
+  }
+
+  @override
+  String get manageStorage => 'Gestionare stocare';
+
+  @override
+  String get safelyBackedUp => 'Salvat în siguranță pe telefonul dvs.';
+
+  @override
+  String get notYetSynced => 'Nu a fost încă sincronizat cu telefonul dvs.';
+
+  @override
+  String get clearAll => 'Șterge tot';
+
+  @override
+  String get phoneKeypad => 'Tastatură';
+
+  @override
+  String get phoneHideKeypad => 'Ascunde tastatura';
 }

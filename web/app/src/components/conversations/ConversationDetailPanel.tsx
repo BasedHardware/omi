@@ -159,7 +159,6 @@ function SummaryTab({
   geolocation,
 }: SummaryTabProps) {
   const hasAppSummaries = appResults && appResults.length > 0;
-  const hasSuggestedApps = suggestedAppIds && suggestedAppIds.length > 0;
   const hasLocation = geolocation && geolocation.latitude && geolocation.longitude;
 
   // State for expandable text
@@ -276,44 +275,40 @@ function SummaryTab({
       )}
 
       {/* App Summaries Section */}
-      {(hasAppSummaries || hasSuggestedApps) && (
-        <div className="pt-4 border-t border-bg-tertiary">
-          {/* Section Header with Generate Button */}
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-2">
-              <Sparkles className="w-4 h-4 text-purple-primary" />
-              <h3 className="text-sm font-medium text-text-primary">Summary Templates</h3>
-            </div>
-            {hasSuggestedApps && (
-              <GenerateSummaryButton
-                conversationId={conversationId}
-                suggestedAppIds={suggestedAppIds}
-                existingAppResults={appResults}
-                onGenerateComplete={onGenerateComplete}
-              />
-            )}
+      <div className="pt-4 border-t border-bg-tertiary">
+        {/* Section Header with Generate Button */}
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <Sparkles className="w-4 h-4 text-purple-primary" />
+            <h3 className="text-sm font-medium text-text-primary">Summary Templates</h3>
           </div>
-
-          {/* App Summary Cards */}
-          {hasAppSummaries && (
-            <div className="space-y-3">
-              {appResults.map((appResponse, index) => (
-                <AppSummaryCard
-                  key={`${appResponse.app_id}-${index}`}
-                  appResponse={appResponse}
-                />
-              ))}
-            </div>
-          )}
-
-          {/* Empty state for templates */}
-          {!hasAppSummaries && hasSuggestedApps && (
-            <p className="text-sm text-text-tertiary mt-2">
-              No summaries yet. Click the button above to generate one or create a custom template.
-            </p>
-          )}
+          <GenerateSummaryButton
+            conversationId={conversationId}
+            suggestedAppIds={suggestedAppIds}
+            existingAppResults={appResults}
+            onGenerateComplete={onGenerateComplete}
+          />
         </div>
-      )}
+
+        {/* App Summary Cards */}
+        {hasAppSummaries && (
+          <div className="space-y-3">
+            {appResults.map((appResponse, index) => (
+              <AppSummaryCard
+                key={`${appResponse.app_id}-${index}`}
+                appResponse={appResponse}
+              />
+            ))}
+          </div>
+        )}
+
+        {/* Empty state for templates */}
+        {!hasAppSummaries && (
+          <p className="text-sm text-text-tertiary mt-2">
+            No summaries yet. Click Templates above to generate one or create a custom template.
+          </p>
+        )}
+      </div>
     </div>
   );
 }

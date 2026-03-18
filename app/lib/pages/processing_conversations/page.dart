@@ -11,10 +11,7 @@ import 'package:omi/utils/l10n_extensions.dart';
 class ProcessingConversationPage extends StatefulWidget {
   final ServerConversation conversation;
 
-  const ProcessingConversationPage({
-    super.key,
-    required this.conversation,
-  });
+  const ProcessingConversationPage({super.key, required this.conversation});
 
   @override
   State<ProcessingConversationPage> createState() => _ProcessingConversationPageState();
@@ -33,123 +30,129 @@ class _ProcessingConversationPageState extends State<ProcessingConversationPage>
 
   void _pushNewConversation(BuildContext context, conversation) async {
     WidgetsBinding.instance.addPostFrameCallback((_) async {
-      await Navigator.of(context).pushReplacement(MaterialPageRoute(
-        builder: (c) => ConversationDetailPage(
-          conversation: conversation,
-        ),
-      ));
+      await Navigator.of(
+        context,
+      ).pushReplacement(MaterialPageRoute(builder: (c) => ConversationDetailPage(conversation: conversation)));
     });
   }
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<ConversationProvider>(builder: (context, provider, child) {
-      // Track memory // FIXME
-      // if (widget.memory.status == ServerProcessingMemoryStatus.done &&
-      //     provider.memories.firstWhereOrNull((e) => e.id == widget.memory.memoryId) != null) {
-      //   _pushNewMemory(context, provider.memories.firstWhereOrNull((e) => e.id == widget.memory.memoryId));
-      // }
+    return Consumer<ConversationProvider>(
+      builder: (context, provider, child) {
+        // Track memory // FIXME
+        // if (widget.memory.status == ServerProcessingMemoryStatus.done &&
+        //     provider.memories.firstWhereOrNull((e) => e.id == widget.memory.memoryId) != null) {
+        //   _pushNewMemory(context, provider.memories.firstWhereOrNull((e) => e.id == widget.memory.memoryId));
+        // }
 
-      // Conversation source
-      var convoSource = widget.conversation.source;
-      bool hasPhotos = (widget.conversation.photos ?? []).isNotEmpty;
+        // Conversation source
+        var convoSource = widget.conversation.source;
+        bool hasPhotos = (widget.conversation.photos ?? []).isNotEmpty;
 
-      return PopScope(
-        canPop: true,
-        child: Scaffold(
-          key: scaffoldKey,
-          backgroundColor: Theme.of(context).colorScheme.primary,
-          appBar: AppBar(
-            automaticallyImplyLeading: false,
+        return PopScope(
+          canPop: true,
+          child: Scaffold(
+            key: scaffoldKey,
             backgroundColor: Theme.of(context).colorScheme.primary,
-            title: Row(
-              mainAxisSize: MainAxisSize.max,
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              crossAxisAlignment: CrossAxisAlignment.center,
+            appBar: AppBar(
+              automaticallyImplyLeading: false,
+              backgroundColor: Theme.of(context).colorScheme.primary,
+              title: Row(
+                mainAxisSize: MainAxisSize.max,
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  IconButton(
+                    onPressed: () {
+                      Navigator.pop(context);
+                      return;
+                    },
+                    icon: const Icon(Icons.arrow_back_rounded, size: 24.0),
+                  ),
+                  const SizedBox(width: 4),
+                  Text(hasPhotos ? "📸" : "🎙️"),
+                  const SizedBox(width: 4),
+                  Expanded(child: Text(context.l10n.inProgress)),
+                ],
+              ),
+            ),
+            body: Column(
               children: [
-                IconButton(
-                  onPressed: () {
-                    Navigator.pop(context);
-                    return;
-                  },
-                  icon: const Icon(Icons.arrow_back_rounded, size: 24.0),
+                TabBar(
+                  indicatorSize: TabBarIndicatorSize.label,
+                  isScrollable: false,
+                  padding: EdgeInsets.zero,
+                  indicatorPadding: EdgeInsets.zero,
+                  controller: _controller,
+                  labelStyle: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 18),
+                  tabs: [
+                    Tab(
+                      text: convoSource == ConversationSource.openglass
+                          ? context.l10n.photos
+                          : convoSource == ConversationSource.screenpipe
+                          ? context.l10n.rawData
+                          : context.l10n.content,
+                    ),
+                    Tab(text: context.l10n.summary),
+                  ],
+                  indicator: BoxDecoration(color: Colors.transparent, borderRadius: BorderRadius.circular(16)),
                 ),
-                const SizedBox(width: 4),
-                Text(hasPhotos ? "📸" : "🎙️"),
-                const SizedBox(width: 4),
-                Expanded(child: Text(context.l10n.inProgress)),
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: TabBarView(
+                      controller: _controller,
+                      physics: const NeverScrollableScrollPhysics(),
+                      children: [
+                        ListView(
+                          shrinkWrap: true,
+                          children: [
+                            if (widget.conversation.transcriptSegments.isNotEmpty ||
+                                widget.conversation.photos.isNotEmpty)
+                              getTranscriptWidget(
+                                false,
+                                widget.conversation.transcriptSegments,
+                                widget.conversation.photos,
+                                null,
+                              ),
+                            if (!hasPhotos && widget.conversation.transcriptSegments.isEmpty)
+                              Column(
+                                children: [
+                                  const SizedBox(height: 80),
+                                  Center(child: Text(context.l10n.noContentToDisplay)),
+                                ],
+                              ),
+                            const SizedBox(height: 32),
+                          ],
+                        ),
+                        ListView(
+                          shrinkWrap: true,
+                          children: [
+                            const SizedBox(height: 80),
+                            Center(
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                                child: Text(
+                                  widget.conversation.transcriptSegments.isEmpty
+                                      ? context.l10n.noSummary
+                                      : context.l10n.statusProcessing,
+                                  textAlign: TextAlign.center,
+                                  style: const TextStyle(fontSize: 16),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
               ],
             ),
           ),
-          body: Column(
-            children: [
-              TabBar(
-                indicatorSize: TabBarIndicatorSize.label,
-                isScrollable: false,
-                padding: EdgeInsets.zero,
-                indicatorPadding: EdgeInsets.zero,
-                controller: _controller,
-                labelStyle: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 18),
-                tabs: [
-                  Tab(
-                    text: convoSource == ConversationSource.openglass
-                        ? context.l10n.photos
-                        : convoSource == ConversationSource.screenpipe
-                            ? context.l10n.rawData
-                            : context.l10n.content,
-                  ),
-                  Tab(text: context.l10n.summary)
-                ],
-                indicator: BoxDecoration(color: Colors.transparent, borderRadius: BorderRadius.circular(16)),
-              ),
-              Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: TabBarView(
-                    controller: _controller,
-                    physics: const NeverScrollableScrollPhysics(),
-                    children: [
-                      ListView(
-                        shrinkWrap: true,
-                        children: [
-                          if (widget.conversation.transcriptSegments.isNotEmpty ||
-                              widget.conversation.photos.isNotEmpty)
-                            getTranscriptWidget(
-                                false, widget.conversation.transcriptSegments, widget.conversation.photos, null),
-                          if (!hasPhotos && widget.conversation.transcriptSegments.isEmpty)
-                            Column(
-                              children: [
-                                const SizedBox(height: 80),
-                                Center(child: Text(context.l10n.noContentToDisplay)),
-                              ],
-                            ),
-                          const SizedBox(height: 32),
-                        ],
-                      ),
-                      ListView(
-                        shrinkWrap: true,
-                        children: [
-                          const SizedBox(height: 80),
-                          Center(
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                              child: Text(
-                                widget.conversation.transcriptSegments.isEmpty ? context.l10n.noSummary : context.l10n.statusProcessing,
-                                textAlign: TextAlign.center,
-                                style: const TextStyle(fontSize: 16),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      );
-    });
+        );
+      },
+    );
   }
 }

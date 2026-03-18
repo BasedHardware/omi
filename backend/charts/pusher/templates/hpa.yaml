@@ -33,4 +33,14 @@ spec:
           type: Utilization
           averageUtilization: {{ .Values.autoscaling.targetMemoryUtilizationPercentage }}
     {{- end }}
+    {{- if .Values.autoscaling.activeConnectionsPerPod }}
+    - type: External
+      external:
+        metric:
+          name: pusher_active_ws_connections_per_pod
+        target:
+          type: Value
+          value: {{ .Values.autoscaling.activeConnectionsPerPod }}
+    {{- end }}
+
 {{- end }}

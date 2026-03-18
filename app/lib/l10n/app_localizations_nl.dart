@@ -25,7 +25,7 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get deleteConversationMessage =>
-      'Weet je zeker dat je dit gesprek wilt verwijderen? Deze actie kan niet ongedaan worden gemaakt.';
+      'Dit zal ook de bijbehorende herinneringen, taken en audiobestanden verwijderen. Deze actie kan niet ongedaan worden gemaakt.';
 
   @override
   String get confirm => 'Bevestigen';
@@ -1464,7 +1464,7 @@ class AppLocalizationsNl extends AppLocalizations {
   String get payYourSttProvider => 'Gebruik Omi vrij. Je betaalt alleen je STT-provider rechtstreeks.';
 
   @override
-  String get freeMinutesMonth => '1.200 gratis minuten/maand inbegrepen. Onbeperkt met ';
+  String get freeMinutesMonth => '4.800 gratis minuten/maand inbegrepen. Onbeperkt met ';
 
   @override
   String get omiUnlimited => 'Omi Onbeperkt';
@@ -1713,12 +1713,7 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'APPARATEN',
-      one: 'APPARAAT',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'APPARATEN', one: 'APPARAAT');
     return '$count $_temp0 GEVONDEN IN DE BUURT';
   }
 
@@ -2680,7 +2675,7 @@ class AppLocalizationsNl extends AppLocalizations {
   String get showAll => 'Alles tonen →';
 
   @override
-  String get noTasksForToday => 'Geen taken voor vandaag.\\nVraag Omi om meer taken of maak ze handmatig aan.';
+  String get noTasksForToday => 'Geen taken voor vandaag.\nVraag Omi om meer taken of maak ze handmatig aan.';
 
   @override
   String get dailyScore => 'DAGELIJKSE SCORE';
@@ -4777,7 +4772,7 @@ class AppLocalizationsNl extends AppLocalizations {
   String get noSpecificDataAccessConfigured => 'Geen specifieke gegevenstoegang geconfigureerd.';
 
   @override
-  String get basicPlanDescription => '1.200 premium minuten + onbeperkt op apparaat';
+  String get basicPlanDescription => '4.800 premium minuten + onbeperkt op apparaat';
 
   @override
   String get minutes => 'minuten';
@@ -6109,7 +6104,7 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get premiumMinutesInfo =>
-      '1.200 premium minuten/maand. Het On-Device tabblad biedt onbeperkte gratis transcriptie.';
+      '4.800 premium minuten/maand. Het On-Device tabblad biedt onbeperkte gratis transcriptie.';
 
   @override
   String get viewUsage => 'Bekijk gebruik';
@@ -6191,7 +6186,7 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get premiumMinutesMonth =>
-      '1.200 premium minuten/maand. Het tabblad On-device biedt onbeperkte gratis transcriptie. ';
+      '4.800 premium minuten/maand. Het tabblad On-device biedt onbeperkte gratis transcriptie. ';
 
   @override
   String get audioProcessedLocally =>
@@ -8500,4 +8495,91 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get showTasksOnHomepage => 'Taken weergeven op startpagina';
+
+  @override
+  String get phoneCallsUnlimitedOnly => 'Telefoongesprekken via Omi';
+
+  @override
+  String get phoneCallsUpsellSubtitle =>
+      'Bel via Omi en krijg realtime transcriptie, automatische samenvattingen en meer.';
+
+  @override
+  String get phoneCallsUpsellFeature1 => 'Realtime transcriptie van elk gesprek';
+
+  @override
+  String get phoneCallsUpsellFeature2 => 'Automatische gesprekssamenvattingen en actiepunten';
+
+  @override
+  String get phoneCallsUpsellFeature3 => 'Ontvangers zien je echte nummer, niet een willekeurig';
+
+  @override
+  String get phoneCallsUpsellFeature4 => 'Je gesprekken blijven privé en veilig';
+
+  @override
+  String get phoneCallsUpgradeButton => 'Upgraden naar Onbeperkt';
+
+  @override
+  String get phoneCallsMaybeLater => 'Misschien later';
+
+  @override
+  String get deleteSynced => 'Gesynchroniseerde verwijderen';
+
+  @override
+  String get deleteSyncedFiles => 'Gesynchroniseerde opnames verwijderen';
+
+  @override
+  String get deleteSyncedFilesMessage =>
+      'Deze opnames zijn al gesynchroniseerd met uw telefoon. Dit kan niet ongedaan worden gemaakt.';
+
+  @override
+  String get syncedFilesDeleted => 'Gesynchroniseerde opnames verwijderd';
+
+  @override
+  String get deletePending => 'Wachtende verwijderen';
+
+  @override
+  String get deletePendingFiles => 'Wachtende opnames verwijderen';
+
+  @override
+  String get deletePendingFilesWarning =>
+      'Deze opnames zijn NIET gesynchroniseerd met uw telefoon en gaan permanent verloren. Dit kan niet ongedaan worden gemaakt.';
+
+  @override
+  String get pendingFilesDeleted => 'Wachtende opnames verwijderd';
+
+  @override
+  String get deleteAllFiles => 'Alle opnames verwijderen';
+
+  @override
+  String get deleteAll => 'Alles verwijderen';
+
+  @override
+  String get deleteAllFilesWarning =>
+      'Dit verwijdert gesynchroniseerde en wachtende opnames. Wachtende opnames zijn NIET gesynchroniseerd en gaan permanent verloren.';
+
+  @override
+  String get allFilesDeleted => 'Alle opnames verwijderd';
+
+  @override
+  String nFiles(int count) {
+    return '$count opnames';
+  }
+
+  @override
+  String get manageStorage => 'Opslag beheren';
+
+  @override
+  String get safelyBackedUp => 'Veilig opgeslagen op uw telefoon';
+
+  @override
+  String get notYetSynced => 'Nog niet gesynchroniseerd met uw telefoon';
+
+  @override
+  String get clearAll => 'Alles wissen';
+
+  @override
+  String get phoneKeypad => 'Toetsenbord';
+
+  @override
+  String get phoneHideKeypad => 'Toetsenbord verbergen';
 }

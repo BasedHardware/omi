@@ -158,6 +158,26 @@ class DashboardViewModel: ObservableObject {
         }
     }
 
+    func updateGoal(_ goal: Goal, title: String, currentValue: Double, targetValue: Double) async {
+        log("Goals: Updating goal '\(goal.title)' -> title='\(title)', current=\(currentValue), target=\(targetValue)")
+
+        do {
+            let updated = try await APIClient.shared.updateGoal(
+                goalId: goal.id,
+                title: title,
+                currentValue: currentValue,
+                targetValue: targetValue
+            )
+
+            _ = try? await GoalStorage.shared.syncServerGoal(updated)
+            goals = try await GoalStorage.shared.getLocalGoals()
+            log("Goals: Updated goal '\(updated.title)' confirmed by API")
+        } catch {
+            logError("Failed to update goal", error: error)
+            goals = (try? await GoalStorage.shared.getLocalGoals()) ?? goals
+        }
+    }
+
     func deleteGoal(_ goal: Goal) async {
         do {
             // Soft-delete locally first for instant UI update
@@ -204,9 +224,18 @@ struct DashboardPage: View {
     private var dashboardWidgets: some View {
         VStack(alignment: .leading, spacing: 24) {
             Grid(horizontalSpacing: 16, verticalSpacing: 16) {
-                // Top row: Score + Goals
+                // Top row: Tasks + Goals
                 GridRow {
-                    ScoreWidget(scoreResponse: viewModel.scoreResponse)
+                    TasksWidget(
+                        overdueTasks: viewModel.overdueTasks,
+                        todaysTasks: viewModel.todaysTasks,
+                        recentTasks: viewModel.recentTasks,
+                        onToggleCompletion: { task in
+                            Task {
+                                await viewModel.toggleTaskCompletion(task)
+                            }
+                        }
+                    )
                         .frame(minWidth: 0, maxWidth: .infinity)
 
                     GoalsWidget(
@@ -221,6 +250,16 @@ struct DashboardPage: View {
                                 )
                             }
                         },
+                        onUpdateGoal: { goal, title, current, target in
+                            Task {
+                                await viewModel.updateGoal(
+                                    goal,
+                                    title: title,
+                                    currentValue: current,
+                                    targetValue: target
+                                )
+                            }
+                        },
                         onUpdateProgress: { goal, value in
                             Task {
                                 await viewModel.updateGoalProgress(goal, currentValue: value)
@@ -232,22 +271,6 @@ struct DashboardPage: View {
                             }
                         }
                     )
-                    .frame(minWidth: 0, maxWidth: .infinity)
-                }
-
-                // Bottom row: Tasks (full width)
-                GridRow {
-                    TasksWidget(
-                        overdueTasks: viewModel.overdueTasks,
-                        todaysTasks: viewModel.todaysTasks,
-                        recentTasks: viewModel.recentTasks,
-                        onToggleCompletion: { task in
-                            Task {
-                                await viewModel.toggleTaskCompletion(task)
-                            }
-                        }
-                    )
-                    .gridCellColumns(2)
                     .frame(minWidth: 0, maxWidth: .infinity)
                 }
             }

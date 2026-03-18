@@ -24,7 +24,8 @@ class AppLocalizationsFi extends AppLocalizations {
   String get deleteConversationTitle => 'Poista keskustelu?';
 
   @override
-  String get deleteConversationMessage => 'Haluatko varmasti poistaa tämän keskustelun? Tätä toimintoa ei voi perua.';
+  String get deleteConversationMessage =>
+      'Tämä poistaa myös liittyvät muistot, tehtävät ja äänitiedostot. Tätä toimintoa ei voi kumota.';
 
   @override
   String get confirm => 'Vahvista';
@@ -1458,7 +1459,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get payYourSttProvider => 'Käytä omia vapaasti. Maksat vain STT-palveluntarjoajallesi suoraan.';
 
   @override
-  String get freeMinutesMonth => '1 200 ilmaisminuuttia kuukaudessa mukana. Rajoittamaton ';
+  String get freeMinutesMonth => '4 800 ilmaisminuuttia kuukaudessa mukana. Rajoittamaton ';
 
   @override
   String get omiUnlimited => 'Omi Unlimited';
@@ -1707,12 +1708,7 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'LAITETTA',
-      one: 'LAITE',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'LAITETTA', one: 'LAITE');
     return '$count $_temp0 LÖYDETTY LÄHISTÖLTÄ';
   }
 
@@ -2670,7 +2666,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get showAll => 'Näytä kaikki →';
 
   @override
-  String get noTasksForToday => 'Ei tehtäviä tänään.\\nKysy Omilta lisää tehtäviä tai luo ne manuaalisesti.';
+  String get noTasksForToday => 'Ei tehtäviä tänään.\nKysy Omilta lisää tehtäviä tai luo ne manuaalisesti.';
 
   @override
   String get dailyScore => 'PÄIVITTÄINEN PISTEMÄÄRÄ';
@@ -4762,7 +4758,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get noSpecificDataAccessConfigured => 'Ei määritettyä tietojen käyttöoikeutta.';
 
   @override
-  String get basicPlanDescription => '1 200 premium-minuuttia + rajoittamaton laitteella';
+  String get basicPlanDescription => '4 800 premium-minuuttia + rajoittamaton laitteella';
 
   @override
   String get minutes => 'minuuttia';
@@ -6090,7 +6086,7 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get premiumMinutesInfo =>
-      '1 200 premium-minuuttia/kk. Laitteella-välilehti tarjoaa rajattoman ilmaisen puheentunnistuksen.';
+      '4 800 premium-minuuttia/kk. Laitteella-välilehti tarjoaa rajattoman ilmaisen puheentunnistuksen.';
 
   @override
   String get viewUsage => 'Näytä käyttö';
@@ -6172,7 +6168,7 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get premiumMinutesMonth =>
-      '1 200 premium-minuuttia/kk. Laitteella-välilehti tarjoaa rajoittamattoman ilmaisen transkription. ';
+      '4 800 premium-minuuttia/kk. Laitteella-välilehti tarjoaa rajoittamattoman ilmaisen transkription. ';
 
   @override
   String get audioProcessedLocally =>
@@ -8471,4 +8467,90 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get showTasksOnHomepage => 'Näytä tehtävät etusivulla';
+
+  @override
+  String get phoneCallsUnlimitedOnly => 'Puhelut Omin kautta';
+
+  @override
+  String get phoneCallsUpsellSubtitle =>
+      'Soita puheluita Omin kautta ja saa reaaliaikainen litterointi, automaattiset yhteenvedot ja paljon muuta.';
+
+  @override
+  String get phoneCallsUpsellFeature1 => 'Jokaisen puhelun reaaliaikainen litterointi';
+
+  @override
+  String get phoneCallsUpsellFeature2 => 'Automaattiset puheluyhteenvedot ja toimenpiteet';
+
+  @override
+  String get phoneCallsUpsellFeature3 => 'Vastaanottajat näkevät oikean numerosi, eivät satunnaista';
+
+  @override
+  String get phoneCallsUpsellFeature4 => 'Puhelusi pysyvät yksityisinä ja turvallisina';
+
+  @override
+  String get phoneCallsUpgradeButton => 'Päivitä Rajattomaan';
+
+  @override
+  String get phoneCallsMaybeLater => 'Ehkä myöhemmin';
+
+  @override
+  String get deleteSynced => 'Poista synkronoidut';
+
+  @override
+  String get deleteSyncedFiles => 'Poista synkronoidut tallenteet';
+
+  @override
+  String get deleteSyncedFilesMessage => 'Nämä tallenteet on jo synkronoitu puhelimeesi. Tätä ei voi kumota.';
+
+  @override
+  String get syncedFilesDeleted => 'Synkronoidut tallenteet poistettu';
+
+  @override
+  String get deletePending => 'Poista odottavat';
+
+  @override
+  String get deletePendingFiles => 'Poista odottavat tallenteet';
+
+  @override
+  String get deletePendingFilesWarning =>
+      'Näitä tallenteita EI ole synkronoitu puhelimeesi ja ne menetetään pysyvästi. Tätä ei voi kumota.';
+
+  @override
+  String get pendingFilesDeleted => 'Odottavat tallenteet poistettu';
+
+  @override
+  String get deleteAllFiles => 'Poista kaikki tallenteet';
+
+  @override
+  String get deleteAll => 'Poista kaikki';
+
+  @override
+  String get deleteAllFilesWarning =>
+      'Tämä poistaa synkronoidut ja odottavat tallenteet. Odottavia tallenteita EI ole synkronoitu ja ne menetetään pysyvästi.';
+
+  @override
+  String get allFilesDeleted => 'Kaikki tallenteet poistettu';
+
+  @override
+  String nFiles(int count) {
+    return '$count tallennetta';
+  }
+
+  @override
+  String get manageStorage => 'Hallitse tallennustilaa';
+
+  @override
+  String get safelyBackedUp => 'Turvallisesti varmuuskopioitu puhelimeesi';
+
+  @override
+  String get notYetSynced => 'Ei vielä synkronoitu puhelimeesi';
+
+  @override
+  String get clearAll => 'Tyhjennä kaikki';
+
+  @override
+  String get phoneKeypad => 'Näppäimistö';
+
+  @override
+  String get phoneHideKeypad => 'Piilota näppäimistö';
 }

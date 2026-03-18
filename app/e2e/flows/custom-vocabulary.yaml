@@ -1,0 +1,96 @@
+# E2E Flow: Custom Vocabulary — add and manage transcription vocabulary words
+# Tests: Navigate to custom vocabulary page, add words, verify chips, delete words
+# Core feature: improving transcription accuracy with user-defined vocabulary
+
+version: 2
+name: custom-vocabulary
+description: Custom vocabulary flow — navigate to Settings > Profile > Custom Vocabulary, add comma-separated words, verify word chips appear, delete individual words, verify transcription settings update
+app: com.friend.ios.dev
+evidence:
+  video: true
+covers:
+  - app/lib/pages/settings/custom_vocabulary_page.dart
+  - app/lib/pages/settings/profile.dart
+  - app/lib/providers/user_provider.dart
+preconditions:
+  - auth_ready  # User signed in and onboarding completed. App shows home screen.
+
+steps:
+  - id: S1
+    name: Open settings
+    do: "Tap the settings icon (gear, top-right corner) on the home screen to open the Settings page."
+    verify: true
+    expect:
+      - kind: interactive_count
+        min: 4
+    evidence:
+      - screenshot: step-S1.webp
+    note: "Settings icon is in the home screen app bar, top-right. Opens the settings drawer/page with profile, notifications, plan & usage, etc."
+
+  - id: S2
+    name: Tap Profile
+    do: "Tap 'Profile' in the settings menu to open the Profile page. Verify the Profile page shows menu items including: Language, Custom Vocabulary, Speech Profile, Identifying Others, Data Privacy."
+    verify: true
+    expect:
+      - kind: interactive_count
+        min: 4
+    evidence:
+      - screenshot: step-S2.webp
+    note: "Profile page in profile.dart. Custom Vocabulary is at line 215-221, has a book icon (FontAwesomeIcons.book). May need to scroll if profile page is long."
+
+  - id: S3
+    name: Tap Custom Vocabulary
+    do: "Tap 'Custom Vocabulary' (book icon) in the Profile menu. The Custom Vocabulary page opens showing: 'Add Words' card header with word count badge, subtitle 'Names, terms, or uncommon words', text input field with placeholder 'Omi, Callie, OpenAI', add button (+), and any existing vocabulary words as dismissible chips."
+    verify: true
+    expect:
+      - kind: interactive_count
+        min: 2
+    evidence:
+      - screenshot: step-S3.webp
+    note: "CustomVocabularyPage in custom_vocabulary_page.dart. Shows count badge with transcriptionVocabulary.length. Text field supports comma-separated input. Words displayed as chips with X close button."
+
+  - id: S4
+    name: Add vocabulary words
+    do: "Type 'Yirgacheffe, Anthropic, Mixtral' in the text input field. Tap the '+' (add) button. The words should appear as individual chips below the input field. The count badge updates to reflect the new total."
+    verify: true
+    expect:
+      - kind: interactive_count
+        min: 4
+    evidence:
+      - screenshot: step-S4.webp
+    note: "Input split by comma: input.split(',').map((w) => w.trim()). Duplicates filtered. addVocabularyWords() adds to local list, then calls API: PATCH /v1/users/transcription-preferences with vocabulary array. Optimistic update: text field clears immediately. CaptureProvider.onTranscriptionSettingsChanged() notified."
+
+  - id: S5
+    name: Verify word chips appear
+    do: "Verify all three words ('Yirgacheffe', 'Anthropic', 'Mixtral') appear as individual chips/badges with an X close button on each. The chips should be dismissible."
+    verify: true
+    expect:
+      - kind: interactive_count
+        min: 4
+    evidence:
+      - screenshot: step-S5.webp
+    note: "Each word displayed as a chip with X button. Tapping X queues word for deletion with 1-second debounce before batch API call. Shows loading spinner during pending deletion."
+
+  - id: S6
+    name: Delete a vocabulary word
+    do: "Tap the X button on the 'Mixtral' word chip to delete it. The chip disappears (may show brief loading state). Verify only 'Yirgacheffe' and 'Anthropic' remain. The count badge decrements."
+    verify: true
+    expect:
+      - kind: interactive_count
+        min: 3
+    evidence:
+      - screenshot: step-S6.webp
+    note: "Deletion uses 1-second debounce timer (_deletionDebounceTimer) to batch multiple deletions. removeVocabularyWord() filters out the word and calls updateTranscriptionVocabulary(). API: PATCH /v1/users/transcription-preferences with updated full list."
+
+  - id: S7
+    name: Return to home
+    do: "Press back three times (Custom Vocabulary → Profile → Settings → Home) to return to the home screen. Verify the home screen is displayed."
+    verify: true
+    expect:
+      - kind: text_visible
+        values: ["Conversations"]
+      - kind: interactive_count
+        min: 4
+    evidence:
+      - screenshot: step-S7.webp
+    note: "Navigation: back from CustomVocabularyPage → Profile → Settings → Home. Vocabulary changes persist via SharedPreferences cache and backend API sync."

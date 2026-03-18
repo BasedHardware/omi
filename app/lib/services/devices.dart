@@ -32,17 +32,9 @@ abstract class IDeviceService {
   Future<void> disconnectDevice();
 }
 
-enum DeviceServiceStatus {
-  init,
-  ready,
-  scanning,
-  stop,
-}
+enum DeviceServiceStatus { init, ready, scanning, stop }
 
-enum DeviceConnectionState {
-  connected,
-  disconnected,
-}
+enum DeviceConnectionState { connected, disconnected }
 
 /// Feature flags for Omi device capabilities
 /// Must match the firmware definitions in features.h
@@ -69,10 +61,7 @@ class DeviceService implements IDeviceService {
   DeviceServiceStatus _status = DeviceServiceStatus.init;
   List<BtDevice> _devices = [];
 
-  final List<DeviceDiscoverer> _discoverers = [
-    BluetoothDeviceDiscoverer(),
-    AppleWatchDiscoverer(),
-  ];
+  final List<DeviceDiscoverer> _discoverers = [BluetoothDeviceDiscoverer(), AppleWatchDiscoverer()];
 
   final Map<Object, IDeviceServiceSubsciption> _subscriptions = {};
 
@@ -84,10 +73,7 @@ class DeviceService implements IDeviceService {
   DateTime? _firstConnectedAt;
 
   @override
-  Future<void> discover({
-    String? desirableDeviceId,
-    int timeout = 5,
-  }) async {
+  Future<void> discover({String? desirableDeviceId, int timeout = 5}) async {
     Logger.debug("Device discovering...");
     if (_status != DeviceServiceStatus.ready) {
       logCommonErrorMessage("Device service is not ready, may busying or stop");
@@ -208,10 +194,7 @@ class DeviceService implements IDeviceService {
 
   void onDeviceConnectionStateChanged(String deviceId, DeviceConnectionState state) {
     Logger.debug("device connection state changed...$deviceId...$state");
-    DebugLogManager.logEvent('device_connection_state', {
-      'device_id': deviceId,
-      'state': state.name,
-    });
+    DebugLogManager.logEvent('device_connection_state', {'device_id': deviceId, 'state': state.name});
     for (var s in _subscriptions.values) {
       s.onDeviceConnectionStateChanged(deviceId, state);
     }

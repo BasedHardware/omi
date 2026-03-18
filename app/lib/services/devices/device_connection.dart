@@ -54,7 +54,8 @@ class DeviceConnectionFactory {
     // Create device connection with transport
     // Use name-based detection as fallback for OmiGlass devices
     final deviceName = device.name.toLowerCase();
-    final isOmiGlass = device.type == DeviceType.openglass ||
+    final isOmiGlass =
+        device.type == DeviceType.openglass ||
         deviceName.contains('openglass') ||
         deviceName.contains('omiglass') ||
         deviceName.contains('glass');
@@ -118,10 +119,7 @@ abstract class DeviceConnection {
 
   StreamSubscription<DeviceTransportState>? _transportStateSubscription;
 
-  DeviceConnection(
-    this.device,
-    this.transport,
-  ) {
+  DeviceConnection(this.device, this.transport) {
     // Listen to transport state changes
     _transportStateSubscription = transport.connectionStateStream.listen((transportState) {
       final deviceState = _mapTransportStateToDeviceState(transportState);
@@ -143,9 +141,7 @@ abstract class DeviceConnection {
     }
   }
 
-  Future<void> connect({
-    void Function(String deviceId, DeviceConnectionState state)? onConnectionStateChanged,
-  }) async {
+  Future<void> connect({void Function(String deviceId, DeviceConnectionState state)? onConnectionStateChanged}) async {
     if (_connectionState == DeviceConnectionState.connected) {
       throw DeviceConnectionException("Connection already established, please disconnect before start new connection");
     }
@@ -212,9 +208,7 @@ abstract class DeviceConnection {
 
   Future<int> performRetrieveBatteryLevel();
 
-  Future<StreamSubscription<List<int>>?> getBleBatteryLevelListener({
-    void Function(int)? onBatteryLevelChange,
-  }) async {
+  Future<StreamSubscription<List<int>>?> getBleBatteryLevelListener({void Function(int)? onBatteryLevelChange}) async {
     if (await isConnected()) {
       return await performGetBleBatteryLevelListener(onBatteryLevelChange: onBatteryLevelChange);
     }
@@ -233,9 +227,7 @@ abstract class DeviceConnection {
     });
   }
 
-  Future<StreamSubscription?> getBleAudioBytesListener({
-    required void Function(List<int>) onAudioBytesReceived,
-  }) async {
+  Future<StreamSubscription?> getBleAudioBytesListener({required void Function(List<int>) onAudioBytesReceived}) async {
     if (await isConnected()) {
       return await performGetBleAudioBytesListener(onAudioBytesReceived: onAudioBytesReceived);
     }
@@ -254,9 +246,7 @@ abstract class DeviceConnection {
 
   Future<List<int>> performGetButtonState();
 
-  Future<StreamSubscription?> getBleButtonListener({
-    required void Function(List<int>) onButtonReceived,
-  }) async {
+  Future<StreamSubscription?> getBleButtonListener({required void Function(List<int>) onButtonReceived}) async {
     if (await isConnected()) {
       return await performGetBleButtonListener(onButtonReceived: onButtonReceived);
     }
@@ -270,9 +260,7 @@ abstract class DeviceConnection {
     return stream.listen(onAudioBytesReceived);
   }
 
-  Future<StreamSubscription?> performGetBleButtonListener({
-    required void Function(List<int>) onButtonReceived,
-  }) async {
+  Future<StreamSubscription?> performGetBleButtonListener({required void Function(List<int>) onButtonReceived}) async {
     final stream = transport.getCharacteristicStream(buttonServiceUuid, buttonTriggerCharacteristicUuid);
     return stream.listen(onButtonReceived);
   }
@@ -305,8 +293,9 @@ abstract class DeviceConnection {
 
   Future<bool> performPlayToSpeakerHaptic(int mode) async {
     try {
-      await transport
-          .writeCharacteristic(speakerDataStreamServiceUuid, speakerDataStreamCharacteristicUuid, [mode & 0xFF]);
+      await transport.writeCharacteristic(speakerDataStreamServiceUuid, speakerDataStreamCharacteristicUuid, [
+        mode & 0xFF,
+      ]);
       return true;
     } catch (e) {
       Logger.debug('Failed to play haptic: $e');
@@ -330,14 +319,15 @@ abstract class DeviceConnection {
 
   Future<bool> performWriteToStorage(int numFile, int command, int offset) async {
     try {
-      final offsetBytes = [
-        (offset >> 24) & 0xFF,
-        (offset >> 16) & 0xFF,
-        (offset >> 8) & 0xFF,
-        offset & 0xFF,
-      ];
-      await transport.writeCharacteristic(storageDataStreamServiceUuid, storageDataStreamCharacteristicUuid,
-          [command & 0xFF, numFile & 0xFF, offsetBytes[0], offsetBytes[1], offsetBytes[2], offsetBytes[3]]);
+      final offsetBytes = [(offset >> 24) & 0xFF, (offset >> 16) & 0xFF, (offset >> 8) & 0xFF, offset & 0xFF];
+      await transport.writeCharacteristic(storageDataStreamServiceUuid, storageDataStreamCharacteristicUuid, [
+        command & 0xFF,
+        numFile & 0xFF,
+        offsetBytes[0],
+        offsetBytes[1],
+        offsetBytes[2],
+        offsetBytes[3],
+      ]);
       return true;
     } catch (e) {
       Logger.debug('Failed to write to storage: $e');
@@ -411,9 +401,7 @@ abstract class DeviceConnection {
     required void Function(OrientedImage orientedImage) onImageReceived,
   });
 
-  Future<StreamSubscription<List<int>>?> getAccelListener({
-    void Function(int)? onAccelChange,
-  }) async {
+  Future<StreamSubscription<List<int>>?> getAccelListener({void Function(int)? onAccelChange}) async {
     if (await isConnected()) {
       return await performGetAccelListener(onAccelChange: onAccelChange);
     }
@@ -421,9 +409,7 @@ abstract class DeviceConnection {
     return null;
   }
 
-  Future<StreamSubscription<List<int>>?> performGetAccelListener({
-    void Function(int)? onAccelChange,
-  });
+  Future<StreamSubscription<List<int>>?> performGetAccelListener({void Function(int)? onAccelChange});
 
   Future<int> getFeatures() async {
     if (_features != null) return _features!;
@@ -531,9 +517,7 @@ abstract class DeviceConnection {
     return false;
   }
 
-  Future<StreamSubscription?> getWifiSyncStatusListener({
-    required void Function(int status) onStatusReceived,
-  }) async {
+  Future<StreamSubscription?> getWifiSyncStatusListener({required void Function(int status) onStatusReceived}) async {
     if (await isConnected()) {
       return await performGetWifiSyncStatusListener(onStatusReceived: onStatusReceived);
     }

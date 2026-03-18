@@ -25,7 +25,7 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get deleteConversationMessage =>
-      'Sei sicuro di voler eliminare questa conversazione? Questa azione non può essere annullata.';
+      'Questo eliminerà anche i ricordi, le attività e i file audio associati. Questa azione non può essere annullata.';
 
   @override
   String get confirm => 'Conferma';
@@ -1466,7 +1466,7 @@ class AppLocalizationsIt extends AppLocalizations {
   String get payYourSttProvider => 'Usa Omi liberamente. Paghi solo il tuo provider STT direttamente.';
 
   @override
-  String get freeMinutesMonth => '1.200 minuti gratuiti/mese inclusi. Illimitato con ';
+  String get freeMinutesMonth => '4.800 minuti gratuiti/mese inclusi. Illimitato con ';
 
   @override
   String get omiUnlimited => 'Omi Unlimited';
@@ -1715,12 +1715,7 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'DISPOSITIVI',
-      one: 'DISPOSITIVO',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'DISPOSITIVI', one: 'DISPOSITIVO');
     return '$count $_temp0 TROVATO/I NELLE VICINANZE';
   }
 
@@ -2684,7 +2679,7 @@ class AppLocalizationsIt extends AppLocalizations {
   String get showAll => 'Mostra tutto →';
 
   @override
-  String get noTasksForToday => 'Nessuna attività per oggi.\\nChiedi a Omi più attività o creale manualmente.';
+  String get noTasksForToday => 'Nessuna attività per oggi.\nChiedi a Omi più attività o creale manualmente.';
 
   @override
   String get dailyScore => 'PUNTEGGIO GIORNALIERO';
@@ -4792,7 +4787,7 @@ class AppLocalizationsIt extends AppLocalizations {
   String get noSpecificDataAccessConfigured => 'Nessun accesso ai dati specifico configurato.';
 
   @override
-  String get basicPlanDescription => '1.200 minuti premium + illimitato sul dispositivo';
+  String get basicPlanDescription => '4.800 minuti premium + illimitato sul dispositivo';
 
   @override
   String get minutes => 'minuti';
@@ -6126,7 +6121,7 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get premiumMinutesInfo =>
-      '1.200 minuti premium/mese. La scheda Su dispositivo offre trascrizione gratuita illimitata.';
+      '4.800 minuti premium/mese. La scheda Su dispositivo offre trascrizione gratuita illimitata.';
 
   @override
   String get viewUsage => 'Visualizza utilizzo';
@@ -6210,7 +6205,7 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get premiumMinutesMonth =>
-      '1.200 minuti premium/mese. La scheda Sul dispositivo offre trascrizione gratuita illimitata. ';
+      '4.800 minuti premium/mese. La scheda Sul dispositivo offre trascrizione gratuita illimitata. ';
 
   @override
   String get audioProcessedLocally =>
@@ -8524,4 +8519,91 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get showTasksOnHomepage => 'Mostra attività nella homepage';
+
+  @override
+  String get phoneCallsUnlimitedOnly => 'Chiamate telefoniche tramite Omi';
+
+  @override
+  String get phoneCallsUpsellSubtitle =>
+      'Effettua chiamate tramite Omi e ottieni trascrizione in tempo reale, riassunti automatici e altro.';
+
+  @override
+  String get phoneCallsUpsellFeature1 => 'Trascrizione in tempo reale di ogni chiamata';
+
+  @override
+  String get phoneCallsUpsellFeature2 => 'Riassunti automatici delle chiamate e azioni da fare';
+
+  @override
+  String get phoneCallsUpsellFeature3 => 'I destinatari vedono il tuo vero numero, non uno casuale';
+
+  @override
+  String get phoneCallsUpsellFeature4 => 'Le tue chiamate restano private e sicure';
+
+  @override
+  String get phoneCallsUpgradeButton => 'Passa a Illimitato';
+
+  @override
+  String get phoneCallsMaybeLater => 'Forse più tardi';
+
+  @override
+  String get deleteSynced => 'Elimina sincronizzati';
+
+  @override
+  String get deleteSyncedFiles => 'Elimina registrazioni sincronizzate';
+
+  @override
+  String get deleteSyncedFilesMessage =>
+      'Queste registrazioni sono già state sincronizzate con il tuo telefono. Questa azione non può essere annullata.';
+
+  @override
+  String get syncedFilesDeleted => 'Registrazioni sincronizzate eliminate';
+
+  @override
+  String get deletePending => 'Elimina in sospeso';
+
+  @override
+  String get deletePendingFiles => 'Elimina registrazioni in sospeso';
+
+  @override
+  String get deletePendingFilesWarning =>
+      'Queste registrazioni NON sono state sincronizzate con il tuo telefono e andranno perse permanentemente. Questa azione non può essere annullata.';
+
+  @override
+  String get pendingFilesDeleted => 'Registrazioni in sospeso eliminate';
+
+  @override
+  String get deleteAllFiles => 'Elimina tutte le registrazioni';
+
+  @override
+  String get deleteAll => 'Elimina tutto';
+
+  @override
+  String get deleteAllFilesWarning =>
+      'Questo eliminerà le registrazioni sincronizzate e in sospeso. Le registrazioni in sospeso NON sono state sincronizzate e andranno perse permanentemente.';
+
+  @override
+  String get allFilesDeleted => 'Tutte le registrazioni eliminate';
+
+  @override
+  String nFiles(int count) {
+    return '$count registrazioni';
+  }
+
+  @override
+  String get manageStorage => 'Gestisci archivio';
+
+  @override
+  String get safelyBackedUp => 'Salvato sul tuo telefono';
+
+  @override
+  String get notYetSynced => 'Non ancora sincronizzato con il tuo telefono';
+
+  @override
+  String get clearAll => 'Cancella tutto';
+
+  @override
+  String get phoneKeypad => 'Tastiera';
+
+  @override
+  String get phoneHideKeypad => 'Nascondi tastiera';
 }

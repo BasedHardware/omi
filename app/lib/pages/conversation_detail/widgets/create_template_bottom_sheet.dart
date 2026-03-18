@@ -22,11 +22,7 @@ class CreateTemplateBottomSheet extends StatefulWidget {
   final String? conversationId;
   final ScrollController? scrollController;
 
-  const CreateTemplateBottomSheet({
-    super.key,
-    this.conversationId,
-    this.scrollController,
-  });
+  const CreateTemplateBottomSheet({super.key, this.conversationId, this.scrollController});
 
   @override
   State<CreateTemplateBottomSheet> createState() => _CreateTemplateBottomSheetState();
@@ -60,10 +56,7 @@ class _CreateTemplateBottomSheetState extends State<CreateTemplateBottomSheet> {
 
     // Draw emoji text
     final textPainter = TextPainter(
-      text: TextSpan(
-        text: emoji,
-        style: const TextStyle(fontSize: 140),
-      ),
+      text: TextSpan(text: emoji, style: const TextStyle(fontSize: 140)),
       textDirection: TextDirection.ltr,
     );
     textPainter.layout();
@@ -238,10 +231,7 @@ class _CreateTemplateBottomSheetState extends State<CreateTemplateBottomSheet> {
               width: 40,
               height: 4,
               margin: const EdgeInsets.only(top: 12),
-              decoration: BoxDecoration(
-                color: Colors.grey.shade700,
-                borderRadius: BorderRadius.circular(2),
-              ),
+              decoration: BoxDecoration(color: Colors.grey.shade700, borderRadius: BorderRadius.circular(2)),
             ),
 
             // Header
@@ -259,29 +249,18 @@ class _CreateTemplateBottomSheetState extends State<CreateTemplateBottomSheet> {
                       ),
                       borderRadius: BorderRadius.circular(12),
                     ),
-                    child: const Icon(
-                      Icons.auto_fix_high,
-                      color: Colors.white,
-                      size: 20,
-                    ),
+                    child: const Icon(Icons.auto_fix_high, color: Colors.white, size: 20),
                   ),
                   const SizedBox(width: 14),
                   Expanded(
                     child: Text(
                       context.l10n.createCustomTemplate,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 18,
-                        fontWeight: FontWeight.w600,
-                      ),
+                      style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
                     ),
                   ),
                   IconButton(
                     onPressed: _isCreating ? null : () => Navigator.pop(context),
-                    icon: Icon(
-                      Icons.close,
-                      color: Colors.grey.shade500,
-                    ),
+                    icon: Icon(Icons.close, color: Colors.grey.shade500),
                   ),
                 ],
               ),
@@ -291,12 +270,7 @@ class _CreateTemplateBottomSheetState extends State<CreateTemplateBottomSheet> {
             Flexible(
               child: SingleChildScrollView(
                 controller: widget.scrollController,
-                padding: const EdgeInsets.only(
-                  left: 20,
-                  right: 20,
-                  top: 20,
-                  bottom: 20,
-                ),
+                padding: const EdgeInsets.only(left: 20, right: 20, top: 20, bottom: 20),
                 child: Form(
                   key: _formKey,
                   child: Column(
@@ -305,11 +279,7 @@ class _CreateTemplateBottomSheetState extends State<CreateTemplateBottomSheet> {
                       // Name field
                       Text(
                         context.l10n.templateName,
-                        style: TextStyle(
-                          color: Colors.grey.shade300,
-                          fontSize: 14,
-                          fontWeight: FontWeight.w500,
-                        ),
+                        style: TextStyle(color: Colors.grey.shade300, fontSize: 14, fontWeight: FontWeight.w500),
                       ),
                       const SizedBox(height: 8),
                       TextFormField(
@@ -343,11 +313,7 @@ class _CreateTemplateBottomSheetState extends State<CreateTemplateBottomSheet> {
                       // Prompt field
                       Text(
                         context.l10n.conversationPrompt,
-                        style: TextStyle(
-                          color: Colors.grey.shade300,
-                          fontSize: 14,
-                          fontWeight: FontWeight.w500,
-                        ),
+                        style: TextStyle(color: Colors.grey.shade300, fontSize: 14, fontWeight: FontWeight.w500),
                       ),
                       const SizedBox(height: 8),
                       TextFormField(
@@ -421,10 +387,7 @@ class _CreateTemplateBottomSheetState extends State<CreateTemplateBottomSheet> {
                                     _isPublic
                                         ? context.l10n.anyoneCanDiscoverTemplate
                                         : context.l10n.onlyYouCanUseTemplate,
-                                    style: TextStyle(
-                                      color: Colors.grey.shade500,
-                                      fontSize: 13,
-                                    ),
+                                    style: TextStyle(color: Colors.grey.shade500, fontSize: 13),
                                   ),
                                 ],
                               ),
@@ -457,9 +420,7 @@ class _CreateTemplateBottomSheetState extends State<CreateTemplateBottomSheet> {
                               backgroundColor: _isCreating ? const Color(0xFF2A2A2E) : Colors.white,
                               foregroundColor: Colors.black,
                               padding: const EdgeInsets.symmetric(vertical: 16),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                               elevation: 0,
                             ),
                             child: _isCreating
@@ -487,10 +448,7 @@ class _CreateTemplateBottomSheetState extends State<CreateTemplateBottomSheet> {
                                   )
                                 : Text(
                                     context.l10n.createApp,
-                                    style: const TextStyle(
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.w600,
-                                    ),
+                                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
                                   ),
                           ),
                         ),
@@ -522,10 +480,8 @@ void showCreateTemplateBottomSheet(BuildContext context, {String? conversationId
         minChildSize: 0.4,
         maxChildSize: 0.95,
         expand: false,
-        builder: (context, scrollController) => CreateTemplateBottomSheet(
-          conversationId: conversationId,
-          scrollController: scrollController,
-        ),
+        builder: (context, scrollController) =>
+            CreateTemplateBottomSheet(conversationId: conversationId, scrollController: scrollController),
       ),
     ),
   );

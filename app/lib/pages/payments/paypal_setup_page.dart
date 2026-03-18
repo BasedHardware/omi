@@ -10,9 +10,7 @@ import 'package:omi/widgets/animated_loading_button.dart';
 import 'package:omi/utils/other/validators.dart';
 
 class PaypalSetupPage extends StatefulWidget {
-  const PaypalSetupPage({
-    super.key,
-  });
+  const PaypalSetupPage({super.key});
 
   @override
   State<PaypalSetupPage> createState() => _PaypalSetupPageState();
@@ -78,8 +76,10 @@ class _PaypalSetupPageState extends State<PaypalSetupPage> {
       backgroundColor: Theme.of(context).colorScheme.primary,
       appBar: AppBar(
         backgroundColor: Theme.of(context).colorScheme.primary,
-        title: Text(_isComplete ? context.l10n.updatePayPal : context.l10n.setUpPayPal,
-            style: const TextStyle(color: Colors.white, fontSize: 20)),
+        title: Text(
+          _isComplete ? context.l10n.updatePayPal : context.l10n.setUpPayPal,
+          style: const TextStyle(color: Colors.white, fontSize: 20),
+        ),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white),
           onPressed: () => Navigator.pop(context),
@@ -108,24 +108,14 @@ class _PaypalSetupPageState extends State<PaypalSetupPage> {
                                 const SizedBox(width: 8),
                                 Container(
                                   padding: const EdgeInsets.all(10),
-                                  decoration: BoxDecoration(
-                                    color: Colors.grey[800],
-                                    shape: BoxShape.circle,
-                                  ),
-                                  child: Image.asset(
-                                    Assets.images.herologo.path,
-                                    width: 26,
-                                    color: Colors.white,
-                                  ),
+                                  decoration: BoxDecoration(color: Colors.grey[800], shape: BoxShape.circle),
+                                  child: Image.asset(Assets.images.herologo.path, width: 26, color: Colors.white),
                                 ),
                                 Transform.translate(
                                   offset: const Offset(-8, 0),
                                   child: Container(
                                     padding: const EdgeInsets.all(10),
-                                    decoration: const BoxDecoration(
-                                      color: Colors.white,
-                                      shape: BoxShape.circle,
-                                    ),
+                                    decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
                                     child: Image.network(
                                       'https://www.paypalobjects.com/webstatic/icon/pp258.png',
                                       width: 26,
@@ -141,10 +131,7 @@ class _PaypalSetupPageState extends State<PaypalSetupPage> {
                                   ? context.l10n.updatePayPalAccountDetails
                                   : context.l10n.connectPayPalToReceivePayments,
                               textAlign: TextAlign.center,
-                              style: TextStyle(
-                                color: Colors.grey.shade300,
-                                fontSize: 16,
-                              ),
+                              style: TextStyle(color: Colors.grey.shade300, fontSize: 16),
                             ),
                           ],
                         ),
@@ -226,26 +213,16 @@ class _PaypalSetupPageState extends State<PaypalSetupPage> {
                           decoration: BoxDecoration(
                             color: const Color(0xFF1F1F25),
                             borderRadius: BorderRadius.circular(12),
-                            border: Border.all(
-                              color: Color(0xFF35343B),
-                              width: 1,
-                            ),
+                            border: Border.all(color: Color(0xFF35343B), width: 1),
                           ),
                           child: Row(
                             children: [
-                              const Icon(
-                                Icons.info_outline,
-                                color: Colors.white70,
-                                size: 24,
-                              ),
+                              const Icon(Icons.info_outline, color: Colors.white70, size: 24),
                               const SizedBox(width: 8),
                               Expanded(
                                 child: Text(
                                   context.l10n.stripeRecommendation,
-                                  style: const TextStyle(
-                                    color: Colors.white70,
-                                    fontSize: 14,
-                                  ),
+                                  style: const TextStyle(color: Colors.white70, fontSize: 14),
                                 ),
                               ),
                             ],
@@ -268,9 +245,9 @@ class _PaypalSetupPageState extends State<PaypalSetupPage> {
               setState(() => _isLoading = true);
               MixpanelManager().track(_isComplete ? 'Update PayPal Details' : 'Save PayPal Details');
               await context.read<PaymentMethodProvider>().connectPayPal(
-                    _emailController.text.trim(),
-                    _paypalMeLinkController.text.trim(),
-                  );
+                _emailController.text.trim(),
+                _paypalMeLinkController.text.trim(),
+              );
 
               setState(() {
                 _isLoading = false;
@@ -281,11 +258,7 @@ class _PaypalSetupPageState extends State<PaypalSetupPage> {
           text: _isComplete ? context.l10n.updatePayPalDetails : context.l10n.savePayPalDetails,
           loaderColor: Colors.black,
           width: MediaQuery.of(context).size.width * 0.8,
-          textStyle: const TextStyle(
-            color: Colors.black,
-            fontSize: 16,
-            fontWeight: FontWeight.w500,
-          ),
+          textStyle: const TextStyle(color: Colors.black, fontSize: 16, fontWeight: FontWeight.w500),
           color: Colors.white,
         ),
       ),

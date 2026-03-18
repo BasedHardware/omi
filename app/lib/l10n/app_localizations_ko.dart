@@ -24,7 +24,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get deleteConversationTitle => '대화를 삭제하시겠습니까?';
 
   @override
-  String get deleteConversationMessage => '이 대화를 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.';
+  String get deleteConversationMessage => '관련된 기억, 작업 및 오디오 파일도 삭제됩니다. 이 작업은 되돌릴 수 없습니다.';
 
   @override
   String get confirm => '확인';
@@ -1439,7 +1439,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get payYourSttProvider => 'Omi를 자유롭게 사용하세요. STT 제공업체에 직접 비용을 지불하기만 하면 됩니다.';
 
   @override
-  String get freeMinutesMonth => '월 1,200분 무료 포함. ';
+  String get freeMinutesMonth => '월 4,800분 무료 포함. ';
 
   @override
   String get omiUnlimited => 'Omi Unlimited';
@@ -1700,7 +1700,7 @@ class AppLocalizationsKo extends AppLocalizations {
   }
 
   @override
-  String get dontShowAgain => '다시 표시하지 않음';
+  String get dontShowAgain => '다시 표시하지 않기';
 
   @override
   String get iUnderstand => '이해했습니다';
@@ -2630,7 +2630,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get showAll => '모두 표시 →';
 
   @override
-  String get noTasksForToday => '오늘의 작업이 없습니다.\\nOmi에게 더 많은 작업을 요청하거나 수동으로 생성하세요.';
+  String get noTasksForToday => '오늘의 작업이 없습니다.\nOmi에게 더 많은 작업을 요청하거나 수동으로 생성하세요.';
 
   @override
   String get dailyScore => '일일 점수';
@@ -4678,7 +4678,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get noSpecificDataAccessConfigured => '특정 데이터 액세스가 구성되지 않았습니다.';
 
   @override
-  String get basicPlanDescription => '1,200 프리미엄 분 + 무제한 온디바이스';
+  String get basicPlanDescription => '4,800 프리미엄 분 + 무제한 온디바이스';
 
   @override
   String get minutes => '분';
@@ -5984,7 +5984,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get cloudProvider => '클라우드 제공자';
 
   @override
-  String get premiumMinutesInfo => '월 1,200분의 프리미엄 사용 시간. 온디바이스 탭에서 무제한 무료 음성 인식을 제공합니다.';
+  String get premiumMinutesInfo => '월 4,800분의 프리미엄 사용 시간. 온디바이스 탭에서 무제한 무료 음성 인식을 제공합니다.';
 
   @override
   String get viewUsage => '사용량 보기';
@@ -6062,7 +6062,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get batteryDrainSignificantly => '배터리 소모가 크게 증가합니다.';
 
   @override
-  String get premiumMinutesMonth => '월 1,200 프리미엄 분. 온디바이스 탭은 무제한 무료 전사를 제공합니다. ';
+  String get premiumMinutesMonth => '월 4,800 프리미엄 분. 온디바이스 탭은 무제한 무료 전사를 제공합니다. ';
 
   @override
   String get audioProcessedLocally => '오디오가 로컬에서 처리됩니다. 오프라인 작동, 더 프라이빗하지만 배터리 사용량이 더 많습니다.';
@@ -8334,4 +8334,87 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get showTasksOnHomepage => '홈페이지에 작업 표시';
+
+  @override
+  String get phoneCallsUnlimitedOnly => 'Omi를 통한 전화 통화';
+
+  @override
+  String get phoneCallsUpsellSubtitle => 'Omi를 통해 전화를 걸고 실시간 텍스트 변환, 자동 요약 등을 받으세요.';
+
+  @override
+  String get phoneCallsUpsellFeature1 => '모든 통화의 실시간 텍스트 변환';
+
+  @override
+  String get phoneCallsUpsellFeature2 => '자동 통화 요약 및 액션 아이템';
+
+  @override
+  String get phoneCallsUpsellFeature3 => '수신자는 임의 번호가 아닌 실제 번호를 봅니다';
+
+  @override
+  String get phoneCallsUpsellFeature4 => '통화는 비공개이고 안전합니다';
+
+  @override
+  String get phoneCallsUpgradeButton => 'Unlimited로 업그레이드';
+
+  @override
+  String get phoneCallsMaybeLater => '나중에';
+
+  @override
+  String get deleteSynced => '동기화된 항목 삭제';
+
+  @override
+  String get deleteSyncedFiles => '동기화된 녹음 삭제';
+
+  @override
+  String get deleteSyncedFilesMessage => '이 녹음은 이미 휴대폰에 동기화되었습니다. 이 작업은 취소할 수 없습니다.';
+
+  @override
+  String get syncedFilesDeleted => '동기화된 녹음 삭제됨';
+
+  @override
+  String get deletePending => '대기 중인 항목 삭제';
+
+  @override
+  String get deletePendingFiles => '대기 중인 녹음 삭제';
+
+  @override
+  String get deletePendingFilesWarning => '이 녹음은 휴대폰에 동기화되지 않았으며 영구적으로 손실됩니다. 이 작업은 취소할 수 없습니다.';
+
+  @override
+  String get pendingFilesDeleted => '대기 중인 녹음 삭제됨';
+
+  @override
+  String get deleteAllFiles => '모든 녹음 삭제';
+
+  @override
+  String get deleteAll => '모두 삭제';
+
+  @override
+  String get deleteAllFilesWarning => '동기화된 녹음과 대기 중인 녹음이 모두 삭제됩니다. 대기 중인 녹음은 동기화되지 않았으며 영구적으로 손실됩니다.';
+
+  @override
+  String get allFilesDeleted => '모든 녹음 삭제됨';
+
+  @override
+  String nFiles(int count) {
+    return '$count개 녹음';
+  }
+
+  @override
+  String get manageStorage => '저장소 관리';
+
+  @override
+  String get safelyBackedUp => '휴대폰에 안전하게 백업됨';
+
+  @override
+  String get notYetSynced => '아직 휴대폰에 동기화되지 않음';
+
+  @override
+  String get clearAll => '모두 지우기';
+
+  @override
+  String get phoneKeypad => '키패드';
+
+  @override
+  String get phoneHideKeypad => '키패드 숨기기';
 }

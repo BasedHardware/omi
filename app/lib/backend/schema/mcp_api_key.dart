@@ -5,13 +5,7 @@ class McpApiKey {
   final DateTime createdAt;
   final DateTime? lastUsedAt;
 
-  McpApiKey({
-    required this.id,
-    required this.name,
-    required this.keyPrefix,
-    required this.createdAt,
-    this.lastUsedAt,
-  });
+  McpApiKey({required this.id, required this.name, required this.keyPrefix, required this.createdAt, this.lastUsedAt});
 
   factory McpApiKey.fromJson(Map<String, dynamic> json) {
     return McpApiKey(

@@ -60,6 +60,11 @@ struct SettingsSearchItem: Identifiable {
         SettingsSearchItem(name: "Account", subtitle: "Your profile and email", keywords: ["profile", "email"], section: .account, icon: "person.circle", settingId: "account.account"),
         SettingsSearchItem(name: "Sign Out", subtitle: "Sign out of your omi account", keywords: ["sign out", "log out", "logout", "signout"], section: .account, icon: "person.circle", settingId: "account.signout"),
 
+        // Plan and Usage
+        SettingsSearchItem(name: "Plan and Usage", subtitle: "Subscription status and usage limits", keywords: ["subscription", "billing", "plan", "usage", "stripe", "pro", "unlimited"], section: .planUsage, icon: "creditcard", settingId: "planusage.overview"),
+        SettingsSearchItem(name: "Current Plan", subtitle: "See your current subscription and renewal status", keywords: ["current plan", "renewal", "billing"], section: .planUsage, icon: "creditcard", settingId: "planusage.current"),
+        SettingsSearchItem(name: "Upgrade Plan", subtitle: "Buy Unlimited Plan or Omi Pro", keywords: ["upgrade", "buy", "pricing", "checkout", "pro", "unlimited"], section: .planUsage, icon: "creditcard", settingId: "planusage.purchase"),
+
         // AI Chat
         SettingsSearchItem(name: "AI Chat", subtitle: "Configure AI assistant settings", keywords: ["claude", "chat settings"], section: .aiChat, icon: "cpu", settingId: "aichat.aichat"),
         SettingsSearchItem(name: "Ask Mode", subtitle: "Show an Ask/Act toggle in the chat to control tool use", keywords: ["ask", "act", "read only", "mode toggle"], section: .aiChat, icon: "cpu", settingId: "aichat.askmode"),
@@ -79,9 +84,9 @@ struct SettingsSearchItem: Identifiable {
         SettingsSearchItem(name: "Report an Issue", subtitle: "Help us improve omi", keywords: ["bug", "feedback", "report", "issue"], section: .about, icon: "info.circle", settingId: "about.reportissue"),
 
         // Advanced subsections
+        SettingsSearchItem(name: "Reset Onboarding", subtitle: "Restart setup wizard for this app build only", keywords: ["reset", "onboarding", "restart", "setup"], section: .advanced, icon: "arrow.counterclockwise", settingId: "advanced.resetonboarding"),
         SettingsSearchItem(name: "AI User Profile", subtitle: "AI-generated summary of your preferences and habits", keywords: ["profile", "generate", "generate now", "regenerate"], section: .advanced, icon: "brain", settingId: "advanced.aiuserprofile"),
         SettingsSearchItem(name: "Your Stats", subtitle: "View your usage statistics and activity", keywords: ["statistics", "conversations", "usage"], section: .advanced, icon: "chart.bar", settingId: "advanced.stats"),
-        SettingsSearchItem(name: "Feature Tiers", subtitle: "Track your progress and unlock features", keywords: ["tiers", "unlock", "features", "progress"], section: .advanced, icon: "lock.shield", settingId: "advanced.featuretiers"),
         SettingsSearchItem(name: "Focus Assistant", subtitle: "Detect distractions and help you stay focused", keywords: ["distraction", "cooldown", "glow"], section: .advanced, icon: "eye.fill", settingId: "advanced.focusassistant"),
         SettingsSearchItem(name: "Visual Glow Effect", subtitle: "Show colored border when focus changes", keywords: ["glow", "visual", "border glow", "screen glow"], section: .advanced, icon: "eye.fill", settingId: "advanced.focusassistant.glow"),
         SettingsSearchItem(name: "Focus Cooldown", subtitle: "Minimum time between distraction alerts", keywords: ["cooldown", "delay", "focus timer"], section: .advanced, icon: "eye.fill", settingId: "advanced.focusassistant.cooldown"),
@@ -122,7 +127,6 @@ struct SettingsSearchItem: Identifiable {
         SettingsSearchItem(name: "Launch at Login", subtitle: "Start omi automatically when you log in", keywords: ["startup", "login", "boot"], section: .advanced, icon: "slider.horizontal.3", settingId: "advanced.preferences.launchatlogin"),
         SettingsSearchItem(name: "Report Issue", subtitle: "Send app logs and report a problem", keywords: ["bug", "feedback", "logs", "report"], section: .advanced, icon: "wrench.and.screwdriver", settingId: "advanced.troubleshooting.reportissue"),
         SettingsSearchItem(name: "Rescan Files", subtitle: "Re-index your files and update your AI profile", keywords: ["index", "reindex", "rescan", "files", "scan", "file indexing", "profile"], section: .advanced, icon: "wrench.and.screwdriver", settingId: "advanced.troubleshooting.rescanfiles"),
-        SettingsSearchItem(name: "Reset Onboarding", subtitle: "Restart setup wizard and reset permissions", keywords: ["setup", "wizard", "permissions", "reset"], section: .advanced, icon: "wrench.and.screwdriver", settingId: "advanced.troubleshooting.resetonboarding"),
     ]
 }
 
@@ -317,6 +321,7 @@ struct SettingsSidebarItem: View {
         case .notifications: return "bell"
         case .privacy: return "lock.shield"
         case .account: return "person.circle"
+        case .planUsage: return "creditcard"
         case .aiChat: return "cpu"
         case .advanced: return "chart.bar"
         case .about: return "info.circle"

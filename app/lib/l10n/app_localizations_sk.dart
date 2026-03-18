@@ -25,7 +25,7 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get deleteConversationMessage =>
-      'Naozaj chcete odstrániť túto konverzáciu? Túto akciu nie je možné vrátiť späť.';
+      'Tým sa tiež vymažú súvisiace spomienky, úlohy a zvukové súbory. Túto akciu nie je možné vrátiť späť.';
 
   @override
   String get confirm => 'Potvrdiť';
@@ -1464,7 +1464,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get payYourSttProvider => 'Voľne používajte omi. Platíte len svojmu poskytovateľovi STT priamo.';
 
   @override
-  String get freeMinutesMonth => '1 200 bezplatných minút/mesiac je zahrnutých. Neobmedzené s ';
+  String get freeMinutesMonth => '4 800 bezplatných minút/mesiac je zahrnutých. Neobmedzené s ';
 
   @override
   String get omiUnlimited => 'Omi Unlimited';
@@ -1713,12 +1713,7 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'ZARIADENIA',
-      one: 'ZARIADENIE',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'ZARIADENIA', one: 'ZARIADENIE');
     return '$count $_temp0 NÁJDENÉ V BLÍZKOSTI';
   }
 
@@ -1731,7 +1726,7 @@ class AppLocalizationsSk extends AppLocalizations {
   }
 
   @override
-  String get dontShowAgain => 'Nezobrazovať znova';
+  String get dontShowAgain => 'Znovu nezobrazovať';
 
   @override
   String get iUnderstand => 'Rozumiem';
@@ -2678,7 +2673,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get showAll => 'Zobraziť všetko →';
 
   @override
-  String get noTasksForToday => 'Žiadne úlohy na dnes.\\nSpýtajte sa Omi na ďalšie úlohy alebo ich vytvorte manuálne.';
+  String get noTasksForToday => 'Žiadne úlohy na dnes.\nSpýtajte sa Omi na ďalšie úlohy alebo ich vytvorte manuálne.';
 
   @override
   String get dailyScore => 'DENNÉ SKÓRE';
@@ -4760,7 +4755,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get noSpecificDataAccessConfigured => 'Nie je nakonfigurovaný žiadny konkrétny prístup k údajom.';
 
   @override
-  String get basicPlanDescription => '1 200 prémiových minút + neobmedzené na zariadení';
+  String get basicPlanDescription => '4 800 prémiových minút + neobmedzené na zariadení';
 
   @override
   String get minutes => 'minút';
@@ -6088,7 +6083,7 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get premiumMinutesInfo =>
-      '1 200 prémiových minút/mesiac. Karta Na zariadení ponúka neobmedzený bezplatný prepis.';
+      '4 800 prémiových minút/mesiac. Karta Na zariadení ponúka neobmedzený bezplatný prepis.';
 
   @override
   String get viewUsage => 'Zobraziť využitie';
@@ -6170,7 +6165,7 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get premiumMinutesMonth =>
-      '1 200 prémiových minút/mesiac. Karta Na zariadení ponúka neobmedzený bezplatný prepis. ';
+      '4 800 prémiových minút/mesiac. Karta Na zariadení ponúka neobmedzený bezplatný prepis. ';
 
   @override
   String get audioProcessedLocally =>
@@ -8462,4 +8457,91 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get showTasksOnHomepage => 'Zobraziť úlohy na domovskej stránke';
+
+  @override
+  String get phoneCallsUnlimitedOnly => 'Telefonáty cez Omi';
+
+  @override
+  String get phoneCallsUpsellSubtitle =>
+      'Telefonujte cez Omi a získajte prepis v reálnom čase, automatické zhrnutia a ďalšie.';
+
+  @override
+  String get phoneCallsUpsellFeature1 => 'Prepis každého hovoru v reálnom čase';
+
+  @override
+  String get phoneCallsUpsellFeature2 => 'Automatické zhrnutia hovorov a úlohy';
+
+  @override
+  String get phoneCallsUpsellFeature3 => 'Príjemcovia vidia vaše skutočné číslo, nie náhodné';
+
+  @override
+  String get phoneCallsUpsellFeature4 => 'Vaše hovory zostávajú súkromné a bezpečné';
+
+  @override
+  String get phoneCallsUpgradeButton => 'Prejsť na Neobmedzený';
+
+  @override
+  String get phoneCallsMaybeLater => 'Možno neskôr';
+
+  @override
+  String get deleteSynced => 'Vymazať synchronizované';
+
+  @override
+  String get deleteSyncedFiles => 'Zmazať synchronizované nahrávky';
+
+  @override
+  String get deleteSyncedFilesMessage =>
+      'Tieto nahrávky sú už synchronizované s vaším telefónom. Toto sa nedá vrátiť späť.';
+
+  @override
+  String get syncedFilesDeleted => 'Synchronizované nahrávky zmazané';
+
+  @override
+  String get deletePending => 'Vymazať čakajúce';
+
+  @override
+  String get deletePendingFiles => 'Zmazať čakajúce nahrávky';
+
+  @override
+  String get deletePendingFilesWarning =>
+      'Tieto nahrávky NIE sú synchronizované s vaším telefónom a budú trvalo stratené. Toto sa nedá vrátiť späť.';
+
+  @override
+  String get pendingFilesDeleted => 'Čakajúce nahrávky zmazané';
+
+  @override
+  String get deleteAllFiles => 'Zmazať všetky nahrávky';
+
+  @override
+  String get deleteAll => 'Vymazať všetko';
+
+  @override
+  String get deleteAllFilesWarning =>
+      'Toto zmaže synchronizované aj čakajúce nahrávky. Čakajúce nahrávky NIE sú synchronizované a budú trvalo stratené.';
+
+  @override
+  String get allFilesDeleted => 'Všetky nahrávky zmazané';
+
+  @override
+  String nFiles(int count) {
+    return '$count nahrávok';
+  }
+
+  @override
+  String get manageStorage => 'Spravovať úložisko';
+
+  @override
+  String get safelyBackedUp => 'Bezpečne zálohované na vašom telefóne';
+
+  @override
+  String get notYetSynced => 'Zatiaľ nesynchronizované s vaším telefónom';
+
+  @override
+  String get clearAll => 'Vymazať všetko';
+
+  @override
+  String get phoneKeypad => 'Klávesnica';
+
+  @override
+  String get phoneHideKeypad => 'Skryť klávesnicu';
 }

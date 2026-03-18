@@ -20,15 +20,7 @@ import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 
-enum TaskIntegrationApp {
-  appleReminders,
-  todoist,
-  clickup,
-  asana,
-  googleTasks,
-  trello,
-  monday,
-}
+enum TaskIntegrationApp { appleReminders, todoist, clickup, asana, googleTasks, trello, monday }
 
 extension TaskIntegrationAppExtension on TaskIntegrationApp {
   String get displayName {
@@ -178,7 +170,8 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
 
   bool _shouldShowSettingsIcon() {
     final selected = context.read<TaskIntegrationProvider>().selectedApp;
-    final hasSettings = (selected == TaskIntegrationApp.asana && AsanaService().isAuthenticated) ||
+    final hasSettings =
+        (selected == TaskIntegrationApp.asana && AsanaService().isAuthenticated) ||
         (selected == TaskIntegrationApp.clickup && ClickUpService().isAuthenticated) ||
         (selected == TaskIntegrationApp.todoist && TodoistService().isAuthenticated) ||
         (selected == TaskIntegrationApp.googleTasks && GoogleTasksService().isAuthenticated);
@@ -189,32 +182,16 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
     final selected = context.read<TaskIntegrationProvider>().selectedApp;
     if (selected == TaskIntegrationApp.asana && AsanaService().isAuthenticated) {
       MixpanelManager().taskIntegrationSettingsOpened(appName: 'asana');
-      Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (context) => const AsanaSettingsPage(),
-        ),
-      );
+      Navigator.of(context).push(MaterialPageRoute(builder: (context) => const AsanaSettingsPage()));
     } else if (selected == TaskIntegrationApp.clickup && ClickUpService().isAuthenticated) {
       MixpanelManager().taskIntegrationSettingsOpened(appName: 'clickup');
-      Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (context) => const ClickUpSettingsPage(),
-        ),
-      );
+      Navigator.of(context).push(MaterialPageRoute(builder: (context) => const ClickUpSettingsPage()));
     } else if (selected == TaskIntegrationApp.todoist && TodoistService().isAuthenticated) {
       MixpanelManager().taskIntegrationSettingsOpened(appName: 'todoist');
-      Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (context) => const TodoistSettingsPage(),
-        ),
-      );
+      Navigator.of(context).push(MaterialPageRoute(builder: (context) => const TodoistSettingsPage()));
     } else if (selected == TaskIntegrationApp.googleTasks && GoogleTasksService().isAuthenticated) {
       MixpanelManager().taskIntegrationSettingsOpened(appName: 'google_tasks');
-      Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (context) => const GoogleTasksSettingsPage(),
-        ),
-      );
+      Navigator.of(context).push(MaterialPageRoute(builder: (context) => const GoogleTasksSettingsPage()));
     }
   }
 
@@ -268,10 +245,7 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
           if (success) {
             if (mounted) {
               ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text(context.l10n.completeAuthBrowser),
-                  duration: const Duration(seconds: 5),
-                ),
+                SnackBar(content: Text(context.l10n.completeAuthBrowser), duration: const Duration(seconds: 5)),
               );
             }
             await context.read<TaskIntegrationProvider>().setSelectedApp(app);
@@ -280,9 +254,7 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
             Logger.debug('✓ Task integration enabled: ${app.displayName} (${app.key}) - authentication in progress');
           } else {
             // Track authentication failure
-            MixpanelManager().taskIntegrationAuthFailed(
-              appName: 'todoist',
-            );
+            MixpanelManager().taskIntegrationAuthFailed(appName: 'todoist');
 
             if (mounted) {
               ScaffoldMessenger.of(context).showSnackBar(
@@ -309,19 +281,14 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
           if (success) {
             if (mounted) {
               ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text(context.l10n.completeAuthBrowser),
-                  duration: const Duration(seconds: 5),
-                ),
+                SnackBar(content: Text(context.l10n.completeAuthBrowser), duration: const Duration(seconds: 5)),
               );
             }
             await context.read<TaskIntegrationProvider>().setSelectedApp(app);
             Logger.debug('✓ Task integration enabled: ${app.displayName} (${app.key}) - authentication in progress');
           } else {
             // Track authentication failure
-            MixpanelManager().taskIntegrationAuthFailed(
-              appName: 'asana',
-            );
+            MixpanelManager().taskIntegrationAuthFailed(appName: 'asana');
 
             if (mounted) {
               ScaffoldMessenger.of(context).showSnackBar(
@@ -348,19 +315,14 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
           if (success) {
             if (mounted) {
               ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text(context.l10n.completeAuthBrowser),
-                  duration: const Duration(seconds: 5),
-                ),
+                SnackBar(content: Text(context.l10n.completeAuthBrowser), duration: const Duration(seconds: 5)),
               );
             }
             await context.read<TaskIntegrationProvider>().setSelectedApp(app);
             Logger.debug('✓ Task integration enabled: ${app.displayName} (${app.key}) - authentication in progress');
           } else {
             // Track authentication failure
-            MixpanelManager().taskIntegrationAuthFailed(
-              appName: 'google_tasks',
-            );
+            MixpanelManager().taskIntegrationAuthFailed(appName: 'google_tasks');
 
             if (mounted) {
               ScaffoldMessenger.of(context).showSnackBar(
@@ -387,19 +349,14 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
           if (success) {
             if (mounted) {
               ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text(context.l10n.completeAuthBrowser),
-                  duration: const Duration(seconds: 5),
-                ),
+                SnackBar(content: Text(context.l10n.completeAuthBrowser), duration: const Duration(seconds: 5)),
               );
             }
             await context.read<TaskIntegrationProvider>().setSelectedApp(app);
             Logger.debug('✓ Task integration enabled: ${app.displayName} (${app.key}) - authentication in progress');
           } else {
             // Track authentication failure
-            MixpanelManager().taskIntegrationAuthFailed(
-              appName: 'clickup',
-            );
+            MixpanelManager().taskIntegrationAuthFailed(appName: 'clickup');
 
             if (mounted) {
               ScaffoldMessenger.of(context).showSnackBar(
@@ -429,13 +386,8 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
       builder: (BuildContext context) {
         return AlertDialog(
           backgroundColor: const Color(0xFF1C1C1E),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-          ),
-          title: Text(
-            context.l10n.connectToAppTitle(app.displayName),
-            style: const TextStyle(color: Colors.white),
-          ),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: Text(context.l10n.connectToAppTitle(app.displayName), style: const TextStyle(color: Colors.white)),
           content: Text(
             context.l10n.authorizeOmiForTasks(app.displayName),
             style: const TextStyle(color: Color(0xFF8E8E93)),
@@ -443,17 +395,11 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(false),
-              child: Text(
-                context.l10n.cancel,
-                style: const TextStyle(color: Color(0xFF8E8E93)),
-              ),
+              child: Text(context.l10n.cancel, style: const TextStyle(color: Color(0xFF8E8E93))),
             ),
             TextButton(
               onPressed: () => Navigator.of(context).pop(true),
-              child: Text(
-                context.l10n.continueButton,
-                style: const TextStyle(color: Colors.white),
-              ),
+              child: Text(context.l10n.continueButton, style: const TextStyle(color: Colors.white)),
             ),
           ],
         );
@@ -467,13 +413,8 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
       builder: (BuildContext context) {
         return AlertDialog(
           backgroundColor: const Color(0xFF1C1C1E),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-          ),
-          title: Text(
-            context.l10n.appIntegration(app.displayName),
-            style: const TextStyle(color: Colors.white),
-          ),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: Text(context.l10n.appIntegration(app.displayName), style: const TextStyle(color: Colors.white)),
           content: Text(
             context.l10n.integrationComingSoon(app.displayName),
             style: const TextStyle(color: Color(0xFF8E8E93)),
@@ -481,10 +422,7 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(),
-              child: Text(
-                context.l10n.gotIt,
-                style: const TextStyle(color: Colors.white),
-              ),
+              child: Text(context.l10n.gotIt, style: const TextStyle(color: Colors.white)),
             ),
           ],
         );
@@ -519,10 +457,7 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
       child: Container(
         width: 70,
         height: 28,
-        decoration: BoxDecoration(
-          color: Colors.grey.shade800,
-          borderRadius: BorderRadius.circular(16),
-        ),
+        decoration: BoxDecoration(color: Colors.grey.shade800, borderRadius: BorderRadius.circular(16)),
       ),
     );
   }
@@ -538,29 +473,13 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
               // If already connected and selected, open settings
               if (isConnected && isSelected) {
                 if (app == TaskIntegrationApp.asana) {
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (context) => const AsanaSettingsPage(),
-                    ),
-                  );
+                  Navigator.of(context).push(MaterialPageRoute(builder: (context) => const AsanaSettingsPage()));
                 } else if (app == TaskIntegrationApp.clickup) {
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (context) => const ClickUpSettingsPage(),
-                    ),
-                  );
+                  Navigator.of(context).push(MaterialPageRoute(builder: (context) => const ClickUpSettingsPage()));
                 } else if (app == TaskIntegrationApp.todoist) {
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (context) => const TodoistSettingsPage(),
-                    ),
-                  );
+                  Navigator.of(context).push(MaterialPageRoute(builder: (context) => const TodoistSettingsPage()));
                 } else if (app == TaskIntegrationApp.googleTasks) {
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (context) => const GoogleTasksSettingsPage(),
-                    ),
-                  );
+                  Navigator.of(context).push(MaterialPageRoute(builder: (context) => const GoogleTasksSettingsPage()));
                 }
               } else {
                 _selectApp(app);
@@ -577,29 +496,18 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
               child: Container(
                 width: 40,
                 height: 40,
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(8),
-                ),
+                decoration: BoxDecoration(borderRadius: BorderRadius.circular(8)),
                 child: app.logoPath != null
                     ? ClipRRect(
                         borderRadius: BorderRadius.circular(8),
-                        child: Image.asset(
-                          app.logoPath!,
-                          width: 40,
-                          height: 40,
-                          fit: BoxFit.contain,
-                        ),
+                        child: Image.asset(app.logoPath!, width: 40, height: 40, fit: BoxFit.contain),
                       )
                     : Container(
                         decoration: BoxDecoration(
                           color: isAvailable ? app.iconColor.withOpacity(0.2) : Colors.grey.withOpacity(0.1),
                           borderRadius: BorderRadius.circular(8),
                         ),
-                        child: Icon(
-                          app.icon,
-                          color: isAvailable ? app.iconColor : Colors.grey,
-                          size: 24,
-                        ),
+                        child: Icon(app.icon, color: isAvailable ? app.iconColor : Colors.grey, size: 24),
                       ),
               ),
             ),
@@ -622,54 +530,33 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
               // Coming Soon button
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF3C3C43),
-                  borderRadius: BorderRadius.circular(16),
-                ),
+                decoration: BoxDecoration(color: const Color(0xFF3C3C43), borderRadius: BorderRadius.circular(16)),
                 child: Text(
                   context.l10n.comingSoon,
-                  style: const TextStyle(
-                    color: Color(0xFF8E8E93),
-                    fontSize: 12,
-                    fontWeight: FontWeight.w500,
-                  ),
+                  style: const TextStyle(color: Color(0xFF8E8E93), fontSize: 12, fontWeight: FontWeight.w500),
                 ),
               )
             else if (!isConnected)
               // Connect button
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(16),
-                ),
+                decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16)),
                 child: Text(
                   context.l10n.connect,
-                  style: const TextStyle(
-                    color: Colors.black,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w500,
-                  ),
+                  style: const TextStyle(color: Colors.black, fontSize: 12, fontWeight: FontWeight.w500),
                 ),
               )
             else
             // Radio button for connected services
             if (isSelected)
-              const FaIcon(
-                FontAwesomeIcons.solidCircleCheck,
-                color: Colors.green,
-                size: 24,
-              )
+              const FaIcon(FontAwesomeIcons.solidCircleCheck, color: Colors.green, size: 24)
             else
               Container(
                 width: 24,
                 height: 24,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  border: Border.all(
-                    color: const Color(0xFF3C3C43),
-                    width: 2,
-                  ),
+                  border: Border.all(color: const Color(0xFF3C3C43), width: 2),
                 ),
               ),
           ],
@@ -695,11 +582,7 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
         ),
         title: Text(
           context.l10n.taskIntegrations,
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 18,
-            fontWeight: FontWeight.w600,
-          ),
+          style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
         ),
         centerTitle: true,
         actions: [
@@ -744,20 +627,12 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
                 ),
                 child: Row(
                   children: [
-                    FaIcon(
-                      FontAwesomeIcons.solidLightbulb,
-                      color: Colors.yellow.withValues(alpha: 0.5),
-                      size: 20,
-                    ),
+                    FaIcon(FontAwesomeIcons.solidLightbulb, color: Colors.yellow.withValues(alpha: 0.5), size: 20),
                     const SizedBox(width: 12),
                     Expanded(
                       child: Text(
                         context.l10n.tasksExportedOneApp,
-                        style: const TextStyle(
-                          color: Color(0xFF8E8E93),
-                          fontSize: 14,
-                          fontWeight: FontWeight.w400,
-                        ),
+                        style: const TextStyle(color: Color(0xFF8E8E93), fontSize: 14, fontWeight: FontWeight.w400),
                       ),
                     ),
                   ],

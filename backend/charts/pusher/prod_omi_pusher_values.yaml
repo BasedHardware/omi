@@ -33,7 +33,10 @@ serviceAccount:
 
 # This is for setting Kubernetes Annotations to a Pod.
 # For more information checkout: https://kubernetes.io/docs/concepts/overview/working-with-objects/annotations/
-podAnnotations: {}
+podAnnotations:
+  prometheus.io/scrape: "true"
+  prometheus.io/port: "8080"
+  prometheus.io/path: "/metrics"
 # This is for setting Kubernetes Labels to a Pod.
 # For more information checkout: https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/
 podLabels: {}
@@ -261,7 +264,7 @@ env:
         name: prod-omi-backend-secrets
         key: STT_SERVICE_MODELS
   - name: BASIC_TIER_MINUTES_LIMIT_PER_MONTH
-    value: "1200"
+    value: "4800"
   - name: BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH
     value: "0"
   - name: BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
@@ -274,6 +277,11 @@ env:
     value: "price_1RtJQ71F8wnoWYvwKMPaGlGY"
   - name: SUBSCRIPTION_LAUNCH_DATE
     value: "2025-08-21"
+  - name: METRICS_SECRET
+    valueFrom:
+      secretKeyRef:
+        name: prod-omi-backend-secrets
+        key: METRICS_SECRET
 
 resources:
   # We usually recommend not to specify default resources and to leave this as a conscious
@@ -309,8 +317,8 @@ startupProbe:
 # This section is for setting up autoscaling more information can be found here: https://kubernetes.io/docs/concepts/workloads/autoscaling/
 autoscaling:
   enabled: true
-  minReplicas: 30
-  maxReplicas: 60
+  minReplicas: 20
+  maxReplicas: 40
   behavior:
     scaleDown:
       stabilizationWindowSeconds: 600
@@ -318,18 +326,39 @@ autoscaling:
       - type: Percent
         value: 20
         periodSeconds: 300
+      - type: Pods
+        value: 1
+        periodSeconds: 120
+      selectPolicy: Min
     scaleUp:
-      stabilizationWindowSeconds: 0
+      stabilizationWindowSeconds: 120
       policies:
       - type: Percent
-        value: 20
-        periodSeconds: 1
+        value: 30
+        periodSeconds: 60
       - type: Pods
-        value: 10
-        periodSeconds: 1
+        value: 5
+        periodSeconds: 60
       selectPolicy: Max
-  targetCPUUtilizationPercentage: 60
-  targetMemoryUtilizationPercentage: 60
+  # targetCPUUtilizationPercentage: 60
+  # targetMemoryUtilizationPercentage: 60
+  activeConnectionsPerPod: 20
+
+podDisruptionBudget:
+  minAvailable: "80%"
+  # maxUnavailable: "20%"
+
+strategy:
+  type: RollingUpdate
+  rollingUpdate:
+    maxUnavailable: 1
+    maxSurge: 2
+
+terminationGracePeriodSeconds: 120
+lifecycle:
+  preStop:
+    exec:
+      command: ["sh", "-c", "sleep 15"]
 
 # Additional volumes on the output Deployment definition.
 volumes: []

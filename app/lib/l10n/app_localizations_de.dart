@@ -25,7 +25,7 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get deleteConversationMessage =>
-      'Sind Sie sicher, dass Sie diese Unterhaltung löschen möchten? Diese Aktion kann nicht rückgängig gemacht werden.';
+      'Dadurch werden auch zugehörige Erinnerungen, Aufgaben und Audiodateien gelöscht. Diese Aktion kann nicht rückgängig gemacht werden.';
 
   @override
   String get confirm => 'Bestätigen';
@@ -1472,7 +1472,7 @@ class AppLocalizationsDe extends AppLocalizations {
   String get payYourSttProvider => 'Nutzen Sie Omi kostenlos. Sie bezahlen nur Ihren STT-Anbieter direkt.';
 
   @override
-  String get freeMinutesMonth => '1.200 kostenlose Minuten/Monat inklusive. Unbegrenzt mit ';
+  String get freeMinutesMonth => '4.800 kostenlose Minuten/Monat inklusive. Unbegrenzt mit ';
 
   @override
   String get omiUnlimited => 'Omi Unbegrenzt';
@@ -1722,12 +1722,7 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'GERÄTE',
-      one: 'GERÄT',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'GERÄTE', one: 'GERÄT');
     return '$count $_temp0 IN DER NÄHE GEFUNDEN';
   }
 
@@ -1740,7 +1735,7 @@ class AppLocalizationsDe extends AppLocalizations {
   }
 
   @override
-  String get dontShowAgain => 'Nicht mehr anzeigen';
+  String get dontShowAgain => 'Nicht erneut anzeigen';
 
   @override
   String get iUnderstand => 'Ich verstehe';
@@ -2695,7 +2690,7 @@ class AppLocalizationsDe extends AppLocalizations {
   String get showAll => 'Alle anzeigen →';
 
   @override
-  String get noTasksForToday => 'Keine Aufgaben für heute.\\nFrage Omi nach mehr Aufgaben oder erstelle sie manuell.';
+  String get noTasksForToday => 'Keine Aufgaben für heute.\nFrage Omi nach mehr Aufgaben oder erstelle sie manuell.';
 
   @override
   String get dailyScore => 'TAGES-SCORE';
@@ -4801,7 +4796,7 @@ class AppLocalizationsDe extends AppLocalizations {
   String get noSpecificDataAccessConfigured => 'Kein spezifischer Datenzugriff konfiguriert.';
 
   @override
-  String get basicPlanDescription => '1.200 Premium-Minuten + unbegrenzt on-device';
+  String get basicPlanDescription => '4.800 Premium-Minuten + unbegrenzt on-device';
 
   @override
   String get minutes => 'Minuten';
@@ -6137,7 +6132,7 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get premiumMinutesInfo =>
-      '1.200 Premium-Minuten/Monat. Der Tab Auf Gerät bietet unbegrenzte kostenlose Transkription.';
+      '4.800 Premium-Minuten/Monat. Der Tab Auf Gerät bietet unbegrenzte kostenlose Transkription.';
 
   @override
   String get viewUsage => 'Nutzung anzeigen';
@@ -6220,7 +6215,7 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get premiumMinutesMonth =>
-      '1.200 Premium-Minuten/Monat. Der Tab Auf Gerät bietet unbegrenzte kostenlose Transkription. ';
+      '4.800 Premium-Minuten/Monat. Der Tab Auf Gerät bietet unbegrenzte kostenlose Transkription. ';
 
   @override
   String get audioProcessedLocally =>
@@ -8544,4 +8539,91 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get showTasksOnHomepage => 'Aufgaben auf der Startseite anzeigen';
+
+  @override
+  String get phoneCallsUnlimitedOnly => 'Telefonanrufe über Omi';
+
+  @override
+  String get phoneCallsUpsellSubtitle =>
+      'Telefoniere über Omi und erhalte Echtzeit-Transkription, automatische Zusammenfassungen und mehr.';
+
+  @override
+  String get phoneCallsUpsellFeature1 => 'Echtzeit-Transkription jedes Anrufs';
+
+  @override
+  String get phoneCallsUpsellFeature2 => 'Automatische Anrufzusammenfassungen und Aufgaben';
+
+  @override
+  String get phoneCallsUpsellFeature3 => 'Empfänger sehen deine echte Nummer, keine zufällige';
+
+  @override
+  String get phoneCallsUpsellFeature4 => 'Deine Anrufe bleiben privat und sicher';
+
+  @override
+  String get phoneCallsUpgradeButton => 'Auf Unlimited upgraden';
+
+  @override
+  String get phoneCallsMaybeLater => 'Vielleicht später';
+
+  @override
+  String get deleteSynced => 'Synchronisierte löschen';
+
+  @override
+  String get deleteSyncedFiles => 'Synchronisierte Aufnahmen löschen';
+
+  @override
+  String get deleteSyncedFilesMessage =>
+      'Diese Aufnahmen wurden bereits mit Ihrem Telefon synchronisiert. Dies kann nicht rückgängig gemacht werden.';
+
+  @override
+  String get syncedFilesDeleted => 'Synchronisierte Aufnahmen gelöscht';
+
+  @override
+  String get deletePending => 'Ausstehende löschen';
+
+  @override
+  String get deletePendingFiles => 'Ausstehende Aufnahmen löschen';
+
+  @override
+  String get deletePendingFilesWarning =>
+      'Diese Aufnahmen wurden NICHT mit Ihrem Telefon synchronisiert und gehen dauerhaft verloren. Dies kann nicht rückgängig gemacht werden.';
+
+  @override
+  String get pendingFilesDeleted => 'Ausstehende Aufnahmen gelöscht';
+
+  @override
+  String get deleteAllFiles => 'Alle Aufnahmen löschen';
+
+  @override
+  String get deleteAll => 'Alle löschen';
+
+  @override
+  String get deleteAllFilesWarning =>
+      'Dies löscht sowohl synchronisierte als auch ausstehende Aufnahmen. Ausstehende Aufnahmen wurden NICHT synchronisiert und gehen dauerhaft verloren.';
+
+  @override
+  String get allFilesDeleted => 'Alle Aufnahmen gelöscht';
+
+  @override
+  String nFiles(int count) {
+    return '$count Aufnahmen';
+  }
+
+  @override
+  String get manageStorage => 'Speicher verwalten';
+
+  @override
+  String get safelyBackedUp => 'Sicher auf Ihrem Telefon gesichert';
+
+  @override
+  String get notYetSynced => 'Noch nicht mit Ihrem Telefon synchronisiert';
+
+  @override
+  String get clearAll => 'Alles löschen';
+
+  @override
+  String get phoneKeypad => 'Tastatur';
+
+  @override
+  String get phoneHideKeypad => 'Tastatur ausblenden';
 }

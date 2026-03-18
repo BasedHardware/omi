@@ -28,18 +28,15 @@ class CrashlyticsManager implements CrashReporter {
 
   @override
   void identifyUser(String email, String name, String userId) {
-    PlatformService.executeIfSupported(
-      true,
-      () async {
-        await FirebaseCrashlytics.instance.setUserIdentifier(userId);
-        if (email.isNotEmpty) {
-          await FirebaseCrashlytics.instance.setCustomKey('user_email', email);
-        }
-        if (name.isNotEmpty) {
-          await FirebaseCrashlytics.instance.setCustomKey('user_name', name);
-        }
-      },
-    );
+    PlatformService.executeIfSupported(true, () async {
+      await FirebaseCrashlytics.instance.setUserIdentifier(userId);
+      if (email.isNotEmpty) {
+        await FirebaseCrashlytics.instance.setCustomKey('user_email', email);
+      }
+      if (name.isNotEmpty) {
+        await FirebaseCrashlytics.instance.setCustomKey('user_name', name);
+      }
+    });
   }
 
   @override

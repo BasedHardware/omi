@@ -173,18 +173,22 @@ void main() {
       final initialVersion = provider.segmentsPhotosVersion;
 
       // Simulate translation event
-      provider.onMessageEventReceived(TranslationEvent(segments: [
-        TranscriptSegment(
-          id: 'a',
-          text: 'hello (translated)',
-          speaker: 'SPEAKER_00',
-          isUser: false,
-          personId: null,
-          start: 0.0,
-          end: 1.0,
-          translations: [],
+      provider.onMessageEventReceived(
+        TranslationEvent(
+          segments: [
+            TranscriptSegment(
+              id: 'a',
+              text: 'hello (translated)',
+              speaker: 'SPEAKER_00',
+              isUser: false,
+              personId: null,
+              start: 0.0,
+              end: 1.0,
+              translations: [],
+            ),
+          ],
         ),
-      ]));
+      );
 
       expect(provider.segmentsPhotosVersion, greaterThan(initialVersion));
     });
@@ -212,13 +216,7 @@ void main() {
 
     test('increments on photo processing event and updates id', () {
       final provider = CaptureProvider();
-      provider.photos = [
-        ConversationPhoto(
-          id: 'temp-photo',
-          base64: 'img',
-          createdAt: DateTime.now(),
-        ),
-      ];
+      provider.photos = [ConversationPhoto(id: 'temp-photo', base64: 'img', createdAt: DateTime.now())];
       final initialVersion = provider.segmentsPhotosVersion;
 
       provider.onMessageEventReceived(PhotoProcessingEvent(tempId: 'temp-photo', photoId: 'permanent-photo'));
@@ -229,18 +227,10 @@ void main() {
 
     test('increments on photo described event and updates description', () {
       final provider = CaptureProvider();
-      provider.photos = [
-        ConversationPhoto(
-          id: 'photo-1',
-          base64: 'img',
-          createdAt: DateTime.now(),
-        ),
-      ];
+      provider.photos = [ConversationPhoto(id: 'photo-1', base64: 'img', createdAt: DateTime.now())];
       final initialVersion = provider.segmentsPhotosVersion;
 
-      provider.onMessageEventReceived(
-        PhotoDescribedEvent(photoId: 'photo-1', description: 'desc', discarded: true),
-      );
+      provider.onMessageEventReceived(PhotoDescribedEvent(photoId: 'photo-1', description: 'desc', discarded: true));
 
       expect(provider.photos.first.description, 'desc');
       expect(provider.photos.first.discarded, true);
@@ -254,12 +244,7 @@ void main() {
       provider.segments = [_segment('seg1', 'hello')];
 
       // Empty personId: backend didn't assign, nothing happens
-      final event = SpeakerLabelSuggestionEvent(
-        speakerId: 0,
-        personId: '',
-        personName: 'Alice',
-        segmentId: 'seg1',
-      );
+      final event = SpeakerLabelSuggestionEvent(speakerId: 0, personId: '', personName: 'Alice', segmentId: 'seg1');
 
       provider.onMessageEventReceived(event);
 

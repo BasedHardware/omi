@@ -24,10 +24,7 @@ class PhotosGridComponent extends StatelessWidget {
           onTap: () {
             Navigator.of(context).push(
               MaterialPageRoute(
-                builder: (context) => PhotoViewerPage(
-                  photos: photos,
-                  initialIndex: idx,
-                ),
+                builder: (context) => PhotoViewerPage(photos: photos, initialIndex: idx),
               ),
             );
           },
@@ -48,11 +45,7 @@ class PhotosGridComponent extends StatelessWidget {
                   if (photo.discarded)
                     Container(
                       color: Colors.black.withOpacity(0.5),
-                      child: const Icon(
-                        Icons.visibility_off_outlined,
-                        color: Colors.white70,
-                        size: 28,
-                      ),
+                      child: const Icon(Icons.visibility_off_outlined, color: Colors.white70, size: 28),
                     ),
                   if (isProcessing)
                     Container(

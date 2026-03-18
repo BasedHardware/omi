@@ -29,8 +29,10 @@ class LocationPermissionHelper {
                 const Icon(Icons.location_on, size: 24, color: Colors.orange),
                 const SizedBox(width: 12),
                 Expanded(
-                  child: Text(context.l10n.locationPermissionRequired,
-                      style: const TextStyle(color: Colors.white, fontSize: 18)),
+                  child: Text(
+                    context.l10n.locationPermissionRequired,
+                    style: const TextStyle(color: Colors.white, fontSize: 18),
+                  ),
                 ),
               ],
             ),
@@ -45,8 +47,10 @@ class LocationPermissionHelper {
               ),
               TextButton(
                 onPressed: () => Navigator.of(context).pop(true),
-                child: Text(context.l10n.openSettings,
-                    style: const TextStyle(color: Colors.orange, fontWeight: FontWeight.w600)),
+                child: Text(
+                  context.l10n.openSettings,
+                  style: const TextStyle(color: Colors.orange, fontWeight: FontWeight.w600),
+                ),
               ),
             ],
           ),

@@ -515,7 +515,28 @@ class TestDownloadEndpoint:
         with patch("routers.updates._get_live_desktop_releases", new_callable=AsyncMock, return_value=mock_releases):
             async with AsyncClient(transport=ASGITransport(app=_test_app), base_url="http://test") as client:
                 resp = await client.get("/v2/desktop/download/latest?channel=beta")
-        assert resp.status_code == 404
+        assert resp.status_code == 302
+        assert resp.headers["location"] == "https://example.com/stable.dmg"
+
+    @pytest.mark.asyncio
+    async def test_beta_uses_latest_release_even_if_marked_stable(self):
+        mock_releases = [
+            {
+                "channel": "stable",
+                "release": {"assets": [_dmg_asset("https://example.com/latest.dmg")]},
+            },
+            {
+                "channel": "beta",
+                "release": {"assets": [_dmg_asset("https://example.com/older-beta.dmg")]},
+            },
+        ]
+        with patch("routers.updates._get_live_desktop_releases", new_callable=AsyncMock, return_value=mock_releases):
+            async with AsyncClient(
+                transport=ASGITransport(app=_test_app), base_url="http://test", follow_redirects=False
+            ) as client:
+                resp = await client.get("/v2/desktop/download/latest?channel=beta")
+        assert resp.status_code == 302
+        assert resp.headers["location"] == "https://example.com/latest.dmg"
 
     @pytest.mark.asyncio
     async def test_404_when_no_dmg_asset(self):

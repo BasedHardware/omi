@@ -84,10 +84,7 @@ class _AddReviewWidgetState extends State<AddReviewWidget> {
         top: 12,
         bottom: 6,
       ),
-      decoration: BoxDecoration(
-        color: const Color(0xFF1F1F25),
-        borderRadius: BorderRadius.circular(16.0),
-      ),
+      decoration: BoxDecoration(color: const Color(0xFF1F1F25), borderRadius: BorderRadius.circular(16.0)),
       child: Column(
         children: [
           Row(
@@ -95,8 +92,10 @@ class _AddReviewWidgetState extends State<AddReviewWidget> {
             children: [
               Padding(
                 padding: const EdgeInsets.only(left: 6.0),
-                child: Text(widget.app.userReview?.score == null ? context.l10n.rateAndReviewThisApp : context.l10n.yourReview,
-                    style: const TextStyle(color: Colors.white, fontSize: 16)),
+                child: Text(
+                  widget.app.userReview?.score == null ? context.l10n.rateAndReviewThisApp : context.l10n.yourReview,
+                  style: const TextStyle(color: Colors.white, fontSize: 16),
+                ),
               ),
             ],
           ),
@@ -134,18 +133,16 @@ class _AddReviewWidgetState extends State<AddReviewWidget> {
               },
             ),
           ),
-          const SizedBox(
-            height: 20,
-          ),
+          const SizedBox(height: 20),
           ClipRRect(
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 300),
               height: showReviewField
                   ? (showButton
-                      ? (MediaQuery.sizeOf(context).height < 680
-                          ? MediaQuery.sizeOf(context).height * 0.28
-                          : MediaQuery.sizeOf(context).height * 0.2)
-                      : MediaQuery.sizeOf(context).height * 0.132)
+                        ? (MediaQuery.sizeOf(context).height < 680
+                              ? MediaQuery.sizeOf(context).height * 0.28
+                              : MediaQuery.sizeOf(context).height * 0.2)
+                        : MediaQuery.sizeOf(context).height * 0.132)
                   : 0,
               child: !showReviewField
                   ? null
@@ -190,25 +187,27 @@ class _AddReviewWidgetState extends State<AddReviewWidget> {
                               maxLines: 3,
                             ),
                           ),
-                          const SizedBox(
-                            height: 20,
-                          ),
+                          const SizedBox(height: 20),
                           showButton
                               ? AnimatedLoadingButton(
                                   loaderColor: Colors.black,
-                                  text: widget.app.userReview != null ? context.l10n.updateReview : context.l10n.submitReview,
+                                  text: widget.app.userReview != null
+                                      ? context.l10n.updateReview
+                                      : context.l10n.submitReview,
                                   textStyle: const TextStyle(color: Colors.black, fontSize: 16),
                                   onPressed: () async {
                                     FocusScope.of(context).unfocus();
                                     if (rating == widget.app.userReview?.score &&
                                         reviewController.text == widget.app.userReview?.review) {
-                                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                                        content: Text(context.l10n.noChangesInReview),
-                                      ));
+                                      ScaffoldMessenger.of(
+                                        context,
+                                      ).showSnackBar(SnackBar(content: Text(context.l10n.noChangesInReview)));
                                       return;
                                     }
-                                    final connectivityProvider =
-                                        Provider.of<ConnectivityProvider>(context, listen: false);
+                                    final connectivityProvider = Provider.of<ConnectivityProvider>(
+                                      context,
+                                      listen: false,
+                                    );
                                     if (connectivityProvider.isConnected) {
                                       bool isSuccessful = false;
                                       var rev = AppReview(
@@ -229,9 +228,9 @@ class _AddReviewWidgetState extends State<AddReviewWidget> {
                                       }
                                       if (isSuccessful) {
                                         updateShowButton(false);
-                                        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                                          content: Text(context.l10n.reviewAddedSuccessfully),
-                                        ));
+                                        ScaffoldMessenger.of(
+                                          context,
+                                        ).showSnackBar(SnackBar(content: Text(context.l10n.reviewAddedSuccessfully)));
                                         bool hadReview = widget.app.userReview != null;
                                         if (!hadReview) widget.app.ratingCount += 1;
                                         widget.app.userReview = AppReview(
@@ -256,14 +255,14 @@ class _AddReviewWidgetState extends State<AddReviewWidget> {
                                         Logger.debug('Refreshed apps list.');
                                         setState(() {});
                                       } else {
-                                        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                                          content: Text(context.l10n.failedToSubmitReview),
-                                        ));
+                                        ScaffoldMessenger.of(
+                                          context,
+                                        ).showSnackBar(SnackBar(content: Text(context.l10n.failedToSubmitReview)));
                                       }
                                     } else {
-                                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                                        content: Text(context.l10n.cantRateWithoutInternet),
-                                      ));
+                                      ScaffoldMessenger.of(
+                                        context,
+                                      ).showSnackBar(SnackBar(content: Text(context.l10n.cantRateWithoutInternet)));
                                     }
                                   },
                                   color: Colors.white,

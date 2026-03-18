@@ -12,10 +12,11 @@ workflows:
     environment:
       ios_signing:
         provisioning_profiles:
-          - codemagic_v4
-          - codemagic_watchos_v4
+          - codemagic_v7
+          - codemagic_watchos_v7
+          - codemagic_widget_v7
         certificates:
-          - codemagic_v4
+          - codemagic_v7
       groups:
         - app_env
         - firebase
@@ -361,10 +362,11 @@ workflows:
     environment:
       ios_signing:
         provisioning_profiles:
-          - codemagic_v4
-          - codemagic_watchos_v4
+          - codemagic_v7
+          - codemagic_watchos_v7
+          - codemagic_widget_v7
         certificates:
-          - codemagic_v4
+          - codemagic_v7
       groups:
         - app_env
         - firebase
@@ -912,10 +914,11 @@ workflows:
     environment:
       ios_signing:
         provisioning_profiles:
-          - codemagic_v4
-          - codemagic_watchos_v4
+          - codemagic_v7
+          - codemagic_watchos_v7
+          - codemagic_widget_v7
         certificates:
-          - codemagic_v4
+          - codemagic_v7
       groups:
         - app_env
         - firebase
@@ -1871,6 +1874,7 @@ workflows:
         GCP_REGION: "us-central1"
         CLOUD_RUN_SERVICE: "desktop-backend"
         BACKEND_IMAGE: "gcr.io/based-hardware/desktop-backend"
+        GCS_DESKTOP_UPDATES_BUCKET: "gs://omi_macos_updates"
       xcode: 16.4
     triggering:
       events:
@@ -2155,9 +2159,6 @@ workflows:
 
           # Write runtime .env from OMI_DESKTOP_APP_ENV secret (base64-encoded .env.app contents)
           echo "$OMI_DESKTOP_APP_ENV" | base64 --decode > "$APP_BUNDLE/Contents/Resources/.env"
-          # Never ship shared Anthropic API keys inside production app bundles.
-          # Anthropic access must come from backend or user OAuth mode.
-          sed -i '' '/^ANTHROPIC_API_KEY=/d' "$APP_BUNDLE/Contents/Resources/.env"
           echo "App bundle created: $APP_BUNDLE"
 
       - name: Sign app
@@ -2307,6 +2308,7 @@ workflows:
             --hide-extension "$APP_NAME.app" \
             --app-drop-link 155 175 \
             --no-internet-enable \
+            --skip-jenkins \
             $BG_ARGS \
             "$DMG_PATH" \
             "$STAGING_DIR/$APP_NAME.app"
@@ -2414,6 +2416,66 @@ workflows:
             "$DMG_PATH"
 
           echo "GitHub release created: $CM_TAG"
+
+      - name: Publish static beta redirect artifacts
+        script: |
+          set -e
+
+          echo "$GCP_SERVICE_ACCOUNT_KEY" | base64 --decode > /tmp/gcp_key.json
+          gcloud auth activate-service-account --key-file=/tmp/gcp_key.json --quiet
+          gcloud config set project "$GCP_PROJECT" --quiet
+          rm /tmp/gcp_key.json
+
+          export BETA_DMG_URL="https://github.com/$GITHUB_REPO/releases/download/$CM_TAG/omi.dmg"
+          export RELEASED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+
+          cat > /tmp/macos-beta-index.html <<EOF
+          <!doctype html>
+          <html lang="en">
+          <head>
+            <meta charset="utf-8">
+            <meta http-equiv="refresh" content="0; url=${BETA_DMG_URL}">
+            <meta name="robots" content="noindex">
+            <title>Redirecting to latest Omi Beta download…</title>
+          </head>
+          <body>
+            <p>Redirecting to the latest Omi Beta download.</p>
+            <p><a href="${BETA_DMG_URL}">If you are not redirected, click here.</a></p>
+            <script>window.location.replace(${BETA_DMG_URL@Q});</script>
+          </body>
+          </html>
+          EOF
+
+          python3 - <<'PY' > /tmp/macos-beta-redirect.json
+          import json, os
+          print(json.dumps({
+              "channel": "beta",
+              "version": os.environ["VERSION"],
+              "build_number": int(os.environ["BUILD_NUMBER"]),
+              "tag": os.environ["CM_TAG"],
+              "download_url": os.environ["BETA_DMG_URL"],
+              "published_at": os.environ["RELEASED_AT"],
+          }, indent=2))
+          PY
+
+          echo "$BETA_DMG_URL" > /tmp/macos-beta-latest-url.txt
+
+          gcloud storage cp \
+            --cache-control="no-store,max-age=0" \
+            /tmp/macos-beta-index.html \
+            "$GCS_DESKTOP_UPDATES_BUCKET/beta/index.html"
+
+          gcloud storage cp \
+            --cache-control="no-store,max-age=0" \
+            /tmp/macos-beta-redirect.json \
+            "$GCS_DESKTOP_UPDATES_BUCKET/beta/redirect.json"
+
+          gcloud storage cp \
+            --cache-control="no-store,max-age=0" \
+            /tmp/macos-beta-latest-url.txt \
+            "$GCS_DESKTOP_UPDATES_BUCKET/beta/latest-url.txt"
+
+          echo "Static beta redirect artifacts published to $GCS_DESKTOP_UPDATES_BUCKET/beta/"
 
       - name: Bridge release to Firestore for old clients
         script: |

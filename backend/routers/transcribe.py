@@ -90,12 +90,13 @@ from utils.stt.streaming import (
 from utils.stt.vad_gate import VADStreamingGate, VAD_GATE_MODE, is_gate_enabled
 from utils.subscription import has_transcription_credits, get_remaining_transcription_seconds
 from utils.translation import TranslationService
-from utils.translation_cache import TranscriptSegmentLanguageCache
+from utils.translation_cache import TranscriptSegmentLanguageCache, should_persist_translation
 from utils.webhooks import get_audio_bytes_webhook_seconds
 from utils.onboarding import OnboardingHandler
 
 from utils.aac import AACDecoder
 from utils.audio import AudioRingBuffer
+from utils.metrics import BACKEND_LISTEN_ACTIVE_WS_CONNECTIONS
 from utils.stt.speaker_embedding import (
     extract_embedding_from_bytes,
     compare_embeddings,
@@ -206,6 +207,7 @@ async def _stream_handler(
     This function is called by both _listen (for app clients) and web_listen_handler (for web clients).
     """
     session_id = str(uuid.uuid4())
+    BACKEND_LISTEN_ACTIVE_WS_CONNECTIONS.inc()
     logger.info(
         f'_stream_handler {uid} {session_id} {language} {sample_rate} {codec} {include_speech_profile} {stt_service} {conversation_timeout} custom_stt={custom_stt_mode} onboarding={onboarding_mode}'
     )
@@ -853,7 +855,13 @@ async def _stream_handler(
                     callback = make_multi_channel_callback(ch_config)
                     if stt_service == STTService.deepgram:
                         stt_sockets_multi[i] = await process_audio_dg(
-                            callback, stt_language, TARGET_SAMPLE_RATE, 1, preseconds=0, model=stt_model
+                            callback,
+                            stt_language,
+                            TARGET_SAMPLE_RATE,
+                            1,
+                            preseconds=0,
+                            model=stt_model,
+                            is_active=lambda: websocket_active,
                         )
                     elif stt_service == STTService.soniox:
                         stt_sockets_multi[i] = await process_audio_soniox(
@@ -934,6 +942,7 @@ async def _stream_handler(
                     model=stt_model,
                     keywords=vocabulary[:100] if vocabulary else None,
                     vad_gate=vad_gate,
+                    is_active=lambda: websocket_active,
                 )
                 if has_speech_profile:
                     deepgram_profile_socket = await process_audio_dg(
@@ -943,6 +952,7 @@ async def _stream_handler(
                         1,
                         model=stt_model,
                         keywords=vocabulary[:100] if vocabulary else None,
+                        is_active=lambda: websocket_active,
                     )
 
             # SONIOX
@@ -1501,6 +1511,12 @@ async def _stream_handler(
                 language_cache.update_from_translate_response(
                     segment.id, detected_lang, translation_language_base or translation_language
                 )
+
+            if not should_persist_translation(
+                segment_text, translated_text, detected_lang, translation_language_base or translation_language
+            ):
+                pending_translations.pop(segment.id, None)
+                return
 
             # Create/Update Translation object
             trans = Translation(lang=translation_language, text=translated_text)
@@ -2553,6 +2569,7 @@ async def _stream_handler(
     except Exception as e:
         logger.error(f"Error during WebSocket operation: {e} {uid} {session_id}")
     finally:
+        BACKEND_LISTEN_ACTIVE_WS_CONNECTIONS.dec()
         if not use_custom_stt and last_usage_record_timestamp:
             transcription_seconds = int(time.time() - last_usage_record_timestamp)
             words_to_record = words_transcribed_since_last_record

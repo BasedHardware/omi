@@ -1,0 +1,94 @@
+# E2E Flow: Memories (Facts/Knowledge Graph) — browse extracted facts, edit, add new memory
+# Tests: Navigate to Memories tab, view facts list, open memory edit, add new memory, search
+# Core feature: viewing and managing extracted knowledge/facts from conversations
+
+version: 2
+name: memories
+description: Memories flow — browse extracted facts about user, edit existing memory, add new memory via FAB, search memories
+app: com.friend.ios.dev
+evidence:
+  video: true
+covers:
+  - app/lib/pages/facts/page.dart
+  - app/lib/pages/facts/widgets/fact_card.dart
+  - app/lib/providers/memory_provider.dart
+  - app/lib/widgets/bottom_nav_bar.dart
+preconditions:
+  - auth_ready  # User signed in and onboarding completed. App shows home screen.
+
+steps:
+  - id: S1
+    name: Navigate to Memories tab
+    do: "From the home screen, tap the Memories tab (brain icon, third in bottom navigation bar). Use ADB coordinates: tap at (740, 2320) on 1080x2400 device."
+    verify: true
+    expect:
+      - kind: text_visible
+        values: ["Search memories"]
+      - kind: interactive_count
+        min: 4
+    evidence:
+      - screenshot: step-S1.webp
+    note: "Bottom nav tabs: Home (house), Action Items (list-check), Memories (brain), Apps (puzzle-piece). Memories tab index is 2. ADB tap at x=740, y=2320 reliably hits the Memories tab."
+
+  - id: S2
+    name: Verify Memories page content
+    do: "Verify the Memories page shows: Omi icon (top-left), settings icon (top-right), search bar ('Search memories...'), category toggle icon, filter icon, and a list of memory facts as cards. Each card shows extracted text about the user with a chat icon on the right."
+    verify: true
+    expect:
+      - kind: text_visible
+        values: ["Search memories"]
+      - kind: interactive_count
+        min: 6
+    evidence:
+      - screenshot: step-S2.webp
+    note: "Memory facts are extracted from conversations. Each card shows a sentence like 'Beastoin appreciates discussing the role of music...' with a chat icon (for discussing the memory with Omi). A blue '+' FAB button at bottom-right allows adding new memories."
+
+  - id: S3
+    name: Scroll to see more memories
+    do: "Scroll down the memories list to reveal additional fact cards. Verify more memory items are visible."
+    verify: true
+    expect:
+      - kind: interactive_count
+        min: 3
+    evidence:
+      - screenshot: step-S3.webp
+    note: "Use gentle ADB swipe: input swipe 540 1500 540 700 500. Memory facts cover various topics extracted from conversations: interests, habits, location, work."
+
+  - id: S4
+    name: Open memory edit view
+    do: "Scroll back to top. Tap on a memory fact card to open the edit view. Use ADB tap on the card center area."
+    verify: true
+    expect:
+      - kind: text_visible
+        values: ["Save Memory"]
+      - kind: interactive_count
+        min: 2
+    evidence:
+      - screenshot: step-S4.webp
+    note: "Memory edit view slides up from bottom, showing: category tag ('system' with delete icon), editable text field with the memory content, 'Save Memory' button. Keyboard opens for editing. Use ADB tap at approximately (540, 580) to tap the first memory card."
+
+  - id: S5
+    name: Dismiss edit and open Add New Memory
+    do: "Dismiss the memory edit view (press Android back). Then tap the '+' FAB button (blue circle, bottom-right) to open the Add New Memory form."
+    verify: true
+    expect:
+      - kind: text_visible
+        values: ["New Memory"]
+      - kind: interactive_count
+        min: 2
+    evidence:
+      - screenshot: step-S5.webp
+    note: "New Memory form shows: sparkle icon, 'New Memory' header, X close button, text field with placeholder 'like to eat ice cream...', 'Save Memory' button. The FAB is a FloatingActionButton that can be found via agent-flutter snapshot."
+
+  - id: S6
+    name: Dismiss and return to home
+    do: "Dismiss the New Memory form (press Android back or tap X). Then tap the Home tab (house icon, leftmost in bottom nav) to return to home screen."
+    verify: true
+    expect:
+      - kind: text_visible
+        values: ["Conversations"]
+      - kind: interactive_count
+        min: 4
+    evidence:
+      - screenshot: step-S6.webp
+    note: "Home tab ADB coordinates: (148, 2320). Pressing KEYCODE_BACK from the Memories tab does not go to home — use the bottom nav tab instead."

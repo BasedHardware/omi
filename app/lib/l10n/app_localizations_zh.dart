@@ -24,7 +24,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get deleteConversationTitle => '删除对话？';
 
   @override
-  String get deleteConversationMessage => '您确定要删除此对话吗？此操作无法撤消。';
+  String get deleteConversationMessage => '这也将删除相关的记忆、任务和音频文件。此操作无法撤消。';
 
   @override
   String get confirm => '确认';
@@ -1437,7 +1437,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get payYourSttProvider => '免费使用 Omi。您只需直接向 STT 提供商付费。';
 
   @override
-  String get freeMinutesMonth => '包含 1,200 免费分钟/月。';
+  String get freeMinutesMonth => '包含 4,800 免费分钟/月。';
 
   @override
   String get omiUnlimited => 'Omi 无限版';
@@ -2625,7 +2625,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get showAll => '显示全部 →';
 
   @override
-  String get noTasksForToday => '今天没有任务。\\n向Omi询问更多任务或手动创建。';
+  String get noTasksForToday => '今天没有任务。\n向Omi询问更多任务或手动创建。';
 
   @override
   String get dailyScore => '每日评分';
@@ -4669,7 +4669,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get noSpecificDataAccessConfigured => '未配置特定数据访问。';
 
   @override
-  String get basicPlanDescription => '1,200 高级分钟 + 设备端无限';
+  String get basicPlanDescription => '4,800 高级分钟 + 设备端无限';
 
   @override
   String get minutes => '分钟';
@@ -5972,7 +5972,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get cloudProvider => '云服务提供商';
 
   @override
-  String get premiumMinutesInfo => '每月 1,200 分钟高级时长。本地标签页提供无限免费转录。';
+  String get premiumMinutesInfo => '每月 4,800 分钟高级时长。本地标签页提供无限免费转录。';
 
   @override
   String get viewUsage => '查看使用量';
@@ -6050,7 +6050,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get batteryDrainSignificantly => '电池消耗将显著增加。';
 
   @override
-  String get premiumMinutesMonth => '每月1,200分钟高级配额。设备端选项卡提供无限免费转录。';
+  String get premiumMinutesMonth => '每月4,800分钟高级配额。设备端选项卡提供无限免费转录。';
 
   @override
   String get audioProcessedLocally => '音频在本地处理。可离线使用，更私密，但消耗更多电量。';
@@ -8322,4 +8322,87 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get showTasksOnHomepage => '在首页显示任务';
+
+  @override
+  String get phoneCallsUnlimitedOnly => '通过 Omi 拨打电话';
+
+  @override
+  String get phoneCallsUpsellSubtitle => '通过 Omi 拨打电话，获取实时转录、自动摘要等功能。';
+
+  @override
+  String get phoneCallsUpsellFeature1 => '每次通话的实时转录';
+
+  @override
+  String get phoneCallsUpsellFeature2 => '自动通话摘要和待办事项';
+
+  @override
+  String get phoneCallsUpsellFeature3 => '接收方看到的是您的真实号码，而非随机号码';
+
+  @override
+  String get phoneCallsUpsellFeature4 => '您的通话保持私密和安全';
+
+  @override
+  String get phoneCallsUpgradeButton => '升级到无限计划';
+
+  @override
+  String get phoneCallsMaybeLater => '以后再说';
+
+  @override
+  String get deleteSynced => '删除已同步';
+
+  @override
+  String get deleteSyncedFiles => '删除已同步录音';
+
+  @override
+  String get deleteSyncedFilesMessage => '这些录音已同步到您的手机。此操作无法撤销。';
+
+  @override
+  String get syncedFilesDeleted => '已同步录音已删除';
+
+  @override
+  String get deletePending => '删除待处理';
+
+  @override
+  String get deletePendingFiles => '删除待处理录音';
+
+  @override
+  String get deletePendingFilesWarning => '这些录音尚未同步到您的手机，将永久丢失。此操作无法撤销。';
+
+  @override
+  String get pendingFilesDeleted => '待处理录音已删除';
+
+  @override
+  String get deleteAllFiles => '删除所有录音';
+
+  @override
+  String get deleteAll => '全部删除';
+
+  @override
+  String get deleteAllFilesWarning => '这将删除已同步和待处理的录音。待处理录音尚未同步，将永久丢失。';
+
+  @override
+  String get allFilesDeleted => '所有录音已删除';
+
+  @override
+  String nFiles(int count) {
+    return '$count个录音';
+  }
+
+  @override
+  String get manageStorage => '管理存储';
+
+  @override
+  String get safelyBackedUp => '已安全备份到您的手机';
+
+  @override
+  String get notYetSynced => '尚未同步到您的手机';
+
+  @override
+  String get clearAll => '全部清除';
+
+  @override
+  String get phoneKeypad => '键盘';
+
+  @override
+  String get phoneHideKeypad => '隐藏键盘';
 }

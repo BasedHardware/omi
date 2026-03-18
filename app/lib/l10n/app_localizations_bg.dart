@@ -25,7 +25,7 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get deleteConversationMessage =>
-      'Сигурни ли сте, че искате да изтриете този разговор? Това действие не може да бъде отменено.';
+      'Това ще изтрие и свързаните спомени, задачи и аудио файлове. Това действие не може да бъде отменено.';
 
   @override
   String get confirm => 'Потвърди';
@@ -1463,7 +1463,7 @@ class AppLocalizationsBg extends AppLocalizations {
   String get payYourSttProvider => 'Използвайте omi свободно. Плащате само на вашия STT доставчик директно.';
 
   @override
-  String get freeMinutesMonth => '1 200 безплатни минути/месец включени. Неограничено с ';
+  String get freeMinutesMonth => '4 800 безплатни минути/месец включени. Неограничено с ';
 
   @override
   String get omiUnlimited => 'Omi Unlimited';
@@ -1713,12 +1713,7 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'УСТРОЙСТВА',
-      one: 'УСТРОЙСТВО',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'УСТРОЙСТВА', one: 'УСТРОЙСТВО');
     return '$count $_temp0 НАМЕРЕНИ НАБЛИЗО';
   }
 
@@ -2678,7 +2673,7 @@ class AppLocalizationsBg extends AppLocalizations {
   String get showAll => 'Покажи всички →';
 
   @override
-  String get noTasksForToday => 'Няма задачи за днес.\\nПопитайте Omi за повече задачи или създайте ръчно.';
+  String get noTasksForToday => 'Няма задачи за днес.\nПопитайте Omi за повече задачи или създайте ръчно.';
 
   @override
   String get dailyScore => 'ДНЕВЕН РЕЗУЛТАТ';
@@ -4777,7 +4772,7 @@ class AppLocalizationsBg extends AppLocalizations {
   String get noSpecificDataAccessConfigured => 'Няма конфигуриран специфичен достъп до данни.';
 
   @override
-  String get basicPlanDescription => '1 200 премиум минути + неограничено на устройството';
+  String get basicPlanDescription => '4 800 премиум минути + неограничено на устройството';
 
   @override
   String get minutes => 'минути';
@@ -6111,7 +6106,7 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get premiumMinutesInfo =>
-      '1200 премиум минути/месец. Разделът На устройството предлага неограничена безплатна транскрипция.';
+      '4800 премиум минути/месец. Разделът На устройството предлага неограничена безплатна транскрипция.';
 
   @override
   String get viewUsage => 'Преглед на използването';
@@ -6194,7 +6189,7 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get premiumMinutesMonth =>
-      '1200 премиум минути/месец. Разделът На устройството предлага неограничена безплатна транскрипция. ';
+      '4800 премиум минути/месец. Разделът На устройството предлага неограничена безплатна транскрипция. ';
 
   @override
   String get audioProcessedLocally =>
@@ -8508,4 +8503,91 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get showTasksOnHomepage => 'Покажи задачите на началната страница';
+
+  @override
+  String get phoneCallsUnlimitedOnly => 'Телефонни обаждания чрез Omi';
+
+  @override
+  String get phoneCallsUpsellSubtitle =>
+      'Правете обаждания чрез Omi и получавайте транскрипция в реално време, автоматични резюмета и още. Достъпно само за абонати на план Неограничен.';
+
+  @override
+  String get phoneCallsUpsellFeature1 => 'Транскрипция в реално време на всяко обаждане';
+
+  @override
+  String get phoneCallsUpsellFeature2 => 'Автоматични резюмета и задачи от обаждания';
+
+  @override
+  String get phoneCallsUpsellFeature3 => 'Получателите виждат истинския ви номер, не случаен';
+
+  @override
+  String get phoneCallsUpsellFeature4 => 'Вашите обаждания остават лични и сигурни';
+
+  @override
+  String get phoneCallsUpgradeButton => 'Надградете до Неограничен';
+
+  @override
+  String get phoneCallsMaybeLater => 'Може би по-късно';
+
+  @override
+  String get deleteSynced => 'Изтриване на синхронизираните';
+
+  @override
+  String get deleteSyncedFiles => 'Изтрий синхронизираните записи';
+
+  @override
+  String get deleteSyncedFilesMessage =>
+      'Тези записи вече са синхронизирани с телефона ви. Това не може да бъде отменено.';
+
+  @override
+  String get syncedFilesDeleted => 'Синхронизираните записи са изтрити';
+
+  @override
+  String get deletePending => 'Изтриване на чакащите';
+
+  @override
+  String get deletePendingFiles => 'Изтрий чакащите записи';
+
+  @override
+  String get deletePendingFilesWarning =>
+      'Тези записи НЕ са синхронизирани с телефона ви и ще бъдат загубени завинаги. Това не може да бъде отменено.';
+
+  @override
+  String get pendingFilesDeleted => 'Чакащите записи са изтрити';
+
+  @override
+  String get deleteAllFiles => 'Изтрий всички записи';
+
+  @override
+  String get deleteAll => 'Изтриване на всички';
+
+  @override
+  String get deleteAllFilesWarning =>
+      'Това ще изтрие синхронизираните и чакащите записи. Чакащите записи НЕ са синхронизирани и ще бъдат загубени завинаги.';
+
+  @override
+  String get allFilesDeleted => 'Всички записи са изтрити';
+
+  @override
+  String nFiles(int count) {
+    return '$count записа';
+  }
+
+  @override
+  String get manageStorage => 'Управление на хранилището';
+
+  @override
+  String get safelyBackedUp => 'Безопасно запазено на телефона ви';
+
+  @override
+  String get notYetSynced => 'Все още не е синхронизирано с телефона ви';
+
+  @override
+  String get clearAll => 'Изчисти всичко';
+
+  @override
+  String get phoneKeypad => 'Клавиатура';
+
+  @override
+  String get phoneHideKeypad => 'Скрий клавиатурата';
 }

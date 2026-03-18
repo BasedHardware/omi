@@ -7,10 +7,7 @@ import 'package:omi/utils/l10n_extensions.dart';
 class EmptyConversationsWidget extends StatefulWidget {
   final bool isStarredFilterActive;
 
-  const EmptyConversationsWidget({
-    super.key,
-    this.isStarredFilterActive = false,
-  });
+  const EmptyConversationsWidget({super.key, this.isStarredFilterActive = false});
 
   @override
   State<EmptyConversationsWidget> createState() => _EmptyConversationsWidgetState();
@@ -27,15 +24,8 @@ class _EmptyConversationsWidgetState extends State<EmptyConversationsWidget> {
           children: [
             Container(
               padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: Colors.amber.withValues(alpha: 0.1),
-                shape: BoxShape.circle,
-              ),
-              child: const FaIcon(
-                FontAwesomeIcons.star,
-                color: Colors.amber,
-                size: 32,
-              ),
+              decoration: BoxDecoration(color: Colors.amber.withValues(alpha: 0.1), shape: BoxShape.circle),
+              child: const FaIcon(FontAwesomeIcons.star, color: Colors.amber, size: 32),
             ),
             const SizedBox(height: 16),
             Text(
@@ -58,10 +48,7 @@ class _EmptyConversationsWidgetState extends State<EmptyConversationsWidget> {
 
     return Padding(
       padding: const EdgeInsets.only(top: 120.0),
-      child: Text(
-        context.l10n.noConversationsYet,
-        style: const TextStyle(color: Colors.grey, fontSize: 16),
-      ),
+      child: Text(context.l10n.noConversationsYet, style: const TextStyle(color: Colors.grey, fontSize: 16)),
     );
   }
 }

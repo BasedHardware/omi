@@ -25,7 +25,7 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get deleteConversationMessage =>
-      'Esteu segur que voleu eliminar aquesta conversa? Aquesta acció no es pot desfer.';
+      'Això també eliminarà els records, tasques i fitxers d\'àudio associats. Aquesta acció no es pot desfer.';
 
   @override
   String get confirm => 'Confirmar';
@@ -1469,7 +1469,7 @@ class AppLocalizationsCa extends AppLocalizations {
   String get payYourSttProvider => 'Utilitzeu omi lliurement. Només pagueu directament al vostre proveïdor STT.';
 
   @override
-  String get freeMinutesMonth => '1.200 minuts gratuïts/mes inclosos. Il·limitat amb ';
+  String get freeMinutesMonth => '4.800 minuts gratuïts/mes inclosos. Il·limitat amb ';
 
   @override
   String get omiUnlimited => 'Omi Il·limitat';
@@ -1719,12 +1719,7 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'DISPOSITIUS',
-      one: 'DISPOSITIU',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'DISPOSITIUS', one: 'DISPOSITIU');
     return '$count $_temp0 TROBATS A PROP';
   }
 
@@ -2686,7 +2681,7 @@ class AppLocalizationsCa extends AppLocalizations {
   String get showAll => 'Mostra-ho tot →';
 
   @override
-  String get noTasksForToday => 'No hi ha tasques per avui.\\nDemana a Omi més tasques o crea-les manualment.';
+  String get noTasksForToday => 'No hi ha tasques per avui.\nDemana a Omi més tasques o crea-les manualment.';
 
   @override
   String get dailyScore => 'PUNTUACIÓ DIÀRIA';
@@ -4791,7 +4786,7 @@ class AppLocalizationsCa extends AppLocalizations {
   String get noSpecificDataAccessConfigured => 'No hi ha accés a dades específic configurat.';
 
   @override
-  String get basicPlanDescription => '1.200 minuts premium + il·limitat al dispositiu';
+  String get basicPlanDescription => '4.800 minuts premium + il·limitat al dispositiu';
 
   @override
   String get minutes => 'minuts';
@@ -6125,7 +6120,7 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get premiumMinutesInfo =>
-      '1.200 minuts premium/mes. La pestanya Al dispositiu ofereix transcripció gratuïta il·limitada.';
+      '4.800 minuts premium/mes. La pestanya Al dispositiu ofereix transcripció gratuïta il·limitada.';
 
   @override
   String get viewUsage => 'Veure ús';
@@ -6207,7 +6202,7 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get premiumMinutesMonth =>
-      '1.200 minuts premium/mes. La pestanya Al dispositiu ofereix transcripció gratuïta il·limitada. ';
+      '4.800 minuts premium/mes. La pestanya Al dispositiu ofereix transcripció gratuïta il·limitada. ';
 
   @override
   String get audioProcessedLocally =>
@@ -8524,4 +8519,91 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get showTasksOnHomepage => 'Mostra les tasques a la pàgina principal';
+
+  @override
+  String get phoneCallsUnlimitedOnly => 'Trucades telefòniques via Omi';
+
+  @override
+  String get phoneCallsUpsellSubtitle =>
+      'Fes trucades a través d\'Omi i obtin transcripció en temps real, resums automàtics i més.';
+
+  @override
+  String get phoneCallsUpsellFeature1 => 'Transcripció en temps real de cada trucada';
+
+  @override
+  String get phoneCallsUpsellFeature2 => 'Resums automàtics de trucades i accions a fer';
+
+  @override
+  String get phoneCallsUpsellFeature3 => 'Els destinataris veuen el teu número real, no un d\'aleatori';
+
+  @override
+  String get phoneCallsUpsellFeature4 => 'Les teves trucades es mantenen privades i segures';
+
+  @override
+  String get phoneCallsUpgradeButton => 'Actualitza a Il·limitat';
+
+  @override
+  String get phoneCallsMaybeLater => 'Potser més tard';
+
+  @override
+  String get deleteSynced => 'Eliminar sincronitzats';
+
+  @override
+  String get deleteSyncedFiles => 'Eliminar enregistraments sincronitzats';
+
+  @override
+  String get deleteSyncedFilesMessage =>
+      'Aquests enregistraments ja estan sincronitzats amb el vostre telèfon. Això no es pot desfer.';
+
+  @override
+  String get syncedFilesDeleted => 'Enregistraments sincronitzats eliminats';
+
+  @override
+  String get deletePending => 'Eliminar pendents';
+
+  @override
+  String get deletePendingFiles => 'Eliminar enregistraments pendents';
+
+  @override
+  String get deletePendingFilesWarning =>
+      'Aquests enregistraments NO estan sincronitzats amb el vostre telèfon i es perdran permanentment. Això no es pot desfer.';
+
+  @override
+  String get pendingFilesDeleted => 'Enregistraments pendents eliminats';
+
+  @override
+  String get deleteAllFiles => 'Eliminar tots els enregistraments';
+
+  @override
+  String get deleteAll => 'Eliminar tot';
+
+  @override
+  String get deleteAllFilesWarning =>
+      'Això eliminarà els enregistraments sincronitzats i pendents. Els enregistraments pendents NO estan sincronitzats i es perdran permanentment.';
+
+  @override
+  String get allFilesDeleted => 'Tots els enregistraments eliminats';
+
+  @override
+  String nFiles(int count) {
+    return '$count enregistraments';
+  }
+
+  @override
+  String get manageStorage => 'Gestionar emmagatzematge';
+
+  @override
+  String get safelyBackedUp => 'Còpia de seguretat al vostre telèfon';
+
+  @override
+  String get notYetSynced => 'Encara no sincronitzat amb el vostre telèfon';
+
+  @override
+  String get clearAll => 'Esborrar tot';
+
+  @override
+  String get phoneKeypad => 'Teclat';
+
+  @override
+  String get phoneHideKeypad => 'Amaga el teclat';
 }

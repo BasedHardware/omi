@@ -47,15 +47,12 @@ void main() {
       // Profile home screen for 10 seconds
       // This captures WaveformSection and ProcessingCapture animations
       debugPrint('Profiling HOME screen...');
-      await binding.traceAction(
-        () async {
-          // Let animations run for 10 seconds
-          for (int i = 0; i < 100; i++) {
-            await tester.pump(const Duration(milliseconds: 100));
-          }
-        },
-        reportKey: 'home_screen_animations',
-      );
+      await binding.traceAction(() async {
+        // Let animations run for 10 seconds
+        for (int i = 0; i < 100; i++) {
+          await tester.pump(const Duration(milliseconds: 100));
+        }
+      }, reportKey: 'home_screen_animations');
       debugPrint('[HOME] Timeline captured');
 
       debugPrint('=== Test Complete ===');
@@ -107,17 +104,23 @@ void main() {
         debugPrint('║               FRAME METRICS SUMMARY                          ║');
         debugPrint('╠══════════════════════════════════════════════════════════════╣');
         debugPrint(
-            '║ Total Frames: ${frameTimings.length.toString().padLeft(6)}                                     ║');
+          '║ Total Frames: ${frameTimings.length.toString().padLeft(6)}                                     ║',
+        );
         debugPrint(
-            '║ Build Time (avg): ${(avgBuild / 1000).toStringAsFixed(2).padLeft(8)} ms                         ║');
+          '║ Build Time (avg): ${(avgBuild / 1000).toStringAsFixed(2).padLeft(8)} ms                         ║',
+        );
         debugPrint(
-            '║ Build Time (p50): ${(p50Build / 1000).toStringAsFixed(2).padLeft(8)} ms                         ║');
+          '║ Build Time (p50): ${(p50Build / 1000).toStringAsFixed(2).padLeft(8)} ms                         ║',
+        );
         debugPrint(
-            '║ Build Time (p90): ${(p90Build / 1000).toStringAsFixed(2).padLeft(8)} ms                         ║');
+          '║ Build Time (p90): ${(p90Build / 1000).toStringAsFixed(2).padLeft(8)} ms                         ║',
+        );
         debugPrint(
-            '║ Build Time (p99): ${(p99Build / 1000).toStringAsFixed(2).padLeft(8)} ms                         ║');
+          '║ Build Time (p99): ${(p99Build / 1000).toStringAsFixed(2).padLeft(8)} ms                         ║',
+        );
         debugPrint(
-            '║ Raster Time (avg): ${(avgRaster / 1000).toStringAsFixed(2).padLeft(7)} ms                         ║');
+          '║ Raster Time (avg): ${(avgRaster / 1000).toStringAsFixed(2).padLeft(7)} ms                         ║',
+        );
         debugPrint('╚══════════════════════════════════════════════════════════════╝');
 
         // Janky frame detection (>16ms = missed 60fps target)
@@ -221,10 +224,7 @@ class _ShimmerWidgetState extends State<_ShimmerWidget> with SingleTickerProvide
   @override
   void initState() {
     super.initState();
-    _controller = AnimationController(
-      duration: const Duration(milliseconds: 1500),
-      vsync: this,
-    )..repeat();
+    _controller = AnimationController(duration: const Duration(milliseconds: 1500), vsync: this)..repeat();
   }
 
   @override
@@ -245,11 +245,7 @@ class _ShimmerWidgetState extends State<_ShimmerWidget> with SingleTickerProvide
             gradient: LinearGradient(
               begin: Alignment(-1.0 + _controller.value * 2, 0),
               end: Alignment(_controller.value * 2, 0),
-              colors: const [
-                Colors.grey,
-                Colors.white,
-                Colors.grey,
-              ],
+              colors: const [Colors.grey, Colors.white, Colors.grey],
             ),
             borderRadius: BorderRadius.circular(4),
           ),
@@ -273,10 +269,7 @@ class _TypingIndicatorWidgetState extends State<_TypingIndicatorWidget> with Sin
   @override
   void initState() {
     super.initState();
-    _controller = AnimationController(
-      duration: const Duration(milliseconds: 600),
-      vsync: this,
-    )..repeat(reverse: true);
+    _controller = AnimationController(duration: const Duration(milliseconds: 600), vsync: this)..repeat(reverse: true);
   }
 
   @override
@@ -289,13 +282,7 @@ class _TypingIndicatorWidgetState extends State<_TypingIndicatorWidget> with Sin
   Widget build(BuildContext context) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        _buildDot(0.0),
-        const SizedBox(width: 5),
-        _buildDot(0.2),
-        const SizedBox(width: 5),
-        _buildDot(0.4),
-      ],
+      children: [_buildDot(0.0), const SizedBox(width: 5), _buildDot(0.2), const SizedBox(width: 5), _buildDot(0.4)],
     );
   }
 
@@ -309,10 +296,7 @@ class _TypingIndicatorWidgetState extends State<_TypingIndicatorWidget> with Sin
           child: Container(
             width: 8,
             height: 8,
-            decoration: BoxDecoration(
-              color: Colors.grey.withOpacity(0.5 + value * 0.5),
-              shape: BoxShape.circle,
-            ),
+            decoration: BoxDecoration(color: Colors.grey.withOpacity(0.5 + value * 0.5), shape: BoxShape.circle),
           ),
         );
       },

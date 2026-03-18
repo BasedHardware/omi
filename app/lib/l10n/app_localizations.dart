@@ -156,7 +156,7 @@ abstract class AppLocalizations {
     Locale('tr'),
     Locale('uk'),
     Locale('vi'),
-    Locale('zh')
+    Locale('zh'),
   ];
 
   /// The app title displayed in various places
@@ -192,7 +192,7 @@ abstract class AppLocalizations {
   /// Message for delete confirmation dialog
   ///
   /// In en, this message translates to:
-  /// **'Are you sure you want to delete this conversation? This action cannot be undone.'**
+  /// **'This will also delete associated memories, tasks, and audio files. This action cannot be undone.'**
   String get deleteConversationMessage;
 
   /// Confirm button label
@@ -249,7 +249,7 @@ abstract class AppLocalizations {
   /// **'Close'**
   String get close;
 
-  /// Clear button
+  /// Button label to clear files
   ///
   /// In en, this message translates to:
   /// **'Clear'**
@@ -2850,7 +2850,7 @@ abstract class AppLocalizations {
   /// No description provided for @freeMinutesMonth.
   ///
   /// In en, this message translates to:
-  /// **'1,200 free minutes/month included. Unlimited with '**
+  /// **'4,800 free minutes/month included. Unlimited with '**
   String get freeMinutesMonth;
 
   /// No description provided for @omiUnlimited.
@@ -3348,7 +3348,7 @@ abstract class AppLocalizations {
   /// Checkbox text to prevent showing dialog again
   ///
   /// In en, this message translates to:
-  /// **'Don\'t show it again'**
+  /// **'Don\'t show again'**
   String get dontShowAgain;
 
   /// Button to acknowledge warning
@@ -5142,7 +5142,7 @@ abstract class AppLocalizations {
   /// Message shown when there are no tasks due today
   ///
   /// In en, this message translates to:
-  /// **'No tasks for today.\\nAsk Omi for more tasks or create manually.'**
+  /// **'No tasks for today.\nAsk Omi for more tasks or create manually.'**
   String get noTasksForToday;
 
   /// Header for daily score widget
@@ -9024,7 +9024,7 @@ abstract class AppLocalizations {
   /// Description of basic plan features in usage page
   ///
   /// In en, this message translates to:
-  /// **'1,200 premium mins + unlimited on-device'**
+  /// **'4,800 premium mins + unlimited on-device'**
   String get basicPlanDescription;
 
   /// Unit label for minutes
@@ -11514,7 +11514,7 @@ abstract class AppLocalizations {
   /// Info about premium minutes
   ///
   /// In en, this message translates to:
-  /// **'1,200 premium minutes/month. On-Device tab offers unlimited free transcription.'**
+  /// **'4,800 premium minutes/month. On-Device tab offers unlimited free transcription.'**
   String get premiumMinutesInfo;
 
   /// Link to view usage
@@ -11658,7 +11658,7 @@ abstract class AppLocalizations {
   /// Description of premium minutes quota
   ///
   /// In en, this message translates to:
-  /// **'1,200 premium minutes/month. On-Device tab offers unlimited free transcription. '**
+  /// **'4,800 premium minutes/month. On-Device tab offers unlimited free transcription. '**
   String get premiumMinutesMonth;
 
   /// Description of on-device processing
@@ -15830,6 +15830,168 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Show Tasks on homepage'**
   String get showTasksOnHomepage;
+
+  /// Title for the phone calls upsell sheet shown to non-unlimited users
+  ///
+  /// In en, this message translates to:
+  /// **'Phone Calls via Omi'**
+  String get phoneCallsUnlimitedOnly;
+
+  /// Subtitle explaining phone calls feature on upsell sheet
+  ///
+  /// In en, this message translates to:
+  /// **'Make calls through Omi and get real-time transcription, automatic summaries, and more. Available exclusively for Unlimited plan subscribers.'**
+  String get phoneCallsUpsellSubtitle;
+
+  /// Phone calls upsell feature 1
+  ///
+  /// In en, this message translates to:
+  /// **'Real-time transcription of every call'**
+  String get phoneCallsUpsellFeature1;
+
+  /// Phone calls upsell feature 2
+  ///
+  /// In en, this message translates to:
+  /// **'Automatic call summaries and action items'**
+  String get phoneCallsUpsellFeature2;
+
+  /// Phone calls upsell feature 3
+  ///
+  /// In en, this message translates to:
+  /// **'Recipients see your real number, not a random one'**
+  String get phoneCallsUpsellFeature3;
+
+  /// Phone calls upsell feature 4
+  ///
+  /// In en, this message translates to:
+  /// **'Your calls stay private and secure'**
+  String get phoneCallsUpsellFeature4;
+
+  /// Button text to upgrade to unlimited plan from phone calls upsell
+  ///
+  /// In en, this message translates to:
+  /// **'Upgrade to Unlimited'**
+  String get phoneCallsUpgradeButton;
+
+  /// Dismiss button text on phone calls upsell sheet
+  ///
+  /// In en, this message translates to:
+  /// **'Maybe later'**
+  String get phoneCallsMaybeLater;
+
+  /// Menu option to delete synced recordings
+  ///
+  /// In en, this message translates to:
+  /// **'Delete Synced'**
+  String get deleteSynced;
+
+  /// Dialog title for deleting synced files
+  ///
+  /// In en, this message translates to:
+  /// **'Delete Synced Recordings'**
+  String get deleteSyncedFiles;
+
+  /// Confirmation message for deleting synced files
+  ///
+  /// In en, this message translates to:
+  /// **'These recordings have already been synced to your phone. This cannot be undone.'**
+  String get deleteSyncedFilesMessage;
+
+  /// Snackbar message after synced files deleted
+  ///
+  /// In en, this message translates to:
+  /// **'Synced recordings deleted'**
+  String get syncedFilesDeleted;
+
+  /// Menu option to delete pending recordings
+  ///
+  /// In en, this message translates to:
+  /// **'Delete Pending'**
+  String get deletePending;
+
+  /// Dialog title for deleting pending files
+  ///
+  /// In en, this message translates to:
+  /// **'Delete Pending Recordings'**
+  String get deletePendingFiles;
+
+  /// Warning message for deleting pending files
+  ///
+  /// In en, this message translates to:
+  /// **'These recordings have NOT been synced to your phone and will be permanently lost. This cannot be undone.'**
+  String get deletePendingFilesWarning;
+
+  /// Snackbar message after pending files deleted
+  ///
+  /// In en, this message translates to:
+  /// **'Pending recordings deleted'**
+  String get pendingFilesDeleted;
+
+  /// Dialog title for deleting all files
+  ///
+  /// In en, this message translates to:
+  /// **'Delete All Recordings'**
+  String get deleteAllFiles;
+
+  /// Menu option to delete all recordings
+  ///
+  /// In en, this message translates to:
+  /// **'Delete All'**
+  String get deleteAll;
+
+  /// Warning message for deleting all files
+  ///
+  /// In en, this message translates to:
+  /// **'This will delete both synced and pending recordings. Pending recordings have NOT been synced and will be permanently lost. This cannot be undone.'**
+  String get deleteAllFilesWarning;
+
+  /// Snackbar message after all files deleted
+  ///
+  /// In en, this message translates to:
+  /// **'All recordings deleted'**
+  String get allFilesDeleted;
+
+  /// Count of files
+  ///
+  /// In en, this message translates to:
+  /// **'{count} recordings'**
+  String nFiles(int count);
+
+  /// Menu option and sheet title for managing recording storage
+  ///
+  /// In en, this message translates to:
+  /// **'Manage Storage'**
+  String get manageStorage;
+
+  /// Description for synced files in manage storage sheet
+  ///
+  /// In en, this message translates to:
+  /// **'Safely backed up to your phone'**
+  String get safelyBackedUp;
+
+  /// Description for pending files in manage storage sheet
+  ///
+  /// In en, this message translates to:
+  /// **'Not yet synced to your phone'**
+  String get notYetSynced;
+
+  /// Button label to clear all files
+  ///
+  /// In en, this message translates to:
+  /// **'Clear All'**
+  String get clearAll;
+
+  /// Label for the keypad/dialpad button during an active phone call
+  ///
+  /// In en, this message translates to:
+  /// **'Keypad'**
+  String get phoneKeypad;
+
+  /// Label for the button to dismiss the in-call keypad
+  ///
+  /// In en, this message translates to:
+  /// **'Hide Keypad'**
+  String get phoneHideKeypad;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {
@@ -15842,41 +16004,41 @@ class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> 
 
   @override
   bool isSupported(Locale locale) => <String>[
-        'ar',
-        'bg',
-        'ca',
-        'cs',
-        'da',
-        'de',
-        'el',
-        'en',
-        'es',
-        'et',
-        'fi',
-        'fr',
-        'hi',
-        'hu',
-        'id',
-        'it',
-        'ja',
-        'ko',
-        'lt',
-        'lv',
-        'ms',
-        'nl',
-        'no',
-        'pl',
-        'pt',
-        'ro',
-        'ru',
-        'sk',
-        'sv',
-        'th',
-        'tr',
-        'uk',
-        'vi',
-        'zh'
-      ].contains(locale.languageCode);
+    'ar',
+    'bg',
+    'ca',
+    'cs',
+    'da',
+    'de',
+    'el',
+    'en',
+    'es',
+    'et',
+    'fi',
+    'fr',
+    'hi',
+    'hu',
+    'id',
+    'it',
+    'ja',
+    'ko',
+    'lt',
+    'lv',
+    'ms',
+    'nl',
+    'no',
+    'pl',
+    'pt',
+    'ro',
+    'ru',
+    'sk',
+    'sv',
+    'th',
+    'tr',
+    'uk',
+    'vi',
+    'zh',
+  ].contains(locale.languageCode);
 
   @override
   bool shouldReload(_AppLocalizationsDelegate old) => false;
@@ -15955,8 +16117,10 @@ AppLocalizations lookupAppLocalizations(Locale locale) {
       return AppLocalizationsZh();
   }
 
-  throw FlutterError('AppLocalizations.delegate failed to load unsupported locale "$locale". This is likely '
-      'an issue with the localizations generation tool. Please file an issue '
-      'on GitHub with a reproducible sample app and the gen-l10n configuration '
-      'that was used.');
+  throw FlutterError(
+    'AppLocalizations.delegate failed to load unsupported locale "$locale". This is likely '
+    'an issue with the localizations generation tool. Please file an issue '
+    'on GitHub with a reproducible sample app and the gen-l10n configuration '
+    'that was used.',
+  );
 }

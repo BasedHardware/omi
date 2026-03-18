@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "flow": "action-items",
+  "flowHash": "9fcaf6e915a65ac8",
+  "device": {
+    "model": "unknown",
+    "resolution": "unknown"
+  },
+  "createdAt": "2026-03-17T10:39:40.279Z",
+  "runId": "bMmeMZE",
+  "totalDurationMs": 0,
+  "verifySteps": [],
+  "steps": {}
+}

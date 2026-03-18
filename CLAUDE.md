@@ -107,6 +107,8 @@ agent-flutter snapshot -i --json       # structured data for parsing
 
 # 4. Interact
 agent-flutter press @e3                # tap by ref
+agent-flutter press 540 1200           # tap by coordinates (ADB fallback)
+agent-flutter dismiss                  # dismiss system dialogs (location, permissions)
 agent-flutter find type button press   # find and tap (more stable than @ref)
 agent-flutter fill @e5 "hello"         # type into textfield
 agent-flutter scroll down              # scroll current view
@@ -116,7 +118,7 @@ agent-flutter screenshot /tmp/after-change.png
 ```
 
 **Key rules:**
-- Refs go stale after any mutation (`press`, `fill`, `scroll`) — always re-snapshot before the next interaction.
+- Refs go stale frequently (Flutter rebuilds aggressively) — always re-snapshot before every interaction. Use `press x y` as fallback.
 - `AGENT_FLUTTER_LOG` must point to the flutter run stdout log file (not logcat). This is how agent-flutter finds the correct VM Service URI.
 - `find type X` or `find text "label"` is more stable than hardcoded `@ref` numbers.
 - When adding new interactive widgets, use `Key('descriptive_name')` so agents can use `find key` (survives i18n and theme changes).
@@ -171,7 +173,9 @@ agent-swift screenshot /tmp/after-change.png  # capture app window
 - 15 commands: `doctor`, `connect`, `disconnect`, `status`, `snapshot`, `press`, `click`, `fill`, `get`, `find`, `screenshot`, `is`, `wait`, `scroll`, `schema`.
 - Works with any macOS app (SwiftUI, AppKit, Electron) — no Marionette or app-side setup.
 - Bundle ID for dev: `com.omi.desktop-dev`. For prod: `com.omi.computer-macos`.
+- If you launch a custom-named desktop test build, keep the bundle suffix and app name identical so auth callbacks reopen the correct app. Example: `1233.app` should use `com.omi.1233`, `search.app` should use `com.omi.search`, and mismatches like `1233.app` with `com.omi.desktop-dev` are not allowed.
 - **App flows & exploration skill**: See `desktop/e2e/SKILL.md` for navigation architecture, screen map, interaction patterns (click vs press), and known flows. Read this when developing features or exploring the app.
+- When asked to build or rebuild the desktop app for testing, don't stop at a successful compile: launch the dev app, interact with it programmatically to confirm it actually runs, and report any environment blocker if full interaction is impossible.
 
 ## Formatting
 <!-- Maintainers: @Thinh (Jan 19) -->
@@ -199,6 +203,9 @@ clang-format -i <files>
 
 ### Rules
 - Always commit to the current branch — never switch branches.
+- Never push directly to `main`.
+- Never merge directly from a local branch. Land changes through a PR only.
+- When a change should go remote, create or use a feature branch, commit there, open/update a PR, and merge via the PR.
 - Never squash merge PRs — use regular merge.
 - Make individual commits per file, not bulk commits.
 - The pre-commit hook auto-formats staged code — no need to format manually before committing.
@@ -225,6 +232,7 @@ See [docs/runbooks/logging.md](docs/runbooks/logging.md) for log commands.
 - Keep `AGENTS.md` synced with this file. Update both in the same commit.
 - Keep rules concise (one-line statements). No code examples or verbose prose in this file.
 - For significant changes to architecture, core flows, or APIs — update the Mintlify docs (`docs/`) in the same PR. Key files: `docs/doc/developer/backend/backend_deepdive.mdx` (architecture), `docs/doc/developer/backend/chat_system.mdx` (chat), `docs/doc/developer/backend/transcription.mdx` (STT pipeline).
+- If a PR changes how audio streaming, transcription, conversation lifecycle, speaker identification, or the listen/pusher WebSocket protocol works — update `docs/doc/developer/backend/listen_pusher_pipeline.mdx` in the same PR. This includes changes to timeouts, event types, processing flow, or inter-service communication between listen and pusher.
 
 ## Testing
 Run `backend/test-preflight.sh` to verify environment. Run `backend/test.sh` (backend) or `app/test.sh` (app) before committing.
