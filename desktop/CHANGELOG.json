@@ -1,6 +1,7 @@
 {
   "unreleased": [
-    "Reduced auth error log spam with exponential backoff across all polling operations"
+    "Reduced auth error log spam with exponential backoff across all polling operations",
+    "Fixed Tasks page showing misleading \"No Matching Tasks\" when user has no tasks"
   ],
   "releases": [
     {
