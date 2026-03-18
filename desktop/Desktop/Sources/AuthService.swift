@@ -80,13 +80,16 @@ class AuthService {
     private let kAuthTokenExpiry = "auth_tokenExpiry"
     private let kAuthTokenUserId = "auth_tokenUserId"  // User ID that owns the stored token
 
-    // Firebase Web API key — configurable via FIREBASE_API_KEY env var, falls back to prod key
-    private let firebaseApiKey: String = {
+    // Firebase Web API key — fetched from backend via APIKeyService, set as env var.
+    // No hardcoded fallback — if the key isn't available, auth operations will fail
+    // with a clear error instead of silently using a potentially wrong key.
+    private var firebaseApiKey: String {
         if let envKey = getenv("FIREBASE_API_KEY"), let key = String(validatingUTF8: envKey), !key.isEmpty {
             return key
         }
-        return "AIzaSyD9dzBdglc7IO9pPDIOvqnCoTis_xKkkC8"
-    }()
+        log("AuthService: FIREBASE_API_KEY not set — auth operations will fail")
+        return ""
+    }
 
     // MARK: - User Name Properties
 
