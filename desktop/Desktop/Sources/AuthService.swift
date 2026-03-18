@@ -80,8 +80,13 @@ class AuthService {
     private let kAuthTokenExpiry = "auth_tokenExpiry"
     private let kAuthTokenUserId = "auth_tokenUserId"  // User ID that owns the stored token
 
-    // Firebase Web API key (from GoogleService-Info.plist)
-    private let firebaseApiKey = "AIzaSyD9dzBdglc7IO9pPDIOvqnCoTis_xKkkC8"
+    // Firebase Web API key — configurable via FIREBASE_API_KEY env var, falls back to prod key
+    private let firebaseApiKey: String = {
+        if let envKey = getenv("FIREBASE_API_KEY"), let key = String(validatingUTF8: envKey), !key.isEmpty {
+            return key
+        }
+        return "AIzaSyD9dzBdglc7IO9pPDIOvqnCoTis_xKkkC8"
+    }()
 
     // MARK: - User Name Properties
 
