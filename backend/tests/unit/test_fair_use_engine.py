@@ -265,6 +265,38 @@ class TestEscalateEnforcement:
         assert result['action'] == 'none'
         assert result['new_stage'] == 'warning'
 
+    @patch.object(
+        fair_use_mod, 'get_rolling_speech_ms', return_value={'daily_ms': 0, 'three_day_ms': 0, 'weekly_ms': 0}
+    )
+    def test_exact_threshold_triggers_warning(self, _):
+        """Score exactly at threshold (0.7) should trigger (uses >=)."""
+        _fair_use_db.get_fair_use_state.return_value = {'stage': 'none'}
+        _fair_use_db.get_violation_counts.return_value = {'violation_count_7d': 0, 'violation_count_30d': 0}
+
+        triggered = [{'trigger': SoftCapTrigger.DAILY, 'speech_ms': 8000000, 'threshold_ms': 7200000}]
+        classifier = {'abuse_score': 0.7, 'abuse_type': 'audiobook'}
+
+        result = fair_use_mod.escalate_enforcement('user1', triggered, classifier)
+
+        assert result['action'] == 'warning'
+        assert result['new_stage'] == 'warning'
+
+    @patch.object(
+        fair_use_mod, 'get_rolling_speech_ms', return_value={'daily_ms': 0, 'three_day_ms': 0, 'weekly_ms': 0}
+    )
+    def test_just_below_threshold_no_warning(self, _):
+        """Score just below threshold (0.69) should NOT trigger."""
+        _fair_use_db.get_fair_use_state.return_value = {'stage': 'none'}
+        _fair_use_db.get_violation_counts.return_value = {'violation_count_7d': 0, 'violation_count_30d': 0}
+
+        triggered = [{'trigger': SoftCapTrigger.DAILY, 'speech_ms': 8000000, 'threshold_ms': 7200000}]
+        classifier = {'abuse_score': 0.69, 'abuse_type': 'audiobook'}
+
+        result = fair_use_mod.escalate_enforcement('user1', triggered, classifier)
+
+        assert result['action'] == 'none'
+        assert result['new_stage'] == 'none'
+
 
 class TestIsHardRestricted:
     """Test hard restriction check."""
