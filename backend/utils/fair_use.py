@@ -64,6 +64,7 @@ FAIR_USE_REDIS_RETENTION_SECONDS = int(os.getenv('FAIR_USE_REDIS_RETENTION_SECON
 
 # Classifier config
 FAIR_USE_CLASSIFIER_MISUSE_THRESHOLD = float(os.getenv('FAIR_USE_CLASSIFIER_ABUSE_SCORE_THRESHOLD', '0.7'))
+FAIR_USE_CLASSIFIER_COOLDOWN_SECONDS = int(os.getenv('FAIR_USE_CLASSIFIER_COOLDOWN_SECONDS', '43200'))  # 12 hours
 
 # Throttle VAD config
 FAIR_USE_STAGE2_VAD_DELTA = float(os.getenv('FAIR_USE_STAGE2_VAD_THRESHOLD_DELTA', '0.08'))
@@ -426,8 +427,9 @@ async def trigger_classifier_if_needed(uid: str, triggered_caps: list, session_i
     lock_token = str(uuid.uuid4())
 
     try:
-        # Acquire lock with 5-minute TTL (deduplicate within window)
-        acquired = redis_client.set(lock_key, lock_token, nx=True, ex=300)
+        # Acquire lock with cooldown TTL (default 12h — classifier looks at 7d of convos,
+        # so re-running every few minutes adds no value; 12h gives ~7% new data per run)
+        acquired = redis_client.set(lock_key, lock_token, nx=True, ex=FAIR_USE_CLASSIFIER_COOLDOWN_SECONDS)
         if not acquired:
             logger.info(f'fair_use: classifier already running/recent for {uid}')
             return
