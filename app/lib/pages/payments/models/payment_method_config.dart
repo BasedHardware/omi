@@ -36,11 +36,7 @@ class PaymentMethodConfig {
     return PaymentMethodConfig(
       title: title,
       subtitle: subtitle,
-      icon: SvgPicture.asset(
-        Assets.images.stripeLogo,
-        width: 80,
-        color: Colors.white,
-      ),
+      icon: SvgPicture.asset(Assets.images.stripeLogo, width: 80, color: Colors.white),
       backgroundColor: isActive ? const Color(0xFF635BFF) : Color(0xFF35343B),
       onManageTap: onManageTap,
       onSetActiveTap: onSetActiveTap,
@@ -60,11 +56,7 @@ class PaymentMethodConfig {
     return PaymentMethodConfig(
       title: title,
       subtitle: subtitle,
-      icon: const Icon(
-        Icons.paypal,
-        size: 32,
-        color: Colors.white,
-      ),
+      icon: const Icon(Icons.paypal, size: 32, color: Colors.white),
       backgroundColor: isActive ? const Color(0xFF003087) : Color(0xFF35343B),
       onManageTap: onManageTap,
       onSetActiveTap: onSetActiveTap,
@@ -81,16 +73,10 @@ class PayPalDetails {
   PayPalDetails({required this.email, required this.link});
 
   Map<String, dynamic> toJson() {
-    return {
-      'email': email,
-      'paypalme_url': link,
-    };
+    return {'email': email, 'paypalme_url': link};
   }
 
   factory PayPalDetails.fromJson(Map<String, dynamic> json) {
-    return PayPalDetails(
-      email: json['email'],
-      link: json['paypalme_url'],
-    );
+    return PayPalDetails(email: json['email'], link: json['paypalme_url']);
   }
 }

@@ -14,9 +14,7 @@ class DevApiKeyListItem extends StatelessWidget {
 
   List<Widget> _buildScopeChips(BuildContext context, List<String>? scopes) {
     if (scopes == null || scopes.isEmpty) {
-      return [
-        _buildChip(context.l10n.readOnlyScope, const Color(0xFF3B82F6)),
-      ];
+      return [_buildChip(context.l10n.readOnlyScope, const Color(0xFF3B82F6))];
     }
 
     final hasRead = scopes.any((s) => s.endsWith(':read'));
@@ -36,17 +34,10 @@ class DevApiKeyListItem extends StatelessWidget {
   Widget _buildChip(String label, Color color) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.15),
-        borderRadius: BorderRadius.circular(6),
-      ),
+      decoration: BoxDecoration(color: color.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(6)),
       child: Text(
         label,
-        style: TextStyle(
-          color: color,
-          fontSize: 11,
-          fontWeight: FontWeight.w600,
-        ),
+        style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.w600),
       ),
     );
   }
@@ -82,20 +73,13 @@ class DevApiKeyListItem extends StatelessWidget {
                   children: [
                     Text(
                       apiKey.name,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 15,
-                        fontWeight: FontWeight.w600,
-                      ),
+                      style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w600),
                       overflow: TextOverflow.ellipsis,
                     ),
                     const SizedBox(height: 4),
                     Text(
                       '${apiKey.keyPrefix}***  •  ${DateFormat.yMMMd().format(apiKey.createdAt)}',
-                      style: const TextStyle(
-                        color: Color(0xFF8E8E93),
-                        fontSize: 13,
-                      ),
+                      style: const TextStyle(color: Color(0xFF8E8E93), fontSize: 13),
                     ),
                   ],
                 ),
@@ -110,22 +94,14 @@ class DevApiKeyListItem extends StatelessWidget {
                   ),
                   child: Text(
                     context.l10n.revoke,
-                    style: const TextStyle(
-                      color: Color(0xFFEF4444),
-                      fontSize: 12,
-                      fontWeight: FontWeight.w500,
-                    ),
+                    style: const TextStyle(color: Color(0xFFEF4444), fontSize: 12, fontWeight: FontWeight.w500),
                   ),
                 ),
               ),
             ],
           ),
           const SizedBox(height: 12),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: _buildScopeChips(context, apiKey.scopes),
-          ),
+          Wrap(spacing: 8, runSpacing: 8, children: _buildScopeChips(context, apiKey.scopes)),
         ],
       ),
     );
@@ -142,18 +118,17 @@ class DevApiKeyListItem extends StatelessWidget {
             context.l10n.revokeKeyQuestion,
             style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
           ),
-          content: Text(
-            context.l10n.revokeKeyConfirmation(apiKey.name),
-            style: TextStyle(color: Colors.grey.shade400),
-          ),
+          content: Text(context.l10n.revokeKeyConfirmation(apiKey.name), style: TextStyle(color: Colors.grey.shade400)),
           actions: <Widget>[
             TextButton(
               child: Text(context.l10n.cancel, style: TextStyle(color: Colors.grey.shade400)),
               onPressed: () => Navigator.of(dialogContext).pop(),
             ),
             TextButton(
-              child: Text(context.l10n.revoke,
-                  style: const TextStyle(color: Colors.redAccent, fontWeight: FontWeight.w600)),
+              child: Text(
+                context.l10n.revoke,
+                style: const TextStyle(color: Colors.redAccent, fontWeight: FontWeight.w600),
+              ),
               onPressed: () {
                 Provider.of<DevApiKeyProvider>(context, listen: false).deleteKey(apiKey.id);
                 Navigator.of(dialogContext).pop();

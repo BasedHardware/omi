@@ -36,499 +36,475 @@ class _UpdateAppPageState extends State<UpdateAppPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<AddAppProvider>(builder: (context, provider, child) {
-      return GestureDetector(
-        onTap: () {
-          FocusScope.of(context).unfocus();
-        },
-        child: Scaffold(
-          backgroundColor: Theme.of(context).colorScheme.primary,
-          extendBody: true,
-          appBar: AppBar(
-            title: Text(context.l10n.manageYourApp),
+    return Consumer<AddAppProvider>(
+      builder: (context, provider, child) {
+        return GestureDetector(
+          onTap: () {
+            FocusScope.of(context).unfocus();
+          },
+          child: Scaffold(
             backgroundColor: Theme.of(context).colorScheme.primary,
-            actions: [
-              if (provider.selectedCapabilities.any((c) => c.id == 'external_integration') &&
-                  provider.chatToolsManifestUrlController.text.isNotEmpty)
-                IconButton(
-                  onPressed: provider.isRefreshingManifest
-                      ? null
-                      : () async {
-                          await provider.refreshManifest();
-                        },
-                  icon: provider.isRefreshingManifest
-                      ? const SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                          ),
-                        )
-                      : const Icon(Icons.refresh),
-                  tooltip: 'Refresh Manifest',
-                ),
-            ],
-          ),
-          body: PopScope(
-            onPopInvokedWithResult: (didPop, result) {
-              context.read<AddAppProvider>().clear();
-            },
-            child: Builder(builder: (context) {
-              if (provider.isUpdating) {
-                return Center(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      const CircularProgressIndicator(
-                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                      ),
-                      const SizedBox(
-                        height: 14,
-                      ),
-                      Text(
-                        context.l10n.updatingYourApp,
-                        style: const TextStyle(color: Colors.white),
-                      ),
-                    ],
-                  ),
-                );
-              }
-              if (provider.isLoading) {
-                return Center(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      const CircularProgressIndicator(
-                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                      ),
-                      const SizedBox(
-                        height: 14,
-                      ),
-                      Text(
-                        context.l10n.fetchingYourAppDetails,
-                        style: const TextStyle(color: Colors.white),
-                      ),
-                    ],
-                  ),
-                );
-              }
-              return SingleChildScrollView(
-                child: Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: Form(
-                    key: provider.formKey,
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const SizedBox(height: 18),
-                        AppMetadataWidget(
-                          pickImage: () async {
-                            await provider.updateImage();
+            extendBody: true,
+            appBar: AppBar(
+              title: Text(context.l10n.manageYourApp),
+              backgroundColor: Theme.of(context).colorScheme.primary,
+              actions: [
+                if (provider.selectedCapabilities.any((c) => c.id == 'external_integration') &&
+                    provider.chatToolsManifestUrlController.text.isNotEmpty)
+                  IconButton(
+                    onPressed: provider.isRefreshingManifest
+                        ? null
+                        : () async {
+                            await provider.refreshManifest();
                           },
-                          generatingDescription: provider.isGenratingDescription,
-                          allowPaidApps: provider.allowPaidApps,
-                          appPricing: provider.isPaid ? 'Paid' : 'Free',
-                          imageFile: provider.imageFile,
-                          appNameController: provider.appNameController,
-                          appDescriptionController: provider.appDescriptionController,
-                          categories: provider.categories,
-                          setAppCategory: provider.setAppCategory,
-                          imageUrl: provider.imageUrl,
-                          category: provider.mapCategoryIdToName(provider.appCategory),
-                        ),
-                        provider.isPaid
-                            ? PaymentDetailsWidget(
-                                appPricingController: provider.priceController,
-                                paymentPlan: provider.mapPaymentPlanIdToName(provider.selectePaymentPlan),
-                              )
-                            : const SizedBox.shrink(),
-                        const SizedBox(height: 18),
-                        Container(
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF1F1F25),
-                            borderRadius: BorderRadius.circular(12.0),
-                          ),
-                          padding: const EdgeInsets.all(14.0),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Padding(
-                                padding: const EdgeInsets.only(left: 8.0),
-                                child: Text(
-                                  context.l10n.previewAndScreenshots,
-                                  style: TextStyle(color: Colors.grey.shade300, fontSize: 16),
-                                ),
+                    icon: provider.isRefreshingManifest
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                            ),
+                          )
+                        : const Icon(Icons.refresh),
+                    tooltip: 'Refresh Manifest',
+                  ),
+              ],
+            ),
+            body: PopScope(
+              onPopInvokedWithResult: (didPop, result) {
+                context.read<AddAppProvider>().clear();
+              },
+              child: Builder(
+                builder: (context) {
+                  if (provider.isUpdating) {
+                    return Center(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          const CircularProgressIndicator(valueColor: AlwaysStoppedAnimation<Color>(Colors.white)),
+                          const SizedBox(height: 14),
+                          Text(context.l10n.updatingYourApp, style: const TextStyle(color: Colors.white)),
+                        ],
+                      ),
+                    );
+                  }
+                  if (provider.isLoading) {
+                    return Center(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          const CircularProgressIndicator(valueColor: AlwaysStoppedAnimation<Color>(Colors.white)),
+                          const SizedBox(height: 14),
+                          Text(context.l10n.fetchingYourAppDetails, style: const TextStyle(color: Colors.white)),
+                        ],
+                      ),
+                    );
+                  }
+                  return SingleChildScrollView(
+                    child: Padding(
+                      padding: const EdgeInsets.all(16.0),
+                      child: Form(
+                        key: provider.formKey,
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const SizedBox(height: 18),
+                            AppMetadataWidget(
+                              pickImage: () async {
+                                await provider.updateImage();
+                              },
+                              generatingDescription: provider.isGenratingDescription,
+                              allowPaidApps: provider.allowPaidApps,
+                              appPricing: provider.isPaid ? 'Paid' : 'Free',
+                              imageFile: provider.imageFile,
+                              appNameController: provider.appNameController,
+                              appDescriptionController: provider.appDescriptionController,
+                              categories: provider.categories,
+                              setAppCategory: provider.setAppCategory,
+                              imageUrl: provider.imageUrl,
+                              category: provider.mapCategoryIdToName(provider.appCategory),
+                            ),
+                            provider.isPaid
+                                ? PaymentDetailsWidget(
+                                    appPricingController: provider.priceController,
+                                    paymentPlan: provider.mapPaymentPlanIdToName(provider.selectePaymentPlan),
+                                  )
+                                : const SizedBox.shrink(),
+                            const SizedBox(height: 18),
+                            Container(
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF1F1F25),
+                                borderRadius: BorderRadius.circular(12.0),
                               ),
-                              const SizedBox(height: 18),
-                              SizedBox(
-                                height: 180,
-                                child: ListView.builder(
-                                  scrollDirection: Axis.horizontal,
-                                  itemCount: provider.thumbnailUrls.length + 1,
-                                  itemBuilder: (context, index) {
-                                    // Calculate dimensions to maintain 2:3 ratio
-                                    const width = 120.0;
-                                    const height = width * 1.5; // 2:3 ratio
+                              padding: const EdgeInsets.all(14.0),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Padding(
+                                    padding: const EdgeInsets.only(left: 8.0),
+                                    child: Text(
+                                      context.l10n.previewAndScreenshots,
+                                      style: TextStyle(color: Colors.grey.shade300, fontSize: 16),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 18),
+                                  SizedBox(
+                                    height: 180,
+                                    child: ListView.builder(
+                                      scrollDirection: Axis.horizontal,
+                                      itemCount: provider.thumbnailUrls.length + 1,
+                                      itemBuilder: (context, index) {
+                                        // Calculate dimensions to maintain 2:3 ratio
+                                        const width = 120.0;
+                                        const height = width * 1.5; // 2:3 ratio
 
-                                    if (index == provider.thumbnailUrls.length) {
-                                      return GestureDetector(
-                                        onTap: provider.isUploadingThumbnail ? null : provider.pickThumbnail,
-                                        child: Container(
-                                          width: width,
-                                          height: height,
-                                          margin: const EdgeInsets.only(right: 8),
-                                          decoration: BoxDecoration(
-                                            color: Color(0xFF35343B),
-                                            borderRadius: BorderRadius.circular(8),
-                                          ),
-                                          child: provider.isUploadingThumbnail
-                                              ? ShimmerWithTimeout(
+                                        if (index == provider.thumbnailUrls.length) {
+                                          return GestureDetector(
+                                            onTap: provider.isUploadingThumbnail ? null : provider.pickThumbnail,
+                                            child: Container(
+                                              width: width,
+                                              height: height,
+                                              margin: const EdgeInsets.only(right: 8),
+                                              decoration: BoxDecoration(
+                                                color: Color(0xFF35343B),
+                                                borderRadius: BorderRadius.circular(8),
+                                              ),
+                                              child: provider.isUploadingThumbnail
+                                                  ? ShimmerWithTimeout(
+                                                      baseColor: Colors.grey[900]!,
+                                                      highlightColor: Colors.grey[800]!,
+                                                      child: Container(
+                                                        width: width,
+                                                        height: height,
+                                                        decoration: BoxDecoration(
+                                                          color: Colors.black,
+                                                          borderRadius: BorderRadius.circular(8),
+                                                        ),
+                                                        child: const Icon(Icons.photo, size: 32),
+                                                      ),
+                                                    )
+                                                  : const Icon(Icons.add_photo_alternate_outlined, size: 32),
+                                            ),
+                                          );
+                                        }
+                                        return Stack(
+                                          children: [
+                                            GestureDetector(
+                                              onTap: () {
+                                                Navigator.push(
+                                                  context,
+                                                  MaterialPageRoute(
+                                                    builder: (context) =>
+                                                        FullScreenImageViewer(imageUrl: provider.thumbnailUrls[index]),
+                                                  ),
+                                                );
+                                              },
+                                              child: CachedNetworkImage(
+                                                imageUrl: provider.thumbnailUrls[index],
+                                                imageBuilder: (context, imageProvider) => Container(
+                                                  width: 120,
+                                                  height: 180, // 2:3 ratio (120 * 1.5)
+                                                  margin: const EdgeInsets.only(right: 8),
+                                                  decoration: BoxDecoration(
+                                                    borderRadius: BorderRadius.circular(8),
+                                                    border: Border.all(color: const Color(0xFF424242), width: 1),
+                                                    image: DecorationImage(image: imageProvider, fit: BoxFit.cover),
+                                                  ),
+                                                ),
+                                                placeholder: (context, url) => ShimmerWithTimeout(
                                                   baseColor: Colors.grey[900]!,
                                                   highlightColor: Colors.grey[800]!,
                                                   child: Container(
-                                                    width: width,
-                                                    height: height,
+                                                    width: 120,
+                                                    height: 180,
+                                                    margin: const EdgeInsets.only(right: 8),
                                                     decoration: BoxDecoration(
                                                       color: Colors.black,
                                                       borderRadius: BorderRadius.circular(8),
                                                     ),
-                                                    child: const Icon(Icons.photo, size: 32),
                                                   ),
-                                                )
-                                              : const Icon(Icons.add_photo_alternate_outlined, size: 32),
-                                        ),
-                                      );
-                                    }
-                                    return Stack(
-                                      children: [
-                                        GestureDetector(
-                                          onTap: () {
-                                            Navigator.push(
-                                              context,
-                                              MaterialPageRoute(
-                                                builder: (context) => FullScreenImageViewer(
-                                                  imageUrl: provider.thumbnailUrls[index],
                                                 ),
-                                              ),
-                                            );
-                                          },
-                                          child: CachedNetworkImage(
-                                            imageUrl: provider.thumbnailUrls[index],
-                                            imageBuilder: (context, imageProvider) => Container(
-                                              width: 120,
-                                              height: 180, // 2:3 ratio (120 * 1.5)
-                                              margin: const EdgeInsets.only(right: 8),
-                                              decoration: BoxDecoration(
-                                                borderRadius: BorderRadius.circular(8),
-                                                border: Border.all(
-                                                  color: const Color(0xFF424242),
-                                                  width: 1,
-                                                ),
-                                                image: DecorationImage(
-                                                  image: imageProvider,
-                                                  fit: BoxFit.cover,
+                                                errorWidget: (context, url, error) => Container(
+                                                  width: 120,
+                                                  height: 180,
+                                                  margin: const EdgeInsets.only(right: 8),
+                                                  decoration: BoxDecoration(
+                                                    color: Colors.grey[900],
+                                                    borderRadius: BorderRadius.circular(8),
+                                                  ),
+                                                  child: const Icon(Icons.error),
                                                 ),
                                               ),
                                             ),
-                                            placeholder: (context, url) => ShimmerWithTimeout(
-                                              baseColor: Colors.grey[900]!,
-                                              highlightColor: Colors.grey[800]!,
-                                              child: Container(
-                                                width: 120,
-                                                height: 180,
-                                                margin: const EdgeInsets.only(right: 8),
-                                                decoration: BoxDecoration(
-                                                  color: Colors.black,
-                                                  borderRadius: BorderRadius.circular(8),
+                                            Positioned(
+                                              top: 4,
+                                              right: 12,
+                                              child: GestureDetector(
+                                                onTap: () => provider.removeThumbnail(index),
+                                                child: Container(
+                                                  padding: const EdgeInsets.all(4),
+                                                  decoration: BoxDecoration(
+                                                    color: Colors.black.withValues(alpha: 0.6),
+                                                    shape: BoxShape.circle,
+                                                  ),
+                                                  child: const Icon(Icons.close, size: 16),
                                                 ),
                                               ),
                                             ),
-                                            errorWidget: (context, url, error) => Container(
-                                              width: 120,
-                                              height: 180,
-                                              margin: const EdgeInsets.only(right: 8),
-                                              decoration: BoxDecoration(
-                                                color: Colors.grey[900],
-                                                borderRadius: BorderRadius.circular(8),
-                                              ),
-                                              child: const Icon(Icons.error),
-                                            ),
-                                          ),
-                                        ),
-                                        Positioned(
-                                          top: 4,
-                                          right: 12,
-                                          child: GestureDetector(
-                                            onTap: () => provider.removeThumbnail(index),
-                                            child: Container(
-                                              padding: const EdgeInsets.all(4),
-                                              decoration: BoxDecoration(
-                                                color: Colors.black.withValues(alpha: 0.6),
-                                                shape: BoxShape.circle,
-                                              ),
-                                              child: const Icon(Icons.close, size: 16),
-                                            ),
-                                          ),
-                                        ),
-                                      ],
-                                    );
-                                  },
-                                ),
+                                          ],
+                                        );
+                                      },
+                                    ),
+                                  ),
+                                ],
                               ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(height: 18),
-                        Container(
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF1F1F25),
-                            borderRadius: BorderRadius.circular(12.0),
-                          ),
-                          padding: const EdgeInsets.all(14.0),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Padding(
-                                padding: const EdgeInsets.only(left: 8.0),
-                                child: Text(
-                                  context.l10n.appCapabilities,
-                                  style: TextStyle(color: Colors.grey.shade300, fontSize: 16),
-                                ),
+                            ),
+                            const SizedBox(height: 18),
+                            Container(
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF1F1F25),
+                                borderRadius: BorderRadius.circular(12.0),
                               ),
-                              const SizedBox(
-                                height: 10,
+                              padding: const EdgeInsets.all(14.0),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Padding(
+                                    padding: const EdgeInsets.only(left: 8.0),
+                                    child: Text(
+                                      context.l10n.appCapabilities,
+                                      style: TextStyle(color: Colors.grey.shade300, fontSize: 16),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 10),
+                                  const CapabilitiesChipsWidget(),
+                                ],
                               ),
-                              const CapabilitiesChipsWidget(),
-                            ],
-                          ),
-                        ),
-                        if (provider.isCapabilitySelectedById('chat') || provider.isCapabilitySelectedById('memories'))
-                          Column(
-                            children: [
-                              const SizedBox(height: 18),
-                              GestureDetector(
-                                onTap: () {
-                                  FocusScope.of(context).unfocus();
-                                },
-                                child: Form(
-                                  key: provider.promptKey,
-                                  onChanged: () {
-                                    provider.checkValidity();
-                                  },
-                                  child: Container(
+                            ),
+                            if (provider.isCapabilitySelectedById('chat') ||
+                                provider.isCapabilitySelectedById('memories'))
+                              Column(
+                                children: [
+                                  const SizedBox(height: 18),
+                                  GestureDetector(
+                                    onTap: () {
+                                      FocusScope.of(context).unfocus();
+                                    },
+                                    child: Form(
+                                      key: provider.promptKey,
+                                      onChanged: () {
+                                        provider.checkValidity();
+                                      },
+                                      child: Container(
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xFF1F1F25),
+                                          borderRadius: BorderRadius.circular(12.0),
+                                        ),
+                                        padding: const EdgeInsets.all(14.0),
+                                        child: Column(
+                                          children: [
+                                            if (provider.isCapabilitySelectedById('chat'))
+                                              PromptTextField(
+                                                controller: provider.chatPromptController,
+                                                label: context.l10n.chatPrompt,
+                                                hint: context.l10n.chatPromptPlaceholder,
+                                              ),
+                                            if (provider.isCapabilitySelectedById('memories') &&
+                                                provider.isCapabilitySelectedById('chat'))
+                                              const SizedBox(height: 20),
+                                            if (provider.isCapabilitySelectedById('memories'))
+                                              PromptTextField(
+                                                controller: provider.conversationPromptController,
+                                                label: context.l10n.conversationPrompt,
+                                                hint: context.l10n.conversationPromptPlaceholder,
+                                              ),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            const ExternalTriggerFieldsWidget(),
+                            if (provider.isCapabilitySelectedById('proactive_notification'))
+                              Column(
+                                children: [
+                                  const SizedBox(height: 18),
+                                  Container(
                                     decoration: BoxDecoration(
                                       color: const Color(0xFF1F1F25),
                                       borderRadius: BorderRadius.circular(12.0),
                                     ),
                                     padding: const EdgeInsets.all(14.0),
+                                    width: double.infinity,
                                     child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
                                       children: [
-                                        if (provider.isCapabilitySelectedById('chat'))
-                                          PromptTextField(
-                                            controller: provider.chatPromptController,
-                                            label: context.l10n.chatPrompt,
-                                            hint: context.l10n.chatPromptPlaceholder,
+                                        Padding(
+                                          padding: const EdgeInsets.only(left: 8.0),
+                                          child: Text(
+                                            context.l10n.notificationScopes,
+                                            style: TextStyle(color: Colors.grey.shade300, fontSize: 16),
                                           ),
-                                        if (provider.isCapabilitySelectedById('memories') &&
-                                            provider.isCapabilitySelectedById('chat'))
-                                          const SizedBox(
-                                            height: 20,
-                                          ),
-                                        if (provider.isCapabilitySelectedById('memories'))
-                                          PromptTextField(
-                                            controller: provider.conversationPromptController,
-                                            label: context.l10n.conversationPrompt,
-                                            hint: context.l10n.conversationPromptPlaceholder,
-                                          ),
+                                        ),
+                                        const SizedBox(height: 10),
+                                        const SizedBox(height: 48, child: NotificationScopesChipsWidget()),
                                       ],
                                     ),
                                   ),
-                                ),
+                                ],
                               ),
-                            ],
-                          ),
-                        const ExternalTriggerFieldsWidget(),
-                        if (provider.isCapabilitySelectedById('proactive_notification'))
-                          Column(
-                            children: [
-                              const SizedBox(height: 18),
-                              Container(
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFF1F1F25),
-                                  borderRadius: BorderRadius.circular(12.0),
-                                ),
-                                padding: const EdgeInsets.all(14.0),
-                                width: double.infinity,
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Padding(
-                                      padding: const EdgeInsets.only(left: 8.0),
-                                      child: Text(
-                                        context.l10n.notificationScopes,
-                                        style: TextStyle(color: Colors.grey.shade300, fontSize: 16),
-                                      ),
+                            if (provider.isCapabilitySelectedById('external_integration') ||
+                                provider.isCapabilitySelectedById('proactive_notification'))
+                              Column(
+                                children: [
+                                  const SizedBox(height: 12),
+                                  Container(
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFF1F1F25),
+                                      borderRadius: BorderRadius.circular(18.0),
                                     ),
-                                    const SizedBox(
-                                      height: 10,
-                                    ),
-                                    const SizedBox(height: 48, child: NotificationScopesChipsWidget()),
-                                  ],
-                                ),
-                              ),
-                            ],
-                          ),
-                        if (provider.isCapabilitySelectedById('external_integration') ||
-                            provider.isCapabilitySelectedById('proactive_notification'))
-                          Column(
-                            children: [
-                              const SizedBox(height: 12),
-                              Container(
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFF1F1F25),
-                                  borderRadius: BorderRadius.circular(18.0),
-                                ),
-                                padding: const EdgeInsets.all(14.0),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Padding(
-                                      padding: const EdgeInsets.only(left: 8.0),
-                                      child: Text.rich(
-                                        TextSpan(
-                                          text: 'GitHub Repository URL',
-                                          style: TextStyle(color: Colors.grey.shade300, fontSize: 16),
-                                          children: const [
+                                    padding: const EdgeInsets.all(14.0),
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Padding(
+                                          padding: const EdgeInsets.only(left: 8.0),
+                                          child: Text.rich(
                                             TextSpan(
-                                              text: ' *',
-                                              style: TextStyle(color: Colors.red),
+                                              text: 'GitHub Repository URL',
+                                              style: TextStyle(color: Colors.grey.shade300, fontSize: 16),
+                                              children: const [
+                                                TextSpan(
+                                                  text: ' *',
+                                                  style: TextStyle(color: Colors.red),
+                                                ),
+                                              ],
                                             ),
-                                          ],
+                                          ),
                                         ),
-                                      ),
+                                        const SizedBox(height: 4),
+                                        Padding(
+                                          padding: const EdgeInsets.only(left: 8.0),
+                                          child: Text(
+                                            'Link to your app\'s source code repository',
+                                            style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
+                                          ),
+                                        ),
+                                        const SizedBox(height: 12),
+                                        TextFormField(
+                                          controller: provider.sourceCodeUrlController,
+                                          decoration: InputDecoration(
+                                            hintText: 'https://github.com/username/repo',
+                                            hintStyle: const TextStyle(color: Colors.grey),
+                                            border: OutlineInputBorder(
+                                              borderRadius: BorderRadius.circular(12),
+                                              borderSide: const BorderSide(color: Colors.grey),
+                                            ),
+                                            enabledBorder: OutlineInputBorder(
+                                              borderRadius: BorderRadius.circular(12),
+                                              borderSide: BorderSide(color: Colors.grey.shade800),
+                                            ),
+                                            focusedBorder: OutlineInputBorder(
+                                              borderRadius: BorderRadius.circular(12),
+                                              borderSide: const BorderSide(color: Colors.white),
+                                            ),
+                                            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                                          ),
+                                          style: const TextStyle(color: Colors.white),
+                                          keyboardType: TextInputType.url,
+                                          validator: (value) {
+                                            if (value == null || value.trim().isEmpty) {
+                                              return 'GitHub repository URL is required';
+                                            }
+                                            if (!Uri.tryParse(value.trim())!.isAbsolute) {
+                                              return 'Please enter a valid URL';
+                                            }
+                                            return null;
+                                          },
+                                        ),
+                                      ],
                                     ),
-                                    const SizedBox(height: 4),
-                                    Padding(
-                                      padding: const EdgeInsets.only(left: 8.0),
-                                      child: Text(
-                                        'Link to your app\'s source code repository',
-                                        style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
-                                      ),
-                                    ),
-                                    const SizedBox(height: 12),
-                                    TextFormField(
-                                      controller: provider.sourceCodeUrlController,
-                                      decoration: InputDecoration(
-                                        hintText: 'https://github.com/username/repo',
-                                        hintStyle: const TextStyle(color: Colors.grey),
-                                        border: OutlineInputBorder(
-                                          borderRadius: BorderRadius.circular(12),
-                                          borderSide: const BorderSide(color: Colors.grey),
-                                        ),
-                                        enabledBorder: OutlineInputBorder(
-                                          borderRadius: BorderRadius.circular(12),
-                                          borderSide: BorderSide(color: Colors.grey.shade800),
-                                        ),
-                                        focusedBorder: OutlineInputBorder(
-                                          borderRadius: BorderRadius.circular(12),
-                                          borderSide: const BorderSide(color: Colors.white),
-                                        ),
-                                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                                      ),
-                                      style: const TextStyle(color: Colors.white),
-                                      keyboardType: TextInputType.url,
-                                      validator: (value) {
-                                        if (value == null || value.trim().isEmpty) {
-                                          return 'GitHub repository URL is required';
-                                        }
-                                        if (!Uri.tryParse(value.trim())!.isAbsolute) {
-                                          return 'Please enter a valid URL';
-                                        }
-                                        return null;
-                                      },
-                                    ),
-                                  ],
-                                ),
+                                  ),
+                                ],
                               ),
-                            ],
-                          ),
-                        // API Keys section
-                        Column(
-                          children: [
-                            const SizedBox(height: 18),
-                            ApiKeysWidget(appId: widget.app.id),
+                            // API Keys section
+                            Column(
+                              children: [
+                                const SizedBox(height: 18),
+                                ApiKeysWidget(appId: widget.app.id),
+                              ],
+                            ),
+                            const SizedBox(height: 120),
                           ],
                         ),
-                        const SizedBox(
-                          height: 120,
-                        ),
-                      ],
+                      ),
                     ),
-                  ),
-                ),
-              );
-            }),
-          ),
-          bottomNavigationBar: (provider.isUpdating)
-              ? null
-              : Container(
-                  padding: const EdgeInsets.only(left: 30.0, right: 30, bottom: 50, top: 10),
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(12.0),
-                    color: const Color(0xFF1F1F25),
-                    gradient: LinearGradient(
-                      colors: [Colors.black, Colors.black.withValues(alpha: 0)],
-                      begin: Alignment.bottomCenter,
-                      end: Alignment.topCenter,
+                  );
+                },
+              ),
+            ),
+            bottomNavigationBar: (provider.isUpdating)
+                ? null
+                : Container(
+                    padding: const EdgeInsets.only(left: 30.0, right: 30, bottom: 50, top: 10),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(12.0),
+                      color: const Color(0xFF1F1F25),
+                      gradient: LinearGradient(
+                        colors: [Colors.black, Colors.black.withValues(alpha: 0)],
+                        begin: Alignment.bottomCenter,
+                        end: Alignment.topCenter,
+                      ),
                     ),
-                  ),
-                  child: GestureDetector(
-                    onTap: !provider.isValid
-                        ? null
-                        : () {
-                            var isValid = provider.validateForm();
-                            if (isValid) {
-                              showDialog(
-                                context: context,
-                                builder: (c) => getDialog(
-                                  context,
-                                  () => Navigator.pop(context),
-                                  () async {
-                                    Navigator.pop(context);
-                                    bool ok = await provider.updateApp();
-                                    if (ok) {
+                    child: GestureDetector(
+                      onTap: !provider.isValid
+                          ? null
+                          : () {
+                              var isValid = provider.validateForm();
+                              if (isValid) {
+                                showDialog(
+                                  context: context,
+                                  builder: (c) => getDialog(
+                                    context,
+                                    () => Navigator.pop(context),
+                                    () async {
                                       Navigator.pop(context);
-                                    }
-                                  },
-                                  context.l10n.updateAppQuestion,
-                                  context.l10n.updateAppConfirmation,
-                                  okButtonText: context.l10n.confirm,
-                                ),
-                              );
-                            }
-                          },
-                    child: Container(
-                      padding: const EdgeInsets.all(12.0),
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(12.0),
-                        color: provider.isValid ? Colors.white : Colors.grey.shade700,
-                      ),
-                      child: Text(
-                        context.l10n.updateApp,
-                        style: const TextStyle(color: Colors.black, fontSize: 16),
-                        textAlign: TextAlign.center,
+                                      bool ok = await provider.updateApp();
+                                      if (ok) {
+                                        Navigator.pop(context);
+                                      }
+                                    },
+                                    context.l10n.updateAppQuestion,
+                                    context.l10n.updateAppConfirmation,
+                                    okButtonText: context.l10n.confirm,
+                                  ),
+                                );
+                              }
+                            },
+                      child: Container(
+                        padding: const EdgeInsets.all(12.0),
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(12.0),
+                          color: provider.isValid ? Colors.white : Colors.grey.shade700,
+                        ),
+                        child: Text(
+                          context.l10n.updateApp,
+                          style: const TextStyle(color: Colors.black, fontSize: 16),
+                          textAlign: TextAlign.center,
+                        ),
                       ),
                     ),
                   ),
-                ),
-        ),
-      );
-    });
+          ),
+        );
+      },
+    );
   }
 }

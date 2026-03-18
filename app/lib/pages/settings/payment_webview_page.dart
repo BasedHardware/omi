@@ -69,18 +69,12 @@ class _PaymentWebViewPageState extends State<PaymentWebViewPage> {
         title: Text(widget.title ?? context.l10n.completeYourUpgrade),
         backgroundColor: Colors.black,
         elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.close),
-          onPressed: () => Navigator.of(context).pop(false),
-        ),
+        leading: IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.of(context).pop(false)),
       ),
       body: Stack(
         children: [
           WebViewWidget(controller: _controller),
-          if (_isLoading)
-            const Center(
-              child: CircularProgressIndicator(color: Colors.deepPurple),
-            ),
+          if (_isLoading) const Center(child: CircularProgressIndicator(color: Colors.deepPurple)),
         ],
       ),
     );

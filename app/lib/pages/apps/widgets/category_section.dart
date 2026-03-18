@@ -66,11 +66,7 @@ class CategorySection extends StatelessWidget {
               children: [
                 Text(
                   categoryName,
-                  style: const TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.white,
-                  ),
+                  style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w600, color: Colors.white),
                 ),
                 const Spacer(),
                 if (showViewAll)
@@ -87,19 +83,11 @@ class CategorySection extends StatelessWidget {
                           ),
                           child: Text(
                             'All',
-                            style: TextStyle(
-                              fontSize: 11,
-                              color: Colors.grey.shade300,
-                              fontWeight: FontWeight.w600,
-                            ),
+                            style: TextStyle(fontSize: 11, color: Colors.grey.shade300, fontWeight: FontWeight.w600),
                           ),
                         ),
                         // const SizedBox(width: 8),
-                        Icon(
-                          Icons.chevron_right,
-                          color: Colors.grey.shade400,
-                          size: 16,
-                        ),
+                        Icon(Icons.chevron_right, color: Colors.grey.shade400, size: 16),
                       ],
                     ),
                   ),
@@ -120,10 +108,7 @@ class CategorySection extends StatelessWidget {
                   mainAxisSpacing: mainAxisSpacing,
                 ),
                 itemCount: displayedApps.length,
-                itemBuilder: (context, index) => SectionAppItemCard(
-                  app: displayedApps[index],
-                  index: index,
-                ),
+                itemBuilder: (context, index) => SectionAppItemCard(app: displayedApps[index], index: index),
               ),
             ),
           ),
@@ -145,10 +130,7 @@ class SectionAppItemCard extends StatelessWidget {
     return Selector<AppProvider, bool>(
       selector: (context, provider) {
         // Only select the enabled state of this specific app
-        final currentApp = provider.apps.firstWhere(
-          (a) => a.id == app.id,
-          orElse: () => app,
-        );
+        final currentApp = provider.apps.firstWhere((a) => a.id == app.id, orElse: () => app);
         return currentApp.enabled;
       },
       builder: (context, isEnabled, child) {
@@ -160,9 +142,7 @@ class SectionAppItemCard extends StatelessWidget {
           },
           child: Container(
             padding: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 4.0),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(12.0),
-            ),
+            decoration: BoxDecoration(borderRadius: BorderRadius.circular(12.0)),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
@@ -184,18 +164,12 @@ class SectionAppItemCard extends StatelessWidget {
                   placeholder: (context, url) => Container(
                     width: 60,
                     height: 60,
-                    decoration: BoxDecoration(
-                      color: Color(0xFF35343B),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
+                    decoration: BoxDecoration(color: Color(0xFF35343B), borderRadius: BorderRadius.circular(8)),
                   ),
                   errorWidget: (context, url, error) => Container(
                     width: 60,
                     height: 60,
-                    decoration: BoxDecoration(
-                      color: Color(0xFF35343B),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
+                    decoration: BoxDecoration(color: Color(0xFF35343B), borderRadius: BorderRadius.circular(8)),
                     child: const Icon(Icons.error_outline, color: Colors.white54, size: 24),
                   ),
                 ),
@@ -235,28 +209,14 @@ class SectionAppItemCard extends StatelessWidget {
                         const SizedBox(height: 2),
                         Row(
                           children: [
-                            FaIcon(
-                              FontAwesomeIcons.solidStar,
-                              color: Color(0xFF8B5CF6),
-                              size: 9,
-                            ),
+                            FaIcon(FontAwesomeIcons.solidStar, color: Color(0xFF8B5CF6), size: 9),
                             const SizedBox(width: 4),
                             Text(
                               app.getRatingAvg()!,
-                              style: TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.w500,
-                                color: Colors.grey.shade300,
-                              ),
+                              style: TextStyle(fontSize: 11, fontWeight: FontWeight.w500, color: Colors.grey.shade300),
                             ),
                             const SizedBox(width: 4),
-                            Text(
-                              '(${app.ratingCount})',
-                              style: TextStyle(
-                                fontSize: 11,
-                                color: Colors.grey.shade500,
-                              ),
-                            ),
+                            Text('(${app.ratingCount})', style: TextStyle(fontSize: 11, color: Colors.grey.shade500)),
                           ],
                         ),
                       ],

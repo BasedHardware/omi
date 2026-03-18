@@ -8,16 +8,9 @@ import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/widgets/extensions/string.dart';
 import 'models/payment_method_config.dart';
 
-enum PaymentMethodType {
-  stripe,
-  paypal,
-}
+enum PaymentMethodType { stripe, paypal }
 
-enum PaymentConnectionState {
-  connected,
-  notConnected,
-  inComplete,
-}
+enum PaymentConnectionState { connected, notConnected, inComplete }
 
 PaymentConnectionState getPaymentConnectionState(String state) {
   switch (state) {

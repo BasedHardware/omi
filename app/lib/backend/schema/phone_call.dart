@@ -33,11 +33,7 @@ class PhoneCallToken {
   final int ttl;
   final String identity;
 
-  PhoneCallToken({
-    required this.accessToken,
-    required this.ttl,
-    required this.identity,
-  });
+  PhoneCallToken({required this.accessToken, required this.ttl, required this.identity});
 
   factory PhoneCallToken.fromJson(Map<String, dynamic> json) {
     return PhoneCallToken(

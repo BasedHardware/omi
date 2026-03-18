@@ -118,10 +118,7 @@ class AudioPlayerUtils extends ChangeNotifier {
     _currentPlayingId = wal.id;
     _isProcessingAudio = false;
 
-    await _audioPlayer?.startPlayer(
-      fromURI: audioFilePath,
-      whenFinished: () => _onPlaybackFinished(),
-    );
+    await _audioPlayer?.startPlayer(fromURI: audioFilePath, whenFinished: () => _onPlaybackFinished());
 
     _setupPositionTracking(wal);
   }
@@ -275,10 +272,7 @@ class AudioPlayerUtils extends ChangeNotifier {
 
     if (opusFrames.isEmpty) return null;
 
-    final decoder = SimpleOpusDecoder(
-      sampleRate: wal.sampleRate,
-      channels: wal.channel,
-    );
+    final decoder = SimpleOpusDecoder(sampleRate: wal.sampleRate, channels: wal.channel);
 
     List<Uint8List> pcmFrames = [];
     for (final opusFrame in opusFrames) {
@@ -299,12 +293,7 @@ class AudioPlayerUtils extends ChangeNotifier {
       writeOffset += frame.length;
     }
 
-    return await _createWavFile(
-      pcmData: combinedPcm,
-      wal: wal,
-      bitsPerSample: 16,
-      forSharing: forSharing,
-    );
+    return await _createWavFile(pcmData: combinedPcm, wal: wal, bitsPerSample: 16, forSharing: forSharing);
   }
 
   Future<String?> _convertPcmToWav(Wal wal, String pcmFilePath, {bool forSharing = false}) async {
@@ -338,12 +327,7 @@ class AudioPlayerUtils extends ChangeNotifier {
     }
 
     final bitsPerSample = wal.codec == BleAudioCodec.pcm16 ? 16 : 8;
-    return await _createWavFile(
-      pcmData: combinedPcm,
-      wal: wal,
-      bitsPerSample: bitsPerSample,
-      forSharing: forSharing,
-    );
+    return await _createWavFile(pcmData: combinedPcm, wal: wal, bitsPerSample: bitsPerSample, forSharing: forSharing);
   }
 
   Future<String> _createWavFile({

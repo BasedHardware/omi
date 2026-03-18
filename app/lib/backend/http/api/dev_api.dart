@@ -8,12 +8,7 @@ class DevApi {
   static final String _baseUrl = '${Env.apiBaseUrl}v1/dev';
 
   static Future<List<DevApiKey>> getDevApiKeys() async {
-    final response = await makeApiCall(
-      url: '$_baseUrl/keys',
-      headers: {},
-      body: '{}',
-      method: 'GET',
-    );
+    final response = await makeApiCall(url: '$_baseUrl/keys', headers: {}, body: '{}', method: 'GET');
 
     if (response != null && response.statusCode == 200) {
       final List<dynamic> body = jsonDecode(response.body);
@@ -29,12 +24,7 @@ class DevApi {
       body['scopes'] = scopes;
     }
 
-    final response = await makeApiCall(
-      url: '$_baseUrl/keys',
-      headers: {},
-      body: jsonEncode(body),
-      method: 'POST',
-    );
+    final response = await makeApiCall(url: '$_baseUrl/keys', headers: {}, body: jsonEncode(body), method: 'POST');
 
     if (response != null && response.statusCode == 200) {
       return DevApiKeyCreated.fromJson(jsonDecode(response.body));
@@ -44,12 +34,7 @@ class DevApi {
   }
 
   static Future<void> deleteDevApiKey(String keyId) async {
-    final response = await makeApiCall(
-      url: '$_baseUrl/keys/$keyId',
-      headers: {},
-      body: '{}',
-      method: 'DELETE',
-    );
+    final response = await makeApiCall(url: '$_baseUrl/keys/$keyId', headers: {}, body: '{}', method: 'DELETE');
 
     if (response == null || response.statusCode != 204) {
       throw Exception('Failed to delete API key: ${response?.body}');

@@ -249,9 +249,7 @@ def execute_graph_chat(
     callback_data = {}
 
     async def _run():
-        async for _ in execute_chat_stream(
-            uid, messages, app, cited=cited, callback_data=callback_data
-        ):
+        async for _ in execute_chat_stream(uid, messages, app, cited=cited, callback_data=callback_data):
             pass
 
     asyncio.run(_run())

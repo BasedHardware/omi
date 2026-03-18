@@ -10,13 +10,7 @@ class OmiSectionHeader extends StatelessWidget {
   final String? badgeLabel; // optional trailing grey-pill count or text
   final double spacing;
 
-  const OmiSectionHeader({
-    super.key,
-    required this.icon,
-    required this.title,
-    this.badgeLabel,
-    this.spacing = 8,
-  });
+  const OmiSectionHeader({super.key, required this.icon, required this.title, this.badgeLabel, this.spacing = 8});
 
   @override
   Widget build(BuildContext context) {
@@ -33,11 +27,7 @@ class OmiSectionHeader extends StatelessWidget {
         SizedBox(width: spacing),
         Text(
           title,
-          style: const TextStyle(
-            color: ResponsiveHelper.textPrimary,
-            fontSize: 18,
-            fontWeight: FontWeight.w600,
-          ),
+          style: const TextStyle(color: ResponsiveHelper.textPrimary, fontSize: 18, fontWeight: FontWeight.w600),
         ),
         if (badgeLabel != null) ...[
           SizedBox(width: spacing),
@@ -49,14 +39,10 @@ class OmiSectionHeader extends StatelessWidget {
             ),
             child: Text(
               badgeLabel!,
-              style: const TextStyle(
-                color: ResponsiveHelper.textTertiary,
-                fontSize: 12,
-                fontWeight: FontWeight.w500,
-              ),
+              style: const TextStyle(color: ResponsiveHelper.textTertiary, fontSize: 12, fontWeight: FontWeight.w500),
             ),
           ),
-        ]
+        ],
       ],
     );
   }

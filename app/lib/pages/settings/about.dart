@@ -20,10 +20,7 @@ class _AboutOmiPageState extends State<AboutOmiPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Theme.of(context).colorScheme.primary,
-      appBar: AppBar(
-        title: Text(context.l10n.aboutOmi),
-        backgroundColor: Theme.of(context).colorScheme.primary,
-      ),
+      appBar: AppBar(title: Text(context.l10n.aboutOmi), backgroundColor: Theme.of(context).colorScheme.primary),
       body: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(

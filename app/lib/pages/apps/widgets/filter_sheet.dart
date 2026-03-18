@@ -29,49 +29,30 @@ class FilterBottomSheet extends StatelessWidget {
                   children: [
                     Text(
                       AppLocalizations.of(context)!.filters,
-                      style: const TextStyle(
-                        fontSize: 24,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.white,
-                      ),
+                      style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w600, color: Colors.white),
                     ),
                     if (provider.filters.isNotEmpty) ...[
                       const SizedBox(width: 8),
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: Color(0xFF8B5CF6),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
+                        decoration: BoxDecoration(color: Color(0xFF8B5CF6), borderRadius: BorderRadius.circular(12)),
                         child: Text(
                           '${provider.filters.length}',
-                          style: const TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            color: Colors.white,
-                          ),
+                          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.white),
                         ),
                       ),
                     ],
                     const Spacer(),
                     IconButton(
                       onPressed: () => Navigator.of(context).pop(),
-                      icon: const Icon(
-                        Icons.close,
-                        color: Colors.white,
-                        size: 24,
-                      ),
+                      icon: const Icon(Icons.close, color: Colors.white, size: 24),
                     ),
                   ],
                 ),
               ),
 
               // Divider
-              Container(
-                margin: const EdgeInsets.symmetric(vertical: 16),
-                height: 1,
-                color: Color(0xFF35343B),
-              ),
+              Container(margin: const EdgeInsets.symmetric(vertical: 16), height: 1, color: Color(0xFF35343B)),
 
               // Content
               Expanded(
@@ -117,9 +98,7 @@ class FilterBottomSheet extends StatelessWidget {
                 padding: const EdgeInsets.fromLTRB(20, 20, 20, 40),
                 decoration: BoxDecoration(
                   color: const Color(0xFF1C1C1E),
-                  border: Border(
-                    top: BorderSide(color: Color(0xFF35343B), width: 1),
-                  ),
+                  border: Border(top: BorderSide(color: Color(0xFF35343B), width: 1)),
                 ),
                 child: Row(
                   children: [
@@ -140,11 +119,7 @@ class FilterBottomSheet extends StatelessWidget {
                         ),
                         child: Text(
                           AppLocalizations.of(context)!.resetFilters,
-                          style: const TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w500,
-                            color: Colors.white,
-                          ),
+                          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: Colors.white),
                         ),
                       ),
                     ),
@@ -158,17 +133,11 @@ class FilterBottomSheet extends StatelessWidget {
                         style: ElevatedButton.styleFrom(
                           backgroundColor: Colors.white,
                           padding: const EdgeInsets.symmetric(vertical: 16),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                         ),
                         child: Text(
                           AppLocalizations.of(context)!.applyFilters,
-                          style: const TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w600,
-                            color: Colors.black,
-                          ),
+                          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: Colors.black),
                         ),
                       ),
                     ),
@@ -185,11 +154,7 @@ class FilterBottomSheet extends StatelessWidget {
   Widget _buildSectionTitle(String title) {
     return Text(
       title,
-      style: const TextStyle(
-        fontSize: 18,
-        fontWeight: FontWeight.w600,
-        color: Colors.white,
-      ),
+      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: Colors.white),
     );
   }
 
@@ -299,18 +264,9 @@ class FilterBottomSheet extends StatelessWidget {
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
                       color: isSelected ? Color(0xFF8B5CF6) : Colors.transparent,
-                      border: Border.all(
-                        color: isSelected ? Color(0xFF8B5CF6) : Colors.grey.shade500,
-                        width: 2,
-                      ),
+                      border: Border.all(color: isSelected ? Color(0xFF8B5CF6) : Colors.grey.shade500, width: 2),
                     ),
-                    child: isSelected
-                        ? const Icon(
-                            Icons.check,
-                            size: 12,
-                            color: Colors.white,
-                          )
-                        : null,
+                    child: isSelected ? const Icon(Icons.check, size: 12, color: Colors.white) : null,
                   ),
                   const SizedBox(width: 12),
                   Text(

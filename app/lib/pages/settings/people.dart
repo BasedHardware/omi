@@ -121,19 +121,20 @@ class _UserPeoplePageState extends State<_UserPeoplePage> {
             ),
             CupertinoDialogAction(
               onPressed: onPressed,
-              child: Text(person == null ? context.l10n.add : context.l10n.update,
-                  style: const TextStyle(color: Colors.white)),
+              child: Text(
+                person == null ? context.l10n.add : context.l10n.update,
+                style: const TextStyle(color: Colors.white),
+              ),
             ),
           ]
         : [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: Text(context.l10n.cancel),
-            ),
+            TextButton(onPressed: () => Navigator.pop(context), child: Text(context.l10n.cancel)),
             TextButton(
               onPressed: onPressed,
-              child: Text(person == null ? context.l10n.add : context.l10n.update,
-                  style: const TextStyle(color: Colors.white)),
+              child: Text(
+                person == null ? context.l10n.add : context.l10n.update,
+                style: const TextStyle(color: Colors.white),
+              ),
             ),
           ];
   }
@@ -214,10 +215,7 @@ class _UserPeoplePageState extends State<_UserPeoplePage> {
             backgroundColor: Theme.of(context).colorScheme.primary,
             centerTitle: true,
             actions: [
-              IconButton(
-                icon: const Icon(Icons.add),
-                onPressed: () => _showPersonDialog(context, provider),
-              ),
+              IconButton(icon: const Icon(Icons.add), onPressed: () => _showPersonDialog(context, provider)),
               provider.people.isNotEmpty
                   ? IconButton(
                       icon: const Icon(Icons.question_mark),
@@ -234,105 +232,100 @@ class _UserPeoplePageState extends State<_UserPeoplePage> {
                             okButtonText: context.l10n.gotIt,
                           ),
                         );
-                      })
+                      },
+                    )
                   : const SizedBox(),
             ],
           ),
           body: provider.loading
-              ? const Center(
-                  child: CircularProgressIndicator(
-                    valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+              ? const Center(child: CircularProgressIndicator(valueColor: AlwaysStoppedAnimation<Color>(Colors.white)))
+              : provider.people.isEmpty
+              ? Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      const Icon(Icons.question_mark, size: 40),
+                      const SizedBox(height: 24),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 32),
+                        child: Text(
+                          context.l10n.createPersonHint,
+                          style: const TextStyle(color: Colors.white, fontSize: 24),
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
+                      const SizedBox(height: 64),
+                    ],
                   ),
                 )
-              : provider.people.isEmpty
-                  ? Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        crossAxisAlignment: CrossAxisAlignment.center,
-                        children: [
-                          const Icon(Icons.question_mark, size: 40),
-                          const SizedBox(height: 24),
-                          Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 32),
-                            child: Text(context.l10n.createPersonHint,
-                                style: const TextStyle(color: Colors.white, fontSize: 24), textAlign: TextAlign.center),
+              : ListView.separated(
+                  itemCount: provider.people.length,
+                  separatorBuilder: (context, index) => const Divider(height: 1),
+                  itemBuilder: (context, index) {
+                    final person = provider.people[index];
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        ListTile(
+                          title: Text(person.name, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w500)),
+                          onTap: () => _showPersonDialog(context, provider, person: person),
+                          trailing: IconButton(
+                            icon: const Icon(Icons.delete, size: 20),
+                            onPressed: () => _confirmDeletePerson(person, provider),
                           ),
-                          const SizedBox(height: 64),
-                        ],
-                      ),
-                    )
-                  : ListView.separated(
-                      itemCount: provider.people.length,
-                      separatorBuilder: (context, index) => const Divider(height: 1),
-                      itemBuilder: (context, index) {
-                        final person = provider.people[index];
-                        return Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            ListTile(
-                              title: Text(
-                                person.name,
-                                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w500),
-                              ),
-                              onTap: () => _showPersonDialog(context, provider, person: person),
-                              trailing: IconButton(
-                                icon: const Icon(Icons.delete, size: 20),
-                                onPressed: () => _confirmDeletePerson(person, provider),
-                              ),
-                            ),
-                            if (person.speechSamples != null && person.speechSamples!.isNotEmpty)
-                              Padding(
-                                padding: const EdgeInsets.only(left: 8, right: 16, bottom: 8),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    const SizedBox(height: 4),
-                                    ...person.speechSamples!.mapIndexed((j, sample) => ListTile(
-                                          contentPadding: EdgeInsets.zero,
-                                          leading: IconButton(
-                                            padding: const EdgeInsets.all(0),
-                                            icon: Icon(
-                                              provider.currentPlayingPersonIndex == index &&
-                                                      provider.currentPlayingIndex == j &&
-                                                      provider.isPlaying
-                                                  ? Icons.pause
-                                                  : Icons.play_arrow,
+                        ),
+                        if (person.speechSamples != null && person.speechSamples!.isNotEmpty)
+                          Padding(
+                            padding: const EdgeInsets.only(left: 8, right: 16, bottom: 8),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const SizedBox(height: 4),
+                                ...person.speechSamples!.mapIndexed(
+                                  (j, sample) => ListTile(
+                                    contentPadding: EdgeInsets.zero,
+                                    leading: IconButton(
+                                      padding: const EdgeInsets.all(0),
+                                      icon: Icon(
+                                        provider.currentPlayingPersonIndex == index &&
+                                                provider.currentPlayingIndex == j &&
+                                                provider.isPlaying
+                                            ? Icons.pause
+                                            : Icons.play_arrow,
+                                      ),
+                                      onPressed: () => provider.playPause(index, j, sample),
+                                    ),
+                                    title: Text(j == 0 ? context.l10n.speechProfile : context.l10n.sampleNumber(j)),
+                                    onTap: () => _confirmDeleteSample(index, person, j, provider),
+                                    subtitle: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        if (person.speechSampleTranscripts != null &&
+                                            j < person.speechSampleTranscripts!.length &&
+                                            person.speechSampleTranscripts![j].isNotEmpty)
+                                          Padding(
+                                            padding: const EdgeInsets.only(bottom: 4),
+                                            child: Text(
+                                              '"${person.speechSampleTranscripts![j]}"',
+                                              style: const TextStyle(fontSize: 14, fontStyle: FontStyle.italic),
                                             ),
-                                            onPressed: () => provider.playPause(index, j, sample),
                                           ),
-                                          title:
-                                              Text(j == 0 ? context.l10n.speechProfile : context.l10n.sampleNumber(j)),
-                                          onTap: () => _confirmDeleteSample(index, person, j, provider),
-                                          subtitle: Column(
-                                            crossAxisAlignment: CrossAxisAlignment.start,
-                                            children: [
-                                              if (person.speechSampleTranscripts != null &&
-                                                  j < person.speechSampleTranscripts!.length &&
-                                                  person.speechSampleTranscripts![j].isNotEmpty)
-                                                Padding(
-                                                  padding: const EdgeInsets.only(bottom: 4),
-                                                  child: Text(
-                                                    '"${person.speechSampleTranscripts![j]}"',
-                                                    style: const TextStyle(
-                                                      fontSize: 14,
-                                                      fontStyle: FontStyle.italic,
-                                                    ),
-                                                  ),
-                                                ),
-                                              Text(
-                                                context.l10n.tapToDelete,
-                                                style: const TextStyle(fontSize: 12, color: Colors.grey),
-                                              ),
-                                            ],
-                                          ),
-                                        )),
-                                  ],
+                                        Text(
+                                          context.l10n.tapToDelete,
+                                          style: const TextStyle(fontSize: 12, color: Colors.grey),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
                                 ),
-                              ),
-                          ],
-                        );
-                      },
-                    ),
+                              ],
+                            ),
+                          ),
+                      ],
+                    );
+                  },
+                ),
         );
       },
     );

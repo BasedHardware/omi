@@ -27,18 +27,14 @@ class OmiBadge extends AdaptiveWidget {
   Widget buildMobile(BuildContext context) => _base();
 
   Widget _base() => Container(
-        padding: padding,
-        decoration: BoxDecoration(
-          color: backgroundColor ?? color.withOpacity(0.15),
-          borderRadius: BorderRadius.circular(borderRadius),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            color: color,
-            fontSize: fontSize,
-            fontWeight: FontWeight.w500,
-          ),
-        ),
-      );
+    padding: padding,
+    decoration: BoxDecoration(
+      color: backgroundColor ?? color.withOpacity(0.15),
+      borderRadius: BorderRadius.circular(borderRadius),
+    ),
+    child: Text(
+      label,
+      style: TextStyle(color: color, fontSize: fontSize, fontWeight: FontWeight.w500),
+    ),
+  );
 }

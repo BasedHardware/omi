@@ -194,8 +194,12 @@ class _ConversationMarkdownWidgetState extends State<ConversationMarkdownWidget>
   }
 
   // Custom markdown widget with search functionality
-  Widget _getMarkdownWidgetWithSearch(BuildContext context, String content,
-      {String searchQuery = '', int currentResultIndex = -1}) {
+  Widget _getMarkdownWidgetWithSearch(
+    BuildContext context,
+    String content, {
+    String searchQuery = '',
+    int currentResultIndex = -1,
+  }) {
     var style = TextStyle(color: Colors.white, fontSize: 16, height: 1.5);
 
     String processedContent = content;
@@ -208,39 +212,21 @@ class _ConversationMarkdownWidgetState extends State<ConversationMarkdownWidget>
     return MarkdownBody(
       selectable: false,
       shrinkWrap: true,
-      builders: searchQuery.isNotEmpty
-          ? {
-              'highlight': _SearchHighlightBuilder(),
-            }
-          : {},
-      inlineSyntaxes: searchQuery.isNotEmpty
-          ? [
-              _SearchHighlightSyntax(),
-            ]
-          : [],
+      builders: searchQuery.isNotEmpty ? {'highlight': _SearchHighlightBuilder()} : {},
+      inlineSyntaxes: searchQuery.isNotEmpty ? [_SearchHighlightSyntax()] : [],
       styleSheet: MarkdownStyleSheet.fromTheme(Theme.of(context)).copyWith(
         a: style,
-        p: style.copyWith(
-          height: 1.5,
-        ),
+        p: style.copyWith(height: 1.5),
         pPadding: const EdgeInsets.only(bottom: 12),
-        blockquote: style.copyWith(
-          backgroundColor: Colors.transparent,
-          color: Colors.white,
-        ),
-        blockquoteDecoration: BoxDecoration(
-          color: Color(0xFF35343B),
-          borderRadius: BorderRadius.circular(4),
-        ),
+        blockquote: style.copyWith(backgroundColor: Colors.transparent, color: Colors.white),
+        blockquoteDecoration: BoxDecoration(color: Color(0xFF35343B), borderRadius: BorderRadius.circular(4)),
         code: style.copyWith(
           backgroundColor: Colors.transparent,
           decoration: TextDecoration.none,
           color: Colors.white,
           fontWeight: FontWeight.w500,
         ),
-        strong: style.copyWith(
-          fontWeight: FontWeight.bold,
-        ),
+        strong: style.copyWith(fontWeight: FontWeight.bold),
       ),
       data: processedContent,
     );
@@ -250,11 +236,7 @@ class _ConversationMarkdownWidgetState extends State<ConversationMarkdownWidget>
     // Reset counter logic if needed
   }
 
-  String _highlightSearchInMarkdown(
-    String content,
-    String searchQuery,
-    int currentResultIndex,
-  ) {
+  String _highlightSearchInMarkdown(String content, String searchQuery, int currentResultIndex) {
     if (searchQuery.isEmpty) return content;
 
     final pattern = RegExp.escape(searchQuery);

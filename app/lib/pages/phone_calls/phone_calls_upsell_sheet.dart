@@ -55,7 +55,10 @@ class _PhoneCallsUpsellSheet extends StatelessWidget {
                       shape: BoxShape.circle,
                       boxShadow: [
                         BoxShadow(
-                            color: const Color(0xFF7C3AED).withValues(alpha: 0.25), blurRadius: 48, spreadRadius: 8),
+                          color: const Color(0xFF7C3AED).withValues(alpha: 0.25),
+                          blurRadius: 48,
+                          spreadRadius: 8,
+                        ),
                       ],
                     ),
                   ),
@@ -78,7 +81,11 @@ class _PhoneCallsUpsellSheet extends StatelessWidget {
               Text(
                 context.l10n.phoneCallsUnlimitedOnly,
                 style: const TextStyle(
-                    fontSize: 24, fontWeight: FontWeight.w700, color: Colors.white, letterSpacing: -0.5),
+                  fontSize: 24,
+                  fontWeight: FontWeight.w700,
+                  color: Colors.white,
+                  letterSpacing: -0.5,
+                ),
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 8),
@@ -142,10 +149,7 @@ class _PhoneCallsUpsellSheet extends StatelessWidget {
                 child: Container(
                   width: double.infinity,
                   height: 52,
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(14),
-                  ),
+                  decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14)),
                   alignment: Alignment.center,
                   child: Text(
                     context.l10n.phoneCallsUpgradeButton,
@@ -190,10 +194,7 @@ class _FeatureRow extends StatelessWidget {
         Icon(icon, color: Colors.white, size: 20),
         const SizedBox(width: 14),
         Expanded(
-          child: Text(
-            text,
-            style: const TextStyle(fontSize: 14, color: Color(0xFFCCCCD0), height: 1.3),
-          ),
+          child: Text(text, style: const TextStyle(fontSize: 14, color: Color(0xFFCCCCD0), height: 1.3)),
         ),
       ],
     );
@@ -219,9 +220,10 @@ class _PlansSheetWrapperState extends State<_PlansSheetWrapper> with TickerProvi
     _waveController = AnimationController(vsync: this, duration: const Duration(seconds: 2))..repeat();
     _arrowController = AnimationController(vsync: this, duration: const Duration(milliseconds: 800))..repeat();
     _notesController = AnimationController(vsync: this, duration: const Duration(seconds: 3))..repeat();
-    _arrowAnimation = Tween<double>(begin: 0, end: 10).animate(
-      CurvedAnimation(parent: _arrowController, curve: Curves.easeInOut),
-    );
+    _arrowAnimation = Tween<double>(
+      begin: 0,
+      end: 10,
+    ).animate(CurvedAnimation(parent: _arrowController, curve: Curves.easeInOut));
   }
 
   @override

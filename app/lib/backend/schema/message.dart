@@ -5,8 +5,7 @@ enum MessageSender { ai, human }
 
 enum MessageType {
   text('text'),
-  daySummary('day_summary'),
-  ;
+  daySummary('day_summary');
 
   final String value;
 
@@ -28,10 +27,7 @@ class MessageConversationStructured {
   }
 
   Map<String, dynamic> toJson() {
-    return {
-      'title': title,
-      'emoji': emoji,
-    };
+    return {'title': title, 'emoji': emoji};
   }
 }
 
@@ -51,11 +47,7 @@ class MessageConversation {
   }
 
   Map<String, dynamic> toJson() {
-    return {
-      'id': id,
-      'created_at': createdAt.toUtc().toIso8601String(),
-      'structured': structured.toJson(),
-    };
+    return {'id': id, 'created_at': createdAt.toUtc().toIso8601String(), 'structured': structured.toJson()};
   }
 }
 
@@ -114,10 +106,7 @@ class ChartDataPoint {
   ChartDataPoint(this.label, this.value);
 
   static ChartDataPoint fromJson(Map<String, dynamic> json) {
-    return ChartDataPoint(
-      json['label'] ?? '',
-      (json['value'] as num).toDouble(),
-    );
+    return ChartDataPoint(json['label'] ?? '', (json['value'] as num).toDouble());
   }
 
   Map<String, dynamic> toJson() {
@@ -141,11 +130,7 @@ class ChartDataset {
   }
 
   Map<String, dynamic> toJson() {
-    return {
-      'label': label,
-      'data_points': dataPoints.map((p) => p.toJson()).toList(),
-      'color': color,
-    };
+    return {'label': label, 'data_points': dataPoints.map((p) => p.toJson()).toList(), 'color': color};
   }
 }
 
@@ -263,18 +248,7 @@ class ServerMessage {
   }
 
   static ServerMessage empty({String? appId}) {
-    return ServerMessage(
-      '0000',
-      DateTime.now(),
-      '',
-      MessageSender.ai,
-      MessageType.text,
-      appId,
-      false,
-      [],
-      [],
-      [],
-    );
+    return ServerMessage('0000', DateTime.now(), '', MessageSender.ai, MessageType.text, appId, false, [], [], []);
   }
 
   static ServerMessage failedMessage() {
@@ -300,8 +274,7 @@ enum MessageChunkType {
   data('data'),
   done('done'),
   error('error'),
-  message('message'),
-  ;
+  message('message');
 
   final String value;
 
@@ -314,12 +287,7 @@ class ServerMessageChunk {
   String text;
   ServerMessage? message;
 
-  ServerMessageChunk(
-    this.messageId,
-    this.text,
-    this.type, {
-    this.message,
-  });
+  ServerMessageChunk(this.messageId, this.text, this.type, {this.message});
 
   static ServerMessageChunk failedMessage() {
     return ServerMessageChunk(

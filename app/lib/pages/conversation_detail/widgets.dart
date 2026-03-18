@@ -57,15 +57,18 @@ List<TextSpan> highlightSearchMatches(String text, String searchQuery, {int curr
 
     bool isCurrentResult = currentResultIndex >= 0 && matchCount == currentResultIndex;
 
-    spans.add(TextSpan(
-      text: text.substring(index, index + searchQuery.length),
-      style: TextStyle(
-        backgroundColor:
-            isCurrentResult ? Colors.orange.withValues(alpha: 0.9) : Colors.deepPurple.withValues(alpha: 0.6),
-        color: Colors.white,
-        fontWeight: FontWeight.bold,
+    spans.add(
+      TextSpan(
+        text: text.substring(index, index + searchQuery.length),
+        style: TextStyle(
+          backgroundColor: isCurrentResult
+              ? Colors.orange.withValues(alpha: 0.9)
+              : Colors.deepPurple.withValues(alpha: 0.6),
+          color: Colors.white,
+          fontWeight: FontWeight.bold,
+        ),
       ),
-    ));
+    );
 
     matchCount++;
     start = index + searchQuery.length;
@@ -141,10 +144,7 @@ class GetSummaryWidgets extends StatelessWidget {
             ),
             // Duration chip
             if (conversation.transcriptSegments.isNotEmpty && _getDuration(context, conversation).isNotEmpty)
-              _buildChip(
-                label: _getDuration(context, conversation),
-                icon: Icons.timelapse,
-              ),
+              _buildChip(label: _getDuration(context, conversation), icon: Icons.timelapse),
             // Folder chip
             _buildFolderChip(
               context: context,
@@ -233,21 +233,14 @@ class GetSummaryWidgets extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 4),
-            Icon(
-              Icons.arrow_drop_down,
-              size: 16,
-              color: folder != null ? folder.colorValue : Colors.grey.shade300,
-            ),
+            Icon(Icons.arrow_drop_down, size: 16, color: folder != null ? folder.colorValue : Colors.grey.shade300),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildVisibilityChip({
-    required BuildContext context,
-    required ServerConversation conversation,
-  }) {
+  Widget _buildVisibilityChip({required BuildContext context, required ServerConversation conversation}) {
     final isPrivate = conversation.visibility == ConversationVisibility.private_;
     final color = isPrivate ? Colors.grey.shade300 : Colors.green;
     final label = isPrivate ? context.l10n.private : context.l10n.shared;
@@ -260,10 +253,7 @@ class GetSummaryWidgets extends StatelessWidget {
       },
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-        decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.2),
-          borderRadius: BorderRadius.circular(20),
-        ),
+        decoration: BoxDecoration(color: color.withValues(alpha: 0.2), borderRadius: BorderRadius.circular(20)),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -287,9 +277,7 @@ class GetSummaryWidgets extends StatelessWidget {
     showModalBottomSheet(
       context: context,
       backgroundColor: const Color(0xFF1C1C1E),
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
       builder: (sheetContext) {
         return SafeArea(
           child: Column(
@@ -328,8 +316,10 @@ class GetSummaryWidgets extends StatelessWidget {
                   final previousVisibility = conversation.visibility;
                   provider.updateVisibilityLocally(ConversationVisibility.private_);
                   Navigator.pop(sheetContext);
-                  bool success = await setConversationVisibility(conversation.id,
-                      visibility: ConversationVisibility.private_.value);
+                  bool success = await setConversationVisibility(
+                    conversation.id,
+                    visibility: ConversationVisibility.private_.value,
+                  );
                   if (!success) {
                     provider.updateVisibilityLocally(previousVisibility);
                     return;
@@ -356,8 +346,10 @@ class GetSummaryWidgets extends StatelessWidget {
                   final previousVisibility = conversation.visibility;
                   provider.updateVisibilityLocally(ConversationVisibility.shared);
                   Navigator.pop(sheetContext);
-                  bool success =
-                      await setConversationVisibility(conversation.id, visibility: ConversationVisibility.shared.value);
+                  bool success = await setConversationVisibility(
+                    conversation.id,
+                    visibility: ConversationVisibility.shared.value,
+                  );
                   if (!success) {
                     provider.updateVisibilityLocally(previousVisibility);
                     return;
@@ -404,7 +396,10 @@ class GetSummaryWidgets extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(label, style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w500)),
+                  Text(
+                    label,
+                    style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w500),
+                  ),
                   const SizedBox(height: 2),
                   Text(description, style: TextStyle(color: Colors.grey.shade500, fontSize: 13)),
                 ],
@@ -420,26 +415,15 @@ class GetSummaryWidgets extends StatelessWidget {
   Widget _buildChip({required String label, required IconData icon}) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      decoration: BoxDecoration(
-        color: Colors.grey.withValues(alpha: 0.2),
-        borderRadius: BorderRadius.circular(20),
-      ),
+      decoration: BoxDecoration(color: Colors.grey.withValues(alpha: 0.2), borderRadius: BorderRadius.circular(20)),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(
-            icon,
-            size: 14,
-            color: Colors.grey.shade300,
-          ),
+          Icon(icon, size: 14, color: Colors.grey.shade300),
           const SizedBox(width: 6),
           Text(
             label,
-            style: TextStyle(
-              color: Colors.grey.shade300,
-              fontSize: 13,
-              fontWeight: FontWeight.w500,
-            ),
+            style: TextStyle(color: Colors.grey.shade300, fontSize: 13, fontWeight: FontWeight.w500),
           ),
         ],
       ),
@@ -485,123 +469,129 @@ class ActionItemsListWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<ConversationDetailProvider>(builder: (context, provider, child) {
-      return Column(
-        children: [
-          provider.conversation.structured.actionItems.isNotEmpty
-              ? Row(
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      context.l10n.actionItems,
-                      style: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 26),
-                    ),
-                    IconButton(
-                      onPressed: () {
-                        Clipboard.setData(ClipboardData(
-                          text:
-                              '- ${provider.conversation.structured.actionItems.map((e) => e.description.decodeString).join('\n- ')}',
-                        ));
-                        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                          content: Text(context.l10n.actionItemsCopiedToClipboard),
-                          duration: const Duration(seconds: 2),
-                        ));
-                        MixpanelManager().copiedConversationDetails(provider.conversation, source: 'Action Items');
-                      },
-                      icon: const Icon(Icons.copy_rounded, color: Colors.white, size: 20),
-                    )
-                  ],
-                )
-              : const SizedBox.shrink(),
-          ListView.builder(
-            itemCount: provider.conversation.structured.actionItems.where((e) => !e.deleted).length,
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            itemBuilder: (context, idx) {
-              var item = provider.conversation.structured.actionItems.where((e) => !e.deleted).toList()[idx];
-              return Dismissible(
-                key: Key(item.description),
-                direction: DismissDirection.endToStart,
-                background: Container(
-                  alignment: Alignment.centerRight,
-                  padding: const EdgeInsets.only(right: 20.0),
-                  color: Colors.red,
-                  child: const Icon(Icons.delete, color: Colors.white),
-                ),
-                onDismissed: (direction) {
-                  var tempItem = provider.conversation.structured.actionItems[idx];
-                  var tempIdx = idx;
-                  provider.deleteActionItem(idx);
-                  provider.deleteActionItemPermanently(tempItem, tempIdx);
-                  MixpanelManager().deletedActionItem(provider.conversation);
-                  // ScaffoldMessenger.of(context)
-                  //     .showSnackBar(
-                  //       SnackBar(
-                  //         content: const Text('Action Item deleted successfully 🗑️'),
-                  //         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-                  //         action: SnackBarAction(
-                  //           label: 'Undo',
-                  //           textColor: Colors.white,
-                  //           onPressed: () {
-                  //             provider.undoDeleteActionItem(idx);
-                  //           },
-                  //         ),
-                  //       ),
-                  //     )
-                  //     .closed
-                  //     .then((reason) {
-                  //   if (reason != SnackBarClosedReason.action) {
-                  //     provider.deleteActionItemPermanently(tempItem, tempIdx);
-                  //     MixpanelManager().deletedActionItem(provider.conversation);
-                  //   }
-                  // });
-                },
-                child: Padding(
-                  padding: const EdgeInsets.only(top: 10, bottom: 2),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+    return Consumer<ConversationDetailProvider>(
+      builder: (context, provider, child) {
+        return Column(
+          children: [
+            provider.conversation.structured.actionItems.isNotEmpty
+                ? Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Padding(
-                        padding: const EdgeInsets.only(top: 6.0),
-                        child: SizedBox(
-                          height: 22.0,
-                          width: 22.0,
-                          child: Checkbox(
-                            shape: const CircleBorder(),
-                            value: item.completed,
-                            onChanged: (value) {
-                              if (value != null) {
-                                context.read<ConversationDetailProvider>().updateActionItemState(value, idx);
-                                setConversationActionItemState(provider.conversation.id, [idx], [value]);
-                                if (value) {
-                                  MixpanelManager().checkedActionItem(provider.conversation, idx);
-                                } else {
-                                  MixpanelManager().uncheckedActionItem(provider.conversation, idx);
-                                }
-                              }
-                            },
-                          ),
-                        ),
+                      Text(
+                        context.l10n.actionItems,
+                        style: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 26),
                       ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: SelectionArea(
-                          child: Text(
-                            item.description.decodeString,
-                            style: TextStyle(color: Colors.grey.shade300, fontSize: 16, height: 1.3),
-                          ),
-                        ),
+                      IconButton(
+                        onPressed: () {
+                          Clipboard.setData(
+                            ClipboardData(
+                              text:
+                                  '- ${provider.conversation.structured.actionItems.map((e) => e.description.decodeString).join('\n- ')}',
+                            ),
+                          );
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(context.l10n.actionItemsCopiedToClipboard),
+                              duration: const Duration(seconds: 2),
+                            ),
+                          );
+                          MixpanelManager().copiedConversationDetails(provider.conversation, source: 'Action Items');
+                        },
+                        icon: const Icon(Icons.copy_rounded, color: Colors.white, size: 20),
                       ),
                     ],
+                  )
+                : const SizedBox.shrink(),
+            ListView.builder(
+              itemCount: provider.conversation.structured.actionItems.where((e) => !e.deleted).length,
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemBuilder: (context, idx) {
+                var item = provider.conversation.structured.actionItems.where((e) => !e.deleted).toList()[idx];
+                return Dismissible(
+                  key: Key(item.description),
+                  direction: DismissDirection.endToStart,
+                  background: Container(
+                    alignment: Alignment.centerRight,
+                    padding: const EdgeInsets.only(right: 20.0),
+                    color: Colors.red,
+                    child: const Icon(Icons.delete, color: Colors.white),
                   ),
-                ),
-              );
-            },
-          ),
-        ],
-      );
-    });
+                  onDismissed: (direction) {
+                    var tempItem = provider.conversation.structured.actionItems[idx];
+                    var tempIdx = idx;
+                    provider.deleteActionItem(idx);
+                    provider.deleteActionItemPermanently(tempItem, tempIdx);
+                    MixpanelManager().deletedActionItem(provider.conversation);
+                    // ScaffoldMessenger.of(context)
+                    //     .showSnackBar(
+                    //       SnackBar(
+                    //         content: const Text('Action Item deleted successfully 🗑️'),
+                    //         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                    //         action: SnackBarAction(
+                    //           label: 'Undo',
+                    //           textColor: Colors.white,
+                    //           onPressed: () {
+                    //             provider.undoDeleteActionItem(idx);
+                    //           },
+                    //         ),
+                    //       ),
+                    //     )
+                    //     .closed
+                    //     .then((reason) {
+                    //   if (reason != SnackBarClosedReason.action) {
+                    //     provider.deleteActionItemPermanently(tempItem, tempIdx);
+                    //     MixpanelManager().deletedActionItem(provider.conversation);
+                    //   }
+                    // });
+                  },
+                  child: Padding(
+                    padding: const EdgeInsets.only(top: 10, bottom: 2),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.only(top: 6.0),
+                          child: SizedBox(
+                            height: 22.0,
+                            width: 22.0,
+                            child: Checkbox(
+                              shape: const CircleBorder(),
+                              value: item.completed,
+                              onChanged: (value) {
+                                if (value != null) {
+                                  context.read<ConversationDetailProvider>().updateActionItemState(value, idx);
+                                  setConversationActionItemState(provider.conversation.id, [idx], [value]);
+                                  if (value) {
+                                    MixpanelManager().checkedActionItem(provider.conversation, idx);
+                                  } else {
+                                    MixpanelManager().uncheckedActionItem(provider.conversation, idx);
+                                  }
+                                }
+                              },
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: SelectionArea(
+                            child: Text(
+                              item.description.decodeString,
+                              style: TextStyle(color: Colors.grey.shade300, fontSize: 16, height: 1.3),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            ),
+          ],
+        );
+      },
+    );
   }
 }
 
@@ -649,72 +639,75 @@ class ReprocessDiscardedWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<ConversationDetailProvider>(builder: (context, provider, child) {
-      if (provider.loadingReprocessConversation && provider.reprocessConversationId == provider.conversation.id) {
-        return Center(
-          child: Padding(
-            padding: const EdgeInsets.only(top: 18.0),
-            child: Row(
+    return Consumer<ConversationDetailProvider>(
+      builder: (context, provider, child) {
+        if (provider.loadingReprocessConversation && provider.reprocessConversationId == provider.conversation.id) {
+          return Center(
+            child: Padding(
+              padding: const EdgeInsets.only(top: 18.0),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  const CircularProgressIndicator(valueColor: AlwaysStoppedAnimation<Color>(Colors.white)),
+                  const SizedBox(width: 16),
+                  Text(
+                    provider.conversation.discarded
+                        ? context.l10n.summarizingConversation
+                        : context.l10n.resummarizingConversation,
+                    style: const TextStyle(color: Colors.white, fontSize: 16),
+                  ),
+                ],
+              ),
+            ),
+          );
+        }
+        return ListView(
+          shrinkWrap: true,
+          children: [
+            const SizedBox(height: 32),
+            Text(
+              context.l10n.nothingInterestingRetry,
+              style: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 20),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 24),
+            Row(
               mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                const CircularProgressIndicator(
-                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                ),
-                const SizedBox(width: 16),
-                Text(
-                  provider.conversation.discarded
-                      ? context.l10n.summarizingConversation
-                      : context.l10n.resummarizingConversation,
-                  style: const TextStyle(color: Colors.white, fontSize: 16),
+                Container(
+                  decoration: BoxDecoration(
+                    border: const GradientBoxBorder(
+                      gradient: LinearGradient(
+                        colors: [
+                          Color.fromARGB(127, 208, 208, 208),
+                          Color.fromARGB(127, 188, 99, 121),
+                          Color.fromARGB(127, 86, 101, 182),
+                          Color.fromARGB(127, 126, 190, 236),
+                        ],
+                      ),
+                      width: 2,
+                    ),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: MaterialButton(
+                    onPressed: () async {
+                      await provider.reprocessConversation();
+                    },
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 0),
+                      child: Text(context.l10n.summarize, style: const TextStyle(color: Colors.white, fontSize: 16)),
+                    ),
+                  ),
                 ),
               ],
             ),
-          ),
+            const SizedBox(height: 32),
+          ],
         );
-      }
-      return ListView(
-        shrinkWrap: true,
-        children: [
-          const SizedBox(height: 32),
-          Text(
-            context.l10n.nothingInterestingRetry,
-            style: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 20),
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: 24),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Container(
-                decoration: BoxDecoration(
-                  border: const GradientBoxBorder(
-                    gradient: LinearGradient(colors: [
-                      Color.fromARGB(127, 208, 208, 208),
-                      Color.fromARGB(127, 188, 99, 121),
-                      Color.fromARGB(127, 86, 101, 182),
-                      Color.fromARGB(127, 126, 190, 236)
-                    ]),
-                    width: 2,
-                  ),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: MaterialButton(
-                  onPressed: () async {
-                    await provider.reprocessConversation();
-                  },
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                  child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 0),
-                      child: Text(context.l10n.summarize, style: const TextStyle(color: Colors.white, fontSize: 16))),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 32),
-        ],
-      );
-    });
+      },
+    );
   }
 }
 
@@ -762,7 +755,9 @@ class AppResultDetailWidget extends StatelessWidget {
                           },
                           child: RichText(
                             text: TextSpan(
-                                style: const TextStyle(color: Colors.grey), text: context.l10n.noSummaryForApp),
+                              style: const TextStyle(color: Colors.grey),
+                              text: context.l10n.noSummaryForApp,
+                            ),
                           ),
                         ),
                       ),
@@ -828,13 +823,7 @@ class AppResultDetailWidget extends StatelessWidget {
                             width: 24,
                             child: Stack(
                               alignment: Alignment.center,
-                              children: [
-                                Image.asset(
-                                  Assets.images.herologo.path,
-                                  height: 16,
-                                  width: 16,
-                                ),
-                              ],
+                              children: [Image.asset(Assets.images.herologo.path, height: 16, width: 16)],
                             ),
                           ),
 
@@ -911,7 +900,7 @@ class GetAppsWidgets extends StatelessWidget {
                       currentResultIndex: currentResultIndex,
                     ),
                   ],
-                  const SizedBox(height: 8)
+                  const SizedBox(height: 8),
                 ],
         );
       },
@@ -932,12 +921,14 @@ class GetAppsWidgets extends StatelessWidget {
               Container(
                 decoration: BoxDecoration(
                   border: const GradientBoxBorder(
-                    gradient: LinearGradient(colors: [
-                      Color.fromARGB(127, 208, 208, 208),
-                      Color.fromARGB(127, 188, 99, 121),
-                      Color.fromARGB(127, 86, 101, 182),
-                      Color.fromARGB(127, 126, 190, 236)
-                    ]),
+                    gradient: LinearGradient(
+                      colors: [
+                        Color.fromARGB(127, 208, 208, 208),
+                        Color.fromARGB(127, 188, 99, 121),
+                        Color.fromARGB(127, 86, 101, 182),
+                        Color.fromARGB(127, 126, 190, 236),
+                      ],
+                    ),
                     width: 2,
                   ),
                   borderRadius: BorderRadius.circular(12),
@@ -953,9 +944,12 @@ class GetAppsWidgets extends StatelessWidget {
                   },
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                   child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 0),
-                      child: Text(context.l10n.generateSummary,
-                          style: const TextStyle(color: Colors.white, fontSize: 16))),
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 0),
+                    child: Text(
+                      context.l10n.generateSummary,
+                      style: const TextStyle(color: Colors.white, fontSize: 16),
+                    ),
+                  ),
                 ),
               ),
             ],
@@ -992,115 +986,103 @@ class GetGeolocationWidgets extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Selector<ConversationDetailProvider, Geolocation?>(selector: (context, provider) {
-      if (provider.conversation.discarded) return null;
-      return provider.conversation.geolocation;
-    }, builder: (context, geolocation, child) {
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: geolocation == null
-            ? []
-            : [
-                const SizedBox(height: 12),
-                GestureDetector(
-                  onTap: () async {
-                    MapsUtil.launchMap(geolocation.latitude!, geolocation.longitude!);
-                  },
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(16),
-                    child: SizedBox(
-                      height: 200,
-                      child: Stack(
-                        children: [
-                          // Map Image
-                          CachedNetworkImage(
-                            imageBuilder: (context, imageProvider) {
-                              return Container(
-                                height: 200,
+    return Selector<ConversationDetailProvider, Geolocation?>(
+      selector: (context, provider) {
+        if (provider.conversation.discarded) return null;
+        return provider.conversation.geolocation;
+      },
+      builder: (context, geolocation, child) {
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: geolocation == null
+              ? []
+              : [
+                  const SizedBox(height: 12),
+                  GestureDetector(
+                    onTap: () async {
+                      MapsUtil.launchMap(geolocation.latitude!, geolocation.longitude!);
+                    },
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(16),
+                      child: SizedBox(
+                        height: 200,
+                        child: Stack(
+                          children: [
+                            // Map Image
+                            CachedNetworkImage(
+                              imageBuilder: (context, imageProvider) {
+                                return Container(
+                                  height: 200,
+                                  decoration: BoxDecoration(
+                                    image: DecorationImage(image: imageProvider, fit: BoxFit.cover),
+                                  ),
+                                );
+                              },
+                              errorWidget: (context, url, error) {
+                                return Container(
+                                  height: 200,
+                                  color: const Color(0xFF2A2A2A),
+                                  child: Center(
+                                    child: Column(
+                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      children: [
+                                        const Icon(Icons.location_off, size: 40, color: Colors.grey),
+                                        const SizedBox(height: 8),
+                                        Text(
+                                          context.l10n.couldNotLoadMap,
+                                          textAlign: TextAlign.center,
+                                          style: const TextStyle(color: Colors.grey),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                );
+                              },
+                              imageUrl: MapsUtil.getMapImageUrl(geolocation.latitude!, geolocation.longitude!),
+                            ),
+                            // Gradient blur overlay from bottom
+                            Positioned(
+                              bottom: 0,
+                              left: 0,
+                              right: 0,
+                              child: Container(
+                                height: 80,
                                 decoration: BoxDecoration(
-                                  image: DecorationImage(
-                                    image: imageProvider,
-                                    fit: BoxFit.cover,
+                                  gradient: LinearGradient(
+                                    begin: Alignment.bottomCenter,
+                                    end: Alignment.topCenter,
+                                    colors: [Colors.black.withValues(alpha: 0.6), Colors.black.withValues(alpha: 0.0)],
                                   ),
-                                ),
-                              );
-                            },
-                            errorWidget: (context, url, error) {
-                              return Container(
-                                height: 200,
-                                color: const Color(0xFF2A2A2A),
-                                child: Center(
-                                  child: Column(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      const Icon(Icons.location_off, size: 40, color: Colors.grey),
-                                      const SizedBox(height: 8),
-                                      Text(
-                                        context.l10n.couldNotLoadMap,
-                                        textAlign: TextAlign.center,
-                                        style: const TextStyle(color: Colors.grey),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              );
-                            },
-                            imageUrl: MapsUtil.getMapImageUrl(
-                              geolocation.latitude!,
-                              geolocation.longitude!,
-                            ),
-                          ),
-                          // Gradient blur overlay from bottom
-                          Positioned(
-                            bottom: 0,
-                            left: 0,
-                            right: 0,
-                            child: Container(
-                              height: 80,
-                              decoration: BoxDecoration(
-                                gradient: LinearGradient(
-                                  begin: Alignment.bottomCenter,
-                                  end: Alignment.topCenter,
-                                  colors: [
-                                    Colors.black.withValues(alpha: 0.6),
-                                    Colors.black.withValues(alpha: 0.0),
-                                  ],
                                 ),
                               ),
                             ),
-                          ),
-                          // Location text at bottom left
-                          Positioned(
-                            bottom: 16,
-                            left: 16,
-                            right: 16,
-                            child: Text(
-                              _getShortAddress(context, geolocation.address?.decodeString),
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 15,
-                                fontWeight: FontWeight.w500,
-                                shadows: [
-                                  Shadow(
-                                    offset: Offset(0, 1),
-                                    blurRadius: 2,
-                                    color: Colors.black,
-                                  ),
-                                ],
+                            // Location text at bottom left
+                            Positioned(
+                              bottom: 16,
+                              left: 16,
+                              right: 16,
+                              child: Text(
+                                _getShortAddress(context, geolocation.address?.decodeString),
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w500,
+                                  shadows: [Shadow(offset: Offset(0, 1), blurRadius: 2, color: Colors.black)],
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
                               ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
                     ),
                   ),
-                ),
-                const SizedBox(height: 16),
-              ],
-      );
-    });
+                  const SizedBox(height: 16),
+                ],
+        );
+      },
+    );
   }
 }
 
@@ -1113,38 +1095,37 @@ class GetSheetTitle extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<ConversationDetailProvider>(builder: (context, provider, child) {
-      return Column(
-        children: [
-          ListTile(
-            title: Text(
-              provider.conversation.discarded
-                  ? context.l10n.discardedConversation
-                  : provider.conversation.structured.title,
-              style: Theme.of(context).textTheme.labelLarge,
+    return Consumer<ConversationDetailProvider>(
+      builder: (context, provider, child) {
+        return Column(
+          children: [
+            ListTile(
+              title: Text(
+                provider.conversation.discarded
+                    ? context.l10n.discardedConversation
+                    : provider.conversation.structured.title,
+                style: Theme.of(context).textTheme.labelLarge,
+              ),
+              leading: const Icon(Icons.description),
+              trailing: IconButton(
+                icon: const Icon(Icons.cancel_outlined),
+                onPressed: () {
+                  Navigator.of(context).pop(true);
+                },
+              ),
             ),
-            leading: const Icon(Icons.description),
-            trailing: IconButton(
-              icon: const Icon(Icons.cancel_outlined),
-              onPressed: () {
-                Navigator.of(context).pop(true);
-              },
-            ),
-          ),
-          const SizedBox(height: 8),
-        ],
-      );
-    });
+            const SizedBox(height: 8),
+          ],
+        );
+      },
+    );
   }
 }
 
 class GetDevToolsOptions extends StatefulWidget {
   final ServerConversation conversation;
 
-  const GetDevToolsOptions({
-    super.key,
-    required this.conversation,
-  });
+  const GetDevToolsOptions({super.key, required this.conversation});
 
   @override
   State<GetDevToolsOptions> createState() => _GetDevToolsOptionsState();
@@ -1161,104 +1142,101 @@ class _GetDevToolsOptionsState extends State<GetDevToolsOptions> {
 
   @override
   Widget build(BuildContext context) {
-    return Column(children: [
-      Card(
-        shape: const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(8))),
-        child: ListTile(
-          title: Text(context.l10n.triggerConversationIntegration),
-          leading: loadingAppIntegrationTest
-              ? const SizedBox(
-                  height: 24,
-                  width: 24,
-                  child: CircularProgressIndicator(
-                    valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                  ),
-                )
-              : const Icon(Icons.send_to_mobile_outlined),
-          onTap: () {
-            changeLoadingAppIntegrationTest(true);
-            if (SharedPreferencesUtil().webhookOnConversationCreated.isEmpty) {
-              showDialog(
-                context: context,
-                builder: (c) => getDialog(
-                  context,
-                  () {
-                    Navigator.pop(context);
-                  },
-                  () {
-                    Navigator.pop(context);
-                    routeToPage(context, const DeveloperSettingsPage());
-                  },
-                  context.l10n.webhookUrlNotSet,
-                  context.l10n.setWebhookUrlInSettings,
-                  okButtonText: context.l10n.settings,
-                ),
-              );
-              changeLoadingAppIntegrationTest(false);
-              return;
-            } else {
-              webhookOnConversationCreatedCall(widget.conversation, returnRawBody: true).then((response) {
+    return Column(
+      children: [
+        Card(
+          shape: const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(8))),
+          child: ListTile(
+            title: Text(context.l10n.triggerConversationIntegration),
+            leading: loadingAppIntegrationTest
+                ? const SizedBox(
+                    height: 24,
+                    width: 24,
+                    child: CircularProgressIndicator(valueColor: AlwaysStoppedAnimation<Color>(Colors.white)),
+                  )
+                : const Icon(Icons.send_to_mobile_outlined),
+            onTap: () {
+              changeLoadingAppIntegrationTest(true);
+              if (SharedPreferencesUtil().webhookOnConversationCreated.isEmpty) {
                 showDialog(
                   context: context,
                   builder: (c) => getDialog(
                     context,
-                    () => Navigator.pop(context),
-                    () => Navigator.pop(context),
-                    context.l10n.result,
-                    response,
-                    okButtonText: context.l10n.ok,
-                    singleButton: true,
+                    () {
+                      Navigator.pop(context);
+                    },
+                    () {
+                      Navigator.pop(context);
+                      routeToPage(context, const DeveloperSettingsPage());
+                    },
+                    context.l10n.webhookUrlNotSet,
+                    context.l10n.setWebhookUrlInSettings,
+                    okButtonText: context.l10n.settings,
                   ),
                 );
                 changeLoadingAppIntegrationTest(false);
-              });
-            }
-          },
+                return;
+              } else {
+                webhookOnConversationCreatedCall(widget.conversation, returnRawBody: true).then((response) {
+                  showDialog(
+                    context: context,
+                    builder: (c) => getDialog(
+                      context,
+                      () => Navigator.pop(context),
+                      () => Navigator.pop(context),
+                      context.l10n.result,
+                      response,
+                      okButtonText: context.l10n.ok,
+                      singleButton: true,
+                    ),
+                  );
+                  changeLoadingAppIntegrationTest(false);
+                });
+              }
+            },
+          ),
         ),
-      ),
-      Card(
-        shape: const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(8))),
-        child: ListTile(
-          title: Text(context.l10n.testConversationPrompt),
-          leading: const Icon(Icons.chat),
-          trailing: const Icon(Icons.arrow_forward_ios, size: 20),
-          onTap: () {
-            routeToPage(context, TestPromptsPage(conversation: widget.conversation));
-          },
+        Card(
+          shape: const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(8))),
+          child: ListTile(
+            title: Text(context.l10n.testConversationPrompt),
+            leading: const Icon(Icons.chat),
+            trailing: const Icon(Icons.arrow_forward_ios, size: 20),
+            onTap: () {
+              routeToPage(context, TestPromptsPage(conversation: widget.conversation));
+            },
+          ),
         ),
-      ),
-      // widget.memory.postprocessing?.status == MemoryPostProcessingStatus.completed
-      // widget.memory.postprocessing?.status != MemoryPostProcessingStatus.not_started
-      //     ? Card(
-      //         shape: const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(8))),
-      //         child: ListTile(
-      //           title: const Text('Compare Transcripts Models'),
-      //           leading: const Icon(Icons.chat),
-      //           trailing: const Icon(Icons.arrow_forward_ios, size: 20),
-      //           onTap: () {
-      //             routeToPage(context, CompareTranscriptsPage(memory: widget.memory));
-      //           },
-      //         ),
-      //       )
-      //     : const SizedBox.shrink(),
-    ]);
+        // widget.memory.postprocessing?.status == MemoryPostProcessingStatus.completed
+        // widget.memory.postprocessing?.status != MemoryPostProcessingStatus.not_started
+        //     ? Card(
+        //         shape: const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(8))),
+        //         child: ListTile(
+        //           title: const Text('Compare Transcripts Models'),
+        //           leading: const Icon(Icons.chat),
+        //           trailing: const Icon(Icons.arrow_forward_ios, size: 20),
+        //           onTap: () {
+        //             routeToPage(context, CompareTranscriptsPage(memory: widget.memory));
+        //           },
+        //         ),
+        //       )
+        //     : const SizedBox.shrink(),
+      ],
+    );
   }
 }
 
 _copyContent(BuildContext context, String content) {
   Clipboard.setData(ClipboardData(text: content));
-  ScaffoldMessenger.of(context).showSnackBar(
-    SnackBar(content: Text(context.l10n.transcriptCopiedToClipboard)),
-  );
+  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.l10n.transcriptCopiedToClipboard)));
   HapticFeedback.lightImpact();
   Navigator.pop(context);
 }
 
 _getLoadingIndicator() {
   return const SizedBox(
-      width: 24,
-      height: 24,
-      child: CircularProgressIndicator(
-        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-      ));
+    width: 24,
+    height: 24,
+    child: CircularProgressIndicator(valueColor: AlwaysStoppedAnimation<Color>(Colors.white)),
+  );
 }

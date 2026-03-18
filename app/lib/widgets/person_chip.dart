@@ -22,11 +22,7 @@ class PersonChip extends StatelessWidget {
         children: [
           if (isAddButton) const Icon(Icons.add, size: 16),
           if (isAddButton) const SizedBox(width: 4),
-          Text(
-            personName,
-            style: const TextStyle(fontSize: 12),
-            overflow: TextOverflow.ellipsis,
-          ),
+          Text(personName, style: const TextStyle(fontSize: 12), overflow: TextOverflow.ellipsis),
         ],
       ),
       selected: isSelected,
@@ -37,10 +33,7 @@ class PersonChip extends StatelessWidget {
       backgroundColor: Colors.grey.shade800.withOpacity(0.6),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(8),
-        side: BorderSide(
-          color: isSelected ? Theme.of(context).colorScheme.secondary : Colors.transparent,
-          width: 1,
-        ),
+        side: BorderSide(color: isSelected ? Theme.of(context).colorScheme.secondary : Colors.transparent, width: 1),
       ),
     );
   }
