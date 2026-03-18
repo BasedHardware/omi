@@ -291,6 +291,37 @@ env:
         key: TWILIO_TWIML_APP_SID
   - name: VAD_GATE_MODE
     value: "active"
+  # Fair-use system (PR #5748)
+  - name: FAIR_USE_ENABLED
+    value: "false"
+  - name: FAIR_USE_KILL_SWITCH
+    value: "false"
+  - name: FAIR_USE_DAILY_SPEECH_MS
+    value: "7200000"
+  - name: FAIR_USE_3DAY_SPEECH_MS
+    value: "28800000"
+  - name: FAIR_USE_WEEKLY_SPEECH_MS
+    value: "36000000"
+  - name: FAIR_USE_BUCKET_SECONDS
+    value: "60"
+  - name: FAIR_USE_REDIS_RETENTION_SECONDS
+    value: "691200"
+  - name: FAIR_USE_CLASSIFIER_ABUSE_SCORE_THRESHOLD
+    value: "0.7"
+  - name: FAIR_USE_CLASSIFIER_COOLDOWN_SECONDS
+    value: "43200"
+  - name: FAIR_USE_CLASSIFIER_MODEL
+    value: "gpt-4.1-mini"
+  - name: FAIR_USE_CLASSIFIER_LOOKBACK_DAYS
+    value: "7"
+  - name: FAIR_USE_STAGE2_VAD_THRESHOLD_DELTA
+    value: "0.08"
+  - name: FAIR_USE_VAD_THRESHOLD_MAX
+    value: "0.82"
+  - name: FAIR_USE_CHECK_INTERVAL_SECONDS
+    value: "300"
+  - name: FAIR_USE_EXEMPT_UIDS
+    value: ""
   - name: METRICS_SECRET
     valueFrom:
       secretKeyRef:
