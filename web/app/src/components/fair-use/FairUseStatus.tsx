@@ -2,36 +2,16 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import {
-  ArrowLeft,
-  CheckCircle2,
-  AlertTriangle,
-  Gauge,
-  Ban,
-  Info,
-  RefreshCw,
-  Loader2,
-  Copy,
-  Check,
-} from 'lucide-react';
+import { ArrowLeft, RefreshCw, Loader2, Info, Copy, Check } from 'lucide-react';
 import { getFairUseStatus } from '@/lib/api';
 import type { FairUseStatus as FairUseStatusType } from '@/lib/api';
 import { cn } from '@/lib/utils';
 
-function Card({ children, className }: { children: React.ReactNode; className?: string }) {
-  return (
-    <div
-      className={cn(
-        'rounded-2xl p-5',
-        'bg-gradient-to-b from-white/[0.03] to-white/[0.01]',
-        'shadow-[0_0_0_1px_rgba(255,255,255,0.04),0_2px_4px_rgba(0,0,0,0.1),0_8px_16px_rgba(0,0,0,0.1)]',
-        className
-      )}
-    >
-      {children}
-    </div>
-  );
-}
+const STAGE_META: Record<string, { label: string; dot: string; text: string; bg: string }> = {
+  warning: { label: 'Warning', dot: 'bg-amber-400', text: 'text-amber-400', bg: 'bg-amber-500/[0.08]' },
+  throttle: { label: 'Throttled', dot: 'bg-orange-400', text: 'text-orange-400', bg: 'bg-orange-500/[0.08]' },
+  restrict: { label: 'Restricted', dot: 'bg-red-400', text: 'text-red-400', bg: 'bg-red-500/[0.08]' },
+};
 
 function UsageBar({
   label,
@@ -47,14 +27,14 @@ function UsageBar({
   const barColor = pct >= 100 ? 'bg-red-500' : pct >= 80 ? 'bg-amber-500' : 'bg-purple-500';
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-1.5">
       <div className="flex items-center justify-between">
         <span className="text-sm text-text-tertiary">{label}</span>
         <span className="text-sm font-medium text-text-primary">
           {hours.toFixed(1)}h / {limit.toFixed(0)}h
         </span>
       </div>
-      <div className="h-1.5 rounded-full bg-bg-tertiary overflow-hidden">
+      <div className="h-1 rounded-full bg-bg-tertiary overflow-hidden">
         <div
           className={cn('h-full rounded-full transition-all', barColor)}
           style={{ width: `${Math.min(pct, 100)}%` }}
@@ -63,37 +43,6 @@ function UsageBar({
     </div>
   );
 }
-
-const STAGE_CONFIG = {
-  none: {
-    icon: CheckCircle2,
-    label: 'Normal',
-    color: 'text-green-400',
-    bgColor: 'from-green-500/10 to-green-500/5',
-    borderColor: 'ring-green-500/20',
-  },
-  warning: {
-    icon: AlertTriangle,
-    label: 'Warning',
-    color: 'text-amber-400',
-    bgColor: 'from-amber-500/10 to-amber-500/5',
-    borderColor: 'ring-amber-500/20',
-  },
-  throttle: {
-    icon: Gauge,
-    label: 'Throttled',
-    color: 'text-orange-400',
-    bgColor: 'from-orange-500/10 to-orange-500/5',
-    borderColor: 'ring-orange-500/20',
-  },
-  restrict: {
-    icon: Ban,
-    label: 'Restricted',
-    color: 'text-red-400',
-    bgColor: 'from-red-500/10 to-red-500/5',
-    borderColor: 'ring-red-500/20',
-  },
-};
 
 export function FairUseStatus() {
   const router = useRouter();
@@ -150,9 +99,8 @@ export function FairUseStatus() {
           </button>
           <h1 className="text-xl font-semibold text-text-primary">Fair Use</h1>
         </div>
-        <Card className="text-center py-8">
-          <AlertTriangle className="w-8 h-8 text-red-400 mx-auto mb-3" />
-          <p className="text-text-secondary mb-4">Unable to load fair use status.</p>
+        <div className="text-center py-8">
+          <p className="text-text-tertiary mb-4">Unable to load fair use status.</p>
           <button
             onClick={loadStatus}
             className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-purple-500/10 text-purple-400 hover:bg-purple-500/20 transition-colors"
@@ -160,17 +108,17 @@ export function FairUseStatus() {
             <RefreshCw className="w-4 h-4" />
             Retry
           </button>
-        </Card>
+        </div>
       </div>
     );
   }
 
   const stage = status?.stage ?? 'none';
-  const config = STAGE_CONFIG[stage] ?? STAGE_CONFIG['none'];
-  const StageIcon = config.icon;
+  const isElevated = stage !== 'none';
+  const meta = STAGE_META[stage];
 
   return (
-    <div className="max-w-2xl mx-auto p-6 space-y-6">
+    <div className="max-w-2xl mx-auto p-6 space-y-4">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
@@ -188,27 +136,36 @@ export function FairUseStatus() {
         </button>
       </div>
 
-      {/* Stage Card */}
-      <Card className={cn('text-center ring-1', config.borderColor)}>
-        <div className={cn('inline-flex p-3 rounded-full bg-gradient-to-b mb-3', config.bgColor)}>
-          <StageIcon className={cn('w-8 h-8', config.color)} />
+      {/* Status Banner — only for elevated stages */}
+      {isElevated && meta && (
+        <div className={cn('flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl', meta.bg)}>
+          <div className={cn('w-2 h-2 rounded-full', meta.dot)} />
+          <span className={cn('text-sm font-medium', meta.text)}>{meta.label}</span>
+          {status?.case_ref && (
+            <>
+              <div className="flex-1" />
+              <button
+                onClick={() => copyRef(status.case_ref)}
+                className="inline-flex items-center gap-1.5 text-text-tertiary text-xs font-mono hover:text-text-secondary transition-colors"
+              >
+                {status.case_ref}
+                {copied ? <Check className="w-3 h-3 text-green-400" /> : <Copy className="w-3 h-3" />}
+              </button>
+            </>
+          )}
         </div>
-        <h2 className={cn('text-lg font-semibold', config.color)}>{config.label}</h2>
-        {status?.case_ref && (
-          <button
-            onClick={() => copyRef(status.case_ref)}
-            className="mt-3 inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-bg-tertiary text-text-tertiary text-sm font-mono hover:bg-bg-quaternary transition-colors"
-          >
-            {status.case_ref}
-            {copied ? <Check className="w-3.5 h-3.5 text-green-400" /> : <Copy className="w-3.5 h-3.5" />}
-          </button>
-        )}
-      </Card>
+      )}
 
-      {/* Usage Section */}
+      {/* Usage */}
       {status && (
-        <Card>
-          <h3 className="text-sm font-medium text-text-secondary mb-4">Speech Usage</h3>
+        <div
+          className={cn(
+            'rounded-2xl p-5',
+            'bg-gradient-to-b from-white/[0.03] to-white/[0.01]',
+            'shadow-[0_0_0_1px_rgba(255,255,255,0.04),0_2px_4px_rgba(0,0,0,0.1),0_8px_16px_rgba(0,0,0,0.1)]'
+          )}
+        >
+          <h3 className="text-xs font-medium text-text-tertiary uppercase tracking-wide mb-4">Speech Usage</h3>
           <div className="space-y-4">
             <UsageBar
               label="Today"
@@ -229,28 +186,26 @@ export function FairUseStatus() {
               pct={status.usage_pct.weekly}
             />
           </div>
-        </Card>
+        </div>
       )}
 
-      {/* Message */}
+      {/* Message — only when present */}
       {status?.message && (
-        <Card>
-          <div className="flex gap-3">
-            <Info className="w-4 h-4 text-text-quaternary flex-shrink-0 mt-0.5" />
-            <p className="text-sm text-text-secondary leading-relaxed">{status.message}</p>
-          </div>
-        </Card>
+        <div className="flex gap-2.5 px-1">
+          <Info className="w-4 h-4 text-text-quaternary flex-shrink-0 mt-0.5" />
+          <p className="text-sm text-text-tertiary leading-relaxed">{status.message}</p>
+        </div>
       )}
 
-      {/* About */}
-      <Card>
-        <h3 className="text-sm font-medium text-text-secondary mb-2">About Fair Use</h3>
-        <p className="text-sm text-text-quaternary leading-relaxed">
+      {/* About footnote */}
+      <div className="px-1 pt-2">
+        <h4 className="text-xs font-medium text-text-quaternary mb-1">About Fair Use</h4>
+        <p className="text-xs text-text-quaternary/70 leading-relaxed">
           Omi is designed for personal conversations, meetings, and live interactions. Usage is measured by real speech
           time detected, not connection time. If usage significantly exceeds normal patterns for non-personal content,
           adjustments may apply.
         </p>
-      </Card>
+      </div>
     </div>
   );
 }
