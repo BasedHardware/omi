@@ -645,7 +645,7 @@ struct ConversationsPage: View {
         )) {
             Button("OK", role: .cancel) { }
         } message: {
-            Text(mergeError ?? "Unknown error")
+            Text(mergeError ?? "Failed to merge conversations. Please try again.")
         }
     }
 
