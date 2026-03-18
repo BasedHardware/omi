@@ -1,0 +1,102 @@
+# E2E Flow: Action Items — view overdue tasks, add new task, toggle completion, return home
+# Tests: Navigate to Action Items tab, expand Overdue section, view task list, add new task via FAB, return home
+# Core feature: managing action items extracted from conversations
+
+version: 2
+name: action-items
+description: Action Items flow — browse overdue tasks, expand/collapse Overdue section, add new task via FAB, verify task form fields
+app: com.friend.ios.dev
+evidence:
+  video: true
+covers:
+  - app/lib/pages/action_items/action_items_page.dart
+  - app/lib/providers/action_items_provider.dart
+  - app/lib/widgets/bottom_nav_bar.dart
+preconditions:
+  - auth_ready  # User signed in and onboarding completed. App shows home screen.
+
+steps:
+  - id: S1
+    name: Navigate to Action Items tab
+    do: "From the home screen, tap the Action Items tab (list-check icon, second in bottom navigation bar). Use ADB coordinates: tap at (339, 2232) on 1080x2400 device."
+    verify: true
+    expect:
+      - kind: text_visible
+        values: ["Overdue"]
+      - kind: interactive_count
+        min: 3
+    evidence:
+      - screenshot: step-S1.webp
+    note: "Bottom nav tabs: Home (house, idx 0), Action Items (list-check, idx 1), Memories (brain, idx 2), Apps (puzzle-piece, idx 3). Action Items tab center ADB coordinates: (339, 2232). Top bar shows: Omi icon (top-left), upload/export icon, check icon, settings icon (top-right)."
+
+  - id: S2
+    name: Verify Action Items page — Overdue section collapsed
+    do: "Verify the Action Items page shows: Omi icon (top-left), 3 top-right icons (upload, checkmark, settings), 'Overdue' section header with count badge (collapsed by default, showing expand_more chevron), '+' FAB button at bottom-right."
+    verify: true
+    expect:
+      - kind: text_visible
+        values: ["Overdue"]
+      - kind: interactive_count
+        min: 3
+    evidence:
+      - screenshot: step-S2.webp
+    note: "The Overdue section is collapsed by default. The count badge shows total overdue tasks (e.g., '100'). The FAB is a FloatingActionButton for adding new action items. Top-right icons: upload/share, bulk complete, settings."
+
+  - id: S3
+    name: Expand Overdue section
+    do: "Tap the 'Overdue' section header (chevron + text) to expand and show the list of overdue action items. Use ADB tap at (250, 320) on 1080x2400 device."
+    verify: true
+    expect:
+      - kind: interactive_count
+        min: 8
+    evidence:
+      - screenshot: step-S3.webp
+    note: "ADB coordinates for Overdue header: UIAutomator bounds [42,268][1038,373]. Tap at x=250, y=320 reliably hits the GestureDetector. Expanded view shows action items with circle checkboxes (unchecked) on the left and task description text. Items are extracted from conversations."
+
+  - id: S4
+    name: Verify action item list content
+    do: "Verify the expanded Overdue section shows a scrollable list of action items. Each item has: an empty circle checkbox (left side), task description text. Items include conversation-extracted tasks like 'Speaker 0 needs to chat...', 'Consider upgrading...', etc."
+    verify: true
+    expect:
+      - kind: interactive_count
+        min: 6
+    evidence:
+      - screenshot: step-S4.webp
+    note: "Action items are grouped by category: today, tomorrow, later, no deadline, overdue. Overdue section is collapsed by default. Each item supports: tap checkbox to complete, long-press for context menu (edit, export, indent), swipe to delete, drag to reorder."
+
+  - id: S5
+    name: Collapse Overdue section
+    do: "Tap the 'Overdue' section header again to collapse the list. Verify the section shows the collapsed state with expand_more chevron and count badge."
+    verify: true
+    expect:
+      - kind: text_visible
+        values: ["Overdue"]
+    evidence:
+      - screenshot: step-S5.webp
+    note: "Tapping the same header area (250, 320) toggles between expanded (expand_less chevron) and collapsed (expand_more chevron) states."
+
+  - id: S6
+    name: Open Add New Task form
+    do: "Tap the '+' FAB button (purple circle, bottom-right) to open the Add New Task inline form. Use ADB tap at (954, 2001) on 1080x2400 device."
+    verify: true
+    expect:
+      - kind: text_visible
+        values: ["Mark Complete"]
+      - kind: interactive_count
+        min: 3
+    evidence:
+      - screenshot: step-S6.webp
+    note: "FAB UIAutomator bounds: [880,1928][1028,2075]. The add task form appears inline at the bottom of the screen with: 'Mark Complete' checkbox, text field placeholder 'What needs to be done?', default due date 'Today - 11:59 PM' with X dismiss, '↵ Press done to create' hint, '0/200' character counter. Keyboard opens automatically."
+
+  - id: S7
+    name: Dismiss form and return to home
+    do: "Dismiss the Add New Task form by tapping outside it (above the form area). Then tap the Home tab (house icon, leftmost in bottom nav) to return to the home screen. Use ADB: tap at (540, 150) to dismiss, then (148, 2232) for Home tab."
+    verify: true
+    expect:
+      - kind: text_visible
+        values: ["Conversations"]
+      - kind: interactive_count
+        min: 4
+    evidence:
+      - screenshot: step-S7.webp
+    note: "IMPORTANT: Do NOT use KEYCODE_BACK on the Action Items page — it exits the app entirely (back-exits-app bug). Always use the Home bottom nav tab to return. Home tab ADB coordinates: (148, 2232)."
