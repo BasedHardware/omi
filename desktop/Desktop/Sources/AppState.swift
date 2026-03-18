@@ -2999,6 +2999,8 @@ extension Notification.Name {
   /// Posted to navigate to AI Chat page
   static let navigateToChat = Notification.Name("navigateToChat")
   static let navigateToTasks = Notification.Name("navigateToTasks")
+  /// Posted by keyboard shortcuts to navigate sidebar. userInfo: ["rawValue": Int]
+  static let navigateToSidebarItem = Notification.Name("navigateToSidebarItem")
   /// Posted by the local desktop automation bridge to request semantic navigation.
   static let desktopAutomationNavigateRequested = Notification.Name(
     "desktopAutomationNavigateRequested")
