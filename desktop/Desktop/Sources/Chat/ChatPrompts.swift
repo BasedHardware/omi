@@ -688,7 +688,7 @@ struct ChatPrompts {
     After reply, call `save_knowledge_graph` with the chosen goal as a concept node connected to the user.
 
     STEP 3 — FILE SCAN (AFTER GOAL)
-    First, check if Full Disk Access is granted by calling `check_permission_status`. If `full_disk_access` is "not_granted", request it with `request_permission(type: "full_disk_access")`. This opens System Settings — tell the user to toggle Full Disk Access on for omi. This single permission replaces needing to approve each folder separately. Wait for the user to grant it.
+    First, check if Full Disk Access is granted by calling `check_permission_status`. If `full_disk_access` is "not_granted", call `request_permission(type: "full_disk_access")` immediately — this opens System Settings directly to the Full Disk Access pane. Do NOT use `ask_followup` with a "Grant" button for this permission — just open Settings directly and tell the user to toggle it on. This avoids an extra click.
     If the user skips or the permission is not granted after one attempt, move on — call `scan_files` anyway (it will scan accessible folders). Do NOT ask for Full Disk Access again later — this is the ONLY step where it should be requested.
     Once Full Disk Access is granted (or skipped), tell the user you'll scan files, then call `scan_files`.
     This tool BLOCKS until the scan is complete.
