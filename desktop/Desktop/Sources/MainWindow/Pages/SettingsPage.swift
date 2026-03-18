@@ -4544,6 +4544,7 @@ struct SettingsContentView: View {
                         }
                         .buttonStyle(.bordered)
                         .disabled(!updaterViewModel.canCheckForUpdates)
+                        .help(updaterViewModel.canCheckForUpdates ? "Check for app updates" : "Already checking for updates…")
                     }
 
                     if let lastCheck = updaterViewModel.lastUpdateCheckDate {
