@@ -177,6 +177,8 @@ class TasksStore: ObservableObject {
     private func refreshTasksIfNeeded() async {
         // Skip if not signed in
         guard AuthService.shared.isSignedIn else { return }
+        // Skip if in auth backoff period (recent 401 errors)
+        guard !AuthBackoffTracker.shared.shouldSkipRequest() else { return }
 
         // Skip if page is not visible
         guard isActive else { return }
@@ -241,7 +243,11 @@ class TasksStore: ObservableObject {
             let newHasMore = mergedTasks.count >= reloadLimit
             if hasMoreIncompleteTasks != newHasMore { hasMoreIncompleteTasks = newHasMore }
             await loadDashboardTasks()
+            AuthBackoffTracker.shared.reportSuccess()
         } catch {
+            if case APIError.unauthorized = error {
+                AuthBackoffTracker.shared.reportAuthFailure()
+            }
             // Silently ignore errors during auto-refresh
             logError("TasksStore: Auto-refresh failed", error: error)
         }
