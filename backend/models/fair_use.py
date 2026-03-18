@@ -47,7 +47,7 @@ class ClassifierResult(BaseModel):
     """Result from the LLM abuse classifier."""
 
     model: str = ""
-    prompt_version: str = "v1"
+    prompt_version: str = "v2"
     abuse_score: float = 0.0
     abuse_type: AbuseType = AbuseType.NONE
     confidence: float = 0.0
