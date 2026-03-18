@@ -1,9 +1,11 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import 'package:omi/backend/http/api/device.dart';
+import 'package:omi/gen/pigeon_communicator.g.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
@@ -224,6 +226,33 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   }
 
   Future periodicConnect(String printer, {bool boundDeviceOnly = false}) async {
+    _reconnectionTimer?.cancel();
+
+    if (Platform.isIOS) {
+      final pairedDeviceId = SharedPreferencesUtil().btDevice.id;
+
+      // Already connected — nothing to do
+      if (isConnected || connectedDevice != null) return;
+
+      // Known device — use native chipset-level reconnection (no scanning, no polling)
+      if (pairedDeviceId.isNotEmpty) {
+        Logger.debug('periodicConnect (iOS native): requesting chipset-level reconnect for $pairedDeviceId');
+        try {
+          BleHostApi().reconnectKnownPeripheral(pairedDeviceId);
+          return;
+        } catch (e) {
+          Logger.debug('periodicConnect (iOS native): reconnect failed: $e, falling back to scan');
+        }
+      }
+
+      // No paired device (onboarding) — fall through to active scanning
+      if (pairedDeviceId.isEmpty && boundDeviceOnly) return;
+    }
+
+    _startPollingReconnect(boundDeviceOnly: boundDeviceOnly);
+  }
+
+  void _startPollingReconnect({bool boundDeviceOnly = false}) {
     _reconnectionTimer?.cancel();
     scan(t) async {
       debugPrint("Period connect seconds: $_connectionCheckSeconds, triggered timer at ${DateTime.now()}");

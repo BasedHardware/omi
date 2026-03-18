@@ -44,6 +44,19 @@ extension FlutterError: Error {}
             WatchRecorderHostAPISetup.setUp(binaryMessenger: controller!.binaryMessenger, api: api)
       }
 
+      // Native BLE module — register Pigeon APIs
+      NSLog("[OmiBle] Registering BLE Pigeon APIs")
+      let bleController = window?.rootViewController as? FlutterViewController
+      if let messenger = bleController?.binaryMessenger {
+          let bleFlutterApi = BleFlutterApi(binaryMessenger: messenger)
+          OmiBleManager.shared.setFlutterApi(bleFlutterApi)
+          let bleHostApi = BleHostApiImpl(bleManager: OmiBleManager.shared)
+          BleHostApiSetup.setUp(binaryMessenger: messenger, api: bleHostApi)
+          NSLog("[OmiBle] BLE Pigeon APIs registered successfully")
+      } else {
+          NSLog("[OmiBle] ERROR: Could not get FlutterBinaryMessenger")
+      }
+
       // Retrieve the link from parameters
     if let url = AppLinks.shared.getLink(launchOptions: launchOptions) {
       // We have a link, propagate it to your Flutter app or not

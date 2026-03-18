@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 
@@ -23,6 +24,7 @@ import 'package:omi/services/notifications.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/services/devices/transports/device_transport.dart';
 import 'package:omi/services/devices/transports/ble_transport.dart';
+import 'package:omi/services/devices/transports/native_ble_transport.dart';
 import 'package:omi/services/devices/transports/frame_transport.dart';
 import 'package:omi/services/devices/transports/watch_transport.dart';
 import 'package:omi/utils/logger.dart';
@@ -39,8 +41,13 @@ class DeviceConnectionFactory {
       case TransportKind.bluetooth:
         final deviceId = locator.bluetoothId;
         if (deviceId == null) return null;
-        final bleDevice = BluetoothDevice.fromId(deviceId);
-        transport = BleTransport(bleDevice);
+        if (Platform.isIOS) {
+          print('[DeviceConnectionFactory] Creating NativeBleTransport for $deviceId');
+          transport = NativeBleTransport(deviceId);
+        } else {
+          final bleDevice = BluetoothDevice.fromId(deviceId);
+          transport = BleTransport(bleDevice);
+        }
         break;
 
       case TransportKind.watchConnectivity:
