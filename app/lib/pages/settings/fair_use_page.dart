@@ -30,10 +30,17 @@ class _FairUsePageState extends State<FairUsePage> {
     try {
       final result = await getFairUseStatus();
       if (mounted) {
-        setState(() {
-          _status = result;
-          _isLoading = false;
-        });
+        if (result == null) {
+          setState(() {
+            _error = 'Unable to load fair use status';
+            _isLoading = false;
+          });
+        } else {
+          setState(() {
+            _status = result;
+            _isLoading = false;
+          });
+        }
       }
     } catch (e) {
       if (mounted) {
@@ -59,7 +66,7 @@ class _FairUsePageState extends State<FairUsePage> {
           : _error != null
               ? _buildError()
               : _status == null
-                  ? _buildUnavailable()
+                  ? _buildError()
                   : RefreshIndicator(
                       onRefresh: _loadStatus,
                       child: SingleChildScrollView(
@@ -100,26 +107,6 @@ class _FairUsePageState extends State<FairUsePage> {
             TextButton(
               onPressed: _loadStatus,
               child: Text(context.l10n.retry, style: const TextStyle(color: Color(0xFF8B5CF6))),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildUnavailable() {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const FaIcon(FontAwesomeIcons.solidCircleCheck, color: Color(0xFF34D399), size: 40),
-            const SizedBox(height: 16),
-            Text(
-              context.l10n.fairUseStatusNormal,
-              style: const TextStyle(color: Colors.white, fontSize: 16),
-              textAlign: TextAlign.center,
             ),
           ],
         ),
@@ -179,7 +166,7 @@ class _FairUsePageState extends State<FairUsePage> {
                 Clipboard.setData(ClipboardData(text: caseRef));
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
-                    content: Text('$caseRef copied'),
+                    content: Text(context.l10n.fairUseCaseRefCopied(caseRef)),
                     duration: const Duration(seconds: 2),
                     backgroundColor: const Color(0xFF2C2C2E),
                   ),
