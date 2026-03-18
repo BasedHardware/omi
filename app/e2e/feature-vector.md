@@ -102,6 +102,11 @@ Prioritized feature map to guide flow-walker E2E coverage of core Omi mobile app
 | phone-capture | 9/9 | PASS | flow-walker.beastoin.workers.dev/runs/HBzorfQBM2.html |
 | device-connect | 10/10 | PASS | flow-walker.beastoin.workers.dev/runs/yOluecTPyM.html |
 | device-capture | 10/10 | PASS | flow-walker.beastoin.workers.dev/runs/EWHjix-kFv.html |
+| conversation-folders | 10/10 | PASS | flow-walker.beastoin.workers.dev/runs/V-TQ-4nmze.html |
+| conversation-sharing | 8/8 | PASS | flow-walker.beastoin.workers.dev/runs/N3YxO9Zpnu.html |
+| add-edit-memory | 7/7 | PASS | flow-walker.beastoin.workers.dev/runs/0crZDcAVrh.html |
+| custom-vocabulary | 7/7 | PASS | flow-walker.beastoin.workers.dev/runs/W3wIFeChiw.html |
+| speaker-identification | 9/9 | PASS | flow-walker.beastoin.workers.dev/runs/uguxZ6ptjN.html |
 
 ---
 
@@ -113,6 +118,16 @@ Prioritized feature map to guide flow-walker E2E coverage of core Omi mobile app
 | Core Weekly (memory, understand, retrieval) | 12 | 11 | 1 (memory review — no UI) |
 | Setup & Auth | 8 | 7 | 1 (calendar OAuth) |
 | **Total** | **33** | **30** | **3** |
+
+### What Changed (2026-03-18 update)
+- **5 new flow-walker reports published** on physical Pixel 7a device:
+  - add-edit-memory (7/7 PASS) — create, edit, delete memory via FAB
+  - custom-vocabulary (7/7 PASS) — add/delete transcription vocabulary words
+  - speaker-identification (9/9 PASS) — add person, name speaker in transcript
+  - conversation-folders (10/10 PASS) — folder tabs, create/filter
+  - conversation-sharing (8/8 PASS) — share link, copy transcript, visibility
+- **goals-tracking flow blocked**: DailyScoreWidget not rendering on Pixel 7a despite preference enabled — "Add Goal" entry point unavailable when no goals exist
+- **Total published reports: 16** (was 11)
 
 ### What Changed (2026-03-17 update #2)
 - **6 new flows added closing all actionable gaps**:
