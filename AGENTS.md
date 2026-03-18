@@ -137,6 +137,7 @@ Always format code after making changes. The pre-commit hook handles this automa
 - Never push directly to `main`.
 - Never merge directly from a local branch. Land changes through a PR only.
 - When a change should go remote, create or use a feature branch, commit there, open/update a PR, and merge via the PR.
+- Always work in a git worktree for code changes. Use `EnterWorktree` at the start of a task to isolate your work.
 
 ## Documentation Maintenance
 
