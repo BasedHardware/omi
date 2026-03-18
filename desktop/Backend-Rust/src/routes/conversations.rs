@@ -56,8 +56,12 @@ async fn get_conversations(
     user: AuthUser,
     Query(query): Query<GetConversationsQuery>,
 ) -> Result<Json<Vec<Conversation>>, (StatusCode, String)> {
-    // Parse statuses from comma-separated string (match Python behavior)
-    let statuses: Vec<String> = if query.statuses.is_empty() {
+    // Parse statuses from comma-separated string (match Python behavior).
+    // When filtering by starred, skip the default status filter to avoid
+    // requiring a Firestore composite index on (status, starred, created_at).
+    let statuses: Vec<String> = if query.starred.is_some() && query.statuses == default_statuses() {
+        vec![]
+    } else if query.statuses.is_empty() {
         vec![]
     } else {
         query.statuses.split(',').map(|s| s.trim().to_string()).collect()
