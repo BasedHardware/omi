@@ -107,6 +107,10 @@ export function FairUseStatus() {
     setError(null);
     try {
       const result = await getFairUseStatus();
+      if (!result) {
+        setError('Unable to load fair use status');
+        return;
+      }
       setStatus(result);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load status');
@@ -158,7 +162,7 @@ export function FairUseStatus() {
   }
 
   const stage = status?.stage ?? 'none';
-  const config = STAGE_CONFIG[stage];
+  const config = STAGE_CONFIG[stage] ?? STAGE_CONFIG['none'];
   const StageIcon = config.icon;
 
   return (
