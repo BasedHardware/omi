@@ -341,6 +341,12 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak self] in
             self?.suppressHoverResize = false
             FloatingControlBarManager.shared.flushQueuedNotificationsIfPossible()
+
+            // If the user has the bar disabled, hide it completely after closing the
+            // AI conversation instead of leaving the compact pill visible.
+            if !FloatingControlBarManager.shared.isEnabled {
+                self?.orderOut(nil)
+            }
         }
     }
 
@@ -707,6 +713,14 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
             guard let self, self.resignKeyAnimationToken == token else { return }
             // Phase 2: collapse while invisible (no jarring resize flash).
             self.closeAIConversation()
+
+            // If the bar is disabled, keep it hidden instead of fading the pill back in.
+            if !FloatingControlBarManager.shared.isEnabled {
+                self.orderOut(nil)
+                self.alphaValue = 1
+                return
+            }
+
             // Phase 3: fade the collapsed pill back in (easeOut — decelerates into place).
             NSAnimationContext.runAnimationGroup({ ctx in
                 ctx.duration = 0.2
@@ -953,7 +967,10 @@ class FloatingControlBarManager {
 
         // If a conversation is already showing, just focus the follow-up input
         if window.state.showingAIConversation && window.state.showingAIResponse {
-            if !window.isVisible { show() }
+            if !window.isVisible {
+                // Show without persisting enabled state — bar hides again when conversation closes
+                window.makeKeyAndOrderFront(nil)
+            }
             window.makeKeyAndOrderFront(nil)
             window.focusInputField()
             return
@@ -961,7 +978,9 @@ class FloatingControlBarManager {
 
         AnalyticsManager.shared.floatingBarAskOmiOpened(source: "shortcut")
         if !window.isVisible {
-            show()
+            // Show window without persisting enabled state — if the user has the bar
+            // disabled, it will hide again when the AI conversation closes.
+            window.makeKeyAndOrderFront(nil)
         }
         window.showAIConversation()
         window.orderFrontRegardless()
@@ -996,7 +1015,9 @@ class FloatingControlBarManager {
         }
 
         if !window.isVisible {
-            show()
+            // Show window without persisting enabled state — if the user has the bar
+            // disabled, it will hide again when the AI conversation closes.
+            window.makeKeyAndOrderFront(nil)
         }
 
         // Cancel any in-flight windowDidResignKey dismiss animation before saving the

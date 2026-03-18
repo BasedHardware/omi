@@ -84,9 +84,9 @@ struct SettingsSearchItem: Identifiable {
         SettingsSearchItem(name: "Report an Issue", subtitle: "Help us improve omi", keywords: ["bug", "feedback", "report", "issue"], section: .about, icon: "info.circle", settingId: "about.reportissue"),
 
         // Advanced subsections
+        SettingsSearchItem(name: "Reset Onboarding", subtitle: "Restart setup wizard for this app build only", keywords: ["reset", "onboarding", "restart", "setup"], section: .advanced, icon: "arrow.counterclockwise", settingId: "advanced.resetonboarding"),
         SettingsSearchItem(name: "AI User Profile", subtitle: "AI-generated summary of your preferences and habits", keywords: ["profile", "generate", "generate now", "regenerate"], section: .advanced, icon: "brain", settingId: "advanced.aiuserprofile"),
         SettingsSearchItem(name: "Your Stats", subtitle: "View your usage statistics and activity", keywords: ["statistics", "conversations", "usage"], section: .advanced, icon: "chart.bar", settingId: "advanced.stats"),
-        SettingsSearchItem(name: "Feature Tiers", subtitle: "Track your progress and unlock features", keywords: ["tiers", "unlock", "features", "progress"], section: .advanced, icon: "lock.shield", settingId: "advanced.featuretiers"),
         SettingsSearchItem(name: "Focus Assistant", subtitle: "Detect distractions and help you stay focused", keywords: ["distraction", "cooldown", "glow"], section: .advanced, icon: "eye.fill", settingId: "advanced.focusassistant"),
         SettingsSearchItem(name: "Visual Glow Effect", subtitle: "Show colored border when focus changes", keywords: ["glow", "visual", "border glow", "screen glow"], section: .advanced, icon: "eye.fill", settingId: "advanced.focusassistant.glow"),
         SettingsSearchItem(name: "Focus Cooldown", subtitle: "Minimum time between distraction alerts", keywords: ["cooldown", "delay", "focus timer"], section: .advanced, icon: "eye.fill", settingId: "advanced.focusassistant.cooldown"),
@@ -127,7 +127,6 @@ struct SettingsSearchItem: Identifiable {
         SettingsSearchItem(name: "Launch at Login", subtitle: "Start omi automatically when you log in", keywords: ["startup", "login", "boot"], section: .advanced, icon: "slider.horizontal.3", settingId: "advanced.preferences.launchatlogin"),
         SettingsSearchItem(name: "Report Issue", subtitle: "Send app logs and report a problem", keywords: ["bug", "feedback", "logs", "report"], section: .advanced, icon: "wrench.and.screwdriver", settingId: "advanced.troubleshooting.reportissue"),
         SettingsSearchItem(name: "Rescan Files", subtitle: "Re-index your files and update your AI profile", keywords: ["index", "reindex", "rescan", "files", "scan", "file indexing", "profile"], section: .advanced, icon: "wrench.and.screwdriver", settingId: "advanced.troubleshooting.rescanfiles"),
-        SettingsSearchItem(name: "Reset Onboarding", subtitle: "Restart setup wizard and reset permissions", keywords: ["setup", "wizard", "permissions", "reset"], section: .advanced, icon: "wrench.and.screwdriver", settingId: "advanced.troubleshooting.resetonboarding"),
     ]
 }
 
