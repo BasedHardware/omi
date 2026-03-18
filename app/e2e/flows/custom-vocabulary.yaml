@@ -84,7 +84,7 @@ steps:
 
   - id: S7
     name: Return to home
-    do: "Press back twice (Custom Vocabulary → Profile → Settings → Home) to return to the home screen. Verify the home screen is displayed."
+    do: "Press back three times (Custom Vocabulary → Profile → Settings → Home) to return to the home screen. Verify the home screen is displayed."
     verify: true
     expect:
       - kind: text_visible
