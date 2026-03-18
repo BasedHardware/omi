@@ -183,16 +183,6 @@ def get_rolling_speech_ms(uid: str) -> dict:
         return result
 
 
-def prune_old_buckets(uid: str) -> None:
-    """Remove buckets older than retention period."""
-    try:
-        cutoff = int(time.time()) - FAIR_USE_REDIS_RETENTION_SECONDS
-        zset_key = _redis_key(uid)
-        redis_client.zremrangebyscore(zset_key, '-inf', cutoff)
-    except Exception as e:
-        logger.error(f'fair_use: Redis prune error for {uid}: {e}')
-
-
 # ---------------------------------------------------------------------------
 # Soft cap detection
 # ---------------------------------------------------------------------------
@@ -382,12 +372,14 @@ def is_hard_restricted(uid: str) -> bool:
     if uid in FAIR_USE_EXEMPT_UIDS:
         return False
 
-    stage = get_enforcement_stage(uid)
+    # Single Firestore read — get_enforcement_stage uses cache, but we need
+    # restrict_until too, so read the full state once and check stage from it.
+    state = fair_use_db.get_fair_use_state(uid)
+    stage = state.get('stage', 'none')
     if stage != 'restrict':
         return False
 
     # Check if restriction has expired
-    state = fair_use_db.get_fair_use_state(uid)
     restrict_until = state.get('restrict_until')
     if restrict_until and isinstance(restrict_until, datetime):
         # Normalize to naive UTC for comparison (Firestore may return aware datetimes)
