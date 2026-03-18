@@ -27,6 +27,7 @@ _fair_use_db = types.ModuleType('database.fair_use')
 _fair_use_db.get_fair_use_state = MagicMock(return_value={})
 _fair_use_db.update_fair_use_state = MagicMock()
 _fair_use_db.create_fair_use_event = MagicMock(return_value='evt-123')
+_fair_use_db.get_fair_use_events = MagicMock(return_value=[{'case_ref': 'FU-TEST01'}])
 _fair_use_db.get_violation_counts = MagicMock(return_value={'violation_count_7d': 0, 'violation_count_30d': 0})
 sys.modules.setdefault('database.fair_use', _fair_use_db)
 
