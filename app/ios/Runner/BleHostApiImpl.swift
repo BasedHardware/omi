@@ -85,4 +85,9 @@ final class BleHostApiImpl: BleHostApi {
     func registerAudioCharacteristic(characteristicUuid: String) throws {
         bleManager.registerAudioCharacteristic(characteristicUuid)
     }
+
+    func requestCompanionDeviceAssociation(deviceAddress: String, completion: @escaping (Result<String, Error>) -> Void) {
+        // No-op on iOS — state restoration handles background reconnection
+        completion(.success(""))
+    }
 }
