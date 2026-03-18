@@ -71,6 +71,8 @@ pub struct Config {
     pub deepgram_api_key: Option<String>,
     /// Anthropic API key for chat (served to desktop clients)
     pub anthropic_api_key: Option<String>,
+    /// Google Calendar API key (served to desktop clients)
+    pub google_calendar_api_key: Option<String>,
 }
 
 impl Config {
@@ -133,6 +135,7 @@ impl Config {
                 .unwrap_or_else(|_| "based-hardware-agent".to_string()),
             deepgram_api_key: env::var("DEEPGRAM_API_KEY").ok(),
             anthropic_api_key: env::var("ANTHROPIC_API_KEY").ok(),
+            google_calendar_api_key: env::var("GOOGLE_CALENDAR_API_KEY").ok(),
         }
     }
 
