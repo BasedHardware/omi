@@ -1970,7 +1970,7 @@ A screenshot may be attached — use it silently only if relevant. Never mention
                                 if sessionKey != "floating" {
                                     // Bring the app to the foreground so the setup sheet is visible
                                     // (the failed browser attempt may have opened Chrome, stealing focus)
-                                    NSApp.activate(ignoringOtherApps: true)
+                                    NSApp.activate()
                                     for window in NSApp.windows where window.title.hasPrefix("Omi") {
                                         window.makeKeyAndOrderFront(nil)
                                     }
