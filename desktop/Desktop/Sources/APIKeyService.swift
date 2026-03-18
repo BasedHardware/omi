@@ -2,6 +2,10 @@ import Foundation
 
 /// Fetches API keys from the backend at runtime instead of bundling them in the app.
 /// Developer overrides (set in Settings) take precedence over backend-provided keys.
+///
+/// NOTE: The current desktop app is slopped on security — API keys were hardcoded in
+/// Swift source and env files. This service moves secrets server-side via /v1/config/api-keys.
+/// Will remove the env-var bridge once all client-side key slop is cleaned up. — CTO
 @MainActor
 final class APIKeyService: ObservableObject {
     static let shared = APIKeyService()
@@ -10,6 +14,8 @@ final class APIKeyService: ObservableObject {
     @Published private(set) var deepgramApiKey: String?
     @Published private(set) var geminiApiKey: String?
     @Published private(set) var anthropicApiKey: String?
+    @Published private(set) var firebaseApiKey: String?
+    @Published private(set) var googleCalendarApiKey: String?
     @Published private(set) var isLoaded: Bool = false
     @Published private(set) var loadError: String?
 
@@ -26,6 +32,14 @@ final class APIKeyService: ObservableObject {
         nonEmpty(UserDefaults.standard.string(forKey: "dev_anthropic_api_key")) ?? anthropicApiKey
     }
 
+    var effectiveFirebaseApiKey: String? {
+        firebaseApiKey
+    }
+
+    var effectiveGoogleCalendarApiKey: String? {
+        googleCalendarApiKey
+    }
+
     /// Fetch keys from the backend. Call after Firebase auth is ready.
     func fetchKeys() async {
         loadError = nil
@@ -37,12 +51,14 @@ final class APIKeyService: ObservableObject {
                 self.deepgramApiKey = keys.deepgramApiKey
                 self.geminiApiKey = keys.geminiApiKey
                 self.anthropicApiKey = keys.anthropicApiKey
+                self.firebaseApiKey = keys.firebaseApiKey
+                self.googleCalendarApiKey = keys.googleCalendarApiKey
                 self.isLoaded = true
 
                 // Set env vars so existing getenv() consumers keep working during transition
                 applyToEnvironment()
 
-                log("APIKeyService: Fetched keys from backend (deepgram=\(keys.deepgramApiKey != nil), gemini=\(keys.geminiApiKey != nil), anthropic=\(keys.anthropicApiKey != nil))")
+                log("APIKeyService: Fetched keys from backend (deepgram=\(keys.deepgramApiKey != nil), gemini=\(keys.geminiApiKey != nil), anthropic=\(keys.anthropicApiKey != nil), firebase=\(keys.firebaseApiKey != nil), calendar=\(keys.googleCalendarApiKey != nil))")
                 return
             } catch {
                 let delay = pow(2.0, Double(attempt - 1))
@@ -65,12 +81,16 @@ final class APIKeyService: ObservableObject {
         deepgramApiKey = nil
         geminiApiKey = nil
         anthropicApiKey = nil
+        firebaseApiKey = nil
+        googleCalendarApiKey = nil
         isLoaded = false
         loadError = nil
 
         unsetenv("DEEPGRAM_API_KEY")
         unsetenv("GEMINI_API_KEY")
         unsetenv("ANTHROPIC_API_KEY")
+        unsetenv("FIREBASE_API_KEY")
+        unsetenv("GOOGLE_CALENDAR_API_KEY")
     }
 
     /// Push effective keys into the process environment for backward compatibility.
@@ -83,6 +103,12 @@ final class APIKeyService: ObservableObject {
         }
         if let key = effectiveAnthropicKey {
             setenv("ANTHROPIC_API_KEY", key, 1)
+        }
+        if let key = effectiveFirebaseApiKey {
+            setenv("FIREBASE_API_KEY", key, 1)
+        }
+        if let key = effectiveGoogleCalendarApiKey {
+            setenv("GOOGLE_CALENDAR_API_KEY", key, 1)
         }
     }
 
