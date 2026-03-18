@@ -1645,7 +1645,8 @@ struct HistorySessionRow: View {
 
                     if !isEditing {
                         HStack(spacing: 4) {
-                            if let preview = session.preview, !preview.isEmpty {
+                            if let preview = session.preview, !preview.isEmpty,
+                               !preview.hasPrefix("[Protected"), !preview.hasPrefix("[Encrypted") {
                                 Text(preview)
                                     .lineLimit(1)
                             }
