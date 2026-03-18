@@ -43,13 +43,14 @@ class AuthService {
     private var appleSignInDelegate: AppleSignInDelegate?
 
     // API Configuration
-    // Auth backend URL — configurable via OMI_AUTH_URL env var, falls back to Cloud Run
+    // Auth backend URL — must be set via OMI_AUTH_URL env var (in .env)
     private let apiBaseURL: String = {
         if let envURL = getenv("OMI_AUTH_URL") {
             let url = String(cString: envURL)
             if !url.isEmpty { return url.hasSuffix("/") ? url : url + "/" }
         }
-        return "https://omi-desktop-auth-208440318997.us-central1.run.app/"
+        NSLog("OMI AUTH: OMI_AUTH_URL not set — OAuth sign-in will fail")
+        return ""
     }()
     private var redirectURI: String {
         return "\(urlScheme)://auth/callback"
