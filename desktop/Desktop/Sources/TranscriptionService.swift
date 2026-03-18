@@ -70,6 +70,14 @@ class TranscriptionService {
     private let vocabulary: [String]
     private let sampleRate = 16000
     private let encoding = "linear16"
+
+    /// DeepGram base URL — configurable via DEEPGRAM_API_URL env var
+    private static let deepgramBaseURL: String = {
+        if let envURL = getenv("DEEPGRAM_API_URL"), let url = String(validatingUTF8: envURL), !url.isEmpty {
+            return url.hasSuffix("/") ? String(url.dropLast()) : url
+        }
+        return "https://api.deepgram.com"
+    }()
     private let channels: Int  // 2 = stereo (mic + system), 1 = mono (mic only for PTT)
 
     // Reconnection
@@ -238,7 +246,13 @@ class TranscriptionService {
 
     private func connect() {
         // Build DeepGram WebSocket URL with parameters
-        var components = URLComponents(string: "wss://api.deepgram.com/v1/listen")!
+        let wsBase = Self.deepgramBaseURL.replacingOccurrences(of: "https://", with: "wss://")
+                                        .replacingOccurrences(of: "http://", with: "ws://")
+        guard var components = URLComponents(string: "\(wsBase)/v1/listen") else {
+            log("TranscriptionService: Invalid DeepGram URL: \(Self.deepgramBaseURL)")
+            onError?(TranscriptionError.connectionFailed(NSError(domain: "Invalid DeepGram URL", code: -1)))
+            return
+        }
         var queryItems = [
             URLQueryItem(name: "model", value: model),
             URLQueryItem(name: "language", value: language),
@@ -516,7 +530,9 @@ extension TranscriptionService {
             throw TranscriptionError.missingAPIKey
         }
 
-        var components = URLComponents(string: "https://api.deepgram.com/v1/listen")!
+        guard var components = URLComponents(string: "\(deepgramBaseURL)/v1/listen") else {
+            throw TranscriptionError.connectionFailed(NSError(domain: "Invalid DeepGram URL", code: -1))
+        }
         components.queryItems = [
             URLQueryItem(name: "model", value: "nova-3"),
             URLQueryItem(name: "language", value: language),
@@ -569,7 +585,9 @@ extension TranscriptionService {
             throw TranscriptionError.missingAPIKey
         }
 
-        var components = URLComponents(string: "https://api.deepgram.com/v1/listen")!
+        guard var components = URLComponents(string: "\(deepgramBaseURL)/v1/listen") else {
+            throw TranscriptionError.connectionFailed(NSError(domain: "Invalid DeepGram URL", code: -1))
+        }
         var queryItems = [
             URLQueryItem(name: "model", value: "nova-3"),
             URLQueryItem(name: "language", value: language),
