@@ -652,52 +652,14 @@ async fn generate_custom_token(
 
     tracing::info!("Firebase sign-in successful, UID: {}", firebase_uid);
 
-    // Generate a Firebase custom token by signing a JWT with the service account key
-    // Equivalent to Python's firebase_admin.auth.create_custom_token()
-    let creds_path = std::env::var("GOOGLE_APPLICATION_CREDENTIALS")
-        .unwrap_or_else(|_| "google-credentials.json".to_string());
+    // For custom token generation, we need Firebase Admin SDK
+    // In Rust, we'd need to use the service account to create a custom token
+    // For now, return an error indicating this needs server-side implementation
+    // The Python version uses firebase_admin.auth.create_custom_token()
 
-    let creds_json = std::fs::read_to_string(&creds_path)
-        .map_err(|e| format!("Failed to read service account credentials: {}", e))?;
-
-    #[derive(Deserialize)]
-    struct ServiceAccount {
-        client_email: String,
-        private_key: String,
-    }
-
-    let sa: ServiceAccount = serde_json::from_str(&creds_json)
-        .map_err(|e| format!("Failed to parse service account JSON: {}", e))?;
-
-    let now = Utc::now().timestamp();
-
-    #[derive(Serialize)]
-    struct CustomTokenClaims {
-        iss: String,
-        sub: String,
-        aud: String,
-        iat: i64,
-        exp: i64,
-        uid: String,
-    }
-
-    let claims = CustomTokenClaims {
-        iss: sa.client_email.clone(),
-        sub: sa.client_email,
-        aud: "https://identitytoolkit.googleapis.com/google.identity.identitytoolkit.v1.IdentityToolkit".to_string(),
-        iat: now,
-        exp: now + 3600,
-        uid: firebase_uid.clone(),
-    };
-
-    let key = EncodingKey::from_rsa_pem(sa.private_key.as_bytes())
-        .map_err(|e| format!("Failed to parse service account private key: {}", e))?;
-
-    let token = encode(&Header::new(Algorithm::RS256), &claims, &key)
-        .map_err(|e| format!("Failed to sign custom token: {}", e))?;
-
-    tracing::info!("Generated Firebase custom token for UID: {}", firebase_uid);
-    Ok(token)
+    // TODO: Implement custom token generation using service account
+    // This requires signing a JWT with the service account private key
+    Err("Custom token generation requires Firebase Admin SDK - not yet implemented in Rust".into())
 }
 
 fn render_auth_callback(code: &str, state: &str, redirect_uri: &str, error: Option<&str>) -> String {
