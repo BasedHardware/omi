@@ -1899,6 +1899,8 @@ class AppState: ObservableObject {
   func refreshConversations() async {
     // Skip if user is signed out (tokens are cleared)
     guard AuthState.shared.isSignedIn else { return }
+    // Skip if in auth backoff period (recent 401 errors)
+    guard !AuthBackoffTracker.shared.shouldSkipRequest() else { return }
     // Skip if currently doing a full load
     guard !isLoadingConversations else { return }
 
@@ -1939,7 +1941,11 @@ class AppState: ObservableObject {
           _ = try? await TranscriptionStorage.shared.syncServerConversation(conversation)
         }
       }
+      AuthBackoffTracker.shared.reportSuccess()
     } catch {
+      if case APIError.unauthorized = error {
+        AuthBackoffTracker.shared.reportAuthFailure()
+      }
       // Silently ignore errors during auto-refresh — cached data stays visible.
       // Auth errors (notSignedIn) are transient: token refresh may fail momentarily
       // while the user is still signed in. Don't send these to Sentry.
