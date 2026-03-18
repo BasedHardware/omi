@@ -1251,7 +1251,7 @@ private class AppleSignInDelegate: NSObject, ASAuthorizationControllerDelegate, 
     }
 
     func presentationAnchor(for controller: ASAuthorizationController) -> ASPresentationAnchor {
-        return NSApp.keyWindow ?? NSApp.windows.first!
+        return NSApp.keyWindow ?? NSApp.windows.first ?? NSWindow()
     }
 }
 
