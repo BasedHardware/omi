@@ -302,6 +302,10 @@ class VADStreamingGate:
         self._vad_state: Optional[Dict[str, Any]] = None
         self._vad_inference_lock = threading.Lock()
         self._speech_threshold = VAD_GATE_SPEECH_THRESHOLD
+        # Separate metering threshold for fair-use tracking (#5746).
+        # Always uses the base threshold so throttle's raised forwarding threshold
+        # doesn't undercount real speech usage in the rolling windows.
+        self._metering_threshold = VAD_GATE_SPEECH_THRESHOLD
 
         # State machine
         self._state = GateState.SILENCE
@@ -387,8 +391,14 @@ class VADStreamingGate:
 
         return data_int16.astype(np.float32) / 32768.0
 
-    def _run_vad(self, pcm_data: bytes) -> bool:
-        """Run Silero VAD on audio chunk. Returns True if speech detected.
+    def _run_vad(self, pcm_data: bytes) -> tuple:
+        """Run Silero VAD on audio chunk.
+
+        Returns (forwarding_speech, metering_speech):
+          - forwarding_speech: True if speech exceeds self._speech_threshold (may be throttled)
+          - metering_speech: True if speech exceeds self._metering_threshold (always base, unbiased)
+
+        When thresholds are equal (no throttle), both values are identical.
 
         Calls the raw model directly for per-window speech probability.
         VADIterator is NOT used because it emits boundary events (start/end)
@@ -408,7 +418,8 @@ class VADStreamingGate:
             self._vad_buffer = np.concatenate([self._vad_buffer, float_data])
             del float_data
 
-            speech_detected = False
+            forwarding_speech = False
+            metering_speech = False
             if len(self._vad_buffer) >= self._vad_window_samples:
                 model = _borrow_vad_model()
                 try:
@@ -427,9 +438,10 @@ class VADStreamingGate:
                         # Silero returns tensor; mock returns float
                         if hasattr(prob, 'item'):
                             prob = prob.item()
-                        window_is_speech = prob > self._speech_threshold
-                        if window_is_speech:
-                            speech_detected = True
+                        if prob > self._speech_threshold:
+                            forwarding_speech = True
+                        if prob > self._metering_threshold:
+                            metering_speech = True
                     self._vad_state = _capture_model_state(model)
                 finally:
                     _return_vad_model(model)
@@ -438,7 +450,7 @@ class VADStreamingGate:
             if len(self._vad_buffer) > self._vad_window_samples:
                 self._vad_buffer = self._vad_buffer[-self._vad_window_samples :]
 
-            return speech_detected
+            return forwarding_speech, metering_speech
 
     def process_audio(self, pcm_data: bytes, wall_time: float) -> GateOutput:
         """Process an audio chunk through the VAD gate.
@@ -461,18 +473,20 @@ class VADStreamingGate:
         chunk_ms = (n_samples * 1000.0) / self.sample_rate
         self._audio_cursor_ms += chunk_ms
 
-        # Run VAD
-        is_speech = self._run_vad(pcm_data)
+        # Run VAD — returns dual signals: forwarding (possibly throttled) and metering (always base)
+        is_speech, is_metered_speech = self._run_vad(pcm_data)
 
         if is_speech:
             self._last_speech_ms = self._audio_cursor_ms
             self._chunks_speech += 1
-            # Fair-use speech accumulator (#5746) — only count active mode speech
-            if self.mode == 'active':
-                self._speech_ms_total += chunk_ms
-                self._speech_ms_delta += chunk_ms
         else:
             self._chunks_silence += 1
+
+        # Fair-use speech accumulator (#5746) — uses metering threshold (base, unbiased)
+        # so throttle's raised forwarding threshold doesn't undercount real speech usage
+        if is_metered_speech and self.mode == 'active':
+            self._speech_ms_total += chunk_ms
+            self._speech_ms_delta += chunk_ms
 
         # Shadow mode: log but send everything
         if self.mode == 'shadow':
