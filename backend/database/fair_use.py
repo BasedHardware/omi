@@ -1,4 +1,4 @@
-"""Firestore CRUD for fair-use anti-abuse tracking."""
+"""Firestore CRUD for fair-use tracking."""
 
 import logging
 import uuid

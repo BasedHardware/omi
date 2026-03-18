@@ -1,5 +1,5 @@
 """
-Fair-use anti-abuse engine for Omi.
+Fair-use engine for Omi.
 
 Tracks per-user rolling speech hours via Redis minute buckets,
 detects soft-cap violations, triggers LLM classification,
@@ -16,7 +16,7 @@ from datetime import datetime, timedelta
 import database.fair_use as fair_use_db
 import database.users as users_db
 from database.redis_db import r as redis_client
-from models.fair_use import AbuseType, FairUseStage, SoftCapTrigger
+from models.fair_use import UsageType, FairUseStage, SoftCapTrigger
 
 # Lazy imports to avoid circular dependency chains at module load time.
 # classify_user_purpose → database.conversations → utils.encryption (needs env var at import).
@@ -29,7 +29,7 @@ _send_notification = None
 def _get_classify_user_purpose():
     global _classify_user_purpose
     if _classify_user_purpose is None:
-        from utils.llm.abuse_detection import classify_user_purpose
+        from utils.llm.fair_use_classifier import classify_user_purpose
 
         _classify_user_purpose = classify_user_purpose
     return _classify_user_purpose
@@ -63,7 +63,7 @@ FAIR_USE_BUCKET_SECONDS = int(os.getenv('FAIR_USE_BUCKET_SECONDS', '60'))  # 1-m
 FAIR_USE_REDIS_RETENTION_SECONDS = int(os.getenv('FAIR_USE_REDIS_RETENTION_SECONDS', '691200'))  # 8 days
 
 # Classifier config
-FAIR_USE_CLASSIFIER_ABUSE_THRESHOLD = float(os.getenv('FAIR_USE_CLASSIFIER_ABUSE_SCORE_THRESHOLD', '0.7'))
+FAIR_USE_CLASSIFIER_MISUSE_THRESHOLD = float(os.getenv('FAIR_USE_CLASSIFIER_ABUSE_SCORE_THRESHOLD', '0.7'))
 
 # Throttle VAD config
 FAIR_USE_STAGE2_VAD_DELTA = float(os.getenv('FAIR_USE_STAGE2_VAD_THRESHOLD_DELTA', '0.08'))
@@ -300,26 +300,26 @@ def escalate_enforcement(uid: str, triggered_caps: list, classifier_result: dict
     current_stage = state.get('stage', 'none')
     counts = fair_use_db.get_violation_counts(uid)
 
-    abuse_score = 0.0
-    abuse_type = 'none'
+    misuse_score = 0.0
+    usage_type = 'none'
     if classifier_result:
-        abuse_score = classifier_result.get('abuse_score', 0.0)
-        abuse_type = classifier_result.get('abuse_type', 'none')
+        misuse_score = classifier_result.get('misuse_score', 0.0)
+        usage_type = classifier_result.get('usage_type', 'none')
 
     # Determine new stage based on current + violation history
     new_stage = current_stage
     action = 'none'
 
     if current_stage == 'none':
-        if abuse_score >= FAIR_USE_CLASSIFIER_ABUSE_THRESHOLD:
+        if misuse_score >= FAIR_USE_CLASSIFIER_MISUSE_THRESHOLD:
             new_stage = 'warning'
             action = 'warning'
     elif current_stage == 'warning':
-        if counts['violation_count_7d'] >= 2 and abuse_score >= FAIR_USE_CLASSIFIER_ABUSE_THRESHOLD:
+        if counts['violation_count_7d'] >= 2 and misuse_score >= FAIR_USE_CLASSIFIER_MISUSE_THRESHOLD:
             new_stage = 'throttle'
             action = 'throttle'
     elif current_stage == 'throttle':
-        if counts['violation_count_7d'] >= 3 and abuse_score >= FAIR_USE_CLASSIFIER_ABUSE_THRESHOLD:
+        if counts['violation_count_7d'] >= 3 and misuse_score >= FAIR_USE_CLASSIFIER_MISUSE_THRESHOLD:
             new_stage = 'restrict'
             action = 'restrict'
 
@@ -328,8 +328,8 @@ def escalate_enforcement(uid: str, triggered_caps: list, classifier_result: dict
         update = {
             'stage': new_stage,
             'last_violation_at': datetime.utcnow(),
-            'last_classifier_score': abuse_score,
-            'last_classifier_type': abuse_type,
+            'last_classifier_score': misuse_score,
+            'last_classifier_type': usage_type,
             'violation_count_7d': counts['violation_count_7d'],
             'violation_count_30d': counts['violation_count_30d'],
         }
@@ -443,8 +443,8 @@ async def trigger_classifier_if_needed(uid: str, triggered_caps: list, session_i
             'fair_use: uid=%s action=%s score=%.2f type=%s stage=%s->%s',
             uid,
             escalation['action'],
-            classifier_result.get('abuse_score', 0),
-            classifier_result.get('abuse_type', 'none'),
+            classifier_result.get('misuse_score', 0),
+            classifier_result.get('usage_type', 'none'),
             escalation['previous_stage'],
             escalation['new_stage'],
         )
