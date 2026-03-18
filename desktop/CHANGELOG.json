@@ -1,5 +1,7 @@
 {
-  "unreleased": [],
+  "unreleased": [
+    "Reduced auth error log spam with exponential backoff across all polling operations"
+  ],
   "releases": [
     {
       "version": "0.11.136",
