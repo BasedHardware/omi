@@ -1036,6 +1036,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     Task { @MainActor in
       AuthService.shared.handleOAuthCallback(url: url)
+      // Bring app to foreground after OAuth redirect — Safari stays in front otherwise
+      NSApp.activate(ignoringOtherApps: true)
     }
   }
 
