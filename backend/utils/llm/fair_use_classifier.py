@@ -1,5 +1,5 @@
 """
-LLM-based purpose detection for fair-use anti-abuse.
+LLM-based purpose detection for fair-use fair-use.
 
 Classifies whether a user's recent conversations indicate non-personal-use
 patterns (audiobook transcription, podcast transcription, pre-recorded content).
@@ -21,7 +21,7 @@ CLASSIFIER_LOOKBACK_DAYS = int(os.getenv('FAIR_USE_CLASSIFIER_LOOKBACK_DAYS', '7
 CLASSIFIER_MAX_CONVERSATIONS = 30
 
 # ---------------------------------------------------------------------------
-# Prompt recipes for different abuse scenarios
+# Prompt recipes for different non-personal usage scenarios
 # ---------------------------------------------------------------------------
 
 SYSTEM_PROMPT = """You are a fair-use cost-protection analyst for Omi, a personal AI wearable device.
@@ -61,8 +61,8 @@ NOT ABUSE (even if wrong purpose):
 
 OUTPUT FORMAT (strict JSON):
 {
-  "abuse_score": <float 0.0-1.0>,
-  "abuse_type": "<none|audiobook|podcast|prerecorded|tv_movie|commercial|unknown>",
+  "misuse_score": <float 0.0-1.0>,
+  "usage_type": "<none|audiobook|podcast|prerecorded|tv_movie|commercial|unknown>",
   "confidence": <float 0.0-1.0>,
   "evidence": [
     {"conversation_id": "...", "title": "...", "reason": "..."}
@@ -195,11 +195,11 @@ async def classify_user_purpose(uid: str) -> dict:
     """Run LLM classification on a user's recent conversations.
 
     Returns a dict matching the ClassifierResult model:
-      {abuse_score, abuse_type, confidence, evidence, model, prompt_version}
+      {misuse_score, usage_type, confidence, evidence, model, prompt_version}
     """
     default_result = {
-        'abuse_score': 0.0,
-        'abuse_type': 'none',
+        'misuse_score': 0.0,
+        'usage_type': 'none',
         'confidence': 0.0,
         'evidence': [],
         'model': CLASSIFIER_MODEL,
@@ -242,9 +242,9 @@ Respond with ONLY the JSON output, no other text."""
         result = json.loads(content.strip())
 
         # Validate and clamp
-        result['abuse_score'] = max(0.0, min(1.0, float(result.get('abuse_score', 0.0))))
+        result['misuse_score'] = max(0.0, min(1.0, float(result.get('misuse_score', 0.0))))
         result['confidence'] = max(0.0, min(1.0, float(result.get('confidence', 0.0))))
-        result['abuse_type'] = result.get('abuse_type', 'none')
+        result['usage_type'] = result.get('usage_type', 'none')
         result['evidence'] = result.get('evidence', [])[:10]  # Cap evidence entries
         result['model'] = CLASSIFIER_MODEL
         result['prompt_version'] = 'v2'
