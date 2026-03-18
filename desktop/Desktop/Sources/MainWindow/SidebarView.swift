@@ -1293,6 +1293,9 @@ struct NavItemView: View {
         }
         .padding(.bottom, 2)
         .help(isCollapsed ? label : "")
+        .accessibilityLabel(label)
+        .accessibilityAddTraits(.isButton)
+        .accessibilityIdentifier("sidebar_\(label.lowercased().replacingOccurrences(of: " ", with: "_"))")
     }
 
     /// Lock icon that reacts on hover and unlocks on click
@@ -1419,6 +1422,9 @@ struct NavItemWithStatusView: View {
         }
         .padding(.bottom, 2)
         .help(isCollapsed ? "\(label) (\(isOn ? "On" : "Off")) - Click icon to toggle" : "Click icon to toggle")
+        .accessibilityLabel("\(label) (\(isOn ? "On" : "Off"))")
+        .accessibilityAddTraits(.isButton)
+        .accessibilityIdentifier("sidebar_\(label.lowercased().replacingOccurrences(of: " ", with: "_"))")
     }
 }
 
@@ -1621,6 +1627,9 @@ struct BottomNavItemView: View {
         }
         .padding(.bottom, 2)
         .help(isCollapsed ? label : "")
+        .accessibilityLabel(label)
+        .accessibilityAddTraits(.isButton)
+        .accessibilityIdentifier("sidebar_\(label.lowercased().replacingOccurrences(of: " ", with: "_"))")
     }
 }
 
