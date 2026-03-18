@@ -1,6 +1,7 @@
 """Firestore CRUD for fair-use anti-abuse tracking."""
 
 import logging
+import uuid
 from datetime import datetime, timedelta
 from typing import Optional
 
@@ -43,10 +44,16 @@ def set_fair_use_stage(uid: str, stage: str, **kwargs) -> None:
 # ---------------------------------------------------------------------------
 
 
+def _generate_case_ref() -> str:
+    """Generate a short human-readable case reference like FU-A1B2C3."""
+    return f'FU-{uuid.uuid4().hex[:6].upper()}'
+
+
 def create_fair_use_event(uid: str, event_data: dict) -> str:
     """Create a new fair-use violation event. Returns the event ID."""
     ref = db.collection('users').document(uid).collection('fair_use_events').document()
     event_data['created_at'] = datetime.utcnow()
+    event_data['case_ref'] = _generate_case_ref()
     ref.set(event_data)
     return ref.id
 
