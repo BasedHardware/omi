@@ -132,6 +132,10 @@ def record_speech_ms(uid: str, speech_ms: int) -> None:
         pipe.zadd(zset_key, {str(bucket_minute): bucket_minute * FAIR_USE_BUCKET_SECONDS})
         pipe.expire(zset_key, FAIR_USE_REDIS_RETENTION_SECONDS)
 
+        # Prune old zset members older than retention window
+        cutoff_ts = now - FAIR_USE_REDIS_RETENTION_SECONDS
+        pipe.zremrangebyscore(zset_key, 0, cutoff_ts)
+
         pipe.execute()
     except Exception as e:
         logger.error(f'fair_use: Redis error recording speech for {uid}: {e}')
@@ -454,8 +458,8 @@ async def trigger_classifier_if_needed(uid: str, triggered_caps: list, session_i
 
     except Exception as e:
         logger.error(f'fair_use: classifier/escalation error for {uid}: {e}')
-    finally:
-        # Compare-and-delete: only release lock if we still own it
+        # Only release lock on error so we can retry sooner;
+        # on success, let the 5-minute TTL act as a cooldown to prevent repeated LLM calls
         try:
             _release_lock(lock_key, lock_token)
         except Exception:
