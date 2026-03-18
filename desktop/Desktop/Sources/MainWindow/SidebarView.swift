@@ -88,10 +88,6 @@ struct SidebarView: View {
     // Tier gating (0 = show all, 1-6 = sequential tiers)
     @AppStorage("currentTierLevel") private var currentTierLevel = 0
 
-    // Track newly unlocked items for animation (persisted so it survives settings navigation)
-    @State private var newlyUnlockedItems: Set<SidebarNavItem> = []
-    @AppStorage("lastSeenTierLevel") private var lastSeenTierLevel = 0
-
     // Toggle states for quick controls
     @AppStorage("screenAnalysisEnabled") private var screenAnalysisEnabled = true
     @State private var isMonitoring = false
@@ -262,11 +258,7 @@ struct SidebarView: View {
                                 )
                             }
                         }
-                        .overlay(
-                            TierUnlockCelebration(isActive: newlyUnlockedItems.contains(item))
-                        )
                     }
-                    .animation(.easeOut(duration: 0.4), value: currentTierLevel)
 
                     Spacer()
 
@@ -320,6 +312,17 @@ struct SidebarView: View {
                             }
                         )
                     }
+
+                    BottomNavItemView(
+                        icon: "message.fill",
+                        label: "Discord",
+                        isCollapsed: isCollapsed,
+                        iconWidth: iconWidth,
+                        onTap: {
+                            guard let url = URL(string: "https://discord.com/invite/8MP3b9ymvx") else { return }
+                            NSWorkspace.shared.open(url)
+                        }
+                    )
 
                     // Settings at the very bottom
                     NavItemView(
@@ -379,8 +382,6 @@ struct SidebarView: View {
         .onAppear {
             syncMonitoringState()
             appState.checkAllPermissions()
-            // Check if tier changed while sidebar wasn't visible (e.g. changed in settings, or auto-upgraded on launch)
-            checkForDeferredUnlockAnimation()
         }
         .onChange(of: currentTierLevel) { _, newTier in
             // Redirect if current page became locked after tier change
@@ -388,10 +389,6 @@ struct SidebarView: View {
                newTier != 0 && newTier < currentItem.requiredTier,
                selectedIndex != SidebarNavItem.settings.rawValue && selectedIndex != SidebarNavItem.permissions.rawValue && selectedIndex != SidebarNavItem.device.rawValue && selectedIndex != SidebarNavItem.help.rawValue {
                 selectedIndex = SidebarNavItem.dashboard.rawValue
-            }
-            // If sidebar is currently visible (not in settings), play animation immediately
-            if selectedIndex != SidebarNavItem.settings.rawValue {
-                checkForDeferredUnlockAnimation()
             }
         }
         .onChange(of: selectedIndex) { _, _ in
@@ -1185,33 +1182,6 @@ struct SidebarView: View {
 
     // MARK: - Tier Unlock Animation
 
-    /// Compare lastSeenTierLevel to currentTierLevel and animate any newly visible items.
-    /// Called on onAppear (returning from settings) and onChange when sidebar is visible.
-    private func checkForDeferredUnlockAnimation() {
-        guard lastSeenTierLevel != currentTierLevel else { return }
-
-        let oldVisible = Self.visibleItems(for: lastSeenTierLevel)
-        let newVisible = Self.visibleItems(for: currentTierLevel)
-        let unlocked = Set(newVisible).subtracting(Set(oldVisible))
-
-        // Update lastSeen immediately so we don't re-trigger
-        lastSeenTierLevel = currentTierLevel
-
-        guard !unlocked.isEmpty else { return }
-
-        // Small delay so the sidebar has time to render before animating
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-            withAnimation(.easeOut(duration: 0.4)) {
-                newlyUnlockedItems = unlocked
-            }
-            // Clear after full celebration plays (highlight 0.3s + confetti 1.5s + text 1.5s + buffer)
-            DispatchQueue.main.asyncAfter(deadline: .now() + 4.0) {
-                withAnimation(.easeOut(duration: 0.5)) {
-                    newlyUnlockedItems = []
-                }
-            }
-        }
-    }
 }
 
 // MARK: - Nav Item View
@@ -1606,149 +1576,6 @@ struct SidebarRewindIcon: View {
     private func startPulsing() {
         withAnimation(.easeOut(duration: 1.0).repeatForever(autoreverses: false)) {
             isPulsing = true
-        }
-    }
-}
-
-// MARK: - Tier Unlock Celebration
-/// Multi-phase celebration overlay: highlight → confetti → glowing text
-struct TierUnlockCelebration: View {
-    let isActive: Bool
-
-    @State private var phase: CelebrationPhase = .idle
-
-    enum CelebrationPhase {
-        case idle, highlight, confetti, text, done
-    }
-
-    var body: some View {
-        ZStack {
-            // Phase 1: Purple highlight border
-            if phase == .highlight || phase == .confetti || phase == .text {
-                RoundedRectangle(cornerRadius: 10)
-                    .stroke(OmiColors.purplePrimary, lineWidth: phase == .highlight ? 2.5 : 1.5)
-                    .shadow(color: OmiColors.purplePrimary.opacity(phase == .highlight ? 0.8 : 0.3), radius: phase == .highlight ? 12 : 4)
-                    .transition(.opacity)
-            }
-
-            // Phase 2: Confetti particles
-            if phase == .confetti || phase == .text {
-                ConfettiView()
-                    .allowsHitTesting(false)
-                    .transition(.opacity)
-            }
-
-            // Phase 3: Glowing "Unlocked!" text
-            if phase == .text {
-                Text("Unlocked!")
-                    .scaledFont(size: 11, weight: .bold)
-                    .foregroundColor(.white)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(
-                        Capsule()
-                            .fill(OmiColors.purplePrimary)
-                            .shadow(color: OmiColors.purplePrimary.opacity(0.8), radius: 8)
-                    )
-                    .transition(.scale(scale: 0.5).combined(with: .opacity))
-                    .offset(x: 30, y: -8)
-            }
-        }
-        .onChange(of: isActive) { _, active in
-            if active {
-                startCelebration()
-            } else {
-                withAnimation(.easeOut(duration: 0.3)) {
-                    phase = .idle
-                }
-            }
-        }
-    }
-
-    private func startCelebration() {
-        // Phase 1: Highlight (immediate)
-        withAnimation(.easeOut(duration: 0.3)) {
-            phase = .highlight
-        }
-        // Phase 2: Confetti (after 0.4s)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
-            withAnimation(.easeOut(duration: 0.3)) {
-                phase = .confetti
-            }
-        }
-        // Phase 3: Text (after 1.0s)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
-            withAnimation(.spring(response: 0.4, dampingFraction: 0.6)) {
-                phase = .text
-            }
-        }
-    }
-}
-
-// MARK: - Confetti View
-/// Burst of small colored particles that animate outward from center
-struct ConfettiView: View {
-    @State private var animate = false
-    @State private var fadeOut = false
-
-    // Pre-computed particle configs (fixed set for reliable animation)
-    private let particleConfigs: [(color: Color, size: CGFloat, angle: Double, distance: CGFloat, rotation: Double, isRect: Bool)] = {
-        let colors: [Color] = [
-            OmiColors.purplePrimary, OmiColors.purplePrimary.opacity(0.7),
-            .yellow, .green, .pink, .cyan, .orange, .mint, .indigo
-        ]
-        return (0..<18).map { _ in
-            (
-                color: colors.randomElement()!,
-                size: CGFloat.random(in: 3...6),
-                angle: Double.random(in: 0...(2 * .pi)),
-                distance: CGFloat.random(in: 40...120),
-                rotation: Double.random(in: 0...720),
-                isRect: Bool.random()
-            )
-        }
-    }()
-
-    var body: some View {
-        GeometryReader { geo in
-            let cx = geo.size.width / 2
-            let cy = geo.size.height / 2
-
-            ZStack {
-                ForEach(0..<particleConfigs.count, id: \.self) { i in
-                    let p = particleConfigs[i]
-                    Group {
-                        if p.isRect {
-                            RoundedRectangle(cornerRadius: 1)
-                                .fill(p.color)
-                        } else {
-                            Circle()
-                                .fill(p.color)
-                        }
-                    }
-                    .frame(width: p.size, height: p.size * (p.isRect ? 2 : 1))
-                    .rotationEffect(.degrees(animate ? p.rotation : 0))
-                    .offset(
-                        x: animate ? cos(p.angle) * p.distance : 0,
-                        y: animate ? sin(p.angle) * p.distance - 20 : 0
-                    )
-                    .scaleEffect(animate ? (fadeOut ? 0.1 : 1.0) : 0.1)
-                    .opacity(fadeOut ? 0 : 1)
-                    .position(x: cx, y: cy)
-                }
-            }
-        }
-        .onAppear {
-            // Burst outward
-            withAnimation(.easeOut(duration: 0.7)) {
-                animate = true
-            }
-            // Fade out
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.9) {
-                withAnimation(.easeOut(duration: 0.5)) {
-                    fadeOut = true
-                }
-            }
         }
     }
 }
