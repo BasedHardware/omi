@@ -137,10 +137,10 @@ All API requests include: X-Request-Start-Time, X-App-Platform, X-Device-Id-Hash
 (() { var count = 0; void visit(Element el) { if (el.widget is Scrollable) { try { final s = (el as StatefulElement).state as ScrollableState; final p = s.position; if (p.maxScrollExtent > 0 && p.pixels < p.maxScrollExtent) { p.jumpTo((p.pixels + 500).clamp(0.0, p.maxScrollExtent)); count++; } } catch (_) {} } el.visitChildren(visit); } WidgetsBinding.instance.rootElement?.visitChildren(visit); return count; })()
 ```
 
-**iOS simulator auth** (VPS backend required — dev Firebase tokens rejected by prod API):
+**iOS simulator auth** (dev Firebase tokens rejected by prod API — needs local backend):
 ```bash
-# .dev.env on Mac Mini must point to VPS backend
-API_BASE_URL=http://100.125.36.102:10230/
+# .dev.env must point to a local/dev backend
+API_BASE_URL=http://<your-backend-host>:<port>/
 USE_WEB_AUTH=false
 USE_AUTH_CUSTOM_TOKEN=true
 # Regenerate envied after .dev.env change, rebuild app
