@@ -14,8 +14,8 @@ class FairUseStage(str, Enum):
     RESTRICT = "restrict"
 
 
-class AbuseType(str, Enum):
-    """Types of detected abuse."""
+class UsageType(str, Enum):
+    """Types of detected non-personal usage."""
 
     NONE = "none"
     AUDIOBOOK = "audiobook"
@@ -44,12 +44,12 @@ class ClassifierEvidence(BaseModel):
 
 
 class ClassifierResult(BaseModel):
-    """Result from the LLM abuse classifier."""
+    """Result from the LLM fair-use classifier."""
 
     model: str = ""
     prompt_version: str = "v2"
-    abuse_score: float = 0.0
-    abuse_type: AbuseType = AbuseType.NONE
+    misuse_score: float = 0.0
+    usage_type: UsageType = UsageType.NONE
     confidence: float = 0.0
     evidence: List[ClassifierEvidence] = Field(default_factory=list)
 
@@ -64,7 +64,7 @@ class FairUseState(BaseModel):
     throttle_until: Optional[datetime] = None
     restrict_until: Optional[datetime] = None
     last_classifier_score: float = 0.0
-    last_classifier_type: AbuseType = AbuseType.NONE
+    last_classifier_type: UsageType = UsageType.NONE
     vad_threshold_delta: float = 0.0
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 
@@ -96,6 +96,6 @@ class FairUseUserSummary(BaseModel):
     violation_count_30d: int = 0
     last_violation_at: Optional[datetime] = None
     last_classifier_score: float = 0.0
-    last_classifier_type: AbuseType = AbuseType.NONE
+    last_classifier_type: UsageType = UsageType.NONE
     speech_hours_today: float = 0.0
     speech_hours_7d: float = 0.0
