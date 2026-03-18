@@ -173,7 +173,7 @@ agent-swift screenshot /tmp/after-change.png  # capture app window
 - 15 commands: `doctor`, `connect`, `disconnect`, `status`, `snapshot`, `press`, `click`, `fill`, `get`, `find`, `screenshot`, `is`, `wait`, `scroll`, `schema`.
 - Works with any macOS app (SwiftUI, AppKit, Electron) — no Marionette or app-side setup.
 - Bundle ID for dev: `com.omi.desktop-dev`. For prod: `com.omi.computer-macos`.
-- If you launch a custom-named desktop test build, keep the dev bundle identifier aligned with the app name. Example: `search.app` should use a matching dev bundle ID like `com.omi.search`, not `com.omi.desktop-dev`.
+- If you launch a custom-named desktop test build, keep the bundle suffix and app name identical so auth callbacks reopen the correct app. Example: `1233.app` should use `com.omi.1233`, `search.app` should use `com.omi.search`, and mismatches like `1233.app` with `com.omi.desktop-dev` are not allowed.
 - **App flows & exploration skill**: See `desktop/e2e/SKILL.md` for navigation architecture, screen map, interaction patterns (click vs press), and known flows. Read this when developing features or exploring the app.
 - When asked to build or rebuild the desktop app for testing, don't stop at a successful compile: launch the dev app, interact with it programmatically to confirm it actually runs, and report any environment blocker if full interaction is impossible.
 

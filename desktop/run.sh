@@ -31,12 +31,42 @@ substep() {
 # App configuration
 BINARY_NAME="Omi Computer"  # Package.swift target — binary paths, pkill, CFBundleExecutable
 APP_NAME="${OMI_APP_NAME:-Omi Dev}"
-BUNDLE_ID="${OMI_BUNDLE_ID:-com.omi.desktop-dev}"
+
+slugify_identifier() {
+    printf '%s' "$1" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9]+/-/g; s/^-+//; s/-+$//; s/-+/-/g'
+}
+
+if [ "$APP_NAME" = "Omi Dev" ]; then
+    EXPECTED_BUNDLE_ID="com.omi.desktop-dev"
+    EXPECTED_URL_SCHEME="omi-computer-dev"
+else
+    APP_SLUG="$(slugify_identifier "$APP_NAME")"
+    if [ -z "$APP_SLUG" ]; then
+        echo "ERROR: OMI_APP_NAME must contain at least one letter or number"
+        exit 1
+    fi
+    EXPECTED_BUNDLE_ID="com.omi.$APP_SLUG"
+    EXPECTED_URL_SCHEME="omi-$APP_SLUG"
+fi
+
+BUNDLE_ID="${OMI_BUNDLE_ID:-$EXPECTED_BUNDLE_ID}"
 BUILD_DIR="build"
 APP_BUNDLE="$BUILD_DIR/$APP_NAME.app"
 APP_PATH="/Applications/$APP_NAME.app"
+APP_DESKTOP_PATH="$HOME/Desktop/$APP_NAME.app"
+APP_DOWNLOADS_PATH="$HOME/Downloads/$APP_NAME.app"
 SIGN_IDENTITY="${OMI_SIGN_IDENTITY:-}"
-URL_SCHEME="${OMI_URL_SCHEME:-omi-computer-dev}"
+URL_SCHEME="${OMI_URL_SCHEME:-$EXPECTED_URL_SCHEME}"
+
+if [ "$BUNDLE_ID" != "$EXPECTED_BUNDLE_ID" ]; then
+    echo "ERROR: APP_NAME '$APP_NAME' must use bundle ID '$EXPECTED_BUNDLE_ID' (got '$BUNDLE_ID')"
+    exit 1
+fi
+
+if [ "$URL_SCHEME" != "$EXPECTED_URL_SCHEME" ]; then
+    echo "ERROR: APP_NAME '$APP_NAME' must use URL scheme '$EXPECTED_URL_SCHEME' (got '$URL_SCHEME')"
+    exit 1
+fi
 AUTOMATION_ARGS=()
 if [ "${OMI_ENABLE_LOCAL_AUTOMATION:-0}" = "1" ]; then
     AUTOMATION_PORT="${OMI_AUTOMATION_PORT:-47777}"
@@ -89,10 +119,11 @@ rm -f /tmp/omi-dev.log 2>/dev/null || true
 step "Cleaning up conflicting app bundles..."
 # Clean old build names from local build dir
 rm -rf "$BUILD_DIR/Omi Computer.app" 2>/dev/null
+rm -rf "$APP_BUNDLE" 2>/dev/null
 CONFLICTING_APPS=(
-    "/Applications/Omi Dev.app"
-    "$HOME/Desktop/Omi Dev.app"
-    "$HOME/Downloads/Omi Dev.app"
+    "$APP_PATH"
+    "$APP_DESKTOP_PATH"
+    "$APP_DOWNLOADS_PATH"
     "$(dirname "$0")/../app/build/macos/Build/Products/Debug/Omi.app"
     "$(dirname "$0")/../app/build/macos/Build/Products/Release/Omi.app"
 )
@@ -103,10 +134,10 @@ for app in "${CONFLICTING_APPS[@]}"; do
     fi
 done
 # Also remove any stale dev app bundles nested inside Flutter builds.
-find "$(dirname "$0")/../app/build" -name "Omi Dev.app" -type d -exec rm -rf {} + 2>/dev/null || true
-# Kill stale "Omi Dev.app" bundles from other repo clones (e.g. ~/omi-desktop/)
-# These confuse LaunchServices and get launched instead of /Applications/Omi Dev.app
-find "$HOME" -maxdepth 4 -name "Omi Dev.app" -type d -not -path "$APP_BUNDLE" -not -path "$APP_PATH" 2>/dev/null | while read stale; do
+find "$(dirname "$0")/../app/build" -name "$APP_NAME.app" -type d -exec rm -rf {} + 2>/dev/null || true
+# Kill stale app bundles from other repo clones (e.g. ~/omi-desktop/)
+# These confuse LaunchServices and get launched instead of the /Applications copy.
+find "$HOME" -maxdepth 4 -name "$APP_NAME.app" -type d -not -path "$APP_BUNDLE" -not -path "$APP_PATH" 2>/dev/null | while read stale; do
     substep "Removing stale clone: $stale"
     rm -rf "$stale"
 done
@@ -243,12 +274,13 @@ cp -f Desktop/Info.plist "$APP_BUNDLE/Contents/Info.plist"
 
 auth_debug "AFTER plist edits: auth_isSignedIn=$(defaults read "$BUNDLE_ID" auth_isSignedIn 2>&1 || true)"
 
-substep "Copying GoogleService-Info.plist (dev version for com.omi.desktop-dev)"
+substep "Copying GoogleService-Info.plist"
 if [ -f "Desktop/Sources/GoogleService-Info-Dev.plist" ]; then
     cp -f Desktop/Sources/GoogleService-Info-Dev.plist "$APP_BUNDLE/Contents/Resources/GoogleService-Info.plist"
 else
     cp -f Desktop/Sources/GoogleService-Info.plist "$APP_BUNDLE/Contents/Resources/"
 fi
+/usr/libexec/PlistBuddy -c "Set :BUNDLE_ID $BUNDLE_ID" "$APP_BUNDLE/Contents/Resources/GoogleService-Info.plist" 2>/dev/null || true
 
 # Copy resource bundle (contains app assets like permissions.gif, herologo.png, etc.)
 RESOURCE_BUNDLE="Desktop/.build/arm64-apple-macosx/debug/Omi Computer_Omi Computer.bundle"
