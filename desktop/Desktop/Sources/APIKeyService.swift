@@ -89,7 +89,8 @@ final class APIKeyService: ObservableObject {
         unsetenv("DEEPGRAM_API_KEY")
         unsetenv("GEMINI_API_KEY")
         unsetenv("ANTHROPIC_API_KEY")
-        unsetenv("FIREBASE_API_KEY")
+        // NOTE: Do NOT unset FIREBASE_API_KEY — it's needed for the next sign-in
+        // (auth bootstrap requires Firebase key before backend is reachable)
         unsetenv("GOOGLE_CALENDAR_API_KEY")
     }
 
