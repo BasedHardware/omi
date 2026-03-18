@@ -230,7 +230,8 @@ actor AgentSyncService {
 
         do {
             let idToken = try await AuthService.shared.getIdToken()
-            guard let url = URL(string: "http://\(vmIP):8080/auth") else { return }
+            // Send token both as query param (backward compat) and header (preferred)
+            guard let url = URL(string: "http://\(vmIP):8080/auth?token=\(authToken)") else { return }
             var request = URLRequest(url: url)
             request.httpMethod = "POST"
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -359,7 +360,8 @@ actor AgentSyncService {
     private func pushRows(_ table: String, _ rows: [[String: Any]]) async -> PushResult {
         guard let vmIP = vmIP, let authToken = authToken else { return .networkError }
 
-        guard let url = URL(string: "http://\(vmIP):8080/sync") else {
+        // Send token both as query param (backward compat) and header (preferred)
+        guard let url = URL(string: "http://\(vmIP):8080/sync?token=\(authToken)") else {
             log("AgentSync: invalid sync URL for vmIP=\(vmIP), skipping push")
             return .httpError
         }
