@@ -895,8 +895,12 @@ class AuthService {
                 || errorBody.contains("USER_DISABLED")
                 || httpResponse.statusCode == 400
             if isDefinitiveAuthFailure {
-                NSLog("OMI AUTH: Definitive auth failure - clearing tokens")
+                NSLog("OMI AUTH: Definitive auth failure - clearing tokens and session")
                 clearTokens()
+                // Also clear auth state so the UI shows sign-in instead of a ghost session
+                // where auth_isSignedIn=true but no valid tokens exist.
+                isSignedIn = false
+                saveAuthState(isSignedIn: false, email: nil, userId: nil)
             }
             throw AuthError.notSignedIn
         }
