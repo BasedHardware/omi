@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/utils/l10n_extensions.dart';
@@ -56,28 +57,28 @@ class _FairUsePageState extends State<FairUsePage> {
       body: _isLoading
           ? const Center(child: CircularProgressIndicator(color: Colors.white))
           : _error != null
-          ? _buildError()
-          : _status == null
-          ? _buildUnavailable()
-          : RefreshIndicator(
-              onRefresh: _loadStatus,
-              child: SingleChildScrollView(
-                physics: const AlwaysScrollableScrollPhysics(),
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _buildStageCard(),
-                    const SizedBox(height: 16),
-                    _buildUsageSection(),
-                    const SizedBox(height: 16),
-                    _buildMessageCard(),
-                    const SizedBox(height: 16),
-                    _buildInfoSection(),
-                  ],
-                ),
-              ),
-            ),
+              ? _buildError()
+              : _status == null
+                  ? _buildUnavailable()
+                  : RefreshIndicator(
+                      onRefresh: _loadStatus,
+                      child: SingleChildScrollView(
+                        physics: const AlwaysScrollableScrollPhysics(),
+                        padding: const EdgeInsets.all(16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            _buildStageCard(),
+                            const SizedBox(height: 16),
+                            _buildUsageSection(),
+                            const SizedBox(height: 16),
+                            _buildMessageCard(),
+                            const SizedBox(height: 16),
+                            _buildInfoSection(),
+                          ],
+                        ),
+                      ),
+                    ),
     );
   }
 
@@ -161,7 +162,7 @@ class _FairUsePageState extends State<FairUsePage> {
       decoration: BoxDecoration(
         color: const Color(0xFF1C1C1E),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: stageColor.withOpacity(0.3)),
+        border: Border.all(color: stageColor.withValues(alpha: 0.3)),
       ),
       child: Column(
         children: [
@@ -173,12 +174,31 @@ class _FairUsePageState extends State<FairUsePage> {
           ),
           if (caseRef.isNotEmpty) ...[
             const SizedBox(height: 8),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              decoration: BoxDecoration(color: const Color(0xFF2C2C2E), borderRadius: BorderRadius.circular(8)),
-              child: Text(
-                caseRef,
-                style: const TextStyle(color: Color(0xFF8E8E93), fontSize: 13, fontFamily: 'monospace'),
+            GestureDetector(
+              onTap: () {
+                Clipboard.setData(ClipboardData(text: caseRef));
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('$caseRef copied'),
+                    duration: const Duration(seconds: 2),
+                    backgroundColor: const Color(0xFF2C2C2E),
+                  ),
+                );
+              },
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(color: const Color(0xFF2C2C2E), borderRadius: BorderRadius.circular(8)),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      caseRef,
+                      style: const TextStyle(color: Color(0xFF8E8E93), fontSize: 13, fontFamily: 'monospace'),
+                    ),
+                    const SizedBox(width: 6),
+                    const Icon(Icons.copy, size: 14, color: Color(0xFF8E8E93)),
+                  ],
+                ),
               ),
             ),
           ],
