@@ -80,7 +80,7 @@ BACKEND_PID=""
 AUTH_PID=""
 TUNNEL_PID=""
 TUNNEL_URL="https://omi-dev.m13v.com"
-AUTH_PORT="${AUTH_PORT:-8079}"
+AUTH_PORT="${AUTH_PORT:-10200}"
 
 # Cleanup function to stop backend, auth, and tunnel on exit
 cleanup() {
@@ -199,8 +199,15 @@ if [ "$FIREBASE_PROJECT_ID" != "based-hardware" ] && [ -z "$FIREBASE_AUTH_PROJEC
     export FIREBASE_AUTH_PROJECT_ID="based-hardware"
     substep "Auth project split: tokens validated against based-hardware (prod), Firestore on $FIREBASE_PROJECT_ID"
 fi
+# Read backend PORT from .env (the Rust backend uses this)
+if [ -z "$PORT" ] && [ -f "$BACKEND_DIR/.env" ]; then
+    PORT=$(grep "^PORT=" "$BACKEND_DIR/.env" | head -1 | cut -d= -f2-)
+fi
+BACKEND_PORT="${PORT:-10201}"
+export PORT="$BACKEND_PORT"
 substep "Using Firestore creds: $GOOGLE_APPLICATION_CREDENTIALS"
 substep "Using Firebase project: $FIREBASE_PROJECT_ID"
+substep "Backend port: $BACKEND_PORT, Auth port: $AUTH_PORT"
 
 # Build if binary doesn't exist or source is newer
 if [ ! -f "target/release/omi-desktop-backend" ] || [ -n "$(find src -newer target/release/omi-desktop-backend 2>/dev/null)" ]; then
@@ -214,7 +221,7 @@ cd - > /dev/null
 
 step "Waiting for backend to start..."
 for i in {1..30}; do
-    if curl -s http://localhost:8080 > /dev/null 2>&1; then
+    if curl -s "http://localhost:$BACKEND_PORT" > /dev/null 2>&1; then
         substep "Backend is ready!"
         break
     fi
@@ -521,7 +528,7 @@ TOTAL_TIME=$(echo "$NOW - $SCRIPT_START_TIME" | bc)
 printf "  └─ done (%.2fs)\n" "$(echo "$NOW - $STEP_START_TIME" | bc)"
 echo ""
 echo "=== Services Running (total: ${TOTAL_TIME%.*}s) ==="
-echo "Backend:  http://localhost:8080 (PID: $BACKEND_PID)"
+echo "Backend:  http://localhost:$BACKEND_PORT (PID: $BACKEND_PID)"
 echo "Auth:     http://localhost:$AUTH_PORT (PID: ${AUTH_PID:-none})"
 echo "Tunnel:   $TUNNEL_URL (PID: $TUNNEL_PID)"
 echo "App:      $APP_PATH (installed from $APP_BUNDLE)"
