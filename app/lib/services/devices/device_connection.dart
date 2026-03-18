@@ -41,7 +41,7 @@ class DeviceConnectionFactory {
       case TransportKind.bluetooth:
         final deviceId = locator.bluetoothId;
         if (deviceId == null) return null;
-        if (Platform.isIOS) {
+        if (Platform.isIOS || Platform.isAndroid) {
           print('[DeviceConnectionFactory] Creating NativeBleTransport for $deviceId');
           transport = NativeBleTransport(deviceId);
         } else {
