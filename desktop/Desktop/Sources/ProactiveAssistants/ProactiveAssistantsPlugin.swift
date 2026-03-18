@@ -208,9 +208,9 @@ public class ProactiveAssistantsPlugin: NSObject {
             return
         }
 
-        // Request notification permission but don't block on it
-        // Screen analysis can work without notifications - users just won't get alerts
-        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { [weak self] granted, error in
+        // Request notification permission in parallel — don't block monitoring on it.
+        // Screen analysis can work without notifications - users just won't get alerts.
+        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { granted, error in
             DispatchQueue.main.async {
                 if let error = error {
                     let nsError = error as NSError
@@ -232,11 +232,11 @@ public class ProactiveAssistantsPlugin: NSObject {
                 if !granted {
                     log("Notification permission not granted - screen analysis will work but notifications will be disabled")
                 }
-
-                // Continue with monitoring regardless of notification permission
-                self?.continueStartMonitoring(completion: completion)
             }
         }
+
+        // Start monitoring immediately — don't wait for notification permission callback
+        continueStartMonitoring(completion: completion)
     }
 
     /// Repair LaunchServices registration when notification authorization fails with "not allowed".
@@ -392,6 +392,12 @@ public class ProactiveAssistantsPlugin: NSObject {
         }
 
         isMonitoring = true
+
+        // Capture the first frame immediately so screenshots appear right away
+        // (don't wait for the first timer interval to elapse)
+        Task { @MainActor in
+            await self.captureFrame()
+        }
         isStartingMonitoring = false
 
         // Report resources after initialization
