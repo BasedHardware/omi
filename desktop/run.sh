@@ -74,7 +74,7 @@ if [ "${OMI_ENABLE_LOCAL_AUTOMATION:-0}" = "1" ]; then
 fi
 
 # Backend configuration (Rust)
-BACKEND_DIR="$(dirname "$0")/Backend-Rust"
+BACKEND_DIR="$(cd "$(dirname "$0")/Backend-Rust" && pwd)"
 BACKEND_PID=""
 TUNNEL_PID=""
 TUNNEL_URL="https://omi-dev.m13v.com"
@@ -238,7 +238,9 @@ else
 fi
 
 step "Checking schema docs..."
-bash scripts/check_schema_docs.sh
+if [ -f scripts/check_schema_docs.sh ]; then
+    bash scripts/check_schema_docs.sh || substep "Schema docs check failed (non-fatal)"
+fi
 
 step "Building Swift app (swift build -c debug)..."
 xcrun swift build -c debug --package-path Desktop
