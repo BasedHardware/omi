@@ -4025,7 +4025,7 @@ impl FirestoreService {
                     Ok(decrypted) => content = decrypted,
                     Err(e) => {
                         tracing::warn!("Failed to decrypt memory {}: {}", id, e);
-                        content = "[Encrypted content — decryption failed]".to_string();
+                        content = "[Protected memory — cannot decrypt with current key]".to_string();
                     }
                 }
             } else {
@@ -4033,7 +4033,7 @@ impl FirestoreService {
                     "Memory {} has enhanced protection but no encryption secret configured",
                     id
                 );
-                content = "[Encrypted content — decryption failed]".to_string();
+                content = "[Protected memory — ENCRYPTION_SECRET not configured]".to_string();
             }
         }
 
@@ -7354,7 +7354,7 @@ impl FirestoreService {
                     Ok(decrypted) => text = decrypted,
                     Err(e) => {
                         tracing::warn!("Failed to decrypt message {}: {}", id, e);
-                        text = "[Encrypted message — decryption failed]".to_string();
+                        text = "[Protected message — cannot decrypt with current key]".to_string();
                     }
                 }
             } else {
@@ -7362,7 +7362,7 @@ impl FirestoreService {
                     "Message {} has enhanced protection but no encryption secret configured",
                     id
                 );
-                text = "[Encrypted message — decryption failed]".to_string();
+                text = "[Protected message — ENCRYPTION_SECRET not configured]".to_string();
             }
         }
 
