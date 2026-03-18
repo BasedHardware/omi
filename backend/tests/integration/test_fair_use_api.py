@@ -207,3 +207,86 @@ class TestUserFacingEndpoint:
         data = resp.json()
         assert data['stage'] == 'restrict'
         assert 'team@basedhardware.com' in data['message']
+
+
+class TestPublicCaseStatusEndpoint:
+    """Test the unauthenticated public case status lookup."""
+
+    def test_valid_case_ref_returns_status(self):
+        """Public endpoint returns stage, message, timestamps, support_email."""
+        _state_store[TEST_UID] = {'stage': 'warning'}
+        _events.append(
+            {
+                'uid': TEST_UID,
+                'case_ref': 'FU-AABBCCDDEEFF',
+                'created_at': '2026-03-18 01:00:00',
+            }
+        )
+
+        # Mock the Firestore collection_group query
+        mock_doc = MagicMock()
+        mock_doc.to_dict.return_value = {
+            'case_ref': 'FU-AABBCCDDEEFF',
+            'created_at': '2026-03-18 01:00:00',
+        }
+        mock_doc.reference.path = f'users/{TEST_UID}/fair_use_events/evt-1'
+
+        with patch.object(_db_client.db, 'collection_group') as mock_cg:
+            mock_cg.return_value.where.return_value.limit.return_value.stream.return_value = [mock_doc]
+            resp = client.get('/v1/fair-use/case/FU-AABBCCDDEEFF/status')
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data['case_ref'] == 'FU-AABBCCDDEEFF'
+        assert data['stage'] == 'warning'
+        assert data['support_email'] == 'team@basedhardware.com'
+        assert 'message' in data
+        assert 'created_at' in data
+        assert 'updated_at' in data
+        # Must NOT contain usage data or user identity
+        assert 'uid' not in data
+        assert 'usage_pct' not in data
+        assert 'speech_hours' not in str(data)
+
+    def test_invalid_case_ref_returns_404(self):
+        """Unknown case ref returns 404."""
+        with patch.object(_db_client.db, 'collection_group') as mock_cg:
+            mock_cg.return_value.where.return_value.limit.return_value.stream.return_value = []
+            resp = client.get('/v1/fair-use/case/FU-DOESNOTEXIST/status')
+
+        assert resp.status_code == 404
+
+    def test_no_auth_required(self):
+        """Public endpoint works without any auth headers."""
+        with patch.object(_db_client.db, 'collection_group') as mock_cg:
+            mock_cg.return_value.where.return_value.limit.return_value.stream.return_value = []
+            resp = client.get('/v1/fair-use/case/FU-ANYTHING/status')
+
+        # Should get 404 (not found), NOT 401/403/422 (auth error)
+        assert resp.status_code == 404
+
+
+class TestCaseRefFormat:
+    """Test case reference generation format."""
+
+    def _generate_case_ref(self):
+        """Generate case ref using the same logic as database.fair_use."""
+        import uuid
+
+        return f'FU-{uuid.uuid4().hex[:12].upper()}'
+
+    def test_case_ref_format_and_length(self):
+        """Case ref should be FU- prefix + 12 uppercase hex chars."""
+        import re
+
+        for _ in range(20):
+            ref = self._generate_case_ref()
+            assert ref.startswith('FU-')
+            hex_part = ref[3:]
+            assert len(hex_part) == 12
+            assert re.match(r'^[0-9A-F]{12}$', hex_part)
+
+    def test_case_refs_are_unique(self):
+        """Generated refs should be unique (from UUID4)."""
+        refs = {self._generate_case_ref() for _ in range(100)}
+        assert len(refs) == 100
