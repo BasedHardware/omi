@@ -484,12 +484,12 @@ async def _send_fair_use_notification(uid: str, action: str, case_ref: str = '')
         ),
         'throttle': (
             'Due to high non-conversational usage, your transcription quality has been temporarily reduced. '
-            'This will reset automatically. Contact support@omi.me if you believe this is an error. '
+            'This will reset automatically. Contact team@basedhardware.com if you believe this is an error. '
             f'Quote your case reference when contacting support.{ref_suffix}'
         ),
         'restrict': (
             'Your cloud transcription has been temporarily limited due to repeated fair-use violations. '
-            'On-device transcription continues normally. Contact support@omi.me to resolve. '
+            'On-device transcription continues normally. Contact team@basedhardware.com to resolve. '
             f'Quote your case reference when contacting support.{ref_suffix}'
         ),
     }
