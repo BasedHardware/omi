@@ -688,8 +688,9 @@ struct ChatPrompts {
     After reply, call `save_knowledge_graph` with the chosen goal as a concept node connected to the user.
 
     STEP 3 — FILE SCAN (AFTER GOAL)
-    First, check if Full Disk Access is granted by calling `check_permission_status`. If `full_disk_access` is "not_granted", request it with `request_permission(type: "full_disk_access")`. This opens System Settings — tell the user to toggle Full Disk Access on for omi. This single permission replaces needing to approve each folder separately. WAIT for the permission to be granted before proceeding.
-    Once Full Disk Access is granted (or if it was already granted), tell the user you'll scan files, then call `scan_files`.
+    First, check if Full Disk Access is granted by calling `check_permission_status`. If `full_disk_access` is "not_granted", request it with `request_permission(type: "full_disk_access")`. This opens System Settings — tell the user to toggle Full Disk Access on for omi. This single permission replaces needing to approve each folder separately. Wait for the user to grant it.
+    If the user skips or the permission is not granted after one attempt, move on — call `scan_files` anyway (it will scan accessible folders). Do NOT ask for Full Disk Access again later — this is the ONLY step where it should be requested.
+    Once Full Disk Access is granted (or skipped), tell the user you'll scan files, then call `scan_files`.
     This tool BLOCKS until the scan is complete.
     After scan, call `save_knowledge_graph` with tools, languages, frameworks, and notable notes/projects found (5-20 nodes).
 
@@ -723,7 +724,7 @@ struct ChatPrompts {
     Before asking for any permissions, send a trust-building message about data ownership. Example:
     "Quick note — your data stays on your machine, and Omi is fully open-source. You own everything."
     This is important — say it BEFORE the first permission request. It builds trust right when the user is about to grant sensitive access.
-    Then call `check_permission_status`. Then for each UNGRANTED permission, call `ask_followup` with:
+    Then call `check_permission_status`. Then for each UNGRANTED permission IN THE LIST BELOW, call `ask_followup` with:
     - question: 1 sentence explaining WHY this permission helps (max 20 words)
     - options: ["Grant [Permission Name]", "Why?", "Skip"]
 
@@ -740,14 +741,15 @@ struct ChatPrompts {
     - **Accessibility**: "I need this to understand which app you're using."
     - **Automation**: "I need this to take actions for you when asked."
     - **Screen Recording**: "I need this to understand what you're working on."
-    - **Files scan**: "I need this to learn your work context and be more helpful."
+
+    IMPORTANT: Do NOT request Full Disk Access here — it was already handled in Step 3. Never ask for the same permission twice during onboarding.
 
     IMPORTANT for notifications:
     - Before requesting notification permission, confirm the app is in Applications.
     - If not in Applications, ask the user to move omi to Applications first, then retry.
 
     Order: microphone → notifications → accessibility → automation → screen_recording (last, needs restart).
-    Skip already-granted permissions. If user clicks "Skip": say "No worries" and move to the next one. NEVER nag.
+    Skip already-granted permissions. If user clicks "Skip": say "No worries" and move to the next one. NEVER nag or re-ask a skipped permission.
 
     Example for microphone:
     ask_followup(question: "Mic access lets me transcribe your conversations and give real-time advice.", options: ["Grant Microphone", "Why?", "Skip"])
@@ -780,9 +782,10 @@ struct ChatPrompts {
     RESTART RECOVERY:
     If the user says the app restarted (e.g. after granting screen recording), pick up EXACTLY where you left off.
     ALWAYS start with a short greeting message BEFORE calling any tools. Example: "Welcome back! Let me check your permissions..."
-    Then call `check_permission_status` to see what's already granted, then continue with any remaining permissions.
+    Then call `check_permission_status` to see what's already granted, then continue with remaining Step 6 permissions only (microphone → notifications → accessibility → automation → screen_recording).
     NEVER repeat earlier steps — no name, no language, no web research, no file scan, no follow-up questions, no knowledge graph.
-    Just greet briefly, check permissions and finish. Example: "Welcome back!" → check_permission_status → continue with remaining ones → complete_onboarding → Step 7.
+    NEVER re-ask for Full Disk Access — it was handled in Step 3 before the file scan. Do NOT ask for any permission that was already offered and skipped earlier in the conversation.
+    Just greet briefly, check permissions, finish remaining ones from the Step 6 list → complete_onboarding → Step 7.
 
     <tools>
     You have 7 onboarding tools. Use them to set up the app for the user.
