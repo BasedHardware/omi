@@ -446,7 +446,6 @@ class AppState: ObservableObject {
     log("Environment loaded (API keys will be fetched from backend after auth)")
   }
 
-
   func openScreenRecordingPreferences() {
     ScreenCaptureService.openScreenRecordingPreferences()
   }
@@ -1001,7 +1000,8 @@ class AppState: ObservableObject {
     do {
       try process.run()
       process.waitUntilExit()
-      let output = String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)?
+      let output =
+        String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)?
         .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
       let granted = output == "2"
       if granted != hasFullDiskAccess {
@@ -2813,19 +2813,26 @@ class AppState: ObservableObject {
       log("Failed to clean user TCC database: \(error.localizedDescription)")
     }
 
-    // Also clean entries for new dev bundle ID pattern (com.omi.desktop-dev)
+    // Also clean entries for non-production Omi bundles (for example com.omi.desktop-dev, com.omi.1233).
     let process2 = Process()
     process2.executableURL = URL(fileURLWithPath: "/usr/bin/sqlite3")
-    process2.arguments = [tccDbPath, "DELETE FROM access WHERE client LIKE '%com.omi.desktop%';"]
+    process2.arguments = [
+      tccDbPath,
+      "DELETE FROM access WHERE client LIKE 'com.omi.%' AND client != 'com.omi.computer-macos';",
+    ]
     process2.standardOutput = FileHandle.nullDevice
     process2.standardError = FileHandle.nullDevice
 
     do {
       try process2.run()
       process2.waitUntilExit()
-      log("User TCC database cleaned for desktop-dev (exit code: \(process2.terminationStatus))")
+      log(
+        "User TCC database cleaned for non-production bundles (exit code: \(process2.terminationStatus))"
+      )
     } catch {
-      log("Failed to clean user TCC database for desktop-dev: \(error.localizedDescription)")
+      log(
+        "Failed to clean user TCC database for non-production bundles: \(error.localizedDescription)"
+      )
     }
   }
 
