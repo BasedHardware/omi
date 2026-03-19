@@ -132,6 +132,8 @@ class FairUseSuccessHarness extends StatelessWidget {
                 ],
               ),
             ),
+            // ---------- budget section ----------
+            _buildBudgetSection(context, l10n),
             // ---------- message banner ----------
             if (message.isNotEmpty)
               Padding(
@@ -243,6 +245,82 @@ class FairUseSuccessHarness extends StatelessWidget {
                   ],
                 ),
               ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBudgetSection(BuildContext context, AppLocalizations l10n) {
+    final dgBudget = status['dg_budget'] as Map<String, dynamic>?;
+    if (dgBudget == null) return const SizedBox.shrink();
+
+    final dailyLimitMs = (dgBudget['daily_limit_ms'] as num?)?.toInt() ?? 0;
+    final usedMs = (dgBudget['used_ms'] as num?)?.toInt() ?? 0;
+    final exhausted = dgBudget['exhausted'] as bool? ?? false;
+    final resetsAt = dgBudget['resets_at'] as String? ?? '';
+
+    if (dailyLimitMs <= 0) return const SizedBox.shrink();
+
+    final usedMin = (usedMs / 60000).round();
+    final limitMin = (dailyLimitMs / 60000).round();
+    final pct = (usedMs / dailyLimitMs * 100).clamp(0.0, 100.0);
+    final barColor = exhausted ? const Color(0xFFEF4444) : const Color(0xFF8B5CF6);
+
+    String resetLabel = '';
+    if (resetsAt.isNotEmpty) {
+      try {
+        final resetTime = DateTime.parse(resetsAt);
+        final now = DateTime.now().toUtc();
+        final diff = resetTime.difference(now);
+        if (diff.inHours > 0) {
+          resetLabel = l10n.fairUseBudgetResetsAt('${diff.inHours}h');
+        } else if (diff.inMinutes > 0) {
+          resetLabel = l10n.fairUseBudgetResetsAt('${diff.inMinutes}m');
+        }
+      } catch (_) {}
+    }
+
+    return Padding(
+      key: const Key('budget_section'),
+      padding: const EdgeInsets.only(top: 12),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: exhausted ? const Color(0xFFEF4444).withValues(alpha: 0.06) : const Color(0xFF1C1C1E),
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(l10n.fairUseDailyTranscription,
+                    style: const TextStyle(color: Color(0xFF8E8E93), fontSize: 13, fontWeight: FontWeight.w500)),
+                Text(l10n.fairUseBudgetUsed('$usedMin', '$limitMin'),
+                    style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w500)),
+              ],
+            ),
+            const SizedBox(height: 8),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(3),
+              child: LinearProgressIndicator(
+                value: (pct / 100).clamp(0.0, 1.0),
+                backgroundColor: const Color(0xFF2C2C2E),
+                valueColor: AlwaysStoppedAnimation<Color>(barColor),
+                minHeight: 4,
+              ),
+            ),
+            if (exhausted) ...[
+              const SizedBox(height: 10),
+              Text(l10n.fairUseBudgetExhausted,
+                  style: const TextStyle(color: Color(0xFFEF4444), fontSize: 13, fontWeight: FontWeight.w500)),
+            ],
+            if (resetLabel.isNotEmpty) ...[
+              const SizedBox(height: 4),
+              Text(resetLabel, style: const TextStyle(color: Color(0xFF636366), fontSize: 12)),
+            ],
           ],
         ),
       ),
@@ -654,6 +732,116 @@ void main() {
 
       // Clean up mock handler
       tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(SystemChannels.platform, null);
+    });
+  });
+
+  // -----------------------------------------------------------------------
+  // 6. Budget section tests
+  // -----------------------------------------------------------------------
+  group('Budget section', () {
+    Map<String, dynamic> makeStatusWithBudget({
+      int dailyLimitMs = 600000, // 10 min
+      int usedMs = 300000, // 5 min
+      bool exhausted = false,
+      String resetsAt = '',
+    }) {
+      return {
+        'stage': 'restrict',
+        'case_ref': 'FU-AABB11',
+        'message': '',
+        'usage_pct': {'daily': 50.0, 'three_day': 40.0, 'weekly': 30.0},
+        'limits': {'daily_hours': 2.0, 'three_day_hours': 8.0, 'weekly_hours': 10.0},
+        'speech_hours_today': 1.0,
+        'speech_hours_3day': 3.0,
+        'speech_hours_weekly': 3.0,
+        'dg_budget': {
+          'daily_limit_ms': dailyLimitMs,
+          'used_ms': usedMs,
+          'remaining_ms': dailyLimitMs - usedMs,
+          'exhausted': exhausted,
+          'resets_at': resetsAt,
+        },
+      };
+    }
+
+    testWidgets('shows budget section when dg_budget present', (tester) async {
+      await tester.pumpWidget(buildTestApp(FairUseSuccessHarness(status: makeStatusWithBudget())));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('budget_section')), findsOneWidget);
+      expect(find.text('Daily Transcription'), findsOneWidget);
+    });
+
+    testWidgets('hides budget section when dg_budget absent', (tester) async {
+      final status = makeStatusWithBudget();
+      status.remove('dg_budget');
+      await tester.pumpWidget(buildTestApp(FairUseSuccessHarness(status: status)));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('budget_section')), findsNothing);
+    });
+
+    testWidgets('shows used/limit in minutes', (tester) async {
+      await tester.pumpWidget(buildTestApp(FairUseSuccessHarness(
+        status: makeStatusWithBudget(dailyLimitMs: 600000, usedMs: 300000),
+      )));
+      await tester.pumpAndSettle();
+
+      // 300000ms = 5min, 600000ms = 10min
+      expect(find.text('5m / 10m'), findsOneWidget);
+    });
+
+    testWidgets('shows exhausted message when budget exhausted', (tester) async {
+      await tester.pumpWidget(buildTestApp(FairUseSuccessHarness(
+        status: makeStatusWithBudget(exhausted: true, usedMs: 600000, dailyLimitMs: 600000),
+      )));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Daily transcription limit reached'), findsOneWidget);
+    });
+
+    testWidgets('no exhausted message when budget not exhausted', (tester) async {
+      await tester.pumpWidget(buildTestApp(FairUseSuccessHarness(
+        status: makeStatusWithBudget(exhausted: false),
+      )));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Daily transcription limit reached'), findsNothing);
+    });
+
+    testWidgets('exhausted bar is red, normal bar is purple', (tester) async {
+      // Normal (not exhausted)
+      await tester.pumpWidget(buildTestApp(FairUseSuccessHarness(
+        status: makeStatusWithBudget(exhausted: false),
+      )));
+      await tester.pumpAndSettle();
+
+      // 4 bars total: 3 usage + 1 budget
+      final bars = tester.widgetList<LinearProgressIndicator>(find.byType(LinearProgressIndicator)).toList();
+      // Budget bar is the last one
+      final budgetBar = bars.last;
+      final normalColor = budgetBar.valueColor as AlwaysStoppedAnimation<Color>;
+      expect(normalColor.value, const Color(0xFF8B5CF6)); // purple
+
+      // Exhausted
+      await tester.pumpWidget(buildTestApp(FairUseSuccessHarness(
+        status: makeStatusWithBudget(exhausted: true, usedMs: 600000, dailyLimitMs: 600000),
+      )));
+      await tester.pumpAndSettle();
+
+      final bars2 = tester.widgetList<LinearProgressIndicator>(find.byType(LinearProgressIndicator)).toList();
+      final exhaustedBar = bars2.last;
+      final exhaustedColor = exhaustedBar.valueColor as AlwaysStoppedAnimation<Color>;
+      expect(exhaustedColor.value, const Color(0xFFEF4444)); // red
+    });
+
+    testWidgets('hides budget section when daily_limit_ms is 0', (tester) async {
+      await tester.pumpWidget(buildTestApp(FairUseSuccessHarness(
+        status: makeStatusWithBudget(dailyLimitMs: 0),
+      )));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('budget_section')), findsNothing);
     });
   });
 
