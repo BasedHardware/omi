@@ -1072,8 +1072,8 @@ impl FirestoreService {
 
             if !response.status().is_success() {
                 let error_text = response.text().await?;
-                tracing::error!("Firestore query error: {}", error_text);
-                break;
+                tracing::error!("Firestore query error for memories: {}", error_text);
+                return Err(format!("Firestore query error: {}", error_text).into());
             }
 
             let results: Vec<Value> = response.json().await?;
@@ -1997,8 +1997,8 @@ impl FirestoreService {
 
             if !response.status().is_success() {
                 let error_text = response.text().await?;
-                tracing::error!("Firestore query error: {}", error_text);
-                break;
+                tracing::error!("Firestore query error for action_items: {}", error_text);
+                return Err(format!("Firestore query error: {}", error_text).into());
             }
 
             let results: Vec<Value> = response.json().await?;
