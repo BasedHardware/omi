@@ -124,17 +124,28 @@ class TestRecordSpeechMs:
             assert call[0][1] == fair_use_mod.FAIR_USE_REDIS_RETENTION_SECONDS
 
     @patch.object(fair_use_mod, 'FAIR_USE_ENABLED', True)
-    def test_cutoff_boundary_exact_equals(self):
-        """Member with score == cutoff is pruned (zrangebyscore uses inclusive range)."""
+    def test_cutoff_boundary_zrangebyscore_args(self):
+        """zrangebyscore is called with inclusive range [0, cutoff_ts] for pruning."""
+        import time
+
         pipe = MagicMock()
         _mock_redis.pipeline.return_value = pipe
-        # Simulate a member exactly at the cutoff boundary
-        _mock_redis.zrangebyscore.return_value = [b'999']
+        _mock_redis.zrangebyscore.return_value = []
         fair_use_mod.record_speech_ms('user1', 5000)
-        # Should prune: boundary member is included
-        pipe.hdel.assert_called_once()
-        args = pipe.hdel.call_args[0]
-        assert '999' in args
+        # Verify zrangebyscore was called with correct cutoff
+        zrange_call = _mock_redis.zrangebyscore.call_args
+        assert zrange_call is not None
+        # Args: (zset_key, min_score=0, max_score=cutoff_ts)
+        _key, min_score, max_score = zrange_call[0]
+        assert min_score == 0
+        # cutoff = now - RETENTION; max_score should be close to that
+        expected_cutoff = int(time.time()) - fair_use_mod.FAIR_USE_REDIS_RETENTION_SECONDS
+        assert abs(max_score - expected_cutoff) <= 2  # within 2s tolerance
+        # zremrangebyscore in pipe uses same range (inclusive upper bound)
+        zrem_calls = [c for c in pipe.zremrangebyscore.call_args_list]
+        assert len(zrem_calls) == 1
+        assert zrem_calls[0][0][1] == 0  # min
+        assert abs(zrem_calls[0][0][2] - expected_cutoff) <= 2  # max
 
 
 class TestGetRollingSpeechMs:
