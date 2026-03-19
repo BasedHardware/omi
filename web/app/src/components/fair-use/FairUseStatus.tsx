@@ -189,8 +189,8 @@ export function FairUseStatus() {
         </div>
       )}
 
-      {/* Daily Transcription Budget — only when dg_budget present */}
-      {status?.dg_budget && status.dg_budget.daily_limit_ms > 0 && (() => {
+      {/* Daily Transcription Budget — only for restricted users */}
+      {status?.stage === 'restrict' && status?.dg_budget && status.dg_budget.daily_limit_ms > 0 && (() => {
         const { daily_limit_ms, used_ms, exhausted, resets_at } = status.dg_budget;
         const usedMin = Math.round(used_ms / 60000);
         const limitMin = Math.round(daily_limit_ms / 60000);
