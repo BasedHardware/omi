@@ -596,6 +596,10 @@ struct OnboardingChatView: View {
       guard let vm = graphViewModel else { return }
       Task { await vm.addGraphFromStorage() }
     }
+    ChatToolExecutor.onPermissionPending = { permType in
+      pendingPermissionType = permType
+      log("OnboardingChat: Permission pending from tool executor: \(permType)")
+    }
     ChatToolExecutor.onScanFilesCompleted = { [weak graphViewModel] fileCount in
       guard fileCount > 0 else { return }
       startExploration(fileCount: fileCount, graphViewModel: graphViewModel)
