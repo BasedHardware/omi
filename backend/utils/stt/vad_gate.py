@@ -302,10 +302,6 @@ class VADStreamingGate:
         self._vad_state: Optional[Dict[str, Any]] = None
         self._vad_inference_lock = threading.Lock()
         self._speech_threshold = VAD_GATE_SPEECH_THRESHOLD
-        # Separate metering threshold for fair-use tracking (#5746).
-        # Always uses the base threshold so throttle's raised forwarding threshold
-        # doesn't undercount real speech usage in the rolling windows.
-        self._metering_threshold = VAD_GATE_SPEECH_THRESHOLD
 
         # State machine
         self._state = GateState.SILENCE
@@ -391,14 +387,8 @@ class VADStreamingGate:
 
         return data_int16.astype(np.float32) / 32768.0
 
-    def _run_vad(self, pcm_data: bytes) -> tuple:
-        """Run Silero VAD on audio chunk.
-
-        Returns (forwarding_speech, metering_speech):
-          - forwarding_speech: True if speech exceeds self._speech_threshold (may be throttled)
-          - metering_speech: True if speech exceeds self._metering_threshold (always base, unbiased)
-
-        When thresholds are equal (no throttle), both values are identical.
+    def _run_vad(self, pcm_data: bytes) -> bool:
+        """Run Silero VAD on audio chunk. Returns True if speech detected.
 
         Calls the raw model directly for per-window speech probability.
         VADIterator is NOT used because it emits boundary events (start/end)
@@ -418,8 +408,7 @@ class VADStreamingGate:
             self._vad_buffer = np.concatenate([self._vad_buffer, float_data])
             del float_data
 
-            forwarding_speech = False
-            metering_speech = False
+            is_speech = False
             if len(self._vad_buffer) >= self._vad_window_samples:
                 model = _borrow_vad_model()
                 try:
@@ -439,9 +428,7 @@ class VADStreamingGate:
                         if hasattr(prob, 'item'):
                             prob = prob.item()
                         if prob > self._speech_threshold:
-                            forwarding_speech = True
-                        if prob > self._metering_threshold:
-                            metering_speech = True
+                            is_speech = True
                     self._vad_state = _capture_model_state(model)
                 finally:
                     _return_vad_model(model)
@@ -450,7 +437,7 @@ class VADStreamingGate:
             if len(self._vad_buffer) > self._vad_window_samples:
                 self._vad_buffer = self._vad_buffer[-self._vad_window_samples :]
 
-            return forwarding_speech, metering_speech
+            return is_speech
 
     def process_audio(self, pcm_data: bytes, wall_time: float) -> GateOutput:
         """Process an audio chunk through the VAD gate.
@@ -473,8 +460,8 @@ class VADStreamingGate:
         chunk_ms = (n_samples * 1000.0) / self.sample_rate
         self._audio_cursor_ms += chunk_ms
 
-        # Run VAD — returns dual signals: forwarding (possibly throttled) and metering (always base)
-        is_speech, is_metered_speech = self._run_vad(pcm_data)
+        # Run VAD
+        is_speech = self._run_vad(pcm_data)
 
         if is_speech:
             self._last_speech_ms = self._audio_cursor_ms
@@ -482,9 +469,8 @@ class VADStreamingGate:
         else:
             self._chunks_silence += 1
 
-        # Fair-use speech accumulator (#5746) — uses metering threshold (base, unbiased)
-        # so throttle's raised forwarding threshold doesn't undercount real speech usage
-        if is_metered_speech and self.mode == 'active':
+        # Fair-use speech accumulator (#5746)
+        if is_speech and self.mode == 'active':
             self._speech_ms_total += chunk_ms
             self._speech_ms_delta += chunk_ms
 
