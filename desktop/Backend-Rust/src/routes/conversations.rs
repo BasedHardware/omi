@@ -56,12 +56,8 @@ async fn get_conversations(
     user: AuthUser,
     Query(query): Query<GetConversationsQuery>,
 ) -> Result<Json<Vec<Conversation>>, (StatusCode, String)> {
-    // Parse statuses from comma-separated string (match Python behavior).
-    // When filtering by starred, skip the default status filter to avoid
-    // requiring a Firestore composite index on (status, starred, created_at).
-    let statuses: Vec<String> = if query.starred.is_some() && query.statuses == default_statuses() {
-        vec![]
-    } else if query.statuses.is_empty() {
+    // Parse statuses from comma-separated string (match Python behavior)
+    let statuses: Vec<String> = if query.statuses.is_empty() {
         vec![]
     } else {
         query.statuses.split(',').map(|s| s.trim().to_string()).collect()
@@ -1162,48 +1158,3 @@ pub fn conversations_routes() -> Router<AppState> {
         )
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    /// Helper that mirrors the status-parsing logic from get_conversations
-    fn parse_statuses(starred: Option<bool>, statuses: &str) -> Vec<String> {
-        if starred.is_some() && statuses == default_statuses() {
-            vec![]
-        } else if statuses.is_empty() {
-            vec![]
-        } else {
-            statuses.split(',').map(|s| s.trim().to_string()).collect()
-        }
-    }
-
-    #[test]
-    fn test_starred_with_default_statuses_skips_status_filter() {
-        let result = parse_statuses(Some(true), &default_statuses());
-        assert!(result.is_empty(), "starred + default statuses should skip status filter");
-    }
-
-    #[test]
-    fn test_starred_with_custom_statuses_preserves_filter() {
-        let result = parse_statuses(Some(true), "completed");
-        assert_eq!(result, vec!["completed"], "custom statuses should be preserved even with starred");
-    }
-
-    #[test]
-    fn test_no_starred_default_statuses_preserved() {
-        let result = parse_statuses(None, &default_statuses());
-        assert_eq!(result, vec!["processing", "completed"], "default statuses should be preserved without starred");
-    }
-
-    #[test]
-    fn test_empty_statuses_returns_empty() {
-        let result = parse_statuses(None, "");
-        assert!(result.is_empty(), "empty statuses should return empty vec");
-    }
-
-    #[test]
-    fn test_starred_false_with_default_statuses_skips_filter() {
-        let result = parse_statuses(Some(false), &default_statuses());
-        assert!(result.is_empty(), "starred=false + default statuses should also skip (starred.is_some() is true)");
-    }
-}
