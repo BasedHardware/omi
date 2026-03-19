@@ -69,10 +69,6 @@ FAIR_USE_REDIS_RETENTION_SECONDS = int(os.getenv('FAIR_USE_REDIS_RETENTION_SECON
 FAIR_USE_CLASSIFIER_MISUSE_THRESHOLD = float(os.getenv('FAIR_USE_CLASSIFIER_ABUSE_SCORE_THRESHOLD', '0.7'))
 FAIR_USE_CLASSIFIER_COOLDOWN_SECONDS = int(os.getenv('FAIR_USE_CLASSIFIER_COOLDOWN_SECONDS', '43200'))  # 12 hours
 
-# Throttle VAD config
-FAIR_USE_STAGE2_VAD_DELTA = float(os.getenv('FAIR_USE_STAGE2_VAD_THRESHOLD_DELTA', '0.08'))
-FAIR_USE_VAD_THRESHOLD_MAX = float(os.getenv('FAIR_USE_VAD_THRESHOLD_MAX', '0.82'))
-
 # Exempt UIDs (comma-separated)
 FAIR_USE_EXEMPT_UIDS = set(filter(None, os.getenv('FAIR_USE_EXEMPT_UIDS', '').split(',')))
 
@@ -272,31 +268,10 @@ def get_enforcement_stage(uid: str) -> str:
     return stage
 
 
-def get_user_vad_threshold_delta(uid: str) -> float:
-    """Get per-user VAD threshold increase for throttled users."""
-    cache_key = f'fair_use:vad_delta:{uid}'
-    try:
-        cached = redis_client.get(cache_key)
-        if cached:
-            return float(cached)
-    except Exception:
-        pass
-
-    state = fair_use_db.get_fair_use_state(uid)
-    delta = state.get('vad_threshold_delta', 0.0)
-
-    try:
-        redis_client.setex(cache_key, 60, str(delta))
-    except Exception:
-        pass
-
-    return delta
-
-
 def invalidate_enforcement_cache(uid: str) -> None:
     """Clear cached enforcement state after an update."""
     try:
-        redis_client.delete(f'fair_use:stage:{uid}', f'fair_use:vad_delta:{uid}')
+        redis_client.delete(f'fair_use:stage:{uid}')
     except Exception:
         pass
 
@@ -345,7 +320,6 @@ def escalate_enforcement(uid: str, triggered_caps: list, classifier_result: dict
         }
 
         if new_stage == 'throttle':
-            update['vad_threshold_delta'] = FAIR_USE_STAGE2_VAD_DELTA
             update['throttle_until'] = datetime.utcnow() + timedelta(days=7)
         elif new_stage == 'restrict':
             update['restrict_until'] = datetime.utcnow() + timedelta(days=30)
