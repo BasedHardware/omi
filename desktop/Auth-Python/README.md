@@ -44,7 +44,6 @@ See `.env.example` for the full list. Key ones:
 
 ## Port allocation
 
-Use your team-assigned port (never 8080):
-- noa: 10200, ren: 10210, etc.
+Pick any free port (never 8080 — conflicts with Tailscale). Default: 10200.
 
-Google OAuth redirect URIs must be registered for each port in the GCP Console.
+Google OAuth redirect URIs must be registered for your port in the GCP Console.
