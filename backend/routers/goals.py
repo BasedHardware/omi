@@ -100,8 +100,8 @@ async def get_current_goal(uid: str = Depends(auth.get_current_user_uid)) -> Opt
 
 @router.get('/v1/goals/all', tags=['goals'])
 async def get_all_goals(uid: str = Depends(auth.get_current_user_uid)) -> List[dict]:
-    """Get all active goals for the user (up to 3)."""
-    goals = goals_db.get_user_goals(uid, limit=3)
+    """Get all active goals for the user (up to 4)."""
+    goals = goals_db.get_user_goals(uid, limit=4)
 
     # Convert datetime objects to strings for JSON serialization
     for goal in goals:
