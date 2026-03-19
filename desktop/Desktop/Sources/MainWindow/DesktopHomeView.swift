@@ -613,7 +613,7 @@ struct DesktopHomeView: View {
       }
     }
     .onReceive(NotificationCenter.default.publisher(for: .navigateToFloatingBarSettings)) { _ in
-      selectedSettingsSection = .advanced
+      selectedSettingsSection = .floatingBar
       withAnimation(.easeInOut(duration: 0.2)) {
         selectedIndex = SidebarNavItem.settings.rawValue
       }

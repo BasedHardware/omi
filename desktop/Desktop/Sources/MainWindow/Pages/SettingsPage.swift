@@ -243,6 +243,7 @@ struct SettingsContentView: View {
         case account = "Account"
         case planUsage = "Plan and Usage"
         case aiChat = "AI Chat"
+        case floatingBar = "Floating Bar"
         case advanced = "Advanced"
         case about = "About"
     }
@@ -257,7 +258,6 @@ struct SettingsContentView: View {
         case memoryAssistant = "Memory Assistant"
         case analysisThrottle = "Analysis Throttle"
         case goals = "Goals"
-        case askOmiFloatingBar = "Ask omi Floating Bar"
         case preferences = "Preferences"
         case troubleshooting = "Troubleshooting"
         case gmailReader = "Gmail Reader"
@@ -275,7 +275,6 @@ struct SettingsContentView: View {
             case .memoryAssistant: return "brain.head.profile"
             case .analysisThrottle: return "clock.arrow.2.circlepath"
             case .goals: return "target"
-            case .askOmiFloatingBar: return "sparkles"
             case .preferences: return "slider.horizontal.3"
             case .troubleshooting: return "wrench.and.screwdriver"
             case .gmailReader: return "envelope.fill"
@@ -388,6 +387,8 @@ struct SettingsContentView: View {
                     planUsageSection
                 case .aiChat:
                     aiChatSection
+                case .floatingBar:
+                    floatingBarSection
                 case .advanced:
                     advancedSection
                 case .about:
@@ -428,10 +429,7 @@ struct SettingsContentView: View {
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: .navigateToFloatingBarSettings)) { _ in
-            selectedSection = .advanced
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
-                highlightedSettingId = "advanced.askomifloatingbar"
-            }
+            selectedSection = .floatingBar
         }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             // Refresh notification permission when app becomes active (user may have changed it in System Settings)
@@ -1763,6 +1761,12 @@ struct SettingsContentView: View {
 
     // MARK: - AI Chat Section
 
+    private var floatingBarSection: some View {
+        VStack(spacing: 20) {
+            ShortcutsSettingsSection(highlightedSettingId: $highlightedSettingId)
+        }
+    }
+
     private var aiChatSection: some View {
         VStack(spacing: 20) {
             // AI Provider card
@@ -2523,8 +2527,6 @@ struct SettingsContentView: View {
             analysisThrottleSubsection
             advancedCategoryHeader(title: "Goals", icon: "target")
             goalsSubsection
-            advancedCategoryHeader(title: "Ask omi Floating Bar", icon: "sparkles")
-            askOmiFloatingBarSubsection
             advancedCategoryHeader(title: "Preferences", icon: "slider.horizontal.3")
             preferencesSubsection
             advancedCategoryHeader(title: "Troubleshooting", icon: "wrench.and.screwdriver")
@@ -3751,12 +3753,6 @@ struct SettingsContentView: View {
                     }
                 }
             }
-        }
-    }
-
-    private var askOmiFloatingBarSubsection: some View {
-        VStack(spacing: 20) {
-            ShortcutsSettingsSection(highlightedSettingId: $highlightedSettingId)
         }
     }
 
