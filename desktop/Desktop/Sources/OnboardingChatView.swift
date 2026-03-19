@@ -466,8 +466,15 @@ struct OnboardingChatView: View {
         scheduleRecoveredOnboardingFallback()
       }
     }
-    .onChange(of: quickReplyOptions) { _, _ in
+    .onChange(of: quickReplyOptions) { _, newOptions in
       scheduleRecoveredOnboardingFallback()
+      // Detect permission-related quick replies (e.g. "Done!" after FDA request, or "Grant Mic")
+      // and start the help timer even when pendingPermissionType isn't set
+      if !newOptions.isEmpty,
+        let detectedPerm = permissionType(for: quickReplyQuestion, options: newOptions)
+      {
+        schedulePermissionHelpTimer(for: detectedPerm)
+      }
     }
     .onChange(of: pendingPermissionType) { _, newValue in
       scheduleRecoveredOnboardingFallback()
@@ -1123,7 +1130,7 @@ struct OnboardingChatView: View {
 
   // MARK: - Permission Help Notification
 
-  /// Schedule (or cancel) the 15-second help timer when pendingPermissionType changes.
+  /// Schedule (or cancel) the 15-second help timer when a permission is being requested.
   private func schedulePermissionHelpTimer(for permissionType: String?) {
     // Always cancel any existing timer first
     permissionHelpTimer?.cancel()
@@ -1134,8 +1141,13 @@ struct OnboardingChatView: View {
     guard !permissionHelpShown.contains(permType) else { return }
 
     let workItem = DispatchWorkItem { [permType] in
-      // Double-check permission is still pending when the timer fires
-      guard pendingPermissionType == permType else { return }
+      // Check permission is still pending — either via pendingPermissionType
+      // or via a permission-related question still showing (e.g. FDA "Done!" buttons)
+      let stillPending =
+        pendingPermissionType == permType
+        || (!quickReplyOptions.isEmpty
+          && self.permissionType(for: quickReplyQuestion, options: quickReplyOptions) == permType)
+      guard stillPending else { return }
       showPermissionHelpNotification(for: permType)
     }
     permissionHelpTimer = workItem
