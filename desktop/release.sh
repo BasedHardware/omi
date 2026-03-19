@@ -25,9 +25,10 @@ set -e
 # How to release:
 #   Merge your desktop changes to main. That's it.
 #   The pipeline handles everything else automatically.
+#   Builds default to the beta channel and go live immediately.
 #
-# How to promote releases:
-#   ./scripts/promote_release.sh <tag>  (staging → beta → stable)
+# To promote to stable:
+#   Update the GitHub release manually to mark it as the stable channel.
 #
 # DO NOT run this script manually. Manual releases cause:
 #   - Version conflicts with the automated pipeline
@@ -49,6 +50,7 @@ echo "Workflows:"
 echo "  https://github.com/BasedHardware/omi/blob/main/.github/workflows/desktop_auto_release.yml"
 echo "  https://github.com/BasedHardware/omi/blob/main/codemagic.yaml"
 echo ""
-echo "To promote a release: ./scripts/promote_release.sh <tag>"
+echo "Builds default to beta channel. To promote to stable,"
+echo "update the GitHub release manually."
 echo ""
 exit 1
