@@ -226,10 +226,7 @@ fn apple_auth_redirect(config: &Config, session_id: &str) -> Result<Redirect, Er
         message: "APPLE_CLIENT_ID not configured".to_string(),
     })?;
 
-    let api_base_url = config.base_api_url.as_deref().ok_or_else(|| ErrorResponse {
-        error: "not_configured".to_string(),
-        message: "BASE_API_URL not set — required for OAuth callbacks".to_string(),
-    })?;
+    let api_base_url = config.base_api_url.as_deref().unwrap_or("http://localhost:8080");
     let callback_url = format!("{}/v1/auth/callback/apple", api_base_url);
 
     let auth_url = format!(
@@ -252,10 +249,7 @@ fn google_auth_redirect(config: &Config, session_id: &str) -> Result<Redirect, E
         message: "GOOGLE_CLIENT_ID not configured".to_string(),
     })?;
 
-    let api_base_url = config.base_api_url.as_deref().ok_or_else(|| ErrorResponse {
-        error: "not_configured".to_string(),
-        message: "BASE_API_URL not set — required for OAuth callbacks".to_string(),
-    })?;
+    let api_base_url = config.base_api_url.as_deref().unwrap_or("http://localhost:8080");
     let callback_url_raw = format!("{}/v1/auth/callback/google", api_base_url);
     let callback_url = urlencoding::encode(&callback_url_raw);
     let scope = urlencoding::encode("openid email profile");
@@ -434,10 +428,7 @@ async fn exchange_apple_code(
         message: "APPLE_PRIVATE_KEY not configured".to_string(),
     })?;
 
-    let api_base_url = config.base_api_url.as_deref().ok_or_else(|| ErrorResponse {
-        error: "not_configured".to_string(),
-        message: "BASE_API_URL not set — required for OAuth callbacks".to_string(),
-    })?;
+    let api_base_url = config.base_api_url.as_deref().unwrap_or("http://localhost:8080");
     let callback_url = format!("{}/v1/auth/callback/apple", api_base_url);
 
     // Generate client secret JWT
@@ -512,10 +503,7 @@ async fn exchange_google_code(
         message: "GOOGLE_CLIENT_SECRET not configured".to_string(),
     })?;
 
-    let api_base_url = config.base_api_url.as_deref().ok_or_else(|| ErrorResponse {
-        error: "not_configured".to_string(),
-        message: "BASE_API_URL not set — required for OAuth callbacks".to_string(),
-    })?;
+    let api_base_url = config.base_api_url.as_deref().unwrap_or("http://localhost:8080");
     let callback_url = format!("{}/v1/auth/callback/google", api_base_url);
 
     // Exchange code for tokens
