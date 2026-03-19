@@ -97,7 +97,6 @@ def set_user_stage(uid: str, stage: str = Query(...), admin_id: str = Depends(_v
 
     updates = {'stage': stage}
     if stage == 'none':
-        updates['vad_threshold_delta'] = 0.0
         updates['throttle_until'] = None
         updates['restrict_until'] = None
 

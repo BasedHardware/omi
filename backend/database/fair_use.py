@@ -150,7 +150,6 @@ def reset_fair_use_state(uid: str, admin_uid: str) -> None:
             'restrict_until': None,
             'last_classifier_score': 0.0,
             'last_classifier_type': 'none',
-            'vad_threshold_delta': 0.0,
             'reset_by': admin_uid,
             'reset_at': datetime.utcnow(),
         },
