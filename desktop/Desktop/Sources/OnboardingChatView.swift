@@ -124,6 +124,10 @@ struct OnboardingChatView: View {
   @State private var showSkipConfirmation = false
   @State private var recoveredOnboardingFallbackTask: Task<Void, Never>?
 
+  // Permission help notification state — shows a floating bar hint if user struggles
+  @State private var permissionHelpShown: Set<String> = []
+  @State private var permissionHelpTimer: DispatchWorkItem? = nil
+
   // Timer to periodically check permission status
   let permissionCheckTimer = Timer.publish(every: 1.0, on: .main, in: .common).autoconnect()
 
@@ -465,8 +469,9 @@ struct OnboardingChatView: View {
     .onChange(of: quickReplyOptions) { _, _ in
       scheduleRecoveredOnboardingFallback()
     }
-    .onChange(of: pendingPermissionType) { _, _ in
+    .onChange(of: pendingPermissionType) { _, newValue in
       scheduleRecoveredOnboardingFallback()
+      schedulePermissionHelpTimer(for: newValue)
     }
     .onChange(of: explorationRunning) { _, _ in
       scheduleRecoveredOnboardingFallback()
@@ -550,6 +555,10 @@ struct OnboardingChatView: View {
     guard !hasStarted else { return }
     hasStarted = true
     isInputFocused = true
+
+    // Set up floating bar so permission help notifications can be shown
+    FloatingControlBarManager.shared.setup(appState: appState, chatProvider: chatProvider)
+    FloatingControlBarManager.shared.showTemporarily()
 
     // Wire up onboarding tools
     ChatToolExecutor.onboardingAppState = appState
@@ -1112,8 +1121,129 @@ struct OnboardingChatView: View {
     }
   }
 
+  // MARK: - Permission Help Notification
+
+  /// Schedule (or cancel) the 15-second help timer when pendingPermissionType changes.
+  private func schedulePermissionHelpTimer(for permissionType: String?) {
+    // Always cancel any existing timer first
+    permissionHelpTimer?.cancel()
+    permissionHelpTimer = nil
+
+    guard let permType = permissionType else { return }
+    // Only fire once per permission type
+    guard !permissionHelpShown.contains(permType) else { return }
+
+    let workItem = DispatchWorkItem { [permType] in
+      // Double-check permission is still pending when the timer fires
+      guard pendingPermissionType == permType else { return }
+      showPermissionHelpNotification(for: permType)
+    }
+    permissionHelpTimer = workItem
+    DispatchQueue.main.asyncAfter(deadline: .now() + 15, execute: workItem)
+    log("OnboardingChat: Started 15s permission help timer for \(permType)")
+  }
+
+  /// Take a screenshot, send it to Gemini for analysis, and show the result in the floating bar.
+  private func showPermissionHelpNotification(for permType: String) {
+    // Mark as shown immediately so we don't fire again
+    permissionHelpShown.insert(permType)
+    log("OnboardingChat: Permission help timer fired for \(permType), capturing screenshot")
+
+    Task {
+      let helpMessage = await generatePermissionHelp(for: permType)
+      await MainActor.run {
+        let permLabel = permissionDisplayName(permType)
+        FloatingControlBarManager.shared.showNotification(
+          title: "Need help with \(permLabel)?",
+          message: helpMessage,
+          assistantId: "onboarding",
+          sound: .none
+        )
+      }
+    }
+  }
+
+  /// Capture a screenshot and ask Gemini how to grant the permission. Falls back to a static message.
+  private func generatePermissionHelp(for permType: String) async -> String {
+    let permLabel = permissionDisplayName(permType)
+    let fallback =
+      "Open System Settings \u{2192} Privacy & Security \u{2192} \(permLabel) and toggle Omi on."
+
+    // Capture screenshot
+    guard let screenshotURL = ScreenCaptureManager.captureScreen() else {
+      log("OnboardingChat: Screenshot capture failed for permission help, using fallback")
+      return fallback
+    }
+
+    // Load image data
+    guard let imageData = try? Data(contentsOf: screenshotURL) else {
+      log("OnboardingChat: Failed to load screenshot data for permission help, using fallback")
+      return fallback
+    }
+
+    // Send to Gemini
+    do {
+      let gemini = try GeminiClient()
+      let prompt =
+        "The user needs to grant \(permLabel) permission to the Omi app. Look at the screenshot and tell them exactly where to click or what to do. Keep it to 1-2 sentences."
+      let systemPrompt = "You are a helpful assistant guiding a user through macOS permission setup. Be concise and specific about what they see on screen."
+
+      let responseSchema = GeminiRequest.GenerationConfig.ResponseSchema(
+        type: "object",
+        properties: [
+          "help_text": .init(type: "string", description: "1-2 sentence help text for the user")
+        ],
+        required: ["help_text"]
+      )
+
+      let responseJSON = try await gemini.sendRequest(
+        prompt: prompt,
+        imageData: imageData,
+        systemPrompt: systemPrompt,
+        responseSchema: responseSchema
+      )
+
+      // Parse the JSON response
+      if let data = responseJSON.data(using: .utf8),
+        let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+        let helpText = json["help_text"] as? String,
+        !helpText.isEmpty
+      {
+        log("OnboardingChat: Gemini permission help response: \(helpText)")
+        // Clean up screenshot file
+        try? FileManager.default.removeItem(at: screenshotURL)
+        return helpText
+      }
+
+      log("OnboardingChat: Gemini response didn't contain valid help_text, using fallback")
+      try? FileManager.default.removeItem(at: screenshotURL)
+      return fallback
+    } catch {
+      log("OnboardingChat: Gemini request failed for permission help: \(error.localizedDescription), using fallback")
+      try? FileManager.default.removeItem(at: screenshotURL)
+      return fallback
+    }
+  }
+
+  /// Human-readable permission name for display
+  private func permissionDisplayName(_ permType: String) -> String {
+    switch permType {
+    case "screen_recording": return "Screen Recording"
+    case "microphone": return "Microphone"
+    case "notifications": return "Notifications"
+    case "accessibility": return "Accessibility"
+    case "automation": return "Automation"
+    case "full_disk_access": return "Full Disk Access"
+    default: return permType
+    }
+  }
+
   private func handleOnboardingComplete() {
     log("OnboardingChatView: Chat step complete, advancing to next onboarding step")
+
+    // Clean up permission help timer
+    permissionHelpTimer?.cancel()
+    permissionHelpTimer = nil
 
     // Clean up parallel exploration
     explorationTask?.cancel()
