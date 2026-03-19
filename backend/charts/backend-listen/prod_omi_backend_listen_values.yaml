@@ -338,6 +338,8 @@ env:
     value: "300"
   - name: FAIR_USE_EXEMPT_UIDS
     value: ""
+  - name: FAIR_USE_RESTRICT_DAILY_DG_MS
+    value: "1800000"
   - name: METRICS_SECRET
     valueFrom:
       secretKeyRef:
