@@ -253,6 +253,7 @@ clang-format -i <files>
 - The pre-commit hook auto-formats staged code — no need to format manually before committing.
 - If push fails because the remote is ahead, pull with rebase first: `git pull --rebase && git push`.
 - Never push or create PRs unless explicitly asked — commit locally by default.
+- Always work in a git worktree for code changes. Use `EnterWorktree` at the start of a task to isolate your work.
 
 ### RELEASE command
 <!-- Added by @AaravGarg (Feb 4) -->

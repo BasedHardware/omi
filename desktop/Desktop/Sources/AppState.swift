@@ -982,37 +982,30 @@ class AppState: ObservableObject {
     }
   }
 
-  /// Check Full Disk Access by querying the user's TCC database for kTCCServiceSystemPolicyAllFiles.
+  /// Check Full Disk Access by probing FDA-protected paths.
+  /// The TCC database query is unreliable on macOS 15+ (schema changes, ad-hoc signing),
+  /// so we probe actual protected directories instead.
   func checkFullDiskAccess() {
-    guard let bundleId = Bundle.main.bundleIdentifier else { return }
     let home = FileManager.default.homeDirectoryForCurrentUser.path
-    let tccPath = "\(home)/Library/Application Support/com.apple.TCC/TCC.db"
-
-    let process = Process()
-    process.executableURL = URL(fileURLWithPath: "/usr/bin/sqlite3")
-    process.arguments = [
-      tccPath,
-      "SELECT auth_value FROM access WHERE service='kTCCServiceSystemPolicyAllFiles' AND client='\(bundleId)' LIMIT 1;",
+    // These paths are protected by Full Disk Access on all macOS versions.
+    // Try to list directory contents — if it succeeds, FDA is granted.
+    let protectedPaths = [
+      "\(home)/Library/Safari",
+      "\(home)/Library/Mail",
+      "\(home)/Library/Messages",
     ]
-    let pipe = Pipe()
-    process.standardOutput = pipe
-    process.standardError = Pipe()
-    do {
-      try process.run()
-      process.waitUntilExit()
-      let output =
-        String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)?
-        .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-      let granted = output == "2"
-      if granted != hasFullDiskAccess {
-        hasFullDiskAccess = granted
-        log("Full Disk Access: \(granted ? "granted" : "not granted")")
+
+    var granted = false
+    for path in protectedPaths {
+      if FileManager.default.fileExists(atPath: path) {
+        granted = (try? FileManager.default.contentsOfDirectory(atPath: path)) != nil
+        break
       }
-    } catch {
-      if hasFullDiskAccess {
-        hasFullDiskAccess = false
-        log("Full Disk Access: check failed, assuming not granted")
-      }
+    }
+
+    if granted != hasFullDiskAccess {
+      hasFullDiskAccess = granted
+      log("Full Disk Access: \(granted ? "granted" : "not granted") (file probe)")
     }
   }
 
