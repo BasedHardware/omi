@@ -25,7 +25,7 @@ Required files:
 Required tools:
   cargo, xcrun/swift, python3, npm, node, codesign, cloudflared (unless skipped)
 
-Port allocation (never use 8080 — Tailscale conflict):
+Port allocation (avoid 8080 to prevent port conflicts):
   Auth default: 10200    Backend default: 10201
 
 Examples:

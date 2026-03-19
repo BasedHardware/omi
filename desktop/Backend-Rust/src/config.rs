@@ -83,7 +83,7 @@ impl Config {
                 .ok()
                 .and_then(|p| p.parse().ok())
                 .unwrap_or_else(|| {
-                    eprintln!("WARNING: PORT not set — defaulting to 10201. Set PORT in .env (avoid 8080 — Tailscale conflict).");
+                    eprintln!("WARNING: PORT not set — defaulting to 10201. Set PORT in .env (avoid 8080 to prevent port conflicts).");
                     10201
                 }),
             gemini_api_key: env::var("GEMINI_API_KEY").ok(),

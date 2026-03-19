@@ -44,6 +44,6 @@ See `.env.example` for the full list. Key ones:
 
 ## Port allocation
 
-Pick any free port (never 8080 — conflicts with Tailscale). Default: 10200.
+Pick any free port (avoid 8080 to prevent port conflicts). Default: 10200.
 
 Google OAuth redirect URIs must be registered for your port in the GCP Console.
