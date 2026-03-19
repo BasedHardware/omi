@@ -6,6 +6,7 @@ on:
     paths:
       - 'desktop/**'
       - '!desktop/CHANGELOG.json'
+  workflow_dispatch:
 
 permissions:
   contents: write
