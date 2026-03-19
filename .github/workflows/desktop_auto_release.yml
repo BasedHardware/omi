@@ -138,14 +138,7 @@ jobs:
             GOOGLE_APPLICATION_CREDENTIALS=/app/google-credentials.json
             AGENT_GCS_BUCKET=based-hardware-agent
           secrets: |
-            GEMINI_API_KEY=GEMINI_API_KEY:latest
             ENCRYPTION_SECRET=ENCRYPTION_SECRET:latest
-            REDIS_DB_PASSWORD=REDIS_DB_PASSWORD:latest
-            FIREBASE_API_KEY=FIREBASE_API_KEY:latest
-            PINECONE_API_KEY=PINECONE_API_KEY:latest
-            REDIS_DB_HOST=REDIS_DB_HOST:latest
-            REDIS_DB_PORT=REDIS_DB_PORT:latest
-            PINECONE_HOST=PINECONE_HOST:latest
             DEEPGRAM_API_KEY=DESKTOP_DEEPGRAM_API_KEY:latest
             ANTHROPIC_API_KEY=DESKTOP_ANTHROPIC_API_KEY:latest
             GOOGLE_CALENDAR_API_KEY=DESKTOP_GOOGLE_CALENDAR_API_KEY:latest
