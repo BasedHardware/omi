@@ -1201,8 +1201,8 @@ struct OnboardingChatView: View {
     do {
       let gemini = try GeminiClient()
       let prompt =
-        "The user needs to grant \(permLabel) permission to the Omi app. Look at the screenshot and tell them exactly where to click or what to do. Keep it to 1-2 sentences."
-      let systemPrompt = "You are a helpful assistant guiding a user through macOS permission setup. Be concise and specific about what they see on screen."
+        "The user needs to grant \(permLabel) permission to the Omi app. Look at the screenshot. Tell them exactly where to click in ONE short sentence, max 15 words."
+      let systemPrompt = "You are a concise macOS setup helper. Give only the essential click instruction, nothing else."
 
       let responseSchema = GeminiRequest.GenerationConfig.ResponseSchema(
         type: "object",
