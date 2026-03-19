@@ -1906,8 +1906,8 @@ class _ManualFirmwareFlashPage extends StatefulWidget {
 
 class _ManualFirmwareFlashPageState extends State<_ManualFirmwareFlashPage> with FirmwareMixin {
   bool _confirmed = false;
-  String? _error; 
-
+  String? _error;
+ 
   @override
   void initState() {
     super.initState();
