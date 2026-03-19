@@ -70,6 +70,7 @@ jobs:
           env_vars: |
             FIREBASE_PROJECT_ID=based-hardware
             GOOGLE_APPLICATION_CREDENTIALS=/app/google-credentials.json
+            BASE_API_URL=https://desktop-backend-hhibjajaja-uc.a.run.app
           secrets: |
             GEMINI_API_KEY=GEMINI_API_KEY:latest
             ENCRYPTION_SECRET=ENCRYPTION_SECRET:latest
