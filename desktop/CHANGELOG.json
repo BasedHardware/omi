@@ -2,7 +2,8 @@
   "unreleased": [
     "Reduced auth error log spam with exponential backoff across all polling operations",
     "Fixed Tasks page showing misleading \"No Matching Tasks\" when user has no tasks",
-    "API keys are now served securely from the backend instead of bundled in the app"
+    "API keys are now served securely from the backend instead of bundled in the app",
+    "Fixed tasks disappearing when switching to Dashboard (missing safety guard on empty API responses)"
   ],
   "releases": [
     {
