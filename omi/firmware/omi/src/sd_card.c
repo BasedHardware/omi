@@ -301,14 +301,18 @@ static int sd_mount(void)
     }
 
     /* Write-test: create+write+read back a small probe file to detect corruption
-     * that only manifests during I/O (metadata CRC ok but data blocks damaged). */
+     * that only manifests during I/O (metadata CRC ok but data blocks damaged).
+     * Use lfs_file_opencfg with static buffer (lfs_finfo_buf) to avoid heap
+     * allocation — lfs_file_open would malloc LFS_CACHE_SIZE from the heap
+     * which may fail with -12 (NOMEM) during early boot. The info file is not
+     * yet open at this point so reusing its buffer is safe. */
     {
         lfs_file_t probe;
         static const char probe_path[] = ".probe";
         static const uint8_t probe_data[4] = {0xDE, 0xAD, 0xBE, 0xEF};
         uint8_t readback[4] = {0};
 
-        ret = lfs_file_open(&lfs_fs, &probe, probe_path, LFS_O_CREAT | LFS_O_RDWR | LFS_O_TRUNC);
+        ret = lfs_file_opencfg(&lfs_fs, &probe, probe_path, LFS_O_CREAT | LFS_O_RDWR | LFS_O_TRUNC, &lfs_finfo_cfg);
         if (ret < 0) {
             LOG_WRN("LFS probe open failed (%d), reformatting...", ret);
             lfs_unmount(&lfs_fs);
@@ -777,10 +781,8 @@ void sd_worker_thread(void)
         /* Sleep until either queue has data — avoids 10ms polling that
          * prevented the CPU from entering deep sleep (was the #1 cause
          * of the 22 mA vs 8 mA power regression vs FATFS). */
-        k_poll_event_init(&poll_events[0], K_POLL_TYPE_MSGQ_DATA_AVAILABLE,
-                          K_POLL_MODE_NOTIFY_ONLY, &sd_prio_msgq);
-        k_poll_event_init(&poll_events[1], K_POLL_TYPE_MSGQ_DATA_AVAILABLE,
-                          K_POLL_MODE_NOTIFY_ONLY, &sd_msgq);
+        k_poll_event_init(&poll_events[0], K_POLL_TYPE_MSGQ_DATA_AVAILABLE, K_POLL_MODE_NOTIFY_ONLY, &sd_prio_msgq);
+        k_poll_event_init(&poll_events[1], K_POLL_TYPE_MSGQ_DATA_AVAILABLE, K_POLL_MODE_NOTIFY_ONLY, &sd_msgq);
         k_poll(poll_events, 2, K_FOREVER);
 
         if (k_msgq_get(&sd_prio_msgq, &req, K_NO_WAIT) == 0) {

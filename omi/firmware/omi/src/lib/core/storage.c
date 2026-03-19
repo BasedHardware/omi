@@ -12,10 +12,10 @@
 #include <zephyr/logging/log.h>
 #include <zephyr/sys/atomic.h>
 
+#include "mic.h"
 #include "sd_card.h"
 #include "transport.h"
 #include "utils.h"
-#include "mic.h"
 #ifdef CONFIG_OMI_ENABLE_WIFI
 #include "wifi.h"
 #endif
@@ -37,9 +37,10 @@ static uint32_t current_read_offset = 0;
 #define STOP_COMMAND 3
 
 /* New multi-file sync commands */
-#define CMD_LIST_FILES 0x10  // Get list of audio files
-#define CMD_READ_FILE 0x11   // Read specific file: [cmd][file_index][offset:4]
-#define CMD_DELETE_FILE 0x12 // Delete specific file: [cmd][file_index]
+#define CMD_LIST_FILES 0x10     // Get list of audio files
+#define CMD_READ_FILE 0x11      // Read specific file: [cmd][file_index][offset:4]
+#define CMD_DELETE_FILE 0x12    // Delete specific file: [cmd][file_index]
+#define CMD_GET_SYNC_STATE 0x13 // Get persisted sync state: responds [ts:4 BE][offset:4 BE]
 
 #define INVALID_FILE_SIZE 3
 #define ZERO_FILE_SIZE 4
@@ -180,7 +181,7 @@ uint8_t transport_started = 0;
 #define SD_BLE_MAX_CHUNK 491
 #define TCP_CHUNK_COUNT 8
 #define STORAGE_BUFFER_SIZE (SD_BLE_MAX_CHUNK * TCP_CHUNK_COUNT + 5 * TCP_CHUNK_COUNT)
-static uint8_t storage_buffer[STORAGE_BUFFER_SIZE];                               /* Shared buffer for BLE and WiFi */
+static uint8_t storage_buffer[STORAGE_BUFFER_SIZE]; /* Shared buffer for BLE and WiFi */
 static uint32_t offset = 0;
 static uint8_t stop_started = 0;
 static uint8_t delete_started = 0;
@@ -411,6 +412,33 @@ static uint8_t parse_storage_command(void *buf, uint16_t len, struct bt_conn *co
 
         delete_file_index = file_index; /* Defer to storage thread */
         return 0xFF;
+    }
+
+    if (command == CMD_GET_SYNC_STATE) {
+        /* Return persisted sync state: [ts:4 BE][offset:4 BE]
+         * ts = timestamp of the file being synced (parsed from filename hex)
+         * offset = byte offset within that file */
+        char filename[MAX_FILENAME_LEN] = {0};
+        uint32_t off = 0;
+        get_offset(filename, &off);
+
+        uint32_t ts = 0;
+        if (filename[0] != '\0') {
+            ts = (uint32_t) strtoul(filename, NULL, 16);
+        }
+
+        uint8_t resp[8];
+        resp[0] = (ts >> 24) & 0xFF;
+        resp[1] = (ts >> 16) & 0xFF;
+        resp[2] = (ts >> 8) & 0xFF;
+        resp[3] = ts & 0xFF;
+        resp[4] = (off >> 24) & 0xFF;
+        resp[5] = (off >> 16) & 0xFF;
+        resp[6] = (off >> 8) & 0xFF;
+        resp[7] = off & 0xFF;
+        bt_gatt_notify(conn, &storage_service.attrs[1], resp, sizeof(resp));
+        LOG_INF("CMD_GET_SYNC_STATE: file=%s ts=%u offset=%u", filename, ts, off);
+        return 0xFF; /* Already sent response via notify */
     }
 
     /* ===== LEGACY COMMANDS ===== */
@@ -980,33 +1008,17 @@ void storage_write(void)
                     stop_started = 0;
                 } else {
                     save_offset(current_read_filename, current_read_offset);
-                    LOG_INF("File done: %s", current_read_filename);
+                    LOG_INF("File done: %s (offset=%u)", current_read_filename, current_read_offset);
 
-                    /* Auto-delete synced file if it's not the currently-recording file */
-                    {
-                        char recording_name[MAX_FILENAME_LEN] = {0};
-                        get_current_filename(recording_name, sizeof(recording_name));
-                        bool is_recording_file =
-                            (recording_name[0] != '\0' && strcmp(current_read_filename, recording_name) == 0);
-
-                        if (!is_recording_file && current_read_filename[0] != '\0') {
-                            LOG_INF("Auto-delete synced file: %s", current_read_filename);
-                            int del_ret = delete_audio_file(current_read_filename);
-                            if (del_ret < 0) {
-                                LOG_ERR("Failed to auto-delete %s: %d", current_read_filename, del_ret);
-                            }
-                            /* Clear saved offset since deleted file is gone */
-                            save_offset("", 0);
-                        } else if (is_recording_file) {
-                            LOG_INF("Skipping delete of active recording file: %s", current_read_filename);
-                        }
-                    }
+                    /* No auto-delete: the phone app will request deletion via
+                     * CMD_DELETE_FILE after it has confirmed successful receipt.
+                     * Clear saved offset since the file is fully sent. */
+                    save_offset("", 0);
 
 #ifdef CONFIG_OMI_ENABLE_WIFI
-                    /* WiFi sync: auto continue to next file */
+                    /* WiFi sync: auto continue to next file (no delete) */
                     if (is_wifi_on() && current_sync_file_index >= 0) {
-                        refresh_file_list_cache();
-                        int next_idx = 0; /* Re-scan from beginning since we deleted a file */
+                        int next_idx = current_sync_file_index + 1;
 
                         /* Skip files with 0 bytes */
                         while (next_idx < sync_file_count && sync_file_sizes[next_idx] == 0) {
@@ -1028,7 +1040,7 @@ void storage_write(void)
                         /* BLE: notify completion (legacy or manual sync) */
                         LOG_PRINTK("done. attempting to download more files\n");
                         uint8_t stop_result[1] = {100};
-                        (void)bt_gatt_notify(get_current_connection(), &storage_service.attrs[1], &stop_result, 1);
+                        (void) bt_gatt_notify(get_current_connection(), &storage_service.attrs[1], &stop_result, 1);
                         k_msleep(10);
                     }
                 }
