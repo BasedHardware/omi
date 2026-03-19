@@ -13,11 +13,7 @@ Future<Memory?> createMemoryServer(String content, String visibility, String cat
     url: '${Env.apiBaseUrl}v3/memories',
     headers: {},
     method: 'POST',
-    body: json.encode({
-      'content': encryptedContent,
-      'visibility': visibility,
-      'category': category,
-    }),
+    body: json.encode({'content': encryptedContent, 'visibility': visibility, 'category': category}),
   );
   if (response == null) return null;
   Logger.debug('createMemory response: ${response.body}');
@@ -77,12 +73,7 @@ Future<bool> deleteMemoryServer(String memoryId) async {
 }
 
 Future<bool> deleteAllMemoriesServer() async {
-  var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v3/memories',
-    headers: {},
-    method: 'DELETE',
-    body: '',
-  );
+  var response = await makeApiCall(url: '${Env.apiBaseUrl}v3/memories', headers: {}, method: 'DELETE', body: '');
   if (response == null) return false;
   Logger.debug('deleteAllMemories response: ${response.body}');
   return response.statusCode == 200;

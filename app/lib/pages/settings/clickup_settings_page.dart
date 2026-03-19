@@ -208,10 +208,7 @@ class _ClickUpSettingsPageState extends State<ClickUpSettingsPage> {
                 Expanded(
                   child: Text(
                     context.l10n.connectedAsUser(_clickupService.currentUserId!),
-                    style: const TextStyle(
-                      color: Colors.green,
-                      fontSize: 12,
-                    ),
+                    style: const TextStyle(color: Colors.green, fontSize: 12),
                   ),
                 ),
               ],
@@ -219,20 +216,10 @@ class _ClickUpSettingsPageState extends State<ClickUpSettingsPage> {
           ),
         Text(
           context.l10n.defaultWorkspace,
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 18,
-            fontWeight: FontWeight.w600,
-          ),
+          style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
         ),
         const SizedBox(height: 8),
-        Text(
-          context.l10n.tasksCreatedInWorkspace,
-          style: const TextStyle(
-            color: Color(0xFF8E8E93),
-            fontSize: 14,
-          ),
-        ),
+        Text(context.l10n.tasksCreatedInWorkspace, style: const TextStyle(color: Color(0xFF8E8E93), fontSize: 14)),
         const SizedBox(height: 16),
         ..._teams.map((team) {
           final teamId = team['id'].toString();
@@ -251,20 +238,9 @@ class _ClickUpSettingsPageState extends State<ClickUpSettingsPage> {
               child: Row(
                 children: [
                   Expanded(
-                    child: Text(
-                      teamName,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 16,
-                      ),
-                    ),
+                    child: Text(teamName, style: const TextStyle(color: Colors.white, fontSize: 16)),
                   ),
-                  if (isSelected)
-                    const Icon(
-                      Icons.check_circle,
-                      color: Colors.white,
-                      size: 24,
-                    ),
+                  if (isSelected) const Icon(Icons.check_circle, color: Colors.white, size: 24),
                 ],
               ),
             ),
@@ -274,42 +250,23 @@ class _ClickUpSettingsPageState extends State<ClickUpSettingsPage> {
         if (_selectedTeamId != null) ...[
           Text(
             context.l10n.defaultSpace,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 18,
-              fontWeight: FontWeight.w600,
-            ),
+            style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
           ),
           const SizedBox(height: 8),
-          Text(
-            context.l10n.selectSpaceInWorkspace,
-            style: const TextStyle(
-              color: Color(0xFF8E8E93),
-              fontSize: 14,
-            ),
-          ),
+          Text(context.l10n.selectSpaceInWorkspace, style: const TextStyle(color: Color(0xFF8E8E93), fontSize: 14)),
           const SizedBox(height: 16),
           if (_isLoadingSpaces)
             const Center(
-              child: Padding(
-                padding: EdgeInsets.all(20),
-                child: CircularProgressIndicator(),
-              ),
+              child: Padding(padding: EdgeInsets.all(20), child: CircularProgressIndicator()),
             )
           else if (_spaces.isEmpty)
             Container(
               padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: const Color(0xFF1C1C1E),
-                borderRadius: BorderRadius.circular(12),
-              ),
+              decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(12)),
               child: Center(
                 child: Text(
                   context.l10n.noSpacesInWorkspace,
-                  style: const TextStyle(
-                    color: Color(0xFF8E8E93),
-                    fontSize: 14,
-                  ),
+                  style: const TextStyle(color: Color(0xFF8E8E93), fontSize: 14),
                 ),
               ),
             )
@@ -331,20 +288,9 @@ class _ClickUpSettingsPageState extends State<ClickUpSettingsPage> {
                   child: Row(
                     children: [
                       Expanded(
-                        child: Text(
-                          spaceName,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 16,
-                          ),
-                        ),
+                        child: Text(spaceName, style: const TextStyle(color: Colors.white, fontSize: 16)),
                       ),
-                      if (isSelected)
-                        const Icon(
-                          Icons.check_circle,
-                          color: Colors.white,
-                          size: 24,
-                        ),
+                      if (isSelected) const Icon(Icons.check_circle, color: Colors.white, size: 24),
                     ],
                   ),
                 ),
@@ -355,42 +301,23 @@ class _ClickUpSettingsPageState extends State<ClickUpSettingsPage> {
         if (_selectedSpaceId != null) ...[
           Text(
             context.l10n.defaultList,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 18,
-              fontWeight: FontWeight.w600,
-            ),
+            style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
           ),
           const SizedBox(height: 8),
-          Text(
-            context.l10n.tasksAddedToList,
-            style: const TextStyle(
-              color: Color(0xFF8E8E93),
-              fontSize: 14,
-            ),
-          ),
+          Text(context.l10n.tasksAddedToList, style: const TextStyle(color: Color(0xFF8E8E93), fontSize: 14)),
           const SizedBox(height: 16),
           if (_isLoadingLists)
             const Center(
-              child: Padding(
-                padding: EdgeInsets.all(20),
-                child: CircularProgressIndicator(),
-              ),
+              child: Padding(padding: EdgeInsets.all(20), child: CircularProgressIndicator()),
             )
           else if (_lists.isEmpty)
             Container(
               padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: const Color(0xFF1C1C1E),
-                borderRadius: BorderRadius.circular(12),
-              ),
+              decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(12)),
               child: Center(
                 child: Text(
                   context.l10n.noListsInSpace,
-                  style: const TextStyle(
-                    color: Color(0xFF8E8E93),
-                    fontSize: 14,
-                  ),
+                  style: const TextStyle(color: Color(0xFF8E8E93), fontSize: 14),
                 ),
               ),
             )
@@ -412,20 +339,9 @@ class _ClickUpSettingsPageState extends State<ClickUpSettingsPage> {
                   child: Row(
                     children: [
                       Expanded(
-                        child: Text(
-                          listName,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 16,
-                          ),
-                        ),
+                        child: Text(listName, style: const TextStyle(color: Colors.white, fontSize: 16)),
                       ),
-                      if (isSelected)
-                        const Icon(
-                          Icons.check_circle,
-                          color: Colors.white,
-                          size: 24,
-                        ),
+                      if (isSelected) const Icon(Icons.check_circle, color: Colors.white, size: 24),
                     ],
                   ),
                 ),

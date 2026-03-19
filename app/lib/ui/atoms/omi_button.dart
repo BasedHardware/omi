@@ -70,32 +70,20 @@ class OmiButton extends AdaptiveWidget {
                         end: Alignment.bottomRight,
                       )
                     : LinearGradient(
-                        colors: [ResponsiveHelper.backgroundTertiary, ResponsiveHelper.backgroundTertiary]),
+                        colors: [ResponsiveHelper.backgroundTertiary, ResponsiveHelper.backgroundTertiary],
+                      ),
                 borderRadius: BorderRadius.circular(12),
                 boxShadow: enabled
-                    ? [
-                        BoxShadow(
-                          color: primaryColor.withOpacity(0.3),
-                          blurRadius: 8,
-                          offset: const Offset(0, 4),
-                        ),
-                      ]
+                    ? [BoxShadow(color: primaryColor.withOpacity(0.3), blurRadius: 8, offset: const Offset(0, 4))]
                     : null,
               ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  if (icon != null) ...[
-                    Icon(icon, size: 18, color: Colors.white),
-                    const SizedBox(width: 6),
-                  ],
+                  if (icon != null) ...[Icon(icon, size: 18, color: Colors.white), const SizedBox(width: 6)],
                   Text(
                     label,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                    ),
+                    style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600),
                   ),
                 ],
               ),
@@ -118,8 +106,11 @@ class OmiButton extends AdaptiveWidget {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   if (icon != null) ...[
-                    Icon(icon,
-                        size: 12, color: enabled ? ResponsiveHelper.textSecondary : ResponsiveHelper.textQuaternary),
+                    Icon(
+                      icon,
+                      size: 12,
+                      color: enabled ? ResponsiveHelper.textSecondary : ResponsiveHelper.textQuaternary,
+                    ),
                     const SizedBox(width: 6),
                   ],
                   Text(

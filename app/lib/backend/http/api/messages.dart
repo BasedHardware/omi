@@ -8,10 +8,7 @@ import 'package:omi/services/e2ee_middleware.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/other/string_utils.dart';
 
-Future<List<ServerMessage>> getMessagesServer({
-  String? appId,
-  bool dropdownSelected = false,
-}) async {
+Future<List<ServerMessage>> getMessagesServer({String? appId, bool dropdownSelected = false}) async {
   if (appId == 'no_selected') appId = null;
   // TODO: Add pagination
   var response = await makeApiCall(
@@ -74,14 +71,22 @@ ServerMessageChunk? parseMessageChunk(String line, String messageId) {
 
   if (line.startsWith('done: ')) {
     var text = decodeBase64(line.substring(6));
-    return ServerMessageChunk(messageId, text, MessageChunkType.done,
-        message: ServerMessage.fromJson(json.decode(text)));
+    return ServerMessageChunk(
+      messageId,
+      text,
+      MessageChunkType.done,
+      message: ServerMessage.fromJson(json.decode(text)),
+    );
   }
 
   if (line.startsWith('message: ')) {
     var text = decodeBase64(line.substring(9));
-    return ServerMessageChunk(messageId, text, MessageChunkType.message,
-        message: ServerMessage.fromJson(json.decode(text)));
+    return ServerMessageChunk(
+      messageId,
+      text,
+      MessageChunkType.message,
+      message: ServerMessage.fromJson(json.decode(text)),
+    );
   }
 
   return null;
@@ -95,10 +100,7 @@ Stream<ServerMessageChunk> sendMessageStreamServer(String text, {String? appId, 
 
   var messageId = "1000"; // Default new message
 
-  await for (var line in makeStreamingApiCall(
-    url: url,
-    body: jsonEncode({'text': text, 'file_ids': filesId}),
-  )) {
+  await for (var line in makeStreamingApiCall(url: url, body: jsonEncode({'text': text, 'file_ids': filesId}))) {
     var messageChunk = parseMessageChunk(line, messageId);
     if (messageChunk != null) {
       yield messageChunk;
@@ -150,10 +152,7 @@ Future<List<MessageFile>?> uploadFilesServer(List<File> files, {String? appId}) 
   }
 
   try {
-    var response = await makeMultipartApiCall(
-      url: url,
-      files: files,
-    );
+    var response = await makeMultipartApiCall(url: url, files: files);
 
     if (response.statusCode == 200) {
       Logger.debug('uploadFileServer response body: ${jsonDecode(response.body)}');

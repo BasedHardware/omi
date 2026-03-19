@@ -46,8 +46,10 @@ class _DataProtectionSectionState extends State<DataProtectionSection> {
           children: [
             const Icon(Icons.lock_person_outlined, color: Colors.white),
             const SizedBox(width: 10),
-            Text(context.l10n.maximumSecurityE2ee,
-                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+            Text(
+              context.l10n.maximumSecurityE2ee,
+              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+            ),
           ],
         ),
         content: RichText(
@@ -81,8 +83,10 @@ class _DataProtectionSectionState extends State<DataProtectionSection> {
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(),
-            child:
-                Text(context.l10n.ok, style: const TextStyle(color: Colors.grey, fontWeight: FontWeight.bold)),
+            child: Text(
+              context.l10n.ok,
+              style: const TextStyle(color: Colors.grey, fontWeight: FontWeight.bold),
+            ),
           ),
           ElevatedButton(
             onPressed: () {
@@ -238,10 +242,7 @@ class _DataProtectionSectionState extends State<DataProtectionSection> {
               ),
             ],
             const SizedBox(height: 12),
-            _buildInfoRow(
-              Icons.shield_outlined,
-              context.l10n.dataAlwaysEncrypted,
-            ),
+            _buildInfoRow(Icons.shield_outlined, context.l10n.dataAlwaysEncrypted),
           ],
         );
       },
@@ -289,7 +290,7 @@ class _DataProtectionSectionState extends State<DataProtectionSection> {
                 backgroundColor: Theme.of(context).colorScheme.secondary,
                 foregroundColor: Colors.white,
               ),
-            )
+            ),
           ],
         ),
       );
@@ -499,11 +500,7 @@ class _DataProtectionSectionState extends State<DataProtectionSection> {
                     children: [
                       Text(
                         context.l10n.endToEndEncryption,
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white,
-                          fontSize: 16,
-                        ),
+                        style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 16),
                       ),
                       const SizedBox(width: 8),
                       if (isActive)
@@ -556,10 +553,7 @@ class _DataProtectionSectionState extends State<DataProtectionSection> {
           Icon(icon, color: Colors.grey, size: 16),
           const SizedBox(width: 12),
           Expanded(
-            child: Text(
-              text,
-              style: const TextStyle(color: Colors.grey, fontSize: 14, height: 1.4),
-            ),
+            child: Text(text, style: const TextStyle(color: Colors.grey, fontSize: 14, height: 1.4)),
           ),
         ],
       ),

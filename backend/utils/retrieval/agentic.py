@@ -59,10 +59,13 @@ import logging
 try:
     from langsmith import traceable as _traceable
 except ImportError:
+
     def _traceable(**kwargs):
         def decorator(func):
             return func
+
         return decorator
+
 
 logger = logging.getLogger(__name__)
 
@@ -243,7 +246,7 @@ def _convert_tools(core_tools: list, app_tools: list = None) -> tuple:
         schemas.append(_langchain_tool_to_anthropic(t, defer_loading=False))
 
     # App tools — deferred, discovered on-demand
-    for t in (app_tools or []):
+    for t in app_tools or []:
         schemas.append(_langchain_tool_to_anthropic(t, defer_loading=True))
 
     # Registry includes ALL tools (core + app) for execution
@@ -349,9 +352,7 @@ async def _run_anthropic_agent_stream(
     and feeds results back until the model stops requesting tools.
     """
     # System prompt with cache_control for Anthropic prompt caching
-    system_blocks = [
-        {"type": "text", "text": system_prompt, "cache_control": {"type": "ephemeral"}}
-    ]
+    system_blocks = [{"type": "text", "text": system_prompt, "cache_control": {"type": "ephemeral"}}]
 
     loop_iteration = 0
 
@@ -375,7 +376,12 @@ async def _run_anthropic_agent_stream(
                             if first_text_in_iteration and loop_iteration > 1 and full_response:
                                 last_char = full_response[-1][-1] if full_response[-1] else ''
                                 first_char = event.delta.text[0] if event.delta.text else ''
-                                if last_char and first_char and last_char not in (' ', '\n') and first_char not in (' ', '\n'):
+                                if (
+                                    last_char
+                                    and first_char
+                                    and last_char not in (' ', '\n')
+                                    and first_char not in (' ', '\n')
+                                ):
                                     full_response.append('\n\n')
                                     await callback.put_data('\n\n')
                             first_text_in_iteration = False
@@ -450,11 +456,13 @@ async def _run_anthropic_agent_stream(
                 await callback.end()
                 return
 
-            tool_results.append({
-                "type": "tool_result",
-                "tool_use_id": block.id,
-                "content": result,
-            })
+            tool_results.append(
+                {
+                    "type": "tool_result",
+                    "tool_use_id": block.id,
+                    "content": result,
+                }
+            )
 
         # Append assistant message + tool results for next iteration
         # Serialize content blocks for the messages array
@@ -463,12 +471,14 @@ async def _run_anthropic_agent_stream(
             if block.type == "text":
                 assistant_content.append({"type": "text", "text": block.text})
             elif block.type == "tool_use":
-                assistant_content.append({
-                    "type": "tool_use",
-                    "id": block.id,
-                    "name": block.name,
-                    "input": block.input,
-                })
+                assistant_content.append(
+                    {
+                        "type": "tool_use",
+                        "id": block.id,
+                        "name": block.name,
+                        "input": block.input,
+                    }
+                )
 
         messages.append({"role": "assistant", "content": assistant_content})
         messages.append({"role": "user", "content": tool_results})
@@ -505,6 +515,7 @@ async def execute_agentic_chat_stream(
     prompt_name, prompt_commit, prompt_source = None, None, None
     try:
         from utils.observability.langsmith_prompts import get_prompt_metadata
+
         prompt_name, prompt_commit, prompt_source = get_prompt_metadata()
     except Exception as e:
         logger.error(f"Could not get prompt metadata: {e}")

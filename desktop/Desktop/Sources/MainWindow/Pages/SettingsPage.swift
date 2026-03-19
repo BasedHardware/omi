@@ -243,41 +243,42 @@ struct SettingsContentView: View {
         case account = "Account"
         case planUsage = "Plan and Usage"
         case aiChat = "AI Chat"
+        case floatingBar = "Floating Bar"
         case advanced = "Advanced"
         case about = "About"
     }
 
     enum AdvancedSubsection: String, CaseIterable {
+        case resetOnboarding = "Reset Onboarding"
         case aiUserProfile = "AI User Profile"
         case stats = "Your Stats"
-        case featureTiers = "Feature Tiers"
         case focusAssistant = "Focus Assistant"
         case taskAssistant = "Task Assistant"
         case adviceAssistant = "Advice Assistant"
         case memoryAssistant = "Memory Assistant"
         case analysisThrottle = "Analysis Throttle"
         case goals = "Goals"
-        case askOmiFloatingBar = "Ask omi Floating Bar"
         case preferences = "Preferences"
         case troubleshooting = "Troubleshooting"
         case gmailReader = "Gmail Reader"
+        case calendarSync = "Calendar Sync"
         case developerKeys = "Developer API Keys"
 
         var icon: String {
             switch self {
+            case .resetOnboarding: return "arrow.counterclockwise"
             case .aiUserProfile: return "brain"
             case .stats: return "chart.bar"
-            case .featureTiers: return "lock.shield"
             case .focusAssistant: return "eye.fill"
             case .taskAssistant: return "checklist"
             case .adviceAssistant: return "lightbulb.fill"
             case .memoryAssistant: return "brain.head.profile"
             case .analysisThrottle: return "clock.arrow.2.circlepath"
             case .goals: return "target"
-            case .askOmiFloatingBar: return "sparkles"
             case .preferences: return "slider.horizontal.3"
             case .troubleshooting: return "wrench.and.screwdriver"
             case .gmailReader: return "envelope.fill"
+            case .calendarSync: return "calendar"
             case .developerKeys: return "key"
             }
         }
@@ -294,6 +295,15 @@ struct SettingsContentView: View {
     @State private var gmailMemoriesSaved: Int = 0
     @State private var gmailReadError: String?
     @State private var gmailLastFetched: Date?
+
+    // Calendar Sync states
+    @State private var calendarEvents: [CalendarEvent] = []
+    @State private var isReadingCalendar: Bool = false
+    @State private var calendarMemoriesCreated: Int = 0
+    @State private var calendarTasksCreated: Int = 0
+    @State private var calendarSyncError: String?
+    @State private var calendarLastSynced: Date?
+
     @State private var isDeletingAccount: Bool = false
     @State private var deleteAccountError: String?
 
@@ -377,6 +387,8 @@ struct SettingsContentView: View {
                     planUsageSection
                 case .aiChat:
                     aiChatSection
+                case .floatingBar:
+                    floatingBarSection
                 case .advanced:
                     advancedSection
                 case .about:
@@ -392,8 +404,8 @@ struct SettingsContentView: View {
             loadSubscriptionInfo()
             // Sync transcription state with appState
             isTranscribing = appState.isTranscribing
-            // Sync floating bar state
-            showAskOmiBar = FloatingControlBarManager.shared.isVisible
+            // Sync floating bar state with persisted preference (not transient visibility)
+            showAskOmiBar = FloatingControlBarManager.shared.isEnabled
             // Refresh notification permission state
             appState.checkNotificationPermission()
         }
@@ -417,10 +429,7 @@ struct SettingsContentView: View {
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: .navigateToFloatingBarSettings)) { _ in
-            selectedSection = .advanced
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
-                highlightedSettingId = "advanced.askomifloatingbar"
-            }
+            selectedSection = .floatingBar
         }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             // Refresh notification permission when app becomes active (user may have changed it in System Settings)
@@ -604,39 +613,6 @@ struct SettingsContentView: View {
                                 .fill(OmiColors.warning.opacity(0.1))
                         )
                     }
-                }
-            }
-
-            // Ask Omi floating bar toggle
-            settingsCard(settingId: "general.askomi") {
-                HStack(spacing: 16) {
-                    Circle()
-                        .fill(showAskOmiBar ? OmiColors.success : OmiColors.textTertiary.opacity(0.3))
-                        .frame(width: 12, height: 12)
-                        .shadow(color: showAskOmiBar ? OmiColors.success.opacity(0.5) : .clear, radius: 6)
-
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Ask omi")
-                            .scaledFont(size: 16, weight: .semibold)
-                            .foregroundColor(OmiColors.textPrimary)
-
-                        Text(showAskOmiBar ? "Floating bar is visible (⌘\\)" : "Floating bar is hidden (⌘\\)")
-                            .scaledFont(size: 13)
-                            .foregroundColor(OmiColors.textTertiary)
-                    }
-
-                    Spacer()
-
-                    Toggle("", isOn: $showAskOmiBar)
-                        .toggleStyle(.switch)
-                        .labelsHidden()
-                        .onChange(of: showAskOmiBar) { _, newValue in
-                            if newValue {
-                                FloatingControlBarManager.shared.show()
-                            } else {
-                                FloatingControlBarManager.shared.hide()
-                            }
-                        }
                 }
             }
 
@@ -1752,6 +1728,39 @@ struct SettingsContentView: View {
 
     // MARK: - AI Chat Section
 
+    private var floatingBarSection: some View {
+        VStack(spacing: 20) {
+            // Show floating bar toggle
+            settingsCard(settingId: "floatingbar.show") {
+                HStack(spacing: 16) {
+                    Circle()
+                        .fill(showAskOmiBar ? OmiColors.success : OmiColors.textTertiary.opacity(0.3))
+                        .frame(width: 12, height: 12)
+                        .shadow(color: showAskOmiBar ? OmiColors.success.opacity(0.5) : .clear, radius: 6)
+
+                    Text("Show floating bar")
+                        .scaledFont(size: 16, weight: .semibold)
+                        .foregroundColor(OmiColors.textPrimary)
+
+                    Spacer()
+
+                    Toggle("", isOn: $showAskOmiBar)
+                        .toggleStyle(.switch)
+                        .labelsHidden()
+                        .onChange(of: showAskOmiBar) { _, newValue in
+                            if newValue {
+                                FloatingControlBarManager.shared.show()
+                            } else {
+                                FloatingControlBarManager.shared.hide()
+                            }
+                        }
+                }
+            }
+
+            ShortcutsSettingsSection(highlightedSettingId: $highlightedSettingId)
+        }
+    }
+
     private var aiChatSection: some View {
         VStack(spacing: 20) {
             // AI Provider card
@@ -2494,12 +2503,12 @@ struct SettingsContentView: View {
 
     private var advancedSection: some View {
         VStack(spacing: 24) {
+            advancedCategoryHeader(title: "Reset Onboarding", icon: "arrow.counterclockwise")
+            resetOnboardingSubsection
             advancedCategoryHeader(title: "AI User Profile", icon: "brain")
             aiUserProfileSubsection
             advancedCategoryHeader(title: "Your Stats", icon: "chart.bar")
             statsSubsection
-            advancedCategoryHeader(title: "Feature Tiers", icon: "lock.shield")
-            featureTiersSubsection
             advancedCategoryHeader(title: "Focus Assistant", icon: "eye.fill")
             focusAssistantSubsection
             advancedCategoryHeader(title: "Task Assistant", icon: "checklist")
@@ -2512,14 +2521,14 @@ struct SettingsContentView: View {
             analysisThrottleSubsection
             advancedCategoryHeader(title: "Goals", icon: "target")
             goalsSubsection
-            advancedCategoryHeader(title: "Ask omi Floating Bar", icon: "sparkles")
-            askOmiFloatingBarSubsection
             advancedCategoryHeader(title: "Preferences", icon: "slider.horizontal.3")
             preferencesSubsection
             advancedCategoryHeader(title: "Troubleshooting", icon: "wrench.and.screwdriver")
             troubleshootingSubsection
             advancedCategoryHeader(title: "Gmail Reader", icon: "envelope.fill")
             gmailReaderSubsection
+            advancedCategoryHeader(title: "Calendar Sync", icon: "calendar")
+            calendarSyncSubsection
             advancedCategoryHeader(title: "Developer API Keys", icon: "key")
             developerKeysSubsection
         }
@@ -3741,12 +3750,6 @@ struct SettingsContentView: View {
         }
     }
 
-    private var askOmiFloatingBarSubsection: some View {
-        VStack(spacing: 20) {
-            ShortcutsSettingsSection(highlightedSettingId: $highlightedSettingId)
-        }
-    }
-
     private var preferencesSubsection: some View {
         VStack(spacing: 20) {
             // Multiple Chat Sessions toggle
@@ -3922,8 +3925,14 @@ struct SettingsContentView: View {
                 Text("This will re-scan your files and update your AI profile with the latest information about your projects and interests.")
             }
 
-            // Reset Onboarding
-            settingsCard(settingId: "advanced.troubleshooting.resetonboarding") {
+        }
+    }
+
+    // MARK: - Reset Onboarding Subsection
+
+    private var resetOnboardingSubsection: some View {
+        VStack(spacing: 20) {
+            settingsCard(settingId: "advanced.resetonboarding") {
                 HStack(spacing: 16) {
                     Image(systemName: "arrow.counterclockwise")
                         .scaledFont(size: 16)
@@ -4101,6 +4110,105 @@ struct SettingsContentView: View {
         }
 
         isReadingGmail = false
+    }
+
+    // MARK: - Calendar Sync Subsection
+
+    private var calendarSyncSubsection: some View {
+        VStack(spacing: 20) {
+            settingsCard(settingId: "advanced.calendar.sync") {
+                HStack(spacing: 16) {
+                    Image(systemName: "calendar.badge.clock")
+                        .scaledFont(size: 16)
+                        .foregroundColor(OmiColors.textSecondary)
+                        .frame(width: 24, height: 24)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Sync Calendar")
+                            .scaledFont(size: 16, weight: .semibold)
+                            .foregroundColor(OmiColors.textPrimary)
+                        if let lastSynced = calendarLastSynced {
+                            Text("Last synced \(lastSynced, formatter: relativeDateFormatter)")
+                                .scaledFont(size: 13)
+                                .foregroundColor(OmiColors.textTertiary)
+                        } else {
+                            Text("Reads Google Calendar using browser cookies — no OAuth needed")
+                                .scaledFont(size: 13)
+                                .foregroundColor(OmiColors.textTertiary)
+                        }
+                    }
+                    Spacer()
+                    Button(action: { Task { await syncCalendar() } }) {
+                        if isReadingCalendar {
+                            ProgressView().scaleEffect(0.7).frame(width: 80, height: 22)
+                        } else {
+                            Text("Sync Calendar")
+                                .scaledFont(size: 13, weight: .medium)
+                                .foregroundColor(.white)
+                                .padding(.horizontal, 14)
+                                .padding(.vertical, 6)
+                                .background(RoundedRectangle(cornerRadius: 6).fill(OmiColors.purplePrimary))
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(isReadingCalendar)
+                    .accessibilityIdentifier("syncCalendarButton")
+                }
+            }
+            if let error = calendarSyncError {
+                settingsCard(settingId: "advanced.calendar.error") {
+                    HStack(spacing: 12) {
+                        Image(systemName: "exclamationmark.triangle.fill").foregroundColor(.orange)
+                        Text(error).scaledFont(size: 13).foregroundColor(OmiColors.textSecondary).lineLimit(3)
+                        Spacer()
+                    }
+                }
+            }
+            if calendarMemoriesCreated > 0 || calendarTasksCreated > 0 {
+                settingsCard(settingId: "advanced.calendar.saved") {
+                    HStack(spacing: 12) {
+                        Image(systemName: "checkmark.circle.fill").foregroundColor(.green)
+                        Text("\(calendarMemoriesCreated) memories and \(calendarTasksCreated) tasks created from \(calendarEvents.count) events")
+                            .scaledFont(size: 13).foregroundColor(OmiColors.textSecondary)
+                        Spacer()
+                    }
+                }
+            }
+            if !calendarEvents.isEmpty {
+                VStack(spacing: 8) {
+                    ForEach(calendarEvents.prefix(15)) { event in
+                        settingsCard(settingId: "advanced.calendar.event.\(event.id)") {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(event.summary).scaledFont(size: 14, weight: .medium).foregroundColor(OmiColors.textPrimary).lineLimit(1)
+                                Text(event.startTime).scaledFont(size: 12).foregroundColor(OmiColors.textSecondary).lineLimit(1)
+                                if !event.attendees.isEmpty {
+                                    Text("With: \(event.attendees.prefix(3).joined(separator: ", "))").scaledFont(size: 12).foregroundColor(OmiColors.textTertiary).lineLimit(1)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private func syncCalendar() async {
+        isReadingCalendar = true
+        calendarSyncError = nil
+        calendarMemoriesCreated = 0
+        calendarTasksCreated = 0
+        do {
+            let events = try await CalendarReaderService.shared.readEvents(daysBack: 30, daysForward: 14)
+            calendarEvents = events
+            calendarLastSynced = Date()
+            if !events.isEmpty {
+                let result = await CalendarReaderService.shared.synthesizeFromEvents(events: events)
+                calendarMemoriesCreated = result.memories
+                calendarTasksCreated = result.tasks
+            }
+        } catch {
+            calendarSyncError = error.localizedDescription
+        }
+        isReadingCalendar = false
     }
 
     private var relativeDateFormatter: DateFormatter {
@@ -4355,7 +4463,8 @@ struct SettingsContentView: View {
                 VStack(spacing: 16) {
                     // App info
                     HStack(spacing: 16) {
-                        if let logoImage = NSImage(contentsOf: Bundle.resourceBundle.url(forResource: "herologo", withExtension: "png")!) {
+                        if let logoURL = Bundle.resourceBundle.url(forResource: "herologo", withExtension: "png"),
+                           let logoImage = NSImage(contentsOf: logoURL) {
                             Image(nsImage: logoImage)
                                 .resizable()
                                 .aspectRatio(contentMode: .fit)
@@ -4429,6 +4538,7 @@ struct SettingsContentView: View {
                         }
                         .buttonStyle(.bordered)
                         .disabled(!updaterViewModel.canCheckForUpdates)
+                        .help(updaterViewModel.canCheckForUpdates ? "Check for app updates" : "Already checking for updates…")
                     }
 
                     if let lastCheck = updaterViewModel.lastUpdateCheckDate {

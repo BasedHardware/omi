@@ -95,7 +95,8 @@ class AgentChatService {
             final text = msg['text'] as String? ?? msg['content'] as String? ?? '';
             final elapsed = _queryStopwatch?.elapsedMilliseconds ?? 0;
             agentLog(
-                '[TIMING] Event: type=$type +${elapsed}ms | text=${text.length > 80 ? '${text.substring(0, 80)}...' : text}');
+              '[TIMING] Event: type=$type +${elapsed}ms | text=${text.length > 80 ? '${text.substring(0, 80)}...' : text}',
+            );
 
             // Skip init/prewarm messages that arrive before or between queries
             if (type == 'init' || type == 'prewarm' || type == 'prewarm_ack') return;

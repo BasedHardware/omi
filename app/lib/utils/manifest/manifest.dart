@@ -23,11 +23,7 @@ class Manifest {
     return manifest;
   }
 
-  Manifest({
-    required this.formatVersion,
-    required this.time,
-    required this.files,
-  });
+  Manifest({required this.formatVersion, required this.time, required this.files});
 }
 
 @JsonSerializable(fieldRename: FieldRename.snake)

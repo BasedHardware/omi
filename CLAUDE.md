@@ -8,6 +8,48 @@
 
 - Never ask for permission to access folders, run commands, search the web, or use tools. Just do it.
 - Never ask for confirmation. Just act. Make decisions autonomously and proceed without checking in.
+- You have full access to the user's computer — browser, desktop, all apps. Never ask the user to do something you can do yourself (sign in, click buttons, dismiss dialogs, etc.).
+
+## Computer Control (clicking, typing, screenshots)
+
+You have multiple MCP tools for controlling the Mac. Use the **right tool for each job** — don't bounce between tools.
+
+### For clicking at coordinates — use `cliclick` (FASTEST)
+```bash
+cliclick c:X,Y        # click
+cliclick dc:X,Y       # double-click
+cliclick rc:X,Y       # right-click
+cliclick m:X,Y        # move mouse
+cliclick t:"text"     # type text
+cliclick p            # print current mouse position
+cliclick kd:cmd ku:cmd  # key down/up
+```
+`cliclick` uses CGEvent, handles Retina correctly, works across all displays. No MCP overhead.
+
+### For screenshots — use `codriver`
+- `mcp__codriver__desktop_screenshot` — capture screen (use `scale: 0.5` for speed)
+- `mcp__codriver__desktop_ocr` — find text positions on screen
+- `mcp__codriver__desktop_windows` — list/focus windows
+
+### Workflow: screenshot → find target → click
+1. Take screenshot with `codriver` to see the screen
+2. Identify the coordinates of what to click (use OCR if needed)
+3. Click with `cliclick c:X,Y` via Bash — instant, reliable
+
+### For native macOS app testing — use `agent-swift`
+Already documented below. Use for connected SwiftUI/AppKit apps.
+
+### For browser interaction — priority order:
+1. **`playwright`** MCP — headless browser, most reliable for web automation
+2. **`claude-in-chrome`** — for existing browser tabs (only when extension is connected)
+3. **`codriver` screenshot + `cliclick`** — fallback if browser tools fail
+
+### Rules:
+- NEVER try 3+ different click tools for the same action — pick one and commit
+- For multi-monitor: always check coordinates against the screenshot scale factor
+- `codriver` screenshots at `scale: 0.5` means multiply coordinates by 2 before clicking
+- Prefer `cliclick` over `automac`/`mac-use-mcp` click — they have coordinate bugs on multi-monitor
+- When a tool errors (e.g., "helper binary not found", "extension not connected"), immediately switch to the fallback — don't retry the broken tool
 
 ## Setup
 
@@ -173,6 +215,7 @@ agent-swift screenshot /tmp/after-change.png  # capture app window
 - 15 commands: `doctor`, `connect`, `disconnect`, `status`, `snapshot`, `press`, `click`, `fill`, `get`, `find`, `screenshot`, `is`, `wait`, `scroll`, `schema`.
 - Works with any macOS app (SwiftUI, AppKit, Electron) — no Marionette or app-side setup.
 - Bundle ID for dev: `com.omi.desktop-dev`. For prod: `com.omi.computer-macos`.
+- If you launch a custom-named desktop test build, keep the bundle suffix and app name identical so auth callbacks reopen the correct app. Example: `1233.app` should use `com.omi.1233`, `search.app` should use `com.omi.search`, and mismatches like `1233.app` with `com.omi.desktop-dev` are not allowed.
 - **App flows & exploration skill**: See `desktop/e2e/SKILL.md` for navigation architecture, screen map, interaction patterns (click vs press), and known flows. Read this when developing features or exploring the app.
 - When asked to build or rebuild the desktop app for testing, don't stop at a successful compile: launch the dev app, interact with it programmatically to confirm it actually runs, and report any environment blocker if full interaction is impossible.
 
@@ -210,6 +253,7 @@ clang-format -i <files>
 - The pre-commit hook auto-formats staged code — no need to format manually before committing.
 - If push fails because the remote is ahead, pull with rebase first: `git pull --rebase && git push`.
 - Never push or create PRs unless explicitly asked — commit locally by default.
+- Always work in a git worktree for code changes. Use `EnterWorktree` at the start of a task to isolate your work.
 
 ### RELEASE command
 <!-- Added by @AaravGarg (Feb 4) -->

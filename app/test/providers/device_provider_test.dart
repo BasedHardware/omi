@@ -53,10 +53,7 @@ void main() {
       expect(notifyCount, 1);
 
       // Small change (2%) within 15 minutes - should NOT notify
-      final result = provider.updateBatteryLevelForTesting(
-        52,
-        now: now.add(const Duration(minutes: 5)),
-      );
+      final result = provider.updateBatteryLevelForTesting(52, now: now.add(const Duration(minutes: 5)));
 
       expect(result, false);
       expect(notifyCount, 1); // No additional notification
@@ -71,10 +68,7 @@ void main() {
       expect(notifyCount, 1);
 
       // 5% change - should notify
-      final result = provider.updateBatteryLevelForTesting(
-        45,
-        now: now.add(const Duration(minutes: 1)),
-      );
+      final result = provider.updateBatteryLevelForTesting(45, now: now.add(const Duration(minutes: 1)));
 
       expect(result, true);
       expect(notifyCount, 2);
@@ -88,10 +82,7 @@ void main() {
       expect(notifyCount, 1);
 
       // Small change but 15 minutes elapsed - should notify
-      final result = provider.updateBatteryLevelForTesting(
-        51,
-        now: now.add(const Duration(minutes: 15)),
-      );
+      final result = provider.updateBatteryLevelForTesting(51, now: now.add(const Duration(minutes: 15)));
 
       expect(result, true);
       expect(notifyCount, 2);
@@ -105,10 +96,7 @@ void main() {
       expect(notifyCount, 1);
 
       // Cross below 20% (only 6% change, but crosses threshold)
-      final result = provider.updateBatteryLevelForTesting(
-        19,
-        now: now.add(const Duration(minutes: 1)),
-      );
+      final result = provider.updateBatteryLevelForTesting(19, now: now.add(const Duration(minutes: 1)));
 
       expect(result, true);
       expect(notifyCount, 2);
@@ -122,10 +110,7 @@ void main() {
       expect(notifyCount, 1);
 
       // Cross above 20% (only 6% change, but crosses threshold)
-      final result = provider.updateBatteryLevelForTesting(
-        21,
-        now: now.add(const Duration(minutes: 1)),
-      );
+      final result = provider.updateBatteryLevelForTesting(21, now: now.add(const Duration(minutes: 1)));
 
       expect(result, true);
       expect(notifyCount, 2);
@@ -139,10 +124,7 @@ void main() {
       expect(notifyCount, 1);
 
       // Small change staying above 20% - should NOT notify
-      final result = provider.updateBatteryLevelForTesting(
-        23,
-        now: now.add(const Duration(minutes: 1)),
-      );
+      final result = provider.updateBatteryLevelForTesting(23, now: now.add(const Duration(minutes: 1)));
 
       expect(result, false);
       expect(notifyCount, 1);
@@ -159,10 +141,7 @@ void main() {
       provider.resetBatteryThrottlingForTesting();
 
       // Now same value should trigger notification again (as if first reading)
-      final result = provider.updateBatteryLevelForTesting(
-        50,
-        now: now.add(const Duration(minutes: 1)),
-      );
+      final result = provider.updateBatteryLevelForTesting(50, now: now.add(const Duration(minutes: 1)));
 
       expect(result, true);
       expect(notifyCount, 2);
@@ -221,8 +200,12 @@ void main() {
     test('alert fires again after recovery — the core bug scenario', () {
       // 50% → 15% (alert) → 25% (recover) → 10% (should alert AGAIN)
       final alerts = runSequence([50, 15, 25, 10]);
-      expect(alerts, [false, true, false, true],
-          reason: 'Before fix: [false, true, false, false] — second alert never fires');
+      expect(alerts, [
+        false,
+        true,
+        false,
+        true,
+      ], reason: 'Before fix: [false, true, false, false] — second alert never fires');
     });
 
     test('full lifecycle: multiple charge cycles', () {

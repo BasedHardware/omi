@@ -2,20 +2,20 @@ import Foundation
 
 actor APIClient {
     static let shared = APIClient()
-
-    // OMI Backend base URL - loaded from .env file (OMI_API_URL)
-    // Production URL is set in .env.app, dev URL is set by run.sh
+    // OMI Backend base URL — must be set via OMI_API_URL env var (in .env)
     var baseURL: String {
         // First check getenv() for values set by setenv() in loadEnvironment()
         if let cString = getenv("OMI_API_URL"), let url = String(validatingUTF8: cString), !url.isEmpty {
-            return url.hasSuffix("/") ? url : url + "/"
+            let normalized = url.hasSuffix("/") ? url : url + "/"
+            return normalized
         }
         // Fallback to ProcessInfo (launch-time snapshot)
         if let envURL = ProcessInfo.processInfo.environment["OMI_API_URL"], !envURL.isEmpty {
-            return envURL.hasSuffix("/") ? envURL : envURL + "/"
+            let normalized = envURL.hasSuffix("/") ? envURL : envURL + "/"
+            return normalized
         }
-        // No hardcoded default - must be set via .env file
-        fatalError("OMI_API_URL not set. Ensure .env file is present in app bundle.")
+        NSLog("OMI API: OMI_API_URL not set — API calls will fail")
+        return ""
     }
 
     let session: URLSession
@@ -2030,7 +2030,34 @@ extension APIClient {
             throw APIError.httpError(statusCode: (response as? HTTPURLResponse)?.statusCode ?? 0)
         }
 
-        return try decoder.decode(Goal.self, from: data)
+        let goal = try decoder.decode(Goal.self, from: data)
+        goalsCache = nil
+        return goal
+    }
+
+    /// Updates editable goal fields.
+    func updateGoal(goalId: String, title: String, currentValue: Double, targetValue: Double) async throws -> Goal {
+        struct UpdateGoalRequest: Encodable {
+            let title: String
+            let currentValue: Double
+            let targetValue: Double
+
+            enum CodingKeys: String, CodingKey {
+                case title
+                case currentValue = "current_value"
+                case targetValue = "target_value"
+            }
+        }
+
+        let request = UpdateGoalRequest(
+            title: title,
+            currentValue: currentValue,
+            targetValue: targetValue
+        )
+
+        let goal: Goal = try await patch("v1/goals/\(goalId)", body: request)
+        goalsCache = nil
+        return goal
     }
 
     /// Gets completed goals for history
@@ -4578,11 +4605,15 @@ extension APIClient {
         let deepgramApiKey: String?
         let geminiApiKey: String?
         let anthropicApiKey: String?
+        let firebaseApiKey: String?
+        let googleCalendarApiKey: String?
 
         enum CodingKeys: String, CodingKey {
             case deepgramApiKey = "deepgram_api_key"
             case geminiApiKey = "gemini_api_key"
             case anthropicApiKey = "anthropic_api_key"
+            case firebaseApiKey = "firebase_api_key"
+            case googleCalendarApiKey = "google_calendar_api_key"
         }
     }
 

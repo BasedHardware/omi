@@ -120,3 +120,4 @@ All API requests include: X-Request-Start-Time, X-App-Platform, X-Device-Id-Hash
 - See `e2e/SKILL.md` for navigation architecture, screen map, widget patterns, and 34 reference flows
 - See `e2e/flows/*.yaml` for individual flow definitions
 - agent-flutter (Marionette) for programmatic UI interaction — see root CLAUDE.md for setup
+

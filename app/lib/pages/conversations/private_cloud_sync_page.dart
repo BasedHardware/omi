@@ -30,9 +30,7 @@ class _PrivateCloudSyncPageState extends State<PrivateCloudSyncPage> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(
-              value ? context.l10n.cloudStorageEnabled : context.l10n.cloudStorageDisabled,
-            ),
+            content: Text(value ? context.l10n.cloudStorageEnabled : context.l10n.cloudStorageDisabled),
             backgroundColor: Colors.green,
           ),
         );
@@ -42,10 +40,7 @@ class _PrivateCloudSyncPageState extends State<PrivateCloudSyncPage> {
       setState(() => _isSaving = false);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(context.l10n.failedToUpdateSettings(e.toString())),
-            backgroundColor: Colors.red,
-          ),
+          SnackBar(content: Text(context.l10n.failedToUpdateSettings(e.toString())), backgroundColor: Colors.red),
         );
       }
     }
@@ -57,8 +52,10 @@ class _PrivateCloudSyncPageState extends State<PrivateCloudSyncPage> {
       builder: (context) => AlertDialog(
         backgroundColor: const Color(0xFF1C1C1E),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Text(context.l10n.enableCloudStorage,
-            style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600)),
+        title: Text(
+          context.l10n.enableCloudStorage,
+          style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
+        ),
         content: Text(
           context.l10n.cloudStorageDialogMessage,
           style: TextStyle(color: Colors.grey.shade400, fontSize: 14, height: 1.4),
@@ -70,7 +67,10 @@ class _PrivateCloudSyncPageState extends State<PrivateCloudSyncPage> {
           ),
           TextButton(
             onPressed: () => Navigator.of(context).pop(true),
-            child: Text(context.l10n.enable, style: const TextStyle(color: Colors.deepPurpleAccent, fontWeight: FontWeight.w600)),
+            child: Text(
+              context.l10n.enable,
+              style: const TextStyle(color: Colors.deepPurpleAccent, fontWeight: FontWeight.w600),
+            ),
           ),
         ],
       ),
@@ -100,8 +100,10 @@ class _PrivateCloudSyncPageState extends State<PrivateCloudSyncPage> {
               icon: _buildFaIcon(FontAwesomeIcons.chevronLeft, size: 18, color: Colors.white),
               onPressed: () => Navigator.of(context).pop(),
             ),
-            title: Text(context.l10n.storeAudioOnCloud,
-                style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600)),
+            title: Text(
+              context.l10n.storeAudioOnCloud,
+              style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
+            ),
             centerTitle: true,
           ),
           body: isLoading
@@ -154,11 +156,7 @@ class _PrivateCloudSyncPageState extends State<PrivateCloudSyncPage> {
                             const SizedBox(height: 20),
                             Text(
                               context.l10n.storeAudioCloudDescription,
-                              style: TextStyle(
-                                color: Colors.grey.shade400,
-                                fontSize: 14,
-                                height: 1.5,
-                              ),
+                              style: TextStyle(color: Colors.grey.shade400, fontSize: 14, height: 1.5),
                             ),
                             const SizedBox(height: 24),
                             const Divider(height: 1, color: Color(0xFF3C3C43)),

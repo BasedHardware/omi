@@ -5,6 +5,7 @@ import SwiftUI
 struct GoalsWidget: View {
     let goals: [Goal]
     let onCreateGoal: (String, Double, Double) -> Void  // (title, currentValue, targetValue)
+    let onUpdateGoal: (Goal, String, Double, Double) -> Void
     let onUpdateProgress: (Goal, Double) -> Void
     let onDeleteGoal: (Goal) -> Void
 
@@ -134,7 +135,7 @@ struct GoalsWidget: View {
             GoalEditSheet(
                 goal: goal,
                 onSave: { title, current, target in
-                    onUpdateProgress(goal, current)
+                    onUpdateGoal(goal, title, current, target)
                 },
                 onDelete: {
                     onDeleteGoal(goal)
@@ -963,6 +964,7 @@ private struct GoalHeaderButton: View {
     GoalsWidget(
         goals: [],
         onCreateGoal: { _, _, _ in },
+        onUpdateGoal: { _, _, _, _ in },
         onUpdateProgress: { _, _ in },
         onDeleteGoal: { _ in }
     )

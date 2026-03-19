@@ -4,11 +4,7 @@ import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/structured.dart';
 
 /// Creates a minimal ServerConversation for testing getTag().
-ServerConversation _makeConversation({
-  String category = 'other',
-  bool discarded = false,
-  ConversationSource? source,
-}) {
+ServerConversation _makeConversation({String category = 'other', bool discarded = false, ConversationSource? source}) {
   return ServerConversation(
     id: 'test-id',
     createdAt: DateTime.now(),

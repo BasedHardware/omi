@@ -29,10 +29,7 @@ class PhoneCallSettingsPage extends StatelessWidget {
                   style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: Colors.white),
                 ),
                 const SizedBox(height: 6),
-                Text(
-                  context.l10n.verifiedNumbersDescription,
-                  style: TextStyle(fontSize: 14, color: Colors.grey[500]),
-                ),
+                Text(context.l10n.verifiedNumbersDescription, style: TextStyle(fontSize: 14, color: Colors.grey[500])),
                 const SizedBox(height: 24),
                 if (provider.verifiedNumbers.isEmpty)
                   _buildEmptyState(context)
@@ -54,32 +51,28 @@ class PhoneCallSettingsPage extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 24),
       child: Center(
-        child: Text(
-          context.l10n.noVerifiedNumbers,
-          style: TextStyle(fontSize: 15, color: Colors.grey[600]),
-        ),
+        child: Text(context.l10n.noVerifiedNumbers, style: TextStyle(fontSize: 15, color: Colors.grey[600])),
       ),
     );
   }
 
   Widget _buildNumberRow(
-      BuildContext context, PhoneCallProvider provider, String id, String phoneNumber, String verifiedAt) {
+    BuildContext context,
+    PhoneCallProvider provider,
+    String id,
+    String phoneNumber,
+    String verifiedAt,
+  ) {
     var timeAgo = _formatVerifiedAt(context, verifiedAt);
     return Container(
       padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: const Color(0xFF1C1C1E),
-        borderRadius: BorderRadius.circular(16),
-      ),
+      decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(16)),
       child: Row(
         children: [
           Container(
             width: 40,
             height: 40,
-            decoration: BoxDecoration(
-              color: const Color(0xFF2A2A2E),
-              borderRadius: BorderRadius.circular(12),
-            ),
+            decoration: BoxDecoration(color: const Color(0xFF2A2A2E), borderRadius: BorderRadius.circular(12)),
             child: Icon(Icons.phone, color: Colors.grey[400], size: 20),
           ),
           const SizedBox(width: 14),
@@ -87,8 +80,10 @@ class PhoneCallSettingsPage extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(phoneNumber,
-                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: Colors.white)),
+                Text(
+                  phoneNumber,
+                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: Colors.white),
+                ),
                 const SizedBox(height: 2),
                 Text(timeAgo, style: TextStyle(fontSize: 13, color: Colors.grey[500])),
               ],

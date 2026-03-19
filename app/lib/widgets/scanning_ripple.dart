@@ -4,11 +4,7 @@ class ScanningRippleWidget extends StatefulWidget {
   final bool isScanning;
   final double size;
 
-  const ScanningRippleWidget({
-    super.key,
-    required this.isScanning,
-    this.size = 300,
-  });
+  const ScanningRippleWidget({super.key, required this.isScanning, this.size = 300});
 
   @override
   State<ScanningRippleWidget> createState() => _ScanningRippleWidgetState();
@@ -20,10 +16,7 @@ class _ScanningRippleWidgetState extends State<ScanningRippleWidget> with Single
   @override
   void initState() {
     super.initState();
-    _controller = AnimationController(
-      duration: const Duration(milliseconds: 2500),
-      vsync: this,
-    );
+    _controller = AnimationController(duration: const Duration(milliseconds: 2500), vsync: this);
     if (widget.isScanning) _controller.repeat();
   }
 
@@ -51,10 +44,7 @@ class _ScanningRippleWidgetState extends State<ScanningRippleWidget> with Single
         builder: (context, child) {
           return CustomPaint(
             size: Size(widget.size, widget.size),
-            painter: _RipplePainter(
-              progress: _controller.value,
-              color: Colors.white,
-            ),
+            painter: _RipplePainter(progress: _controller.value, color: Colors.white),
           );
         },
       ),

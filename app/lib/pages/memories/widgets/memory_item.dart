@@ -48,13 +48,7 @@ class MemoryItem extends StatelessWidget {
         decoration: BoxDecoration(
           color: AppStyles.backgroundSecondary,
           borderRadius: BorderRadius.circular(24),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.1),
-              blurRadius: 4,
-              offset: const Offset(0, 2),
-            ),
-          ],
+          boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.1), blurRadius: 4, offset: const Offset(0, 2))],
         ),
         child: Stack(
           children: [
@@ -64,12 +58,7 @@ class MemoryItem extends StatelessWidget {
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        memory.content.decodeString,
-                        style: AppStyles.body,
-                      ),
-                    ],
+                    children: [Text(memory.content.decodeString, style: AppStyles.body)],
                   ),
                 ),
                 const SizedBox(width: AppStyles.spacingM),
@@ -93,27 +82,18 @@ class MemoryItem extends StatelessWidget {
                     child: GestureDetector(
                       onTap: () {
                         MixpanelManager().paywallOpened('Action Item');
-                        routeToPage(
-                          context,
-                          const UsagePage(showUpgradeDialog: true),
-                        );
+                        routeToPage(context, const UsagePage(showUpgradeDialog: true));
                         return;
                       },
                       child: Container(
                         alignment: Alignment.center,
                         decoration: BoxDecoration(
                           color: Colors.black.withValues(alpha: 0.01),
-                          borderRadius: const BorderRadius.all(
-                            Radius.circular(8),
-                          ),
+                          borderRadius: const BorderRadius.all(Radius.circular(8)),
                         ),
                         child: const Text(
                           'Upgrade to unlimited',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                          ),
+                          style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
                         ),
                       ),
                     ),
@@ -149,10 +129,7 @@ class MemoryItem extends StatelessWidget {
       },
       background: Container(
         margin: const EdgeInsets.only(bottom: 12),
-        decoration: BoxDecoration(
-          color: AppStyles.error,
-          borderRadius: BorderRadius.circular(24),
-        ),
+        decoration: BoxDecoration(color: AppStyles.error, borderRadius: BorderRadius.circular(24)),
         alignment: Alignment.centerRight,
         padding: const EdgeInsets.only(right: 20),
         child: const Icon(Icons.delete_outline, color: Colors.white),
@@ -171,13 +148,7 @@ class MemoryItem extends StatelessWidget {
           color: Colors.white.withOpacity(0.1),
           borderRadius: BorderRadius.circular(AppStyles.radiusMedium),
         ),
-        child: const Center(
-          child: FaIcon(
-            FontAwesomeIcons.message,
-            size: 16,
-            color: Colors.white70,
-          ),
-        ),
+        child: const Center(child: FaIcon(FontAwesomeIcons.message, size: 16, color: Colors.white70)),
       ),
     );
   }
@@ -186,10 +157,7 @@ class MemoryItem extends StatelessWidget {
     return DateTime(createdAt.year, createdAt.month, createdAt.day);
   }
 
-  void _ensureConversationInGroup(
-    ConversationProvider conversationProvider,
-    dynamic conversation,
-  ) {
+  void _ensureConversationInGroup(ConversationProvider conversationProvider, dynamic conversation) {
     final date = _getConversationDate(conversation.createdAt);
     conversationProvider.groupedConversations.putIfAbsent(date, () => []);
 
@@ -222,23 +190,18 @@ class MemoryItem extends StatelessWidget {
       final conversationDate = _getConversationDate(conversation.createdAt);
       detailProvider.updateConversation(conversation.id, conversationDate);
 
-      Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (context) => ConversationDetailPage(conversation: conversation),
-        ),
-      );
+      Navigator.of(
+        context,
+      ).push(MaterialPageRoute(builder: (context) => ConversationDetailPage(conversation: conversation)));
     } else {
       _showConversationNotFoundError(context);
     }
   }
 
   void _showConversationNotFoundError(BuildContext context) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(context.l10n.conversationNotFoundOrDeleted),
-        backgroundColor: Colors.red,
-      ),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(context.l10n.conversationNotFoundOrDeleted), backgroundColor: Colors.red));
   }
 
   // Widget _buildVisibilityButton(BuildContext context) {

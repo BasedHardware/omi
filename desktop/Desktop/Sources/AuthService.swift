@@ -43,8 +43,15 @@ class AuthService {
     private var appleSignInDelegate: AppleSignInDelegate?
 
     // API Configuration
-    // Production: Cloud Run backend
-    private let apiBaseURL: String = "https://omi-desktop-auth-208440318997.us-central1.run.app/"
+    // Auth backend URL — must be set via OMI_AUTH_URL env var (in .env)
+    private let apiBaseURL: String = {
+        if let envURL = getenv("OMI_AUTH_URL") {
+            let url = String(cString: envURL)
+            if !url.isEmpty { return url.hasSuffix("/") ? url : url + "/" }
+        }
+        NSLog("OMI AUTH: OMI_AUTH_URL not set — OAuth sign-in will fail")
+        return ""
+    }()
     private var redirectURI: String {
         return "\(urlScheme)://auth/callback"
     }
@@ -74,8 +81,16 @@ class AuthService {
     private let kAuthTokenExpiry = "auth_tokenExpiry"
     private let kAuthTokenUserId = "auth_tokenUserId"  // User ID that owns the stored token
 
-    // Firebase Web API key (from GoogleService-Info.plist)
-    private let firebaseApiKey = "AIzaSyD9dzBdglc7IO9pPDIOvqnCoTis_xKkkC8"
+    // Firebase Web API key — fetched from backend via APIKeyService, set as env var.
+    // No hardcoded fallback — if the key isn't available, auth operations will fail
+    // with a clear error instead of silently using a potentially wrong key.
+    private var firebaseApiKey: String {
+        if let envKey = getenv("FIREBASE_API_KEY"), let key = String(validatingUTF8: envKey), !key.isEmpty {
+            return key
+        }
+        log("AuthService: FIREBASE_API_KEY not set — auth operations will fail")
+        return ""
+    }
 
     // MARK: - User Name Properties
 
@@ -789,7 +804,9 @@ class AuthService {
 
     /// Exchange custom token for ID token using Firebase REST API
     private func exchangeCustomTokenForIdToken(customToken: String) async throws -> FirebaseTokenResult {
-        let url = URL(string: "https://identitytoolkit.googleapis.com/v1/accounts:signInWithCustomToken?key=\(firebaseApiKey)")!
+        guard let url = URL(string: "https://identitytoolkit.googleapis.com/v1/accounts:signInWithCustomToken?key=\(firebaseApiKey)") else {
+            throw AuthError.invalidURL
+        }
 
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
@@ -853,7 +870,9 @@ class AuthService {
             throw AuthError.notSignedIn
         }
 
-        let url = URL(string: "https://securetoken.googleapis.com/v1/token?key=\(firebaseApiKey)")!
+        guard let url = URL(string: "https://securetoken.googleapis.com/v1/token?key=\(firebaseApiKey)") else {
+            throw AuthError.invalidURL
+        }
 
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
@@ -877,8 +896,12 @@ class AuthService {
                 || errorBody.contains("USER_DISABLED")
                 || httpResponse.statusCode == 400
             if isDefinitiveAuthFailure {
-                NSLog("OMI AUTH: Definitive auth failure - clearing tokens")
+                NSLog("OMI AUTH: Definitive auth failure - clearing tokens and session")
                 clearTokens()
+                // Also clear auth state so the UI shows sign-in instead of a ghost session
+                // where auth_isSignedIn=true but no valid tokens exist.
+                isSignedIn = false
+                saveAuthState(isSignedIn: false, email: nil, userId: nil)
             }
             throw AuthError.notSignedIn
         }
@@ -1125,7 +1148,9 @@ class AuthService {
     /// Sign in with Firebase using an Apple identity token via REST API
     /// This bypasses the backend entirely - Firebase verifies the Apple JWT directly
     private func signInWithAppleIdentityToken(identityToken: String, nonce: String) async throws -> FirebaseTokenResult {
-        let url = URL(string: "https://identitytoolkit.googleapis.com/v1/accounts:signInWithIdp?key=\(firebaseApiKey)")!
+        guard let url = URL(string: "https://identitytoolkit.googleapis.com/v1/accounts:signInWithIdp?key=\(firebaseApiKey)") else {
+            throw AuthError.invalidURL
+        }
 
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
@@ -1234,7 +1259,7 @@ private class AppleSignInDelegate: NSObject, ASAuthorizationControllerDelegate, 
     }
 
     func presentationAnchor(for controller: ASAuthorizationController) -> ASPresentationAnchor {
-        return NSApp.keyWindow ?? NSApp.windows.first!
+        return NSApp.keyWindow ?? NSApp.windows.first ?? NSWindow()
     }
 }
 

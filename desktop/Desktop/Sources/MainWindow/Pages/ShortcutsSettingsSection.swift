@@ -46,7 +46,7 @@ struct ShortcutsSettingsSection: View {
             RoundedRectangle(cornerRadius: 12)
                 .fill(OmiColors.backgroundTertiary.opacity(0.5))
         )
-        .modifier(SettingHighlightModifier(settingId: "advanced.askomi.model", highlightedSettingId: $highlightedSettingId))
+        .modifier(SettingHighlightModifier(settingId: "floatingbar.model", highlightedSettingId: $highlightedSettingId))
     }
 
     private func aiModelButton(_ model: (id: String, label: String)) -> some View {
@@ -74,28 +74,34 @@ struct ShortcutsSettingsSection: View {
     }
 
     private var backgroundStyleCard: some View {
-        HStack(spacing: 16) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Background Style")
-                    .scaledFont(size: 16, weight: .semibold)
-                    .foregroundColor(OmiColors.textPrimary)
-                Text(settings.solidBackground
-                     ? "Solid dark background"
-                     : "Semi-transparent with blur")
-                    .scaledFont(size: 13)
-                    .foregroundColor(OmiColors.textSecondary)
+        VStack(alignment: .leading, spacing: 16) {
+            Text("Background Style")
+                .scaledFont(size: 16, weight: .semibold)
+                .foregroundColor(OmiColors.textPrimary)
+
+            HStack(spacing: 16) {
+                Text("Transparent")
+                    .scaledFont(size: 13, weight: settings.solidBackground ? .regular : .semibold)
+                    .foregroundColor(settings.solidBackground ? OmiColors.textTertiary : OmiColors.textPrimary)
+
+                Toggle("", isOn: $settings.solidBackground)
+                    .toggleStyle(.switch)
+                    .tint(OmiColors.purplePrimary)
+                    .labelsHidden()
+
+                Text("Solid Dark")
+                    .scaledFont(size: 13, weight: settings.solidBackground ? .semibold : .regular)
+                    .foregroundColor(settings.solidBackground ? OmiColors.textPrimary : OmiColors.textTertiary)
+
+                Spacer()
             }
-            Spacer()
-            Toggle("", isOn: $settings.solidBackground)
-                .toggleStyle(.switch)
-                .tint(OmiColors.purplePrimary)
         }
         .padding(20)
         .background(
             RoundedRectangle(cornerRadius: 12)
                 .fill(OmiColors.backgroundTertiary.opacity(0.5))
         )
-        .modifier(SettingHighlightModifier(settingId: "advanced.askomi.background", highlightedSettingId: $highlightedSettingId))
+        .modifier(SettingHighlightModifier(settingId: "floatingbar.background", highlightedSettingId: $highlightedSettingId))
     }
 
     private var draggableBarCard: some View {
@@ -118,7 +124,7 @@ struct ShortcutsSettingsSection: View {
             RoundedRectangle(cornerRadius: 12)
                 .fill(OmiColors.backgroundTertiary.opacity(0.5))
         )
-        .modifier(SettingHighlightModifier(settingId: "advanced.askomi.draggable", highlightedSettingId: $highlightedSettingId))
+        .modifier(SettingHighlightModifier(settingId: "floatingbar.draggable", highlightedSettingId: $highlightedSettingId))
     }
 
     private var askOmiKeyCard: some View {
@@ -144,7 +150,7 @@ struct ShortcutsSettingsSection: View {
             RoundedRectangle(cornerRadius: 12)
                 .fill(OmiColors.backgroundTertiary.opacity(0.5))
         )
-        .modifier(SettingHighlightModifier(settingId: "advanced.askomi.shortcut", highlightedSettingId: $highlightedSettingId))
+        .modifier(SettingHighlightModifier(settingId: "floatingbar.shortcut", highlightedSettingId: $highlightedSettingId))
     }
 
     private func askOmiKeyButton(_ key: ShortcutSettings.AskOmiKey) -> some View {
@@ -194,7 +200,7 @@ struct ShortcutsSettingsSection: View {
             RoundedRectangle(cornerRadius: 12)
                 .fill(OmiColors.backgroundTertiary.opacity(0.5))
         )
-        .modifier(SettingHighlightModifier(settingId: "advanced.askomi.ptt", highlightedSettingId: $highlightedSettingId))
+        .modifier(SettingHighlightModifier(settingId: "floatingbar.ptt", highlightedSettingId: $highlightedSettingId))
     }
 
     private func pttKeyButton(_ key: ShortcutSettings.PTTKey) -> some View {
@@ -248,7 +254,7 @@ struct ShortcutsSettingsSection: View {
             RoundedRectangle(cornerRadius: 12)
                 .fill(OmiColors.backgroundTertiary.opacity(0.5))
         )
-        .modifier(SettingHighlightModifier(settingId: "advanced.askomi.transcriptionmode", highlightedSettingId: $highlightedSettingId))
+        .modifier(SettingHighlightModifier(settingId: "floatingbar.transcriptionmode", highlightedSettingId: $highlightedSettingId))
     }
 
     private func pttTranscriptionModeButton(_ mode: ShortcutSettings.PTTTranscriptionMode) -> some View {
@@ -295,7 +301,7 @@ struct ShortcutsSettingsSection: View {
             RoundedRectangle(cornerRadius: 12)
                 .fill(OmiColors.backgroundTertiary.opacity(0.5))
         )
-        .modifier(SettingHighlightModifier(settingId: "advanced.askomi.doubletap", highlightedSettingId: $highlightedSettingId))
+        .modifier(SettingHighlightModifier(settingId: "floatingbar.doubletap", highlightedSettingId: $highlightedSettingId))
     }
 
     private var pttSoundsCard: some View {
@@ -318,7 +324,7 @@ struct ShortcutsSettingsSection: View {
             RoundedRectangle(cornerRadius: 12)
                 .fill(OmiColors.backgroundTertiary.opacity(0.5))
         )
-        .modifier(SettingHighlightModifier(settingId: "advanced.askomi.pttsounds", highlightedSettingId: $highlightedSettingId))
+        .modifier(SettingHighlightModifier(settingId: "floatingbar.pttsounds", highlightedSettingId: $highlightedSettingId))
     }
 
     private var referenceCard: some View {

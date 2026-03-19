@@ -77,11 +77,7 @@ class GoalHistoryEntry {
   final double value;
   final DateTime recordedAt;
 
-  GoalHistoryEntry({
-    required this.date,
-    required this.value,
-    required this.recordedAt,
-  });
+  GoalHistoryEntry({required this.date, required this.value, required this.recordedAt});
 
   factory GoalHistoryEntry.fromJson(Map<String, dynamic> json) {
     return GoalHistoryEntry(
@@ -124,12 +120,7 @@ class GoalSuggestion {
 
 /// Get current active goal (backward compatibility - returns first goal)
 Future<Goal?> getCurrentGoal() async {
-  var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/goals',
-    headers: {},
-    method: 'GET',
-    body: '',
-  );
+  var response = await makeApiCall(url: '${Env.apiBaseUrl}v1/goals', headers: {}, method: 'GET', body: '');
   if (response == null) return null;
   if (response.statusCode == 200) {
     var decoded = json.decode(response.body);
@@ -142,12 +133,7 @@ Future<Goal?> getCurrentGoal() async {
 
 /// Get all active goals (up to 3)
 Future<List<Goal>> getAllGoals() async {
-  var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/goals/all',
-    headers: {},
-    method: 'GET',
-    body: '',
-  );
+  var response = await makeApiCall(url: '${Env.apiBaseUrl}v1/goals/all', headers: {}, method: 'GET', body: '');
   if (response == null) return [];
   Logger.debug('getAllGoals response: ${response.body}');
   if (response.statusCode == 200) {
@@ -262,24 +248,14 @@ Future<List<GoalHistoryEntry>> getGoalHistory(String goalId, {int days = 30}) as
 
 /// Delete a goal
 Future<bool> deleteGoal(String goalId) async {
-  var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/goals/$goalId',
-    headers: {},
-    method: 'DELETE',
-    body: '',
-  );
+  var response = await makeApiCall(url: '${Env.apiBaseUrl}v1/goals/$goalId', headers: {}, method: 'DELETE', body: '');
   if (response == null) return false;
   return response.statusCode == 200;
 }
 
 /// Get AI-suggested goal based on user data
 Future<GoalSuggestion?> suggestGoal() async {
-  var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/goals/suggest',
-    headers: {},
-    method: 'GET',
-    body: '',
-  );
+  var response = await makeApiCall(url: '${Env.apiBaseUrl}v1/goals/suggest', headers: {}, method: 'GET', body: '');
   if (response == null) return null;
   Logger.debug('suggestGoal response: ${response.body}');
   if (response.statusCode == 200) {
@@ -291,12 +267,7 @@ Future<GoalSuggestion?> suggestGoal() async {
 
 /// Get AI-generated advice for current goal
 Future<String?> getGoalAdvice() async {
-  var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/goals/advice',
-    headers: {},
-    method: 'GET',
-    body: '',
-  );
+  var response = await makeApiCall(url: '${Env.apiBaseUrl}v1/goals/advice', headers: {}, method: 'GET', body: '');
   if (response == null) return null;
   Logger.debug('getGoalAdvice response: ${response.body}');
   if (response.statusCode == 200) {

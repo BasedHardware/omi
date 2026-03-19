@@ -21,215 +21,204 @@ class PermissionsWidget extends StatefulWidget {
 class _PermissionsWidgetState extends State<PermissionsWidget> {
   @override
   Widget build(BuildContext context) {
-    return Consumer<OnboardingProvider>(builder: (context, provider, child) {
-      return Column(
-        children: [
-          // Background area - takes remaining space
-          Expanded(
-            child: Container(), // Just takes up space for background image
-          ),
-
-          // Bottom drawer card - wraps content
-          Container(
-            width: double.infinity,
-            padding: EdgeInsets.fromLTRB(32, 0, 32, MediaQuery.of(context).padding.bottom + 8),
-            decoration: const BoxDecoration(
-              color: Colors.black,
-              borderRadius: BorderRadius.only(
-                topLeft: Radius.circular(40),
-                topRight: Radius.circular(40),
-              ),
+    return Consumer<OnboardingProvider>(
+      builder: (context, provider, child) {
+        return Column(
+          children: [
+            // Background area - takes remaining space
+            Expanded(
+              child: Container(), // Just takes up space for background image
             ),
-            child: SafeArea(
-              top: false,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const SizedBox(height: 32),
 
-                  // Main title
-                  Text(
-                    context.l10n.grantPermissions,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 32,
-                      fontWeight: FontWeight.bold,
-                      height: 1.2,
-                      fontFamily: 'Manrope',
+            // Bottom drawer card - wraps content
+            Container(
+              width: double.infinity,
+              padding: EdgeInsets.fromLTRB(32, 0, 32, MediaQuery.of(context).padding.bottom + 8),
+              decoration: const BoxDecoration(
+                color: Colors.black,
+                borderRadius: BorderRadius.only(topLeft: Radius.circular(40), topRight: Radius.circular(40)),
+              ),
+              child: SafeArea(
+                top: false,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const SizedBox(height: 32),
+
+                    // Main title
+                    Text(
+                      context.l10n.grantPermissions,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 32,
+                        fontWeight: FontWeight.bold,
+                        height: 1.2,
+                        fontFamily: 'Manrope',
+                      ),
+                      textAlign: TextAlign.center,
                     ),
-                    textAlign: TextAlign.center,
-                  ),
 
-                  const SizedBox(height: 28),
+                    const SizedBox(height: 28),
 
-                  // Permissions checkboxes
-                  Column(
-                    children: [
-                      // Background permission (Android only)
-                      if (Platform.isAndroid)
+                    // Permissions checkboxes
+                    Column(
+                      children: [
+                        // Background permission (Android only)
+                        if (Platform.isAndroid)
+                          _buildPermissionTile(
+                            value: provider.hasBackgroundPermission,
+                            title: context.l10n.backgroundActivity,
+                            subtitle: context.l10n.backgroundActivityDesc,
+                            onChanged: (s) async {
+                              if (s != null) {
+                                if (s) {
+                                  await provider.askForBackgroundPermissions();
+                                } else {
+                                  provider.updateBackgroundPermission(false);
+                                }
+                              }
+                            },
+                          ),
+
+                        // Location permission
                         _buildPermissionTile(
-                          value: provider.hasBackgroundPermission,
-                          title: context.l10n.backgroundActivity,
-                          subtitle: context.l10n.backgroundActivityDesc,
+                          value: provider.hasLocationPermission,
+                          title: context.l10n.locationAccess,
+                          subtitle: context.l10n.locationAccessDesc,
                           onChanged: (s) async {
                             if (s != null) {
                               if (s) {
-                                await provider.askForBackgroundPermissions();
+                                // Auto-check the box immediately when popup is triggered
+                                provider.updateLocationPermission(true);
+                                var (serviceStatus, permissionStatus) = await provider.askForLocationPermissions();
+                                if (!serviceStatus) {
+                                  // Uncheck if service is disabled
+                                  provider.updateLocationPermission(false);
+                                  showDialog(
+                                    context: context,
+                                    builder: (ctx) {
+                                      return getDialog(
+                                        context,
+                                        () => Navigator.of(context).pop(),
+                                        () => Navigator.of(context).pop(),
+                                        context.l10n.locationServiceDisabled,
+                                        context.l10n.locationServiceDisabledDesc,
+                                        singleButton: true,
+                                      );
+                                    },
+                                  );
+                                } else {
+                                  // Update checkbox based on actual permission status
+                                  bool wasGranted = permissionStatus.isGranted;
+                                  provider.updateLocationPermission(wasGranted);
+
+                                  // Request "Always" permission (iOS may show this later)
+                                  // But keep checkbox checked if "When in use" was granted
+                                  await provider.alwaysAllowLocation();
+
+                                  // If "When in use" was granted, keep it checked even if "Always" was denied
+                                  if (wasGranted) {
+                                    provider.updateLocationPermission(true);
+                                  }
+                                }
                               } else {
-                                provider.updateBackgroundPermission(false);
+                                provider.updateLocationPermission(false);
                               }
                             }
                           },
                         ),
 
-                      // Location permission
-                      _buildPermissionTile(
-                        value: provider.hasLocationPermission,
-                        title: context.l10n.locationAccess,
-                        subtitle: context.l10n.locationAccessDesc,
-                        onChanged: (s) async {
-                          if (s != null) {
-                            if (s) {
-                              // Auto-check the box immediately when popup is triggered
-                              provider.updateLocationPermission(true);
-                              var (serviceStatus, permissionStatus) = await provider.askForLocationPermissions();
-                              if (!serviceStatus) {
-                                // Uncheck if service is disabled
-                                provider.updateLocationPermission(false);
-                                showDialog(
-                                  context: context,
-                                  builder: (ctx) {
-                                    return getDialog(
-                                      context,
-                                      () => Navigator.of(context).pop(),
-                                      () => Navigator.of(context).pop(),
-                                      context.l10n.locationServiceDisabled,
-                                      context.l10n.locationServiceDisabledDesc,
-                                      singleButton: true,
-                                    );
-                                  },
-                                );
+                        // Notification permission
+                        _buildPermissionTile(
+                          value: provider.hasNotificationPermission,
+                          title: context.l10n.notifications,
+                          subtitle: context.l10n.notificationsDesc,
+                          onChanged: (s) async {
+                            if (s != null) {
+                              if (s) {
+                                await provider.askForNotificationPermissions();
                               } else {
-                                // Update checkbox based on actual permission status
-                                bool wasGranted = permissionStatus.isGranted;
-                                provider.updateLocationPermission(wasGranted);
-
-                                // Request "Always" permission (iOS may show this later)
-                                // But keep checkbox checked if "When in use" was granted
-                                await provider.alwaysAllowLocation();
-
-                                // If "When in use" was granted, keep it checked even if "Always" was denied
-                                if (wasGranted) {
-                                  provider.updateLocationPermission(true);
-                                }
+                                provider.updateNotificationPermission(false);
                               }
-                            } else {
-                              provider.updateLocationPermission(false);
                             }
-                          }
-                        },
-                      ),
+                          },
+                        ),
+                      ],
+                    ),
 
-                      // Notification permission
-                      _buildPermissionTile(
-                        value: provider.hasNotificationPermission,
-                        title: context.l10n.notifications,
-                        subtitle: context.l10n.notificationsDesc,
-                        onChanged: (s) async {
-                          if (s != null) {
-                            if (s) {
-                              await provider.askForNotificationPermissions();
-                            } else {
-                              provider.updateNotificationPermission(false);
-                            }
-                          }
-                        },
-                      ),
-                    ],
-                  ),
+                    const SizedBox(height: 8),
 
-                  const SizedBox(height: 8),
-
-                  // Continue button
-                  provider.isLoading
-                      ? const CircularProgressIndicator(
-                          color: Colors.white,
-                        )
-                      : SizedBox(
-                          width: double.infinity,
-                          height: 56,
-                          child: ElevatedButton(
-                            onPressed: () async {
-                              provider.setLoading(true);
-                              if (Platform.isAndroid) {
-                                if (!provider.hasBackgroundPermission) {
-                                  await provider.askForBackgroundPermissions();
+                    // Continue button
+                    provider.isLoading
+                        ? const CircularProgressIndicator(color: Colors.white)
+                        : SizedBox(
+                            width: double.infinity,
+                            height: 56,
+                            child: ElevatedButton(
+                              onPressed: () async {
+                                provider.setLoading(true);
+                                if (Platform.isAndroid) {
+                                  if (!provider.hasBackgroundPermission) {
+                                    await provider.askForBackgroundPermissions();
+                                  }
                                 }
-                              }
-                              await Permission.notification.request().then(
-                                (value) async {
+                                await Permission.notification.request().then((value) async {
                                   if (value.isGranted) {
                                     provider.updateNotificationPermission(true);
                                   }
                                   if (await Permission.location.serviceStatus.isEnabled) {
-                                    await Permission.locationWhenInUse.request().then(
-                                      (value) async {
-                                        if (value.isGranted) {
-                                          await Permission.locationAlways.request().then(
-                                            (value) async {
-                                              if (value.isGranted) {
+                                    await Permission.locationWhenInUse.request().then((value) async {
+                                      if (value.isGranted) {
+                                        await Permission.locationAlways.request().then((value) async {
+                                          if (value.isGranted) {
+                                            provider.updateLocationPermission(true);
+                                            widget.goNext();
+                                            provider.setLoading(false);
+                                          } else {
+                                            Future.delayed(const Duration(milliseconds: 2500), () async {
+                                              if (await Permission.locationAlways.status.isGranted) {
                                                 provider.updateLocationPermission(true);
-                                                widget.goNext();
-                                                provider.setLoading(false);
-                                              } else {
-                                                Future.delayed(const Duration(milliseconds: 2500), () async {
-                                                  if (await Permission.locationAlways.status.isGranted) {
-                                                    provider.updateLocationPermission(true);
-                                                  }
-                                                  widget.goNext();
-                                                  provider.setLoading(false);
-                                                });
                                               }
-                                            },
-                                          );
-                                        } else {
-                                          widget.goNext();
-                                          provider.setLoading(false);
-                                        }
-                                      },
-                                    );
+                                              widget.goNext();
+                                              provider.setLoading(false);
+                                            });
+                                          }
+                                        });
+                                      } else {
+                                        widget.goNext();
+                                        provider.setLoading(false);
+                                      }
+                                    });
                                   } else {
                                     widget.goNext();
                                     provider.setLoading(false);
                                   }
-                                },
-                              );
-                            },
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.white,
-                              foregroundColor: Colors.black,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(28),
+                                });
+                              },
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.white,
+                                foregroundColor: Colors.black,
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+                                elevation: 0,
                               ),
-                              elevation: 0,
-                            ),
-                            child: Text(
-                              context.l10n.continueButton,
-                              style: const TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.w600,
-                                fontFamily: 'Manrope',
+                              child: Text(
+                                context.l10n.continueButton,
+                                style: const TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.w600,
+                                  fontFamily: 'Manrope',
+                                ),
                               ),
                             ),
                           ),
-                        ),
-                ],
+                  ],
+                ),
               ),
             ),
-          ),
-        ],
-      );
-    });
+          ],
+        );
+      },
+    );
   }
 
   Widget _buildPermissionTile({
@@ -244,10 +233,7 @@ class _PermissionsWidgetState extends State<PermissionsWidget> {
       decoration: BoxDecoration(
         color: Colors.grey[900],
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: Colors.grey[700]!,
-          width: 1,
-        ),
+        border: Border.all(color: Colors.grey[700]!, width: 1),
       ),
       child: Row(
         children: [
@@ -267,11 +253,7 @@ class _PermissionsWidgetState extends State<PermissionsWidget> {
                 const SizedBox(height: 4),
                 Text(
                   subtitle,
-                  style: TextStyle(
-                    color: Colors.white.withOpacity(0.6),
-                    fontSize: 12,
-                    fontFamily: 'Manrope',
-                  ),
+                  style: TextStyle(color: Colors.white.withOpacity(0.6), fontSize: 12, fontFamily: 'Manrope'),
                 ),
               ],
             ),
@@ -284,13 +266,8 @@ class _PermissionsWidgetState extends State<PermissionsWidget> {
               onChanged: onChanged,
               activeColor: Colors.white,
               checkColor: Colors.black,
-              side: BorderSide(
-                color: Colors.grey[500]!,
-                width: 2,
-              ),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(4),
-              ),
+              side: BorderSide(color: Colors.grey[500]!, width: 2),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
             ),
           ),
         ],
