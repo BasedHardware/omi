@@ -192,12 +192,13 @@ if [ -z "$FIREBASE_PROJECT_ID" ]; then
     echo "  For dev:  FIREBASE_PROJECT_ID=based-hardware-dev"
     exit 1
 fi
-# When using a dev Firestore project with the prod auth service, auth tokens
-# are minted for "based-hardware" (prod). Set FIREBASE_AUTH_PROJECT_ID so the
-# backend validates tokens against prod while keeping Firestore on dev.
-if [ "$FIREBASE_PROJECT_ID" != "based-hardware" ] && [ -z "$FIREBASE_AUTH_PROJECT_ID" ]; then
-    export FIREBASE_AUTH_PROJECT_ID="based-hardware"
-    substep "Auth project split: tokens validated against based-hardware (prod), Firestore on $FIREBASE_PROJECT_ID"
+# FIREBASE_AUTH_PROJECT_ID controls which project ID the backend validates
+# auth tokens against. With local auth (Auth-Python using dev SA), tokens
+# are signed for the dev project — so leave it matching FIREBASE_PROJECT_ID.
+# Only set FIREBASE_AUTH_PROJECT_ID explicitly if using a DIFFERENT auth
+# service (e.g. prod Cloud Run) that mints tokens for a different project.
+if [ -n "$FIREBASE_AUTH_PROJECT_ID" ]; then
+    substep "Auth project: tokens validated against $FIREBASE_AUTH_PROJECT_ID, Firestore on $FIREBASE_PROJECT_ID"
 fi
 # Read backend PORT from .env (the Rust backend uses this)
 if [ -z "$PORT" ] && [ -f "$BACKEND_DIR/.env" ]; then
@@ -388,6 +389,15 @@ if [ -f "$BACKEND_DIR/.env" ]; then
     if [ -n "$FIREBASE_KEY" ] && ! grep -q "^FIREBASE_API_KEY=" "$APP_BUNDLE/Contents/Resources/.env"; then
         echo "FIREBASE_API_KEY=$FIREBASE_KEY" >> "$APP_BUNDLE/Contents/Resources/.env"
         substep "Bootstrapped FIREBASE_API_KEY from backend .env"
+    fi
+fi
+# Bootstrap GEMINI_API_KEY — needed by the Swift app for Rewind/Screen Analysis
+# (the app reads it from .env, not just from APIKeyService)
+if [ -f "$BACKEND_DIR/.env" ]; then
+    GEMINI_KEY=$(grep "^GEMINI_API_KEY=" "$BACKEND_DIR/.env" | head -1 | cut -d= -f2-)
+    if [ -n "$GEMINI_KEY" ] && ! grep -q "^GEMINI_API_KEY=" "$APP_BUNDLE/Contents/Resources/.env"; then
+        echo "GEMINI_API_KEY=$GEMINI_KEY" >> "$APP_BUNDLE/Contents/Resources/.env"
+        substep "Bootstrapped GEMINI_API_KEY from backend .env"
     fi
 fi
 # Bootstrap OMI_AUTH_URL — for local dev, point to the local Python auth service.
