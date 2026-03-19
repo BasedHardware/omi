@@ -2,7 +2,7 @@
 set -e
 
 # =============================================================================
-# DEPRECATED — DO NOT USE FOR MANUAL RELEASES
+# DEPRECATED — DO NOT RUN MANUAL RELEASES
 # =============================================================================
 #
 # The source of truth for desktop releases is the automated pipeline:
