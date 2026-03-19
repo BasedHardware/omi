@@ -400,8 +400,19 @@ async def _stream_handler(
 
     # Fair-use state (#5746)
     fair_use_last_check_ts: float = 0.0
-    # DG budget gate for restricted users — checked once per cap-check interval
+    # DG budget gate for restricted users — checked at session start + per cap-check interval
     fair_use_dg_budget_exhausted: bool = False
+
+    # Session-start DG budget check: prevent reconnect bypass (#5748 reviewer fix)
+    if FAIR_USE_ENABLED and FAIR_USE_RESTRICT_DAILY_DG_MS > 0:
+        try:
+            _init_stage = get_enforcement_stage(uid)
+            if _init_stage == 'restrict':
+                fair_use_dg_budget_exhausted = is_dg_budget_exhausted(uid)
+                if fair_use_dg_budget_exhausted:
+                    logger.info(f'fair_use: DG budget already exhausted at session start for {uid}')
+        except Exception as e:
+            logger.error(f'fair_use: session-start budget check error for {uid}: {e}')
 
     async def _record_usage_periodically():
         nonlocal websocket_active, last_usage_record_timestamp, words_transcribed_since_last_record
@@ -2302,11 +2313,16 @@ async def _stream_handler(
 
                         spawn(close_dg_profile())
                 else:
-                    deepgram_profile_socket.send(chunk)
+                    if not fair_use_dg_budget_exhausted:
+                        deepgram_profile_socket.send(chunk)
 
             if soniox_sock is not None and not fair_use_dg_budget_exhausted:
                 if profile_complete or not soniox_profile_socket:
                     await soniox_sock.send(chunk)
+                    # Track STT usage for restricted users
+                    if FAIR_USE_ENABLED and FAIR_USE_RESTRICT_DAILY_DG_MS > 0:
+                        chunk_ms = len(chunk) * 1000 // (sample_rate * 2)
+                        record_dg_usage_ms(uid, chunk_ms)
                     if soniox_profile_socket:
                         logger.info(f'Scheduling delayed close of soniox_profile_socket {uid} {session_id}')
                         socket_to_close = soniox_profile_socket
@@ -2323,6 +2339,10 @@ async def _stream_handler(
 
             if speechmatics_sock is not None and not fair_use_dg_budget_exhausted:
                 await speechmatics_sock.send(chunk)
+                # Track STT usage for restricted users
+                if FAIR_USE_ENABLED and FAIR_USE_RESTRICT_DAILY_DG_MS > 0:
+                    chunk_ms = len(chunk) * 1000 // (sample_rate * 2)
+                    record_dg_usage_ms(uid, chunk_ms)
 
         try:
             while websocket_active:
@@ -2374,13 +2394,17 @@ async def _stream_handler(
                         # Resample to TARGET_SAMPLE_RATE for STT
                         pcm_16k = resample_pcm(bytes(audio_data), sample_rate, TARGET_SAMPLE_RATE)
 
-                        # Send to per-channel STT
-                        if stt_sockets_multi[ch_idx]:
+                        # Send to per-channel STT (budget-gated for restricted users)
+                        if stt_sockets_multi[ch_idx] and not fair_use_dg_budget_exhausted:
                             try:
                                 if stt_service == STTService.deepgram:
                                     stt_sockets_multi[ch_idx].send(pcm_16k)
                                 else:
                                     await stt_sockets_multi[ch_idx].send(pcm_16k)
+                                # Track STT usage for restricted users
+                                if FAIR_USE_ENABLED and FAIR_USE_RESTRICT_DAILY_DG_MS > 0:
+                                    mc_chunk_ms = len(pcm_16k) * 1000 // (TARGET_SAMPLE_RATE * 2)
+                                    record_dg_usage_ms(uid, mc_chunk_ms)
                             except Exception as e:
                                 logger.error(f"[MC-STT] ch={ch_idx} send error: {e} {uid} {session_id}")
 
