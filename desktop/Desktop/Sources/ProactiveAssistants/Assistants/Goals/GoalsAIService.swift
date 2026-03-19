@@ -24,13 +24,18 @@ actor GoalsAIService {
   /// (set by APIKeyService.fetchKeys()) is available.
   private func getGeminiClient() -> GeminiClient? {
     if let client = geminiClient { return client }
-    guard !geminiClientInitAttempted else { return nil }
+    // If APIKeyService hasn't loaded yet, don't set the "attempted" flag — allow retry later
+    guard APIKeyService.keysAvailable || !geminiClientInitAttempted else { return nil }
     geminiClientInitAttempted = true
     do {
       let client = try GeminiClient(model: "gemini-pro-latest")
       geminiClient = client
       return client
     } catch {
+      // If keys aren't loaded yet, reset flag so we retry once they are
+      if !APIKeyService.keysAvailable {
+        geminiClientInitAttempted = false
+      }
       log("GoalsAIService: Failed to initialize GeminiClient: \(error)")
       return nil
     }
