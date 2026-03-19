@@ -13,6 +13,7 @@ from database._client import db
 from utils.other.endpoints import get_current_user_uid, rate_limit_dependency
 from utils.fair_use import (
     get_rolling_speech_ms,
+    get_dg_budget_status,
     invalidate_enforcement_cache,
     FAIR_USE_ENABLED,
     FAIR_USE_DAILY_SPEECH_MS,
@@ -183,6 +184,9 @@ def get_my_fair_use_status(uid: str = Depends(get_current_user_uid)):
     three_day_ms = speech.get('three_day_ms', 0)
     weekly_ms = speech.get('weekly_ms', 0)
 
+    # DG budget (only meaningful for restrict stage, but always returned for frontend simplicity)
+    dg_budget = get_dg_budget_status(uid)
+
     return {
         'stage': stage,
         'case_ref': case_ref,
@@ -199,6 +203,7 @@ def get_my_fair_use_status(uid: str = Depends(get_current_user_uid)):
             'three_day': round(three_day_ms / FAIR_USE_3DAY_SPEECH_MS * 100, 1) if FAIR_USE_3DAY_SPEECH_MS else 0,
             'weekly': round(weekly_ms / FAIR_USE_WEEKLY_SPEECH_MS * 100, 1) if FAIR_USE_WEEKLY_SPEECH_MS else 0,
         },
+        'dg_budget': dg_budget,
         'message': _user_facing_message(stage, case_ref),
     }
 
