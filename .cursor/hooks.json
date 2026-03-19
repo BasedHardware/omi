@@ -1,6 +1,8 @@
 {
   "version": 1,
-  "_comment": "This file is optional. Uncomment and configure hooks as needed.",
-  "_comment2": "See https://cursor.com/docs/agent/hooks for documentation.",
-  "hooks": {}
+  "hooks": {
+    "beforeShellExecution": [
+      { "command": "npx block-no-verify@1.1.2", "event": "beforeShellExecution" }
+    ]
+  }
 }
