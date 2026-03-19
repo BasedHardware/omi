@@ -9,7 +9,7 @@
 #define MAX_STORAGE_BYTES 0x1E000000 // 480MB
 #define MAX_WRITE_SIZE 440
 #define MAX_FILENAME_LEN 32
-#define MAX_AUDIO_FILES 100
+#define MAX_AUDIO_FILES 50
 #define FILE_ROTATION_INTERVAL_MS (30 * 60 * 1000) // 30 minutes in milliseconds
 
 /* Request types for the SD worker */

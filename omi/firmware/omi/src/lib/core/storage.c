@@ -178,7 +178,7 @@ static ssize_t storage_read_characteristic(struct bt_conn *conn,
 uint8_t transport_started = 0;
 #define SD_BLE_SIZE 440
 #define SD_BLE_MAX_CHUNK 491
-#define TCP_CHUNK_COUNT 16
+#define TCP_CHUNK_COUNT 8
 #define STORAGE_BUFFER_SIZE (SD_BLE_MAX_CHUNK * TCP_CHUNK_COUNT + 5 * TCP_CHUNK_COUNT)
 static uint8_t storage_buffer[STORAGE_BUFFER_SIZE];                               /* Shared buffer for BLE and WiFi */
 static uint32_t offset = 0;

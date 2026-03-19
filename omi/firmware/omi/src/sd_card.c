@@ -32,31 +32,31 @@ LOG_MODULE_REGISTER(sd_card, LOG_LEVEL_INF);
 #define DISK_DRIVE_NAME CONFIG_SDMMC_VOLUME_NAME
 #define SD_REQ_QUEUE_MSGS 32
 #define SD_FSYNC_THRESHOLD 131072
-#define WRITE_BATCH_COUNT 32
+#define WRITE_BATCH_COUNT 16
 #define ERROR_THRESHOLD 5
 #define ACTIVE_FILE_EOF_SYNC_INTERVAL_MS 3000
 
 #define FILE_DATA_DIR "audio"
 #define FILE_INFO_PATH "info.txt"
 
+#define DISK_SECTOR_SIZE 512
+#define LFS_BLOCK_SIZE 4096
+#define LFS_CACHE_SIZE 2048
+#define SECTORS_PER_BLOCK (LFS_BLOCK_SIZE / DISK_SECTOR_SIZE)
+
 static lfs_t lfs_fs;
 static lfs_file_t lfs_fil_data;
 static lfs_file_t lfs_fil_info;
 
-static uint8_t lfs_fdata_buf[4096];
-static uint8_t lfs_finfo_buf[4096];
+static uint8_t lfs_fdata_buf[LFS_CACHE_SIZE];
+static uint8_t lfs_finfo_buf[LFS_CACHE_SIZE];
 static struct lfs_file_config lfs_fdata_cfg = {.buffer = lfs_fdata_buf};
 static struct lfs_file_config lfs_finfo_cfg = {.buffer = lfs_finfo_buf};
 
-static uint8_t lfs_read_buf[4096];
-static uint8_t lfs_prog_buf[4096];
+static uint8_t lfs_read_buf[LFS_CACHE_SIZE];
+static uint8_t lfs_prog_buf[LFS_CACHE_SIZE];
 static uint8_t lfs_lookahead_buf[32];
 static uint8_t _lfs_io_tmp[512];
-
-#define DISK_SECTOR_SIZE 512
-#define LFS_BLOCK_SIZE 4096
-#define LFS_CACHE_SIZE LFS_BLOCK_SIZE
-#define SECTORS_PER_BLOCK (LFS_BLOCK_SIZE / DISK_SECTOR_SIZE)
 
 static int lfs_disk_read_cb(const struct lfs_config *c, lfs_block_t block, lfs_off_t off, void *buffer, lfs_size_t size)
 {
@@ -187,7 +187,7 @@ K_MSGQ_DEFINE(sd_msgq, sizeof(sd_req_t), SD_REQ_QUEUE_MSGS, 4);
 K_MSGQ_DEFINE(sd_prio_msgq, sizeof(sd_req_t), SD_PRIO_QUEUE_MSGS, 4);
 
 static lfs_file_t lfs_read_handle;
-static uint8_t lfs_read_handle_buf[4096];
+static uint8_t lfs_read_handle_buf[LFS_CACHE_SIZE];
 static struct lfs_file_config lfs_read_handle_cfg = {.buffer = lfs_read_handle_buf};
 static char read_handle_filename[MAX_FILENAME_LEN] = {0};
 static bool read_handle_open = false;
@@ -297,22 +297,64 @@ static int sd_mount(void)
     ret = lfs_mount(&lfs_fs, &lfs_cfg);
     if (ret != LFS_ERR_OK) {
         LOG_WRN("LFS mount failed (%d), formatting...", ret);
-        ret = lfs_format(&lfs_fs, &lfs_cfg);
-        if (ret != LFS_ERR_OK) {
-            LOG_ERR("LFS format failed: %d", ret);
-            sd_enable_power(false);
-            return -EIO;
+        goto do_format;
+    }
+
+    /* Write-test: create+write+read back a small probe file to detect corruption
+     * that only manifests during I/O (metadata CRC ok but data blocks damaged). */
+    {
+        lfs_file_t probe;
+        static const char probe_path[] = ".probe";
+        static const uint8_t probe_data[4] = {0xDE, 0xAD, 0xBE, 0xEF};
+        uint8_t readback[4] = {0};
+
+        ret = lfs_file_open(&lfs_fs, &probe, probe_path, LFS_O_CREAT | LFS_O_RDWR | LFS_O_TRUNC);
+        if (ret < 0) {
+            LOG_WRN("LFS probe open failed (%d), reformatting...", ret);
+            lfs_unmount(&lfs_fs);
+            goto do_format;
         }
-        ret = lfs_mount(&lfs_fs, &lfs_cfg);
-        if (ret != LFS_ERR_OK) {
-            LOG_ERR("LFS mount after format failed: %d", ret);
-            sd_enable_power(false);
-            return -EIO;
+        lfs_ssize_t bw = lfs_file_write(&lfs_fs, &probe, probe_data, sizeof(probe_data));
+        if (bw != sizeof(probe_data)) {
+            LOG_WRN("LFS probe write failed (%d), reformatting...", (int) bw);
+            lfs_file_close(&lfs_fs, &probe);
+            lfs_unmount(&lfs_fs);
+            goto do_format;
+        }
+        /* Seek back and verify */
+        lfs_file_seek(&lfs_fs, &probe, 0, LFS_SEEK_SET);
+        lfs_ssize_t br = lfs_file_read(&lfs_fs, &probe, readback, sizeof(readback));
+        lfs_file_close(&lfs_fs, &probe);
+        lfs_remove(&lfs_fs, probe_path);
+
+        if (br != sizeof(readback) || memcmp(readback, probe_data, sizeof(probe_data)) != 0) {
+            LOG_WRN("LFS probe verify failed, reformatting...");
+            lfs_unmount(&lfs_fs);
+            goto do_format;
         }
     }
 
     is_mounted = true;
     LOG_INF("LittleFS mounted OK");
+    goto mount_done;
+
+do_format:
+    ret = lfs_format(&lfs_fs, &lfs_cfg);
+    if (ret != LFS_ERR_OK) {
+        LOG_ERR("LFS format failed: %d", ret);
+        sd_enable_power(false);
+        return -EIO;
+    }
+    ret = lfs_mount(&lfs_fs, &lfs_cfg);
+    if (ret != LFS_ERR_OK) {
+        LOG_ERR("LFS mount after format failed: %d", ret);
+        sd_enable_power(false);
+        return -EIO;
+    }
+    is_mounted = true;
+    LOG_INF("LittleFS formatted and mounted OK");
+
+mount_done:
     return 0;
 }
 
