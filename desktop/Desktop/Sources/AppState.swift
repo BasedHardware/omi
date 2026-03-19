@@ -420,11 +420,11 @@ class AppState: ObservableObject {
             // Skip comments
             guard !key.hasPrefix("#") else { continue }
             // API keys are fetched from the backend at runtime (APIKeyService).
-            // Load them from .env as a fallback — APIKeyService.fetchKeys() will
-            // overwrite them with backend-provided keys once auth is ready.
-            let backendServedKeys = ["DEEPGRAM_API_KEY", "GEMINI_API_KEY", "ANTHROPIC_API_KEY", "FIREBASE_API_KEY", "GOOGLE_CALENDAR_API_KEY"]
+            // Do NOT load them from .env — defer entirely to APIKeyService.fetchKeys().
+            let backendServedKeys = ["DEEPGRAM_API_KEY", "GEMINI_API_KEY", "ANTHROPIC_API_KEY", "GOOGLE_CALENDAR_API_KEY"]
             if backendServedKeys.contains(key) {
-              log("  Set \(key)=*** (fallback, will be overwritten by backend)")
+              log("  Skipped \(key) (fetched from backend via APIKeyService)")
+              continue
             }
             let value = String(parts[1]).trimmingCharacters(in: .whitespaces)
               .trimmingCharacters(in: CharacterSet(charactersIn: "\"'"))
