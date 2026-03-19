@@ -90,9 +90,13 @@ from utils.stt.vad_gate import VADStreamingGate, VAD_GATE_MODE, is_gate_enabled
 from utils.fair_use import (
     FAIR_USE_ENABLED,
     FAIR_USE_CHECK_INTERVAL_SECONDS,
+    FAIR_USE_RESTRICT_DAILY_DG_MS,
     record_speech_ms,
     check_soft_caps,
     trigger_classifier_if_needed,
+    get_enforcement_stage,
+    is_dg_budget_exhausted,
+    record_dg_usage_ms,
 )
 from utils.subscription import has_transcription_credits, get_remaining_transcription_seconds
 from utils.translation import TranslationService
@@ -396,13 +400,15 @@ async def _stream_handler(
 
     # Fair-use state (#5746)
     fair_use_last_check_ts: float = 0.0
+    # DG budget gate for restricted users — checked once per cap-check interval
+    fair_use_dg_budget_exhausted: bool = False
 
     async def _record_usage_periodically():
         nonlocal websocket_active, last_usage_record_timestamp, words_transcribed_since_last_record
         nonlocal last_audio_received_time, last_transcript_time, user_has_credits
         nonlocal freemium_threshold_sent
         nonlocal remaining_seconds_cache, remaining_seconds_cache_ts, remaining_seconds_cache_initialized
-        nonlocal fair_use_last_check_ts
+        nonlocal fair_use_last_check_ts, fair_use_dg_budget_exhausted
 
         while websocket_active:
             await asyncio.sleep(60)
@@ -453,6 +459,20 @@ async def _stream_handler(
                         asyncio.create_task(trigger_classifier_if_needed(uid, triggered_caps, session_id))
                 except Exception as e:
                     logger.error(f'fair_use: cap check error for {uid}: {e}')
+
+                # DG budget gate: check if restricted user's daily DG budget is exhausted
+                if FAIR_USE_RESTRICT_DAILY_DG_MS > 0:
+                    try:
+                        stage = get_enforcement_stage(uid)
+                        if stage == 'restrict':
+                            was_exhausted = fair_use_dg_budget_exhausted
+                            fair_use_dg_budget_exhausted = is_dg_budget_exhausted(uid)
+                            if fair_use_dg_budget_exhausted and not was_exhausted:
+                                logger.info(f'fair_use: DG budget exhausted for {uid} session={session_id}')
+                        else:
+                            fair_use_dg_budget_exhausted = False
+                    except Exception as e:
+                        logger.error(f'fair_use: DG budget check error for {uid}: {e}')
 
             # Freemium: Check remaining credits with local cache (#5439)
             # Refresh from Firestore only every CREDITS_REFRESH_SECONDS; decrement locally between refreshes
@@ -2252,7 +2272,15 @@ async def _stream_handler(
 
             if dg_socket is not None:
                 if profile_complete or not deepgram_profile_socket:
-                    dg_socket.send(chunk)
+                    # DG budget gate: skip sending if restricted user's daily budget is exhausted (#5746)
+                    if fair_use_dg_budget_exhausted:
+                        pass  # Audio not forwarded to DG — budget exhausted
+                    else:
+                        dg_socket.send(chunk)
+                        # Track DG usage for restricted users
+                        if FAIR_USE_ENABLED and FAIR_USE_RESTRICT_DAILY_DG_MS > 0:
+                            chunk_ms = len(chunk) * 1000 // (sample_rate * 2)  # 16-bit mono
+                            record_dg_usage_ms(uid, chunk_ms)
                     if deepgram_profile_socket:
                         logger.info(f'Scheduling delayed close of deepgram_profile_socket {uid} {session_id}')
                         socket_to_close = deepgram_profile_socket
@@ -2276,7 +2304,7 @@ async def _stream_handler(
                 else:
                     deepgram_profile_socket.send(chunk)
 
-            if soniox_sock is not None:
+            if soniox_sock is not None and not fair_use_dg_budget_exhausted:
                 if profile_complete or not soniox_profile_socket:
                     await soniox_sock.send(chunk)
                     if soniox_profile_socket:
@@ -2293,7 +2321,7 @@ async def _stream_handler(
                 else:
                     await soniox_profile_socket.send(chunk)
 
-            if speechmatics_sock is not None:
+            if speechmatics_sock is not None and not fair_use_dg_budget_exhausted:
                 await speechmatics_sock.send(chunk)
 
         try:
