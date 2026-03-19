@@ -1,6 +1,41 @@
 #!/bin/bash
 set -e
 
+# ─── Help ──────────────────────────────────────────────────────────────
+if [ "$1" = "--help" ] || [ "$1" = "-h" ]; then
+    cat <<'USAGE'
+Usage: ./run.sh [options]
+
+Build and run the Omi Desktop dev app with local backend services.
+
+Options (via environment variables):
+  OMI_SKIP_BACKEND=1      Skip starting Rust backend (use remote backend via OMI_API_URL)
+  OMI_SKIP_AUTH=1          Skip starting Python auth service (use remote auth via OMI_AUTH_URL)
+  OMI_SKIP_TUNNEL=1        Skip Cloudflare tunnel (use OMI_API_URL from .env directly)
+  AUTH_PORT=10200           Auth service port (default: 10200)
+  PORT=10201                Rust backend port (default: 10201, never use 8080)
+  OMI_APP_NAME="Omi Dev"   App name (default: "Omi Dev")
+  OMI_SIGN_IDENTITY="..."  Code signing identity (auto-detected if not set)
+  OMI_ENABLE_LOCAL_AUTOMATION=1  Enable agent-swift automation bridge
+
+Required files:
+  Backend-Rust/.env         Environment variables (copy from ../.env.example)
+  Backend-Rust/google-credentials.json  GCP service account key
+
+Required tools:
+  cargo, xcrun/swift, python3, npm, node, codesign, cloudflared (unless skipped)
+
+Port allocation (never use 8080 — Tailscale conflict):
+  noa: 10200-10209    ren: 10210-10219    (see team port ranges)
+
+Examples:
+  ./run.sh                                  # Full local dev (backend + auth + tunnel + app)
+  OMI_SKIP_BACKEND=1 OMI_SKIP_AUTH=1 ./run.sh  # App only (backend running elsewhere)
+  OMI_SKIP_TUNNEL=1 ./run.sh                # No Cloudflare tunnel (use direct URL)
+USAGE
+    exit 0
+fi
+
 # Clear system OPENAI_API_KEY so .env takes precedence
 unset OPENAI_API_KEY
 
@@ -110,11 +145,10 @@ auth_debug "BEFORE pkill: ALL_KEYS=$(defaults read "$BUNDLE_ID" 2>&1 | grep -E '
 # Only kill the dev app — never touch Omi Beta (production)
 pkill -f "$APP_NAME.app" 2>/dev/null || true
 pkill -f "cloudflared.*omi-computer-dev" 2>/dev/null || true
-# Kill only the Rust backend on port 8080 (not other apps that might use it)
-lsof -ti:8080 -sTCP:LISTEN 2>/dev/null | while read pid; do
-    if ps -p "$pid" -o command= 2>/dev/null | grep -q "omi-backend\|Backend-Rust\|target/"; then
-        kill -9 "$pid" 2>/dev/null || true
-    fi
+# Kill any old Rust backend by process name (port-agnostic)
+pgrep -f "omi-desktop-backend" 2>/dev/null | while read pid; do
+    substep "Killing old backend (PID: $pid)"
+    kill -9 "$pid" 2>/dev/null || true
 done
 sleep 0.5  # Let cfprefsd flush after process death
 auth_debug "AFTER pkill: auth_isSignedIn=$(defaults read "$BUNDLE_ID" auth_isSignedIn 2>&1 || true)"
@@ -149,12 +183,20 @@ find "$HOME" -maxdepth 4 -name "$APP_NAME.app" -type d -not -path "$APP_BUNDLE" 
     rm -rf "$stale"
 done
 
-step "Starting Cloudflare tunnel..."
-cloudflared tunnel run omi-computer-dev &
-TUNNEL_PID=$!
-sleep 2
+if [ "${OMI_SKIP_TUNNEL:-0}" != "1" ]; then
+    step "Starting Cloudflare tunnel..."
+    if command -v cloudflared >/dev/null 2>&1; then
+        cloudflared tunnel run omi-computer-dev &
+        TUNNEL_PID=$!
+        sleep 2
+    else
+        substep "cloudflared not found — skipping tunnel (set OMI_API_URL in .env instead)"
+    fi
+else
+    substep "Skipping tunnel (OMI_SKIP_TUNNEL=1)"
+fi
 
-step "Starting Rust backend..."
+# ─── Load .env and credentials ─────────────────────────────────────────
 cd "$BACKEND_DIR"
 
 # Copy .env if not present
@@ -171,101 +213,104 @@ elif [ ! -f "google-credentials.json" ] && [ -f "../Backend/google-credentials.j
     ln -sf "../Backend/google-credentials.json" "google-credentials.json"
 fi
 
-# Set Firestore credentials for local backend.
+# Read environment from .env
+if [ -f "$BACKEND_DIR/.env" ]; then
+    set -a; source "$BACKEND_DIR/.env"; set +a
+fi
+
+# Read backend PORT from env (required — never default to 8080)
+BACKEND_PORT="${PORT:-10201}"
+export PORT="$BACKEND_PORT"
+
+# Validate credentials (needed for both backend and auth)
 CREDS_PATH="$BACKEND_DIR/google-credentials.json"
-if [ ! -f "$CREDS_PATH" ]; then
-    echo "Missing credentials file: $CREDS_PATH"
+if [ "${OMI_SKIP_BACKEND:-0}" != "1" ] && [ ! -f "$CREDS_PATH" ]; then
+    echo "ERROR: Missing credentials file: $CREDS_PATH"
+    echo "  Get it from: ~/.config/omi/dev/backend/google-credentials.json"
+    echo "  Or skip backend: OMI_SKIP_BACKEND=1 ./run.sh"
     exit 1
 fi
-export GOOGLE_APPLICATION_CREDENTIALS="$CREDS_PATH"
-# Read FIREBASE_PROJECT_ID from: shell env > backend .env > "based-hardware" default.
-# This ensures the project ID matches the service account credentials.
-if [ -z "$FIREBASE_PROJECT_ID" ] && [ -f "$BACKEND_DIR/.env" ]; then
-    ENV_PROJECT_ID=$(grep "^FIREBASE_PROJECT_ID=" "$BACKEND_DIR/.env" | head -1 | cut -d= -f2-)
-    if [ -n "$ENV_PROJECT_ID" ]; then
-        export FIREBASE_PROJECT_ID="$ENV_PROJECT_ID"
-    fi
+if [ -f "$CREDS_PATH" ]; then
+    export GOOGLE_APPLICATION_CREDENTIALS="$CREDS_PATH"
 fi
+
+# Validate FIREBASE_PROJECT_ID (required)
 if [ -z "$FIREBASE_PROJECT_ID" ]; then
     echo "ERROR: FIREBASE_PROJECT_ID is not set. Add it to $BACKEND_DIR/.env or export it."
     echo "  For prod: FIREBASE_PROJECT_ID=based-hardware"
     echo "  For dev:  FIREBASE_PROJECT_ID=based-hardware-dev"
     exit 1
 fi
-# FIREBASE_AUTH_PROJECT_ID controls which project ID the backend validates
-# auth tokens against. With local auth (Auth-Python using dev SA), tokens
-# are signed for the dev project — so leave it matching FIREBASE_PROJECT_ID.
-# Only set FIREBASE_AUTH_PROJECT_ID explicitly if using a DIFFERENT auth
-# service (e.g. prod Cloud Run) that mints tokens for a different project.
 if [ -n "$FIREBASE_AUTH_PROJECT_ID" ]; then
     substep "Auth project: tokens validated against $FIREBASE_AUTH_PROJECT_ID, Firestore on $FIREBASE_PROJECT_ID"
 fi
-# Read backend PORT from .env (the Rust backend uses this)
-if [ -z "$PORT" ] && [ -f "$BACKEND_DIR/.env" ]; then
-    PORT=$(grep "^PORT=" "$BACKEND_DIR/.env" | head -1 | cut -d= -f2-)
-fi
-BACKEND_PORT="${PORT:-10201}"
-export PORT="$BACKEND_PORT"
-substep "Using Firestore creds: $GOOGLE_APPLICATION_CREDENTIALS"
-substep "Using Firebase project: $FIREBASE_PROJECT_ID"
-substep "Backend port: $BACKEND_PORT, Auth port: $AUTH_PORT"
-
-# Build if binary doesn't exist or source is newer
-if [ ! -f "target/release/omi-desktop-backend" ] || [ -n "$(find src -newer target/release/omi-desktop-backend 2>/dev/null)" ]; then
-    step "Building Rust backend (cargo build --release)..."
-    cargo build --release
-fi
-
-./target/release/omi-desktop-backend &
-BACKEND_PID=$!
+substep "Firebase project: $FIREBASE_PROJECT_ID | Backend port: $BACKEND_PORT | Auth port: $AUTH_PORT"
 cd - > /dev/null
 
-step "Waiting for backend to start..."
-for i in {1..30}; do
-    if curl -s "http://localhost:$BACKEND_PORT" > /dev/null 2>&1; then
-        substep "Backend is ready!"
-        break
-    fi
-    if ! kill -0 "$BACKEND_PID" 2>/dev/null; then
-        echo "Backend failed to start"
-        exit 1
-    fi
-    sleep 0.5
-done
+# ─── Start Rust backend ───────────────────────────────────────────────
+if [ "${OMI_SKIP_BACKEND:-0}" != "1" ]; then
+    step "Starting Rust backend..."
+    cd "$BACKEND_DIR"
 
-step "Starting Python auth service (port $AUTH_PORT)..."
-if [ -d "$AUTH_DIR" ]; then
-    # Set up venv if needed
-    if [ ! -d "$AUTH_DIR/.venv" ]; then
-        substep "Creating virtualenv..."
-        python3 -m venv "$AUTH_DIR/.venv"
-        "$AUTH_DIR/.venv/bin/pip" install -q -r "$AUTH_DIR/requirements.txt"
+    # Build if binary doesn't exist or source is newer
+    if [ ! -f "target/release/omi-desktop-backend" ] || [ -n "$(find src -newer target/release/omi-desktop-backend 2>/dev/null)" ]; then
+        step "Building Rust backend (cargo build --release)..."
+        cargo build --release
     fi
-    # Copy .env from backend dir if auth doesn't have its own
-    if [ ! -f "$AUTH_DIR/.env" ] && [ -f "$BACKEND_DIR/.env" ]; then
-        substep "Using backend .env for auth service"
-    fi
-    # Auth service shares credentials with the Rust backend
-    export BASE_API_URL="http://localhost:$AUTH_PORT"
-    (
-        cd "$AUTH_DIR"
-        if [ -f "$BACKEND_DIR/.env" ]; then
-            set -a; source "$BACKEND_DIR/.env"; set +a
+
+    ./target/release/omi-desktop-backend &
+    BACKEND_PID=$!
+    cd - > /dev/null
+
+    step "Waiting for backend to start..."
+    for i in {1..30}; do
+        if curl -s "http://localhost:$BACKEND_PORT" > /dev/null 2>&1; then
+            substep "Backend is ready!"
+            break
         fi
-        export GOOGLE_APPLICATION_CREDENTIALS="$CREDS_PATH"
-        export BASE_API_URL="http://localhost:$AUTH_PORT"
-        .venv/bin/uvicorn main:app --host 0.0.0.0 --port "$AUTH_PORT" --log-level warning &
-        echo $!
-    ) &
-    AUTH_PID=$!
-    sleep 1
-    if curl -s "http://localhost:$AUTH_PORT/docs" > /dev/null 2>&1; then
-        substep "Auth service is ready on port $AUTH_PORT"
+        if ! kill -0 "$BACKEND_PID" 2>/dev/null; then
+            echo "ERROR: Backend failed to start. Check $BACKEND_DIR/.env and credentials."
+            exit 1
+        fi
+        sleep 0.5
+    done
+else
+    substep "Skipping backend (OMI_SKIP_BACKEND=1) — using OMI_API_URL from .env"
+fi
+
+# ─── Start Python auth service ────────────────────────────────────────
+if [ "${OMI_SKIP_AUTH:-0}" != "1" ]; then
+    step "Starting Python auth service (port $AUTH_PORT)..."
+    if [ -d "$AUTH_DIR" ]; then
+        # Set up venv if needed
+        if [ ! -d "$AUTH_DIR/.venv" ]; then
+            substep "Creating virtualenv..."
+            python3 -m venv "$AUTH_DIR/.venv"
+            "$AUTH_DIR/.venv/bin/pip" install -q -r "$AUTH_DIR/requirements.txt"
+        fi
+        # Auth service shares credentials with the Rust backend
+        (
+            cd "$AUTH_DIR"
+            if [ -f "$BACKEND_DIR/.env" ]; then
+                set -a; source "$BACKEND_DIR/.env"; set +a
+            fi
+            export GOOGLE_APPLICATION_CREDENTIALS="$CREDS_PATH"
+            export BASE_API_URL="http://localhost:$AUTH_PORT"
+            .venv/bin/uvicorn main:app --host 0.0.0.0 --port "$AUTH_PORT" --log-level warning &
+            echo $!
+        ) &
+        AUTH_PID=$!
+        sleep 1
+        if curl -s "http://localhost:$AUTH_PORT/docs" > /dev/null 2>&1; then
+            substep "Auth service is ready on port $AUTH_PORT"
+        else
+            substep "Auth service starting (PID: $AUTH_PID)..."
+        fi
     else
-        substep "Auth service starting (PID: $AUTH_PID)..."
+        substep "Auth-Python/ not found — skipping (auth will use OMI_AUTH_URL from .env)"
     fi
 else
-    substep "Auth-Python/ not found — skipping (auth will use OMI_AUTH_URL from .env)"
+    substep "Skipping auth service (OMI_SKIP_AUTH=1) — using OMI_AUTH_URL from .env"
 fi
 
 # Check if another SwiftPM instance is running (will block our build)
@@ -377,11 +422,20 @@ elif [ -f ".env.app" ]; then
 else
     touch "$APP_BUNDLE/Contents/Resources/.env"
 fi
-if grep -q "^OMI_API_URL=" "$APP_BUNDLE/Contents/Resources/.env"; then
-    sed -i '' "s|^OMI_API_URL=.*|OMI_API_URL=$TUNNEL_URL|" "$APP_BUNDLE/Contents/Resources/.env"
+# Set OMI_API_URL: tunnel URL if tunnel is running, otherwise from .env or local backend
+if [ -n "$TUNNEL_PID" ]; then
+    EFFECTIVE_API_URL="$TUNNEL_URL"
+elif [ -n "$OMI_API_URL" ]; then
+    EFFECTIVE_API_URL="$OMI_API_URL"
 else
-    echo "OMI_API_URL=$TUNNEL_URL" >> "$APP_BUNDLE/Contents/Resources/.env"
+    EFFECTIVE_API_URL="http://localhost:$BACKEND_PORT"
 fi
+if grep -q "^OMI_API_URL=" "$APP_BUNDLE/Contents/Resources/.env"; then
+    sed -i '' "s|^OMI_API_URL=.*|OMI_API_URL=$EFFECTIVE_API_URL|" "$APP_BUNDLE/Contents/Resources/.env"
+else
+    echo "OMI_API_URL=$EFFECTIVE_API_URL" >> "$APP_BUNDLE/Contents/Resources/.env"
+fi
+substep "OMI_API_URL=$EFFECTIVE_API_URL"
 # Bootstrap FIREBASE_API_KEY from backend .env so auth can restore on launch
 # (before APIKeyService.fetchKeys() has a chance to fetch it from the backend)
 if [ -f "$BACKEND_DIR/.env" ]; then
@@ -529,14 +583,26 @@ TOTAL_TIME=$(echo "$NOW - $SCRIPT_START_TIME" | bc)
 printf "  └─ done (%.2fs)\n" "$(echo "$NOW - $STEP_START_TIME" | bc)"
 echo ""
 echo "=== Services Running (total: ${TOTAL_TIME%.*}s) ==="
-echo "Backend:  http://localhost:$BACKEND_PORT (PID: $BACKEND_PID)"
-echo "Auth:     http://localhost:$AUTH_PORT (PID: ${AUTH_PID:-none})"
-echo "Tunnel:   $TUNNEL_URL (PID: $TUNNEL_PID)"
-echo "App:      $APP_PATH (installed from $APP_BUNDLE)"
+if [ -n "$BACKEND_PID" ]; then
+    echo "Backend:  http://localhost:$BACKEND_PORT (PID: $BACKEND_PID)"
+else
+    echo "Backend:  skipped (OMI_SKIP_BACKEND=1)"
+fi
+if [ -n "$AUTH_PID" ]; then
+    echo "Auth:     http://localhost:$AUTH_PORT (PID: $AUTH_PID)"
+else
+    echo "Auth:     skipped"
+fi
+if [ -n "$TUNNEL_PID" ]; then
+    echo "Tunnel:   $TUNNEL_URL (PID: $TUNNEL_PID)"
+else
+    echo "Tunnel:   skipped"
+fi
+echo "App:      $APP_PATH"
+echo "API URL:  $EFFECTIVE_API_URL"
 if [ "${#AUTOMATION_ARGS[@]}" -gt 0 ]; then
     echo "Automation bridge: http://127.0.0.1:${AUTOMATION_PORT}"
 fi
-echo "Using backend: $TUNNEL_URL"
 echo "========================================"
 echo ""
 
@@ -547,6 +613,13 @@ else
     open "$APP_PATH" || "$APP_PATH/Contents/MacOS/$BINARY_NAME" &
 fi
 
-# Wait for backend process (keeps script running and shows logs)
+# Keep script running until Ctrl+C
 echo "Press Ctrl+C to stop all services..."
-wait "$BACKEND_PID"
+if [ -n "$BACKEND_PID" ]; then
+    wait "$BACKEND_PID"
+elif [ -n "$AUTH_PID" ]; then
+    wait "$AUTH_PID"
+else
+    # No backend or auth — just wait for user to Ctrl+C
+    while true; do sleep 60; done
+fi
