@@ -1897,8 +1897,8 @@ class _ManualFirmwareFlashPage extends StatefulWidget {
   const _ManualFirmwareFlashPage({
     required this.zipFilePath,
     required this.fileName,
-    required this.device, 
-  });
+    required this.device,
+  }); 
 
   @override
   State<_ManualFirmwareFlashPage> createState() => _ManualFirmwareFlashPageState();
