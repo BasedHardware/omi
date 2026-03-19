@@ -1087,43 +1087,34 @@ async def _stream_handler(
                     return
 
                 # Send to appropriate STT socket with fixed duration padding
-                # Skip if restricted user's DG budget is already exhausted (#5746)
-                if fair_use_dg_budget_exhausted:
-                    logger.info(f'fair_use: skipping speech profile send — DG budget exhausted {uid} {session_id}')
-                elif stt_service == STTService.deepgram and deepgram_socket:
+                if stt_service == STTService.deepgram and deepgram_socket:
 
                     async def deepgram_socket_send(data):
                         return deepgram_socket.send(data)
 
-                    profile_bytes_sent = await send_initial_file_path(
+                    await send_initial_file_path(
                         file_path,
                         deepgram_socket_send,
                         is_active,
                         sample_rate=audio_sample_rate,
                         target_duration=SPEECH_PROFILE_FIXED_DURATION,
                     )
-                    if FAIR_USE_ENABLED and FAIR_USE_RESTRICT_DAILY_DG_MS > 0 and profile_bytes_sent:
-                        record_dg_usage_ms(uid, profile_bytes_sent * 1000 // (audio_sample_rate * 2))
                 elif stt_service == STTService.soniox and soniox_socket:
-                    profile_bytes_sent = await send_initial_file_path(
+                    await send_initial_file_path(
                         file_path,
                         soniox_socket.send,
                         is_active,
                         sample_rate=audio_sample_rate,
                         target_duration=SPEECH_PROFILE_FIXED_DURATION,
                     )
-                    if FAIR_USE_ENABLED and FAIR_USE_RESTRICT_DAILY_DG_MS > 0 and profile_bytes_sent:
-                        record_dg_usage_ms(uid, profile_bytes_sent * 1000 // (audio_sample_rate * 2))
                 elif stt_service == STTService.speechmatics and speechmatics_socket:
-                    profile_bytes_sent = await send_initial_file_path(
+                    await send_initial_file_path(
                         file_path,
                         speechmatics_socket.send,
                         is_active,
                         sample_rate=audio_sample_rate,
                         target_duration=SPEECH_PROFILE_FIXED_DURATION,
                     )
-                    if FAIR_USE_ENABLED and FAIR_USE_RESTRICT_DAILY_DG_MS > 0 and profile_bytes_sent:
-                        record_dg_usage_ms(uid, profile_bytes_sent * 1000 // (audio_sample_rate * 2))
 
                 # Stabilization delay before switching to main socket
                 if is_active():
@@ -2322,11 +2313,7 @@ async def _stream_handler(
 
                         spawn(close_dg_profile())
                 else:
-                    if not fair_use_dg_budget_exhausted:
-                        deepgram_profile_socket.send(chunk)
-                        if FAIR_USE_ENABLED and FAIR_USE_RESTRICT_DAILY_DG_MS > 0:
-                            chunk_ms = len(chunk) * 1000 // (sample_rate * 2)
-                            record_dg_usage_ms(uid, chunk_ms)
+                    deepgram_profile_socket.send(chunk)
 
             if soniox_sock is not None and not fair_use_dg_budget_exhausted:
                 if profile_complete or not soniox_profile_socket:
@@ -2348,9 +2335,6 @@ async def _stream_handler(
                         spawn(close_soniox_profile())
                 else:
                     await soniox_profile_socket.send(chunk)
-                    if FAIR_USE_ENABLED and FAIR_USE_RESTRICT_DAILY_DG_MS > 0:
-                        chunk_ms = len(chunk) * 1000 // (sample_rate * 2)
-                        record_dg_usage_ms(uid, chunk_ms)
 
             if speechmatics_sock is not None and not fair_use_dg_budget_exhausted:
                 await speechmatics_sock.send(chunk)
