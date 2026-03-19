@@ -8584,4 +8584,20 @@ class AppLocalizationsHi extends AppLocalizations {
   String fairUseCaseRefCopied(String caseRef) {
     return '$caseRef कॉपी किया गया';
   }
+
+  @override
+  String get fairUseDailyTranscription => 'दैनिक ट्रांसक्रिप्शन';
+
+  @override
+  String fairUseBudgetUsed(String used, String limit) {
+    return '$usedमि / $limitमि';
+  }
+
+  @override
+  String get fairUseBudgetExhausted => 'दैनिक ट्रांसक्रिप्शन सीमा पूरी हुई';
+
+  @override
+  String fairUseBudgetResetsAt(String time) {
+    return 'रीसेट $time';
+  }
 }

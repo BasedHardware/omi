@@ -8633,4 +8633,20 @@ class AppLocalizationsRu extends AppLocalizations {
   String fairUseCaseRefCopied(String caseRef) {
     return '$caseRef скопировано';
   }
+
+  @override
+  String get fairUseDailyTranscription => 'Ежедневная транскрипция';
+
+  @override
+  String fairUseBudgetUsed(String used, String limit) {
+    return '$usedм / $limitм';
+  }
+
+  @override
+  String get fairUseBudgetExhausted => 'Достигнут дневной лимит транскрипции';
+
+  @override
+  String fairUseBudgetResetsAt(String time) {
+    return 'Сброс $time';
+  }
 }

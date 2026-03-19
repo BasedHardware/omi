@@ -8462,4 +8462,20 @@ class AppLocalizationsKo extends AppLocalizations {
   String fairUseCaseRefCopied(String caseRef) {
     return '$caseRef 복사됨';
   }
+
+  @override
+  String get fairUseDailyTranscription => '일일 음성 인식';
+
+  @override
+  String fairUseBudgetUsed(String used, String limit) {
+    return '$used분 / $limit분';
+  }
+
+  @override
+  String get fairUseBudgetExhausted => '일일 음성 인식 한도에 도달했습니다';
+
+  @override
+  String fairUseBudgetResetsAt(String time) {
+    return '재설정 $time';
+  }
 }

@@ -16076,6 +16076,30 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'{caseRef} copied'**
   String fairUseCaseRefCopied(String caseRef);
+
+  /// No description provided for @fairUseDailyTranscription.
+  ///
+  /// In en, this message translates to:
+  /// **'Daily Transcription'**
+  String get fairUseDailyTranscription;
+
+  /// No description provided for @fairUseBudgetUsed.
+  ///
+  /// In en, this message translates to:
+  /// **'{used}m / {limit}m'**
+  String fairUseBudgetUsed(String used, String limit);
+
+  /// No description provided for @fairUseBudgetExhausted.
+  ///
+  /// In en, this message translates to:
+  /// **'Daily transcription limit reached'**
+  String get fairUseBudgetExhausted;
+
+  /// No description provided for @fairUseBudgetResetsAt.
+  ///
+  /// In en, this message translates to:
+  /// **'Resets {time}'**
+  String fairUseBudgetResetsAt(String time);
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

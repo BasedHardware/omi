@@ -8603,4 +8603,20 @@ class AppLocalizationsFi extends AppLocalizations {
   String fairUseCaseRefCopied(String caseRef) {
     return '$caseRef kopioitu';
   }
+
+  @override
+  String get fairUseDailyTranscription => 'Daily Transcription';
+
+  @override
+  String fairUseBudgetUsed(String used, String limit) {
+    return '${used}m / ${limit}m';
+  }
+
+  @override
+  String get fairUseBudgetExhausted => 'Daily transcription limit reached';
+
+  @override
+  String fairUseBudgetResetsAt(String time) {
+    return 'Resets $time';
+  }
 }

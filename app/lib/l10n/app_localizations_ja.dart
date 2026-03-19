@@ -8460,4 +8460,20 @@ class AppLocalizationsJa extends AppLocalizations {
   String fairUseCaseRefCopied(String caseRef) {
     return '$caseRef をコピーしました';
   }
+
+  @override
+  String get fairUseDailyTranscription => '日次文字起こし';
+
+  @override
+  String fairUseBudgetUsed(String used, String limit) {
+    return '$used分 / $limit分';
+  }
+
+  @override
+  String get fairUseBudgetExhausted => '日次文字起こし上限に達しました';
+
+  @override
+  String fairUseBudgetResetsAt(String time) {
+    return 'リセット $time';
+  }
 }

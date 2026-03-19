@@ -8449,4 +8449,20 @@ class AppLocalizationsZh extends AppLocalizations {
   String fairUseCaseRefCopied(String caseRef) {
     return '$caseRef 已复制';
   }
+
+  @override
+  String get fairUseDailyTranscription => '每日转写';
+
+  @override
+  String fairUseBudgetUsed(String used, String limit) {
+    return '$used分 / $limit分';
+  }
+
+  @override
+  String get fairUseBudgetExhausted => '已达到每日转写限额';
+
+  @override
+  String fairUseBudgetResetsAt(String time) {
+    return '重置时间 $time';
+  }
 }

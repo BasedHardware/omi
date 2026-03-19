@@ -8607,4 +8607,20 @@ class AppLocalizationsVi extends AppLocalizations {
   String fairUseCaseRefCopied(String caseRef) {
     return 'Đã sao chép $caseRef';
   }
+
+  @override
+  String get fairUseDailyTranscription => 'Chuyển giọng hàng ngày';
+
+  @override
+  String fairUseBudgetUsed(String used, String limit) {
+    return '${used}p / ${limit}p';
+  }
+
+  @override
+  String get fairUseBudgetExhausted => 'Đã đạt giới hạn chuyển giọng hàng ngày';
+
+  @override
+  String fairUseBudgetResetsAt(String time) {
+    return 'Đặt lại $time';
+  }
 }

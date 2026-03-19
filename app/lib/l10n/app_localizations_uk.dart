@@ -8618,4 +8618,20 @@ class AppLocalizationsUk extends AppLocalizations {
   String fairUseCaseRefCopied(String caseRef) {
     return '$caseRef скопійовано';
   }
+
+  @override
+  String get fairUseDailyTranscription => 'Щоденна транскрипція';
+
+  @override
+  String fairUseBudgetUsed(String used, String limit) {
+    return '$usedхв / $limitхв';
+  }
+
+  @override
+  String get fairUseBudgetExhausted => 'Досягнуто денний ліміт транскрипції';
+
+  @override
+  String fairUseBudgetResetsAt(String time) {
+    return 'Скидання $time';
+  }
 }
