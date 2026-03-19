@@ -1909,8 +1909,8 @@ class _ManualFirmwareFlashPageState extends State<_ManualFirmwareFlashPage> with
   String? _error;
 
   @override
-  void initState() { 
-    super.initState();
+  void initState() {
+    super.initState(); 
   }
 
   @override
