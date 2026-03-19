@@ -1095,29 +1095,35 @@ async def _stream_handler(
                     async def deepgram_socket_send(data):
                         return deepgram_socket.send(data)
 
-                    await send_initial_file_path(
+                    profile_bytes_sent = await send_initial_file_path(
                         file_path,
                         deepgram_socket_send,
                         is_active,
                         sample_rate=audio_sample_rate,
                         target_duration=SPEECH_PROFILE_FIXED_DURATION,
                     )
+                    if FAIR_USE_ENABLED and FAIR_USE_RESTRICT_DAILY_DG_MS > 0 and profile_bytes_sent:
+                        record_dg_usage_ms(uid, profile_bytes_sent * 1000 // (audio_sample_rate * 2))
                 elif stt_service == STTService.soniox and soniox_socket:
-                    await send_initial_file_path(
+                    profile_bytes_sent = await send_initial_file_path(
                         file_path,
                         soniox_socket.send,
                         is_active,
                         sample_rate=audio_sample_rate,
                         target_duration=SPEECH_PROFILE_FIXED_DURATION,
                     )
+                    if FAIR_USE_ENABLED and FAIR_USE_RESTRICT_DAILY_DG_MS > 0 and profile_bytes_sent:
+                        record_dg_usage_ms(uid, profile_bytes_sent * 1000 // (audio_sample_rate * 2))
                 elif stt_service == STTService.speechmatics and speechmatics_socket:
-                    await send_initial_file_path(
+                    profile_bytes_sent = await send_initial_file_path(
                         file_path,
                         speechmatics_socket.send,
                         is_active,
                         sample_rate=audio_sample_rate,
                         target_duration=SPEECH_PROFILE_FIXED_DURATION,
                     )
+                    if FAIR_USE_ENABLED and FAIR_USE_RESTRICT_DAILY_DG_MS > 0 and profile_bytes_sent:
+                        record_dg_usage_ms(uid, profile_bytes_sent * 1000 // (audio_sample_rate * 2))
 
                 # Stabilization delay before switching to main socket
                 if is_active():
