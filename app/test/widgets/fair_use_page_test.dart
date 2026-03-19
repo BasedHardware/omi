@@ -252,6 +252,9 @@ class FairUseSuccessHarness extends StatelessWidget {
   }
 
   Widget _buildBudgetSection(BuildContext context, AppLocalizations l10n) {
+    final stage = status['stage'] as String? ?? 'none';
+    if (stage != 'restrict') return const SizedBox.shrink();
+
     final dgBudget = status['dg_budget'] as Map<String, dynamic>?;
     if (dgBudget == null) return const SizedBox.shrink();
 
@@ -833,6 +836,15 @@ void main() {
       final exhaustedBar = bars2.last;
       final exhaustedColor = exhaustedBar.valueColor as AlwaysStoppedAnimation<Color>;
       expect(exhaustedColor.value, const Color(0xFFEF4444)); // red
+    });
+
+    testWidgets('hides budget section for non-restrict stages even with dg_budget', (tester) async {
+      final status = makeStatusWithBudget();
+      status['stage'] = 'warning';
+      await tester.pumpWidget(buildTestApp(FairUseSuccessHarness(status: status)));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('budget_section')), findsNothing);
     });
 
     testWidgets('hides budget section when daily_limit_ms is 0', (tester) async {
