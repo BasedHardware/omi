@@ -109,7 +109,8 @@ class TranscriptionService {
     ///   - language: Language code for transcription (e.g., "en", "uk", "ru", "multi" for auto-detect)
     ///   - vocabulary: Custom vocabulary/keyterms to improve transcription accuracy (Nova-3 limit: 500 tokens total)
     init(apiKey: String? = nil, language: String = "en", vocabulary: [String] = [], channels: Int = 2) throws {
-        guard let key = apiKey ?? (getenv("DEEPGRAM_API_KEY").flatMap { String(validatingUTF8: $0) }) else {
+        guard let key = apiKey
+            ?? APIKeyService.currentDeepgramKey else {
             throw TranscriptionError.missingAPIKey
         }
         self.apiKey = key
@@ -526,7 +527,8 @@ extension TranscriptionService {
         language: String = "en",
         apiKey: String? = nil
     ) async throws -> String? {
-        guard let key = apiKey ?? (getenv("DEEPGRAM_API_KEY").flatMap { String(validatingUTF8: $0) }) else {
+        guard let key = apiKey
+            ?? APIKeyService.currentDeepgramKey else {
             throw TranscriptionError.missingAPIKey
         }
 
@@ -581,7 +583,8 @@ extension TranscriptionService {
         vocabulary: [String] = [],
         apiKey: String? = nil
     ) async throws -> [TranscriptSegment] {
-        guard let key = apiKey ?? (getenv("DEEPGRAM_API_KEY").flatMap { String(validatingUTF8: $0) }) else {
+        guard let key = apiKey
+            ?? APIKeyService.currentDeepgramKey else {
             throw TranscriptionError.missingAPIKey
         }
 
