@@ -16,7 +16,7 @@ from utils.llm.clients import llm_mini
 
 logger = logging.getLogger(__name__)
 
-CLASSIFIER_MODEL = os.getenv('FAIR_USE_CLASSIFIER_MODEL', 'gpt-4.1-mini')
+CLASSIFIER_MODEL = os.getenv('FAIR_USE_CLASSIFIER_MODEL', 'gpt-4.1')
 CLASSIFIER_LOOKBACK_DAYS = int(os.getenv('FAIR_USE_CLASSIFIER_LOOKBACK_DAYS', '7'))
 CLASSIFIER_MAX_CONVERSATIONS = 30
 
