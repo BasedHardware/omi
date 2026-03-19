@@ -10324,5 +10324,26 @@
         "type": "String"
       }
     }
+  },
+  "fairUseDailyTranscription": "Daily Transcription",
+  "fairUseBudgetUsed": "{used}m / {limit}m",
+  "@fairUseBudgetUsed": {
+    "placeholders": {
+      "used": {
+        "type": "String"
+      },
+      "limit": {
+        "type": "String"
+      }
+    }
+  },
+  "fairUseBudgetExhausted": "Daily transcription limit reached",
+  "fairUseBudgetResetsAt": "Resets {time}",
+  "@fairUseBudgetResetsAt": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
   }
 }

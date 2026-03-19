@@ -2772,5 +2772,26 @@
                 "type": "String"
             }
         }
+    },
+    "fairUseDailyTranscription": "日次文字起こし",
+    "fairUseBudgetExhausted": "日次文字起こし上限に達しました",
+    "fairUseBudgetResetsAt": "リセット {time}",
+    "fairUseBudgetUsed": "{used}分 / {limit}分",
+    "@fairUseBudgetUsed": {
+        "placeholders": {
+            "used": {
+                "type": "String"
+            },
+            "limit": {
+                "type": "String"
+            }
+        }
+    },
+    "@fairUseBudgetResetsAt": {
+        "placeholders": {
+            "time": {
+                "type": "String"
+            }
+        }
     }
 }

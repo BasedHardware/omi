@@ -2771,5 +2771,26 @@
                 "type": "String"
             }
         }
+    },
+    "fairUseDailyTranscription": "일일 음성 인식",
+    "fairUseBudgetExhausted": "일일 음성 인식 한도에 도달했습니다",
+    "fairUseBudgetResetsAt": "재설정 {time}",
+    "fairUseBudgetUsed": "{used}분 / {limit}분",
+    "@fairUseBudgetUsed": {
+        "placeholders": {
+            "used": {
+                "type": "String"
+            },
+            "limit": {
+                "type": "String"
+            }
+        }
+    },
+    "@fairUseBudgetResetsAt": {
+        "placeholders": {
+            "time": {
+                "type": "String"
+            }
+        }
     }
 }

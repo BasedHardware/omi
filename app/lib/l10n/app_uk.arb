@@ -2771,5 +2771,26 @@
                 "type": "String"
             }
         }
+    },
+    "fairUseDailyTranscription": "Щоденна транскрипція",
+    "fairUseBudgetExhausted": "Досягнуто денний ліміт транскрипції",
+    "fairUseBudgetResetsAt": "Скидання {time}",
+    "fairUseBudgetUsed": "{used}хв / {limit}хв",
+    "@fairUseBudgetUsed": {
+        "placeholders": {
+            "used": {
+                "type": "String"
+            },
+            "limit": {
+                "type": "String"
+            }
+        }
+    },
+    "@fairUseBudgetResetsAt": {
+        "placeholders": {
+            "time": {
+                "type": "String"
+            }
+        }
     }
 }

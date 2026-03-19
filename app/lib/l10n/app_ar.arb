@@ -2738,5 +2738,26 @@
                 "type": "String"
             }
         }
+    },
+    "fairUseDailyTranscription": "النسخ اليومي",
+    "fairUseBudgetExhausted": "تم الوصول إلى حد النسخ اليومي",
+    "fairUseBudgetResetsAt": "يُعاد التعيين {time}",
+    "fairUseBudgetUsed": "{used}د / {limit}د",
+    "@fairUseBudgetUsed": {
+        "placeholders": {
+            "used": {
+                "type": "String"
+            },
+            "limit": {
+                "type": "String"
+            }
+        }
+    },
+    "@fairUseBudgetResetsAt": {
+        "placeholders": {
+            "time": {
+                "type": "String"
+            }
+        }
     }
 }

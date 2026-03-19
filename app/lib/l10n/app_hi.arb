@@ -2772,5 +2772,26 @@
                 "type": "String"
             }
         }
+    },
+    "fairUseDailyTranscription": "दैनिक ट्रांसक्रिप्शन",
+    "fairUseBudgetExhausted": "दैनिक ट्रांसक्रिप्शन सीमा पूरी हुई",
+    "fairUseBudgetResetsAt": "रीसेट {time}",
+    "fairUseBudgetUsed": "{used}मि / {limit}मि",
+    "@fairUseBudgetUsed": {
+        "placeholders": {
+            "used": {
+                "type": "String"
+            },
+            "limit": {
+                "type": "String"
+            }
+        }
+    },
+    "@fairUseBudgetResetsAt": {
+        "placeholders": {
+            "time": {
+                "type": "String"
+            }
+        }
     }
 }

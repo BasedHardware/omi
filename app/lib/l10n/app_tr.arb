@@ -2806,5 +2806,26 @@
                 "type": "String"
             }
         }
+    },
+    "fairUseDailyTranscription": "Günlük transkripsiyon",
+    "fairUseBudgetExhausted": "Günlük transkripsiyon limiti doldu",
+    "fairUseBudgetResetsAt": "Sıfırlanma {time}",
+    "fairUseBudgetUsed": "{used}dk / {limit}dk",
+    "@fairUseBudgetUsed": {
+        "placeholders": {
+            "used": {
+                "type": "String"
+            },
+            "limit": {
+                "type": "String"
+            }
+        }
+    },
+    "@fairUseBudgetResetsAt": {
+        "placeholders": {
+            "time": {
+                "type": "String"
+            }
+        }
     }
 }

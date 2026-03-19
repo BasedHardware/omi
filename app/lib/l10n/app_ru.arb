@@ -2806,5 +2806,26 @@
                 "type": "String"
             }
         }
+    },
+    "fairUseDailyTranscription": "Ежедневная транскрипция",
+    "fairUseBudgetExhausted": "Достигнут дневной лимит транскрипции",
+    "fairUseBudgetResetsAt": "Сброс {time}",
+    "fairUseBudgetUsed": "{used}м / {limit}м",
+    "@fairUseBudgetUsed": {
+        "placeholders": {
+            "used": {
+                "type": "String"
+            },
+            "limit": {
+                "type": "String"
+            }
+        }
+    },
+    "@fairUseBudgetResetsAt": {
+        "placeholders": {
+            "time": {
+                "type": "String"
+            }
+        }
     }
 }

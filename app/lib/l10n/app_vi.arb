@@ -2776,5 +2776,26 @@
                 "type": "String"
             }
         }
+    },
+    "fairUseDailyTranscription": "Chuyển giọng hàng ngày",
+    "fairUseBudgetExhausted": "Đã đạt giới hạn chuyển giọng hàng ngày",
+    "fairUseBudgetResetsAt": "Đặt lại {time}",
+    "fairUseBudgetUsed": "{used}p / {limit}p",
+    "@fairUseBudgetUsed": {
+        "placeholders": {
+            "used": {
+                "type": "String"
+            },
+            "limit": {
+                "type": "String"
+            }
+        }
+    },
+    "@fairUseBudgetResetsAt": {
+        "placeholders": {
+            "time": {
+                "type": "String"
+            }
+        }
     }
 }

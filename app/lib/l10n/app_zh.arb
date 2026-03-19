@@ -2793,5 +2793,26 @@
                 "type": "String"
             }
         }
+    },
+    "fairUseDailyTranscription": "每日转写",
+    "fairUseBudgetExhausted": "已达到每日转写限额",
+    "fairUseBudgetResetsAt": "重置时间 {time}",
+    "fairUseBudgetUsed": "{used}分 / {limit}分",
+    "@fairUseBudgetUsed": {
+        "placeholders": {
+            "used": {
+                "type": "String"
+            },
+            "limit": {
+                "type": "String"
+            }
+        }
+    },
+    "@fairUseBudgetResetsAt": {
+        "placeholders": {
+            "time": {
+                "type": "String"
+            }
+        }
     }
 }

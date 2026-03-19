@@ -2807,5 +2807,26 @@
                 "type": "String"
             }
         }
+    },
+    "fairUseDailyTranscription": "Transcrição diária",
+    "fairUseBudgetExhausted": "Limite diário de transcrição atingido",
+    "fairUseBudgetResetsAt": "Reinicia {time}",
+    "fairUseBudgetUsed": "{used}m / {limit}m",
+    "@fairUseBudgetUsed": {
+        "placeholders": {
+            "used": {
+                "type": "String"
+            },
+            "limit": {
+                "type": "String"
+            }
+        }
+    },
+    "@fairUseBudgetResetsAt": {
+        "placeholders": {
+            "time": {
+                "type": "String"
+            }
+        }
     }
 }
