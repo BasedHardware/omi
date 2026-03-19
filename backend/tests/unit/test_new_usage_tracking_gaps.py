@@ -181,6 +181,57 @@ class TestGetUsageCallback:
             assert ctx.feature == feature
             assert ctx.uid == "uid-cb"
 
+    def test_callback_on_llm_end_reads_context(self):
+        """Exercise LLMUsageCallback.on_llm_end to verify it reads the usage context and calls flush_fn."""
+        captured_calls = []
+        # Create a fresh callback with a capturing flush_fn
+        cb = LLMUsageCallback(flush_fn=lambda *args: captured_calls.append(args))
+
+        mock_response = MagicMock()
+        mock_response.generations = [[MagicMock()]]
+        mock_response.llm_output = {
+            "token_usage": {
+                "prompt_tokens": 100,
+                "completion_tokens": 50,
+                "total_tokens": 150,
+            },
+            "model_name": "gpt-4.1-mini",
+        }
+
+        with track_usage("uid-e2e", Features.PROACTIVE_NOTIFICATION):
+            cb.on_llm_end(mock_response)
+
+        assert len(captured_calls) >= 1, "on_llm_end should have called flush_fn"
+        uid, feature, model, inp, out = captured_calls[0]
+        assert uid == "uid-e2e", f"Expected uid 'uid-e2e', got {uid}"
+        assert feature == "proactive_notification", f"Expected feature 'proactive_notification', got {feature}"
+        assert inp == 100, f"Expected 100 input tokens, got {inp}"
+        assert out == 50, f"Expected 50 output tokens, got {out}"
+
+    def test_callback_on_llm_end_no_context_uses_fallback(self):
+        """Without track_usage, on_llm_end should fall back to uid=unknown, feature=other."""
+        captured_calls = []
+        cb = LLMUsageCallback(flush_fn=lambda *args: captured_calls.append(args))
+
+        mock_response = MagicMock()
+        mock_response.generations = [[MagicMock()]]
+        mock_response.llm_output = {
+            "token_usage": {
+                "prompt_tokens": 10,
+                "completion_tokens": 5,
+                "total_tokens": 15,
+            },
+            "model_name": "gpt-4.1-mini",
+        }
+
+        assert get_current_context() is None
+        cb.on_llm_end(mock_response)
+
+        assert len(captured_calls) >= 1, "on_llm_end should still call flush_fn with fallback"
+        uid, feature, model, inp, out = captured_calls[0]
+        assert uid == "unknown", f"Expected fallback uid 'unknown', got {uid}"
+        assert feature == "other", f"Expected fallback feature 'other', got {feature}"
+
 
 # ===================================================================
 # 4. Thread and asyncio safety
@@ -326,6 +377,45 @@ class TestSourceTrackUsageWrapping:
         source = (BACKEND_ROOT / "utils" / "onboarding.py").read_text()
         assert "with track_usage(self.uid, Features.ONBOARDING):" in source
 
+    def test_chat_py_tracking(self):
+        """utils/llm/chat.py must wrap LLM calls with CHAT, CONVERSATION_PROCESSING, or REALTIME_INTEGRATIONS."""
+        source = (BACKEND_ROOT / "utils" / "llm" / "chat.py").read_text()
+        assert "with track_usage(uid, Features.CHAT):" in source
+        assert (
+            "with track_usage(uid, Features.CONVERSATION_PROCESSING):" in source
+            or "with track_usage(uid, Features.REALTIME_INTEGRATIONS):" in source
+        )
+
+    def test_persona_py_tracking(self):
+        """utils/llm/persona.py must wrap LLM calls with PERSONA."""
+        source = (BACKEND_ROOT / "utils" / "llm" / "persona.py").read_text()
+        count = source.count("with track_usage(uid, Features.PERSONA):")
+        assert count >= 2, f"Expected >= 2 PERSONA wrappers in persona.py, found {count}"
+
+    def test_apps_py_tracking(self):
+        """utils/apps.py must wrap persona generation calls with PERSONA."""
+        source = (BACKEND_ROOT / "utils" / "apps.py").read_text()
+        count = source.count("with track_usage(")
+        assert count >= 4, f"Expected >= 4 track_usage wrappers in utils/apps.py, found {count}"
+
+    def test_transcribe_py_describe_image_call(self):
+        """routers/transcribe.py must pass uid to describe_image."""
+        source = (BACKEND_ROOT / "routers" / "transcribe.py").read_text()
+        assert "describe_image(uid," in source, "describe_image must be called with uid as first arg"
+
+    def test_users_py_followup_call(self):
+        """routers/users.py must pass uid to followup_question_prompt."""
+        source = (BACKEND_ROOT / "routers" / "users.py").read_text()
+        assert (
+            "followup_question_prompt(uid," in source
+        ), "followup_question_prompt must be called with uid as first arg"
+
+    def test_graph_py_usage_callback(self):
+        """utils/retrieval/graph.py must attach _usage_callback to ChatOpenAI."""
+        source = (BACKEND_ROOT / "utils" / "retrieval" / "graph.py").read_text()
+        assert "callbacks=[_usage_callback]" in source, "graph.py must attach usage callback"
+        assert "get_usage_callback" in source, "graph.py must import get_usage_callback"
+
     def test_usage_tracker_imports_in_modified_files(self):
         """Each modified file must import track_usage and Features from usage_tracker."""
         files_to_check = [
@@ -334,6 +424,9 @@ class TestSourceTrackUsageWrapping:
             "utils/onboarding.py",
             "utils/app_integrations.py",
             "routers/apps.py",
+            "utils/llm/chat.py",
+            "utils/llm/persona.py",
+            "utils/apps.py",
         ]
         import_pattern = re.compile(r'from\s+utils\.llm\.usage_tracker\s+import\s+.*track_usage.*Features')
         for rel_path in files_to_check:
