@@ -199,11 +199,34 @@ fi
 # ─── Load .env and credentials ─────────────────────────────────────────
 cd "$BACKEND_DIR"
 
-# Copy .env if not present
+# Copy .env if not present — try sibling dirs, then scaffold from .env.example
 if [ ! -f ".env" ] && [ -f "../backend/.env" ]; then
     cp "../backend/.env" ".env"
 elif [ ! -f ".env" ] && [ -f "../Backend/.env" ]; then
     cp "../Backend/.env" ".env"
+fi
+if [ ! -f ".env" ]; then
+    echo ""
+    echo "=== First-time setup ==="
+    echo "No .env file found at $BACKEND_DIR/.env"
+    echo ""
+    echo "Quick start:"
+    echo "  1. cp .env.example .env"
+    echo "  2. Fill in required values (see comments in .env.example)"
+    echo "  3. Place google-credentials.json in $BACKEND_DIR/"
+    echo "     (GCP service account key with Firestore + Firebase Auth access)"
+    echo ""
+    echo "Minimal .env for local dev:"
+    echo "  PORT=10201"
+    echo "  FIREBASE_PROJECT_ID=based-hardware-dev"
+    echo "  FIREBASE_API_KEY=<from GCP console>"
+    echo "  GOOGLE_APPLICATION_CREDENTIALS=./google-credentials.json"
+    echo ""
+    echo "Or skip the backend entirely:"
+    echo "  OMI_SKIP_BACKEND=1 OMI_SKIP_AUTH=1 ./run.sh"
+    echo "  (set OMI_API_URL and OMI_AUTH_URL in .env.app to point to a remote backend)"
+    echo "==========================="
+    exit 1
 fi
 
 # Symlink google-credentials.json if not present
@@ -214,11 +237,9 @@ elif [ ! -f "google-credentials.json" ] && [ -f "../Backend/google-credentials.j
 fi
 
 # Read environment from .env
-if [ -f "$BACKEND_DIR/.env" ]; then
-    set -a; source "$BACKEND_DIR/.env"; set +a
-fi
+set -a; source "$BACKEND_DIR/.env"; set +a
 
-# Read backend PORT from env (required — never default to 8080)
+# Read backend PORT from env (default: 10201, never use 8080)
 BACKEND_PORT="${PORT:-10201}"
 export PORT="$BACKEND_PORT"
 
@@ -226,8 +247,12 @@ export PORT="$BACKEND_PORT"
 CREDS_PATH="$BACKEND_DIR/google-credentials.json"
 if [ "${OMI_SKIP_BACKEND:-0}" != "1" ] && [ ! -f "$CREDS_PATH" ]; then
     echo "ERROR: Missing credentials file: $CREDS_PATH"
-    echo "  Get it from: ~/.config/omi/dev/backend/google-credentials.json"
-    echo "  Or skip backend: OMI_SKIP_BACKEND=1 ./run.sh"
+    echo ""
+    echo "  Option A: Place your GCP service account key here:"
+    echo "    cp /path/to/google-credentials.json $CREDS_PATH"
+    echo ""
+    echo "  Option B: Skip the local backend and use a remote one:"
+    echo "    OMI_SKIP_BACKEND=1 ./run.sh"
     exit 1
 fi
 if [ -f "$CREDS_PATH" ]; then
@@ -236,9 +261,11 @@ fi
 
 # Validate FIREBASE_PROJECT_ID (required)
 if [ -z "$FIREBASE_PROJECT_ID" ]; then
-    echo "ERROR: FIREBASE_PROJECT_ID is not set. Add it to $BACKEND_DIR/.env or export it."
-    echo "  For prod: FIREBASE_PROJECT_ID=based-hardware"
-    echo "  For dev:  FIREBASE_PROJECT_ID=based-hardware-dev"
+    echo "ERROR: FIREBASE_PROJECT_ID is not set."
+    echo ""
+    echo "  Add to $BACKEND_DIR/.env:"
+    echo "    FIREBASE_PROJECT_ID=based-hardware       # prod Firestore"
+    echo "    FIREBASE_PROJECT_ID=based-hardware-dev   # dev Firestore"
     exit 1
 fi
 if [ -n "$FIREBASE_AUTH_PROJECT_ID" ]; then
