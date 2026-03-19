@@ -82,7 +82,7 @@ impl Config {
             port: env::var("PORT")
                 .ok()
                 .and_then(|p| p.parse().ok())
-                .unwrap_or(8080),
+                .expect("PORT must be set (e.g. PORT=10201). Do not use 8080 — it conflicts with Tailscale."),
             gemini_api_key: env::var("GEMINI_API_KEY").ok(),
             google_application_credentials: env::var("GOOGLE_APPLICATION_CREDENTIALS").ok(),
             firebase_project_id: env::var("FIREBASE_PROJECT_ID").ok()
