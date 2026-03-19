@@ -587,3 +587,80 @@ class TestDgBudget:
         today = datetime.utcnow().strftime('%Y%m%d')
         assert today in key
         assert 'user1' in key
+
+    @patch.object(fair_use_mod, 'FAIR_USE_ENABLED', True)
+    @patch.object(fair_use_mod, 'FAIR_USE_RESTRICT_DAILY_DG_MS', 1800000)
+    def test_record_dg_usage_ignores_negative(self):
+        """Negative ms values should be ignored (no Redis call)."""
+        pipe = MagicMock()
+        _mock_redis.pipeline.return_value = pipe
+        fair_use_mod.record_dg_usage_ms('user1', -100)
+        assert not pipe.execute.called
+
+    @patch.object(fair_use_mod, 'FAIR_USE_ENABLED', False)
+    @patch.object(fair_use_mod, 'FAIR_USE_RESTRICT_DAILY_DG_MS', 1800000)
+    def test_record_dg_usage_noop_when_fair_use_disabled(self):
+        """record_dg_usage_ms is a no-op when FAIR_USE_ENABLED=False."""
+        pipe = MagicMock()
+        _mock_redis.pipeline.return_value = pipe
+        fair_use_mod.record_dg_usage_ms('user1', 5000)
+        assert not pipe.execute.called
+
+    @patch.object(fair_use_mod, 'FAIR_USE_ENABLED', False)
+    @patch.object(fair_use_mod, 'FAIR_USE_RESTRICT_DAILY_DG_MS', 1800000)
+    def test_is_dg_budget_exhausted_false_when_disabled(self):
+        """is_dg_budget_exhausted returns False when FAIR_USE_ENABLED=False."""
+        assert fair_use_mod.is_dg_budget_exhausted('user1') is False
+        assert not _mock_redis.get.called
+
+    @patch.object(fair_use_mod, 'FAIR_USE_ENABLED', False)
+    @patch.object(fair_use_mod, 'FAIR_USE_RESTRICT_DAILY_DG_MS', 1800000)
+    def test_get_dg_budget_status_defaults_when_disabled(self):
+        """get_dg_budget_status returns defaults when FAIR_USE_ENABLED=False."""
+        result = fair_use_mod.get_dg_budget_status('user1')
+        assert result['daily_limit_ms'] == 1800000
+        assert result['used_ms'] == 0
+        assert result['remaining_ms'] == 1800000
+        assert result['exhausted'] is False
+        assert not _mock_redis.get.called
+
+    @patch.object(fair_use_mod, 'FAIR_USE_ENABLED', True)
+    @patch.object(fair_use_mod, 'FAIR_USE_RESTRICT_DAILY_DG_MS', 1800000)
+    def test_is_dg_budget_exhausted_fail_open_on_invalid_data(self):
+        """Non-integer Redis payload should fail open (return False)."""
+        _mock_redis.get.return_value = b'not-a-number'
+        # ValueError from int() is caught by the except Exception block
+        assert fair_use_mod.is_dg_budget_exhausted('user1') is False
+
+    @patch.object(fair_use_mod, 'FAIR_USE_ENABLED', True)
+    @patch.object(fair_use_mod, 'FAIR_USE_RESTRICT_DAILY_DG_MS', 1800000)
+    def test_get_dg_budget_status_exact_limit(self):
+        """At exactly the limit, remaining_ms == 0 and exhausted == True."""
+        _mock_redis.get.return_value = b'1800000'
+        result = fair_use_mod.get_dg_budget_status('user1')
+        assert result['used_ms'] == 1800000
+        assert result['remaining_ms'] == 0
+        assert result['exhausted'] is True
+
+    @patch.object(fair_use_mod, 'FAIR_USE_ENABLED', True)
+    @patch.object(fair_use_mod, 'FAIR_USE_RESTRICT_DAILY_DG_MS', 1800000)
+    def test_record_dg_usage_ttl_in_expected_range(self):
+        """TTL should be between 3600 (at midnight) and 90000 (just after midnight + 1h buffer)."""
+        pipe = MagicMock()
+        _mock_redis.pipeline.return_value = pipe
+        fair_use_mod.record_dg_usage_ms('user1', 1000)
+        expire_args = pipe.expire.call_args[0]
+        ttl = expire_args[1]
+        # TTL = seconds_until_midnight + 3600; range: 3600 (at 23:59:59) to 90000 (at 00:00:01)
+        assert 3600 <= ttl <= 90000, f'TTL {ttl} outside expected range [3600, 90000]'
+
+    @patch.object(fair_use_mod, 'FAIR_USE_ENABLED', True)
+    @patch.object(fair_use_mod, 'FAIR_USE_RESTRICT_DAILY_DG_MS', 1800000)
+    def test_get_dg_budget_status_fail_open_on_redis_error(self):
+        """Redis error should return safe defaults (not exhausted)."""
+        _mock_redis.get.side_effect = Exception('Redis down')
+        result = fair_use_mod.get_dg_budget_status('user1')
+        assert result['exhausted'] is False
+        assert result['used_ms'] == 0
+        assert result['remaining_ms'] == 1800000
+        _mock_redis.get.side_effect = None
