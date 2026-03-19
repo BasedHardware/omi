@@ -32,8 +32,34 @@ Examples:
   ./run.sh                                  # Full local dev (backend + auth + tunnel + app)
   OMI_SKIP_BACKEND=1 OMI_SKIP_AUTH=1 ./run.sh  # App only (backend running elsewhere)
   OMI_SKIP_TUNNEL=1 ./run.sh                # No Cloudflare tunnel (use direct URL)
+  ./run.sh --yolo                            # Quick start: use prod backend, no local services
 USAGE
     exit 0
+fi
+
+# ─── YOLO mode: use prod backend, zero local setup ───────────────────
+# WARNING: Temporary shortcut while desktop dev setup is being cleaned up.
+# Will be removed once all desktop slop is fixed.
+if [ "$1" = "--yolo" ]; then
+    echo ""
+    echo "=========================================="
+    echo "  YOLO MODE — using production backend"
+    echo "=========================================="
+    echo ""
+    echo "  WARNING: This connects directly to the prod Cloud Run backend."
+    echo "  No local Rust backend, no local auth, no tunnel."
+    echo "  This is a temporary shortcut — will be removed once"
+    echo "  desktop dev setup friction is fully resolved."
+    echo ""
+    echo "=========================================="
+    echo ""
+
+    export OMI_SKIP_BACKEND=1
+    export OMI_SKIP_AUTH=1
+    export OMI_SKIP_TUNNEL=1
+    export OMI_API_URL="https://desktop-backend-hhibjajaja-uc.a.run.app"
+    export OMI_AUTH_URL="https://omi-desktop-auth-208440318997.us-central1.run.app/"
+    export FIREBASE_API_KEY="AIzaSyD9dzBdglc7IO9pPDIOvqnCoTis_xKkkC8"
 fi
 
 # Clear system OPENAI_API_KEY so .env takes precedence
@@ -205,7 +231,7 @@ if [ ! -f ".env" ] && [ -f "../backend/.env" ]; then
 elif [ ! -f ".env" ] && [ -f "../Backend/.env" ]; then
     cp "../Backend/.env" ".env"
 fi
-if [ ! -f ".env" ]; then
+if [ ! -f ".env" ] && [ "$1" != "--yolo" ]; then
     echo ""
     echo "=== First-time setup ==="
     echo "No .env file found at $BACKEND_DIR/.env"
@@ -225,6 +251,9 @@ if [ ! -f ".env" ]; then
     echo "Or skip the backend entirely:"
     echo "  OMI_SKIP_BACKEND=1 OMI_SKIP_AUTH=1 ./run.sh"
     echo "  (set OMI_API_URL and OMI_AUTH_URL in .env.app to point to a remote backend)"
+    echo ""
+    echo "Or just use the production backend (no setup needed):"
+    echo "  ./run.sh --yolo"
     echo "==========================="
     exit 1
 fi
@@ -236,8 +265,10 @@ elif [ ! -f "google-credentials.json" ] && [ -f "../Backend/google-credentials.j
     ln -sf "../Backend/google-credentials.json" "google-credentials.json"
 fi
 
-# Read environment from .env
-set -a; source "$BACKEND_DIR/.env"; set +a
+# Read environment from .env (skip if missing — yolo mode doesn't need it)
+if [ -f "$BACKEND_DIR/.env" ]; then
+    set -a; source "$BACKEND_DIR/.env"; set +a
+fi
 
 # Read backend PORT from env (default: 10201, never use 8080)
 BACKEND_PORT="${PORT:-10201}"
@@ -259,8 +290,8 @@ if [ -f "$CREDS_PATH" ]; then
     export GOOGLE_APPLICATION_CREDENTIALS="$CREDS_PATH"
 fi
 
-# Validate FIREBASE_PROJECT_ID (required)
-if [ -z "$FIREBASE_PROJECT_ID" ]; then
+# Validate FIREBASE_PROJECT_ID (required unless yolo mode — no local backend)
+if [ -z "$FIREBASE_PROJECT_ID" ] && [ "${OMI_SKIP_BACKEND:-0}" != "1" ]; then
     echo "ERROR: FIREBASE_PROJECT_ID is not set."
     echo ""
     echo "  Add to $BACKEND_DIR/.env:"
@@ -463,24 +494,24 @@ else
     echo "OMI_API_URL=$EFFECTIVE_API_URL" >> "$APP_BUNDLE/Contents/Resources/.env"
 fi
 substep "OMI_API_URL=$EFFECTIVE_API_URL"
-# Bootstrap FIREBASE_API_KEY from backend .env so auth can restore on launch
-# (before APIKeyService.fetchKeys() has a chance to fetch it from the backend)
-if [ -f "$BACKEND_DIR/.env" ]; then
-    FIREBASE_KEY=$(grep "^FIREBASE_API_KEY=" "$BACKEND_DIR/.env" | head -1 | cut -d= -f2-)
-    if [ -n "$FIREBASE_KEY" ] && ! grep -q "^FIREBASE_API_KEY=" "$APP_BUNDLE/Contents/Resources/.env"; then
+# Bootstrap FIREBASE_API_KEY — check env var first (yolo mode), then backend .env
+if ! grep -q "^FIREBASE_API_KEY=" "$APP_BUNDLE/Contents/Resources/.env"; then
+    FIREBASE_KEY="${FIREBASE_API_KEY:-}"
+    if [ -z "$FIREBASE_KEY" ] && [ -f "$BACKEND_DIR/.env" ]; then
+        FIREBASE_KEY=$(grep "^FIREBASE_API_KEY=" "$BACKEND_DIR/.env" | head -1 | cut -d= -f2-)
+    fi
+    if [ -n "$FIREBASE_KEY" ]; then
         echo "FIREBASE_API_KEY=$FIREBASE_KEY" >> "$APP_BUNDLE/Contents/Resources/.env"
-        substep "Bootstrapped FIREBASE_API_KEY from backend .env"
+        substep "Bootstrapped FIREBASE_API_KEY"
     fi
 fi
-# Bootstrap OMI_AUTH_URL — for local dev, point to the local Python auth service.
-# For prod, set OMI_AUTH_URL explicitly in Backend-Rust/.env.
+# Bootstrap OMI_AUTH_URL — check env var first (yolo mode), then backend .env, then local auth
 if ! grep -q "^OMI_AUTH_URL=" "$APP_BUNDLE/Contents/Resources/.env"; then
-    AUTH_URL=""
-    if [ -f "$BACKEND_DIR/.env" ]; then
+    AUTH_URL="${OMI_AUTH_URL:-}"
+    if [ -z "$AUTH_URL" ] && [ -f "$BACKEND_DIR/.env" ]; then
         AUTH_URL=$(grep "^OMI_AUTH_URL=" "$BACKEND_DIR/.env" | head -1 | cut -d= -f2-)
     fi
     if [ -z "$AUTH_URL" ]; then
-        # Default to local Python auth service
         AUTH_URL="http://localhost:${AUTH_PORT}/"
         substep "OMI_AUTH_URL not set — defaulting to local auth service: $AUTH_URL"
     fi
