@@ -26,7 +26,7 @@ Required tools:
   cargo, xcrun/swift, python3, npm, node, codesign, cloudflared (unless skipped)
 
 Port allocation (never use 8080 — Tailscale conflict):
-  noa: 10200-10209    ren: 10210-10219    (see team port ranges)
+  Auth default: 10200    Backend default: 10201
 
 Examples:
   ./run.sh                                  # Full local dev (backend + auth + tunnel + app)
