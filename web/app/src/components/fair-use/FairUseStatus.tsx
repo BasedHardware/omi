@@ -189,6 +189,54 @@ export function FairUseStatus() {
         </div>
       )}
 
+      {/* Daily Transcription Budget — only when dg_budget present */}
+      {status?.dg_budget && status.dg_budget.daily_limit_ms > 0 && (() => {
+        const { daily_limit_ms, used_ms, exhausted, resets_at } = status.dg_budget;
+        const usedMin = Math.round(used_ms / 60000);
+        const limitMin = Math.round(daily_limit_ms / 60000);
+        const pct = Math.min((used_ms / daily_limit_ms) * 100, 100);
+        const barColor = exhausted ? 'bg-red-500' : 'bg-purple-500';
+
+        let resetLabel = '';
+        if (resets_at) {
+          try {
+            const diff = new Date(resets_at).getTime() - Date.now();
+            if (diff > 0) {
+              const hours = Math.floor(diff / 3600000);
+              const mins = Math.floor((diff % 3600000) / 60000);
+              resetLabel = hours > 0 ? `Resets in ${hours}h` : `Resets in ${mins}m`;
+            }
+          } catch {}
+        }
+
+        return (
+          <div
+            className={cn(
+              'rounded-2xl p-4',
+              exhausted ? 'bg-red-500/[0.06]' : 'bg-gradient-to-b from-white/[0.03] to-white/[0.01]',
+              'shadow-[0_0_0_1px_rgba(255,255,255,0.04),0_2px_4px_rgba(0,0,0,0.1),0_8px_16px_rgba(0,0,0,0.1)]'
+            )}
+          >
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs font-medium text-text-tertiary uppercase tracking-wide">Daily Transcription</span>
+              <span className="text-sm font-medium text-text-primary">{usedMin}m / {limitMin}m</span>
+            </div>
+            <div className="h-1 rounded-full bg-bg-tertiary overflow-hidden">
+              <div
+                className={cn('h-full rounded-full transition-all', barColor)}
+                style={{ width: `${Math.min(pct, 100)}%` }}
+              />
+            </div>
+            {exhausted && (
+              <p className="text-xs font-medium text-red-400 mt-2">Budget exhausted — transcription paused</p>
+            )}
+            {resetLabel && (
+              <p className="text-xs text-text-quaternary mt-1">{resetLabel}</p>
+            )}
+          </div>
+        );
+      })()}
+
       {/* Message — only when present */}
       {status?.message && (
         <div className="flex gap-2.5 px-1">
