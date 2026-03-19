@@ -28,6 +28,11 @@ struct FloatingControlBarView: View {
         .animation(.spring(response: 0.35, dampingFraction: 0.82), value: state.currentNotification?.id)
     }
 
+    /// Whether the bar chrome should stretch to fill the window width
+    private var barNeedsFullWidth: Bool {
+        isHovering || state.showingAIConversation || state.isVoiceListening
+    }
+
     private var barChrome: some View {
         VStack(spacing: 0) {
             // Main control bar - always visible
@@ -50,7 +55,7 @@ struct FloatingControlBarView: View {
                 .padding(.bottom, 8)
             }
         }
-        .frame(maxWidth: .infinity, alignment: .top)
+        .frame(maxWidth: barNeedsFullWidth ? .infinity : nil, alignment: .top)
         .overlay(alignment: .topLeading) {
             if state.showingAIConversation {
                 Button {
@@ -99,7 +104,7 @@ struct FloatingControlBarView: View {
         }
         .clipped()
         .background(DraggableAreaView(targetWindow: window))
-        .floatingBackground(cornerRadius: isHovering || state.showingAIConversation || state.isVoiceListening || state.isShowingNotification ? 20 : 5)
+        .floatingBackground(cornerRadius: barNeedsFullWidth ? 20 : 5)
         .onHover(perform: handleBarHover)
     }
 
