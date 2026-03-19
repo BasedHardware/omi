@@ -268,25 +268,36 @@ class TestCaseRefFormat:
     """Test case reference generation format using production _generate_case_ref."""
 
     def _load_generate_case_ref(self):
-        """Load _generate_case_ref from production source (avoids stubbed sys.modules)."""
+        """Load _generate_case_ref from production source file (avoids stubbed sys.modules).
+
+        Uses spec_from_file_location with a package-qualified name and injects
+        the ._client parent so the relative import succeeds.
+        """
         import importlib.util
 
+        # Create a minimal database package with _client stub
+        _client_stub = types.ModuleType('database._client')
+        _client_stub.db = MagicMock()
+        saved = sys.modules.get('database._client')
+        sys.modules['database._client'] = _client_stub
+
+        src_path = os.path.join(os.path.dirname(__file__), '..', '..', 'database', 'fair_use.py')
         spec = importlib.util.spec_from_file_location(
-            'database.fair_use_real',
-            os.path.join(os.path.dirname(__file__), '..', '..', 'database', 'fair_use.py'),
+            'database.fair_use_prod',
+            src_path,
+            submodule_search_locations=[],
         )
         mod = importlib.util.module_from_spec(spec)
-        # Only need uuid, not Firestore — patch db before exec
-        mod.__dict__['db'] = MagicMock()
-        mod.__dict__['firestore'] = MagicMock()
-        # exec just to define _generate_case_ref
-        import uuid as uuid_mod
+        mod.__package__ = 'database'
+        spec.loader.exec_module(mod)
 
-        # Direct implementation from database/fair_use.py:_generate_case_ref
-        def _generate_case_ref():
-            return f'FU-{uuid_mod.uuid4().hex[:12].upper()}'
+        # Restore original stub
+        if saved is not None:
+            sys.modules['database._client'] = saved
+        else:
+            sys.modules.pop('database._client', None)
 
-        return _generate_case_ref
+        return mod._generate_case_ref
 
     def test_case_ref_format_and_length(self):
         """Case ref should be FU- prefix + 12 uppercase hex chars."""
