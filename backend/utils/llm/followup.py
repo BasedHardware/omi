@@ -3,10 +3,11 @@ from typing import List, Optional
 from models.other import Person
 from models.transcript_segment import TranscriptSegment
 from utils.llm.clients import llm_mini
+from utils.llm.usage_tracker import track_usage, Features
 
 
 def followup_question_prompt(
-    segments: List[TranscriptSegment], people: Optional[List[Person]] = None, user_name: str = None
+    uid: str, segments: List[TranscriptSegment], people: Optional[List[Person]] = None, user_name: str = None
 ):
     transcript_str = TranscriptSegment.segments_as_string(
         segments, include_timestamps=False, people=people, user_name=user_name
@@ -29,4 +30,5 @@ def followup_question_prompt(
         Output your response in plain text, without markdown.
         Output only the question, without context, be concise and straight to the point.
         """.replace('    ', '').strip()
-    return llm_mini.invoke(prompt).content
+    with track_usage(uid, Features.FOLLOWUP):
+        return llm_mini.invoke(prompt).content
