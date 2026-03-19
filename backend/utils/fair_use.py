@@ -75,6 +75,10 @@ FAIR_USE_EXEMPT_UIDS = set(filter(None, os.getenv('FAIR_USE_EXEMPT_UIDS', '').sp
 # Check interval — how often the usage loop checks caps (seconds)
 FAIR_USE_CHECK_INTERVAL_SECONDS = int(os.getenv('FAIR_USE_CHECK_INTERVAL_SECONDS', '300'))  # 5 min
 
+# Restrict-stage daily Deepgram budget (milliseconds of audio forwarded to DG per day)
+# 0 = no budget cap (disabled). Only enforced when stage == 'restrict'.
+FAIR_USE_RESTRICT_DAILY_DG_MS = int(os.getenv('FAIR_USE_RESTRICT_DAILY_DG_MS', '1800000'))  # 30 min
+
 
 def _redis_key(uid: str) -> str:
     """Redis sorted set key for a user's speech minute buckets."""
@@ -393,6 +397,86 @@ def is_hard_restricted(uid: str) -> bool:
         or speech['three_day_ms'] > FAIR_USE_3DAY_SPEECH_MS
         or speech['weekly_ms'] > FAIR_USE_WEEKLY_SPEECH_MS
     )
+
+
+# ---------------------------------------------------------------------------
+# Restrict-stage daily Deepgram budget
+# ---------------------------------------------------------------------------
+
+
+def _dg_budget_key(uid: str) -> str:
+    """Redis key for daily DG budget counter. Auto-expires at end of UTC day."""
+    day = datetime.utcnow().strftime('%Y%m%d')
+    return f'fair_use:dg_budget:{uid}:{day}'
+
+
+def record_dg_usage_ms(uid: str, ms: int) -> None:
+    """Atomically increment today's DG usage for a restricted user."""
+    if not FAIR_USE_ENABLED or FAIR_USE_RESTRICT_DAILY_DG_MS <= 0 or ms <= 0:
+        return
+    try:
+        key = _dg_budget_key(uid)
+        pipe = redis_client.pipeline(transaction=False)
+        pipe.incrby(key, ms)
+        # TTL = seconds until next midnight UTC + 1h buffer
+        now = datetime.utcnow()
+        seconds_until_midnight = ((24 - now.hour - 1) * 3600) + ((60 - now.minute) * 60) + (60 - now.second)
+        pipe.expire(key, seconds_until_midnight + 3600)
+        pipe.execute()
+    except Exception as e:
+        logger.error(f'fair_use: Redis error recording DG usage for {uid}: {e}')
+
+
+def get_dg_budget_status(uid: str) -> dict:
+    """Get the DG budget status for a user.
+
+    Returns dict with: daily_limit_ms, used_ms, remaining_ms, exhausted, resets_at.
+    """
+    limit = FAIR_USE_RESTRICT_DAILY_DG_MS
+    result = {
+        'daily_limit_ms': limit,
+        'used_ms': 0,
+        'remaining_ms': limit,
+        'exhausted': False,
+        'resets_at': None,
+    }
+    if not FAIR_USE_ENABLED or limit <= 0:
+        return result
+
+    try:
+        key = _dg_budget_key(uid)
+        used = redis_client.get(key)
+        used_ms = int(used) if used else 0
+        remaining = max(0, limit - used_ms)
+        # Next midnight UTC
+        now = datetime.utcnow()
+        tomorrow = (now + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
+        result['used_ms'] = used_ms
+        result['remaining_ms'] = remaining
+        result['exhausted'] = remaining <= 0
+        result['resets_at'] = tomorrow.isoformat() + 'Z'
+    except Exception as e:
+        logger.error(f'fair_use: Redis error reading DG budget for {uid}: {e}')
+
+    return result
+
+
+def is_dg_budget_exhausted(uid: str) -> bool:
+    """Fast check: is the restricted user's daily DG budget used up?
+
+    Only meaningful when stage == 'restrict'. Callers should check stage first.
+    Returns False on Redis errors (fail-open).
+    """
+    if not FAIR_USE_ENABLED or FAIR_USE_RESTRICT_DAILY_DG_MS <= 0:
+        return False
+    try:
+        key = _dg_budget_key(uid)
+        used = redis_client.get(key)
+        if used is None:
+            return False
+        return int(used) >= FAIR_USE_RESTRICT_DAILY_DG_MS
+    except Exception:
+        return False
 
 
 # ---------------------------------------------------------------------------
