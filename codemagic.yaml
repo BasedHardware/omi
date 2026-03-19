@@ -2304,9 +2304,9 @@ workflows:
             --window-pos 200 120 \
             --window-size 610 365 \
             --icon-size 80 \
-            --icon "$APP_NAME.app" 455 175 \
+            --icon "$APP_NAME.app" 155 175 \
             --hide-extension "$APP_NAME.app" \
-            --app-drop-link 155 175 \
+            --app-drop-link 455 175 \
             --no-internet-enable \
             --skip-jenkins \
             $BG_ARGS \
