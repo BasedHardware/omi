@@ -90,12 +90,8 @@ from utils.stt.vad_gate import VADStreamingGate, VAD_GATE_MODE, is_gate_enabled
 from utils.fair_use import (
     FAIR_USE_ENABLED,
     FAIR_USE_CHECK_INTERVAL_SECONDS,
-    FAIR_USE_VAD_THRESHOLD_MAX,
     record_speech_ms,
     check_soft_caps,
-    get_enforcement_stage,
-    get_user_vad_threshold_delta,
-    is_hard_restricted,
     trigger_classifier_if_needed,
 )
 from utils.subscription import has_transcription_credits, get_remaining_transcription_seconds
@@ -400,14 +396,13 @@ async def _stream_handler(
 
     # Fair-use state (#5746)
     fair_use_last_check_ts: float = 0.0
-    fair_use_restricted: bool = False
 
     async def _record_usage_periodically():
         nonlocal websocket_active, last_usage_record_timestamp, words_transcribed_since_last_record
         nonlocal last_audio_received_time, last_transcript_time, user_has_credits
         nonlocal freemium_threshold_sent
         nonlocal remaining_seconds_cache, remaining_seconds_cache_ts, remaining_seconds_cache_initialized
-        nonlocal fair_use_last_check_ts, fair_use_restricted
+        nonlocal fair_use_last_check_ts
 
         while websocket_active:
             await asyncio.sleep(60)
@@ -445,6 +440,7 @@ async def _stream_handler(
                 last_usage_record_timestamp = current_time
 
             # Fair-use soft cap check (every FAIR_USE_CHECK_INTERVAL_SECONDS) (#5746)
+            # Track + detect + classify + set stage + notify. No service degradation.
             now_ts = time.time()
             if FAIR_USE_ENABLED and now_ts - fair_use_last_check_ts >= FAIR_USE_CHECK_INTERVAL_SECONDS:
                 fair_use_last_check_ts = now_ts
@@ -455,13 +451,6 @@ async def _stream_handler(
                             f'fair_use: soft cap triggered for {uid} session={session_id} caps={triggered_caps}'
                         )
                         asyncio.create_task(trigger_classifier_if_needed(uid, triggered_caps, session_id))
-
-                    # Check hard restriction
-                    if is_hard_restricted(uid):
-                        fair_use_restricted = True
-                        logger.info(f'fair_use: hard restrict active for {uid} session={session_id}')
-                    else:
-                        fair_use_restricted = False
                 except Exception as e:
                     logger.error(f'fair_use: cap check error for {uid}: {e}')
 
@@ -969,34 +958,6 @@ async def _stream_handler(
                         uid=uid,
                         session_id=session_id,
                     )
-                    # Apply per-user VAD threshold delta for throttled users (#5746)
-                    if FAIR_USE_ENABLED:
-                        try:
-                            vad_delta = get_user_vad_threshold_delta(uid)
-                            if vad_delta > 0:
-                                new_threshold = min(
-                                    vad_gate._speech_threshold + vad_delta,
-                                    FAIR_USE_VAD_THRESHOLD_MAX,
-                                )
-                                vad_gate._speech_threshold = new_threshold
-                                logger.info(
-                                    'fair_use: VAD threshold adjusted to %.3f (delta=%.3f) uid=%s session=%s',
-                                    new_threshold,
-                                    vad_delta,
-                                    uid,
-                                    session_id,
-                                )
-                        except Exception as e:
-                            logger.error(f'fair_use: VAD threshold adjustment error: {e} {uid} {session_id}')
-
-                        # Check hard restriction at session start to avoid 5-min startup leak window
-                        try:
-                            if is_hard_restricted(uid):
-                                fair_use_restricted = True
-                                logger.info(f'fair_use: session start hard restrict for {uid} session={session_id}')
-                        except Exception as e:
-                            logger.error(f'fair_use: session start restrict check error: {e} {uid} {session_id}')
-
                     logger.info(
                         'VAD gate initialized mode=%s preseconds=%s codec=%s sample_rate=%s uid=%s session=%s',
                         gate_mode,
@@ -2082,9 +2043,9 @@ async def _stream_handler(
             if transcript_segments:
                 await websocket.send_json([segment.dict() for segment in updated_segments])
 
-                if transcript_send is not None and user_has_credits and not fair_use_restricted:
+                if transcript_send is not None and user_has_credits:
                     transcript_send([segment.dict() for segment in transcript_segments])
-                elif not PUSHER_ENABLED and user_has_credits and not fair_use_restricted:
+                elif not PUSHER_ENABLED and user_has_credits:
                     # Fallback: trigger realtime integrations directly when pusher is disabled
                     try:
                         await trigger_realtime_integrations(
@@ -2289,7 +2250,7 @@ async def _stream_handler(
             # Use event-based routing instead of time-based
             profile_complete = speech_profile_complete.is_set()
 
-            if dg_socket is not None and not fair_use_restricted:
+            if dg_socket is not None:
                 if profile_complete or not deepgram_profile_socket:
                     dg_socket.send(chunk)
                     if deepgram_profile_socket:
@@ -2385,8 +2346,8 @@ async def _stream_handler(
                         # Resample to TARGET_SAMPLE_RATE for STT
                         pcm_16k = resample_pcm(bytes(audio_data), sample_rate, TARGET_SAMPLE_RATE)
 
-                        # Send to per-channel STT (skip if fair-use restricted to save STT cost)
-                        if stt_sockets_multi[ch_idx] and not fair_use_restricted:
+                        # Send to per-channel STT
+                        if stt_sockets_multi[ch_idx]:
                             try:
                                 if stt_service == STTService.deepgram:
                                     stt_sockets_multi[ch_idx].send(pcm_16k)
@@ -2451,9 +2412,8 @@ async def _stream_handler(
                         if audio_ring_buffer is not None:
                             audio_ring_buffer.write(data, last_audio_received_time)
 
-                        if not use_custom_stt and not fair_use_restricted:
+                        if not use_custom_stt:
                             # VAD gating is handled inside GatedDeepgramSocket.send()
-                            # Skip STT entirely when fair-use restricted to save Deepgram cost
                             stt_audio_buffer.extend(data)
                             await flush_stt_buffer()
 
