@@ -117,4 +117,33 @@ final class APIKeyService: ObservableObject {
         guard let s, !s.trimmingCharacters(in: .whitespaces).isEmpty else { return nil }
         return s
     }
+
+    // MARK: - Thread-safe key access (for non-MainActor contexts)
+    // These read from UserDefaults (thread-safe) and getenv() (set by applyToEnvironment).
+    // Use these from actors, nonisolated inits, and background threads.
+
+    nonisolated static var currentGeminiKey: String? {
+        nonEmptyStatic(UserDefaults.standard.string(forKey: "dev_gemini_api_key"))
+            ?? (getenv("GEMINI_API_KEY").flatMap { String(validatingUTF8: $0) })
+    }
+
+    nonisolated static var currentDeepgramKey: String? {
+        nonEmptyStatic(UserDefaults.standard.string(forKey: "dev_deepgram_api_key"))
+            ?? (getenv("DEEPGRAM_API_KEY").flatMap { String(validatingUTF8: $0) })
+    }
+
+    nonisolated static var currentAnthropicKey: String? {
+        nonEmptyStatic(UserDefaults.standard.string(forKey: "dev_anthropic_api_key"))
+            ?? (getenv("ANTHROPIC_API_KEY").flatMap { String(validatingUTF8: $0) })
+    }
+
+    /// True once fetchKeys() has called applyToEnvironment() (proxy: env var is set).
+    nonisolated static var keysAvailable: Bool {
+        getenv("GEMINI_API_KEY") != nil || getenv("DEEPGRAM_API_KEY") != nil
+    }
+
+    private nonisolated static func nonEmptyStatic(_ s: String?) -> String? {
+        guard let s, !s.trimmingCharacters(in: .whitespaces).isEmpty else { return nil }
+        return s
+    }
 }
