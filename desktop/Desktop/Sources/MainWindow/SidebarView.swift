@@ -451,7 +451,8 @@ struct SidebarView: View {
     private var headerSection: some View {
         HStack(spacing: 12) {
             // Omi logo icon - using the herologo from Resources
-            if let logoImage = NSImage(contentsOf: Bundle.resourceBundle.url(forResource: "herologo", withExtension: "png")!) {
+            if let logoURL = Bundle.resourceBundle.url(forResource: "herologo", withExtension: "png"),
+               let logoImage = NSImage(contentsOf: logoURL) {
                 Image(nsImage: logoImage)
                     .resizable()
                     .aspectRatio(contentMode: .fit)
@@ -862,7 +863,7 @@ struct SidebarView: View {
                 .scaleEffect(permissionPulse && (isDenied || isBroken || isStale) ? 1.1 : 1.0)
 
             if !isCollapsed {
-                Text(isStale ? "Screen Recording (Re-enable)" : (isBroken ? "Screen Recording (Reset Required)" : "Screen Recording"))
+                Text("Screen Recording")
                     .scaledFont(size: 13, weight: .medium)
                     .foregroundColor(color)
                     .lineLimit(1)
@@ -1044,7 +1045,7 @@ struct SidebarView: View {
                 .scaleEffect(permissionPulse && (isDenied || isBroken) ? 1.1 : 1.0)
 
             if !isCollapsed {
-                Text(isBroken ? "Accessibility (Reset Required)" : "Accessibility")
+                Text("Accessibility")
                     .scaledFont(size: 13, weight: .medium)
                     .foregroundColor(color)
                     .lineLimit(1)
@@ -1305,6 +1306,9 @@ struct NavItemView: View {
         }
         .padding(.bottom, 2)
         .help(isCollapsed ? label : "")
+        .accessibilityLabel(label)
+        .accessibilityAddTraits(.isButton)
+        .accessibilityIdentifier("sidebar_\(label.lowercased().replacingOccurrences(of: " ", with: "_"))")
     }
 
     /// Lock icon that reacts on hover and unlocks on click
@@ -1431,6 +1435,9 @@ struct NavItemWithStatusView: View {
         }
         .padding(.bottom, 2)
         .help(isCollapsed ? "\(label) (\(isOn ? "On" : "Off")) - Click icon to toggle" : "Click icon to toggle")
+        .accessibilityLabel("\(label) (\(isOn ? "On" : "Off"))")
+        .accessibilityAddTraits(.isButton)
+        .accessibilityIdentifier("sidebar_\(label.lowercased().replacingOccurrences(of: " ", with: "_"))")
     }
 }
 
@@ -1633,6 +1640,9 @@ struct BottomNavItemView: View {
         }
         .padding(.bottom, 2)
         .help(isCollapsed ? label : "")
+        .accessibilityLabel(label)
+        .accessibilityAddTraits(.isButton)
+        .accessibilityIdentifier("sidebar_\(label.lowercased().replacingOccurrences(of: " ", with: "_"))")
     }
 }
 

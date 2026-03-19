@@ -872,8 +872,8 @@ enum ContentBlockGroup: Identifiable {
         var pendingToolCalls: [ChatContentBlock] = []
 
         func flushToolCalls() {
-            guard !pendingToolCalls.isEmpty else { return }
-            let groupId = "toolgroup_\(pendingToolCalls.first!.id)"
+            guard let first = pendingToolCalls.first else { return }
+            let groupId = "toolgroup_\(first.id)"
             groups.append(.toolCalls(id: groupId, calls: pendingToolCalls))
             pendingToolCalls = []
         }
@@ -1645,7 +1645,8 @@ struct HistorySessionRow: View {
 
                     if !isEditing {
                         HStack(spacing: 4) {
-                            if let preview = session.preview, !preview.isEmpty {
+                            if let preview = session.preview, !preview.isEmpty,
+                               !preview.hasPrefix("[Protected"), !preview.hasPrefix("[Encrypted") {
                                 Text(preview)
                                     .lineLimit(1)
                             }

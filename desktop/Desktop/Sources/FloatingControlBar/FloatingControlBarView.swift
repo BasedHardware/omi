@@ -165,7 +165,7 @@ struct FloatingControlBarView: View {
 
     private func openFloatingBarSettings() {
         // Bring main window to front and navigate to floating bar settings
-        NSApp.activate(ignoringOtherApps: true)
+        NSApp.activate()
         for window in NSApp.windows where window.title.hasPrefix("Omi") {
             window.makeKeyAndOrderFront(nil)
             break

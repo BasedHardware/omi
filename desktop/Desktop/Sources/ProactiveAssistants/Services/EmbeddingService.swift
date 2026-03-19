@@ -16,14 +16,9 @@ actor EmbeddingService {
   /// Cap in-memory embeddings to limit memory (~12KB each, 5000 = ~60MB max)
   private let maxIndexSize = 5000
 
-  /// Read GEMINI_API_KEY lazily from the C environment (set by loadEnvironment/setenv).
-  /// ProcessInfo.processInfo.environment is a launch-time snapshot and misses keys
-  /// loaded from .env files after startup.
+  /// Prefer APIKeyService (backend-fetched, includes dev overrides) over raw getenv().
   private var geminiApiKey: String? {
-    if let cString = getenv("GEMINI_API_KEY") {
-      return String(validatingUTF8: cString)
-    }
-    return nil
+    APIKeyService.currentGeminiKey
   }
 
   private init() {}

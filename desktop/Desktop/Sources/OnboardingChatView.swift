@@ -1534,7 +1534,7 @@ struct OnboardingChatView: View {
 
   private func bringToFront() {
     DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-      NSApp.activate(ignoringOtherApps: true)
+      NSApp.activate()
       for window in NSApp.windows {
         if window.title.hasPrefix("Omi") {
           window.makeKeyAndOrderFront(nil)

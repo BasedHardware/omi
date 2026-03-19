@@ -188,6 +188,10 @@ struct OnboardingView: View {
           onComplete: {
             AnalyticsManager.shared.onboardingStepCompleted(step: 3, stepName: "Tasks")
             handleOnboardingComplete()
+          },
+          onSkip: {
+            AnalyticsManager.shared.onboardingStepCompleted(step: 4, stepName: "Tasks_Skipped")
+            handleOnboardingComplete()
           }
         )
       }
@@ -229,7 +233,21 @@ struct OnboardingView: View {
     UserDefaults.standard.set(true, forKey: "onboardingJustCompleted")
     UserDefaults.standard.set(true, forKey: "hasCompletedFileIndexing")
 
-    // Start essential services
+    // Clean up onboarding state and persisted chat data
+    chatProvider.isOnboarding = false
+    OnboardingChatPersistence.clear()
+
+    if let onComplete = onComplete {
+      onComplete()
+    }
+
+    // Transition UI FIRST — service failures must never block the UI.
+    // Setting this synchronously crashes in Button.body.getter, so defer it.
+    DispatchQueue.main.async {
+      appState.hasCompletedOnboarding = true
+    }
+
+    // Start services AFTER UI transition is queued — failures are non-blocking.
     Task {
       await AgentVMService.shared.startPipeline()
       await GoalGenerationService.shared.generateNow()
@@ -252,21 +270,6 @@ struct OnboardingView: View {
           priority: "low"
         )
       }
-    }
-
-    // Clean up onboarding state and persisted chat data
-    chatProvider.isOnboarding = false
-    OnboardingChatPersistence.clear()
-
-    if let onComplete = onComplete {
-      onComplete()
-    }
-
-    // Defer the view hierarchy change so SwiftUI finishes rendering the
-    // current button before the OnboardingView is removed from the tree.
-    // Setting this synchronously crashes in Button.body.getter.
-    DispatchQueue.main.async {
-      appState.hasCompletedOnboarding = true
     }
   }
 }

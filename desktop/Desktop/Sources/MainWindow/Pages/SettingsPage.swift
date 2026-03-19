@@ -4469,7 +4469,8 @@ struct SettingsContentView: View {
                 VStack(spacing: 16) {
                     // App info
                     HStack(spacing: 16) {
-                        if let logoImage = NSImage(contentsOf: Bundle.resourceBundle.url(forResource: "herologo", withExtension: "png")!) {
+                        if let logoURL = Bundle.resourceBundle.url(forResource: "herologo", withExtension: "png"),
+                           let logoImage = NSImage(contentsOf: logoURL) {
                             Image(nsImage: logoImage)
                                 .resizable()
                                 .aspectRatio(contentMode: .fit)
@@ -4543,6 +4544,7 @@ struct SettingsContentView: View {
                         }
                         .buttonStyle(.bordered)
                         .disabled(!updaterViewModel.canCheckForUpdates)
+                        .help(updaterViewModel.canCheckForUpdates ? "Check for app updates" : "Already checking for updates…")
                     }
 
                     if let lastCheck = updaterViewModel.lastUpdateCheckDate {
