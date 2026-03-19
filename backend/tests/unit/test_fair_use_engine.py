@@ -110,6 +110,32 @@ class TestRecordSpeechMs:
         fair_use_mod.record_speech_ms('user1', 5000)
         assert not pipe.hdel.called
 
+    @patch.object(fair_use_mod, 'FAIR_USE_ENABLED', True)
+    def test_expire_set_on_both_keys(self):
+        """Both bucket hash and zset keys get expire() with FAIR_USE_REDIS_RETENTION_SECONDS."""
+        pipe = MagicMock()
+        _mock_redis.pipeline.return_value = pipe
+        fair_use_mod.record_speech_ms('user1', 5000)
+        # expire should be called twice: once for bucket hash, once for zset
+        expire_calls = [c for c in pipe.expire.call_args_list]
+        assert len(expire_calls) == 2
+        # Both should use the retention seconds
+        for call in expire_calls:
+            assert call[0][1] == fair_use_mod.FAIR_USE_REDIS_RETENTION_SECONDS
+
+    @patch.object(fair_use_mod, 'FAIR_USE_ENABLED', True)
+    def test_cutoff_boundary_exact_equals(self):
+        """Member with score == cutoff is pruned (zrangebyscore uses inclusive range)."""
+        pipe = MagicMock()
+        _mock_redis.pipeline.return_value = pipe
+        # Simulate a member exactly at the cutoff boundary
+        _mock_redis.zrangebyscore.return_value = [b'999']
+        fair_use_mod.record_speech_ms('user1', 5000)
+        # Should prune: boundary member is included
+        pipe.hdel.assert_called_once()
+        args = pipe.hdel.call_args[0]
+        assert '999' in args
+
 
 class TestGetRollingSpeechMs:
     """Test rolling window speech totals from Redis."""
