@@ -334,10 +334,6 @@ env:
     value: "gpt-4.1-mini"
   - name: FAIR_USE_CLASSIFIER_LOOKBACK_DAYS
     value: "7"
-  - name: FAIR_USE_STAGE2_VAD_THRESHOLD_DELTA
-    value: "0.08"
-  - name: FAIR_USE_VAD_THRESHOLD_MAX
-    value: "0.82"
   - name: FAIR_USE_CHECK_INTERVAL_SECONDS
     value: "300"
   - name: FAIR_USE_EXEMPT_UIDS
