@@ -420,7 +420,8 @@ def record_dg_usage_ms(uid: str, ms: int) -> None:
         pipe.incrby(key, ms)
         # TTL = seconds until next midnight UTC + 1h buffer
         now = datetime.utcnow()
-        seconds_until_midnight = ((24 - now.hour - 1) * 3600) + ((60 - now.minute) * 60) + (60 - now.second)
+        tomorrow = (now + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
+        seconds_until_midnight = int((tomorrow - now).total_seconds())
         pipe.expire(key, seconds_until_midnight + 3600)
         pipe.execute()
     except Exception as e:
