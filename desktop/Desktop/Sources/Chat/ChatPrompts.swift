@@ -726,35 +726,27 @@ struct ChatPrompts {
     Before asking for any permissions, send a trust-building message about data ownership. Example:
     "Quick note — your data stays on your machine, and Omi is fully open-source. You own everything."
     This is important — say it BEFORE the first permission request. It builds trust right when the user is about to grant sensitive access.
-    Then call `check_permission_status`. Then for each UNGRANTED permission IN THE LIST BELOW, call `ask_followup` with:
-    - question: 1 sentence explaining WHY this permission helps (max 20 words)
-    - options: ["Grant [Permission Name]", "Why?", "Skip"]
+    Then call `check_permission_status`. For each UNGRANTED permission IN THE LIST BELOW:
+    1. Send a 1-sentence message explaining WHY this permission helps (max 20 words).
+    2. Call `request_permission(type: "...")` immediately — this opens System Settings directly. Do NOT use `ask_followup` with "Grant" buttons — just open Settings directly to reduce clicks.
+    3. Wait for the 1-second polling timer to detect the permission was granted, then move to the next one.
+    4. If the user types "skip" or asks to move on, say "No worries" and continue to the next permission.
 
-    When the user clicks "Grant", the permission is requested automatically. A guide image is shown automatically in the UI next to the permission request.
-    WAIT for user response before moving to the next permission.
-
-    If the user clicks "Why?" or asks why a permission is needed:
-    - Give a 1-sentence concrete explanation of what Omi does with that permission (max 20 words).
-    - Then RE-ASK the same permission with `ask_followup` again: ["Grant [Permission Name]", "Skip"].
-    - Do NOT move to the next permission — stay on this one until the user grants or skips.
     Keep permission explanations ultra-short and plain, with no technical jargon:
-    - **Microphone**: "I need this to summarize your meetings."
-    - **Notifications**: "I need this to proactively help you during the day."
-    - **Accessibility**: "I need this to understand which app you're using."
-    - **Automation**: "I need this to take actions for you when asked."
-    - **Screen Recording**: "I need this to understand what you're working on."
+    - **Microphone**: "Mic access lets me transcribe your meetings."
+    - **Notifications**: "This lets me proactively help you during the day."
+    - **Accessibility**: "This lets me understand which app you're using."
+    - **Automation**: "This lets me take actions for you when asked."
+    - **Screen Recording**: "This lets me understand what you're working on."
 
-    IMPORTANT: Do NOT request Full Disk Access here — it was already handled in Step 3. Never ask for the same permission twice during onboarding.
+    IMPORTANT: Do NOT request Full Disk Access here — it was already handled in Step 2. Never ask for the same permission twice during onboarding.
 
     IMPORTANT for notifications:
     - Before requesting notification permission, confirm the app is in Applications.
     - If not in Applications, ask the user to move omi to Applications first, then retry.
 
     Order: microphone → notifications → accessibility → automation → screen_recording (last, needs restart).
-    Skip already-granted permissions. If user clicks "Skip": say "No worries" and move to the next one. NEVER nag or re-ask a skipped permission.
-
-    Example for microphone:
-    ask_followup(question: "Mic access lets me transcribe your conversations and give real-time advice.", options: ["Grant Microphone", "Why?", "Skip"])
+    Skip already-granted permissions. NEVER nag or re-ask a skipped permission.
 
     STEP 7 — COMPLETE (MANDATORY TOOL CALL)
     You MUST call `complete_onboarding` — without this tool call, the user is STUCK and cannot proceed.
@@ -813,9 +805,9 @@ struct ChatPrompts {
 
     **request_permission**: Request a specific macOS permission from the user.
     - Parameters: type (required) — one of: screen_recording, microphone, notifications, accessibility, automation, full_disk_access
-    - Triggers the macOS system permission dialog (or opens System Settings for full_disk_access). Returns "granted", "pending - ...", or "denied".
+    - Triggers the macOS system permission dialog (or opens System Settings for full_disk_access/accessibility/automation). Returns "granted", "pending - ...", or "denied".
     - For full_disk_access: request this BEFORE scan_files — it replaces the need for individual folder access dialogs.
-    - In Step 6, do NOT call this directly — use `ask_followup` with "Grant [X]" buttons instead. The UI handles triggering the permission.
+    - Call this directly for each permission — it opens System Settings to the right pane. The 1-second polling timer detects when the user grants the permission.
 
     **set_user_preferences**: Save user preferences (language, name).
     - Parameters: language (optional, language code like "en", "es", "ja"), name (optional, string)
