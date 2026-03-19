@@ -1839,8 +1839,11 @@ workflows:
   #   GCP_SERVICE_ACCOUNT_KEY         — base64 GCP service account JSON
   #                                     (needs: Cloud Run Admin, Storage Object Admin, GCR push)
   #   OMI_DESKTOP_APP_ENV_V2          — base64-encoded .env bundled into .app at build time
-  #                                     Contains ONLY: OMI_API_URL, FIREBASE_API_KEY (auth bootstrap),
-  #                                     MIXPANEL_PROJECT_TOKEN
+  #                                     Contains:
+  #                                       OMI_API_URL=https://api.omi.me
+  #                                       OMI_AUTH_URL=https://omi-desktop-auth-208440318997.us-central1.run.app/
+  #                                       FIREBASE_API_KEY=<prod firebase web api key>
+  #                                       MIXPANEL_PROJECT_TOKEN=<token>
   #                                     REMOVED from V1 (now served by backend /v1/config/api-keys):
   #                                       DEEPGRAM_API_KEY, GEMINI_API_KEY, ANTHROPIC_API_KEY,
   #                                       GOOGLE_CALENDAR_API_KEY
@@ -2167,7 +2170,7 @@ workflows:
             cp Desktop/embedded.provisionprofile "$APP_BUNDLE/Contents/embedded.provisionprofile"
 
           # Write runtime .env from OMI_DESKTOP_APP_ENV_V2 secret (base64-encoded, slimmed down)
-          # V2 contains only OMI_API_URL, FIREBASE_API_KEY, MIXPANEL_PROJECT_TOKEN
+          # V2 contains: OMI_API_URL, OMI_AUTH_URL, FIREBASE_API_KEY, MIXPANEL_PROJECT_TOKEN
           # API keys (Deepgram, Gemini, Anthropic, Google Calendar) are now fetched at
           # runtime from backend /v1/config/api-keys via APIKeyService
           echo "$OMI_DESKTOP_APP_ENV_V2" | base64 --decode > "$APP_BUNDLE/Contents/Resources/.env"
