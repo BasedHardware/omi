@@ -391,15 +391,6 @@ if [ -f "$BACKEND_DIR/.env" ]; then
         substep "Bootstrapped FIREBASE_API_KEY from backend .env"
     fi
 fi
-# Bootstrap GEMINI_API_KEY — needed by the Swift app for Rewind/Screen Analysis
-# (the app reads it from .env, not just from APIKeyService)
-if [ -f "$BACKEND_DIR/.env" ]; then
-    GEMINI_KEY=$(grep "^GEMINI_API_KEY=" "$BACKEND_DIR/.env" | head -1 | cut -d= -f2-)
-    if [ -n "$GEMINI_KEY" ] && ! grep -q "^GEMINI_API_KEY=" "$APP_BUNDLE/Contents/Resources/.env"; then
-        echo "GEMINI_API_KEY=$GEMINI_KEY" >> "$APP_BUNDLE/Contents/Resources/.env"
-        substep "Bootstrapped GEMINI_API_KEY from backend .env"
-    fi
-fi
 # Bootstrap OMI_AUTH_URL — for local dev, point to the local Python auth service.
 # For prod, set OMI_AUTH_URL explicitly in Backend-Rust/.env.
 if ! grep -q "^OMI_AUTH_URL=" "$APP_BUNDLE/Contents/Resources/.env"; then
