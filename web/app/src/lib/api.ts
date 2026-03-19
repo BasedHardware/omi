@@ -2249,6 +2249,13 @@ export interface FairUseStatus {
     weekly: number;
   };
   message: string;
+  dg_budget?: {
+    daily_limit_ms: number;
+    used_ms: number;
+    remaining_ms: number;
+    exhausted: boolean;
+    resets_at: string;
+  };
 }
 
 export async function getFairUseStatus(): Promise<FairUseStatus | null> {
