@@ -497,3 +497,93 @@ class TestDatetimeNormalization:
 
         result = fair_use_mod.is_hard_restricted('user1')
         assert result is True
+
+
+class TestDgBudget:
+    """Test daily Deepgram budget tracking for restricted users."""
+
+    def setup_method(self):
+        _mock_redis.reset_mock()
+        _mock_redis.pipeline.side_effect = None
+        _mock_redis.pipeline.return_value = MagicMock()
+
+    @patch.object(fair_use_mod, 'FAIR_USE_ENABLED', True)
+    @patch.object(fair_use_mod, 'FAIR_USE_RESTRICT_DAILY_DG_MS', 1800000)
+    def test_record_dg_usage_increments_counter(self):
+        pipe = MagicMock()
+        _mock_redis.pipeline.return_value = pipe
+        fair_use_mod.record_dg_usage_ms('user1', 5000)
+        assert pipe.incrby.called
+        assert pipe.expire.called
+        assert pipe.execute.called
+
+    @patch.object(fair_use_mod, 'FAIR_USE_ENABLED', True)
+    @patch.object(fair_use_mod, 'FAIR_USE_RESTRICT_DAILY_DG_MS', 1800000)
+    def test_record_dg_usage_ignores_zero(self):
+        pipe = MagicMock()
+        _mock_redis.pipeline.return_value = pipe
+        fair_use_mod.record_dg_usage_ms('user1', 0)
+        assert not pipe.execute.called
+
+    @patch.object(fair_use_mod, 'FAIR_USE_ENABLED', True)
+    @patch.object(fair_use_mod, 'FAIR_USE_RESTRICT_DAILY_DG_MS', 0)
+    def test_record_dg_usage_noop_when_budget_disabled(self):
+        pipe = MagicMock()
+        _mock_redis.pipeline.return_value = pipe
+        fair_use_mod.record_dg_usage_ms('user1', 5000)
+        assert not pipe.execute.called
+
+    @patch.object(fair_use_mod, 'FAIR_USE_ENABLED', True)
+    @patch.object(fair_use_mod, 'FAIR_USE_RESTRICT_DAILY_DG_MS', 1800000)
+    def test_is_dg_budget_exhausted_true(self):
+        _mock_redis.get.return_value = b'1800000'
+        assert fair_use_mod.is_dg_budget_exhausted('user1') is True
+
+    @patch.object(fair_use_mod, 'FAIR_USE_ENABLED', True)
+    @patch.object(fair_use_mod, 'FAIR_USE_RESTRICT_DAILY_DG_MS', 1800000)
+    def test_is_dg_budget_exhausted_false_under_limit(self):
+        _mock_redis.get.return_value = b'900000'
+        assert fair_use_mod.is_dg_budget_exhausted('user1') is False
+
+    @patch.object(fair_use_mod, 'FAIR_USE_ENABLED', True)
+    @patch.object(fair_use_mod, 'FAIR_USE_RESTRICT_DAILY_DG_MS', 1800000)
+    def test_is_dg_budget_exhausted_false_no_data(self):
+        _mock_redis.get.return_value = None
+        assert fair_use_mod.is_dg_budget_exhausted('user1') is False
+
+    @patch.object(fair_use_mod, 'FAIR_USE_ENABLED', True)
+    @patch.object(fair_use_mod, 'FAIR_USE_RESTRICT_DAILY_DG_MS', 1800000)
+    def test_is_dg_budget_exhausted_false_on_redis_error(self):
+        _mock_redis.get.side_effect = Exception('Redis down')
+        assert fair_use_mod.is_dg_budget_exhausted('user1') is False
+        _mock_redis.get.side_effect = None
+
+    @patch.object(fair_use_mod, 'FAIR_USE_ENABLED', True)
+    @patch.object(fair_use_mod, 'FAIR_USE_RESTRICT_DAILY_DG_MS', 1800000)
+    def test_get_dg_budget_status_returns_correct_fields(self):
+        _mock_redis.get.return_value = b'600000'
+        result = fair_use_mod.get_dg_budget_status('user1')
+        assert result['daily_limit_ms'] == 1800000
+        assert result['used_ms'] == 600000
+        assert result['remaining_ms'] == 1200000
+        assert result['exhausted'] is False
+        assert result['resets_at'] is not None
+        assert result['resets_at'].endswith('Z')
+
+    @patch.object(fair_use_mod, 'FAIR_USE_ENABLED', True)
+    @patch.object(fair_use_mod, 'FAIR_USE_RESTRICT_DAILY_DG_MS', 1800000)
+    def test_get_dg_budget_status_exhausted(self):
+        _mock_redis.get.return_value = b'2000000'
+        result = fair_use_mod.get_dg_budget_status('user1')
+        assert result['used_ms'] == 2000000
+        assert result['remaining_ms'] == 0
+        assert result['exhausted'] is True
+
+    @patch.object(fair_use_mod, 'FAIR_USE_ENABLED', True)
+    @patch.object(fair_use_mod, 'FAIR_USE_RESTRICT_DAILY_DG_MS', 1800000)
+    def test_dg_budget_key_includes_date(self):
+        """Budget key includes date for daily reset."""
+        key = fair_use_mod._dg_budget_key('user1')
+        today = datetime.utcnow().strftime('%Y%m%d')
+        assert today in key
+        assert 'user1' in key
