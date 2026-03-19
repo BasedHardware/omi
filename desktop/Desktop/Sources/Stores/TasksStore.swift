@@ -203,7 +203,8 @@ class TasksStore: ObservableObject {
 
             // Reconcile: if we got the full set, hard-delete local tasks absent from API
             // (completed/deleted on mobile). Safe: only deletes synced records.
-            if response.items.count < reloadLimit {
+            // Safety guard: skip if API returned zero tasks (possible backend error / empty 200).
+            if response.items.count < reloadLimit, !response.items.isEmpty {
                 let apiIds = Set(response.items.map { $0.id })
                 let reconciled = try await ActionItemStorage.shared.hardDeleteAbsentTasks(apiIds: apiIds)
                 if reconciled > 0 {
@@ -339,6 +340,12 @@ class TasksStore: ObservableObject {
                 allApiIds.formUnion(response.items.map { $0.id })
                 offset += response.items.count
                 if response.items.count < batchSize { break }
+            }
+
+            // Safety guard: skip if API returned zero tasks (possible backend error / empty 200).
+            if allApiIds.isEmpty {
+                log("TasksStore: Periodic reconciliation skipped — API returned zero task IDs (possible backend error)")
+                return
             }
 
             let deleted = try await ActionItemStorage.shared.hardDeleteAbsentTasks(apiIds: allApiIds)
