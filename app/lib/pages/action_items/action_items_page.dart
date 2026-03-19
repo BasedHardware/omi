@@ -553,7 +553,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                       style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
                     ),
                     const Spacer(),
-                    if (goals.length < 3)
+                    if (goals.length < 4)
                       GestureDetector(
                         onTap: () {
                           HapticFeedback.lightImpact();
