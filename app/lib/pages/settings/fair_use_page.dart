@@ -265,6 +265,9 @@ class _FairUsePageState extends State<FairUsePage> {
   }
 
   Widget _buildBudgetSection() {
+    final stage = _status!['stage'] as String? ?? 'none';
+    if (stage != 'restrict') return const SizedBox.shrink();
+
     final dgBudget = _status!['dg_budget'] as Map<String, dynamic>?;
     if (dgBudget == null) return const SizedBox.shrink();
 
