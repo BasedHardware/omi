@@ -250,6 +250,87 @@ def get_yearly_history(uid: str) -> list[dict]:
     return history
 
 
+def get_user_stats(uid: str) -> dict:
+    """Gets all-time stats and active days for the last 90 days for streak/calendar."""
+    user_ref = db.collection('users').document(uid)
+    hourly_usage_collection = user_ref.collection('hourly_usage')
+
+    # Get all docs for totals + active days
+    docs = list(hourly_usage_collection.stream())
+
+    total_words = 0
+    total_seconds = 0
+    daily_activity: dict[str, bool] = {}
+
+    for doc in docs:
+        data = doc.to_dict()
+        words = data.get('words_transcribed', 0)
+        seconds = data.get('transcription_seconds', 0)
+        total_words += words
+        total_seconds += seconds
+
+        if seconds > 0:
+            year = data.get('year', 0)
+            month = data.get('month', 0)
+            day = data.get('day', 0)
+            if year and month and day:
+                date_str = f"{year}-{month:02d}-{day:02d}"
+                daily_activity[date_str] = True
+
+    total_hours = round(total_seconds / 3600, 1)
+
+    # Calculate streaks
+    today = datetime.utcnow().date()
+    sorted_dates = sorted(daily_activity.keys(), reverse=True)
+
+    # Current streak: consecutive days ending today (or yesterday)
+    current_streak = 0
+    check_date = today
+    # Allow streak to start from today or yesterday
+    today_str = today.strftime('%Y-%m-%d')
+    yesterday_str = (today - timedelta(days=1)).strftime('%Y-%m-%d')
+    if today_str not in daily_activity and yesterday_str not in daily_activity:
+        current_streak = 0
+    else:
+        if today_str not in daily_activity:
+            check_date = today - timedelta(days=1)
+        while check_date.strftime('%Y-%m-%d') in daily_activity:
+            current_streak += 1
+            check_date -= timedelta(days=1)
+
+    # Longest streak
+    longest_streak = 0
+    if sorted_dates:
+        all_dates_sorted = sorted(sorted_dates)
+        streak = 1
+        for i in range(1, len(all_dates_sorted)):
+            prev = datetime.strptime(all_dates_sorted[i - 1], '%Y-%m-%d').date()
+            curr = datetime.strptime(all_dates_sorted[i], '%Y-%m-%d').date()
+            if (curr - prev).days == 1:
+                streak += 1
+            else:
+                longest_streak = max(longest_streak, streak)
+                streak = 1
+        longest_streak = max(longest_streak, streak)
+
+    longest_streak = max(longest_streak, current_streak)
+
+    # Active days for last 90 days
+    ninety_days_ago = today - timedelta(days=89)
+    active_days = [
+        d for d in sorted_dates
+        if datetime.strptime(d, '%Y-%m-%d').date() >= ninety_days_ago
+    ]
+
+    return {
+        'total_words': total_words,
+        'total_hours': total_hours,
+        'current_streak': current_streak,
+        'longest_streak': longest_streak,
+        'active_days': sorted(active_days, reverse=True),
+    }
+
+
 def get_current_user_usage(uid: str, period: str) -> dict:
     """Gets usage for the current user for a specific period from Firestore."""
     now = datetime.utcnow()
