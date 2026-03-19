@@ -58,7 +58,6 @@ class TestFairUseState:
         state = FairUseState()
         assert state.stage == FairUseStage.NONE
         assert state.violation_count_7d == 0
-        assert state.vad_threshold_delta == 0.0
         assert state.throttle_until is None
         assert state.restrict_until is None
 
@@ -66,11 +65,10 @@ class TestFairUseState:
         state = FairUseState(
             stage=FairUseStage.THROTTLE,
             violation_count_7d=3,
-            vad_threshold_delta=0.08,
             throttle_until=datetime(2026, 4, 1),
         )
         assert state.stage == FairUseStage.THROTTLE
-        assert state.vad_threshold_delta == 0.08
+        assert state.throttle_until == datetime(2026, 4, 1)
 
 
 class TestFairUseEvent:

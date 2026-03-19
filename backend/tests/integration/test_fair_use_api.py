@@ -145,10 +145,9 @@ class TestAdminEndpoints:
         assert TEST_UID not in _state_store
 
     def test_set_stage_none_clears_enforcement(self):
-        """Setting stage to 'none' should reset vad_delta and durations."""
+        """Setting stage to 'none' should reset durations."""
         _state_store[TEST_UID] = {
             'stage': 'throttle',
-            'vad_threshold_delta': 0.08,
             'throttle_until': datetime.utcnow() + timedelta(days=7),
         }
 
@@ -158,7 +157,6 @@ class TestAdminEndpoints:
         )
         assert resp.status_code == 200
         state = _state_store[TEST_UID]
-        assert state['vad_threshold_delta'] == 0.0
         assert state['throttle_until'] is None
         assert state['restrict_until'] is None
 

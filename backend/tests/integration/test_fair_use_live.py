@@ -237,7 +237,6 @@ class TestEscalationLive:
         assert result['action'] == 'throttle'
         assert result['new_stage'] == 'throttle'
         assert _mem_db.states[TEST_UID]['stage'] == 'throttle'
-        assert _mem_db.states[TEST_UID]['vad_threshold_delta'] == fair_use.FAIR_USE_STAGE2_VAD_DELTA
 
     def test_escalate_throttle_to_restrict(self):
         """Throttle + 3 violations + high score -> restrict."""
@@ -324,18 +323,6 @@ class TestCacheInvalidation:
 
         cached = fair_use.redis_client.get(f'fair_use:stage:{TEST_UID}')
         assert cached is None
-
-    def test_vad_delta_cache(self):
-        """VAD delta should be cached and returnable."""
-        _mem_db.states[TEST_UID] = {'vad_threshold_delta': 0.08}
-
-        delta = fair_use.get_user_vad_threshold_delta(TEST_UID)
-        assert delta == 0.08
-
-        # Second call should hit cache
-        delta2 = fair_use.get_user_vad_threshold_delta(TEST_UID)
-        assert delta2 == 0.08
-
 
 class TestRedisLockLive:
     """Test the compare-and-delete lock against real Redis."""
@@ -463,23 +450,15 @@ class TestFullFlowEndToEnd:
         _mem_db.events.append({'uid': TEST_UID, 'enforcement_action': 'warning'})  # simulate prior
         r3 = fair_use.escalate_enforcement(TEST_UID, triggered, classifier_high)
         assert r3['new_stage'] == 'throttle'
-        fair_use.invalidate_enforcement_cache(TEST_UID)
-        assert fair_use.get_user_vad_threshold_delta(TEST_UID) == fair_use.FAIR_USE_STAGE2_VAD_DELTA
 
         # Step 5: More violations → restrict (need 3+ violation events)
         fair_use.invalidate_enforcement_cache(TEST_UID)
         r4 = fair_use.escalate_enforcement(TEST_UID, triggered, classifier_high)
         assert r4['new_stage'] == 'restrict'
 
-        # Step 6: Hard restriction should be active
+        # Step 6: Verify restrict stage is set (no service degradation, just state tracking)
         fair_use.invalidate_enforcement_cache(TEST_UID)
-        assert fair_use.is_hard_restricted(TEST_UID) is True
-
-        # Step 7: Simulate restriction expiry
-        _mem_db.states[TEST_UID]['restrict_until'] = datetime.utcnow() - timedelta(hours=1)
-        fair_use.invalidate_enforcement_cache(TEST_UID)
-        assert fair_use.is_hard_restricted(TEST_UID) is False
-        assert _mem_db.states[TEST_UID]['stage'] == 'throttle'
+        assert _mem_db.states[TEST_UID]['stage'] == 'restrict'
 
     def test_events_recorded_throughout(self):
         """Verify events are recorded for each escalation step."""
