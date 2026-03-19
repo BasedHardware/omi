@@ -12,11 +12,13 @@ from datetime import datetime, timedelta
 from typing import Optional
 
 import database.conversations as conversations_db
-from utils.llm.clients import llm_mini
+from langchain_openai import ChatOpenAI
+from utils.llm.usage_tracker import get_usage_callback
 
 logger = logging.getLogger(__name__)
 
-CLASSIFIER_MODEL = os.getenv('FAIR_USE_CLASSIFIER_MODEL', 'gpt-4.1')
+CLASSIFIER_MODEL = os.getenv('FAIR_USE_CLASSIFIER_MODEL', 'gpt-5.1')
+_classifier_llm = ChatOpenAI(model=CLASSIFIER_MODEL, callbacks=[get_usage_callback()])
 CLASSIFIER_LOOKBACK_DAYS = int(os.getenv('FAIR_USE_CLASSIFIER_LOOKBACK_DAYS', '7'))
 CLASSIFIER_MAX_CONVERSATIONS = 30
 
@@ -223,7 +225,7 @@ CONVERSATIONS:
 
 Respond with ONLY the JSON output, no other text."""
 
-        response = await llm_mini.ainvoke(
+        response = await _classifier_llm.ainvoke(
             [
                 {"role": "system", "content": SYSTEM_PROMPT},
                 {"role": "user", "content": user_message},
