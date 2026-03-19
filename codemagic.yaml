@@ -2456,7 +2456,7 @@ workflows:
           <body>
             <p>Redirecting to the latest Omi Beta download.</p>
             <p><a href="${BETA_DMG_URL}">If you are not redirected, click here.</a></p>
-            <script>window.location.replace(${BETA_DMG_URL@Q});</script>
+            <script>window.location.replace("${BETA_DMG_URL}");</script>
           </body>
           </html>
           EOF
