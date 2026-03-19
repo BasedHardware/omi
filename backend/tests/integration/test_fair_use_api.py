@@ -400,18 +400,18 @@ class TestTranscribePathFairUseImports:
         # Must be used as a conditional guard (if/not/and), not just defined or commented
         conditional_uses = re.findall(r'(?:if|and|not)\s+fair_use_dg_budget_exhausted', source)
         # Expect at least 5 guard points: session-start, periodic check, single-ch DG, soniox, speechmatics,
-        # multi-channel, speech-profile loader
+        # multi-channel (speech-profile excluded — small chunks, not budget-gated)
         assert (
             len(conditional_uses) >= 5
         ), f'Expected >=5 conditional uses of fair_use_dg_budget_exhausted, found {len(conditional_uses)}'
 
     def test_budget_accounting_across_providers(self):
-        """record_dg_usage_ms must be called for all STT providers (DG, Soniox, Speechmatics, multi-channel)."""
+        """record_dg_usage_ms must be called for main STT providers (DG, Soniox, Speechmatics, multi-channel)."""
         source = self._read_transcribe_source()
         # Count occurrences of record_dg_usage_ms (excluding imports/comments)
         import re
 
         calls = re.findall(r'^\s+record_dg_usage_ms\(', source, re.MULTILINE)
-        # Expect at least 6: DG main, DG profile, Soniox main, Soniox profile, Speechmatics main,
-        # multi-channel, + speech-profile loader sends
-        assert len(calls) >= 6, f'Expected >=6 record_dg_usage_ms calls, found {len(calls)}'
+        # Expect at least 4: DG main, Soniox main, Speechmatics main, multi-channel
+        # (speech-profile sends excluded — small audio chunks, not budget-tracked)
+        assert len(calls) >= 4, f'Expected >=4 record_dg_usage_ms calls, found {len(calls)}'
