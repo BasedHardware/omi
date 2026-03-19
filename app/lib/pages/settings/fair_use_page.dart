@@ -76,6 +76,7 @@ class _FairUsePageState extends State<FairUsePage> {
                           children: [
                             _buildStatusBanner(),
                             _buildUsageSection(),
+                            _buildBudgetSection(),
                             _buildMessageBanner(),
                             const SizedBox(height: 24),
                             _buildAboutFooter(),
@@ -260,6 +261,90 @@ class _FairUsePageState extends State<FairUsePage> {
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildBudgetSection() {
+    final dgBudget = _status!['dg_budget'] as Map<String, dynamic>?;
+    if (dgBudget == null) return const SizedBox.shrink();
+
+    final dailyLimitMs = (dgBudget['daily_limit_ms'] as num?)?.toInt() ?? 0;
+    final usedMs = (dgBudget['used_ms'] as num?)?.toInt() ?? 0;
+    final exhausted = dgBudget['exhausted'] as bool? ?? false;
+    final resetsAt = dgBudget['resets_at'] as String? ?? '';
+
+    if (dailyLimitMs <= 0) return const SizedBox.shrink();
+
+    final usedMin = (usedMs / 60000).round();
+    final limitMin = (dailyLimitMs / 60000).round();
+    final pct = (usedMs / dailyLimitMs * 100).clamp(0.0, 100.0);
+    final barColor = exhausted ? const Color(0xFFEF4444) : const Color(0xFF8B5CF6);
+
+    String resetLabel = '';
+    if (resetsAt.isNotEmpty) {
+      try {
+        final resetTime = DateTime.parse(resetsAt);
+        final now = DateTime.now().toUtc();
+        final diff = resetTime.difference(now);
+        if (diff.inHours > 0) {
+          resetLabel = context.l10n.fairUseBudgetResetsAt('${diff.inHours}h');
+        } else if (diff.inMinutes > 0) {
+          resetLabel = context.l10n.fairUseBudgetResetsAt('${diff.inMinutes}m');
+        }
+      } catch (_) {}
+    }
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 12),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: exhausted ? const Color(0xFFEF4444).withValues(alpha: 0.06) : const Color(0xFF1C1C1E),
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  context.l10n.fairUseDailyTranscription,
+                  style: const TextStyle(color: Color(0xFF8E8E93), fontSize: 13, fontWeight: FontWeight.w500),
+                ),
+                Text(
+                  context.l10n.fairUseBudgetUsed('$usedMin', '$limitMin'),
+                  style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w500),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(3),
+              child: LinearProgressIndicator(
+                value: (pct / 100).clamp(0.0, 1.0),
+                backgroundColor: const Color(0xFF2C2C2E),
+                valueColor: AlwaysStoppedAnimation<Color>(barColor),
+                minHeight: 4,
+              ),
+            ),
+            if (exhausted) ...[
+              const SizedBox(height: 10),
+              Text(
+                context.l10n.fairUseBudgetExhausted,
+                style: const TextStyle(color: Color(0xFFEF4444), fontSize: 13, fontWeight: FontWeight.w500),
+              ),
+            ],
+            if (resetLabel.isNotEmpty) ...[
+              const SizedBox(height: 4),
+              Text(
+                resetLabel,
+                style: const TextStyle(color: Color(0xFF636366), fontSize: 12),
+              ),
+            ],
+          ],
+        ),
+      ),
     );
   }
 
