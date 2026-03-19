@@ -193,6 +193,22 @@ class TestUserFacingEndpoint:
         assert data['stage'] == 'warning'
         assert 'personal conversations' in data['message']
 
+    def test_status_includes_dg_budget(self):
+        """Status response includes dg_budget fields."""
+        app.dependency_overrides[get_current_user_uid] = lambda: TEST_UID
+        resp = client.get('/v1/fair-use/status')
+        app.dependency_overrides.pop(get_current_user_uid, None)
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert 'dg_budget' in data
+        budget = data['dg_budget']
+        assert 'daily_limit_ms' in budget
+        assert 'used_ms' in budget
+        assert 'remaining_ms' in budget
+        assert 'exhausted' in budget
+        assert 'resets_at' in budget
+
     def test_status_shows_restrict_message(self):
         """Restrict stage shows support contact info."""
         _state_store[TEST_UID] = {'stage': 'restrict'}
@@ -342,12 +358,12 @@ class TestPublicEndpointRateLimit:
             assert resp.status_code == 429
 
 
-class TestNoEnforcementInTranscribePath:
-    """Structural test: transcribe.py must NOT import or use enforcement functions.
+class TestTranscribePathFairUseImports:
+    """Structural test: transcribe.py fair-use imports match expected design.
 
     Reads the source file directly (avoids heavy dep chain import).
-    This proves the notify-only design — stages are informational labels,
-    no service degradation occurs on the streaming path.
+    Warning/throttle are notify-only. Restrict enforces DG budget cap only.
+    No VAD throttle, no blanket transcript blocking.
     """
 
     @staticmethod
@@ -356,19 +372,22 @@ class TestNoEnforcementInTranscribePath:
         with open(transcribe_path) as f:
             return f.read()
 
-    def test_transcribe_does_not_import_enforcement_functions(self):
-        """transcribe.py must not import is_hard_restricted or get_enforcement_stage."""
+    def test_transcribe_does_not_import_hard_restriction(self):
+        """transcribe.py must not use is_hard_restricted (blanket block) or VAD throttle."""
         source = self._read_transcribe_source()
         assert 'is_hard_restricted' not in source, 'transcribe.py must not reference is_hard_restricted'
-        assert 'get_enforcement_stage' not in source, 'transcribe.py must not reference get_enforcement_stage'
         assert 'fair_use_restricted' not in source, 'transcribe.py must not have fair_use_restricted variable'
+        assert 'get_user_vad_threshold_delta' not in source, 'transcribe.py must not use VAD throttle'
 
-    def test_fair_use_imports_are_tracking_only(self):
-        """Only tracking/detection functions should be imported from fair_use."""
+    def test_fair_use_imports_include_budget_gate(self):
+        """Tracking + DG budget gate functions should be imported from fair_use."""
         source = self._read_transcribe_source()
-        # These tracking functions SHOULD be present
+        # Tracking functions
         assert 'record_speech_ms' in source
         assert 'check_soft_caps' in source
         assert 'trigger_classifier_if_needed' in source
-        # No enforcement/blocking functions
-        assert 'get_user_vad_threshold_delta' not in source
+        # DG budget gate (restrict-only)
+        assert 'get_enforcement_stage' in source
+        assert 'is_dg_budget_exhausted' in source
+        assert 'record_dg_usage_ms' in source
+        assert 'FAIR_USE_RESTRICT_DAILY_DG_MS' in source
