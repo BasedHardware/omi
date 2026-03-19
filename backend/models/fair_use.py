@@ -65,7 +65,6 @@ class FairUseState(BaseModel):
     restrict_until: Optional[datetime] = None
     last_classifier_score: float = 0.0
     last_classifier_type: UsageType = UsageType.NONE
-    vad_threshold_delta: float = 0.0
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 
 
