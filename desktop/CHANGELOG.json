@@ -1,10 +1,15 @@
 {
-  "unreleased": [
-    "Reduced auth error log spam with exponential backoff across all polling operations",
-    "Fixed Tasks page showing misleading \"No Matching Tasks\" when user has no tasks",
-    "API keys are now served securely from the backend instead of bundled in the app"
-  ],
+  "unreleased": [],
   "releases": [
+    {
+      "version": "0.11.140",
+      "date": "2026-03-19",
+      "changes": [
+        "Reduced auth error log spam with exponential backoff across all polling operations",
+        "Fixed Tasks page showing misleading \"No Matching Tasks\" when user has no tasks",
+        "API keys are now served securely from the backend instead of bundled in the app"
+      ]
+    },
     {
       "version": "0.11.139",
       "date": "2026-03-19",
