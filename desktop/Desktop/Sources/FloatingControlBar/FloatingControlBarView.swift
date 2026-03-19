@@ -204,9 +204,9 @@ struct FloatingControlBarView: View {
 
     /// Minimal thin bar shown when not hovering
     private var compactCircleView: some View {
-        RoundedRectangle(cornerRadius: 2)
+        RoundedRectangle(cornerRadius: 3)
             .fill(Color.white.opacity(0.5))
-            .frame(width: 28, height: 4)
+            .frame(width: 28, height: 6)
     }
 
     private func compactToggle(_ title: String, isOn: Binding<Bool>) -> some View {

@@ -616,39 +616,6 @@ struct SettingsContentView: View {
                 }
             }
 
-            // Ask Omi floating bar toggle
-            settingsCard(settingId: "general.askomi") {
-                HStack(spacing: 16) {
-                    Circle()
-                        .fill(showAskOmiBar ? OmiColors.success : OmiColors.textTertiary.opacity(0.3))
-                        .frame(width: 12, height: 12)
-                        .shadow(color: showAskOmiBar ? OmiColors.success.opacity(0.5) : .clear, radius: 6)
-
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Ask omi")
-                            .scaledFont(size: 16, weight: .semibold)
-                            .foregroundColor(OmiColors.textPrimary)
-
-                        Text(showAskOmiBar ? "Floating bar is visible (⌘\\)" : "Floating bar is hidden (⌘\\)")
-                            .scaledFont(size: 13)
-                            .foregroundColor(OmiColors.textTertiary)
-                    }
-
-                    Spacer()
-
-                    Toggle("", isOn: $showAskOmiBar)
-                        .toggleStyle(.switch)
-                        .labelsHidden()
-                        .onChange(of: showAskOmiBar) { _, newValue in
-                            if newValue {
-                                FloatingControlBarManager.shared.show()
-                            } else {
-                                FloatingControlBarManager.shared.hide()
-                            }
-                        }
-                }
-            }
-
             // Font Size
             settingsCard(settingId: "general.fontsize") {
                 VStack(spacing: 12) {
@@ -1763,6 +1730,33 @@ struct SettingsContentView: View {
 
     private var floatingBarSection: some View {
         VStack(spacing: 20) {
+            // Show floating bar toggle
+            settingsCard(settingId: "floatingbar.show") {
+                HStack(spacing: 16) {
+                    Circle()
+                        .fill(showAskOmiBar ? OmiColors.success : OmiColors.textTertiary.opacity(0.3))
+                        .frame(width: 12, height: 12)
+                        .shadow(color: showAskOmiBar ? OmiColors.success.opacity(0.5) : .clear, radius: 6)
+
+                    Text("Show floating bar")
+                        .scaledFont(size: 16, weight: .semibold)
+                        .foregroundColor(OmiColors.textPrimary)
+
+                    Spacer()
+
+                    Toggle("", isOn: $showAskOmiBar)
+                        .toggleStyle(.switch)
+                        .labelsHidden()
+                        .onChange(of: showAskOmiBar) { _, newValue in
+                            if newValue {
+                                FloatingControlBarManager.shared.show()
+                            } else {
+                                FloatingControlBarManager.shared.hide()
+                            }
+                        }
+                }
+            }
+
             ShortcutsSettingsSection(highlightedSettingId: $highlightedSettingId)
         }
     }
