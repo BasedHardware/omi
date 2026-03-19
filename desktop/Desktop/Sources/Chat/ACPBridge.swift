@@ -141,14 +141,19 @@ actor ACPBridge {
     proc.executableURL = URL(fileURLWithPath: nodePath)
     proc.arguments = ["--max-old-space-size=256", "--max-semi-space-size=16", bridgePath]
 
-    // Build environment
+    // Build environment — use APIKeyService.currentAnthropicKey (reads getenv + dev overrides)
+    // since ProcessInfo.processInfo.environment is a launch-time snapshot.
     var env = ProcessInfo.processInfo.environment
     env["NODE_NO_WARNINGS"] = "1"
-    if !passApiKey {
+    if passApiKey {
+      // Mode A: Inject current ANTHROPIC_API_KEY (may have been set after launch by APIKeyService)
+      if let key = APIKeyService.currentAnthropicKey {
+        env["ANTHROPIC_API_KEY"] = key
+      }
+    } else {
       // Mode B: Strip API key so ACP uses user's own OAuth
       env.removeValue(forKey: "ANTHROPIC_API_KEY")
     }
-    // else: Mode A: Keep ANTHROPIC_API_KEY for OMI's key
     env.removeValue(forKey: "CLAUDE_CODE_USE_VERTEX")
 
     // Ensure the directory containing node is in PATH
