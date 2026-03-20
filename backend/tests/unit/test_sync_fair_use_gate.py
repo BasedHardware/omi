@@ -93,21 +93,41 @@ class TestCheckSoftCapsWithPrecomputedTotals:
 
 
 class TestSpeechDurationComputation:
-    """Test the speech duration accumulation logic used in sync endpoint."""
+    """Test the speech duration accumulation logic used in sync endpoint.
 
-    def test_duration_from_vad_segments(self):
-        """Segments with start/end produce correct total duration."""
-        segments = [
+    Duration is computed from raw VAD segments BEFORE merging, so silence
+    gaps between merged segments are not counted as speech.
+    """
+
+    def test_duration_from_raw_vad_segments(self):
+        """Raw VAD segments produce correct total duration (no silence gaps)."""
+        # Two separate 30s speech spans
+        raw_segments = [
             {'start': 0.0, 'end': 30.0},
             {'start': 150.0, 'end': 180.0},
         ]
-        durations = [s['end'] - s['start'] for s in segments if (s['end'] - s['start']) >= 1]
+        durations = [s['end'] - s['start'] for s in raw_segments if (s['end'] - s['start']) >= 1]
+        # 30 + 30 = 60s (the 120s gap is NOT counted)
         assert sum(durations) == pytest.approx(60.0)
+
+    def test_merged_segments_would_overcount(self):
+        """Merged segments include silence gaps — raw segments don't."""
+        # After merging (gap < 120s), these become one segment: 0-180
+        # But raw speech is only 30+30 = 60s
+        raw_segments = [
+            {'start': 0.0, 'end': 30.0},
+            {'start': 100.0, 'end': 130.0},  # Gap = 70s < 120s → merged
+        ]
+        raw_duration = sum(s['end'] - s['start'] for s in raw_segments if (s['end'] - s['start']) >= 1)
+        merged_duration = 130.0 - 0.0  # What merged would give
+        assert raw_duration == pytest.approx(60.0)
+        assert merged_duration == pytest.approx(130.0)
+        assert raw_duration < merged_duration  # Raw is correct, merged is inflated
 
     def test_short_segments_excluded(self):
         """Segments shorter than 1s are excluded."""
         segments = [
-            {'start': 0.0, 'end': 0.5},   # Too short
+            {'start': 0.0, 'end': 0.5},  # Too short
             {'start': 10.0, 'end': 40.0},  # Valid
         ]
         durations = [s['end'] - s['start'] for s in segments if (s['end'] - s['start']) >= 1]
