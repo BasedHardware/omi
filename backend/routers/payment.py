@@ -15,7 +15,7 @@ from database import (
 )
 from database.redis_db import set_credits_invalidation_signal
 from utils.notifications import send_notification, send_subscription_paid_personalized_notification
-from models.users import Subscription, SubscriptionStatus, PlanLimits
+from models.users import PlanType, Subscription, SubscriptionStatus, PlanLimits
 from utils.subscription import (
     get_basic_plan_limits,
     get_paid_plan_definitions,
