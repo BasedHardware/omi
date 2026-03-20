@@ -6,11 +6,21 @@ on:
     paths:
       - 'web/frontend/**'
       - 'web/personas-open-source/**'
+      - 'app/**.dart'
+      - 'app/lib/l10n/**'
+      - 'backend/**.py'
+      - 'omi/**'
+      - 'omiGlass/**'
   pull_request:
     branches: main
     paths:
       - 'web/frontend/**'
       - 'web/personas-open-source/**'
+      - 'app/**.dart'
+      - 'app/lib/l10n/**'
+      - 'backend/**.py'
+      - 'omi/**'
+      - 'omiGlass/**'
 
 jobs:
   lint-frontend:
@@ -19,7 +29,7 @@ jobs:
     defaults:
       run:
         working-directory: ./web/frontend
-    
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -40,13 +50,104 @@ jobs:
       - name: Check Prettier formatting
         run: npm run lint:format -- --check
 
+  format-dart:
+    name: Check Dart Formatting
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+
+      - name: Check Dart formatting
+        run: |
+          FILES=$(find app -name '*.dart' ! -name '*.gen.dart' ! -name '*.g.dart' -type f)
+          if [ -z "$FILES" ]; then
+            echo "No Dart files to check."
+            exit 0
+          fi
+          echo "$FILES" | xargs dart format --line-length 120 --set-exit-if-changed --output=none
+
+  format-python:
+    name: Check Python Formatting
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install black
+        run: pip install black
+
+      - name: Check Python formatting
+        run: |
+          FILES=$(find backend -name '*.py' -type f)
+          if [ -z "$FILES" ]; then
+            echo "No Python files to check."
+            exit 0
+          fi
+          echo "$FILES" | xargs black --check --line-length 120 --skip-string-normalization
+
+  format-arb:
+    name: Check ARB Formatting
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Check ARB files are valid JSON with 4-space indent
+        run: |
+          failed=0
+          for f in app/lib/l10n/*.arb; do
+            if ! python3 -m json.tool "$f" > /dev/null 2>&1; then
+              echo "FAIL: $f is not valid JSON"
+              failed=1
+              continue
+            fi
+            if ! python3 -c "
+          import json, sys
+          with open('$f') as fh:
+              original = fh.read()
+          formatted = json.dumps(json.loads(original), indent=4, ensure_ascii=False) + '\n'
+          if original != formatted:
+              sys.exit(1)
+          " 2>/dev/null; then
+              echo "FAIL: $f not formatted with 4-space indent"
+              failed=1
+            fi
+          done
+          if [ "$failed" -eq 1 ]; then
+            echo ""
+            echo "Fix: jq --indent 4 '.' <file> > tmp && mv tmp <file>"
+            exit 1
+          fi
+          echo "All ARB files formatted correctly."
+
+  format-firmware:
+    name: Check C/C++ Formatting
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Check C/C++ formatting
+        run: |
+          FILES=$(find omi/ omiGlass/ -type f \( -name '*.c' -o -name '*.cpp' -o -name '*.cc' -o -name '*.cxx' -o -name '*.h' -o -name '*.hpp' \) 2>/dev/null || true)
+          if [ -z "$FILES" ]; then
+            echo "No C/C++ files to check."
+            exit 0
+          fi
+          echo "$FILES" | xargs clang-format --dry-run --Werror
+
   lint-personas:
     name: Lint Personas Open Source
     runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: ./web/personas-open-source
-    
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
