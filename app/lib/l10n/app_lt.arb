@@ -2750,6 +2750,8 @@
     "clearAll": "Išvalyti viską",
     "phoneKeypad": "Klaviatūra",
     "phoneHideKeypad": "Slėpti klaviatūrą",
+    "transcriptionPaused": "Įrašoma, jungiamasi iš naujo",
+    "transcriptionPausedReconnecting": "Vis dar įrašoma — jungiamasi prie transkripcijos...",
     "fairUsePolicy": "Sąžiningas naudojimas",
     "fairUseLoadError": "Nepavyko įkelti sąžiningo naudojimo būsenos. Bandykite dar kartą.",
     "fairUseStatusNormal": "Jūsų naudojimas yra normaliose ribose.",

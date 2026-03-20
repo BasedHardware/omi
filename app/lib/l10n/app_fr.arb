@@ -2785,6 +2785,8 @@
     "clearAll": "Tout effacer",
     "phoneKeypad": "Clavier",
     "phoneHideKeypad": "Masquer le clavier",
+    "transcriptionPaused": "Enregistrement, reconnexion",
+    "transcriptionPausedReconnecting": "Enregistrement en cours — reconnexion à la transcription...",
     "fairUsePolicy": "Utilisation raisonnable",
     "fairUseLoadError": "Impossible de charger le statut d'utilisation raisonnable. Veuillez réessayer.",
     "fairUseStatusNormal": "Votre utilisation est dans les limites normales.",

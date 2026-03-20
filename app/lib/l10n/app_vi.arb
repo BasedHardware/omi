@@ -2755,6 +2755,8 @@
     "clearAll": "Xóa tất cả",
     "phoneKeypad": "Bàn phím",
     "phoneHideKeypad": "Ẩn bàn phím",
+    "transcriptionPaused": "Đang ghi, đang kết nối lại",
+    "transcriptionPausedReconnecting": "Vẫn đang ghi — đang kết nối lại với phiên âm...",
     "fairUsePolicy": "Sử dụng hợp lý",
     "fairUseLoadError": "Không thể tải trạng thái sử dụng hợp lý. Vui lòng thử lại.",
     "fairUseStatusNormal": "Mức sử dụng của bạn trong giới hạn bình thường.",

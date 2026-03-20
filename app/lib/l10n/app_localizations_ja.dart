@@ -8476,4 +8476,10 @@ class AppLocalizationsJa extends AppLocalizations {
   String fairUseBudgetResetsAt(String time) {
     return 'リセット $time';
   }
+
+  @override
+  String get transcriptionPaused => '録音中、再接続中';
+
+  @override
+  String get transcriptionPausedReconnecting => '録音は継続中 — 文字起こしに再接続しています...';
 }

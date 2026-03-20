@@ -10345,5 +10345,7 @@
                 "type": "String"
             }
         }
-    }
+    },
+    "transcriptionPaused": "Recording, reconnecting",
+    "transcriptionPausedReconnecting": "Still recording — reconnecting to transcription..."
 }

@@ -2717,6 +2717,8 @@
     "clearAll": "مسح الكل",
     "phoneKeypad": "لوحة المفاتيح",
     "phoneHideKeypad": "إخفاء لوحة المفاتيح",
+    "transcriptionPaused": "جارٍ التسجيل، إعادة الاتصال",
+    "transcriptionPausedReconnecting": "لا يزال التسجيل جاريًا — إعادة الاتصال بالنسخ...",
     "fairUsePolicy": "الاستخدام العادل",
     "fairUseLoadError": "تعذر تحميل حالة الاستخدام العادل. يرجى المحاولة مرة أخرى.",
     "fairUseStatusNormal": "استخدامك ضمن الحدود الطبيعية.",

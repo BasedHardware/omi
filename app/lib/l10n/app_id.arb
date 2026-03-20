@@ -2792,6 +2792,8 @@
     "clearAll": "Hapus semua",
     "phoneKeypad": "Keypad",
     "phoneHideKeypad": "Sembunyikan keypad",
+    "transcriptionPaused": "Merekam, menghubungkan ulang",
+    "transcriptionPausedReconnecting": "Masih merekam — menghubungkan ulang ke transkripsi...",
     "fairUsePolicy": "Penggunaan Wajar",
     "fairUseLoadError": "Tidak dapat memuat status penggunaan wajar. Silakan coba lagi.",
     "fairUseStatusNormal": "Penggunaan Anda dalam batas normal.",

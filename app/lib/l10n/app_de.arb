@@ -2718,6 +2718,8 @@
     "clearAll": "Alles löschen",
     "phoneKeypad": "Tastatur",
     "phoneHideKeypad": "Tastatur ausblenden",
+    "transcriptionPaused": "Aufnahme läuft, verbinde neu",
+    "transcriptionPausedReconnecting": "Nimmt weiterhin auf — Verbindung zur Transkription wird wiederhergestellt...",
     "fairUsePolicy": "Faire Nutzung",
     "fairUseLoadError": "Der Status der fairen Nutzung konnte nicht geladen werden. Bitte versuchen Sie es erneut.",
     "fairUseStatusNormal": "Ihre Nutzung liegt im normalen Bereich.",

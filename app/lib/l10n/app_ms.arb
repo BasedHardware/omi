@@ -2750,6 +2750,8 @@
     "clearAll": "Kosongkan semua",
     "phoneKeypad": "Pad kekunci",
     "phoneHideKeypad": "Sembunyikan pad kekunci",
+    "transcriptionPaused": "Merakam, menyambung semula",
+    "transcriptionPausedReconnecting": "Masih merakam — menyambung semula ke transkripsi...",
     "fairUsePolicy": "Penggunaan Saksama",
     "fairUseLoadError": "Tidak dapat memuatkan status penggunaan saksama. Sila cuba lagi.",
     "fairUseStatusNormal": "Penggunaan anda dalam had biasa.",

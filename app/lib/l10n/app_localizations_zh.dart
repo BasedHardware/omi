@@ -8465,4 +8465,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String fairUseBudgetResetsAt(String time) {
     return '重置时间 $time';
   }
+
+  @override
+  String get transcriptionPaused => '录音中，正在重连';
+
+  @override
+  String get transcriptionPausedReconnecting => '仍在录音 — 正在重新连接转录...';
 }

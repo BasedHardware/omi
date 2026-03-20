@@ -2786,6 +2786,8 @@
     "clearAll": "Limpar tudo",
     "phoneKeypad": "Teclado",
     "phoneHideKeypad": "Ocultar teclado",
+    "transcriptionPaused": "Gravando, reconectando",
+    "transcriptionPausedReconnecting": "Ainda gravando — reconectando à transcrição...",
     "fairUsePolicy": "Uso justo",
     "fairUseLoadError": "Não foi possível carregar o status de uso justo. Tente novamente.",
     "fairUseStatusNormal": "Seu uso está dentro dos limites normais.",
