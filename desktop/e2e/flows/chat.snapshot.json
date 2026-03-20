@@ -1,0 +1,46 @@
+{
+  "version": 1,
+  "flow": "chat",
+  "flowHash": "efb697d6b68af93b",
+  "device": {
+    "model": "unknown",
+    "resolution": "unknown"
+  },
+  "createdAt": "2026-03-20T07:03:04.855Z",
+  "runId": "ycYUEqE",
+  "totalDurationMs": 286000,
+  "verifySteps": [
+    "S1",
+    "S2",
+    "S3",
+    "S4",
+    "S5"
+  ],
+  "steps": {
+    "S1": {
+      "kind": "action",
+      "waitAfterMs": 200,
+      "durationMs": 50000
+    },
+    "S2": {
+      "kind": "action",
+      "waitAfterMs": 200,
+      "durationMs": 108000
+    },
+    "S3": {
+      "kind": "verify",
+      "waitAfterMs": 200,
+      "durationMs": 62000
+    },
+    "S4": {
+      "kind": "action",
+      "waitAfterMs": 200,
+      "durationMs": 35000
+    },
+    "S5": {
+      "kind": "action",
+      "waitAfterMs": 500,
+      "durationMs": 31000
+    }
+  }
+}
