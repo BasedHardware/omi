@@ -122,6 +122,13 @@ final class OmiBleManager: NSObject {
         centralManager.cancelPeripheralConnection(peripheral)
     }
 
+    func disconnectAllPeripherals() {
+        for (uuid, peripheral) in peripherals {
+            manuallyDisconnected.insert(uuid)
+            centralManager.cancelPeripheralConnection(peripheral)
+        }
+    }
+
     func reconnectKnownPeripheral(uuid: String) {
         manuallyDisconnected.remove(uuid)
 
