@@ -8649,4 +8649,10 @@ class AppLocalizationsRu extends AppLocalizations {
   String fairUseBudgetResetsAt(String time) {
     return 'Сброс $time';
   }
+
+  @override
+  String get transcriptionPaused => 'Запись, переподключение';
+
+  @override
+  String get transcriptionPausedReconnecting => 'Запись продолжается — переподключение к транскрипции...';
 }

@@ -2750,6 +2750,8 @@
     "clearAll": "Εκκαθάριση όλων",
     "phoneKeypad": "Πληκτρολόγιο",
     "phoneHideKeypad": "Απόκρυψη πληκτρολογίου",
+    "transcriptionPaused": "Εγγραφή, επανασύνδεση",
+    "transcriptionPausedReconnecting": "Συνεχίζει η εγγραφή — επανασύνδεση με τη μεταγραφή...",
     "fairUsePolicy": "Δίκαιη χρήση",
     "fairUseLoadError": "Δεν ήταν δυνατή η φόρτωση της κατάστασης δίκαιης χρήσης. Παρακαλώ δοκιμάστε ξανά.",
     "fairUseStatusNormal": "Η χρήση σας είναι εντός κανονικών ορίων.",

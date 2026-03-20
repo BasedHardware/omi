@@ -2751,6 +2751,8 @@
     "clearAll": "すべて削除",
     "phoneKeypad": "キーパッド",
     "phoneHideKeypad": "キーパッドを隠す",
+    "transcriptionPaused": "録音中、再接続中",
+    "transcriptionPausedReconnecting": "録音は継続中 — 文字起こしに再接続しています...",
     "fairUsePolicy": "フェアユース",
     "fairUseLoadError": "フェアユースの状態を読み込めませんでした。もう一度お試しください。",
     "fairUseStatusNormal": "ご利用は通常の範囲内です。",

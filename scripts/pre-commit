@@ -30,26 +30,40 @@ fi
 STAGED_ARB_FILES=$(git diff --cached --name-only --diff-filter=ACM | grep '\.arb$')
 
 if [ -n "$STAGED_ARB_FILES" ]; then
-  BAD_ARB=""
-  for f in $STAGED_ARB_FILES; do
-    if grep -qP '^\s{2}"' "$f" && ! grep -qP '^\s{4}"' "$f"; then
-      BAD_ARB="$BAD_ARB $f"
+  if command -v jq >/dev/null 2>&1; then
+    echo "Formatting ARB files to 4-space JSON indent..."
+    for f in $STAGED_ARB_FILES; do
+      jq --indent 4 '.' "$f" > "$f.tmp" && mv "$f.tmp" "$f"
+    done
+    echo "$STAGED_ARB_FILES" | xargs git add
+  else
+    echo "jq is not installed. Please run 'sudo apt install jq' or 'brew install jq'" >&2
+    exit 1
+  fi
+fi
+
+# Web (JS/TS/JSX/TSX) formatting with Prettier
+STAGED_WEB_FILES=$(git diff --cached --name-only --diff-filter=ACM | grep -E '\.(js|jsx|ts|tsx)$' | grep -E '^web/')
+
+if [ -n "$STAGED_WEB_FILES" ]; then
+  echo "Formatting staged web files with Prettier..."
+  for dir in web/frontend web/app web/personas-open-source; do
+    DIR_FILES=$(echo "$STAGED_WEB_FILES" | grep "^$dir/")
+    if [ -z "$DIR_FILES" ]; then
+      continue
     fi
-  done
-  if [ -n "$BAD_ARB" ]; then
-    if command -v jq >/dev/null 2>&1; then
-      echo "Reformatting ARB files to 4-space indent..."
-      for f in $BAD_ARB; do
-        jq --indent 4 '.' "$f" > "$f.tmp" && mv "$f.tmp" "$f"
-      done
-      echo "$BAD_ARB" | xargs git add
+    if [ -x "$dir/node_modules/.bin/prettier" ]; then
+      echo "$DIR_FILES" | xargs "$dir/node_modules/.bin/prettier" --write
+    elif command -v npx >/dev/null 2>&1; then
+      echo "$DIR_FILES" | xargs npx --prefix "$dir" prettier --write
+    elif command -v prettier >/dev/null 2>&1; then
+      echo "$DIR_FILES" | xargs prettier --write
     else
-      echo "ERROR: These ARB files use 2-space indent instead of 4-space:" >&2
-      echo "$BAD_ARB" >&2
-      echo "Install jq to auto-fix, or reformat manually with: jq --indent 4 '.' <file>" >&2
+      echo "prettier not found for $dir. Run 'npm install' in $dir or install prettier globally." >&2
       exit 1
     fi
-  fi
+    echo "$DIR_FILES" | xargs git add
+  done
 fi
 
 # C/C++ formatting for firmware/

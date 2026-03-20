@@ -2750,6 +2750,8 @@
     "clearAll": "모두 지우기",
     "phoneKeypad": "키패드",
     "phoneHideKeypad": "키패드 숨기기",
+    "transcriptionPaused": "녹음 중, 재연결 중",
+    "transcriptionPausedReconnecting": "계속 녹음 중 — 음성 인식에 재연결하는 중...",
     "fairUsePolicy": "공정 사용",
     "fairUseLoadError": "공정 사용 상태를 불러올 수 없습니다. 다시 시도해 주세요.",
     "fairUseStatusNormal": "사용량이 정상 범위 내에 있습니다.",

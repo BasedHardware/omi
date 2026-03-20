@@ -8623,4 +8623,10 @@ class AppLocalizationsPt extends AppLocalizations {
   String fairUseBudgetResetsAt(String time) {
     return 'Reinicia $time';
   }
+
+  @override
+  String get transcriptionPaused => 'Gravando, reconectando';
+
+  @override
+  String get transcriptionPausedReconnecting => 'Ainda gravando — reconectando à transcrição...';
 }

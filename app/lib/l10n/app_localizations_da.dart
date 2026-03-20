@@ -8604,4 +8604,10 @@ class AppLocalizationsDa extends AppLocalizations {
   String fairUseBudgetResetsAt(String time) {
     return 'Resets $time';
   }
+
+  @override
+  String get transcriptionPaused => 'Optager, genopretter forbindelse';
+
+  @override
+  String get transcriptionPausedReconnecting => 'Optager stadig — genopretter forbindelse til transskription...';
 }

@@ -1715,7 +1715,12 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'DISPOSITIVI', one: 'DISPOSITIVO');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'DISPOSITIVI',
+      one: 'DISPOSITIVO',
+    );
     return '$count $_temp0 TROVATO/I NELLE VICINANZE';
   }
 
@@ -8667,4 +8672,10 @@ class AppLocalizationsIt extends AppLocalizations {
   String fairUseBudgetResetsAt(String time) {
     return 'Si reimposta $time';
   }
+
+  @override
+  String get transcriptionPaused => 'Registrazione, riconnessione';
+
+  @override
+  String get transcriptionPausedReconnecting => 'Registrazione in corso — riconnessione alla trascrizione...';
 }

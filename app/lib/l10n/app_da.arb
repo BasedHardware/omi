@@ -2759,6 +2759,8 @@
     "clearAll": "Ryd alt",
     "phoneKeypad": "Tastatur",
     "phoneHideKeypad": "Skjul tastatur",
+    "transcriptionPaused": "Optager, genopretter forbindelse",
+    "transcriptionPausedReconnecting": "Optager stadig — genopretter forbindelse til transskription...",
     "fairUsePolicy": "Rimelig brug",
     "fairUseLoadError": "Kunne ikke indlæse status for rimelig brug. Prøv venligst igen.",
     "fairUseStatusNormal": "Dit forbrug er inden for normale grænser.",

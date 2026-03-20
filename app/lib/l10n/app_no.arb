@@ -2750,6 +2750,8 @@
     "clearAll": "Tøm alt",
     "phoneKeypad": "Tastatur",
     "phoneHideKeypad": "Skjul tastatur",
+    "transcriptionPaused": "Tar opp, kobler til på nytt",
+    "transcriptionPausedReconnecting": "Tar fortsatt opp — kobler til transkripsjon på nytt...",
     "fairUsePolicy": "Rimelig bruk",
     "fairUseLoadError": "Kunne ikke laste status for rimelig bruk. Vennligst prøv igjen.",
     "fairUseStatusNormal": "Bruken din er innenfor normale grenser.",

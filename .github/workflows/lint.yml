@@ -41,6 +41,11 @@ jobs:
         with:
           channel: stable
 
+      - name: Resolve Flutter dependencies
+        if: steps.changed.outputs.has_dart == 'true'
+        working-directory: app
+        run: flutter pub get
+
       - name: Check Dart formatting
         if: steps.changed.outputs.has_dart == 'true'
         run: |

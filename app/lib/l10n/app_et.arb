@@ -2750,6 +2750,8 @@
     "clearAll": "Tühjenda kõik",
     "phoneKeypad": "Klahvistik",
     "phoneHideKeypad": "Peida klahvistik",
+    "transcriptionPaused": "Salvestamine, taasühendamine",
+    "transcriptionPausedReconnecting": "Salvestamine jätkub — ühenduse taastamine transkriptsiooniga...",
     "fairUsePolicy": "Õiglane kasutus",
     "fairUseLoadError": "Õiglase kasutuse olekut ei õnnestunud laadida. Palun proovige uuesti.",
     "fairUseStatusNormal": "Teie kasutus on tavapiirides.",

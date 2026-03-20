@@ -8639,4 +8639,10 @@ class AppLocalizationsPl extends AppLocalizations {
   String fairUseBudgetResetsAt(String time) {
     return 'Resetuje się $time';
   }
+
+  @override
+  String get transcriptionPaused => 'Nagrywanie, ponowne łączenie';
+
+  @override
+  String get transcriptionPausedReconnecting => 'Nadal nagrywa — ponowne łączenie z transkrypcją...';
 }

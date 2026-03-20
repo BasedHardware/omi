@@ -2785,6 +2785,8 @@
     "clearAll": "Wyczyść wszystko",
     "phoneKeypad": "Klawiatura",
     "phoneHideKeypad": "Ukryj klawiaturę",
+    "transcriptionPaused": "Nagrywanie, ponowne łączenie",
+    "transcriptionPausedReconnecting": "Nadal nagrywa — ponowne łączenie z transkrypcją...",
     "fairUsePolicy": "Uczciwe korzystanie",
     "fairUseLoadError": "Nie udało się załadować statusu uczciwego korzystania. Spróbuj ponownie.",
     "fairUseStatusNormal": "Twoje użytkowanie mieści się w normalnych granicach.",
