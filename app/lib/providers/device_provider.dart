@@ -227,7 +227,6 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   Future periodicConnect(String printer, {bool boundDeviceOnly = false}) async {
     _reconnectionTimer?.cancel();
 
-    if (Platform.isIOS || Platform.isAndroid) {
       final pairedDeviceId = SharedPreferencesUtil().btDevice.id;
 
       // Already connected — nothing to do
@@ -236,7 +235,6 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
       // Known device — use ensureConnection which creates the NativeBleTransport first,
       // then connects natively. If native is already connected, it just re-notifies Dart.
       if (pairedDeviceId.isNotEmpty) {
-        Logger.debug('periodicConnect (native): ensureConnection for $pairedDeviceId');
         try {
           await ServiceManager.instance().device.ensureConnection(pairedDeviceId, force: false);
           return;
@@ -247,7 +245,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
 
       // No paired device (onboarding) — fall through to active scanning
       if (pairedDeviceId.isEmpty && boundDeviceOnly) return;
-    }
+
 
     _startPollingReconnect(boundDeviceOnly: boundDeviceOnly);
   }

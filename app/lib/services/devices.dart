@@ -65,7 +65,7 @@ class DeviceService implements IDeviceService {
 
 
   final List<DeviceDiscoverer> _discoverers = [
-    (Platform.isIOS || Platform.isAndroid) ? NativeBluetoothDiscoverer() : BluetoothDeviceDiscoverer(),
+    NativeBluetoothDiscoverer(),
     AppleWatchDiscoverer(),
   ];
 
@@ -123,7 +123,6 @@ class DeviceService implements IDeviceService {
   }
 
   Future<void> _connectToDevice(String id) async {
-    print('[DeviceService] _connectToDevice called with id=$id, _devices.length=${_devices.length}');
     // Drop existing connection first
     if (_connection?.status == DeviceConnectionState.connected) {
       await _connection?.disconnect();
@@ -150,17 +149,10 @@ class DeviceService implements IDeviceService {
     }
 
     _connection = DeviceConnectionFactory.create(device);
-    print('[DeviceService] connection created: ${_connection != null}, type: ${_connection.runtimeType}');
     if (_connection != null) {
-      try {
-        await _connection!.connect(onConnectionStateChanged: onDeviceConnectionStateChanged);
-        print('[DeviceService] connect() completed successfully');
-      } catch (e) {
-        print('[DeviceService] connect() threw: $e');
-        rethrow;
-      }
+      await _connection!.connect(onConnectionStateChanged: onDeviceConnectionStateChanged);
     } else {
-      print('[DeviceService] Failed to create device connection for ${device.id}');
+      Logger.debug('[DeviceService] Failed to create device connection for ${device.id}');
     }
   }
 

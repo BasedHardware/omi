@@ -74,7 +74,6 @@ import 'package:omi/services/services.dart';
 import 'package:omi/utils/analytics/growthbook.dart';
 import 'package:omi/utils/debug_log_manager.dart';
 import 'package:omi/utils/debugging/crashlytics_manager.dart';
-import 'package:omi/utils/enums.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/environment_detector.dart';
 import 'package:omi/pages/settings/developer.dart';
@@ -189,20 +188,17 @@ Future _init() async {
   if (PlatformService.isMobile) initOpus(await opus_flutter.load());
 
   await GrowthbookUtil.init();
-  if (!PlatformService.isWindows && !PlatformService.isIOS) {
+  if (!PlatformService.isWindows && !PlatformService.isMobile) {
     ble.FlutterBluePlus.setOptions(restoreState: true);
     ble.FlutterBluePlus.setLogLevel(ble.LogLevel.info, color: true);
   }
 
-  // Register native BLE bridge on iOS and Android (must be before any BLE operations)
-  if (PlatformService.isIOS || PlatformService.isAndroid) {
+  // Register native BLE bridge
+  if (PlatformService.isMobile) {
     BleFlutterApi.setUp(BleBridge.instance);
 
-    // Handle state restoration — iOS may restore peripherals after app relaunch
     BleBridge.instance.stateRestoredCallback = (List<String> peripheralUuids) {
       Logger.debug('main: restored ${peripheralUuids.length} BLE peripherals');
-      // The DeviceProvider will pick up the connection via NativeBleTransport
-      // when it initializes and calls periodicConnect.
     };
   }
 
