@@ -154,11 +154,7 @@ class _NameSpeakerBottomSheetState extends State<NameSpeakerBottomSheet> {
               loading
                   ? const Padding(
                       padding: EdgeInsets.symmetric(vertical: 40),
-                      child: Center(
-                        child: CircularProgressIndicator(
-                          valueColor: AlwaysStoppedAnimation(Colors.white),
-                        ),
-                      ),
+                      child: Center(child: CircularProgressIndicator(valueColor: AlwaysStoppedAnimation(Colors.white))),
                     )
                   : Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -248,10 +244,7 @@ class _NameSpeakerBottomSheetState extends State<NameSpeakerBottomSheet> {
             filled: true,
             contentPadding: const EdgeInsets.symmetric(horizontal: 16),
             fillColor: Colors.grey[900],
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(8),
-              borderSide: BorderSide.none,
-            ),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
             hintStyle: const TextStyle(color: Colors.grey),
             errorText: _duplicateNameError,
           ),
@@ -266,7 +259,7 @@ class _NameSpeakerBottomSheetState extends State<NameSpeakerBottomSheet> {
             });
           },
           child: Text(context.l10n.cancel, style: const TextStyle(color: Colors.white)),
-        )
+        ),
       ],
     );
   }
@@ -303,7 +296,7 @@ class _NameSpeakerBottomSheetState extends State<NameSpeakerBottomSheet> {
     });
 
     final List<Person> people = [
-      Person(id: 'user', name: '$userName (You)', colorIdx: 0, createdAt: DateTime.now(), updatedAt: DateTime.now())
+      Person(id: 'user', name: '$userName (You)', colorIdx: 0, createdAt: DateTime.now(), updatedAt: DateTime.now()),
     ];
     people.addAll(cachedPeople);
 
@@ -319,22 +312,22 @@ class _NameSpeakerBottomSheetState extends State<NameSpeakerBottomSheet> {
             setAllowSave(false);
           });
         },
-      )
+      ),
     ];
-    chips.addAll(people.map((person) => PersonChip(
+    chips.addAll(
+      people.map(
+        (person) => PersonChip(
           personName: person.name,
           isSelected: selectedPerson == person.id,
           onSelected: (bool selected) {
             setSelectedPerson(person.id);
             setSelectedPersonName(person.id == 'user' ? userName : person.name);
           },
-        )));
-
-    return Wrap(
-      spacing: 8.0,
-      runSpacing: 8.0,
-      children: chips,
+        ),
+      ),
     );
+
+    return Wrap(spacing: 8.0, runSpacing: 8.0, children: chips);
   }
 
   Widget _buildUntaggedSegments() {
@@ -408,10 +401,7 @@ class _NameSpeakerBottomSheetState extends State<NameSpeakerBottomSheet> {
                         style: const TextStyle(fontSize: 12, color: Colors.white),
                       ),
                       const SizedBox(height: 4),
-                      Text(
-                        segment.getTimestampString(),
-                        style: TextStyle(fontSize: 10, color: Colors.grey.shade400),
-                      ),
+                      Text(segment.getTimestampString(), style: TextStyle(fontSize: 10, color: Colors.grey.shade400)),
                     ],
                   ),
                   value: _selectedSegmentIds.contains(segment.id),
@@ -443,9 +433,7 @@ class _NameSpeakerBottomSheetState extends State<NameSpeakerBottomSheet> {
         style: ElevatedButton.styleFrom(
           backgroundColor: Colors.white,
           foregroundColor: Colors.black,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(8),
-          ),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
         ),
         onPressed: !allowSave || loading
             ? null
@@ -461,16 +449,18 @@ class _NameSpeakerBottomSheetState extends State<NameSpeakerBottomSheet> {
                 }
 
                 await widget.onSpeakerAssigned(
-                    widget.speakerId, personIdToAssign, personNameToAssign, _selectedSegmentIds);
+                  widget.speakerId,
+                  personIdToAssign,
+                  personNameToAssign,
+                  _selectedSegmentIds,
+                );
 
                 setLoading(false);
                 if (mounted) {
                   Navigator.pop(context);
                 }
               },
-        child: Center(
-          child: Text(context.l10n.save),
-        ),
+        child: Center(child: Text(context.l10n.save)),
       ),
     );
   }

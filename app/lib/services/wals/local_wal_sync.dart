@@ -62,8 +62,9 @@ class LocalWalSyncImpl implements LocalWalSync {
     _chunkingTimer = Timer.periodic(const Duration(seconds: chunkSizeInSeconds + newFrameSyncDelaySeconds), (t) async {
       await _chunk();
     });
-    _flushingTimer =
-        Timer.periodic(const Duration(seconds: flushIntervalInSeconds + newFrameSyncDelaySeconds), (t) async {
+    _flushingTimer = Timer.periodic(const Duration(seconds: flushIntervalInSeconds + newFrameSyncDelaySeconds), (
+      t,
+    ) async {
       await _flush();
     });
   }
@@ -177,8 +178,9 @@ class LocalWalSyncImpl implements LocalWalSync {
       Logger.debug("${low} - ${high} - ${syncedOffset} - ${chunkFrameCount} - ${_framesPerSecond}");
 
       Wal wal;
-      var walIdx =
-          _wals.indexWhere((w) => w.timerStart == timerStart && w.device == (_deviceId ?? "omi") && w.codec == _codec);
+      var walIdx = _wals.indexWhere(
+        (w) => w.timerStart == timerStart && w.device == (_deviceId ?? "omi") && w.codec == _codec,
+      );
       if (walIdx < 0) {
         wal = Wal(
           codec: _codec,
@@ -447,10 +449,14 @@ class LocalWalSyncImpl implements LocalWalSync {
       try {
         var partialRes = await syncLocalFiles(files);
 
-        resp.newConversationIds
-            .addAll(partialRes.newConversationIds.where((id) => !resp.newConversationIds.contains(id)));
-        resp.updatedConversationIds.addAll(partialRes.updatedConversationIds
-            .where((id) => !resp.updatedConversationIds.contains(id) && !resp.newConversationIds.contains(id)));
+        resp.newConversationIds.addAll(
+          partialRes.newConversationIds.where((id) => !resp.newConversationIds.contains(id)),
+        );
+        resp.updatedConversationIds.addAll(
+          partialRes.updatedConversationIds.where(
+            (id) => !resp.updatedConversationIds.contains(id) && !resp.newConversationIds.contains(id),
+          ),
+        );
 
         batchesCompleted++;
 
@@ -548,10 +554,14 @@ class LocalWalSyncImpl implements LocalWalSync {
     try {
       var partialRes = await syncLocalFiles([walFile]);
 
-      resp.newConversationIds
-          .addAll(partialRes.newConversationIds.where((id) => !resp.newConversationIds.contains(id)));
-      resp.updatedConversationIds.addAll(partialRes.updatedConversationIds
-          .where((id) => !resp.updatedConversationIds.contains(id) && !resp.newConversationIds.contains(id)));
+      resp.newConversationIds.addAll(
+        partialRes.newConversationIds.where((id) => !resp.newConversationIds.contains(id)),
+      );
+      resp.updatedConversationIds.addAll(
+        partialRes.updatedConversationIds.where(
+          (id) => !resp.updatedConversationIds.contains(id) && !resp.newConversationIds.contains(id),
+        ),
+      );
 
       walToSync.status = WalStatus.synced;
       walToSync.isSyncing = false;

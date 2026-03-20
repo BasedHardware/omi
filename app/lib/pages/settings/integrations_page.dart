@@ -12,11 +12,7 @@ import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/other/temp.dart';
 
-enum IntegrationApp {
-  appleHealth,
-  googleCalendar,
-  gmail,
-}
+enum IntegrationApp { appleHealth, googleCalendar, gmail }
 
 extension IntegrationAppExtension on IntegrationApp {
   String get displayName {
@@ -184,23 +180,14 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
         // Save the connection status to the backend (this is a fallback in case sync partially failed)
         await integrationProvider.saveConnection(IntegrationApp.appleHealth.key, {});
         if (mounted) {
-          scaffoldMessenger.showSnackBar(
-            SnackBar(
-              content: Text(result.message),
-              duration: const Duration(seconds: 2),
-            ),
-          );
+          scaffoldMessenger.showSnackBar(SnackBar(content: Text(result.message), duration: const Duration(seconds: 2)));
         }
         await _loadFromBackend();
       } else {
         MixpanelManager().integrationConnectFailed(integrationName: 'Apple Health');
         if (mounted) {
           scaffoldMessenger.showSnackBar(
-            SnackBar(
-              content: Text(result.message),
-              backgroundColor: Colors.red,
-              duration: const Duration(seconds: 3),
-            ),
+            SnackBar(content: Text(result.message), backgroundColor: Colors.red, duration: const Duration(seconds: 3)),
           );
         }
       }
@@ -221,10 +208,7 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
         MixpanelManager().integrationConnectSucceeded(integrationName: app.displayName);
         if (mounted) {
           scaffoldMessenger.showSnackBar(
-            SnackBar(
-              content: Text(context.l10n.completeAuthInBrowser),
-              duration: const Duration(seconds: 5),
-            ),
+            SnackBar(content: Text(context.l10n.completeAuthInBrowser), duration: const Duration(seconds: 5)),
           );
         }
         await _loadFromBackend();
@@ -251,13 +235,8 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
       builder: (BuildContext context) {
         return AlertDialog(
           backgroundColor: const Color(0xFF1C1C1E),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-          ),
-          title: Text(
-            context.l10n.disconnectAppTitle(app.displayName),
-            style: const TextStyle(color: Colors.white),
-          ),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: Text(context.l10n.disconnectAppTitle(app.displayName), style: const TextStyle(color: Colors.white)),
           content: Text(
             context.l10n.disconnectAppMessage(app.displayName),
             style: const TextStyle(color: Color(0xFF8E8E93)),
@@ -265,17 +244,11 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(false),
-              child: Text(
-                context.l10n.cancel,
-                style: const TextStyle(color: Color(0xFF8E8E93)),
-              ),
+              child: Text(context.l10n.cancel, style: const TextStyle(color: Color(0xFF8E8E93))),
             ),
             TextButton(
               onPressed: () => Navigator.of(context).pop(true),
-              child: Text(
-                context.l10n.disconnect,
-                style: const TextStyle(color: Colors.red),
-              ),
+              child: Text(context.l10n.disconnect, style: const TextStyle(color: Colors.red)),
             ),
           ],
         );
@@ -331,10 +304,7 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
       }
       if (mounted) {
         scaffoldMessenger.showSnackBar(
-          SnackBar(
-            content: Text(context.l10n.disconnectedFrom(app.displayName)),
-            duration: const Duration(seconds: 2),
-          ),
+          SnackBar(content: Text(context.l10n.disconnectedFrom(app.displayName)), duration: const Duration(seconds: 2)),
         );
       }
     } else {
@@ -356,13 +326,8 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
       builder: (BuildContext context) {
         return AlertDialog(
           backgroundColor: const Color(0xFF1C1C1E),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-          ),
-          title: Text(
-            context.l10n.connectTo(app.displayName),
-            style: const TextStyle(color: Colors.white),
-          ),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: Text(context.l10n.connectTo(app.displayName), style: const TextStyle(color: Colors.white)),
           content: Text(
             context.l10n.authAccessMessage(app.displayName),
             style: const TextStyle(color: Color(0xFF8E8E93)),
@@ -370,17 +335,11 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(false),
-              child: Text(
-                context.l10n.cancel,
-                style: const TextStyle(color: Color(0xFF8E8E93)),
-              ),
+              child: Text(context.l10n.cancel, style: const TextStyle(color: Color(0xFF8E8E93))),
             ),
             TextButton(
               onPressed: () => Navigator.of(context).pop(true),
-              child: Text(
-                context.l10n.continueAction,
-                style: const TextStyle(color: Colors.white),
-              ),
+              child: Text(context.l10n.continueAction, style: const TextStyle(color: Colors.white)),
             ),
           ],
         );
@@ -400,10 +359,7 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
       child: Container(
         width: 80,
         height: 32,
-        decoration: BoxDecoration(
-          color: Colors.grey.shade800,
-          borderRadius: BorderRadius.circular(16),
-        ),
+        decoration: BoxDecoration(color: Colors.grey.shade800, borderRadius: BorderRadius.circular(16)),
       ),
     );
   }
@@ -433,9 +389,7 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
             Container(
               width: 40,
               height: 40,
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(8),
-              ),
+              decoration: BoxDecoration(borderRadius: BorderRadius.circular(8)),
               child: app.logoPath != null
                   ? ClipRRect(
                       borderRadius: BorderRadius.circular(8),
@@ -450,11 +404,7 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
                               color: isAvailable ? app.iconColor.withOpacity(0.2) : Colors.grey.withOpacity(0.1),
                               borderRadius: BorderRadius.circular(8),
                             ),
-                            child: Icon(
-                              app.icon,
-                              color: isAvailable ? app.iconColor : Colors.grey,
-                              size: 24,
-                            ),
+                            child: Icon(app.icon, color: isAvailable ? app.iconColor : Colors.grey, size: 24),
                           );
                         },
                       ),
@@ -464,11 +414,7 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
                         color: isAvailable ? app.iconColor.withOpacity(0.2) : Colors.grey.withOpacity(0.1),
                         borderRadius: BorderRadius.circular(8),
                       ),
-                      child: Icon(
-                        app.icon,
-                        color: isAvailable ? app.iconColor : Colors.grey,
-                        size: 24,
-                      ),
+                      child: Icon(app.icon, color: isAvailable ? app.iconColor : Colors.grey, size: 24),
                     ),
             ),
             const SizedBox(width: 16),
@@ -513,11 +459,7 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
                 ),
                 child: Text(
                   context.l10n.disconnect,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w500,
-                  ),
+                  style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w500),
                 ),
               ),
           ],
@@ -529,10 +471,7 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
   Widget _buildCreateYourOwnAppTile() {
     return GestureDetector(
       onTap: () {
-        routeToPage(
-          context,
-          const AddAppPage(presetExternalIntegration: true),
-        );
+        routeToPage(context, const AddAppPage(presetExternalIntegration: true));
       },
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 0, vertical: 16),
@@ -542,40 +481,22 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
             Container(
               width: 40,
               height: 40,
-              decoration: BoxDecoration(
-                color: Colors.purple.withOpacity(0.2),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: const Icon(
-                Icons.add_circle_outline,
-                color: Colors.purple,
-                size: 24,
-              ),
+              decoration: BoxDecoration(color: Colors.purple.withOpacity(0.2), borderRadius: BorderRadius.circular(8)),
+              child: const Icon(Icons.add_circle_outline, color: Colors.purple, size: 24),
             ),
             const SizedBox(width: 16),
             // App Name
             Expanded(
               child: Text(
                 context.l10n.createYourOwnApp,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 17,
-                  fontWeight: FontWeight.w400,
-                ),
+                style: const TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w400),
               ),
             ),
             // Arrow icon
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              decoration: BoxDecoration(
-                color: Colors.purple.withOpacity(0.2),
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: const Icon(
-                Icons.arrow_forward_ios,
-                color: Colors.purple,
-                size: 12,
-              ),
+              decoration: BoxDecoration(color: Colors.purple.withOpacity(0.2), borderRadius: BorderRadius.circular(16)),
+              child: const Icon(Icons.arrow_forward_ios, color: Colors.purple, size: 12),
             ),
           ],
         ),
@@ -600,11 +521,7 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
         ),
         title: Text(
           context.l10n.integrations,
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 18,
-            fontWeight: FontWeight.w600,
-          ),
+          style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
         ),
         centerTitle: true,
       ),
@@ -621,10 +538,7 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
                     ...IntegrationApp.values.map((app) => _buildAppTile(app, isLoading)),
                     Padding(
                       padding: const EdgeInsets.symmetric(vertical: 8),
-                      child: Divider(
-                        color: Colors.grey.shade800,
-                        thickness: 1,
-                      ),
+                      child: Divider(color: Colors.grey.shade800, thickness: 1),
                     ),
                     _buildCreateYourOwnAppTile(),
                   ],
@@ -640,10 +554,7 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
                     Expanded(
                       child: Text(
                         context.l10n.integrationsFooter,
-                        style: const TextStyle(
-                          color: Color(0xFF8E8E93),
-                          fontSize: 12,
-                        ),
+                        style: const TextStyle(color: Color(0xFF8E8E93), fontSize: 12),
                       ),
                     ),
                   ],

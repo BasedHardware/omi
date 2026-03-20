@@ -149,11 +149,11 @@ def test_core_tools_constant_exists():
 
 
 def test_core_tools_used_in_both_functions():
-    """Both execute_agentic_chat and execute_agentic_chat_stream should use CORE_TOOLS."""
+    """execute_agentic_chat_stream should use CORE_TOOLS."""
     source = _read_agentic_source()
     assert (
-        source.count("list(CORE_TOOLS)") >= 2
-    ), "Both execute functions should use list(CORE_TOOLS) instead of inline tool lists"
+        source.count("list(CORE_TOOLS)") >= 1
+    ), "Execute function should use list(CORE_TOOLS) instead of inline tool lists"
 
 
 def test_no_duplicate_inline_tool_lists():

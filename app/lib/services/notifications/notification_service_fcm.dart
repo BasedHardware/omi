@@ -52,30 +52,28 @@ class _FCMNotificationService implements NotificationInterface {
 
   Future<void> _initializeAwesomeNotifications() async {
     bool initialized = await _awesomeNotifications.initialize(
-        // set the icon to null if you want to use the default app icon
-        'resource://drawable/icon',
-        [
-          NotificationChannel(
-            channelGroupKey: 'channel_group_key',
-            channelKey: channel.channelKey,
-            channelName: channel.channelName,
-            channelDescription: channel.channelDescription,
-            defaultColor: const Color(0xFF9D50DD),
-            ledColor: Colors.white,
-          )
-        ],
-        // Channel groups are only visual and are not required
-        channelGroups: [
-          NotificationChannelGroup(
-            channelGroupKey: channel.channelKey!,
-            channelGroupName: channel.channelName!,
-          )
-        ],
-        debug: false);
+      // set the icon to null if you want to use the default app icon
+      'resource://drawable/icon',
+      [
+        NotificationChannel(
+          channelGroupKey: 'channel_group_key',
+          channelKey: channel.channelKey,
+          channelName: channel.channelName,
+          channelDescription: channel.channelDescription,
+          defaultColor: const Color(0xFF9D50DD),
+          ledColor: Colors.white,
+        ),
+      ],
+      // Channel groups are only visual and are not required
+      channelGroups: [
+        NotificationChannelGroup(channelGroupKey: channel.channelKey!, channelGroupName: channel.channelName!),
+      ],
+      debug: false,
+    );
 
     Logger.debug('initializeNotifications: $initialized');
 
-// Reset badge to clear existing badge count if any
+    // Reset badge to clear existing badge count if any
     int badgeCount = await _awesomeNotifications.getGlobalBadgeCounter();
     if (badgeCount > 0) await _awesomeNotifications.resetGlobalBadge();
   }
@@ -125,13 +123,10 @@ class _FCMNotificationService implements NotificationInterface {
   Future<void> register() async {
     try {
       if (PlatformService.isDesktop) return;
-      await platform.invokeMethod(
-        'setNotificationOnKillService',
-        {
-          'title': "Your Omi Device Disconnected",
-          'description': "Please keep your app opened to continue using your Omi.",
-        },
-      );
+      await platform.invokeMethod('setNotificationOnKillService', {
+        'title': "Your Omi Device Disconnected",
+        'description': "Please keep your app opened to continue using your Omi.",
+      });
     } catch (e) {
       Logger.debug('NotifOnKill error: $e');
     }
@@ -239,11 +234,7 @@ class _FCMNotificationService implements NotificationInterface {
           ActionItemNotificationHandler.handleDeletionMessage(data);
           return;
         } else if (messageType == 'merge_completed') {
-          MergeNotificationHandler.handleMergeCompleted(
-            data,
-            channel.channelKey!,
-            isAppInForeground: true,
-          );
+          MergeNotificationHandler.handleMergeCompleted(data, channel.channelKey!, isAppInForeground: true);
           return;
         } else if (messageType == 'important_conversation') {
           ImportantConversationNotificationHandler.handleImportantConversation(
@@ -279,10 +270,11 @@ class _FCMNotificationService implements NotificationInterface {
   @override
   Stream<ServerMessage> get listenForServerMessages => _serverMessageStreamController.stream;
 
-  Future<void> _showForegroundNotification(
-      {required RemoteNotification noti,
-      NotificationLayout layout = NotificationLayout.Default,
-      Map<String, String?>? payload}) async {
+  Future<void> _showForegroundNotification({
+    required RemoteNotification noti,
+    NotificationLayout layout = NotificationLayout.Default,
+    Map<String, String?>? payload,
+  }) async {
     if (noti.title == null || noti.body == null) return;
     final id = Random().nextInt(10000);
     showNotification(id: id, title: noti.title!, body: noti.body!, layout: layout, payload: payload);

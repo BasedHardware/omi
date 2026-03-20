@@ -62,11 +62,7 @@ class _ReferralPageState extends State<ReferralPage> {
         ),
         title: Text(
           context.l10n.referralProgram,
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 20,
-            fontWeight: FontWeight.w600,
-          ),
+          style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w600),
         ),
         centerTitle: true,
       ),
@@ -74,9 +70,7 @@ class _ReferralPageState extends State<ReferralPage> {
         children: [
           if (_controller != null) WebViewWidget(controller: _controller!),
           if (_isLoading || _controller == null)
-            const Center(
-              child: CircularProgressIndicator(color: Colors.deepPurple),
-            ),
+            const Center(child: CircularProgressIndicator(color: Colors.deepPurple)),
         ],
       ),
     );

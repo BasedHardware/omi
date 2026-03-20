@@ -15,30 +15,27 @@ class MixpanelManager {
 
   static Future<void> init() async {
     if (Env.mixpanelProjectToken == null) return;
-    return PlatformService.executeIfSupportedAsync(
-      PlatformService.isMixpanelSupported,
-      () async {
-        if (PlatformService.isMixpanelNativelySupported) {
-          if (_mixpanel == null) {
-            _mixpanel = await Mixpanel.init(
-              Env.mixpanelProjectToken!,
-              optOutTrackingDefault: false,
-              trackAutomaticEvents: true,
-            );
-            _mixpanel?.setLoggingEnabled(false);
-          }
-        } else {
-          // Use mixpanel_analytics for desktop platforms
-          _mixpanelAnalytics ??= MixpanelAnalytics.batch(
-            token: Env.mixpanelProjectToken!,
-            uploadInterval: const Duration(seconds: 3),
-            userId$: Stream.value(_preferences.uid),
-            useIp: true,
-            verbose: false,
+    return PlatformService.executeIfSupportedAsync(PlatformService.isMixpanelSupported, () async {
+      if (PlatformService.isMixpanelNativelySupported) {
+        if (_mixpanel == null) {
+          _mixpanel = await Mixpanel.init(
+            Env.mixpanelProjectToken!,
+            optOutTrackingDefault: false,
+            trackAutomaticEvents: true,
           );
+          _mixpanel?.setLoggingEnabled(false);
         }
-      },
-    );
+      } else {
+        // Use mixpanel_analytics for desktop platforms
+        _mixpanelAnalytics ??= MixpanelAnalytics.batch(
+          token: Env.mixpanelProjectToken!,
+          uploadInterval: const Duration(seconds: 3),
+          userId$: Stream.value(_preferences.uid),
+          useIp: true,
+          verbose: false,
+        );
+      }
+    });
   }
 
   factory MixpanelManager() {
@@ -48,94 +45,74 @@ class MixpanelManager {
   MixpanelManager._internal();
 
   setPeopleValues() {
-    PlatformService.executeIfSupported(
-      PlatformService.isMixpanelSupported,
-      () {
-        setUserProperty('Notifications Enabled', _preferences.notificationsEnabled);
-        setUserProperty('Location Enabled', _preferences.locationEnabled);
-        setUserProperty('Apps Enabled Count', _preferences.enabledAppsCount);
-        setUserProperty('Apps Integrations Enabled Count', _preferences.enabledAppsIntegrationsCount);
-        setUserProperty('Speaker Profile', _preferences.hasSpeakerProfile);
-        setUserProperty('Calendar Enabled', _preferences.calendarEnabled);
-        setUserProperty('Primary Language', _preferences.userPrimaryLanguage);
-        setUserProperty('Authorized Storing Recordings', _preferences.permissionStoreRecordingsEnabled);
-      },
-    );
+    PlatformService.executeIfSupported(PlatformService.isMixpanelSupported, () {
+      setUserProperty('Notifications Enabled', _preferences.notificationsEnabled);
+      setUserProperty('Location Enabled', _preferences.locationEnabled);
+      setUserProperty('Apps Enabled Count', _preferences.enabledAppsCount);
+      setUserProperty('Apps Integrations Enabled Count', _preferences.enabledAppsIntegrationsCount);
+      setUserProperty('Speaker Profile', _preferences.hasSpeakerProfile);
+      setUserProperty('Calendar Enabled', _preferences.calendarEnabled);
+      setUserProperty('Primary Language', _preferences.userPrimaryLanguage);
+      setUserProperty('Authorized Storing Recordings', _preferences.permissionStoreRecordingsEnabled);
+    });
   }
 
-  setUserProperty(String key, dynamic value) => PlatformService.executeIfSupported(
-        PlatformService.isMixpanelSupported,
-        () {
-          if (PlatformService.isMixpanelNativelySupported) {
-            _mixpanel?.getPeople().set(key, value);
-          } else {
-            _mixpanelAnalytics?.engage(
-              operation: MixpanelUpdateOperations.$set,
-              value: {key: value},
-            );
-          }
-        },
-      );
+  setUserProperty(String key, dynamic value) =>
+      PlatformService.executeIfSupported(PlatformService.isMixpanelSupported, () {
+        if (PlatformService.isMixpanelNativelySupported) {
+          _mixpanel?.getPeople().set(key, value);
+        } else {
+          _mixpanelAnalytics?.engage(operation: MixpanelUpdateOperations.$set, value: {key: value});
+        }
+      });
 
   void optInTracking() {
-    PlatformService.executeIfSupported(
-      PlatformService.isMixpanelSupported,
-      () {
-        if (PlatformService.isMixpanelNativelySupported) {
-          _mixpanel?.optInTracking();
-        }
-        // Note: mixpanel_analytics doesn't have built-in opt-in/opt-out, but we can still identify
-        identify();
-      },
-    );
+    PlatformService.executeIfSupported(PlatformService.isMixpanelSupported, () {
+      if (PlatformService.isMixpanelNativelySupported) {
+        _mixpanel?.optInTracking();
+      }
+      // Note: mixpanel_analytics doesn't have built-in opt-in/opt-out, but we can still identify
+      identify();
+    });
   }
 
   void optOutTracking() {
-    PlatformService.executeIfSupported(
-      PlatformService.isMixpanelSupported,
-      () {
-        if (PlatformService.isMixpanelNativelySupported) {
-          _mixpanel?.optOutTracking();
-          _mixpanel?.reset();
-        } else {
-          // Note: mixpanel_analytics doesn't have built-in opt-out,
-          // but we can set userId to null to stop tracking
-          _mixpanelAnalytics?.userId = null;
-        }
-      },
-    );
+    PlatformService.executeIfSupported(PlatformService.isMixpanelSupported, () {
+      if (PlatformService.isMixpanelNativelySupported) {
+        _mixpanel?.optOutTracking();
+        _mixpanel?.reset();
+      } else {
+        // Note: mixpanel_analytics doesn't have built-in opt-out,
+        // but we can set userId to null to stop tracking
+        _mixpanelAnalytics?.userId = null;
+      }
+    });
   }
 
   void identify() {
-    PlatformService.executeIfSupported(
-      PlatformService.isMixpanelSupported,
-      () {
-        if (PlatformService.isMixpanelNativelySupported) {
-          _mixpanel?.identify(_preferences.uid);
-        } else {
-          _mixpanelAnalytics?.userId = _preferences.uid;
-        }
-        _instance.setPeopleValues();
-        setNameAndEmail();
-      },
-    );
+    PlatformService.executeIfSupported(PlatformService.isMixpanelSupported, () {
+      if (PlatformService.isMixpanelNativelySupported) {
+        _mixpanel?.identify(_preferences.uid);
+      } else {
+        _mixpanelAnalytics?.userId = _preferences.uid;
+      }
+      _instance.setPeopleValues();
+      setNameAndEmail();
+    });
   }
 
   void migrateUser(String newUid) {
-    PlatformService.executeIfSupported(
-      PlatformService.isMixpanelSupported,
-      () {
-        if (PlatformService.isMixpanelNativelySupported) {
-          _mixpanel?.alias(newUid, _preferences.uid);
-          _mixpanel?.identify(newUid);
-        } else {
-          // Note: mixpanel_analytics doesn't have built-in alias,
-          // but we can just set the new userId
-          _mixpanelAnalytics?.userId = newUid;
-        }
-        setNameAndEmail();
-      },
-    );
+    PlatformService.executeIfSupported(PlatformService.isMixpanelSupported, () {
+      if (PlatformService.isMixpanelNativelySupported) {
+        _mixpanel?.alias(newUid, _preferences.uid);
+        _mixpanel?.identify(newUid);
+      } else {
+        // Note: mixpanel_analytics doesn't have built-in alias,
+        // but we can just set the new userId
+        _mixpanelAnalytics?.userId = newUid;
+      }
+      setNameAndEmail();
+    });
   }
 
   void setNameAndEmail() {
@@ -143,35 +120,28 @@ class MixpanelManager {
     setUserProperty('\$email', SharedPreferencesUtil().email);
   }
 
-  void track(String eventName, {Map<String, dynamic>? properties}) => PlatformService.executeIfSupported(
-        PlatformService.isMixpanelSupported,
-        () {
-          if (PlatformService.isMixpanelNativelySupported) {
-            _mixpanel?.track(eventName, properties: properties);
-          } else {
-            _mixpanelAnalytics?.track(
-              event: eventName,
-              properties: properties ?? {},
-            );
-          }
-        },
-      );
+  void track(String eventName, {Map<String, dynamic>? properties}) =>
+      PlatformService.executeIfSupported(PlatformService.isMixpanelSupported, () {
+        if (PlatformService.isMixpanelNativelySupported) {
+          _mixpanel?.track(eventName, properties: properties);
+        } else {
+          _mixpanelAnalytics?.track(event: eventName, properties: properties ?? {});
+        }
+      });
 
-  void startTimingEvent(String eventName) => PlatformService.executeIfSupported(
-        PlatformService.isMixpanelSupported,
-        () {
-          if (PlatformService.isMixpanelNativelySupported) {
-            _mixpanel?.timeEvent(eventName);
-          } else {
-            // Note: mixpanel_analytics doesn't have built-in timing events,
-            // but we can track the start time manually in properties
-            _mixpanelAnalytics?.track(
-              event: eventName,
-              properties: {'event_start_time': DateTime.now().millisecondsSinceEpoch},
-            );
-          }
-        },
-      );
+  void startTimingEvent(String eventName) =>
+      PlatformService.executeIfSupported(PlatformService.isMixpanelSupported, () {
+        if (PlatformService.isMixpanelNativelySupported) {
+          _mixpanel?.timeEvent(eventName);
+        } else {
+          // Note: mixpanel_analytics doesn't have built-in timing events,
+          // but we can track the start time manually in properties
+          _mixpanelAnalytics?.track(
+            event: eventName,
+            properties: {'event_start_time': DateTime.now().millisecondsSinceEpoch},
+          );
+        }
+      });
 
   void onboardingDeviceConnected() => track('Onboarding Device Connected');
 
@@ -182,14 +152,13 @@ class MixpanelManager {
   void onboardingUserAcquisitionSource(String source) =>
       track('User Acquisition Source', properties: {'source': source});
 
-  void settingsSaved({
-    bool hasWebhookConversationCreated = false,
-    bool hasWebhookTranscriptReceived = false,
-  }) =>
-      track('Developer Settings Saved', properties: {
-        'has_webhook_memory_created': hasWebhookConversationCreated,
-        'has_webhook_transcript_received': hasWebhookTranscriptReceived,
-      });
+  void settingsSaved({bool hasWebhookConversationCreated = false, bool hasWebhookTranscriptReceived = false}) => track(
+    'Developer Settings Saved',
+    properties: {
+      'has_webhook_memory_created': hasWebhookConversationCreated,
+      'has_webhook_transcript_received': hasWebhookTranscriptReceived,
+    },
+  );
 
   void pageOpened(String name) => track('$name Opened');
 
@@ -282,21 +251,15 @@ class MixpanelManager {
 
   void bottomNavigationTabClicked(String tab) => track('Bottom Navigation Tab Clicked', properties: {'tab': tab});
 
-  void deviceConnected() => track('Device Connected', properties: {
-        ..._preferences.btDevice.toJson(),
-      });
+  void deviceConnected() => track('Device Connected', properties: {..._preferences.btDevice.toJson()});
 
   void deviceDisconnected() => track('Device Disconnected');
 
   void memoriesPageCategoryOpened(MemoryCategory category) =>
       track('Fact Page Category Opened', properties: {'category': category.toString().split('.').last});
 
-  void memoriesPageDeletedMemory(Memory memory) => track(
-        'Fact Page Deleted Fact',
-        properties: {
-          'fact_category': memory.category.toString().split('.').last,
-        },
-      );
+  void memoriesPageDeletedMemory(Memory memory) =>
+      track('Fact Page Deleted Fact', properties: {'fact_category': memory.category.toString().split('.').last});
 
   void memoriesPageEditedMemory() => track('Fact Page Edited Fact');
 
@@ -306,10 +269,7 @@ class MixpanelManager {
       track('Fact Page Created Fact', properties: {'fact_category': category.toString().split('.').last});
 
   void memorySearched(String query, int resultsCount) {
-    track('Fact Searched', properties: {
-      'search_query_length': query.length,
-      'results_count': resultsCount,
-    });
+    track('Fact Searched', properties: {'search_query_length': query.length, 'results_count': resultsCount});
   }
 
   void memorySearchCleared(int totalFactsCount) {
@@ -317,31 +277,29 @@ class MixpanelManager {
   }
 
   void memoryListItemClicked(Memory memory) {
-    track('Fact List Item Clicked', properties: {
-      'fact_id': memory.id,
-      'fact_category': memory.category.toString().split('.').last,
-    });
+    track(
+      'Fact List Item Clicked',
+      properties: {'fact_id': memory.id, 'fact_category': memory.category.toString().split('.').last},
+    );
   }
 
   void memoryVisibilityChanged(Memory memory, MemoryVisibility newVisibility) {
-    track('Fact Visibility Changed', properties: {
-      'fact_id': memory.id,
-      'fact_category': memory.category.toString().split('.').last,
-      'new_visibility': newVisibility.name,
-    });
+    track(
+      'Fact Visibility Changed',
+      properties: {
+        'fact_id': memory.id,
+        'fact_category': memory.category.toString().split('.').last,
+        'new_visibility': newVisibility.name,
+      },
+    );
   }
 
   void memoriesAllVisibilityChanged(MemoryVisibility newVisibility, int count) {
-    track('All Facts Visibility Changed', properties: {
-      'new_visibility': newVisibility.name,
-      'facts_count': count,
-    });
+    track('All Facts Visibility Changed', properties: {'new_visibility': newVisibility.name, 'facts_count': count});
   }
 
   void memoriesAllDeleted(int countBeforeDeletion) {
-    track('All Facts Deleted', properties: {
-      'facts_count_before_deletion': countBeforeDeletion,
-    });
+    track('All Facts Deleted', properties: {'facts_count_before_deletion': countBeforeDeletion});
   }
 
   void memoriesFiltered(String filter) => track('Facts Filtered', properties: {'filter': filter});
@@ -410,22 +368,21 @@ class MixpanelManager {
     required String chatTargetId,
     required bool isPersonaChat,
     required bool isVoiceInput,
-  }) =>
-      track('Chat Message Sent', properties: {
-        'message_length': message.length,
-        'message_word_count': message.split(' ').length,
-        'includes_files': includesFiles,
-        'number_of_files': numberOfFiles,
-        'chat_target_id': chatTargetId,
-        'is_persona_chat': isPersonaChat,
-        'is_voice_input': isVoiceInput,
-      });
-
-  void chatVoiceInputUsed({required String chatTargetId, required bool isPersonaChat}) {
-    track('Chat Voice Input Used', properties: {
+  }) => track(
+    'Chat Message Sent',
+    properties: {
+      'message_length': message.length,
+      'message_word_count': message.split(' ').length,
+      'includes_files': includesFiles,
+      'number_of_files': numberOfFiles,
       'chat_target_id': chatTargetId,
       'is_persona_chat': isPersonaChat,
-    });
+      'is_voice_input': isVoiceInput,
+    },
+  );
+
+  void chatVoiceInputUsed({required String chatTargetId, required bool isPersonaChat}) {
+    track('Chat Voice Input Used', properties: {'chat_target_id': chatTargetId, 'is_persona_chat': isPersonaChat});
   }
 
   void speechProfileCapturePageClicked() => track('Speech Profile Capture Page Clicked');
@@ -443,9 +400,9 @@ class MixpanelManager {
       track('Show Discarded Conversations Toggled', properties: {'show_discarded': showDiscarded});
 
   void shortConversationThresholdChanged(int thresholdSeconds) => track(
-        'Short Conversation Threshold Changed',
-        properties: {'threshold_seconds': thresholdSeconds, 'threshold_minutes': thresholdSeconds ~/ 60},
-      );
+    'Short Conversation Threshold Changed',
+    properties: {'threshold_seconds': thresholdSeconds, 'threshold_minutes': thresholdSeconds ~/ 60},
+  );
 
   // Conversation Merge Events
   void conversationMergeSelectionModeEntered() => track('Conversation Merge Selection Mode Entered');
@@ -453,49 +410,45 @@ class MixpanelManager {
   void conversationMergeSelectionModeExited() => track('Conversation Merge Selection Mode Exited');
 
   void conversationSelectedForMerge(String conversationId, int totalSelected) => track(
-        'Conversation Selected For Merge',
-        properties: {'conversation_id': conversationId, 'total_selected': totalSelected},
-      );
+    'Conversation Selected For Merge',
+    properties: {'conversation_id': conversationId, 'total_selected': totalSelected},
+  );
 
   void conversationMergeInitiated(List<String> conversationIds) => track(
-        'Conversation Merge Initiated',
-        properties: {'conversation_count': conversationIds.length, 'conversation_ids': conversationIds},
-      );
+    'Conversation Merge Initiated',
+    properties: {'conversation_count': conversationIds.length, 'conversation_ids': conversationIds},
+  );
 
   void conversationMergeCompleted(String mergedConversationId, List<String> removedConversationIds) => track(
-        'Conversation Merge Completed',
-        properties: {
-          'merged_conversation_id': mergedConversationId,
-          'removed_count': removedConversationIds.length,
-          'removed_conversation_ids': removedConversationIds,
-        },
-      );
+    'Conversation Merge Completed',
+    properties: {
+      'merged_conversation_id': mergedConversationId,
+      'removed_count': removedConversationIds.length,
+      'removed_conversation_ids': removedConversationIds,
+    },
+  );
 
   void conversationMergeFailed(List<String> conversationIds) => track(
-        'Conversation Merge Failed',
-        properties: {'conversation_count': conversationIds.length, 'conversation_ids': conversationIds},
-      );
+    'Conversation Merge Failed',
+    properties: {'conversation_count': conversationIds.length, 'conversation_ids': conversationIds},
+  );
 
   // Important Conversation Share Events
-  void importantConversationNotificationReceived(String conversationId) => track(
-        'Important Conversation Notification Received',
-        properties: {'conversation_id': conversationId},
-      );
+  void importantConversationNotificationReceived(String conversationId) =>
+      track('Important Conversation Notification Received', properties: {'conversation_id': conversationId});
 
-  void shareToContactsSheetOpened(String conversationId) => track(
-        'Share To Contacts Sheet Opened',
-        properties: {'conversation_id': conversationId},
-      );
+  void shareToContactsSheetOpened(String conversationId) =>
+      track('Share To Contacts Sheet Opened', properties: {'conversation_id': conversationId});
 
   void shareToContactsSelected(String conversationId, int contactCount) => track(
-        'Share To Contacts Selected',
-        properties: {'conversation_id': conversationId, 'contact_count': contactCount},
-      );
+    'Share To Contacts Selected',
+    properties: {'conversation_id': conversationId, 'contact_count': contactCount},
+  );
 
   void shareToContactsSmsOpened(String conversationId, int contactCount) => track(
-        'Share To Contacts SMS Opened',
-        properties: {'conversation_id': conversationId, 'contact_count': contactCount},
-      );
+    'Share To Contacts SMS Opened',
+    properties: {'conversation_id': conversationId, 'contact_count': contactCount},
+  );
 
   void chatMessageConversationClicked(ServerConversation conversation) =>
       track('Chat Message Memory Clicked', properties: getConversationEventProperties(conversation));
@@ -595,19 +548,13 @@ class MixpanelManager {
 
   void deleteAccountCancelled() => track('Delete Account Cancelled');
 
-  void deleteUser() => PlatformService.executeIfSupported(
-        PlatformService.isMixpanelSupported,
-        () {
-          if (PlatformService.isMixpanelNativelySupported) {
-            _mixpanel?.getPeople().deleteUser();
-          } else {
-            _mixpanelAnalytics?.engage(
-              operation: MixpanelUpdateOperations.$delete,
-              value: {},
-            );
-          }
-        },
-      );
+  void deleteUser() => PlatformService.executeIfSupported(PlatformService.isMixpanelSupported, () {
+    if (PlatformService.isMixpanelNativelySupported) {
+      _mixpanel?.getPeople().deleteUser();
+    } else {
+      _mixpanelAnalytics?.engage(operation: MixpanelUpdateOperations.$delete, value: {});
+    }
+  });
 
   // Apps Filter
   void appsFilterOpened() => track('Apps Filter Opened');
@@ -636,10 +583,7 @@ class MixpanelManager {
 
   // Persona Events
   void personaProfileViewed({String? personaId, required String source}) {
-    track('Persona Profile Viewed', properties: {
-      if (personaId != null) 'persona_id': personaId,
-      'source': source,
-    });
+    track('Persona Profile Viewed', properties: {if (personaId != null) 'persona_id': personaId, 'source': source});
   }
 
   void personaCreateStarted() => track('Persona Create Started');
@@ -653,19 +597,20 @@ class MixpanelManager {
     bool? hasOmiConnection,
     bool? hasTwitterConnection,
   }) {
-    track('Persona Created', properties: {
-      'persona_id': personaId,
-      'is_public': isPublic,
-      if (connectedAccounts != null) 'connected_accounts': connectedAccounts,
-      if (hasOmiConnection != null) 'has_omi_connection': hasOmiConnection,
-      if (hasTwitterConnection != null) 'has_twitter_connection': hasTwitterConnection,
-    });
+    track(
+      'Persona Created',
+      properties: {
+        'persona_id': personaId,
+        'is_public': isPublic,
+        if (connectedAccounts != null) 'connected_accounts': connectedAccounts,
+        if (hasOmiConnection != null) 'has_omi_connection': hasOmiConnection,
+        if (hasTwitterConnection != null) 'has_twitter_connection': hasTwitterConnection,
+      },
+    );
   }
 
   void personaCreateFailed({String? errorMessage}) {
-    track('Persona Create Failed', properties: {
-      if (errorMessage != null) 'error_message': errorMessage,
-    });
+    track('Persona Create Failed', properties: {if (errorMessage != null) 'error_message': errorMessage});
   }
 
   void personaUpdateStarted({required String personaId}) {
@@ -684,49 +629,46 @@ class MixpanelManager {
     bool? hasOmiConnection,
     bool? hasTwitterConnection,
   }) {
-    track('Persona Updated', properties: {
-      'persona_id': personaId,
-      if (updatedFields != null && updatedFields.isNotEmpty) 'updated_fields': updatedFields,
-      'is_public': isPublic,
-      if (connectedAccounts != null) 'connected_accounts': connectedAccounts,
-      if (hasOmiConnection != null) 'has_omi_connection': hasOmiConnection,
-      if (hasTwitterConnection != null) 'has_twitter_connection': hasTwitterConnection,
-    });
+    track(
+      'Persona Updated',
+      properties: {
+        'persona_id': personaId,
+        if (updatedFields != null && updatedFields.isNotEmpty) 'updated_fields': updatedFields,
+        'is_public': isPublic,
+        if (connectedAccounts != null) 'connected_accounts': connectedAccounts,
+        if (hasOmiConnection != null) 'has_omi_connection': hasOmiConnection,
+        if (hasTwitterConnection != null) 'has_twitter_connection': hasTwitterConnection,
+      },
+    );
   }
 
   void personaUpdateFailed({required String personaId, String? errorMessage}) {
-    track('Persona Update Failed', properties: {
-      'persona_id': personaId,
-      if (errorMessage != null) 'error_message': errorMessage,
-    });
+    track(
+      'Persona Update Failed',
+      properties: {'persona_id': personaId, if (errorMessage != null) 'error_message': errorMessage},
+    );
   }
 
   void personaPublicToggled({required String personaId, required bool isPublic}) {
-    track('Persona Public Toggled', properties: {
-      'persona_id': personaId,
-      'is_public': isPublic,
-    });
+    track('Persona Public Toggled', properties: {'persona_id': personaId, 'is_public': isPublic});
   }
 
   void personaOmiConnectionToggled({required String personaId, required bool omiConnected}) {
-    track('Persona OMI Connection Toggled', properties: {
-      'persona_id': personaId,
-      'omi_connected': omiConnected,
-    });
+    track('Persona OMI Connection Toggled', properties: {'persona_id': personaId, 'omi_connected': omiConnected});
   }
 
   void personaTwitterConnectionToggled({required String personaId, required bool twitterConnected}) {
-    track('Persona Twitter Connection Toggled', properties: {
-      'persona_id': personaId,
-      'twitter_connected': twitterConnected,
-    });
+    track(
+      'Persona Twitter Connection Toggled',
+      properties: {'persona_id': personaId, 'twitter_connected': twitterConnected},
+    );
   }
 
   void personaTwitterProfileFetched({required String twitterHandle, required bool fetchSuccessful}) {
-    track('Persona Twitter Profile Fetched', properties: {
-      'twitter_handle': twitterHandle,
-      'fetch_successful': fetchSuccessful,
-    });
+    track(
+      'Persona Twitter Profile Fetched',
+      properties: {'twitter_handle': twitterHandle, 'fetch_successful': fetchSuccessful},
+    );
   }
 
   void personaTwitterOwnershipVerified({
@@ -734,25 +676,28 @@ class MixpanelManager {
     required String twitterHandle,
     required bool verificationSuccessful,
   }) {
-    track('Persona Twitter Ownership Verified', properties: {
-      if (personaId != null) 'persona_id': personaId,
-      'twitter_handle': twitterHandle,
-      'verification_successful': verificationSuccessful,
-    });
+    track(
+      'Persona Twitter Ownership Verified',
+      properties: {
+        if (personaId != null) 'persona_id': personaId,
+        'twitter_handle': twitterHandle,
+        'verification_successful': verificationSuccessful,
+      },
+    );
   }
 
   void personaShared({required String? personaId, required String? personaUsername}) {
-    track('Persona Shared', properties: {
-      if (personaId != null) 'persona_id': personaId,
-      if (personaUsername != null) 'persona_username': personaUsername,
-    });
+    track(
+      'Persona Shared',
+      properties: {
+        if (personaId != null) 'persona_id': personaId,
+        if (personaUsername != null) 'persona_username': personaUsername,
+      },
+    );
   }
 
   void personaUsernameCheck({required String username, required bool isTaken}) {
-    track('Persona Username Check', properties: {
-      'username': username,
-      'is_taken': isTaken,
-    });
+    track('Persona Username Check', properties: {'username': username, 'is_taken': isTaken});
   }
 
   void personaEnabled({required String personaId}) {
@@ -760,21 +705,17 @@ class MixpanelManager {
   }
 
   void personaEnableFailed({required String personaId, String? errorMessage}) {
-    track('Persona Enable Failed', properties: {
-      'persona_id': personaId,
-      if (errorMessage != null) 'error_message': errorMessage,
-    });
+    track(
+      'Persona Enable Failed',
+      properties: {'persona_id': personaId, if (errorMessage != null) 'error_message': errorMessage},
+    );
   }
 
   // Brain Map Events
   void brainMapOpened() => track('Brain Map Opened');
 
   void brainMapNodeClicked(String nodeId, String label, String type) {
-    track('Brain Map Node Clicked', properties: {
-      'node_id': nodeId,
-      'label': label,
-      'type': type,
-    });
+    track('Brain Map Node Clicked', properties: {'node_id': nodeId, 'label': label, 'type': type});
   }
 
   void brainMapShareClicked() => track('Brain Map Share Clicked');
@@ -782,50 +723,37 @@ class MixpanelManager {
   void brainMapRebuilt() => track('Brain Map Rebuilt');
 
   // Summarized Apps Sheet Events
-  void summarizedAppSheetViewed({
-    required String conversationId,
-    String? currentSummarizedAppId,
-  }) {
-    track('Summarized App Sheet Viewed', properties: {
-      'conversation_id': conversationId,
-      'current_summarized_app_id': currentSummarizedAppId ?? 'auto',
-    });
+  void summarizedAppSheetViewed({required String conversationId, String? currentSummarizedAppId}) {
+    track(
+      'Summarized App Sheet Viewed',
+      properties: {'conversation_id': conversationId, 'current_summarized_app_id': currentSummarizedAppId ?? 'auto'},
+    );
   }
 
-  void summarizedAppSelected({
-    required String conversationId,
-    required String selectedAppId,
-    String? previousAppId,
-  }) {
-    track('Summarized App Selected', properties: {
-      'conversation_id': conversationId,
-      'selected_app_id': selectedAppId,
-      'previous_app_id': previousAppId ?? 'auto',
-    });
+  void summarizedAppSelected({required String conversationId, required String selectedAppId, String? previousAppId}) {
+    track(
+      'Summarized App Selected',
+      properties: {
+        'conversation_id': conversationId,
+        'selected_app_id': selectedAppId,
+        'previous_app_id': previousAppId ?? 'auto',
+      },
+    );
   }
 
   void summarizedAppEnableAppsClicked({required String conversationId}) {
-    track('Summarized App Enable Apps Clicked', properties: {
-      'conversation_id': conversationId,
-    });
+    track('Summarized App Enable Apps Clicked', properties: {'conversation_id': conversationId});
   }
 
   void summarizedAppCreateTemplateClicked({required String conversationId}) {
-    track('Summarized App Create Template Clicked', properties: {
-      'conversation_id': conversationId,
-    });
+    track('Summarized App Create Template Clicked', properties: {'conversation_id': conversationId});
   }
 
-  void quickTemplateCreated({
-    required String conversationId,
-    required String appName,
-    required bool isPublic,
-  }) {
-    track('Quick Template Created', properties: {
-      'conversation_id': conversationId,
-      'app_name': appName,
-      'is_public': isPublic,
-    });
+  void quickTemplateCreated({required String conversationId, required String appName, required bool isPublic}) {
+    track(
+      'Quick Template Created',
+      properties: {'conversation_id': conversationId, 'app_name': appName, 'is_public': isPublic},
+    );
   }
 
   // Action Items Page Events
@@ -840,27 +768,28 @@ class MixpanelManager {
     required String actionItemDescription, // Using description as a pseudo-ID if no stable ID exists
     required bool isCompleted,
   }) {
-    track('Action Item Completion Toggled on Action Items Page', properties: {
-      'conversation_id': conversationId,
-      'action_item_description': actionItemDescription,
-      'is_completed': isCompleted,
-    });
+    track(
+      'Action Item Completion Toggled on Action Items Page',
+      properties: {
+        'conversation_id': conversationId,
+        'action_item_description': actionItemDescription,
+        'is_completed': isCompleted,
+      },
+    );
   }
 
   void actionItemTappedForEditOnActionItemsPage({
     required String conversationId,
     required String actionItemDescription,
   }) {
-    track('Action Item Tapped for Edit on Action Items Page', properties: {
-      'conversation_id': conversationId,
-      'action_item_description': actionItemDescription,
-    });
+    track(
+      'Action Item Tapped for Edit on Action Items Page',
+      properties: {'conversation_id': conversationId, 'action_item_description': actionItemDescription},
+    );
   }
 
   void actionItemsDateFilterApplied(String filterType) {
-    track('Action Items Date Filter Applied', properties: {
-      'filter_type': filterType,
-    });
+    track('Action Items Date Filter Applied', properties: {'filter_type': filterType});
   }
 
   void actionItemsDateFilterCleared() {
@@ -868,15 +797,11 @@ class MixpanelManager {
   }
 
   void actionItemTabChanged(String tabName) {
-    track('Action Item Tab Changed', properties: {
-      'tab_name': tabName,
-    });
+    track('Action Item Tab Changed', properties: {'tab_name': tabName});
   }
 
   void actionItemCompleted({required String fromTab}) {
-    track('Action Item Completed', properties: {
-      'from_tab': fromTab,
-    });
+    track('Action Item Completed', properties: {'from_tab': fromTab});
   }
 
   void trainingDataOptInSubmitted() {
@@ -891,10 +816,7 @@ class MixpanelManager {
 
   // Homepage Events
   void recordingMuteToggled({required bool isMuted, required String recordingType}) {
-    track('Recording Mute Toggled', properties: {
-      'is_muted': isMuted,
-      'recording_type': recordingType,
-    });
+    track('Recording Mute Toggled', properties: {'is_muted': isMuted, 'recording_type': recordingType});
   }
 
   void deletedConversationsFilterToggled(bool showDeleted) {
@@ -902,10 +824,13 @@ class MixpanelManager {
   }
 
   void calendarFilterApplied(DateTime selectedDate) {
-    track('Calendar Filter Applied', properties: {
-      'selected_date': selectedDate.toIso8601String(),
-      'days_ago': DateTime.now().difference(selectedDate).inDays,
-    });
+    track(
+      'Calendar Filter Applied',
+      properties: {
+        'selected_date': selectedDate.toIso8601String(),
+        'days_ago': DateTime.now().difference(selectedDate).inDays,
+      },
+    );
   }
 
   void calendarFilterCleared() {
@@ -917,11 +842,14 @@ class MixpanelManager {
   }
 
   void searchQueryEntered(String query, int resultsCount) {
-    track('Search Query Entered', properties: {
-      'query_length': query.length,
-      'query_word_count': query.split(' ').length,
-      'results_count': resultsCount,
-    });
+    track(
+      'Search Query Entered',
+      properties: {
+        'query_length': query.length,
+        'query_word_count': query.split(' ').length,
+        'results_count': resultsCount,
+      },
+    );
   }
 
   void searchQueryCleared() {
@@ -946,20 +874,26 @@ class MixpanelManager {
     required int segmentCount,
     required int photoCount,
   }) {
-    track('Live Transcript Card Clicked', properties: {
-      'has_segments': hasSegments,
-      'has_photos': hasPhotos,
-      'segment_count': segmentCount,
-      'photo_count': photoCount,
-    });
+    track(
+      'Live Transcript Card Clicked',
+      properties: {
+        'has_segments': hasSegments,
+        'has_photos': hasPhotos,
+        'segment_count': segmentCount,
+        'photo_count': photoCount,
+      },
+    );
   }
 
   void deviceInfoButtonClicked({String? deviceId, String? deviceName, int? batteryLevel}) {
-    track('Device Info Button Clicked', properties: {
-      if (deviceId != null) 'device_id': deviceId,
-      if (deviceName != null) 'device_name': deviceName,
-      if (batteryLevel != null) 'battery_level': batteryLevel,
-    });
+    track(
+      'Device Info Button Clicked',
+      properties: {
+        if (deviceId != null) 'device_id': deviceId,
+        if (deviceName != null) 'device_name': deviceName,
+        if (batteryLevel != null) 'battery_level': batteryLevel,
+      },
+    );
   }
 
   void conversationListItemClickedWithTimeDifference({
@@ -983,23 +917,20 @@ class MixpanelManager {
     track('Conversation Detail Tab Changed', properties: {'tab_name': tabName});
   }
 
-  void speakerEdited({
-    required String conversationId,
-    required int oldSpeakerCount,
-    required int newSpeakerCount,
-  }) {
-    track('Speaker Edited', properties: {
-      'conversation_id': conversationId,
-      'old_speaker_count': oldSpeakerCount,
-      'new_speaker_count': newSpeakerCount,
-      'speaker_count_changed': oldSpeakerCount != newSpeakerCount,
-    });
+  void speakerEdited({required String conversationId, required int oldSpeakerCount, required int newSpeakerCount}) {
+    track(
+      'Speaker Edited',
+      properties: {
+        'conversation_id': conversationId,
+        'old_speaker_count': oldSpeakerCount,
+        'new_speaker_count': newSpeakerCount,
+        'speaker_count_changed': oldSpeakerCount != newSpeakerCount,
+      },
+    );
   }
 
   void conversationDetailSearchClicked({required String conversationId}) {
-    track('Conversation Detail Search Clicked', properties: {
-      'conversation_id': conversationId,
-    });
+    track('Conversation Detail Search Clicked', properties: {'conversation_id': conversationId});
   }
 
   void conversationDetailSearchQueryEntered({
@@ -1008,12 +939,15 @@ class MixpanelManager {
     required int resultsCount,
     required String activeTab,
   }) {
-    track('Conversation Detail Search Query Entered', properties: {
-      'conversation_id': conversationId,
-      'query_length': query.length,
-      'results_count': resultsCount,
-      'active_tab': activeTab,
-    });
+    track(
+      'Conversation Detail Search Query Entered',
+      properties: {
+        'conversation_id': conversationId,
+        'query_length': query.length,
+        'results_count': resultsCount,
+        'active_tab': activeTab,
+      },
+    );
   }
 
   void conversationReprocessedWithApp({
@@ -1023,84 +957,60 @@ class MixpanelManager {
     required bool isOwnApp,
     required bool wasAutoSelected,
   }) {
-    track('Conversation Reprocessed', properties: {
-      'conversation_id': conversationId,
-      'app_id': appId,
-      'app_name': appName,
-      'is_own_app': isOwnApp,
-      'was_auto_selected': wasAutoSelected,
-    });
+    track(
+      'Conversation Reprocessed',
+      properties: {
+        'conversation_id': conversationId,
+        'app_id': appId,
+        'app_name': appName,
+        'is_own_app': isOwnApp,
+        'was_auto_selected': wasAutoSelected,
+      },
+    );
   }
 
-  void conversationShared({
-    required ServerConversation conversation,
-    required String shareMethod,
-  }) {
+  void conversationShared({required ServerConversation conversation, required String shareMethod}) {
     var properties = getConversationEventProperties(conversation);
     properties['share_method'] = shareMethod;
     track('Conversation Shared', properties: properties);
   }
 
   void conversationThreeDotsMenuOpened({required String conversationId}) {
-    track('Conversation Three Dots Menu Opened', properties: {
-      'conversation_id': conversationId,
-    });
+    track('Conversation Three Dots Menu Opened', properties: {'conversation_id': conversationId});
   }
 
-  void conversationThreeDotsMenuActionSelected({
-    required String conversationId,
-    required String action,
-  }) {
-    track('Conversation Three Dots Menu Action Selected', properties: {
-      'conversation_id': conversationId,
-      'action': action,
-    });
+  void conversationThreeDotsMenuActionSelected({required String conversationId, required String action}) {
+    track(
+      'Conversation Three Dots Menu Action Selected',
+      properties: {'conversation_id': conversationId, 'action': action},
+    );
   }
 
   // ============================================================================
   // ACTION ITEMS TRACKING
   // ============================================================================
 
-  void actionItemChecked({
-    required String actionItemId,
-    required bool completed,
-    required DateTime timestamp,
-  }) {
-    track('Action Item Checked', properties: {
-      'action_item_id': actionItemId,
-      'completed': completed,
-      'timestamp': timestamp.toIso8601String(),
-    });
+  void actionItemChecked({required String actionItemId, required bool completed, required DateTime timestamp}) {
+    track(
+      'Action Item Checked',
+      properties: {'action_item_id': actionItemId, 'completed': completed, 'timestamp': timestamp.toIso8601String()},
+    );
   }
 
   void exportTasksBannerClicked() {
     track('Export Tasks Banner Clicked');
   }
 
-  void taskIntegrationEnabled({
-    required String appName,
-    required bool success,
-  }) {
-    track('Task Integration Enabled', properties: {
-      'app_name': appName,
-      'success': success,
-    });
+  void taskIntegrationEnabled({required String appName, required bool success}) {
+    track('Task Integration Enabled', properties: {'app_name': appName, 'success': success});
   }
 
-  void taskIntegrationAuthFailed({
-    required String appName,
-  }) {
-    track('Task Integration Auth Failed', properties: {
-      'app_name': appName,
-    });
+  void taskIntegrationAuthFailed({required String appName}) {
+    track('Task Integration Auth Failed', properties: {'app_name': appName});
   }
 
-  void taskIntegrationSettingsOpened({
-    required String appName,
-  }) {
-    track('Task Integration Settings Opened', properties: {
-      'app_name': appName,
-    });
+  void taskIntegrationSettingsOpened({required String appName}) {
+    track('Task Integration Settings Opened', properties: {'app_name': appName});
   }
 
   // ============================================================================
@@ -1110,55 +1020,44 @@ class MixpanelManager {
   void transcriptionSourceSelected({
     required String source, // 'omi' or 'custom'
   }) {
-    track('Transcription Source Selected', properties: {
-      'source': source,
-    });
+    track('Transcription Source Selected', properties: {'source': source});
   }
 
   void transcriptionProviderSelected({
     required String provider, // e.g. 'openai', 'deepgram', 'gemini', 'local_whisper', 'custom', 'custom_live'
   }) {
-    track('Transcription Provider Selected', properties: {
-      'provider': provider,
-    });
+    track('Transcription Provider Selected', properties: {'provider': provider});
   }
 
   // ============================================================================
   // AUDIO PLAYBACK TRACKING
   // ============================================================================
 
-  void audioPlaybackStarted({
-    required String conversationId,
-    int? durationSeconds,
-  }) {
-    track('Audio Playback Started', properties: {
-      'conversation_id': conversationId,
-      if (durationSeconds != null) 'duration_seconds': durationSeconds,
-    });
+  void audioPlaybackStarted({required String conversationId, int? durationSeconds}) {
+    track(
+      'Audio Playback Started',
+      properties: {'conversation_id': conversationId, if (durationSeconds != null) 'duration_seconds': durationSeconds},
+    );
   }
 
-  void audioPlaybackPaused({
-    required String conversationId,
-    required int positionSeconds,
-    int? durationSeconds,
-  }) {
-    track('Audio Playback Paused', properties: {
-      'conversation_id': conversationId,
-      'position_seconds': positionSeconds,
-      if (durationSeconds != null) 'duration_seconds': durationSeconds,
-      if (durationSeconds != null && durationSeconds > 0)
-        'completion_percentage': ((positionSeconds / durationSeconds) * 100).round(),
-    });
+  void audioPlaybackPaused({required String conversationId, required int positionSeconds, int? durationSeconds}) {
+    track(
+      'Audio Playback Paused',
+      properties: {
+        'conversation_id': conversationId,
+        'position_seconds': positionSeconds,
+        if (durationSeconds != null) 'duration_seconds': durationSeconds,
+        if (durationSeconds != null && durationSeconds > 0)
+          'completion_percentage': ((positionSeconds / durationSeconds) * 100).round(),
+      },
+    );
   }
 
-  void audioPlaybackSeeked({
-    required String conversationId,
-    required int toPositionSeconds,
-  }) {
-    track('Audio Playback Seeked', properties: {
-      'conversation_id': conversationId,
-      'to_position_seconds': toPositionSeconds,
-    });
+  void audioPlaybackSeeked({required String conversationId, required int toPositionSeconds}) {
+    track(
+      'Audio Playback Seeked',
+      properties: {'conversation_id': conversationId, 'to_position_seconds': toPositionSeconds},
+    );
   }
 
   void transcriptSegmentTapped({
@@ -1166,21 +1065,18 @@ class MixpanelManager {
     required double segmentStartSeconds,
     required double seekPositionSeconds,
   }) {
-    track('Transcript Segment Tapped', properties: {
-      'conversation_id': conversationId,
-      'segment_start_seconds': segmentStartSeconds,
-      'seek_position_seconds': seekPositionSeconds,
-    });
+    track(
+      'Transcript Segment Tapped',
+      properties: {
+        'conversation_id': conversationId,
+        'segment_start_seconds': segmentStartSeconds,
+        'seek_position_seconds': seekPositionSeconds,
+      },
+    );
   }
 
-  void audioShareStarted({
-    required String conversationId,
-    required int audioFileCount,
-  }) {
-    track('Audio Share Started', properties: {
-      'conversation_id': conversationId,
-      'audio_file_count': audioFileCount,
-    });
+  void audioShareStarted({required String conversationId, required int audioFileCount}) {
+    track('Audio Share Started', properties: {'conversation_id': conversationId, 'audio_file_count': audioFileCount});
   }
 
   void audioShareCompleted({
@@ -1189,156 +1085,95 @@ class MixpanelManager {
     required bool wasCombined,
     required int durationSeconds,
   }) {
-    track('Audio Share Completed', properties: {
-      'conversation_id': conversationId,
-      'audio_file_count': audioFileCount,
-      'was_combined': wasCombined,
-      'duration_seconds': durationSeconds,
-    });
+    track(
+      'Audio Share Completed',
+      properties: {
+        'conversation_id': conversationId,
+        'audio_file_count': audioFileCount,
+        'was_combined': wasCombined,
+        'duration_seconds': durationSeconds,
+      },
+    );
   }
 
-  void audioShareFailed({
-    required String conversationId,
-    String? errorMessage,
-  }) {
-    track('Audio Share Failed', properties: {
-      'conversation_id': conversationId,
-      if (errorMessage != null) 'error_message': errorMessage,
-    });
+  void audioShareFailed({required String conversationId, String? errorMessage}) {
+    track(
+      'Audio Share Failed',
+      properties: {'conversation_id': conversationId, if (errorMessage != null) 'error_message': errorMessage},
+    );
   }
 
-  void audioShareCancelled({
-    required String conversationId,
-  }) {
-    track('Audio Share Cancelled', properties: {
-      'conversation_id': conversationId,
-    });
+  void audioShareCancelled({required String conversationId}) {
+    track('Audio Share Cancelled', properties: {'conversation_id': conversationId});
   }
 
-  void actionItemExported({
-    required String actionItemId,
-    required String appName,
-    required DateTime timestamp,
-  }) {
-    track('Action Item Exported', properties: {
-      'action_item_id': actionItemId,
-      'app_name': appName,
-      'timestamp': timestamp.toIso8601String(),
-    });
+  void actionItemExported({required String actionItemId, required String appName, required DateTime timestamp}) {
+    track(
+      'Action Item Exported',
+      properties: {'action_item_id': actionItemId, 'app_name': appName, 'timestamp': timestamp.toIso8601String()},
+    );
   }
 
-  void actionItemManuallyAdded({
-    required String actionItemId,
-    required DateTime timestamp,
-  }) {
-    track('Action Item Manually Added', properties: {
-      'action_item_id': actionItemId,
-      'timestamp': timestamp.toIso8601String(),
-    });
+  void actionItemManuallyAdded({required String actionItemId, required DateTime timestamp}) {
+    track(
+      'Action Item Manually Added',
+      properties: {'action_item_id': actionItemId, 'timestamp': timestamp.toIso8601String()},
+    );
   }
 
-  void actionItemEdited({
-    required String actionItemId,
-    required bool titleChanged,
-    required bool dateChanged,
-  }) {
-    track('Action Item Edited', properties: {
-      'action_item_id': actionItemId,
-      'title_changed': titleChanged,
-      'date_changed': dateChanged,
-    });
+  void actionItemEdited({required String actionItemId, required bool titleChanged, required bool dateChanged}) {
+    track(
+      'Action Item Edited',
+      properties: {'action_item_id': actionItemId, 'title_changed': titleChanged, 'date_changed': dateChanged},
+    );
   }
 
   // ============================================================================
   // SETTINGS PAGE TRACKING
   // ============================================================================
 
-  void settingsPageOpened({
-    required String pageName,
-  }) {
-    track('Settings Page Opened', properties: {
-      'page_name': pageName,
-    });
+  void settingsPageOpened({required String pageName}) {
+    track('Settings Page Opened', properties: {'page_name': pageName});
   }
 
-  void usageTabChanged({
-    required String tabName,
-  }) {
-    track('Usage Tab Changed', properties: {
-      'tab_name': tabName,
-    });
+  void usageTabChanged({required String tabName}) {
+    track('Usage Tab Changed', properties: {'tab_name': tabName});
   }
 
   // ============================================================================
   // APPS PAGE TRACKING
   // ============================================================================
 
-  void appsSearched({
-    required String searchTerm,
-    required int resultCount,
-  }) {
-    track('Apps Searched', properties: {
-      'search_term': searchTerm,
-      'result_count': resultCount,
-    });
+  void appsSearched({required String searchTerm, required int resultCount}) {
+    track('Apps Searched', properties: {'search_term': searchTerm, 'result_count': resultCount});
   }
 
-  void appsFilterMyApps({
-    required bool enabled,
-  }) {
-    track('Apps Filter My Apps', properties: {
-      'enabled': enabled,
-    });
+  void appsFilterMyApps({required bool enabled}) {
+    track('Apps Filter My Apps', properties: {'enabled': enabled});
   }
 
-  void appsFilterInstalled({
-    required bool enabled,
-  }) {
-    track('Apps Filter Installed', properties: {
-      'enabled': enabled,
-    });
+  void appsFilterInstalled({required bool enabled}) {
+    track('Apps Filter Installed', properties: {'enabled': enabled});
   }
 
-  void appsFilterRating({
-    required int rating,
-  }) {
-    track('Apps Filter Rating', properties: {
-      'rating': rating,
-    });
+  void appsFilterRating({required int rating}) {
+    track('Apps Filter Rating', properties: {'rating': rating});
   }
 
-  void appsFilterCategory({
-    required String category,
-  }) {
-    track('Apps Filter Category', properties: {
-      'category': category,
-    });
+  void appsFilterCategory({required String category}) {
+    track('Apps Filter Category', properties: {'category': category});
   }
 
-  void appsSortChanged({
-    required String sortOption,
-  }) {
-    track('Apps Sort Changed', properties: {
-      'sort_option': sortOption,
-    });
+  void appsSortChanged({required String sortOption}) {
+    track('Apps Sort Changed', properties: {'sort_option': sortOption});
   }
 
-  void appsFilterCapability({
-    required String capability,
-  }) {
-    track('Apps Filter Capability', properties: {
-      'capability': capability,
-    });
+  void appsFilterCapability({required String capability}) {
+    track('Apps Filter Capability', properties: {'capability': capability});
   }
 
-  void appsCategoryPageOpened({
-    required String category,
-    required int appCount,
-  }) {
-    track('Apps Category Page Opened', properties: {
-      'category': category,
-      'app_count': appCount,
-    });
+  void appsCategoryPageOpened({required String category, required int appCount}) {
+    track('Apps Category Page Opened', properties: {'category': category, 'app_count': appCount});
   }
 
   // ============================================================================
@@ -1353,106 +1188,56 @@ class MixpanelManager {
     int? installs,
     bool? isInstalled,
   }) {
-    track('App Detail Viewed', properties: {
-      'app_id': appId,
-      'app_name': appName,
-      if (category != null) 'category': category,
-      if (rating != null) 'rating': rating,
-      if (installs != null) 'installs': installs,
-      if (isInstalled != null) 'is_installed': isInstalled,
-    });
+    track(
+      'App Detail Viewed',
+      properties: {
+        'app_id': appId,
+        'app_name': appName,
+        if (category != null) 'category': category,
+        if (rating != null) 'rating': rating,
+        if (installs != null) 'installs': installs,
+        if (isInstalled != null) 'is_installed': isInstalled,
+      },
+    );
   }
 
-  void appDetailSectionViewed({
-    required String appId,
-    required String sectionName,
-  }) {
-    track('App Detail Section Viewed', properties: {
-      'app_id': appId,
-      'section_name': sectionName,
-    });
+  void appDetailSectionViewed({required String appId, required String sectionName}) {
+    track('App Detail Section Viewed', properties: {'app_id': appId, 'section_name': sectionName});
   }
 
-  void appDetailShared({
-    required String appId,
-    required String appName,
-  }) {
-    track('App Detail Shared', properties: {
-      'app_id': appId,
-      'app_name': appName,
-    });
+  void appDetailShared({required String appId, required String appName}) {
+    track('App Detail Shared', properties: {'app_id': appId, 'app_name': appName});
   }
 
-  void appDetailReviewsOpened({
-    required String appId,
-    required int reviewCount,
-  }) {
-    track('App Detail Reviews Opened', properties: {
-      'app_id': appId,
-      'review_count': reviewCount,
-    });
+  void appDetailReviewsOpened({required String appId, required int reviewCount}) {
+    track('App Detail Reviews Opened', properties: {'app_id': appId, 'review_count': reviewCount});
   }
 
-  void appDetailReviewAdded({
-    required String appId,
-    required int rating,
-    required bool hasComment,
-  }) {
-    track('App Detail Review Added', properties: {
-      'app_id': appId,
-      'rating': rating,
-      'has_comment': hasComment,
-    });
+  void appDetailReviewAdded({required String appId, required int rating, required bool hasComment}) {
+    track('App Detail Review Added', properties: {'app_id': appId, 'rating': rating, 'has_comment': hasComment});
   }
 
-  void appDetailSettingsOpened({
-    required String appId,
-  }) {
-    track('App Detail Settings Opened', properties: {
-      'app_id': appId,
-    });
+  void appDetailSettingsOpened({required String appId}) {
+    track('App Detail Settings Opened', properties: {'app_id': appId});
   }
 
-  void appDetailSubscribeClicked({
-    required String appId,
-    required String appName,
-    double? price,
-  }) {
-    track('App Detail Subscribe Clicked', properties: {
-      'app_id': appId,
-      'app_name': appName,
-      if (price != null) 'price': price,
-    });
+  void appDetailSubscribeClicked({required String appId, required String appName, double? price}) {
+    track(
+      'App Detail Subscribe Clicked',
+      properties: {'app_id': appId, 'app_name': appName, if (price != null) 'price': price},
+    );
   }
 
-  void appDetailSubscriptionCancelled({
-    required String appId,
-    required String appName,
-  }) {
-    track('App Detail Subscription Cancelled', properties: {
-      'app_id': appId,
-      'app_name': appName,
-    });
+  void appDetailSubscriptionCancelled({required String appId, required String appName}) {
+    track('App Detail Subscription Cancelled', properties: {'app_id': appId, 'app_name': appName});
   }
 
-  void appDetailPreviewImageViewed({
-    required String appId,
-    required int imageIndex,
-  }) {
-    track('App Detail Preview Image Viewed', properties: {
-      'app_id': appId,
-      'image_index': imageIndex,
-    });
+  void appDetailPreviewImageViewed({required String appId, required int imageIndex}) {
+    track('App Detail Preview Image Viewed', properties: {'app_id': appId, 'image_index': imageIndex});
   }
 
-  void appDetailChatClicked({
-    required String appId,
-    required String appName,
-  }) {
-    track('App Detail Chat Clicked', properties: {
-      'app_id': appId,
-      'app_name': appName,
-    });
+  void appDetailChatClicked({required String appId, required String appName}) {
+    track('App Detail Chat Clicked', properties: {'app_id': appId, 'app_name': appName});
   }
 
   // ============================================================================
@@ -1465,22 +1250,14 @@ class MixpanelManager {
     required String icon,
     required String color,
   }) {
-    track('Folder Created', properties: {
-      'folder_id': folderId,
-      'folder_name': folderName,
-      'icon': icon,
-      'color': color,
-    });
+    track(
+      'Folder Created',
+      properties: {'folder_id': folderId, 'folder_name': folderName, 'icon': icon, 'color': color},
+    );
   }
 
-  void folderUpdated({
-    required String folderId,
-    required String folderName,
-  }) {
-    track('Folder Updated', properties: {
-      'folder_id': folderId,
-      'folder_name': folderName,
-    });
+  void folderUpdated({required String folderId, required String folderName}) {
+    track('Folder Updated', properties: {'folder_id': folderId, 'folder_name': folderName});
   }
 
   void folderDeleted({
@@ -1489,49 +1266,46 @@ class MixpanelManager {
     required int conversationCount,
     String? moveToFolderId,
   }) {
-    track('Folder Deleted', properties: {
-      'folder_id': folderId,
-      'folder_name': folderName,
-      'conversation_count': conversationCount,
-      if (moveToFolderId != null) 'move_to_folder_id': moveToFolderId,
-      'moved_conversations': moveToFolderId != null,
-    });
+    track(
+      'Folder Deleted',
+      properties: {
+        'folder_id': folderId,
+        'folder_name': folderName,
+        'conversation_count': conversationCount,
+        if (moveToFolderId != null) 'move_to_folder_id': moveToFolderId,
+        'moved_conversations': moveToFolderId != null,
+      },
+    );
   }
 
-  void folderSelected({
-    String? folderId,
-    String? folderName,
-  }) {
-    track('Folder Selected', properties: {
-      if (folderId != null) 'folder_id': folderId,
-      if (folderName != null) 'folder_name': folderName,
-      'is_all_tab': folderId == null,
-    });
+  void folderSelected({String? folderId, String? folderName}) {
+    track(
+      'Folder Selected',
+      properties: {
+        if (folderId != null) 'folder_id': folderId,
+        if (folderName != null) 'folder_name': folderName,
+        'is_all_tab': folderId == null,
+      },
+    );
   }
 
-  void folderContextMenuOpened({
-    required String folderId,
-    required String folderName,
-  }) {
-    track('Folder Context Menu Opened', properties: {
-      'folder_id': folderId,
-      'folder_name': folderName,
-    });
+  void folderContextMenuOpened({required String folderId, required String folderName}) {
+    track('Folder Context Menu Opened', properties: {'folder_id': folderId, 'folder_name': folderName});
   }
 
   void createFolderButtonClicked() {
     track('Create Folder Button Clicked');
   }
 
-  void conversationDetailFolderChipClicked({
-    required String conversationId,
-    String? currentFolderId,
-  }) {
-    track('Conversation Detail Folder Chip Clicked', properties: {
-      'conversation_id': conversationId,
-      if (currentFolderId != null) 'current_folder_id': currentFolderId,
-      'has_folder': currentFolderId != null,
-    });
+  void conversationDetailFolderChipClicked({required String conversationId, String? currentFolderId}) {
+    track(
+      'Conversation Detail Folder Chip Clicked',
+      properties: {
+        'conversation_id': conversationId,
+        if (currentFolderId != null) 'current_folder_id': currentFolderId,
+        'has_folder': currentFolderId != null,
+      },
+    );
   }
 
   void conversationMovedToFolder({
@@ -1540,13 +1314,16 @@ class MixpanelManager {
     String? toFolderId,
     required String source,
   }) {
-    track('Conversation Moved To Folder', properties: {
-      'conversation_id': conversationId,
-      if (fromFolderId != null) 'from_folder_id': fromFolderId,
-      if (toFolderId != null) 'to_folder_id': toFolderId,
-      'source': source,
-      'was_in_folder': fromFolderId != null,
-    });
+    track(
+      'Conversation Moved To Folder',
+      properties: {
+        'conversation_id': conversationId,
+        if (fromFolderId != null) 'from_folder_id': fromFolderId,
+        if (toFolderId != null) 'to_folder_id': toFolderId,
+        'source': source,
+        'was_in_folder': fromFolderId != null,
+      },
+    );
   }
 
   void conversationVisibilityChanged({
@@ -1554,22 +1331,21 @@ class MixpanelManager {
     required String fromVisibility,
     required String toVisibility,
   }) {
-    track('Conversation Visibility Changed', properties: {
-      'conversation_id': conversationId,
-      'from_visibility': fromVisibility,
-      'to_visibility': toVisibility,
-    });
+    track(
+      'Conversation Visibility Changed',
+      properties: {'conversation_id': conversationId, 'from_visibility': fromVisibility, 'to_visibility': toVisibility},
+    );
   }
 
-  void starredFilterToggled({
-    required bool enabled,
-    String? selectedFolderId,
-  }) {
-    track('Starred Filter Toggled', properties: {
-      'enabled': enabled,
-      if (selectedFolderId != null) 'selected_folder_id': selectedFolderId,
-      'has_folder_filter': selectedFolderId != null,
-    });
+  void starredFilterToggled({required bool enabled, String? selectedFolderId}) {
+    track(
+      'Starred Filter Toggled',
+      properties: {
+        'enabled': enabled,
+        if (selectedFolderId != null) 'selected_folder_id': selectedFolderId,
+        'has_folder_filter': selectedFolderId != null,
+      },
+    );
   }
 
   void conversationStarToggled({
@@ -1593,14 +1369,11 @@ class MixpanelManager {
     track('Conversation Star Toggled', properties: properties);
   }
 
-  void omiDoubleTap({
-    required String feature,
-    Map<String, dynamic>? additionalProperties,
-  }) {
-    track('Omi Double Tap', properties: {
-      'feature': feature,
-      if (additionalProperties != null) ...additionalProperties,
-    });
+  void omiDoubleTap({required String feature, Map<String, dynamic>? additionalProperties}) {
+    track(
+      'Omi Double Tap',
+      properties: {'feature': feature, if (additionalProperties != null) ...additionalProperties},
+    );
   }
 
   // ============================================================================
@@ -1625,64 +1398,43 @@ class MixpanelManager {
     required int totalMinutes,
     required int daysActive,
   }) {
-    track('Wrapped Generation Completed', properties: {
-      'total_conversations': totalConversations,
-      'total_minutes': totalMinutes,
-      'days_active': daysActive,
-    });
+    track(
+      'Wrapped Generation Completed',
+      properties: {'total_conversations': totalConversations, 'total_minutes': totalMinutes, 'days_active': daysActive},
+    );
   }
 
   void wrappedGenerationFailed({String? error}) {
-    track('Wrapped Generation Failed', properties: {
-      if (error != null) 'error': error,
-    });
+    track('Wrapped Generation Failed', properties: {if (error != null) 'error': error});
   }
 
-  void wrappedCardViewed({
-    required String cardName,
-    required int cardIndex,
-  }) {
-    track('Wrapped Card Viewed', properties: {
-      'card_name': cardName,
-      'card_index': cardIndex,
-    });
+  void wrappedCardViewed({required String cardName, required int cardIndex}) {
+    track('Wrapped Card Viewed', properties: {'card_name': cardName, 'card_index': cardIndex});
   }
 
-  void wrappedShareButtonClicked({
-    required String cardName,
-    required int cardIndex,
-  }) {
-    track('Wrapped Share Button Clicked', properties: {
-      'card_name': cardName,
-      'card_index': cardIndex,
-    });
+  void wrappedShareButtonClicked({required String cardName, required int cardIndex}) {
+    track('Wrapped Share Button Clicked', properties: {'card_name': cardName, 'card_index': cardIndex});
     startTimingEvent('Wrapped Shared Successfully');
   }
 
-  void wrappedSharedSuccessfully({
-    required String cardName,
-    required int cardIndex,
-    int? fileSizeBytes,
-  }) {
-    track('Wrapped Shared Successfully', properties: {
-      'card_name': cardName,
-      'card_index': cardIndex,
-      if (fileSizeBytes != null) 'file_size_bytes': fileSizeBytes,
-      if (fileSizeBytes != null) 'file_size_kb': (fileSizeBytes / 1024).round(),
-      if (fileSizeBytes != null) 'file_size_mb': (fileSizeBytes / (1024 * 1024)).toStringAsFixed(2),
-    });
+  void wrappedSharedSuccessfully({required String cardName, required int cardIndex, int? fileSizeBytes}) {
+    track(
+      'Wrapped Shared Successfully',
+      properties: {
+        'card_name': cardName,
+        'card_index': cardIndex,
+        if (fileSizeBytes != null) 'file_size_bytes': fileSizeBytes,
+        if (fileSizeBytes != null) 'file_size_kb': (fileSizeBytes / 1024).round(),
+        if (fileSizeBytes != null) 'file_size_mb': (fileSizeBytes / (1024 * 1024)).toStringAsFixed(2),
+      },
+    );
   }
 
-  void wrappedShareFailed({
-    required String cardName,
-    required int cardIndex,
-    String? error,
-  }) {
-    track('Wrapped Share Failed', properties: {
-      'card_name': cardName,
-      'card_index': cardIndex,
-      if (error != null) 'error': error,
-    });
+  void wrappedShareFailed({required String cardName, required int cardIndex, String? error}) {
+    track(
+      'Wrapped Share Failed',
+      properties: {'card_name': cardName, 'card_index': cardIndex, if (error != null) 'error': error},
+    );
   }
 
   // ============================================================================
@@ -1699,25 +1451,18 @@ class MixpanelManager {
   void dailySummaryTimeChanged({required int hour}) {
     final hour12 = hour == 0 ? 12 : (hour > 12 ? hour - 12 : hour);
     final period = hour >= 12 ? 'PM' : 'AM';
-    track('Daily Summary Time Changed', properties: {
-      'hour_24': hour,
-      'hour_12': hour12,
-      'period': period,
-      'display_time': '$hour12:00 $period',
-    });
+    track(
+      'Daily Summary Time Changed',
+      properties: {'hour_24': hour, 'hour_12': hour12, 'period': period, 'display_time': '$hour12:00 $period'},
+    );
     setUserProperty('Daily Summary Hour', hour);
   }
 
-  void dailySummaryDetailViewed({
-    required String summaryId,
-    required String date,
-    String? source,
-  }) {
-    track('Daily Summary Detail Viewed', properties: {
-      'summary_id': summaryId,
-      'date': date,
-      if (source != null) 'source': source,
-    });
+  void dailySummaryDetailViewed({required String summaryId, required String date, String? source}) {
+    track(
+      'Daily Summary Detail Viewed',
+      properties: {'summary_id': summaryId, 'date': date, if (source != null) 'source': source},
+    );
   }
 
   void dailySummaryTestGenerated({required String date}) {
@@ -1725,44 +1470,21 @@ class MixpanelManager {
   }
 
   void dailySummaryTestGenerationFailed({required String date, String? error}) {
-    track('Daily Summary Test Generation Failed', properties: {
-      'date': date,
-      if (error != null) 'error': error,
-    });
+    track('Daily Summary Test Generation Failed', properties: {'date': date, if (error != null) 'error': error});
   }
 
   void recapTabOpened() => track('Recap Tab Opened');
 
-  void recapSummaryCardClicked({
-    required String summaryId,
-    required String date,
-    required int cardIndex,
-  }) {
-    track('Recap Summary Card Clicked', properties: {
-      'summary_id': summaryId,
-      'date': date,
-      'card_index': cardIndex,
-    });
+  void recapSummaryCardClicked({required String summaryId, required String date, required int cardIndex}) {
+    track('Recap Summary Card Clicked', properties: {'summary_id': summaryId, 'date': date, 'card_index': cardIndex});
   }
 
-  void dailySummaryNotificationReceived({
-    required String summaryId,
-    required String date,
-  }) {
-    track('Daily Summary Notification Received', properties: {
-      'summary_id': summaryId,
-      'date': date,
-    });
+  void dailySummaryNotificationReceived({required String summaryId, required String date}) {
+    track('Daily Summary Notification Received', properties: {'summary_id': summaryId, 'date': date});
   }
 
-  void dailySummaryNotificationOpened({
-    required String summaryId,
-    required String date,
-  }) {
-    track('Daily Summary Notification Opened', properties: {
-      'summary_id': summaryId,
-      'date': date,
-    });
+  void dailySummaryNotificationOpened({required String summaryId, required String date}) {
+    track('Daily Summary Notification Opened', properties: {'summary_id': summaryId, 'date': date});
   }
 
   void dailySummaryConversationClicked({
@@ -1770,71 +1492,48 @@ class MixpanelManager {
     required String conversationId,
     required String source,
   }) {
-    track('Daily Summary Conversation Clicked', properties: {
-      'summary_id': summaryId,
-      'conversation_id': conversationId,
-      'source': source,
-    });
+    track(
+      'Daily Summary Conversation Clicked',
+      properties: {'summary_id': summaryId, 'conversation_id': conversationId, 'source': source},
+    );
   }
 
-  void dailySummarySectionViewed({
-    required String summaryId,
-    required String sectionName,
-  }) {
-    track('Daily Summary Section Viewed', properties: {
-      'summary_id': summaryId,
-      'section_name': sectionName,
-    });
+  void dailySummarySectionViewed({required String summaryId, required String sectionName}) {
+    track('Daily Summary Section Viewed', properties: {'summary_id': summaryId, 'section_name': sectionName});
   }
 
   // ============================================================================
   // ANNOUNCEMENT TRACKING
   // ============================================================================
 
-  void announcementShown({
-    required String announcementId,
-    required String type,
-    String? trigger,
-    int? priority,
-  }) {
-    track('Announcement Shown', properties: {
-      'announcement_id': announcementId,
-      'type': type,
-      if (trigger != null) 'trigger': trigger,
-      if (priority != null) 'priority': priority,
-    });
+  void announcementShown({required String announcementId, required String type, String? trigger, int? priority}) {
+    track(
+      'Announcement Shown',
+      properties: {
+        'announcement_id': announcementId,
+        'type': type,
+        if (trigger != null) 'trigger': trigger,
+        if (priority != null) 'priority': priority,
+      },
+    );
   }
 
-  void announcementDismissed({
-    required String announcementId,
-    required String type,
-    required bool ctaClicked,
-  }) {
-    track('Announcement Dismissed', properties: {
-      'announcement_id': announcementId,
-      'type': type,
-      'cta_clicked': ctaClicked,
-    });
+  void announcementDismissed({required String announcementId, required String type, required bool ctaClicked}) {
+    track(
+      'Announcement Dismissed',
+      properties: {'announcement_id': announcementId, 'type': type, 'cta_clicked': ctaClicked},
+    );
   }
 
-  void changelogShown({
-    required int changelogCount,
-    required String fromVersion,
-    required String toVersion,
-  }) {
-    track('Changelog Shown', properties: {
-      'changelog_count': changelogCount,
-      'from_version': fromVersion,
-      'to_version': toVersion,
-    });
+  void changelogShown({required int changelogCount, required String fromVersion, required String toVersion}) {
+    track(
+      'Changelog Shown',
+      properties: {'changelog_count': changelogCount, 'from_version': fromVersion, 'to_version': toVersion},
+    );
   }
 
-  void changelogDismissed({
-    required int changelogCount,
-  }) {
-    track('Changelog Dismissed', properties: {
-      'changelog_count': changelogCount,
-    });
+  void changelogDismissed({required int changelogCount}) {
+    track('Changelog Dismissed', properties: {'changelog_count': changelogCount});
   }
 
   void whatsNewOpened() => track('Whats New Opened');
@@ -1847,36 +1546,28 @@ class MixpanelManager {
     track('Goal Add Button Tapped', properties: {'source': source});
   }
 
-  void goalCreated(
-      {required String goalId, required int titleLength, required double targetValue, required String source}) {
-    track('Goal Created', properties: {
-      'goal_id': goalId,
-      'title_length': titleLength,
-      'target_value': targetValue,
-      'source': source,
-    });
+  void goalCreated({
+    required String goalId,
+    required int titleLength,
+    required double targetValue,
+    required String source,
+  }) {
+    track(
+      'Goal Created',
+      properties: {'goal_id': goalId, 'title_length': titleLength, 'target_value': targetValue, 'source': source},
+    );
   }
 
   void goalUpdated({required String goalId, required String source}) {
-    track('Goal Updated', properties: {
-      'goal_id': goalId,
-      'source': source,
-    });
+    track('Goal Updated', properties: {'goal_id': goalId, 'source': source});
   }
 
   void goalDeleted({required String goalId, required String source, required String method}) {
-    track('Goal Deleted', properties: {
-      'goal_id': goalId,
-      'source': source,
-      'method': method,
-    });
+    track('Goal Deleted', properties: {'goal_id': goalId, 'source': source, 'method': method});
   }
 
   void goalItemTappedForEdit({required String goalId, required String source}) {
-    track('Goal Item Tapped For Edit', properties: {
-      'goal_id': goalId,
-      'source': source,
-    });
+    track('Goal Item Tapped For Edit', properties: {'goal_id': goalId, 'source': source});
   }
 
   void goalEmojiSelected({required String emoji}) {
@@ -1889,20 +1580,20 @@ class MixpanelManager {
     required double newValue,
     required double targetValue,
   }) {
-    track('Goal Progress Changed', properties: {
-      'goal_id': goalId,
-      'old_value': oldValue,
-      'new_value': newValue,
-      'target_value': targetValue,
-      'progress_percentage': targetValue > 0 ? (newValue / targetValue * 100).round() : 0,
-    });
+    track(
+      'Goal Progress Changed',
+      properties: {
+        'goal_id': goalId,
+        'old_value': oldValue,
+        'new_value': newValue,
+        'target_value': targetValue,
+        'progress_percentage': targetValue > 0 ? (newValue / targetValue * 100).round() : 0,
+      },
+    );
   }
 
   void taskDraggedToGoal({required String taskId, required String goalId}) {
-    track('Task Dragged To Goal', properties: {
-      'task_id': taskId,
-      'goal_id': goalId,
-    });
+    track('Task Dragged To Goal', properties: {'task_id': taskId, 'goal_id': goalId});
   }
 
   void dailyScoreCtaTapped({required String ctaType}) {
@@ -1979,10 +1670,7 @@ class MixpanelManager {
   }
 
   void notificationFrequencyChanged({required int oldFrequency, required int newFrequency}) {
-    track('Notification Frequency Changed', properties: {
-      'old_frequency': oldFrequency,
-      'new_frequency': newFrequency,
-    });
+    track('Notification Frequency Changed', properties: {'old_frequency': oldFrequency, 'new_frequency': newFrequency});
   }
 
   void dailyReflectionToggled({required bool enabled}) {

@@ -6,12 +6,7 @@ import 'package:omi/env/env.dart';
 import 'package:omi/utils/logger.dart';
 
 Future<List<Folder>> getFolders() async {
-  var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/folders',
-    headers: {},
-    method: 'GET',
-    body: '',
-  );
+  var response = await makeApiCall(url: '${Env.apiBaseUrl}v1/folders', headers: {}, method: 'GET', body: '');
   if (response == null) return [];
   if (response.statusCode == 200) {
     var body = utf8.decode(response.bodyBytes);
@@ -25,12 +20,7 @@ Future<List<Folder>> getFolders() async {
 }
 
 /// Create a new custom folder.
-Future<Folder?> createFolderApi({
-  required String name,
-  String? description,
-  String? color,
-  String? icon,
-}) async {
+Future<Folder?> createFolderApi({required String name, String? description, String? color, String? icon}) async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/folders',
     headers: {},
@@ -87,22 +77,14 @@ Future<bool> deleteFolderApi(String folderId, {String? moveToFolderId}) async {
     url += '?move_to_folder_id=$moveToFolderId';
   }
 
-  var response = await makeApiCall(
-    url: url,
-    headers: {},
-    method: 'DELETE',
-    body: '',
-  );
+  var response = await makeApiCall(url: url, headers: {}, method: 'DELETE', body: '');
   if (response == null) return false;
   Logger.debug('deleteFolderApi: ${response.statusCode}');
   return response.statusCode == 204;
 }
 
 /// Move a conversation to a different folder.
-Future<bool> moveConversationToFolderApi(
-  String conversationId,
-  String? folderId,
-) async {
+Future<bool> moveConversationToFolderApi(String conversationId, String? folderId) async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/conversations/$conversationId/folder',
     headers: {},
@@ -115,10 +97,7 @@ Future<bool> moveConversationToFolderApi(
 }
 
 /// Bulk move multiple conversations to a folder.
-Future<int> bulkMoveConversationsToFolderApi(
-  String folderId,
-  List<String> conversationIds,
-) async {
+Future<int> bulkMoveConversationsToFolderApi(String folderId, List<String> conversationIds) async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/folders/$folderId/conversations/bulk-move',
     headers: {},

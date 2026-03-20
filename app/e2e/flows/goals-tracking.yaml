@@ -1,0 +1,96 @@
+# E2E Flow: Goals Tracking — create, track progress, edit, and delete personal goals
+# Tests: Goals widget on home screen, add goal, update progress via slider, edit goal, delete goal
+# Core feature: personal goal tracking with visual progress bars on the home screen
+
+version: 2
+name: goals-tracking
+description: Goals tracking flow — view goals widget on home, add up to 3 goals with title/target, update progress via slider, edit goal details, swipe to delete goal
+app: com.friend.ios.dev
+evidence:
+  video: true
+covers:
+  - app/lib/pages/conversations/widgets/goals_widget.dart
+  - app/lib/providers/goals_provider.dart
+  - app/lib/backend/http/api/goals.dart
+preconditions:
+  - auth_ready  # User signed in and onboarding completed. App shows home screen.
+
+steps:
+  - id: S1
+    name: Verify home screen with goals section
+    do: "On the home screen, look for the 'Goals' section header (below daily score, above conversations). If goals tracking is enabled in preferences, the section shows with a '+' icon to add a goal. If no goals exist yet, the section may show 'Add Goal' prompt or be minimal."
+    verify: true
+    expect:
+      - kind: text_visible
+        values: ["Conversations"]
+      - kind: interactive_count
+        min: 4
+    evidence:
+      - screenshot: step-S1.webp
+    note: "GoalsWidget appears in conversations_page.dart (lines 233-248) between DailyScoreWidget/TodayTasksWidget and the conversation list. Controlled by showGoalTrackerEnabled preference. Hidden when searching, date filtering, or showing daily summaries. GoalsProvider.init() loads goals on app start."
+
+  - id: S2
+    name: Tap + to add first goal
+    do: "Tap the '+' icon next to the 'Goals' header (or the 'Add Goal' prompt if no goals exist). A bottom sheet opens with the goal creation form showing: title text field, current value field (default 0), target value field (default 100). Enter a goal title like 'Read 10 Books' and set target to 10."
+    verify: true
+    expect:
+      - kind: interactive_count
+        min: 3
+    evidence:
+      - screenshot: step-S2.webp
+    note: "Add goal button appears when < 3 goals exist (max 3 limit enforced). Also accessible via DailyScoreWidget 'Add Goal' button when no goals exist. Form fields: title (required), current (default 0), target (default 100). Smart emoji assigned based on title keywords (e.g., 'read' → 📚, 'revenue' → 💰, 'workout' → 💪)."
+
+  - id: S3
+    name: Save goal and verify on home screen
+    do: "Tap 'Save' to create the goal. The bottom sheet closes and the new goal appears in the Goals section on the home screen. Verify the goal shows: emoji icon (auto-assigned based on title), goal title, progress bar at 0%, and '0/10' completion text."
+    verify: true
+    expect:
+      - kind: interactive_count
+        min: 4
+    evidence:
+      - screenshot: step-S3.webp
+    note: "createGoal() API call creates the goal on the backend. Progress bar color-coded: 0.8+ green, 0.6+ lime, 0.4+ amber, 0.2+ orange, else gray. Emoji assignment uses keyword matching: fitness words → 💪, money words → 💰, book words → 📚, etc. Max 3 goals per user."
+
+  - id: S4
+    name: Update progress via slider
+    do: "Drag the progress bar/slider on the goal to update the current value. Drag it to approximately 30% (3 out of 10). Verify the progress bar updates, the completion text changes to '3/10', and the bar color changes accordingly. Haptic feedback should trigger on interaction."
+    verify: true
+    expect:
+      - kind: interactive_count
+        min: 4
+    evidence:
+      - screenshot: step-S4.webp
+    note: "Slider interaction triggers updateGoalProgress() which updates currentValue. Progress updates are sent to the backend API. The slider is interactive and provides real-time visual feedback. Color transitions from gray (low) through orange, amber, lime to green (high). ADB drag: `adb shell input swipe <startX> <sliderY> <endX> <sliderY> 500` — startX=left edge of progress bar, endX=30% across, sliderY=goal item vertical center."
+
+  - id: S5
+    name: Tap goal to edit details
+    do: "Tap the goal card to open the edit sheet. The edit form shows the current title, current value, and target value pre-filled. Also shows an emoji selector with 20 emoji options (target, muscle, book, money, runner, yoga, etc.). Change the title to 'Read 15 Books' and update target to 15. Tap 'Save'."
+    verify: true
+    expect:
+      - kind: interactive_count
+        min: 3
+    evidence:
+      - screenshot: step-S5.webp
+    note: "Edit sheet reuses the goal form with pre-filled values. 20 emoji options: 🎯, 💪, 📚, 💰, 🏃, 🧘, 🎵, 🍎, 💧, 📝, 🧠, ⭐, 🔥, 🌱, 📱, 🎨, 🤝, ⏰, 🧹, 🏆. updateGoal() API call updates the goal on the backend."
+
+  - id: S6
+    name: Add second goal
+    do: "Tap the '+' icon to add a second goal. Enter title 'Daily Exercise' with current 0 and target 30. Save. Verify two goals now appear in the Goals section, each with their own progress bar and emoji."
+    verify: true
+    expect:
+      - kind: interactive_count
+        min: 5
+    evidence:
+      - screenshot: step-S6.webp
+    note: "Multiple goals stack vertically in the GoalsWidget. Each goal has independent progress tracking. Max 3 goals — the '+' button hides when 3 goals exist."
+
+  - id: S7
+    name: Swipe to delete goal
+    do: "Swipe the first goal ('Read 15 Books') from right to left to reveal the delete action. A confirmation dialog may appear. Confirm deletion. Verify the goal is removed and only one goal remains in the Goals section."
+    verify: true
+    expect:
+      - kind: interactive_count
+        min: 4
+    evidence:
+      - screenshot: step-S7.webp
+    note: "Swipe-to-delete uses Dismissible widget. deleteGoal() optimistically removes locally, then calls API. Analytics tracks goal deletion. The '+' button reappears since count < 3. ADB swipe: `adb shell input swipe <rightX> <goalY> <leftX> <goalY> 300` — swipe right-to-left across goal card (e.g. x=900→200) to trigger Dismissible."

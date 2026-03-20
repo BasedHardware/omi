@@ -1,0 +1,118 @@
+# E2E Flow: Settings — navigate all 9 settings sections
+# Tests: Settings sidebar, General, Rewind, Transcription, Notifications, Privacy, Account, AI Chat, Advanced, About
+# Core feature: app configuration and preferences management
+
+version: 2
+name: settings
+description: Settings flow — open Settings via sidebar or Cmd+comma, navigate all 9 sections (General, Rewind, Transcription, Notifications, Privacy, Account, AI Chat, Advanced, About), verify each section loads with expected controls
+app: com.omi.desktop-dev
+evidence:
+  video: true
+covers:
+  - desktop/Desktop/Sources/MainWindow/Pages/SettingsPage.swift
+  - desktop/Desktop/Sources/MainWindow/SettingsSidebar.swift
+  - desktop/Desktop/Sources/MainWindow/SidebarView.swift
+preconditions:
+  - auth_ready  # User signed in and onboarding completed. App shows main window.
+
+steps:
+  - id: S1
+    name: Open Settings via keyboard shortcut
+    do: "Press Cmd+comma (Cmd+,) to open Settings. Verify the Settings page opens with a sidebar showing section names: General, Rewind, Transcription, Notifications, Privacy, Account, AI Chat, Advanced, About."
+    verify: true
+    expect:
+      - kind: interactive_count
+        min: 9
+    evidence:
+      - screenshot: step-S1.webp
+    note: "Cmd+, keyboard shortcut added in friction fix. Settings is index 9 in sidebar. SettingsSidebar sections use press (AXPress) for navigation, not click."
+
+  - id: S2
+    name: Navigate to General section
+    do: "Click 'General' in the Settings sidebar (agent-swift press on the General button). Verify General settings load showing screen analysis monitoring toggle and other app-wide preferences."
+    verify: true
+    expect:
+      - kind: interactive_count
+        min: 3
+    evidence:
+      - screenshot: step-S2.webp
+    note: "General section shows: screen analysis monitoring toggle, app preferences. Use press not click for Settings sidebar items."
+
+  - id: S3
+    name: Navigate to Rewind section
+    do: "Click 'Rewind' in the Settings sidebar. Verify Rewind settings show screenshot/timeline configuration options."
+    verify: true
+    expect:
+      - kind: interactive_count
+        min: 3
+    evidence:
+      - screenshot: step-S3.webp
+    note: "Rewind settings control the timeline/screenshot feature. Options include capture interval, storage limits, excluded apps."
+
+  - id: S4
+    name: Navigate to Transcription section
+    do: "Click 'Transcription' in the Settings sidebar. Verify Language Mode card appears with two options: 'Auto-Detect Multi-Language' and 'Single Language Better Accuracy'. If Single Language is selected, a language picker should be visible."
+    verify: true
+    expect:
+      - kind: text_visible
+        values: ["Language Mode"]
+      - kind: interactive_count
+        min: 3
+    evidence:
+      - screenshot: step-S4.webp
+    note: "Transcription section has radio-style language mode toggle. Auto-Detect uses multi-language STT. Single Language shows popupbutton picker with language options."
+
+  - id: S5
+    name: Navigate to Notifications section
+    do: "Click 'Notifications' in the Settings sidebar. Verify notification preferences appear with toggles for different alert types."
+    verify: true
+    expect:
+      - kind: interactive_count
+        min: 3
+    evidence:
+      - screenshot: step-S5.webp
+    note: "Notification settings control frequency and types of desktop notifications from proactive assistants."
+
+  - id: S6
+    name: Navigate to Privacy section
+    do: "Click 'Privacy' in the Settings sidebar. Verify privacy/data settings appear."
+    verify: true
+    expect:
+      - kind: interactive_count
+        min: 2
+    evidence:
+      - screenshot: step-S6.webp
+    note: "Privacy section controls data collection, sharing, and retention preferences."
+
+  - id: S7
+    name: Navigate to Account section
+    do: "Click 'Account' in the Settings sidebar. Verify account information appears showing the signed-in user's details (email, name, plan)."
+    verify: true
+    expect:
+      - kind: interactive_count
+        min: 2
+    evidence:
+      - screenshot: step-S7.webp
+    note: "Account section shows user profile info from Firebase Auth. May include plan/subscription details and sign-out option."
+
+  - id: S8
+    name: Navigate to About section
+    do: "Click 'About' in the Settings sidebar. Verify the About section shows app version, build info, and update check button."
+    verify: true
+    expect:
+      - kind: interactive_count
+        min: 2
+    evidence:
+      - screenshot: step-S8.webp
+    note: "About section shows version from UpdaterViewModel. Check for updates button triggers Sparkle update check."
+
+  - id: S9
+    name: Return to Dashboard from Settings
+    do: "Click the back button or press Cmd+1 to return to Dashboard. Verify the Dashboard page loads."
+    verify: true
+    expect:
+      - kind: interactive_count
+        min: 5
+    evidence:
+      - screenshot: step-S9.webp
+    note: "Back from Settings restores previousIndexBeforeSettings. Cmd+1 is the Dashboard keyboard shortcut."

@@ -25,10 +25,7 @@ class McpApiKeyCreatedDialog extends StatelessWidget {
                 color: Theme.of(context).colorScheme.surface,
                 borderRadius: BorderRadius.circular(8),
               ),
-              child: SelectableText(
-                apiKey.key,
-                style: const TextStyle(fontFamily: 'monospace'),
-              ),
+              child: SelectableText(apiKey.key, style: const TextStyle(fontFamily: 'monospace')),
             ),
           ],
         ),

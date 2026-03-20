@@ -40,11 +40,19 @@ The BOM contains 88 components across the mainboard, charger board, FPC, and mec
 
 The mainboard uses 0201-size passives (resistors, capacitors) primarily from YAGEO and Murata. See the full BOM CSV for complete listings including designators.
 
+<Tip>
+**Sourcing tip for indie makers:** Order passives (0201 resistors/capacitors) from LCSC — they have the best prices and ship from China alongside your JLCPCB boards. For active ICs, Mouser/DigiKey have more reliable stock.
+</Tip>
+
 ---
 
 ## Assembly Reference
 
 ### Exploded View
+
+<Frame caption="Complete Omi Consumer — all components identified">
+  <img src="https://raw.githubusercontent.com/BasedHardware/omi/main/omi/hardware/consumer/assembly/photos/materials-labelled-exploded-view.jpg" />
+</Frame>
 
 The device consists of these main assemblies:
 1. **Front aluminium cover** (CNC machined)
@@ -56,6 +64,66 @@ The device consists of these main assemblies:
 7. **Vibration motor**
 8. **Silicone pad**
 9. **Back aluminium cover** (CNC machined)
+
+### Build Guide
+
+<Tabs>
+  <Tab title="Core Assembly" icon="screwdriver-wrench">
+    <Steps>
+      <Step title="Prepare workspace">
+        <Frame caption="All components laid out before assembly">
+          <img src="https://raw.githubusercontent.com/BasedHardware/omi/main/omi/hardware/consumer/assembly/photos/components-disassembled.jpg" />
+        </Frame>
+
+        Lay out all components on an anti-static mat. You'll need: tweezers, Phillips screwdriver (PH000), UV lamp, multimeter, and S300 adhesive.
+      </Step>
+      <Step title="Install PCB into frame">
+        Place the mainboard PCB into the SLA frame on the mounting posts. Board should sit flat with no rocking. Connect the FPC cable to the board-to-board connector.
+
+        <Warning>The FPC connector is fragile — lift the latch before inserting, then press down firmly to lock. Do not force it.</Warning>
+      </Step>
+      <Step title="Connect battery and motor">
+        Plug in the 150mAh LiPo battery. Route the cable to avoid pinching. Attach the vibration motor with double-sided tape.
+
+        <Warning>**Battery polarity is critical.** Reversed polarity will destroy the BQ25101 charger IC and may cause thermal runaway. Verify polarity with a multimeter before connecting.</Warning>
+      </Step>
+      <Step title="Install magnets and silicone pad">
+        Apply UV adhesive to magnet seats. Insert 4x N52 magnets (D3×H3mm). Cure with UV lamp for 30 seconds each.
+
+        <Warning>Test magnet polarity against the charger dock BEFORE gluing. Mark each magnet with a Sharpie. Once cured, they cannot be removed.</Warning>
+
+        Place the silicone pad over the battery/motor assembly.
+      </Step>
+      <Step title="Close enclosure">
+        Attach aluminium covers (Case A front, Case B back). Secure with 3x Phillips screws (CM1.2×5). Apply S300 glue around the seam.
+
+        <Check>Before sealing: test charging contact continuity, verify BLE advertising, confirm both mics record audio.</Check>
+
+        {/* WIP: Need a photo showing the actual enclosure-closing process (covers being mated, screws being inserted). @aarav */}
+      </Step>
+    </Steps>
+  </Tab>
+  <Tab title="Packaging & QA" icon="box">
+    <Steps>
+      <Step title="Final device QA">
+        Power on the device and run through the verification checklist:
+        - BLE advertising visible in nRF Connect
+        - Both microphones recording (test with firmware audio loopback)
+        - Wi-Fi scanning networks
+        - IMU reporting orientation changes
+        - LED cycling RGB colors
+        - Charger dock making contact and charging
+
+        <Check>All 6 checks must pass before packaging.</Check>
+      </Step>
+      <Step title="Package the device">
+        Place device in foam insert, close the packaging case. The foam inserts protect the device during shipping.
+
+        <Tip>Packaging STEP files are in [`packaging/cad/`](https://github.com/BasedHardware/omi/tree/main/omi/hardware/consumer/packaging/cad) if you want to manufacture custom retail packaging.</Tip>
+      </Step>
+    </Steps>
+  </Tab>
+</Tabs>
 
 ### Reference Photos
 

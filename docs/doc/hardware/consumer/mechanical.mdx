@@ -16,6 +16,19 @@ The Omi is a 25.5mm diameter wearable pendant with aluminium covers and a PC+ABS
 - [`omi-2d-drawings.pdf`](https://github.com/BasedHardware/omi/blob/main/omi/hardware/consumer/mechanical/drawings/omi-2d-drawings.pdf) — Technical drawings for all parts
 - [`manufacturing-specifications.png`](https://github.com/BasedHardware/omi/blob/main/omi/hardware/consumer/mechanical/drawings/manufacturing-specifications.png) — Manufacturing spec overview
 
+<Frame caption="Manufacturing specifications and critical dimensions">
+  <img src="https://raw.githubusercontent.com/BasedHardware/omi/main/omi/hardware/consumer/mechanical/drawings/manufacturing-specifications.png" />
+</Frame>
+
+{/* WIP: outer-aluminium-covers.jpg appears to show SLA prototypes, not final CNC aluminium covers. Need a photo of actual anodized aluminium covers to replace this. @aarav */}
+<Frame caption="Cover prototypes for fit verification (SLA printed before CNC production)">
+  <img src="https://raw.githubusercontent.com/BasedHardware/omi/main/omi/hardware/consumer/assembly/photos/outer-aluminium-covers.jpg" />
+</Frame>
+
+<Frame caption="All individual components before assembly">
+  <img src="https://raw.githubusercontent.com/BasedHardware/omi/main/omi/hardware/consumer/assembly/photos/components-disassembled.jpg" />
+</Frame>
+
 ---
 
 ## Parts by Manufacturing Process
@@ -35,10 +48,18 @@ The Omi is a 25.5mm diameter wearable pendant with aluminium covers and a PC+ABS
     | [`cnc-brass-copper-zinc-polished.zip`](https://github.com/BasedHardware/omi/blob/main/omi/hardware/consumer/mechanical/parts/cnc/cnc-brass-copper-zinc-polished.zip) | Brass/copper variant with polished zinc finish |
 
     **Material:** Aluminium (covers), Copper or Brass + Zinc plating (touch pins)
+
+    <Warning>
+    **Critical:** Covers must be D25.5mm ±0.05mm. Touch pins must make reliable contact — test continuity after assembly. Poor pin contact is the #1 charger failure cause.
+    </Warning>
+
+    <Tip>
+    For prototyping, 3D print the covers in SLA resin first to verify fit before committing to CNC aluminium (minimum orders typically 10-50 units).
+    </Tip>
   </Accordion>
 
   <Accordion title="Injection Molding" icon="fill-drip">
-    Internal shell/wrapper.
+    Internal shell/wrapper (OD 28.61mm, H 10.85mm, wall 0.7-1.34mm).
 
     | File | Description |
     |------|-------------|
@@ -49,7 +70,7 @@ The Omi is a 25.5mm diameter wearable pendant with aluminium covers and a PC+ABS
   </Accordion>
 
   <Accordion title="Silicone Molding" icon="droplet">
-    Internal cushioning pad.
+    Internal cushioning pad (D22.4mm, 0.6-0.9mm thick).
 
     | File | Description |
     |------|-------------|
@@ -73,6 +94,10 @@ The Omi is a 25.5mm diameter wearable pendant with aluminium covers and a PC+ABS
     | [`touchpin-2-sla-test.step`](https://github.com/BasedHardware/omi/blob/main/omi/hardware/consumer/mechanical/parts/sla/touchpin-2-sla-test.step) | Touch pin (SLA test variant) | Grey |
 
     **Material:** PC+ABS, SLA resin, or MJF nylon depending on finish
+
+    <Note>
+    All SLA parts can be printed on consumer SLA printers (Formlabs Form 3/4, Elegoo Saturn). Use white/translucent resin for the frame and LED guide — these need to transmit light.
+    </Note>
   </Accordion>
 </AccordionGroup>
 
@@ -100,3 +125,26 @@ Retail packaging 3D models for manufacturing the box, foam inserts, and protecti
 ### Reference Photos
 
 Photos of the assembled packaging are in [`packaging/photos/`](https://github.com/BasedHardware/omi/tree/main/omi/hardware/consumer/packaging/photos) for manufacturing reference.
+
+---
+
+## Ordering Guide for Indie Makers
+
+<Steps>
+  <Step title="Start with SLA-printed parts">
+    Print the frame, LED guide, charger cases, enhance plate, and pad on your SLA printer. Total print time: ~4-6 hours. Cost: ~$5 in resin.
+
+    <Tip>No SLA printer? Services like JLCPCB 3D Printing, Craftcloud, or Shapeways accept STEP files directly.</Tip>
+  </Step>
+  <Step title="Order CNC aluminium covers">
+    Upload `case-a.step` and `case-b.step` to a CNC service. Specify 6061 aluminium, anodized finish. Typical lead time: 5-10 days, $10-30/unit at 10+ quantity.
+  </Step>
+  <Step title="Source silicone pad and wrapper">
+    For prototyping, 3D print the silicone pad in flexible resin (Formlabs Flexible 80A). The wrapper can be SLA printed in rigid resin.
+
+    <Note>True silicone molding and injection molding only make economic sense at 500+ units.</Note>
+  </Step>
+  <Step title="Buy off-the-shelf parts">
+    Order from standard suppliers: N52 magnets (D3×H3mm), Phillips screws (CM1.2×5), necklace rope (2.5mm), dust filters, double-sided tape. All available on AliExpress/Amazon.
+  </Step>
+</Steps>

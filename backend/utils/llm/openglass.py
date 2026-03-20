@@ -2,9 +2,10 @@ from typing import List
 
 from models.conversation import ConversationPhoto, Structured
 from utils.llm.clients import llm_mini
+from utils.llm.usage_tracker import track_usage, Features
 
 
-async def describe_image(base64_data: str) -> str:
+async def describe_image(uid: str, base64_data: str) -> str:
     """
     Generates a description for a base64 encoded image using a vision model via LangChain.
     """
@@ -25,6 +26,7 @@ async def describe_image(base64_data: str) -> str:
         ],
     }
 
-    response = await llm_mini.ainvoke([message], config={"max_tokens": 150})
+    with track_usage(uid, Features.OPENGLASS):
+        response = await llm_mini.ainvoke([message], config={"max_tokens": 150})
     description = response.content
     return description.strip() if description is not None and description != '""' else ""

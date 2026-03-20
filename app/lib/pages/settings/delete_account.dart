@@ -59,41 +59,21 @@ class _DeleteAccountState extends State<DeleteAccount> {
           padding: const EdgeInsets.symmetric(horizontal: 10),
           child: Column(
             children: [
-              const SizedBox(
-                height: 10,
-              ),
+              const SizedBox(height: 10),
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 50),
                 child: Text(
                   context.l10n.deleteAccountConfirm,
-                  style: const TextStyle(
-                    fontSize: 24,
-                  ),
+                  style: const TextStyle(fontSize: 24),
                   textAlign: TextAlign.center,
                 ),
               ),
-              const SizedBox(
-                height: 10,
-              ),
-              Text(
-                context.l10n.cannotBeUndone,
-                style: const TextStyle(fontSize: 18),
-              ),
-              const SizedBox(
-                height: 30,
-              ),
-              ListTile(
-                leading: const Icon(Icons.message_rounded),
-                title: Text(context.l10n.allDataErased),
-              ),
-              ListTile(
-                leading: const Icon(Icons.person_pin_outlined),
-                title: Text(context.l10n.appsDisconnected),
-              ),
-              ListTile(
-                leading: const Icon(Icons.upload_file_outlined),
-                title: Text(context.l10n.exportBeforeDelete),
-              ),
+              const SizedBox(height: 10),
+              Text(context.l10n.cannotBeUndone, style: const TextStyle(fontSize: 18)),
+              const SizedBox(height: 30),
+              ListTile(leading: const Icon(Icons.message_rounded), title: Text(context.l10n.allDataErased)),
+              ListTile(leading: const Icon(Icons.person_pin_outlined), title: Text(context.l10n.appsDisconnected)),
+              ListTile(leading: const Icon(Icons.upload_file_outlined), title: Text(context.l10n.exportBeforeDelete)),
               const Spacer(),
               Row(
                 children: [
@@ -111,22 +91,20 @@ class _DeleteAccountState extends State<DeleteAccount> {
                   ),
                 ],
               ),
-              const SizedBox(
-                height: 30,
-              ),
+              const SizedBox(height: 30),
               isDeleteing
-                  ? const CircularProgressIndicator(
-                      color: Colors.white,
-                    )
+                  ? const CircularProgressIndicator(color: Colors.white)
                   : Container(
                       decoration: BoxDecoration(
                         border: const GradientBoxBorder(
-                          gradient: LinearGradient(colors: [
-                            Color.fromARGB(127, 208, 208, 208),
-                            Color.fromARGB(127, 188, 99, 121),
-                            Color.fromARGB(127, 86, 101, 182),
-                            Color.fromARGB(127, 126, 190, 236)
-                          ]),
+                          gradient: LinearGradient(
+                            colors: [
+                              Color.fromARGB(127, 208, 208, 208),
+                              Color.fromARGB(127, 188, 99, 121),
+                              Color.fromARGB(127, 86, 101, 182),
+                              Color.fromARGB(127, 126, 190, 236),
+                            ],
+                          ),
                           width: 2,
                         ),
                         borderRadius: BorderRadius.circular(12),
@@ -135,31 +113,35 @@ class _DeleteAccountState extends State<DeleteAccount> {
                         onPressed: () {
                           if (checkboxValue) {
                             showDialog(
-                                context: context,
-                                builder: (c) {
-                                  return getDialog(context, () {
+                              context: context,
+                              builder: (c) {
+                                return getDialog(
+                                  context,
+                                  () {
                                     MixpanelManager().deleteAccountCancelled();
                                     Navigator.of(context).pop();
-                                  }, () {
+                                  },
+                                  () {
                                     deleteAccountNow();
                                     Navigator.of(context).pop();
-                                  }, context.l10n.areYouSure, context.l10n.deleteAccountFinal,
-                                      okButtonText: context.l10n.deleteNow, cancelButtonText: context.l10n.goBack);
-                                });
-                          } else {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text(context.l10n.checkBoxToConfirm),
-                              ),
+                                  },
+                                  context.l10n.areYouSure,
+                                  context.l10n.deleteAccountFinal,
+                                  okButtonText: context.l10n.deleteNow,
+                                  cancelButtonText: context.l10n.goBack,
+                                );
+                              },
                             );
+                          } else {
+                            ScaffoldMessenger.of(
+                              context,
+                            ).showSnackBar(SnackBar(content: Text(context.l10n.checkBoxToConfirm)));
                           }
                         },
                         style: ElevatedButton.styleFrom(
                           backgroundColor: Colors.transparent,
                           shadowColor: const Color.fromARGB(255, 17, 17, 17),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                         ),
                         child: Container(
                           width: double.infinity,
@@ -176,9 +158,7 @@ class _DeleteAccountState extends State<DeleteAccount> {
                         ),
                       ),
                     ),
-              const SizedBox(
-                height: 70,
-              ),
+              const SizedBox(height: 70),
             ],
           ),
         ),

@@ -97,10 +97,7 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
 
       // Pick ZIP file
       Logger.debug('Opening file picker for ZIP...');
-      final result = await FilePicker.platform.pickFiles(
-        type: FileType.custom,
-        allowedExtensions: ['zip'],
-      );
+      final result = await FilePicker.platform.pickFiles(type: FileType.custom, allowedExtensions: ['zip']);
 
       if (result == null || result.files.isEmpty) {
         Logger.debug('User cancelled file picker');
@@ -116,10 +113,7 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
       if (filePath == null) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(context.l10n.couldNotAccessFile),
-              backgroundColor: Colors.red.shade700,
-            ),
+            SnackBar(content: Text(context.l10n.couldNotAccessFile), backgroundColor: Colors.red.shade700),
           );
         }
         if (mounted) {
@@ -150,9 +144,7 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
                 children: [
                   const Icon(Icons.check_circle, color: Colors.white),
                   const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(context.l10n.importStarted),
-                  ),
+                  Expanded(child: Text(context.l10n.importStarted)),
                 ],
               ),
               backgroundColor: Colors.green.shade700,
@@ -196,10 +188,7 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
       if (mounted) {
         setState(() => _isUploading = false);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(context.l10n.importErrorGeneric(e.toString())),
-            backgroundColor: Colors.red.shade700,
-          ),
+          SnackBar(content: Text(context.l10n.importErrorGeneric(e.toString())), backgroundColor: Colors.red.shade700),
         );
       }
     }
@@ -320,10 +309,7 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
                   return Container(
                     width: 48,
                     height: 48,
-                    decoration: BoxDecoration(
-                      color: Colors.grey.shade800,
-                      borderRadius: BorderRadius.circular(10),
-                    ),
+                    decoration: BoxDecoration(color: Colors.grey.shade800, borderRadius: BorderRadius.circular(10)),
                     child: const Icon(Icons.device_unknown, color: Colors.grey),
                   );
                 },
@@ -355,11 +341,7 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
                           ),
                           child: Text(
                             context.l10n.comingSoon,
-                            style: TextStyle(
-                              color: Colors.grey.shade400,
-                              fontSize: 10,
-                              fontWeight: FontWeight.w500,
-                            ),
+                            style: TextStyle(color: Colors.grey.shade400, fontSize: 10, fontWeight: FontWeight.w500),
                           ),
                         ),
                       ],
@@ -367,13 +349,7 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
                   ),
                   if (description.isNotEmpty) ...[
                     const SizedBox(height: 4),
-                    Text(
-                      description,
-                      style: TextStyle(
-                        color: Colors.grey.shade500,
-                        fontSize: 13,
-                      ),
-                    ),
+                    Text(description, style: TextStyle(color: Colors.grey.shade500, fontSize: 13)),
                   ],
                 ],
               ),
@@ -384,10 +360,7 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
                   ? const SizedBox(
                       width: 20,
                       height: 20,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: Colors.deepPurple,
-                      ),
+                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.deepPurple),
                     )
                   : Container(
                       width: 30,
@@ -396,18 +369,10 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
                         color: Colors.deepPurple.withValues(alpha: 0.8),
                         borderRadius: BorderRadius.circular(8),
                       ),
-                      child: const Icon(
-                        FontAwesomeIcons.plus,
-                        color: Colors.white,
-                        size: 16,
-                      ),
+                      child: const Icon(FontAwesomeIcons.plus, color: Colors.white, size: 16),
                     )
             else
-              Icon(
-                Icons.lock_outline,
-                color: Colors.grey.shade700,
-                size: 20,
-              ),
+              Icon(Icons.lock_outline, color: Colors.grey.shade700, size: 20),
           ],
         ),
       ),
@@ -429,30 +394,20 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
         Container(
           margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
           padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: const Color(0xFF1F1F25),
-            borderRadius: BorderRadius.circular(12),
-          ),
+          decoration: BoxDecoration(color: const Color(0xFF1F1F25), borderRadius: BorderRadius.circular(12)),
           child: Row(
             children: [
               Container(
                 width: 48,
                 height: 48,
-                decoration: BoxDecoration(
-                  color: Colors.grey.shade800,
-                  borderRadius: BorderRadius.circular(10),
-                ),
+                decoration: BoxDecoration(color: Colors.grey.shade800, borderRadius: BorderRadius.circular(10)),
                 child: Icon(Icons.devices_other, color: Colors.grey.shade600, size: 24),
               ),
               const SizedBox(width: 16),
               Expanded(
                 child: Text(
                   context.l10n.otherDevicesComingSoon,
-                  style: TextStyle(
-                    color: Colors.grey.shade500,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w500,
-                  ),
+                  style: TextStyle(color: Colors.grey.shade500, fontSize: 14, fontWeight: FontWeight.w500),
                 ),
               ),
             ],
@@ -499,10 +454,12 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
 
       if (jobDate == today) {
         dateTimeStr = context.l10n.todayAtTime(
-            '${job.createdAt!.hour.toString().padLeft(2, '0')}:${job.createdAt!.minute.toString().padLeft(2, '0')}');
+          '${job.createdAt!.hour.toString().padLeft(2, '0')}:${job.createdAt!.minute.toString().padLeft(2, '0')}',
+        );
       } else if (jobDate == today.subtract(const Duration(days: 1))) {
         dateTimeStr = context.l10n.yesterdayAtTime(
-            '${job.createdAt!.hour.toString().padLeft(2, '0')}:${job.createdAt!.minute.toString().padLeft(2, '0')}');
+          '${job.createdAt!.hour.toString().padLeft(2, '0')}:${job.createdAt!.minute.toString().padLeft(2, '0')}',
+        );
       } else {
         dateTimeStr =
             '${job.createdAt!.day}/${job.createdAt!.month}/${job.createdAt!.year} at ${job.createdAt!.hour.toString().padLeft(2, '0')}:${job.createdAt!.minute.toString().padLeft(2, '0')}';
@@ -512,10 +469,7 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
       padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: const Color(0xFF1F1F25),
-        borderRadius: BorderRadius.circular(12),
-      ),
+      decoration: BoxDecoration(color: const Color(0xFF1F1F25), borderRadius: BorderRadius.circular(12)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -545,20 +499,10 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
                   children: [
                     Text(
                       statusText,
-                      style: TextStyle(
-                        color: statusColor,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                      ),
+                      style: TextStyle(color: statusColor, fontSize: 14, fontWeight: FontWeight.w600),
                     ),
                     if (dateTimeStr.isNotEmpty && job.status == ImportJobStatus.completed)
-                      Text(
-                        dateTimeStr,
-                        style: TextStyle(
-                          color: Colors.grey.shade600,
-                          fontSize: 10,
-                        ),
-                      ),
+                      Text(dateTimeStr, style: TextStyle(color: Colors.grey.shade600, fontSize: 10)),
                   ],
                 ),
               ),
@@ -575,11 +519,7 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
                     children: [
                       Text(
                         context.l10n.nConversations(job.conversationsCreated!),
-                        style: TextStyle(
-                          color: Colors.green.shade400,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w500,
-                        ),
+                        style: TextStyle(color: Colors.green.shade400, fontSize: 12, fontWeight: FontWeight.w500),
                       ),
                       const SizedBox(width: 4),
                       Icon(Icons.check_circle, color: Colors.green.shade400, size: 14),
@@ -590,49 +530,51 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
           ),
           if (job.isProcessing && job.totalFiles != null && job.totalFiles! > 0) ...[
             const SizedBox(height: 16),
-            Builder(builder: (context) {
-              final remainingFiles = job.totalFiles! - (job.processedFiles ?? 0);
-              final estimatedSeconds = (remainingFiles * 0.5).ceil(); // ~0.5 seconds per file (light import)
-              String estimatedTime;
-              if (estimatedSeconds < 60) {
-                estimatedTime = context.l10n.lessThanAMinute;
-              } else if (estimatedSeconds < 3600) {
-                final minutes = (estimatedSeconds / 60).ceil();
-                estimatedTime = context.l10n.estimatedMinutes(minutes);
-              } else {
-                final hours = (estimatedSeconds / 3600).ceil();
-                estimatedTime = context.l10n.estimatedHours(hours);
-              }
+            Builder(
+              builder: (context) {
+                final remainingFiles = job.totalFiles! - (job.processedFiles ?? 0);
+                final estimatedSeconds = (remainingFiles * 0.5).ceil(); // ~0.5 seconds per file (light import)
+                String estimatedTime;
+                if (estimatedSeconds < 60) {
+                  estimatedTime = context.l10n.lessThanAMinute;
+                } else if (estimatedSeconds < 3600) {
+                  final minutes = (estimatedSeconds / 60).ceil();
+                  estimatedTime = context.l10n.estimatedMinutes(minutes);
+                } else {
+                  final hours = (estimatedSeconds / 3600).ceil();
+                  estimatedTime = context.l10n.estimatedHours(hours);
+                }
 
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        context.l10n.estimatedTimeRemaining(estimatedTime),
-                        style: TextStyle(color: Colors.grey.shade400, fontSize: 12),
-                      ),
-                      Text(
-                        '${job.processedFiles ?? 0}/${job.totalFiles}',
-                        style: TextStyle(color: Colors.grey.shade400, fontSize: 12),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(4),
-                    child: LinearProgressIndicator(
-                      value: job.progress,
-                      backgroundColor: Colors.grey.shade800,
-                      color: Colors.blue,
-                      minHeight: 6,
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          context.l10n.estimatedTimeRemaining(estimatedTime),
+                          style: TextStyle(color: Colors.grey.shade400, fontSize: 12),
+                        ),
+                        Text(
+                          '${job.processedFiles ?? 0}/${job.totalFiles}',
+                          style: TextStyle(color: Colors.grey.shade400, fontSize: 12),
+                        ),
+                      ],
                     ),
-                  ),
-                ],
-              );
-            }),
+                    const SizedBox(height: 12),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(4),
+                      child: LinearProgressIndicator(
+                        value: job.progress,
+                        backgroundColor: Colors.grey.shade800,
+                        color: Colors.blue,
+                        minHeight: 6,
+                      ),
+                    ),
+                  ],
+                );
+              },
+            ),
             const SizedBox(height: 8),
           ],
           if (job.error != null) ...[
@@ -655,10 +597,7 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
         return Container(
           margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
           padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: const Color(0xFF1F1F25),
-            borderRadius: BorderRadius.circular(12),
-          ),
+          decoration: BoxDecoration(color: const Color(0xFF1F1F25), borderRadius: BorderRadius.circular(12)),
           child: ShimmerWithTimeout(
             baseColor: Colors.grey[800]!,
             highlightColor: Colors.grey[600]!,
@@ -671,20 +610,14 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
                     Container(
                       width: 26,
                       height: 26,
-                      decoration: BoxDecoration(
-                        color: Colors.grey[800],
-                        borderRadius: BorderRadius.circular(6),
-                      ),
+                      decoration: BoxDecoration(color: Colors.grey[800], borderRadius: BorderRadius.circular(6)),
                     ),
                     const SizedBox(width: 8),
                     // Status icon shimmer
                     Container(
                       width: 18,
                       height: 18,
-                      decoration: BoxDecoration(
-                        color: Colors.grey[800],
-                        shape: BoxShape.circle,
-                      ),
+                      decoration: BoxDecoration(color: Colors.grey[800], shape: BoxShape.circle),
                     ),
                     const SizedBox(width: 6),
                     // Status text shimmer
@@ -695,19 +628,13 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
                           Container(
                             width: 80,
                             height: 14,
-                            decoration: BoxDecoration(
-                              color: Colors.grey[800],
-                              borderRadius: BorderRadius.circular(4),
-                            ),
+                            decoration: BoxDecoration(color: Colors.grey[800], borderRadius: BorderRadius.circular(4)),
                           ),
                           const SizedBox(height: 4),
                           Container(
                             width: 120,
                             height: 10,
-                            decoration: BoxDecoration(
-                              color: Colors.grey[800],
-                              borderRadius: BorderRadius.circular(4),
-                            ),
+                            decoration: BoxDecoration(color: Colors.grey[800], borderRadius: BorderRadius.circular(4)),
                           ),
                         ],
                       ),
@@ -716,10 +643,7 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
                     Container(
                       width: 100,
                       height: 24,
-                      decoration: BoxDecoration(
-                        color: Colors.grey[800],
-                        borderRadius: BorderRadius.circular(8),
-                      ),
+                      decoration: BoxDecoration(color: Colors.grey[800], borderRadius: BorderRadius.circular(8)),
                     ),
                   ],
                 ),
@@ -740,11 +664,7 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           child: Text(
             context.l10n.importHistory,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 16,
-              fontWeight: FontWeight.w600,
-            ),
+            style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
           ),
         ),
         // Content based on state
@@ -754,19 +674,13 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
           Container(
             margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
             padding: const EdgeInsets.all(24),
-            decoration: BoxDecoration(
-              color: const Color(0xFF1F1F25),
-              borderRadius: BorderRadius.circular(12),
-            ),
+            decoration: BoxDecoration(color: const Color(0xFF1F1F25), borderRadius: BorderRadius.circular(12)),
             child: Row(
               children: [
                 Icon(Icons.history, color: Colors.grey.shade600, size: 24),
                 const SizedBox(width: 16),
                 Expanded(
-                  child: Text(
-                    context.l10n.noImportsYet,
-                    style: TextStyle(color: Colors.grey.shade500, fontSize: 14),
-                  ),
+                  child: Text(context.l10n.noImportsYet, style: TextStyle(color: Colors.grey.shade500, fontSize: 14)),
                 ),
               ],
             ),
@@ -783,10 +697,7 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
       backgroundColor: Theme.of(context).colorScheme.primary,
       appBar: AppBar(
         backgroundColor: Theme.of(context).colorScheme.primary,
-        title: Text(
-          context.l10n.importData,
-          style: const TextStyle(fontWeight: FontWeight.w600),
-        ),
+        title: Text(context.l10n.importData, style: const TextStyle(fontWeight: FontWeight.w600)),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios, size: 20),
           onPressed: () => Navigator.of(context).pop(),
@@ -804,13 +715,8 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
               child: Container(
                 width: 36,
                 height: 36,
-                decoration: BoxDecoration(
-                  color: Colors.grey.withValues(alpha: 0.3),
-                  shape: BoxShape.circle,
-                ),
-                child: const Center(
-                  child: FaIcon(FontAwesomeIcons.arrowsRotate, size: 16.0, color: Colors.white),
-                ),
+                decoration: BoxDecoration(color: Colors.grey.withValues(alpha: 0.3), shape: BoxShape.circle),
+                child: const Center(child: FaIcon(FontAwesomeIcons.arrowsRotate, size: 16.0, color: Colors.white)),
               ),
             ),
           ),
@@ -836,10 +742,7 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
                 child: Container(
                   width: 36,
                   height: 36,
-                  decoration: BoxDecoration(
-                    color: Colors.grey.withValues(alpha: 0.3),
-                    shape: BoxShape.circle,
-                  ),
+                  decoration: BoxDecoration(color: Colors.grey.withValues(alpha: 0.3), shape: BoxShape.circle),
                   child: const Center(
                     child: FaIcon(FontAwesomeIcons.ellipsisVertical, size: 16.0, color: Colors.white),
                   ),
@@ -885,10 +788,7 @@ class _RotatingSyncIconState extends State<_RotatingSyncIcon> with SingleTickerP
   @override
   void initState() {
     super.initState();
-    _controller = AnimationController(
-      duration: const Duration(seconds: 1),
-      vsync: this,
-    )..repeat();
+    _controller = AnimationController(duration: const Duration(seconds: 1), vsync: this)..repeat();
   }
 
   @override
@@ -902,10 +802,7 @@ class _RotatingSyncIconState extends State<_RotatingSyncIcon> with SingleTickerP
     return AnimatedBuilder(
       animation: _controller,
       builder: (context, child) {
-        return Transform.rotate(
-          angle: _controller.value * 2 * 3.14159,
-          child: child,
-        );
+        return Transform.rotate(angle: _controller.value * 2 * 3.14159, child: child);
       },
       child: Icon(Icons.sync, color: widget.color, size: widget.size),
     );

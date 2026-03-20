@@ -2750,5 +2750,48 @@
     "notYetSynced": "Aún no sincronizado con tu teléfono",
     "clearAll": "Borrar todo",
     "phoneKeypad": "Teclado",
-    "phoneHideKeypad": "Ocultar teclado"
+    "phoneHideKeypad": "Ocultar teclado",
+    "fairUsePolicy": "Uso razonable",
+    "fairUseLoadError": "No se pudo cargar el estado de uso razonable. Por favor, inténtelo de nuevo.",
+    "fairUseStatusNormal": "Su uso está dentro de los límites normales.",
+    "fairUseStageNormal": "Normal",
+    "fairUseStageWarning": "Advertencia",
+    "fairUseStageThrottle": "Limitado",
+    "fairUseStageRestrict": "Restringido",
+    "fairUseSpeechUsage": "Uso del habla",
+    "fairUseToday": "Hoy",
+    "fairUse3Day": "3 días continuos",
+    "fairUseWeekly": "Semanal continuo",
+    "fairUseAboutTitle": "Sobre el uso razonable",
+    "fairUseAboutBody": "Omi está diseñado para conversaciones personales, reuniones e interacciones en vivo. El uso se mide por el tiempo real de habla detectado, no por el tiempo de conexión. Si el uso supera significativamente los patrones normales para contenido no personal, se pueden aplicar ajustes.",
+    "fairUseCaseRefCopied": "{caseRef} copiado",
+    "@fairUseCaseRefCopied": {
+        "description": "Snackbar message when case reference is copied",
+        "placeholders": {
+            "caseRef": {
+                "type": "String"
+            }
+        }
+    },
+    "fairUseDailyTranscription": "Transcripción diaria",
+    "fairUseBudgetExhausted": "Límite diario de transcripción alcanzado",
+    "fairUseBudgetResetsAt": "Se reinicia {time}",
+    "fairUseBudgetUsed": "{used}m / {limit}m",
+    "@fairUseBudgetUsed": {
+        "placeholders": {
+            "used": {
+                "type": "String"
+            },
+            "limit": {
+                "type": "String"
+            }
+        }
+    },
+    "@fairUseBudgetResetsAt": {
+        "placeholders": {
+            "time": {
+                "type": "String"
+            }
+        }
+    }
 }

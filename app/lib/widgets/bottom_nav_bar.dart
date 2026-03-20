@@ -13,11 +13,7 @@ import 'package:omi/utils/enums.dart';
 import 'package:omi/utils/logger.dart';
 
 class BottomNavBar extends StatelessWidget {
-  const BottomNavBar({
-    super.key,
-    required this.onTabTap,
-    this.showCenterButton = true,
-  });
+  const BottomNavBar({super.key, required this.onTabTap, this.showCenterButton = true});
 
   final void Function(int index, bool isRepeat) onTabTap;
   final bool showCenterButton;
@@ -41,11 +37,7 @@ class BottomNavBar extends StatelessWidget {
                     begin: Alignment.topCenter,
                     end: Alignment.bottomCenter,
                     stops: [0.0, 0.30, 1.0],
-                    colors: [
-                      Colors.transparent,
-                      Color.fromARGB(255, 15, 15, 15),
-                      Color.fromARGB(255, 15, 15, 15),
-                    ],
+                    colors: [Colors.transparent, Color.fromARGB(255, 15, 15, 15), Color.fromARGB(255, 15, 15, 15)],
                   ),
                 ),
                 child: Row(
@@ -165,16 +157,10 @@ class BottomNavBar extends StatelessWidget {
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
                           color: isRecording ? Colors.red : Colors.deepPurple,
-                          border: Border.all(
-                            color: Colors.black,
-                            width: 5,
-                          ),
+                          border: Border.all(color: Colors.black, width: 5),
                         ),
                         child: isInitializing
-                            ? const CircularProgressIndicator(
-                                color: Colors.white,
-                                strokeWidth: 2,
-                              )
+                            ? const CircularProgressIndicator(color: Colors.white, strokeWidth: 2)
                             : Icon(
                                 isRecording ? FontAwesomeIcons.stop : FontAwesomeIcons.microphone,
                                 color: Colors.white,
@@ -210,9 +196,7 @@ class BottomNavBar extends StatelessWidget {
             : null;
         Navigator.push(
           context,
-          MaterialPageRoute(
-            builder: (context) => ConversationCapturingPage(topConversationId: topConvoId),
-          ),
+          MaterialPageRoute(builder: (context) => ConversationCapturingPage(topConversationId: topConvoId)),
         );
       }
     }

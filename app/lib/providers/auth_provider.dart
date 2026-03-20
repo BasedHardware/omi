@@ -33,12 +33,14 @@ class AuthenticationProvider extends BaseProvider {
   void _initializeAuthListeners() {
     // DEBUG: Log initial state
     Logger.debug(
-        'DEBUG AuthProvider: Initial currentUser=${_auth.currentUser?.uid}, isAnonymous=${_auth.currentUser?.isAnonymous}');
+      'DEBUG AuthProvider: Initial currentUser=${_auth.currentUser?.uid}, isAnonymous=${_auth.currentUser?.isAnonymous}',
+    );
 
     Future.microtask(() {
       _auth.authStateChanges().distinct((p, n) => p?.uid == n?.uid).listen((User? user) {
         Logger.debug(
-            'DEBUG AuthProvider: authStateChanges fired - user=${user?.uid}, isAnonymous=${user?.isAnonymous}');
+          'DEBUG AuthProvider: authStateChanges fired - user=${user?.uid}, isAnonymous=${user?.isAnonymous}',
+        );
         this.user = user;
         // Only update SharedPreferences if Firebase has a user
         // Don't clear cached credentials - allows fallback for dev builds
@@ -94,15 +96,18 @@ class AuthenticationProvider extends BaseProvider {
         if (credential != null && isSignedIn()) {
           _signIn(onSignIn);
         } else {
-          AppSnackbar.showSnackbarError(MyApp.navigatorKey.currentContext?.l10n.authFailedToSignInWithGoogle ??
-              'Failed to sign in with Google, please try again.');
+          AppSnackbar.showSnackbarError(
+            MyApp.navigatorKey.currentContext?.l10n.authFailedToSignInWithGoogle ??
+                'Failed to sign in with Google, please try again.',
+          );
         }
       } catch (e, stackTrace) {
         print('DEBUG_AUTH: OAuth Google sign in error: $e');
         print('DEBUG_AUTH: Stack trace: $stackTrace');
         Logger.debug('OAuth Google sign in error: $e');
         AppSnackbar.showSnackbarError(
-            MyApp.navigatorKey.currentContext?.l10n.authenticationFailed ?? 'Authentication failed. Please try again.');
+          MyApp.navigatorKey.currentContext?.l10n.authenticationFailed ?? 'Authentication failed. Please try again.',
+        );
       }
       setLoadingState(false);
     }
@@ -122,13 +127,16 @@ class AuthenticationProvider extends BaseProvider {
         if (credential != null && isSignedIn()) {
           _signIn(onSignIn);
         } else {
-          AppSnackbar.showSnackbarError(MyApp.navigatorKey.currentContext?.l10n.authFailedToSignInWithApple ??
-              'Failed to sign in with Apple, please try again.');
+          AppSnackbar.showSnackbarError(
+            MyApp.navigatorKey.currentContext?.l10n.authFailedToSignInWithApple ??
+                'Failed to sign in with Apple, please try again.',
+          );
         }
       } catch (e) {
         Logger.debug('OAuth Apple sign in error: $e');
         AppSnackbar.showSnackbarError(
-            MyApp.navigatorKey.currentContext?.l10n.authenticationFailed ?? 'Authentication failed. Please try again.');
+          MyApp.navigatorKey.currentContext?.l10n.authenticationFailed ?? 'Authentication failed. Please try again.',
+        );
       }
       setLoadingState(false);
     }
@@ -142,8 +150,10 @@ class AuthenticationProvider extends BaseProvider {
       Logger.debug('Token: $token');
       return token;
     } catch (e, stackTrace) {
-      AppSnackbar.showSnackbarError(MyApp.navigatorKey.currentContext?.l10n.authFailedToRetrieveToken ??
-          'Failed to retrieve firebase token, please try again.');
+      AppSnackbar.showSnackbarError(
+        MyApp.navigatorKey.currentContext?.l10n.authFailedToRetrieveToken ??
+            'Failed to retrieve firebase token, please try again.',
+      );
       PlatformManager.instance.crashReporter.reportCrash(e, stackTrace);
 
       return null;
@@ -158,8 +168,10 @@ class AuthenticationProvider extends BaseProvider {
       try {
         user = FirebaseAuth.instance.currentUser!;
       } catch (e, stackTrace) {
-        AppSnackbar.showSnackbarError(MyApp.navigatorKey.currentContext?.l10n.authUnexpectedErrorFirebase ??
-            'Unexpected error signing in, Firebase error, please try again.');
+        AppSnackbar.showSnackbarError(
+          MyApp.navigatorKey.currentContext?.l10n.authUnexpectedErrorFirebase ??
+              'Unexpected error signing in, Firebase error, please try again.',
+        );
 
         PlatformManager.instance.crashReporter.reportCrash(e, stackTrace);
         return;
@@ -169,8 +181,9 @@ class AuthenticationProvider extends BaseProvider {
       MixpanelManager().identify();
       onSignIn();
     } else {
-      AppSnackbar.showSnackbarError(MyApp.navigatorKey.currentContext?.l10n.authUnexpectedError ??
-          'Unexpected error signing in, please try again');
+      AppSnackbar.showSnackbarError(
+        MyApp.navigatorKey.currentContext?.l10n.authUnexpectedError ?? 'Unexpected error signing in, please try again',
+      );
     }
   }
 
@@ -189,10 +202,7 @@ class AuthenticationProvider extends BaseProvider {
       return;
     }
 
-    await launchUrl(
-      uri,
-      mode: LaunchMode.inAppBrowserView,
-    );
+    await launchUrl(uri, mode: LaunchMode.inAppBrowserView);
   }
 
   Future<void> linkWithGoogle() async {
@@ -214,8 +224,10 @@ class AuthenticationProvider extends BaseProvider {
         }
         return;
       }
-      AppSnackbar.showSnackbarError(MyApp.navigatorKey.currentContext?.l10n.authFailedToLinkGoogle ??
-          'Failed to link with Google, please try again.');
+      AppSnackbar.showSnackbarError(
+        MyApp.navigatorKey.currentContext?.l10n.authFailedToLinkGoogle ??
+            'Failed to link with Google, please try again.',
+      );
       rethrow;
     } finally {
       setLoading(false);
@@ -251,14 +263,17 @@ class AuthenticationProvider extends BaseProvider {
           }
           return;
         }
-        AppSnackbar.showSnackbarError(MyApp.navigatorKey.currentContext?.l10n.authFailedToLinkApple ??
-            'Failed to link with Apple, please try again.');
+        AppSnackbar.showSnackbarError(
+          MyApp.navigatorKey.currentContext?.l10n.authFailedToLinkApple ??
+              'Failed to link with Apple, please try again.',
+        );
         rethrow;
       }
     } catch (e) {
       print('Error linking with Apple: $e');
-      AppSnackbar.showSnackbarError(MyApp.navigatorKey.currentContext?.l10n.authFailedToLinkApple ??
-          'Failed to link with Apple, please try again.');
+      AppSnackbar.showSnackbarError(
+        MyApp.navigatorKey.currentContext?.l10n.authFailedToLinkApple ?? 'Failed to link with Apple, please try again.',
+      );
       rethrow;
     } finally {
       setLoading(false);

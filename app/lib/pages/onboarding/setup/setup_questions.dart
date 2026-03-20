@@ -96,18 +96,25 @@ class _SetupQuestionsPageState extends State<SetupQuestionsPage> {
                 onPressed: () {
                   if (selectedProfession != null && selectedUsage != null && selectedAge != null) {
                     MixpanelManager().setUserProperties(selectedProfession!, selectedUsage!, selectedAge!);
-                    Navigator.of(context)
-                        .pushReplacement(MaterialPageRoute(builder: (c) => const SpeechProfilePage(onbording: true)));
+                    Navigator.of(
+                      context,
+                    ).pushReplacement(MaterialPageRoute(builder: (c) => const SpeechProfilePage(onbording: true)));
                   } else {
-                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                      content: Text(context.l10n.setupAnswerAllQuestions,
-                          style: const TextStyle(color: Colors.white)),
-                      duration: const Duration(seconds: 2),
-                    ));
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(
+                          context.l10n.setupAnswerAllQuestions,
+                          style: const TextStyle(color: Colors.white),
+                        ),
+                        duration: const Duration(seconds: 2),
+                      ),
+                    );
                   }
                 },
                 shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12), side: const BorderSide(color: Colors.grey)),
+                  borderRadius: BorderRadius.circular(12),
+                  side: const BorderSide(color: Colors.grey),
+                ),
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                   child: Text(context.l10n.continueButton, style: Theme.of(context).textTheme.titleMedium),
@@ -118,15 +125,16 @@ class _SetupQuestionsPageState extends State<SetupQuestionsPage> {
             Center(
               child: GestureDetector(
                 onTap: () {
-                  Navigator.of(context)
-                      .pushReplacement(MaterialPageRoute(builder: (c) => const SpeechProfilePage(onbording: true)));
+                  Navigator.of(
+                    context,
+                  ).pushReplacement(MaterialPageRoute(builder: (c) => const SpeechProfilePage(onbording: true)));
                 },
                 child: Text(
                   context.l10n.setupSkipHelp,
                   style: const TextStyle(color: Colors.grey, decoration: TextDecoration.underline),
                 ),
               ),
-            )
+            ),
           ],
         ),
       ),

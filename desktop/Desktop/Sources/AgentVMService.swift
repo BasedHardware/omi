@@ -134,7 +134,7 @@ actor AgentVMService {
 
     /// Check if the VM needs a database upload by hitting its /health endpoint.
     private func checkVMNeedsDatabase(vmIP: String, authToken: String) async -> Bool {
-        let healthURL = URL(string: "http://\(vmIP):8080/health")!
+        guard let healthURL = URL(string: "http://\(vmIP):8080/health") else { return true }
         var request = URLRequest(url: healthURL)
         request.timeoutInterval = 10
 
@@ -228,11 +228,17 @@ actor AgentVMService {
 
         log("AgentVMService: Uploading compressed database to \(vmIP)...")
 
-        let uploadURL = URL(string: "http://\(vmIP):8080/upload?token=\(authToken)")!
+        // Send token both as query param (backward compat) and header (preferred)
+        guard let uploadURL = URL(string: "http://\(vmIP):8080/upload?token=\(authToken)") else {
+            log("AgentVMService: Invalid upload URL for IP \(vmIP)")
+            try? FileManager.default.removeItem(at: tempGzPath)
+            return
+        }
         var request = URLRequest(url: uploadURL)
         request.httpMethod = "POST"
         request.setValue("application/octet-stream", forHTTPHeaderField: "Content-Type")
         request.setValue("gzip", forHTTPHeaderField: "Content-Encoding")
+        request.setValue("Bearer \(authToken)", forHTTPHeaderField: "Authorization")
         request.timeoutInterval = 600
 
         do {
@@ -273,10 +279,12 @@ actor AgentVMService {
     private func sendFirebaseToken(vmIP: String, authToken: String) async {
         do {
             let idToken = try await AuthService.shared.getIdToken()
+            // Send token both as query param (backward compat) and header (preferred)
             guard let url = URL(string: "http://\(vmIP):8080/auth?token=\(authToken)") else { return }
             var request = URLRequest(url: url)
             request.httpMethod = "POST"
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.setValue("Bearer \(authToken)", forHTTPHeaderField: "Authorization")
             request.timeoutInterval = 15
 
             let body: [String: String] = ["firebaseToken": idToken]

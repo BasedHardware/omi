@@ -34,32 +34,23 @@ class IntercomManager {
   }
 
   Future displayChargingArticle(String device) async {
-    return PlatformService.executeIfSupportedAsync(
-      _isIntercomEnabled,
-      () async {
-        if (device == 'Omi DevKit 2') {
-          return await intercom.displayArticle('10003257-how-to-charge-devkit2');
-        } else if (device == 'Omi') {
-          return await intercom.displayArticle('12123047-how-to-charge-omi');
-        } else {
-          return await intercom.displayArticle('9907475-how-to-charge-the-device');
-        }
-      },
-    );
+    return PlatformService.executeIfSupportedAsync(_isIntercomEnabled, () async {
+      if (device == 'Omi DevKit 2') {
+        return await intercom.displayArticle('10003257-how-to-charge-devkit2');
+      } else if (device == 'Omi') {
+        return await intercom.displayArticle('12123047-how-to-charge-omi');
+      } else {
+        return await intercom.displayArticle('9907475-how-to-charge-the-device');
+      }
+    });
   }
 
   Future loginIdentifiedUser(String uid) async {
-    return PlatformService.executeIfSupportedAsync(
-      _isIntercomEnabled,
-      () => intercom.loginIdentifiedUser(userId: uid),
-    );
+    return PlatformService.executeIfSupportedAsync(_isIntercomEnabled, () => intercom.loginIdentifiedUser(userId: uid));
   }
 
   Future loginUnidentifiedUser() async {
-    return PlatformService.executeIfSupportedAsync(
-      _isIntercomEnabled,
-      () => intercom.loginUnidentifiedUser(),
-    );
+    return PlatformService.executeIfSupportedAsync(_isIntercomEnabled, () => intercom.loginUnidentifiedUser());
   }
 
   Future displayEarnMoneyArticle() async {
@@ -77,10 +68,7 @@ class IntercomManager {
   }
 
   Future logEvent(String eventName, {Map<String, dynamic>? metaData}) async {
-    return PlatformService.executeIfSupportedAsync(
-      _isIntercomEnabled,
-      () => intercom.logEvent(eventName, metaData),
-    );
+    return PlatformService.executeIfSupportedAsync(_isIntercomEnabled, () => intercom.logEvent(eventName, metaData));
   }
 
   Future updateCustomAttributes(Map<String, dynamic> attributes) async {
@@ -93,11 +81,7 @@ class IntercomManager {
   Future updateUser(String? email, String? name, String? uid) async {
     return PlatformService.executeIfSupportedAsync(
       _isIntercomEnabled,
-      () => intercom.updateUser(
-        email: email,
-        name: name,
-        userId: uid,
-      ),
+      () => intercom.updateUser(email: email, name: name, userId: uid),
     );
   }
 

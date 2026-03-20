@@ -79,7 +79,9 @@ System Tray Menu
 ### Interaction Patterns
 
 **Main sidebar navigation:**
-- Icons are `image` type elements with labels: `Home`, `Conversation`, `brain`, `checklist`, `puzzlepiece.fill`, `gearshape.fill`
+- Icons are `image` type elements with accessibility identifiers: `sidebar_dashboard`, `sidebar_chat`, `sidebar_memories`, `sidebar_tasks`, `sidebar_rewind`, `sidebar_apps`, `sidebar_settings`
+- Use `find key sidebar_dashboard click` for reliable navigation (survives UI changes)
+- Keyboard shortcuts: Cmd+1 (Dashboard), Cmd+2 (Chat), Cmd+3 (Memories), Cmd+4 (Tasks), Cmd+5 (Rewind), Cmd+6 (Apps), Cmd+, (Settings)
 - Use `click` — these are SwiftUI views with onTapGesture
 
 **Settings sidebar navigation:**
@@ -104,6 +106,11 @@ Reference flows in `desktop/e2e/flows/*.yaml` describe the app's key user journe
 |------|--------|-------------------|
 | `flows/navigation.yaml` | SidebarView, DesktopHomeView, OmiApp | Sidebar icons, section switching, text input, scroll, tray menu |
 | `flows/language.yaml` | SettingsPage, SettingsSidebar, SidebarView | Settings nav, Transcription, language mode toggle, picker |
+| `flows/dashboard.yaml` | DashboardPage, GoalsWidget, TasksWidget | Goals CRUD, task toggle, embedded conversations |
+| `flows/chat.yaml` | ChatPage, ChatProvider | Send message, AI response, message actions |
+| `flows/memories.yaml` | MemoriesPage, MemoryGraphPage | Tag filtering, search, visibility toggle, memory graph |
+| `flows/tasks.yaml` | TasksPage, TasksStore | Task categories, filters, create task, toggle completion |
+| `flows/settings.yaml` | SettingsPage, SettingsSidebar | All 9 settings sections (General through About) |
 
 When you modify a Swift file, check if any flow's `covers:` includes it. That flow describes the user journey your change affects.
 

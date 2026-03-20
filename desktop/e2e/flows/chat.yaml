@@ -1,0 +1,71 @@
+# E2E Flow: Chat — AI conversation with Ask Omi
+# Tests: Open chat, send message, receive AI response, message actions, conversation history
+# Core feature: AI chat interface for asking questions and getting contextual answers
+
+version: 2
+name: chat
+description: Chat flow — navigate to Chat page, send a message, verify AI response streams, test message actions (copy, regenerate), browse conversation history
+app: com.omi.desktop-dev
+evidence:
+  video: true
+covers:
+  - desktop/Desktop/Sources/MainWindow/Pages/ChatPage.swift
+  - desktop/Desktop/Sources/Chat/ChatProvider.swift
+preconditions:
+  - auth_ready  # User signed in and onboarding completed. App shows main window.
+
+steps:
+  - id: S1
+    name: Navigate to Chat page
+    do: "Click Chat in sidebar: agent-swift find key sidebar_chat click. Verify the Chat page opens showing a text input field at the bottom and any previous conversation messages."
+    verify: true
+    expect:
+      - kind: interactive_count
+        min: 3
+    evidence:
+      - screenshot: step-S1.webp
+    note: "Chat is index 2 in sidebar (SidebarNavItem.chat). ChatPage has Markdown rendering, scroll position detection with 60ms debounce, and keyboard shortcuts."
+
+  - id: S2
+    name: Send a message
+    do: "Click the text input field at the bottom of the chat. Type 'What did I do today?' and press Enter (or click send button). Verify the message appears in the chat as a user bubble."
+    verify: true
+    expect:
+      - kind: interactive_count
+        min: 2
+    evidence:
+      - screenshot: step-S2.webp
+    note: "Message sent via ChatProvider. Input field is a textfield type element. Send can be triggered by Enter key or send button."
+
+  - id: S3
+    name: Verify AI response streams
+    do: "Wait for the AI response to appear below the user message. The response should stream in progressively (typing indicator, then text). Verify response text appears within 10 seconds."
+    verify: true
+    expect:
+      - kind: interactive_count
+        min: 3
+    evidence:
+      - screenshot: step-S3.webp
+    note: "AI responses stream via ChatProvider.isSending state. Response renders as Markdown. May include tool calls (search memories, check calendar, etc.) shown as expandable sections."
+
+  - id: S4
+    name: Test message actions
+    do: "Hover over the AI response message to reveal action buttons (copy, regenerate). Click the copy button. Verify the message text is copied to clipboard (or the button shows a checkmark/copied state)."
+    verify: true
+    expect:
+      - kind: interactive_count
+        min: 2
+    evidence:
+      - screenshot: step-S4.webp
+    note: "Message action buttons appear on hover. Actions include: copy to clipboard, regenerate response, thumbs up/down feedback."
+
+  - id: S5
+    name: Navigate back to Dashboard
+    do: "Click Dashboard in sidebar: agent-swift find key sidebar_dashboard click. Verify Dashboard page loads, confirming navigation works both ways."
+    verify: true
+    expect:
+      - kind: interactive_count
+        min: 5
+    evidence:
+      - screenshot: step-S5.webp
+    note: "Verifies sidebar navigation returns to Dashboard correctly. selectedIndex changes from 2 to 0."

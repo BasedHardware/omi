@@ -2758,5 +2758,48 @@
     "notYetSynced": "Endnu ikke synkroniseret med din telefon",
     "clearAll": "Ryd alt",
     "phoneKeypad": "Tastatur",
-    "phoneHideKeypad": "Skjul tastatur"
+    "phoneHideKeypad": "Skjul tastatur",
+    "fairUsePolicy": "Rimelig brug",
+    "fairUseLoadError": "Kunne ikke indlæse status for rimelig brug. Prøv venligst igen.",
+    "fairUseStatusNormal": "Dit forbrug er inden for normale grænser.",
+    "fairUseStageNormal": "Normal",
+    "fairUseStageWarning": "Advarsel",
+    "fairUseStageThrottle": "Begrænset",
+    "fairUseStageRestrict": "Spærret",
+    "fairUseSpeechUsage": "Taleforbrug",
+    "fairUseToday": "I dag",
+    "fairUse3Day": "3-dages rullende",
+    "fairUseWeekly": "Ugentlig rullende",
+    "fairUseAboutTitle": "Om rimelig brug",
+    "fairUseAboutBody": "Omi er designet til personlige samtaler, møder og live-interaktioner. Forbruget måles ved den faktiske registrerede taletid, ikke forbindelsestid. Hvis forbruget væsentligt overstiger normale mønstre for ikke-personligt indhold, kan der foretages justeringer.",
+    "fairUseCaseRefCopied": "{caseRef} kopieret",
+    "@fairUseCaseRefCopied": {
+        "description": "Snackbar message when case reference is copied",
+        "placeholders": {
+            "caseRef": {
+                "type": "String"
+            }
+        }
+    },
+    "fairUseDailyTranscription": "Daily Transcription",
+    "fairUseBudgetExhausted": "Daily transcription limit reached",
+    "fairUseBudgetResetsAt": "Resets {time}",
+    "fairUseBudgetUsed": "{used}m / {limit}m",
+    "@fairUseBudgetUsed": {
+        "placeholders": {
+            "used": {
+                "type": "String"
+            },
+            "limit": {
+                "type": "String"
+            }
+        }
+    },
+    "@fairUseBudgetResetsAt": {
+        "placeholders": {
+            "time": {
+                "type": "String"
+            }
+        }
+    }
 }

@@ -95,6 +95,7 @@ class AppState: ObservableObject {
   private var isCheckingAutomationPermission = false  // Prevent concurrent checks (retry path has a 1s sleep)
   @Published var hasAccessibilityPermission = false
   @Published var isAccessibilityBroken = false  // TCC says yes but AX calls actually fail (common after macOS updates/app re-signs)
+  @Published var hasFullDiskAccess = false
 
   /// True if notifications are enabled but won't show visual banners
   var isNotificationBannerDisabled: Bool {
@@ -406,11 +407,7 @@ class AppState: ObservableObject {
     let envPaths = [
       Bundle.main.path(forResource: ".env", ofType: nil),
       FileManager.default.currentDirectoryPath + "/.env",
-      NSHomeDirectory() + "/.hartford.env",
       NSHomeDirectory() + "/.omi.env",
-      // Explicit paths for development
-      "/Users/matthewdi/omi-computer-swift/.env",
-      "/Users/matthewdi/omi/backend/.env",
     ].compactMap { $0 }
 
     for path in envPaths {
@@ -422,6 +419,13 @@ class AppState: ObservableObject {
             let key = String(parts[0]).trimmingCharacters(in: .whitespaces)
             // Skip comments
             guard !key.hasPrefix("#") else { continue }
+            // API keys are fetched from the backend at runtime (APIKeyService).
+            // Do NOT load them from .env — defer entirely to APIKeyService.fetchKeys().
+            let backendServedKeys = ["DEEPGRAM_API_KEY", "GEMINI_API_KEY", "ANTHROPIC_API_KEY", "GOOGLE_CALENDAR_API_KEY"]
+            if backendServedKeys.contains(key) {
+              log("  Skipped \(key) (fetched from backend via APIKeyService)")
+              continue
+            }
             let value = String(parts[1]).trimmingCharacters(in: .whitespaces)
               .trimmingCharacters(in: CharacterSet(charactersIn: "\"'"))
             setenv(key, value, 1)
@@ -435,14 +439,8 @@ class AppState: ObservableObject {
       }
     }
 
-    // Log final state of important keys
-    if getenv("DEEPGRAM_API_KEY") != nil {
-      log("DEEPGRAM_API_KEY is set")
-    } else {
-      log("WARNING: DEEPGRAM_API_KEY is NOT set")
-    }
+    log("Environment loaded (API keys will be fetched from backend after auth)")
   }
-
 
   func openScreenRecordingPreferences() {
     ScreenCaptureService.openScreenRecordingPreferences()
@@ -464,7 +462,7 @@ class AppState: ObservableObject {
 
         if settings.authorizationStatus == .notDetermined {
           // First time - show the system prompt
-          NSApp.activate(ignoringOtherApps: true)
+          NSApp.activate()
           UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge])
           { [weak self] granted, error in
             if let error = error {
@@ -625,6 +623,7 @@ class AppState: ObservableObject {
     checkMicrophonePermission()
     checkSystemAudioPermission()
     checkAccessibilityPermission()
+    checkFullDiskAccess()
     // One-time startup diagnostic for accessibility
     let osVersion = ProcessInfo.processInfo.operatingSystemVersion
     let bundleId = Bundle.main.bundleIdentifier ?? "unknown"
@@ -976,6 +975,33 @@ class AppState: ObservableObject {
         hasAccessibilityPermission = false
         isAccessibilityBroken = false
       }
+    }
+  }
+
+  /// Check Full Disk Access by probing FDA-protected paths.
+  /// The TCC database query is unreliable on macOS 15+ (schema changes, ad-hoc signing),
+  /// so we probe actual protected directories instead.
+  func checkFullDiskAccess() {
+    let home = FileManager.default.homeDirectoryForCurrentUser.path
+    // These paths are protected by Full Disk Access on all macOS versions.
+    // Try to list directory contents — if it succeeds, FDA is granted.
+    let protectedPaths = [
+      "\(home)/Library/Safari",
+      "\(home)/Library/Mail",
+      "\(home)/Library/Messages",
+    ]
+
+    var granted = false
+    for path in protectedPaths {
+      if FileManager.default.fileExists(atPath: path) {
+        granted = (try? FileManager.default.contentsOfDirectory(atPath: path)) != nil
+        break
+      }
+    }
+
+    if granted != hasFullDiskAccess {
+      hasFullDiskAccess = granted
+      log("Full Disk Access: \(granted ? "granted" : "not granted") (file probe)")
     }
   }
 
@@ -1862,6 +1888,8 @@ class AppState: ObservableObject {
   func refreshConversations() async {
     // Skip if user is signed out (tokens are cleared)
     guard AuthState.shared.isSignedIn else { return }
+    // Skip if in auth backoff period (recent 401 errors)
+    guard !AuthBackoffTracker.shared.shouldSkipRequest() else { return }
     // Skip if currently doing a full load
     guard !isLoadingConversations else { return }
 
@@ -1902,7 +1930,11 @@ class AppState: ObservableObject {
           _ = try? await TranscriptionStorage.shared.syncServerConversation(conversation)
         }
       }
+      AuthBackoffTracker.shared.reportSuccess()
     } catch {
+      if case APIError.unauthorized = error {
+        AuthBackoffTracker.shared.reportAuthFailure()
+      }
       // Silently ignore errors during auto-refresh — cached data stays visible.
       // Auth errors (notSignedIn) are transient: token refresh may fail momentarily
       // while the user is still signed in. Don't send these to Sentry.
@@ -2502,7 +2534,7 @@ class AppState: ObservableObject {
   /// Request microphone permission
   func requestMicrophonePermission() {
     // Activate app to ensure permission dialog appears
-    NSApp.activate(ignoringOtherApps: true)
+    NSApp.activate()
 
     log(
       "Requesting microphone permission, current status: \(AudioCaptureService.authorizationStatus().rawValue)"
@@ -2609,6 +2641,12 @@ class AppState: ObservableObject {
     // Clear onboarding chat persistence and messages
     OnboardingChatPersistence.clear()
     log("Cleared onboarding chat persistence")
+
+    // Clear local knowledge graph so the onboarding chart starts fresh
+    Task {
+      await KnowledgeGraphStorage.shared.clearAll()
+      log("Cleared local knowledge graph storage")
+    }
 
     // Clear persisted backend chat messages so onboarding does not resume old history.
     // Onboarding currently uses the default chat message stream.
@@ -2770,19 +2808,26 @@ class AppState: ObservableObject {
       log("Failed to clean user TCC database: \(error.localizedDescription)")
     }
 
-    // Also clean entries for new dev bundle ID pattern (com.omi.desktop-dev)
+    // Also clean entries for non-production Omi bundles (for example com.omi.desktop-dev, com.omi.1233).
     let process2 = Process()
     process2.executableURL = URL(fileURLWithPath: "/usr/bin/sqlite3")
-    process2.arguments = [tccDbPath, "DELETE FROM access WHERE client LIKE '%com.omi.desktop%';"]
+    process2.arguments = [
+      tccDbPath,
+      "DELETE FROM access WHERE client LIKE 'com.omi.%' AND client != 'com.omi.computer-macos';",
+    ]
     process2.standardOutput = FileHandle.nullDevice
     process2.standardError = FileHandle.nullDevice
 
     do {
       try process2.run()
       process2.waitUntilExit()
-      log("User TCC database cleaned for desktop-dev (exit code: \(process2.terminationStatus))")
+      log(
+        "User TCC database cleaned for non-production bundles (exit code: \(process2.terminationStatus))"
+      )
     } catch {
-      log("Failed to clean user TCC database for desktop-dev: \(error.localizedDescription)")
+      log(
+        "Failed to clean user TCC database for non-production bundles: \(error.localizedDescription)"
+      )
     }
   }
 
@@ -2950,6 +2995,8 @@ extension Notification.Name {
   /// Posted to navigate to AI Chat page
   static let navigateToChat = Notification.Name("navigateToChat")
   static let navigateToTasks = Notification.Name("navigateToTasks")
+  /// Posted by keyboard shortcuts to navigate sidebar. userInfo: ["rawValue": Int]
+  static let navigateToSidebarItem = Notification.Name("navigateToSidebarItem")
   /// Posted by the local desktop automation bridge to request semantic navigation.
   static let desktopAutomationNavigateRequested = Notification.Name(
     "desktopAutomationNavigateRequested")

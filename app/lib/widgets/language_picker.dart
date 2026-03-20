@@ -13,17 +13,13 @@ class LanguagePickerTile extends StatelessWidget {
     return Consumer<LocaleProvider>(
       builder: (context, localeProvider, child) {
         final currentLocale = localeProvider.locale;
-        final displayName = currentLocale != null ? LocaleProvider.getDisplayName(currentLocale) : context.l10n.systemDefault;
+        final displayName = currentLocale != null
+            ? LocaleProvider.getDisplayName(currentLocale)
+            : context.l10n.systemDefault;
 
         return ListTile(
-          title: Text(
-            context.l10n.language,
-            style: const TextStyle(color: Colors.white),
-          ),
-          subtitle: Text(
-            displayName,
-            style: TextStyle(color: Colors.grey.shade400),
-          ),
+          title: Text(context.l10n.language, style: const TextStyle(color: Colors.white)),
+          subtitle: Text(displayName, style: TextStyle(color: Colors.grey.shade400)),
           trailing: const Icon(Icons.chevron_right, color: Colors.grey),
           onTap: () => _showLanguagePicker(context, localeProvider),
         );
@@ -38,9 +34,7 @@ class LanguagePickerTile extends StatelessWidget {
     showModalBottomSheet(
       context: context,
       backgroundColor: const Color(0xFF1C1C1E),
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-      ),
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
       builder: (context) {
         return SafeArea(
           child: Column(
@@ -50,18 +44,11 @@ class LanguagePickerTile extends StatelessWidget {
                 margin: const EdgeInsets.only(top: 12, bottom: 16),
                 width: 36,
                 height: 4,
-                decoration: BoxDecoration(
-                  color: const Color(0xFF3C3C43),
-                  borderRadius: BorderRadius.circular(2),
-                ),
+                decoration: BoxDecoration(color: const Color(0xFF3C3C43), borderRadius: BorderRadius.circular(2)),
               ),
               Text(
                 context.l10n.selectLanguage,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 17,
-                  fontWeight: FontWeight.w600,
-                ),
+                style: const TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w600),
               ),
               const SizedBox(height: 16),
               Flexible(

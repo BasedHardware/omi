@@ -38,7 +38,7 @@ class AddAppProvider extends ChangeNotifier {
   String? appCategory;
   List<Map<String, dynamic>> actions = [];
 
-// Trigger Event
+  // Trigger Event
   String? triggerEvent;
   TextEditingController webhookUrlController = TextEditingController();
   TextEditingController setupCompletedController = TextEditingController();
@@ -106,9 +106,7 @@ class AddAppProvider extends ChangeNotifier {
       setAppCategory('conversation-analysis');
 
       // Add memories capability
-      final memoriesCapability = capabilities.firstWhereOrNull(
-        (cap) => cap.id == 'memories',
-      );
+      final memoriesCapability = capabilities.firstWhereOrNull((cap) => cap.id == 'memories');
       if (memoriesCapability != null && !selectedCapabilities.contains(memoriesCapability)) {
         selectedCapabilities.add(memoriesCapability);
       }
@@ -122,9 +120,7 @@ class AddAppProvider extends ChangeNotifier {
 
     // Preset external integration capability
     if (presetExternalIntegration) {
-      final externalIntegrationCapability = capabilities.firstWhereOrNull(
-        (cap) => cap.id == 'external_integration',
-      );
+      final externalIntegrationCapability = capabilities.firstWhereOrNull((cap) => cap.id == 'external_integration');
       if (externalIntegrationCapability != null && !selectedCapabilities.contains(externalIntegrationCapability)) {
         selectedCapabilities.add(externalIntegrationCapability);
       }
@@ -195,9 +191,7 @@ class AddAppProvider extends ChangeNotifier {
       actions = [];
       if (app.externalIntegration!.actions != null) {
         for (var action in app.externalIntegration!.actions!) {
-          actions.add({
-            'action': action.action,
-          });
+          actions.add({'action': action.action});
         }
       }
     }
@@ -212,7 +206,8 @@ class AddAppProvider extends ChangeNotifier {
     }
     if (app.proactiveNotification != null) {
       selectedScopes = app.getNotificationScopesFromIds(
-          capabilities.firstWhere((element) => element.id == 'proactive_notification').notificationScopes);
+        capabilities.firstWhere((element) => element.id == 'proactive_notification').notificationScopes,
+      );
     }
 
     // Set existing thumbnails
@@ -257,9 +252,7 @@ class AddAppProvider extends ChangeNotifier {
   void addSpecificAction(String actionTypeId) {
     // Check if this action type already exists
     if (!actions.any((action) => action['action'] == actionTypeId)) {
-      actions.add({
-        'action': actionTypeId,
-      });
+      actions.add({'action': actionTypeId});
       checkValidity();
       notifyListeners();
     }
@@ -714,11 +707,13 @@ class AddAppProvider extends ChangeNotifier {
         } on PlatformException catch (e) {
           Logger.debug('🖼️ FilePicker PlatformException: ${e.code} - ${e.message}');
           AppSnackbar.showSnackbarError(
-              MyApp.navigatorKey.currentContext!.l10n.addAppErrorOpeningFilePicker(e.message ?? e.code));
+            MyApp.navigatorKey.currentContext!.l10n.addAppErrorOpeningFilePicker(e.message ?? e.code),
+          );
         } catch (e) {
           Logger.debug('🖼️ FilePicker general error: $e');
           AppSnackbar.showSnackbarError(
-              MyApp.navigatorKey.currentContext!.l10n.addAppErrorSelectingImage(e.toString()));
+            MyApp.navigatorKey.currentContext!.l10n.addAppErrorSelectingImage(e.toString()),
+          );
         }
       } else {
         Logger.debug('🖼️ Using image_picker for mobile platform');
@@ -740,7 +735,8 @@ class AddAppProvider extends ChangeNotifier {
         AppSnackbar.showSnackbarError(MyApp.navigatorKey.currentContext!.l10n.addAppPhotosPermissionDenied);
       } else {
         AppSnackbar.showSnackbarError(
-            MyApp.navigatorKey.currentContext!.l10n.addAppErrorSelectingImage(e.message ?? e.code));
+          MyApp.navigatorKey.currentContext!.l10n.addAppErrorSelectingImage(e.message ?? e.code),
+        );
       }
     } catch (e) {
       Logger.debug('🖼️ General exception during image picking: $e');
@@ -779,21 +775,20 @@ class AddAppProvider extends ChangeNotifier {
         } on PlatformException catch (e) {
           Logger.debug('🖼️ FilePicker PlatformException (thumbnail): ${e.code} - ${e.message}');
           AppSnackbar.showSnackbarError(
-              MyApp.navigatorKey.currentContext!.l10n.addAppErrorOpeningFilePicker(e.message ?? e.code));
+            MyApp.navigatorKey.currentContext!.l10n.addAppErrorOpeningFilePicker(e.message ?? e.code),
+          );
           return;
         } catch (e) {
           Logger.debug('🖼️ FilePicker general error (thumbnail): $e');
           AppSnackbar.showSnackbarError(
-              MyApp.navigatorKey.currentContext!.l10n.addAppErrorSelectingThumbnail(e.toString()));
+            MyApp.navigatorKey.currentContext!.l10n.addAppErrorSelectingThumbnail(e.toString()),
+          );
           return;
         }
       } else {
         Logger.debug('🖼️ Using image_picker for mobile platform (thumbnail)');
         ImagePicker imagePicker = ImagePicker();
-        var file = await imagePicker.pickImage(
-          source: ImageSource.gallery,
-          imageQuality: 85,
-        );
+        var file = await imagePicker.pickImage(source: ImageSource.gallery, imageQuality: 85);
         if (file != null) {
           Logger.debug('🖼️ Thumbnail picked successfully via image_picker: ${file.path}');
           thumbnailFile = File(file.path);
@@ -822,7 +817,8 @@ class AddAppProvider extends ChangeNotifier {
         AppSnackbar.showSnackbarError(MyApp.navigatorKey.currentContext!.l10n.addAppPhotosPermissionDenied);
       } else {
         AppSnackbar.showSnackbarError(
-            MyApp.navigatorKey.currentContext!.l10n.addAppErrorSelectingThumbnail(e.message ?? e.code));
+          MyApp.navigatorKey.currentContext!.l10n.addAppErrorSelectingThumbnail(e.message ?? e.code),
+        );
       }
       setIsUploadingThumbnail(false);
     } catch (e) {

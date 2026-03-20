@@ -18,11 +18,7 @@ class SpeechProfileWidget extends StatefulWidget {
   final VoidCallback goNext;
   final VoidCallback onSkip;
 
-  const SpeechProfileWidget({
-    super.key,
-    required this.goNext,
-    required this.onSkip,
-  });
+  const SpeechProfileWidget({super.key, required this.goNext, required this.onSkip});
 
   @override
   State<SpeechProfileWidget> createState() => _SpeechProfileWidgetState();
@@ -36,13 +32,11 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerPr
   @override
   void initState() {
     super.initState();
-    _questionAnimationController = AnimationController(
-      duration: const Duration(milliseconds: 500),
-      vsync: this,
-    );
-    _questionFadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(parent: _questionAnimationController, curve: Curves.easeInOut),
-    );
+    _questionAnimationController = AnimationController(duration: const Duration(milliseconds: 500), vsync: this);
+    _questionFadeAnimation = Tween<double>(
+      begin: 0.0,
+      end: 1.0,
+    ).animate(CurvedAnimation(parent: _questionAnimationController, curve: Curves.easeInOut));
 
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
@@ -262,18 +256,13 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerPr
             },
             child: Column(
               children: [
-                Expanded(
-                  child: Container(),
-                ),
+                Expanded(child: Container()),
                 Container(
                   width: double.infinity,
                   padding: EdgeInsets.fromLTRB(32, 0, 32, MediaQuery.of(context).padding.bottom + 8),
                   decoration: const BoxDecoration(
                     color: Colors.black,
-                    borderRadius: BorderRadius.only(
-                      topLeft: Radius.circular(40),
-                      topRight: Radius.circular(40),
-                    ),
+                    borderRadius: BorderRadius.only(topLeft: Radius.circular(40), topRight: Radius.circular(40)),
                   ),
                   child: SafeArea(
                     top: false,
@@ -317,9 +306,7 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerPr
 
                           // Get Started button
                           provider.isInitialising
-                              ? const CircularProgressIndicator(
-                                  color: Colors.white,
-                                )
+                              ? const CircularProgressIndicator(color: Colors.white)
                               : SizedBox(
                                   width: double.infinity,
                                   height: 56,
@@ -336,8 +323,10 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerPr
                                       bool success = await provider.initialise(
                                         usePhoneMic: true,
                                         processConversationCallback: () {
-                                          Provider.of<CaptureProvider>(context, listen: false)
-                                              .forceProcessingCurrentConversation();
+                                          Provider.of<CaptureProvider>(
+                                            context,
+                                            listen: false,
+                                          ).forceProcessingCurrentConversation();
                                         },
                                       );
 
@@ -345,10 +334,12 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerPr
                                         return;
                                       }
 
-                                      provider.forceCompletionTimer =
-                                          Timer(Duration(seconds: provider.maxDuration), () async {
-                                        provider.finalize();
-                                      });
+                                      provider.forceCompletionTimer = Timer(
+                                        Duration(seconds: provider.maxDuration),
+                                        () async {
+                                          provider.finalize();
+                                        },
+                                      );
 
                                       if (!mounted) return;
                                       _questionAnimationController.forward();
@@ -356,9 +347,7 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerPr
                                     style: ElevatedButton.styleFrom(
                                       backgroundColor: Colors.white,
                                       foregroundColor: Colors.black,
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(28),
-                                      ),
+                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
                                       elevation: 0,
                                     ),
                                     child: Text(
@@ -377,10 +366,7 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerPr
                             onPressed: () => widget.onSkip(),
                             child: Text(
                               context.l10n.skipForNow,
-                              style: const TextStyle(
-                                color: Colors.grey,
-                                fontSize: 16,
-                              ),
+                              style: const TextStyle(color: Colors.grey, fontSize: 16),
                             ),
                           ),
                         ] else if (provider.profileCompleted) ...[
@@ -394,9 +380,7 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerPr
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: Colors.white,
                                 foregroundColor: Colors.black,
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(28),
-                                ),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
                                 elevation: 0,
                               ),
                               child: Text(
@@ -427,11 +411,7 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerPr
                               const SizedBox(width: 16),
                               Text(
                                 _getLoadingText(context, provider.loadingState),
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 16,
-                                  fontFamily: 'Manrope',
-                                ),
+                                style: const TextStyle(color: Colors.white, fontSize: 16, fontFamily: 'Manrope'),
                               ),
                             ],
                           ),
@@ -517,11 +497,7 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerPr
                             onPressed: () => provider.skipCurrentQuestion(),
                             child: Text(
                               context.l10n.skipThisQuestion,
-                              style: const TextStyle(
-                                color: Colors.grey,
-                                fontSize: 14,
-                                fontFamily: 'Manrope',
-                              ),
+                              style: const TextStyle(color: Colors.grey, fontSize: 14, fontFamily: 'Manrope'),
                             ),
                           ),
                         ],

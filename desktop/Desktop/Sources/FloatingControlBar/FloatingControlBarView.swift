@@ -25,20 +25,12 @@ struct FloatingControlBarView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .onHover { hovering in
-            // Resize window BEFORE updating SwiftUI state on expand so the expanded
-            // content never renders in a too-small window (which causes overflow).
-            if hovering {
-                (window as? FloatingControlBarWindow)?.resizeForHover(expanded: true)
-            }
-            withAnimation(.easeInOut(duration: 0.2)) {
-                isHovering = hovering
-            }
-            if !hovering {
-                (window as? FloatingControlBarWindow)?.resizeForHover(expanded: false)
-            }
-        }
         .animation(.spring(response: 0.35, dampingFraction: 0.82), value: state.currentNotification?.id)
+    }
+
+    /// Whether the bar chrome should stretch to fill the window width
+    private var barNeedsFullWidth: Bool {
+        isHovering || state.showingAIConversation || state.isVoiceListening
     }
 
     private var barChrome: some View {
@@ -63,7 +55,7 @@ struct FloatingControlBarView: View {
                 .padding(.bottom, 8)
             }
         }
-        .frame(maxWidth: .infinity, alignment: .top)
+        .frame(maxWidth: barNeedsFullWidth ? .infinity : nil, alignment: .top)
         .overlay(alignment: .topLeading) {
             if state.showingAIConversation {
                 Button {
@@ -112,7 +104,23 @@ struct FloatingControlBarView: View {
         }
         .clipped()
         .background(DraggableAreaView(targetWindow: window))
-        .floatingBackground(cornerRadius: isHovering || state.showingAIConversation || state.isVoiceListening || state.isShowingNotification ? 20 : 5)
+        .floatingBackground(cornerRadius: barNeedsFullWidth ? 20 : 5)
+        .onHover(perform: handleBarHover)
+    }
+
+    private func handleBarHover(_ hovering: Bool) {
+        state.isHoveringBar = hovering
+        // Resize window BEFORE updating SwiftUI state on expand so the expanded
+        // content never renders in a too-small window (which causes overflow).
+        if hovering {
+            (window as? FloatingControlBarWindow)?.resizeForHover(expanded: true)
+        }
+        withAnimation(.easeInOut(duration: 0.2)) {
+            isHovering = hovering
+        }
+        if !hovering {
+            (window as? FloatingControlBarWindow)?.resizeForHover(expanded: false)
+        }
     }
 
     private func notificationView(_ notification: FloatingBarNotification) -> some View {
@@ -162,7 +170,7 @@ struct FloatingControlBarView: View {
 
     private func openFloatingBarSettings() {
         // Bring main window to front and navigate to floating bar settings
-        NSApp.activate(ignoringOtherApps: true)
+        NSApp.activate()
         for window in NSApp.windows where window.title.hasPrefix("Omi") {
             window.makeKeyAndOrderFront(nil)
             break
@@ -201,9 +209,9 @@ struct FloatingControlBarView: View {
 
     /// Minimal thin bar shown when not hovering
     private var compactCircleView: some View {
-        RoundedRectangle(cornerRadius: 2)
+        RoundedRectangle(cornerRadius: 3)
             .fill(Color.white.opacity(0.5))
-            .frame(width: 28, height: 4)
+            .frame(width: 28, height: 6)
     }
 
     private func compactToggle(_ title: String, isOn: Binding<Bool>) -> some View {

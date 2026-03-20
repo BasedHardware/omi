@@ -213,10 +213,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
                           style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
                         ),
                         const SizedBox(height: 2),
-                        Text(
-                          context.l10n.performanceReduced,
-                          style: const TextStyle(fontSize: 12),
-                        ),
+                        Text(context.l10n.performanceReduced, style: const TextStyle(fontSize: 12)),
                         const SizedBox(height: 4),
                         TweenAnimationBuilder<double>(
                           tween: Tween(begin: 10.0, end: 0.0),
@@ -246,7 +243,8 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
 
     // Restore JSON configs if customized
     if (config != null) {
-      final hasCustomRequest = config.requestType != null ||
+      final hasCustomRequest =
+          config.requestType != null ||
           config.headers != null ||
           config.params != null ||
           config.audioFieldName != null;
@@ -323,8 +321,9 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
       // Only set schema if not already set
       if (_schemaJsonPerProvider[config.provider] == null) {
         final template = CustomSttConfig.getFullTemplateJson(config.provider);
-        _schemaJsonPerProvider[config.provider] =
-            const JsonEncoder.withIndent('  ').convert(template['response_schema']);
+        _schemaJsonPerProvider[config.provider] = const JsonEncoder.withIndent(
+          '  ',
+        ).convert(template['response_schema']);
       }
     }
   }
@@ -514,9 +513,9 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
   Future<void> _saveConfig() async {
     _validateAndSetError();
     if (_validationError != null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(_validationError!), backgroundColor: Colors.red.shade700),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(_validationError!), backgroundColor: Colors.red.shade700));
       return;
     }
 
@@ -530,10 +529,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
           builder: (context) => AlertDialog(
             backgroundColor: const Color(0xFF1A1A1A),
             title: Text(context.l10n.modelRequired, style: const TextStyle(color: Colors.white)),
-            content: Text(
-              context.l10n.downloadWhisperModel,
-              style: const TextStyle(color: Colors.white70),
-            ),
+            content: Text(context.l10n.downloadWhisperModel, style: const TextStyle(color: Colors.white70)),
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(context),
@@ -601,10 +597,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
     await Clipboard.setData(ClipboardData(text: jsonString));
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(context.l10n.configCopiedToClipboard),
-          duration: const Duration(seconds: 2),
-        ),
+        SnackBar(content: Text(context.l10n.configCopiedToClipboard), duration: const Duration(seconds: 2)),
       );
     }
   }
@@ -627,20 +620,14 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: const Color(0xFF1A1A1A),
-        title: Text(
-          context.l10n.importConfiguration,
-          style: const TextStyle(color: Colors.white, fontSize: 18),
-        ),
+        title: Text(context.l10n.importConfiguration, style: const TextStyle(color: Colors.white, fontSize: 18)),
         content: SizedBox(
           width: double.maxFinite,
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                context.l10n.pasteJsonConfig,
-                style: TextStyle(color: Colors.grey.shade400, fontSize: 14),
-              ),
+              Text(context.l10n.pasteJsonConfig, style: TextStyle(color: Colors.grey.shade400, fontSize: 14)),
               const SizedBox(height: 12),
               Container(
                 height: 200,
@@ -653,11 +640,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
                   controller: controller,
                   maxLines: null,
                   expands: true,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontFamily: 'monospace',
-                    fontSize: 12,
-                  ),
+                  style: const TextStyle(color: Colors.white, fontFamily: 'monospace', fontSize: 12),
                   decoration: InputDecoration(
                     hintText: context.l10n.transcriptionJsonPlaceholder,
                     hintStyle: TextStyle(color: Colors.grey.shade700),
@@ -717,10 +700,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
       // Validate provider
       if (config.provider == SttProvider.omi) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(context.l10n.invalidProviderInConfig),
-            backgroundColor: Colors.red.shade700,
-          ),
+          SnackBar(content: Text(context.l10n.invalidProviderInConfig), backgroundColor: Colors.red.shade700),
         );
         return;
       }
@@ -884,7 +864,8 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
 
     if (isLowSpec && !isIOS) {
       // Android low-spec: "Not Compatible" Dialog (Whisper may crash)
-      proceed = await showDialog<bool>(
+      proceed =
+          await showDialog<bool>(
             context: context,
             builder: (context) => AlertDialog(
               backgroundColor: const Color(0xFF1A1A1A),
@@ -892,33 +873,26 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
                 children: [
                   const Icon(Icons.error_outline, color: Colors.red, size: 24),
                   const SizedBox(width: 8),
-                  Text(context.l10n.deviceNotCompatibleTitle,
-                      style: const TextStyle(color: Colors.white, fontSize: 18)),
+                  Text(
+                    context.l10n.deviceNotCompatibleTitle,
+                    style: const TextStyle(color: Colors.white, fontSize: 18),
+                  ),
                 ],
               ),
               content: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    context.l10n.deviceNotMeetRequirements,
-                    style: const TextStyle(color: Colors.white70),
-                  ),
+                  Text(context.l10n.deviceNotMeetRequirements, style: const TextStyle(color: Colors.white70)),
                   const SizedBox(height: 8),
-                  Text(
-                    specDetails,
-                    style: const TextStyle(color: Colors.white38, fontSize: 12),
-                  ),
+                  Text(specDetails, style: const TextStyle(color: Colors.white38, fontSize: 12)),
                   const SizedBox(height: 12),
                   Text(
                     context.l10n.willLikelyCrash,
                     style: const TextStyle(color: Colors.white70, fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 8),
-                  Text(
-                    context.l10n.transcriptionSlowerLessAccurate,
-                    style: const TextStyle(color: Colors.white70),
-                  ),
+                  Text(context.l10n.transcriptionSlowerLessAccurate, style: const TextStyle(color: Colors.white70)),
                 ],
               ),
               actions: [
@@ -938,7 +912,8 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
           false;
     } else if (isLowSpec && isIOS) {
       // iOS low-spec: Milder "Performance Warning" (Apple Speech won't crash)
-      proceed = await showDialog<bool>(
+      proceed =
+          await showDialog<bool>(
             context: context,
             builder: (context) => AlertDialog(
               backgroundColor: const Color(0xFF1A1A1A),
@@ -947,32 +922,23 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
                   const Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 24),
                   const SizedBox(width: 8),
                   Expanded(
-                      child: Text(context.l10n.olderDeviceDetected,
-                          style: const TextStyle(color: Colors.white, fontSize: 18))),
+                    child: Text(
+                      context.l10n.olderDeviceDetected,
+                      style: const TextStyle(color: Colors.white, fontSize: 18),
+                    ),
+                  ),
                 ],
               ),
               content: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    specDetails,
-                    style: const TextStyle(color: Colors.white38, fontSize: 12),
-                  ),
+                  Text(specDetails, style: const TextStyle(color: Colors.white38, fontSize: 12)),
                   const SizedBox(height: 12),
-                  Text(
-                    context.l10n.transcriptionSlowerOnDevice,
-                    style: const TextStyle(color: Colors.white70),
-                  ),
+                  Text(context.l10n.transcriptionSlowerOnDevice, style: const TextStyle(color: Colors.white70)),
                   const SizedBox(height: 8),
-                  Text(
-                    '• ${context.l10n.batteryUsageHigher}',
-                    style: const TextStyle(color: Colors.white70),
-                  ),
-                  Text(
-                    '• ${context.l10n.considerOmiCloud}',
-                    style: const TextStyle(color: Colors.white70),
-                  ),
+                  Text('• ${context.l10n.batteryUsageHigher}', style: const TextStyle(color: Colors.white70)),
+                  Text('• ${context.l10n.considerOmiCloud}', style: const TextStyle(color: Colors.white70)),
                 ],
               ),
               actions: [
@@ -982,8 +948,10 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
                 ),
                 TextButton(
                   onPressed: () => Navigator.pop(context, true),
-                  child: Text(context.l10n.continueButton,
-                      style: const TextStyle(color: Colors.blue, fontWeight: FontWeight.bold)),
+                  child: Text(
+                    context.l10n.continueButton,
+                    style: const TextStyle(color: Colors.blue, fontWeight: FontWeight.bold),
+                  ),
                 ),
               ],
             ),
@@ -991,7 +959,8 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
           false;
     } else {
       // Standard "High Resource Usage" Warning for capable devices
-      proceed = await showDialog<bool>(
+      proceed =
+          await showDialog<bool>(
             context: context,
             builder: (context) => AlertDialog(
               backgroundColor: const Color(0xFF1A1A1A),
@@ -1006,23 +975,11 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    context.l10n.computationallyIntensive,
-                    style: const TextStyle(color: Colors.white70),
-                  ),
+                  Text(context.l10n.computationallyIntensive, style: const TextStyle(color: Colors.white70)),
                   const SizedBox(height: 12),
-                  Text(
-                    '• ${context.l10n.batteryDrainSignificantly}',
-                    style: const TextStyle(color: Colors.white70),
-                  ),
-                  Text(
-                    '• ${context.l10n.deviceMayWarmUp}',
-                    style: const TextStyle(color: Colors.white70),
-                  ),
-                  Text(
-                    '• ${context.l10n.speedAccuracyLower}',
-                    style: const TextStyle(color: Colors.white70),
-                  ),
+                  Text('• ${context.l10n.batteryDrainSignificantly}', style: const TextStyle(color: Colors.white70)),
+                  Text('• ${context.l10n.deviceMayWarmUp}', style: const TextStyle(color: Colors.white70)),
+                  Text('• ${context.l10n.speedAccuracyLower}', style: const TextStyle(color: Colors.white70)),
                 ],
               ),
               actions: [
@@ -1032,8 +989,10 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
                 ),
                 TextButton(
                   onPressed: () => Navigator.pop(context, true),
-                  child: Text(context.l10n.iUnderstand,
-                      style: const TextStyle(color: Colors.blue, fontWeight: FontWeight.bold)),
+                  child: Text(
+                    context.l10n.iUnderstand,
+                    style: const TextStyle(color: Colors.blue, fontWeight: FontWeight.bold),
+                  ),
                 ),
               ],
             ),
@@ -1117,9 +1076,9 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
         const SizedBox(height: 12),
         if (currentTab == 0)
           GestureDetector(
-            onTap: () => Navigator.of(context).push(
-              MaterialPageRoute(builder: (context) => const UsagePage(showUpgradeDialog: true)),
-            ),
+            onTap: () => Navigator.of(
+              context,
+            ).push(MaterialPageRoute(builder: (context) => const UsagePage(showUpgradeDialog: true))),
             child: Text.rich(
               TextSpan(
                 children: [
@@ -1129,11 +1088,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
                   ),
                   TextSpan(
                     text: context.l10n.viewUsage,
-                    style: TextStyle(
-                      color: Colors.grey.shade400,
-                      fontSize: 12,
-                      decoration: TextDecoration.underline,
-                    ),
+                    style: TextStyle(color: Colors.grey.shade400, fontSize: 12, decoration: TextDecoration.underline),
                   ),
                   TextSpan(
                     text: '.',
@@ -1144,24 +1099,14 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
             ),
           )
         else if (currentTab == 1)
-          Text(
-            context.l10n.audioProcessedLocally,
-            style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
-          )
+          Text(context.l10n.audioProcessedLocally, style: TextStyle(color: Colors.grey.shade600, fontSize: 12))
         else if (currentTab == 2)
-          Text(
-            context.l10n.payYourSttProvider,
-            style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
-          ),
+          Text(context.l10n.payYourSttProvider, style: TextStyle(color: Colors.grey.shade600, fontSize: 12)),
       ],
     );
   }
 
-  Widget _buildTabOption({
-    required bool isSelected,
-    required String title,
-    required VoidCallback onTap,
-  }) {
+  Widget _buildTabOption({required bool isSelected, required String title, required VoidCallback onTap}) {
     return GestureDetector(
       onTap: onTap,
       child: Container(
@@ -1169,10 +1114,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
         decoration: BoxDecoration(
           color: isSelected ? Colors.white : const Color(0xFF1A1A1A),
           borderRadius: BorderRadius.circular(10),
-          border: Border.all(
-            color: isSelected ? Colors.white : Colors.grey.shade800,
-            width: 1,
-          ),
+          border: Border.all(color: isSelected ? Colors.white : Colors.grey.shade800, width: 1),
         ),
         child: Center(
           child: Row(
@@ -1228,10 +1170,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _buildCodecWarning(),
-        Text(
-          context.l10n.provider,
-          style: TextStyle(color: Colors.grey.shade500, fontSize: 13),
-        ),
+        Text(context.l10n.provider, style: TextStyle(color: Colors.grey.shade500, fontSize: 13)),
         const SizedBox(height: 10),
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -1248,35 +1187,31 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
               style: const TextStyle(color: Colors.white, fontSize: 15),
               icon: Icon(Icons.keyboard_arrow_down, color: Colors.grey.shade500),
               items: [
-                ...SttProviderConfig.allProviders
-                    .where((config) => config.provider != SttProvider.onDeviceWhisper)
-                    .map((config) {
-                  return DropdownMenuItem<SttProvider>(
-                    value: config.provider,
-                    child: Row(
-                      children: [
-                        Expanded(child: Text(config.displayName)),
-                        if (config.isLive)
-                          Container(
-                            margin: const EdgeInsets.only(left: 8),
-                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                            decoration: BoxDecoration(
-                              color: Colors.green.withOpacity(0.2),
-                              borderRadius: BorderRadius.circular(4),
-                            ),
-                            child: Text(
-                              context.l10n.live,
-                              style: const TextStyle(
-                                color: Colors.green,
-                                fontSize: 10,
-                                fontWeight: FontWeight.w600,
+                ...SttProviderConfig.allProviders.where((config) => config.provider != SttProvider.onDeviceWhisper).map(
+                  (config) {
+                    return DropdownMenuItem<SttProvider>(
+                      value: config.provider,
+                      child: Row(
+                        children: [
+                          Expanded(child: Text(config.displayName)),
+                          if (config.isLive)
+                            Container(
+                              margin: const EdgeInsets.only(left: 8),
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: Colors.green.withOpacity(0.2),
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Text(
+                                context.l10n.live,
+                                style: const TextStyle(color: Colors.green, fontSize: 10, fontWeight: FontWeight.w600),
                               ),
                             ),
-                          ),
-                      ],
-                    ),
-                  );
-                }),
+                        ],
+                      ),
+                    );
+                  },
+                ),
               ],
               onChanged: (provider) async {
                 if (provider != null) {
@@ -1301,9 +1236,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
                   });
 
                   // Track which provider was selected (name only, no keys/URLs)
-                  MixpanelManager().transcriptionProviderSelected(
-                    provider: provider.name,
-                  );
+                  MixpanelManager().transcriptionProviderSelected(provider: provider.name);
 
                   _validateAndSetError();
                 }
@@ -1315,10 +1248,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
         Row(
           children: [
             Expanded(
-              child: Text(
-                _currentConfig.description,
-                style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
-              ),
+              child: Text(_currentConfig.description, style: TextStyle(color: Colors.grey.shade600, fontSize: 12)),
             ),
             if (_currentConfig.docsUrl != null)
               GestureDetector(
@@ -1343,11 +1273,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
     }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _buildApiKeyInput(),
-        const SizedBox(height: 20),
-        _buildLanguageSelector(),
-      ],
+      children: [_buildApiKeyInput(), const SizedBox(height: 20), _buildLanguageSelector()],
     );
   }
 
@@ -1393,10 +1319,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
             builder: (context) => AlertDialog(
               backgroundColor: const Color(0xFF1A1A1A),
               title: Text(context.l10n.performanceWarning, style: const TextStyle(color: Colors.white)),
-              content: Text(
-                context.l10n.modelTooLargeWarning,
-                style: const TextStyle(color: Colors.white70),
-              ),
+              content: Text(context.l10n.modelTooLargeWarning, style: const TextStyle(color: Colors.white70)),
               actions: [
                 TextButton(
                   onPressed: () => Navigator.pop(context),
@@ -1478,10 +1401,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
                 filled: true,
                 fillColor: const Color(0xFF1A1A1A),
                 contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10),
-                  borderSide: BorderSide.none,
-                ),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
                 enabledBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(10),
                   borderSide: BorderSide(color: Colors.grey.shade800),
@@ -1509,10 +1429,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
           hint: 'https://your-stt-api.com/transcribe',
         ),
         const SizedBox(height: 8),
-        Text(
-          context.l10n.enterSttHttpEndpoint,
-          style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
-        ),
+        Text(context.l10n.enterSttHttpEndpoint, style: TextStyle(color: Colors.grey.shade600, fontSize: 12)),
       ],
     );
   }
@@ -1527,10 +1444,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
           hint: 'wss://your-stt-api.com/live',
         ),
         const SizedBox(height: 8),
-        Text(
-          context.l10n.enterLiveSttWebsocket,
-          style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
-        ),
+        Text(context.l10n.enterLiveSttWebsocket, style: TextStyle(color: Colors.grey.shade600, fontSize: 12)),
       ],
     );
   }
@@ -1541,10 +1455,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
       children: [
         Row(
           children: [
-            Text(
-              context.l10n.apiKey,
-              style: TextStyle(color: Colors.grey.shade500, fontSize: 13),
-            ),
+            Text(context.l10n.apiKey, style: TextStyle(color: Colors.grey.shade500, fontSize: 13)),
             const Spacer(),
             if (_currentConfig.apiKeyUrl != null)
               GestureDetector(
@@ -1565,10 +1476,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
             filled: true,
             fillColor: const Color(0xFF1A1A1A),
             contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(10),
-              borderSide: BorderSide.none,
-            ),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
             enabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(10),
               borderSide: BorderSide(color: Colors.grey.shade800),
@@ -1578,20 +1486,13 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
               borderSide: const BorderSide(color: Colors.white),
             ),
             suffixIcon: IconButton(
-              icon: Icon(
-                _showApiKey ? Icons.visibility_off : Icons.visibility,
-                color: Colors.grey.shade600,
-                size: 20,
-              ),
+              icon: Icon(_showApiKey ? Icons.visibility_off : Icons.visibility, color: Colors.grey.shade600, size: 20),
               onPressed: () => setState(() => _showApiKey = !_showApiKey),
             ),
           ),
         ),
         const SizedBox(height: 8),
-        Text(
-          context.l10n.storedLocallyNeverShared,
-          style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
-        ),
+        Text(context.l10n.storedLocallyNeverShared, style: TextStyle(color: Colors.grey.shade600, fontSize: 12)),
       ],
     );
   }
@@ -1604,11 +1505,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
           children: [
             Expanded(
               flex: 3,
-              child: _buildTextField(
-                controller: _hostController,
-                label: context.l10n.host,
-                hint: '127.0.0.1',
-              ),
+              child: _buildTextField(controller: _hostController, label: context.l10n.host, hint: '127.0.0.1'),
             ),
             const SizedBox(width: 12),
             Expanded(
@@ -1655,10 +1552,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
             filled: true,
             fillColor: const Color(0xFF1A1A1A),
             contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(10),
-              borderSide: BorderSide.none,
-            ),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
             enabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(10),
               borderSide: BorderSide(color: Colors.grey.shade800),
@@ -1701,10 +1595,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
             ),
           ),
           const SizedBox(height: 12),
-          Text(
-            context.l10n.nativeEngineNoDownload,
-            style: const TextStyle(color: Colors.grey, fontSize: 12),
-          ),
+          Text(context.l10n.nativeEngineNoDownload, style: const TextStyle(color: Colors.grey, fontSize: 12)),
           const SizedBox(height: 20),
           _buildLanguageSelector(),
         ],
@@ -1752,10 +1643,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
               ),
               const SizedBox(height: 8),
               Center(
-                child: Text(
-                  context.l10n.doNotCloseApp,
-                  style: TextStyle(color: Colors.orange.shade300, fontSize: 11),
-                ),
+                child: Text(context.l10n.doNotCloseApp, style: TextStyle(color: Colors.orange.shade300, fontSize: 11)),
               ),
               const SizedBox(height: 8),
               Row(
@@ -1786,7 +1674,8 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
                   onPressed: _downloadModel,
                   icon: const Icon(Icons.download, size: 16),
                   label: Text(
-                      context.l10n.downloadModelWithName('ggml-${_currentModel.isEmpty ? 'tiny' : _currentModel}.bin')),
+                    context.l10n.downloadModelWithName('ggml-${_currentModel.isEmpty ? 'tiny' : _currentModel}.bin'),
+                  ),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.white,
                     foregroundColor: Colors.black,
@@ -1846,10 +1735,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              context.l10n.modelNameWithFile('ggml-$modelName.bin'),
-              style: const TextStyle(color: Colors.white70),
-            ),
+            Text(context.l10n.modelNameWithFile('ggml-$modelName.bin'), style: const TextStyle(color: Colors.white70)),
             const SizedBox(height: 8),
             Text(
               context.l10n.estimatedSizeWithValue(estimatedSizeMB.toStringAsFixed(0)),
@@ -1858,7 +1744,8 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
             const SizedBox(height: 8),
             Text(
               context.l10n.availableSpaceWithValue(
-                  freeSpaceMB != null ? '${freeSpaceMB.toStringAsFixed(0)} MB' : context.l10n.unknown),
+                freeSpaceMB != null ? '${freeSpaceMB.toStringAsFixed(0)} MB' : context.l10n.unknown,
+              ),
               style: TextStyle(
                 color: (freeSpaceMB != null && freeSpaceMB < estimatedSizeMB) ? Colors.red : Colors.white70,
                 fontWeight: FontWeight.bold,
@@ -1867,10 +1754,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
             if (freeSpaceMB != null && freeSpaceMB < estimatedSizeMB)
               Padding(
                 padding: const EdgeInsets.only(top: 10),
-                child: Text(
-                  context.l10n.notEnoughSpace,
-                  style: const TextStyle(color: Colors.red),
-                ),
+                child: Text(context.l10n.notEnoughSpace, style: const TextStyle(color: Colors.red)),
               ),
           ],
         ),
@@ -1880,8 +1764,9 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
             child: Text(context.l10n.cancel, style: const TextStyle(color: Colors.grey)),
           ),
           TextButton(
-            onPressed:
-                (freeSpaceMB != null && freeSpaceMB < estimatedSizeMB) ? null : () => Navigator.pop(context, true),
+            onPressed: (freeSpaceMB != null && freeSpaceMB < estimatedSizeMB)
+                ? null
+                : () => Navigator.pop(context, true),
             child: Text(context.l10n.download, style: const TextStyle(color: Colors.blue)),
           ),
         ],
@@ -1920,20 +1805,20 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
       final sink = file.openWrite();
 
       try {
-        await response.stream.listen(
-          (chunk) {
-            sink.add(chunk);
-            received += chunk.length;
-            if (mounted) {
-              setState(() {
-                _downloadProgress = received / contentLength;
-                _modelDownloadStatus = context.l10n.downloadingModelProgress(modelName,
-                    (received / 1024 / 1024).toStringAsFixed(1), (contentLength / 1024 / 1024).toStringAsFixed(1));
-              });
-            }
-          },
-          cancelOnError: true,
-        ).asFuture();
+        await response.stream.listen((chunk) {
+          sink.add(chunk);
+          received += chunk.length;
+          if (mounted) {
+            setState(() {
+              _downloadProgress = received / contentLength;
+              _modelDownloadStatus = context.l10n.downloadingModelProgress(
+                modelName,
+                (received / 1024 / 1024).toStringAsFixed(1),
+                (contentLength / 1024 / 1024).toStringAsFixed(1),
+              );
+            });
+          }
+        }, cancelOnError: true).asFuture();
       } finally {
         await sink.close();
       }
@@ -2016,10 +1901,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
             padding: const EdgeInsets.symmetric(vertical: 12),
             child: Row(
               children: [
-                Text(
-                  context.l10n.advanced,
-                  style: TextStyle(color: Colors.grey.shade500, fontSize: 13),
-                ),
+                Text(context.l10n.advanced, style: TextStyle(color: Colors.grey.shade500, fontSize: 13)),
                 const SizedBox(width: 8),
                 Icon(
                   _showAdvanced ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
@@ -2052,10 +1934,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          context.l10n.configuration,
-          style: TextStyle(color: Colors.grey.shade500, fontSize: 13),
-        ),
+        Text(context.l10n.configuration, style: TextStyle(color: Colors.grey.shade500, fontSize: 13)),
         const SizedBox(height: 10),
         _buildJsonEditorButton(
           title: context.l10n.requestConfiguration,
@@ -2071,11 +1950,8 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
         _buildJsonEditorButton(
           title: context.l10n.responseSchema,
           jsonContent: _currentSchemaJson,
-          onTap: () => _openJsonEditor(
-            title: context.l10n.responseSchema,
-            jsonContent: _currentSchemaJson,
-            isRequest: false,
-          ),
+          onTap: () =>
+              _openJsonEditor(title: context.l10n.responseSchema, jsonContent: _currentSchemaJson, isRequest: false),
         ),
       ],
     );
@@ -2112,10 +1988,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
         children: [
           Icon(Icons.refresh, color: Colors.grey.shade500, size: 16),
           const SizedBox(width: 6),
-          Text(
-            context.l10n.resetRequestConfig,
-            style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
-          ),
+          Text(context.l10n.resetRequestConfig, style: TextStyle(color: Colors.grey.shade500, fontSize: 12)),
         ],
       ),
     );
@@ -2167,10 +2040,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
                             color: Colors.white.withOpacity(0.15),
                             borderRadius: BorderRadius.circular(4),
                           ),
-                          child: Text(
-                            context.l10n.modified,
-                            style: const TextStyle(color: Colors.white, fontSize: 10),
-                          ),
+                          child: Text(context.l10n.modified, style: const TextStyle(color: Colors.white, fontSize: 10)),
                         ),
                       ],
                     ],
@@ -2192,11 +2062,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
     );
   }
 
-  Future<void> _openJsonEditor({
-    required String title,
-    required String jsonContent,
-    bool isRequest = false,
-  }) async {
+  Future<void> _openJsonEditor({required String title, required String jsonContent, bool isRequest = false}) async {
     final result = await Navigator.of(context).push<String>(
       MaterialPageRoute(
         builder: (context) => _JsonEditorPage(
@@ -2298,10 +2164,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
             padding: const EdgeInsets.symmetric(vertical: 12),
             child: Row(
               children: [
-                Text(
-                  context.l10n.logs,
-                  style: TextStyle(color: Colors.grey.shade500, fontSize: 13),
-                ),
+                Text(context.l10n.logs, style: TextStyle(color: Colors.grey.shade500, fontSize: 13)),
                 const SizedBox(width: 8),
                 Icon(
                   _showLogs ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
@@ -2358,25 +2221,21 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
                           children: [
                             Text(
                               log.formattedTime,
-                              style: TextStyle(
-                                color: Colors.grey.shade600,
-                                fontSize: 10,
-                                fontFamily: 'monospace',
-                              ),
+                              style: TextStyle(color: Colors.grey.shade600, fontSize: 10, fontFamily: 'monospace'),
                             ),
                             const SizedBox(width: 6),
                             Icon(
                               isError
                                   ? Icons.error_outline
                                   : isWarning
-                                      ? Icons.warning_amber_outlined
-                                      : Icons.info_outline,
+                                  ? Icons.warning_amber_outlined
+                                  : Icons.info_outline,
                               size: 12,
                               color: isError
                                   ? Colors.red.shade400
                                   : isWarning
-                                      ? Colors.orange.shade400
-                                      : Colors.grey.shade500,
+                                  ? Colors.orange.shade400
+                                  : Colors.grey.shade500,
                             ),
                             const SizedBox(width: 6),
                             Expanded(
@@ -2386,8 +2245,8 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
                                   color: isError
                                       ? Colors.red.shade300
                                       : isWarning
-                                          ? Colors.orange.shade300
-                                          : Colors.grey.shade400,
+                                      ? Colors.orange.shade300
+                                      : Colors.grey.shade400,
                                   fontSize: 11,
                                   fontFamily: 'monospace',
                                 ),
@@ -2417,12 +2276,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
 
   Widget _buildBottomBar() {
     return Container(
-      padding: EdgeInsets.only(
-        left: 20,
-        right: 20,
-        top: 16,
-        bottom: MediaQuery.of(context).padding.bottom + 16,
-      ),
+      padding: EdgeInsets.only(left: 20, right: 20, top: 16, bottom: MediaQuery.of(context).padding.bottom + 16),
       decoration: BoxDecoration(
         color: const Color(0xFF0D0D0D),
         border: Border(top: BorderSide(color: Colors.grey.shade900)),
@@ -2551,17 +2405,15 @@ class _JsonEditorPageState extends State<_JsonEditorPage> {
 
   Widget _buildTemplateSelector() {
     final isResponseSchema = widget.isResponseSchema;
-    final templates =
-        isResponseSchema ? SttResponseSchema.templates.keys.toList() : SttProviderConfig.requestTemplates.keys.toList();
+    final templates = isResponseSchema
+        ? SttResponseSchema.templates.keys.toList()
+        : SttProviderConfig.requestTemplates.keys.toList();
     final description = isResponseSchema ? context.l10n.quicklyPopulateResponse : context.l10n.quicklyPopulateRequest;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          context.l10n.useTemplateFrom,
-          style: TextStyle(color: Colors.grey.shade500, fontSize: 13),
-        ),
+        Text(context.l10n.useTemplateFrom, style: TextStyle(color: Colors.grey.shade500, fontSize: 13)),
         const SizedBox(height: 8),
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -2600,11 +2452,7 @@ class _JsonEditorPageState extends State<_JsonEditorPage> {
                           ),
                           child: Text(
                             context.l10n.live,
-                            style: const TextStyle(
-                              color: Colors.green,
-                              fontSize: 10,
-                              fontWeight: FontWeight.w600,
-                            ),
+                            style: const TextStyle(color: Colors.green, fontSize: 10, fontWeight: FontWeight.w600),
                           ),
                         ),
                     ],
@@ -2624,10 +2472,7 @@ class _JsonEditorPageState extends State<_JsonEditorPage> {
           ),
         ),
         const SizedBox(height: 4),
-        Text(
-          description,
-          style: TextStyle(color: Colors.grey.shade700, fontSize: 11),
-        ),
+        Text(description, style: TextStyle(color: Colors.grey.shade700, fontSize: 11)),
       ],
     );
   }
@@ -2638,10 +2483,7 @@ class _JsonEditorPageState extends State<_JsonEditorPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (_showTemplateSelector) ...[
-            _buildTemplateSelector(),
-            const SizedBox(height: 16),
-          ],
+          if (_showTemplateSelector) ...[_buildTemplateSelector(), const SizedBox(height: 16)],
           if (_parseError != null)
             Container(
               margin: const EdgeInsets.only(bottom: 12),
@@ -2677,10 +2519,7 @@ class _JsonEditorPageState extends State<_JsonEditorPage> {
                 expands: true,
                 style: const TextStyle(color: Colors.white, fontFamily: 'monospace', fontSize: 13),
                 onChanged: (_) => _parseJson(),
-                decoration: const InputDecoration(
-                  border: InputBorder.none,
-                  contentPadding: EdgeInsets.all(16),
-                ),
+                decoration: const InputDecoration(border: InputBorder.none, contentPadding: EdgeInsets.all(16)),
               ),
             ),
           ),
@@ -2691,12 +2530,7 @@ class _JsonEditorPageState extends State<_JsonEditorPage> {
 
   Widget _buildBottomBar() {
     return Container(
-      padding: EdgeInsets.only(
-        left: 20,
-        right: 20,
-        top: 16,
-        bottom: MediaQuery.of(context).padding.bottom + 16,
-      ),
+      padding: EdgeInsets.only(left: 20, right: 20, top: 16, bottom: MediaQuery.of(context).padding.bottom + 16),
       decoration: BoxDecoration(
         color: const Color(0xFF0D0D0D),
         border: Border(top: BorderSide(color: Colors.grey.shade900)),

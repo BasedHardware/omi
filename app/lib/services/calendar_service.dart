@@ -79,10 +79,7 @@ class CalendarService {
   }
 
   /// Update calendar settings
-  Future<void> updateSettings({
-    bool? showEventsWithNoParticipants,
-    bool? showMeetingsInMenuBar,
-  }) async {
+  Future<void> updateSettings({bool? showEventsWithNoParticipants, bool? showMeetingsInMenuBar}) async {
     try {
       final args = <String, dynamic>{};
       if (showEventsWithNoParticipants != null) {
@@ -101,10 +98,7 @@ class CalendarService {
   /// Snooze a meeting notification
   Future<void> snoozeMeeting(String eventId, int minutes) async {
     try {
-      await _methodChannel.invokeMethod('snoozeMeeting', {
-        'eventId': eventId,
-        'minutes': minutes,
-      });
+      await _methodChannel.invokeMethod('snoozeMeeting', {'eventId': eventId, 'minutes': minutes});
       print('CalendarService: Snoozed meeting $eventId for $minutes minutes');
     } catch (e) {
       print('CalendarService: Error snoozing meeting: $e');
@@ -120,9 +114,7 @@ class CalendarService {
   }
 
   /// Initialize and listen to calendar events
-  void initialize({
-    Function(CalendarMeetingEvent)? onMeetingEvent,
-  }) {
+  void initialize({Function(CalendarMeetingEvent)? onMeetingEvent}) {
     _streamSubscription = meetingStream.listen(
       (event) {
         print('CalendarService: Received event: ${event.type} - ${event.title}');
@@ -162,10 +154,7 @@ class CalendarParticipant {
   CalendarParticipant({this.name, this.email});
 
   factory CalendarParticipant.fromMap(Map<dynamic, dynamic> map) {
-    return CalendarParticipant(
-      name: map['name'] as String?,
-      email: map['email'] as String?,
-    );
+    return CalendarParticipant(name: map['name'] as String?, email: map['email'] as String?);
   }
 
   String get displayName {
@@ -202,7 +191,8 @@ class CalendarMeeting {
   });
 
   factory CalendarMeeting.fromMap(Map<dynamic, dynamic> map) {
-    final participantsList = (map['participants'] as List<dynamic>?)
+    final participantsList =
+        (map['participants'] as List<dynamic>?)
             ?.map((p) => CalendarParticipant.fromMap(p as Map<dynamic, dynamic>))
             .toList() ??
         [];
@@ -230,10 +220,7 @@ class CalendarMeeting {
       'meetingUrl': meetingUrl,
       'attendeeCount': attendeeCount,
       'participants': participants
-          .map((p) => {
-                if (p.name != null) 'name': p.name,
-                if (p.email != null) 'email': p.email,
-              })
+          .map((p) => {if (p.name != null) 'name': p.name, if (p.email != null) 'email': p.email})
           .toList(),
       if (notes != null) 'notes': notes,
       if (meetingId != null) 'meetingId': meetingId,
@@ -345,23 +332,12 @@ class SystemCalendar {
   final bool isSubscribed;
   final Color? color;
 
-  SystemCalendar({
-    required this.id,
-    required this.title,
-    required this.type,
-    required this.isSubscribed,
-    this.color,
-  });
+  SystemCalendar({required this.id, required this.title, required this.type, required this.isSubscribed, this.color});
 
   factory SystemCalendar.fromMap(Map<dynamic, dynamic> map) {
     Color? calendarColor;
     if (map['colorRed'] != null && map['colorGreen'] != null && map['colorBlue'] != null) {
-      calendarColor = Color.fromRGBO(
-        map['colorRed'] as int,
-        map['colorGreen'] as int,
-        map['colorBlue'] as int,
-        1.0,
-      );
+      calendarColor = Color.fromRGBO(map['colorRed'] as int, map['colorGreen'] as int, map['colorBlue'] as int, 1.0);
     }
 
     return SystemCalendar(

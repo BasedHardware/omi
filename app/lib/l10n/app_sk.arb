@@ -2754,5 +2754,48 @@
     "notYetSynced": "Zatiaľ nesynchronizované s vaším telefónom",
     "clearAll": "Vymazať všetko",
     "phoneKeypad": "Klávesnica",
-    "phoneHideKeypad": "Skryť klávesnicu"
+    "phoneHideKeypad": "Skryť klávesnicu",
+    "fairUsePolicy": "Spravodlivé používanie",
+    "fairUseLoadError": "Nepodarilo sa načítať stav spravodlivého používania. Skúste to znova.",
+    "fairUseStatusNormal": "Vaše používanie je v normálnych medziach.",
+    "fairUseStageNormal": "Normálne",
+    "fairUseStageWarning": "Upozornenie",
+    "fairUseStageThrottle": "Obmedzené",
+    "fairUseStageRestrict": "Zablokované",
+    "fairUseSpeechUsage": "Používanie reči",
+    "fairUseToday": "Dnes",
+    "fairUse3Day": "3-dňové obdobie",
+    "fairUseWeekly": "Týždenné obdobie",
+    "fairUseAboutTitle": "O spravodlivom používaní",
+    "fairUseAboutBody": "Omi je navrhnutý pre osobné konverzácie, stretnutia a živé interakcie. Používanie sa meria skutočným detegovaným časom reči, nie časom pripojenia. Ak používanie výrazne prekročí bežné vzory pre neosobný obsah, môžu sa uplatniť úpravy.",
+    "fairUseCaseRefCopied": "{caseRef} skopírované",
+    "@fairUseCaseRefCopied": {
+        "description": "Snackbar message when case reference is copied",
+        "placeholders": {
+            "caseRef": {
+                "type": "String"
+            }
+        }
+    },
+    "fairUseDailyTranscription": "Daily Transcription",
+    "fairUseBudgetExhausted": "Daily transcription limit reached",
+    "fairUseBudgetResetsAt": "Resets {time}",
+    "fairUseBudgetUsed": "{used}m / {limit}m",
+    "@fairUseBudgetUsed": {
+        "placeholders": {
+            "used": {
+                "type": "String"
+            },
+            "limit": {
+                "type": "String"
+            }
+        }
+    },
+    "@fairUseBudgetResetsAt": {
+        "placeholders": {
+            "time": {
+                "type": "String"
+            }
+        }
+    }
 }

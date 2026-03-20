@@ -2749,5 +2749,48 @@
     "notYetSynced": "Nog niet gesynchroniseerd met uw telefoon",
     "clearAll": "Alles wissen",
     "phoneKeypad": "Toetsenbord",
-    "phoneHideKeypad": "Toetsenbord verbergen"
+    "phoneHideKeypad": "Toetsenbord verbergen",
+    "fairUsePolicy": "Redelijk gebruik",
+    "fairUseLoadError": "Kan de status van redelijk gebruik niet laden. Probeer het opnieuw.",
+    "fairUseStatusNormal": "Uw gebruik is binnen de normale grenzen.",
+    "fairUseStageNormal": "Normaal",
+    "fairUseStageWarning": "Waarschuwing",
+    "fairUseStageThrottle": "Beperkt",
+    "fairUseStageRestrict": "Geblokkeerd",
+    "fairUseSpeechUsage": "Spraakgebruik",
+    "fairUseToday": "Vandaag",
+    "fairUse3Day": "3-daags voortschrijdend",
+    "fairUseWeekly": "Wekelijks voortschrijdend",
+    "fairUseAboutTitle": "Over redelijk gebruik",
+    "fairUseAboutBody": "Omi is ontworpen voor persoonlijke gesprekken, vergaderingen en live interacties. Het gebruik wordt gemeten aan de hand van de werkelijke gedetecteerde spreektijd, niet de verbindingstijd. Als het gebruik de normale patronen voor niet-persoonlijke inhoud aanzienlijk overschrijdt, kunnen aanpassingen worden toegepast.",
+    "fairUseCaseRefCopied": "{caseRef} gekopieerd",
+    "@fairUseCaseRefCopied": {
+        "description": "Snackbar message when case reference is copied",
+        "placeholders": {
+            "caseRef": {
+                "type": "String"
+            }
+        }
+    },
+    "fairUseDailyTranscription": "Daily Transcription",
+    "fairUseBudgetExhausted": "Daily transcription limit reached",
+    "fairUseBudgetResetsAt": "Resets {time}",
+    "fairUseBudgetUsed": "{used}m / {limit}m",
+    "@fairUseBudgetUsed": {
+        "placeholders": {
+            "used": {
+                "type": "String"
+            },
+            "limit": {
+                "type": "String"
+            }
+        }
+    },
+    "@fairUseBudgetResetsAt": {
+        "placeholders": {
+            "time": {
+                "type": "String"
+            }
+        }
+    }
 }

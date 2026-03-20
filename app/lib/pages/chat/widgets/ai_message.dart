@@ -59,7 +59,8 @@ Widget _buildAppIcon(BuildContext context, String appId, {double size = 15, doub
   final appProvider = Provider.of<AppProvider>(context, listen: false);
   final messageProvider = Provider.of<MessageProvider>(context, listen: false);
   // Check both public apps and user's installed chat apps (includes private MCP apps)
-  final app = appProvider.apps.firstWhereOrNull((a) => a.id == appId) ??
+  final app =
+      appProvider.apps.firstWhereOrNull((a) => a.id == appId) ??
       messageProvider.chatApps.firstWhereOrNull((a) => a.id == appId);
 
   if (app != null) {
@@ -78,26 +79,16 @@ Widget _buildAppIcon(BuildContext context, String appId, {double size = 15, doub
             height: size,
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(3),
-              image: DecorationImage(
-                image: imageProvider,
-                fit: BoxFit.cover,
-              ),
+              image: DecorationImage(image: imageProvider, fit: BoxFit.cover),
             ),
           ),
           placeholder: (context, url) => SizedBox(
             width: size,
             height: size,
-            child: Icon(
-              Icons.apps,
-              size: size * 0.7,
-              color: Colors.white.withOpacity(opacity),
-            ),
+            child: Icon(Icons.apps, size: size * 0.7, color: Colors.white.withOpacity(opacity)),
           ),
-          errorWidget: (context, url, error) => Icon(
-            Icons.apps,
-            size: size * 0.7,
-            color: Colors.white.withOpacity(opacity),
-          ),
+          errorWidget: (context, url, error) =>
+              Icon(Icons.apps, size: size * 0.7, color: Colors.white.withOpacity(opacity)),
         ),
       ),
     );
@@ -106,11 +97,7 @@ Widget _buildAppIcon(BuildContext context, String appId, {double size = 15, doub
   // Fallback to generic icon if app not found
   return Opacity(
     opacity: opacity,
-    child: Icon(
-      Icons.apps,
-      size: size,
-      color: Colors.white.withOpacity(opacity),
-    ),
+    child: Icon(Icons.apps, size: size, color: Colors.white.withOpacity(opacity)),
   );
 }
 
@@ -165,19 +152,11 @@ Widget _buildThinkingIconWidget(String thinkingText, {double size = 15, Color co
         width: size,
         height: size,
         fit: BoxFit.cover,
-        errorBuilder: (context, error, stackTrace) => FaIcon(
-          _getThinkingIcon(thinkingText),
-          size: size,
-          color: color,
-        ),
+        errorBuilder: (context, error, stackTrace) => FaIcon(_getThinkingIcon(thinkingText), size: size, color: color),
       ),
     );
   }
-  return FaIcon(
-    _getThinkingIcon(thinkingText),
-    size: size,
-    color: color,
-  );
+  return FaIcon(_getThinkingIcon(thinkingText), size: size, color: color);
 }
 
 class AIMessage extends StatefulWidget {
@@ -256,17 +235,21 @@ Widget buildMessageWidget(
 }) {
   if (message.memories.isNotEmpty) {
     return MemoriesMessageWidget(
-        showTypingIndicator: showTypingIndicator,
-        messageMemories: message.memories.length > 3 ? message.memories.sublist(0, 3) : message.memories,
-        messageText: message.isEmpty ? '...' : message.text.decodeString,
-        updateConversation: updateConversation,
-        message: message,
-        setMessageNps: sendMessageNps,
-        date: message.createdAt,
-        onAskOmi: onAskOmi);
+      showTypingIndicator: showTypingIndicator,
+      messageMemories: message.memories.length > 3 ? message.memories.sublist(0, 3) : message.memories,
+      messageText: message.isEmpty ? '...' : message.text.decodeString,
+      updateConversation: updateConversation,
+      message: message,
+      setMessageNps: sendMessageNps,
+      date: message.createdAt,
+      onAskOmi: onAskOmi,
+    );
   } else if (message.type == MessageType.daySummary) {
     return DaySummaryWidget(
-        showTypingIndicator: showTypingIndicator, messageText: message.text.decodeString, date: message.createdAt);
+      showTypingIndicator: showTypingIndicator,
+      messageText: message.text.decodeString,
+      date: message.createdAt,
+    );
   } else if (displayOptions) {
     return InitialMessageWidget(
       showTypingIndicator: showTypingIndicator,
@@ -294,12 +277,13 @@ class InitialMessageWidget extends StatelessWidget {
   final Function(String) sendMessage;
   final Function(String)? onAskOmi;
 
-  const InitialMessageWidget(
-      {super.key,
-      required this.showTypingIndicator,
-      required this.messageText,
-      required this.sendMessage,
-      this.onAskOmi});
+  const InitialMessageWidget({
+    super.key,
+    required this.showTypingIndicator,
+    required this.messageText,
+    required this.sendMessage,
+    this.onAskOmi,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -310,11 +294,7 @@ class InitialMessageWidget extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisAlignment: MainAxisAlignment.start,
-                children: [
-                  SizedBox(width: 4),
-                  TypingIndicator(),
-                  Spacer(),
-                ],
+                children: [SizedBox(width: 4), TypingIndicator(), Spacer()],
               )
             : getMarkdownWidget(context, messageText, onAskOmi: onAskOmi),
         const SizedBox(height: 8),
@@ -357,11 +337,7 @@ class DaySummaryWidget extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisAlignment: MainAxisAlignment.start,
-                children: [
-                  SizedBox(width: 4),
-                  TypingIndicator(),
-                  Spacer(),
-                ],
+                children: [SizedBox(width: 4), TypingIndicator(), Spacer()],
               )
             : daySummaryMessagesList(messageText),
         if (messageText.isNotEmpty && !showTypingIndicator) MessageActionBar(messageText: messageText),
@@ -402,20 +378,11 @@ class DaySummaryWidget extends StatelessWidget {
           minLeadingWidth: 0,
           leading: Text(
             '${index + 1}.',
-            style: TextStyle(
-              fontSize: 15,
-              fontWeight: FontWeight.bold,
-              color: Colors.grey.shade500,
-            ),
+            style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.grey.shade500),
           ),
           title: AutoSizeText(
             sentences[index],
-            style: const TextStyle(
-              fontSize: 16.0,
-              fontWeight: FontWeight.w500,
-              height: 1.35,
-              color: Colors.white,
-            ),
+            style: const TextStyle(fontSize: 16.0, fontWeight: FontWeight.w500, height: 1.35, color: Colors.white),
             softWrap: true,
             maxLines: 3,
             overflow: TextOverflow.ellipsis,
@@ -552,13 +519,14 @@ class _NormalMessageWidgetState extends State<NormalMessageWidget> {
                                       ),
                                     ),
                                   ],
-                                )
+                                ),
                               ],
                             ),
                           )
                         : const TypingIndicator(),
                   ],
-                ))
+                ),
+              )
             : const SizedBox.shrink(),
         // !(showTypingIndicator && messageText.isEmpty)
         //     ? Container(
@@ -584,14 +552,9 @@ class _NormalMessageWidgetState extends State<NormalMessageWidget> {
                         selectedText = selectedContent?.plainText;
                       },
                       contextMenuBuilder: (context, selectableRegionState) {
-                        return omiSelectionMenuBuilder(
-                          context,
-                          selectableRegionState,
-                          (text) {
-                            widget.onAskOmi?.call(text);
-                          },
-                          selectedText: selectedText,
-                        );
+                        return omiSelectionMenuBuilder(context, selectableRegionState, (text) {
+                          widget.onAskOmi?.call(text);
+                        }, selectedText: selectedText);
                       },
                       child: getMarkdownWidget(context, widget.messageText, onAskOmi: widget.onAskOmi),
                     );
@@ -780,45 +743,37 @@ class _MemoriesMessageWidgetState extends State<MemoriesMessageWidget> {
                                       ),
                                     ),
                                   ],
-                                )
+                                ),
                               ],
                             ),
                           )
                         : const TypingIndicator(),
                   ],
-                ))
+                ),
+              )
             : widget.showTypingIndicator
-                ? const Row(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisAlignment: MainAxisAlignment.start,
-                    children: [
-                      SizedBox(width: 4),
-                      TypingIndicator(),
-                      Spacer(),
-                    ],
-                  )
-                : Builder(
-                    builder: (context) {
-                      String? selectedText;
-                      return SelectionArea(
-                        onSelectionChanged: (SelectedContent? selectedContent) {
-                          selectedText = selectedContent?.plainText;
-                        },
-                        contextMenuBuilder: (context, selectableRegionState) {
-                          return omiSelectionMenuBuilder(
-                            context,
-                            selectableRegionState,
-                            (text) {
-                              widget.onAskOmi?.call(text);
-                            },
-                            selectedText: selectedText,
-                          );
-                        },
-                        child: getMarkdownWidget(context, widget.messageText, onAskOmi: widget.onAskOmi),
-                      );
+            ? const Row(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.start,
+                children: [SizedBox(width: 4), TypingIndicator(), Spacer()],
+              )
+            : Builder(
+                builder: (context) {
+                  String? selectedText;
+                  return SelectionArea(
+                    onSelectionChanged: (SelectedContent? selectedContent) {
+                      selectedText = selectedContent?.plainText;
                     },
-                  ),
+                    contextMenuBuilder: (context, selectableRegionState) {
+                      return omiSelectionMenuBuilder(context, selectableRegionState, (text) {
+                        widget.onAskOmi?.call(text);
+                      }, selectedText: selectedText);
+                    },
+                    child: getMarkdownWidget(context, widget.messageText, onAskOmi: widget.onAskOmi),
+                  );
+                },
+              ),
         if (widget.messageText.isNotEmpty && widget.messageText != '...' && !widget.showTypingIndicator)
           MessageActionBar(
             messageText: widget.messageText,
@@ -849,13 +804,9 @@ class _MemoriesMessageWidgetState extends State<MemoriesMessageWidget> {
                     context.read<ConversationDetailProvider>().updateConversation(data.$2.id, date);
                     var m = memProvider.groupedConversations[date]![idx];
                     MixpanelManager().chatMessageConversationClicked(m);
-                    await Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (c) => ConversationDetailPage(
-                          conversation: m,
-                        ),
-                      ),
-                    );
+                    await Navigator.of(
+                      context,
+                    ).push(MaterialPageRoute(builder: (c) => ConversationDetailPage(conversation: m)));
                   } else {
                     if (conversationDetailLoading[data.$1]) return;
                     setState(() => conversationDetailLoading[data.$1] = true);
@@ -865,24 +816,21 @@ class _MemoriesMessageWidgetState extends State<MemoriesMessageWidget> {
                     MixpanelManager().chatMessageConversationClicked(m);
                     setState(() => conversationDetailLoading[data.$1] = false);
                     context.read<ConversationDetailProvider>().updateConversation(m.id, date);
-                    await Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (c) => ConversationDetailPage(
-                          conversation: m,
-                        ),
-                      ),
-                    );
+                    await Navigator.of(
+                      context,
+                    ).push(MaterialPageRoute(builder: (c) => ConversationDetailPage(conversation: m)));
                     if (SharedPreferencesUtil().modifiedConversationDetails?.id == m.id) {
                       ServerConversation modifiedDetails = SharedPreferencesUtil().modifiedConversationDetails!;
                       widget.updateConversation(SharedPreferencesUtil().modifiedConversationDetails!);
                       var copy = List<MessageConversation>.from(widget.messageMemories);
                       copy[data.$1] = MessageConversation(
-                          modifiedDetails.id,
-                          modifiedDetails.createdAt,
-                          MessageConversationStructured(
-                            modifiedDetails.structured.title,
-                            modifiedDetails.structured.emoji,
-                          ));
+                        modifiedDetails.id,
+                        modifiedDetails.createdAt,
+                        MessageConversationStructured(
+                          modifiedDetails.structured.title,
+                          modifiedDetails.structured.emoji,
+                        ),
+                      );
                       widget.messageMemories.clear();
                       widget.messageMemories.addAll(copy);
                       SharedPreferencesUtil().modifiedConversationDetails = null;
@@ -901,10 +849,7 @@ class _MemoriesMessageWidgetState extends State<MemoriesMessageWidget> {
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12),
                 width: double.maxFinite,
-                decoration: BoxDecoration(
-                  color: const Color(0xFF1F1F25),
-                  borderRadius: BorderRadius.circular(16.0),
-                ),
+                decoration: BoxDecoration(color: const Color(0xFF1F1F25), borderRadius: BorderRadius.circular(16.0)),
                 child: Row(
                   children: [
                     Expanded(
@@ -923,8 +868,9 @@ class _MemoriesMessageWidgetState extends State<MemoriesMessageWidget> {
                             child: CircularProgressIndicator(
                               valueColor: AlwaysStoppedAnimation<Color>(Colors.white54),
                               strokeWidth: 2,
-                            ))
-                        : const FaIcon(FontAwesomeIcons.chevronRight, size: 16, color: Colors.white54)
+                            ),
+                          )
+                        : const FaIcon(FontAwesomeIcons.chevronRight, size: 16, color: Colors.white54),
                   ],
                 ),
               ),
@@ -962,10 +908,7 @@ enum FeedbackReason {
 class FeedbackBottomSheet extends StatefulWidget {
   final Function(String reason, String? comment) onSubmit;
 
-  const FeedbackBottomSheet({
-    super.key,
-    required this.onSubmit,
-  });
+  const FeedbackBottomSheet({super.key, required this.onSubmit});
 
   @override
   State<FeedbackBottomSheet> createState() => _FeedbackBottomSheetState();
@@ -1004,9 +947,7 @@ class _FeedbackBottomSheetState extends State<FeedbackBottomSheet> {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: EdgeInsets.only(
-        bottom: MediaQuery.of(context).viewInsets.bottom,
-      ),
+      padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
       child: Container(
         decoration: const BoxDecoration(
           color: Color(0xFF1C1C1E),
@@ -1023,10 +964,7 @@ class _FeedbackBottomSheetState extends State<FeedbackBottomSheet> {
                 width: 36,
                 height: 4,
                 margin: const EdgeInsets.only(bottom: 16),
-                decoration: BoxDecoration(
-                  color: Colors.grey.shade600,
-                  borderRadius: BorderRadius.circular(2),
-                ),
+                decoration: BoxDecoration(color: Colors.grey.shade600, borderRadius: BorderRadius.circular(2)),
               ),
             ),
 
@@ -1036,11 +974,7 @@ class _FeedbackBottomSheetState extends State<FeedbackBottomSheet> {
               children: [
                 const Text(
                   'What went wrong?',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.white,
-                  ),
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: Colors.white),
                 ),
                 TextButton(
                   onPressed: _selectedReason != null ? _handleSubmit : null,
@@ -1060,11 +994,7 @@ class _FeedbackBottomSheetState extends State<FeedbackBottomSheet> {
             // Reason options
             const Text(
               'Select a reason',
-              style: TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w500,
-                color: Colors.grey,
-              ),
+              style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: Colors.grey),
             ),
             const SizedBox(height: 10),
 
@@ -1105,35 +1035,21 @@ class _FeedbackBottomSheetState extends State<FeedbackBottomSheet> {
             // Comment input
             const Text(
               'Additional feedback (optional)',
-              style: TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w500,
-                color: Colors.grey,
-              ),
+              style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: Colors.grey),
             ),
             const SizedBox(height: 10),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
-              decoration: BoxDecoration(
-                color: const Color(0xFF2C2C2E),
-                borderRadius: BorderRadius.circular(12),
-              ),
+              decoration: BoxDecoration(color: const Color(0xFF2C2C2E), borderRadius: BorderRadius.circular(12)),
               child: TextField(
                 controller: _commentController,
                 focusNode: _commentFocusNode,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 15,
-                  height: 1.4,
-                ),
+                style: const TextStyle(color: Colors.white, fontSize: 15, height: 1.4),
                 decoration: InputDecoration(
                   border: InputBorder.none,
                   contentPadding: const EdgeInsets.symmetric(vertical: 10),
                   hintText: context.l10n.tellUsMoreWhatWentWrong,
-                  hintStyle: const TextStyle(
-                    color: Colors.grey,
-                    fontSize: 15,
-                  ),
+                  hintStyle: const TextStyle(color: Colors.grey, fontSize: 15),
                 ),
                 maxLines: 3,
                 minLines: 2,
@@ -1168,12 +1084,7 @@ class MessageActionBar extends StatefulWidget {
   final Function(int, {String? reason})? setMessageNps;
   final int? currentNps;
 
-  const MessageActionBar({
-    super.key,
-    required this.messageText,
-    this.setMessageNps,
-    this.currentNps,
-  });
+  const MessageActionBar({super.key, required this.messageText, this.setMessageNps, this.currentNps});
 
   @override
   State<MessageActionBar> createState() => _MessageActionBarState();
@@ -1218,10 +1129,7 @@ class _MessageActionBarState extends State<MessageActionBar> {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text(
-                'Thanks for your feedback!',
-                style: TextStyle(color: Colors.white),
-              ),
+              content: Text('Thanks for your feedback!', style: TextStyle(color: Colors.white)),
               duration: Duration(seconds: 2),
             ),
           );
@@ -1315,22 +1223,14 @@ class _MessageActionBarState extends State<MessageActionBar> {
     );
   }
 
-  Widget _buildActionButton({
-    required IconData icon,
-    required VoidCallback onTap,
-    bool isSelected = false,
-  }) {
+  Widget _buildActionButton({required IconData icon, required VoidCallback onTap, bool isSelected = false}) {
     return InkWell(
       splashColor: Colors.transparent,
       focusColor: Colors.transparent,
       hoverColor: Colors.transparent,
       highlightColor: Colors.transparent,
       onTap: onTap,
-      child: FaIcon(
-        icon,
-        color: isSelected ? Colors.white : Colors.grey.shade600,
-        size: 14,
-      ),
+      child: FaIcon(icon, color: isSelected ? Colors.white : Colors.grey.shade600, size: 14),
     );
   }
 }
@@ -1339,11 +1239,7 @@ class CopyButton extends StatelessWidget {
   final String messageText;
   final bool isUserMessage;
 
-  const CopyButton({
-    super.key,
-    required this.messageText,
-    this.isUserMessage = false,
-  });
+  const CopyButton({super.key, required this.messageText, this.isUserMessage = false});
 
   @override
   Widget build(BuildContext context) {
@@ -1360,10 +1256,7 @@ class CopyButton extends StatelessWidget {
             const SnackBar(
               content: Text(
                 'Message copied to clipboard.',
-                style: TextStyle(
-                  color: Color.fromARGB(255, 255, 255, 255),
-                  fontSize: 12.0,
-                ),
+                style: TextStyle(color: Color.fromARGB(255, 255, 255, 255), fontSize: 12.0),
               ),
               duration: Duration(milliseconds: 2000),
             ),
@@ -1375,19 +1268,10 @@ class CopyButton extends StatelessWidget {
           children: [
             Padding(
               padding: const EdgeInsetsDirectional.fromSTEB(0.0, 0.0, 4.0, 0.0),
-              child: Icon(
-                Icons.content_copy,
-                color: Theme.of(context).textTheme.bodySmall!.color,
-                size: 10.0,
-              ),
+              child: Icon(Icons.content_copy, color: Theme.of(context).textTheme.bodySmall!.color, size: 10.0),
             ),
-            Text(
-              'Copy message',
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
-            const SizedBox(
-              width: 8,
-            ),
+            Text('Copy message', style: Theme.of(context).textTheme.bodySmall),
+            const SizedBox(width: 8),
           ],
         ),
       ),
@@ -1407,10 +1291,7 @@ class InitialOptionWidget extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 10),
         width: double.maxFinite,
-        decoration: BoxDecoration(
-          color: const Color(0xFF1F1F25),
-          borderRadius: BorderRadius.circular(12.0),
-        ),
+        decoration: BoxDecoration(color: const Color(0xFF1F1F25), borderRadius: BorderRadius.circular(12.0)),
         child: Text(optionText, style: Theme.of(context).textTheme.bodyMedium),
       ),
       onTap: () {

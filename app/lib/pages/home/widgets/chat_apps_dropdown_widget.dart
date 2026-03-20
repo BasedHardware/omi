@@ -29,97 +29,96 @@ class ChatAppsDropdownWidget extends StatelessWidget {
       selector: (context, state) => state.selectedIndex == 1,
       builder: (context, isChatPage, child) {
         if (mode == ChatMode.chat && !isChatPage) {
-          return const SizedBox(
-            width: 16,
-          );
+          return const SizedBox(width: 16);
         }
         return child!;
       },
-      child: Consumer2<AppProvider, MessageProvider>(builder: (context, appProvider, messageProvider, child) {
-        var selectedApp = messageProvider.chatApps.firstWhereOrNull((app) => app.id == appProvider.selectedChatAppId);
-        return Padding(
-          padding: const EdgeInsets.only(left: 0),
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: PopupMenuButton<String>(
-              iconSize: 164,
-              icon: Row(
-                crossAxisAlignment: CrossAxisAlignment.center,
-                mainAxisAlignment: MainAxisAlignment.center,
-                mainAxisSize: MainAxisSize.max,
-                children: [
-                  selectedApp != null ? _getAppAvatar(selectedApp) : _getOmiAvatar(),
-                  const SizedBox(width: 8),
-                  Container(
-                    constraints: const BoxConstraints(
-                      maxWidth: 100,
+      child: Consumer2<AppProvider, MessageProvider>(
+        builder: (context, appProvider, messageProvider, child) {
+          var selectedApp = messageProvider.chatApps.firstWhereOrNull((app) => app.id == appProvider.selectedChatAppId);
+          return Padding(
+            padding: const EdgeInsets.only(left: 0),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: PopupMenuButton<String>(
+                iconSize: 164,
+                icon: Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  mainAxisSize: MainAxisSize.max,
+                  children: [
+                    selectedApp != null ? _getAppAvatar(selectedApp) : _getOmiAvatar(),
+                    const SizedBox(width: 8),
+                    Container(
+                      constraints: const BoxConstraints(maxWidth: 100),
+                      child: Text(
+                        selectedApp != null ? selectedApp.getName() : context.l10n.omiAppName,
+                        style: const TextStyle(color: Colors.white, fontSize: 16),
+                        overflow: TextOverflow.fade,
+                      ),
                     ),
-                    child: Text(
-                      selectedApp != null ? selectedApp.getName() : context.l10n.omiAppName,
-                      style: const TextStyle(color: Colors.white, fontSize: 16),
-                      overflow: TextOverflow.fade,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  const SizedBox(
-                    width: 24,
-                    child: Icon(Icons.keyboard_arrow_down, color: Colors.white60, size: 16),
-                  ),
-                ],
+                    const SizedBox(width: 8),
+                    const SizedBox(width: 24, child: Icon(Icons.keyboard_arrow_down, color: Colors.white60, size: 16)),
+                  ],
+                ),
+                constraints: const BoxConstraints(minWidth: 250.0, maxWidth: 250.0, maxHeight: 350.0),
+                offset: Offset(
+                  (MediaQuery.sizeOf(context).width - 250) / 2 / MediaQuery.devicePixelRatioOf(context),
+                  114,
+                ),
+                shape: const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(16))),
+                onSelected: (String? val) async {
+                  if (val == null || val == appProvider.selectedChatAppId) {
+                    return;
+                  }
+
+                  // clear chat
+                  if (val == 'clear_chat') {
+                    showDialog(
+                      context: context,
+                      builder: (ctx) {
+                        return getDialog(
+                          context,
+                          () {
+                            Navigator.of(context).pop();
+                          },
+                          () {
+                            context.read<MessageProvider>().clearChat();
+                            Navigator.of(context).pop();
+                          },
+                          context.l10n.clearChatTitle,
+                          context.l10n.confirmClearChat,
+                        );
+                      },
+                    );
+                    return;
+                  }
+
+                  // enable apps
+                  if (val == 'enable') {
+                    MixpanelManager().pageOpened('Chat Apps');
+                    context.read<HomeProvider>().setIndex(4);
+                    controller?.animateToPage(4, duration: const Duration(milliseconds: 200), curve: Curves.easeInOut);
+                    return;
+                  }
+
+                  // select app by id
+                  appProvider.setSelectedChatAppId(val);
+                  await context.read<MessageProvider>().refreshMessages(dropdownSelected: true);
+                  var app = messageProvider.chatApps.firstWhereOrNull((a) => a.id == val);
+                  if (context.read<MessageProvider>().messages.isEmpty) {
+                    context.read<MessageProvider>().sendInitialAppMessage(app);
+                  }
+                },
+                itemBuilder: (BuildContext context) {
+                  return _getAppsDropdownItems(context, messageProvider, appProvider);
+                },
+                color: const Color(0xFF1F1F25),
               ),
-              constraints: const BoxConstraints(
-                minWidth: 250.0,
-                maxWidth: 250.0,
-                maxHeight: 350.0,
-              ),
-              offset:
-                  Offset((MediaQuery.sizeOf(context).width - 250) / 2 / MediaQuery.devicePixelRatioOf(context), 114),
-              shape: const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(16))),
-              onSelected: (String? val) async {
-                if (val == null || val == appProvider.selectedChatAppId) {
-                  return;
-                }
-
-                // clear chat
-                if (val == 'clear_chat') {
-                  showDialog(
-                    context: context,
-                    builder: (ctx) {
-                      return getDialog(context, () {
-                        Navigator.of(context).pop();
-                      }, () {
-                        context.read<MessageProvider>().clearChat();
-                        Navigator.of(context).pop();
-                      }, context.l10n.clearChatTitle, context.l10n.confirmClearChat);
-                    },
-                  );
-                  return;
-                }
-
-                // enable apps
-                if (val == 'enable') {
-                  MixpanelManager().pageOpened('Chat Apps');
-                  context.read<HomeProvider>().setIndex(4);
-                  controller?.animateToPage(4, duration: const Duration(milliseconds: 200), curve: Curves.easeInOut);
-                  return;
-                }
-
-                // select app by id
-                appProvider.setSelectedChatAppId(val);
-                await context.read<MessageProvider>().refreshMessages(dropdownSelected: true);
-                var app = messageProvider.chatApps.firstWhereOrNull((a) => a.id == val);
-                if (context.read<MessageProvider>().messages.isEmpty) {
-                  context.read<MessageProvider>().sendInitialAppMessage(app);
-                }
-              },
-              itemBuilder: (BuildContext context) {
-                return _getAppsDropdownItems(context, messageProvider, appProvider);
-              },
-              color: const Color(0xFF1F1F25),
             ),
-          ),
-        );
-      }),
+          );
+        },
+      ),
     );
   }
 
@@ -127,18 +126,10 @@ class ChatAppsDropdownWidget extends StatelessWidget {
     return CachedNetworkImage(
       imageUrl: app.getImageUrl(),
       imageBuilder: (context, imageProvider) {
-        return CircleAvatar(
-          backgroundColor: Colors.white,
-          radius: 12,
-          backgroundImage: imageProvider,
-        );
+        return CircleAvatar(backgroundColor: Colors.white, radius: 12, backgroundImage: imageProvider);
       },
       errorWidget: (context, url, error) {
-        return const CircleAvatar(
-          backgroundColor: Colors.white,
-          radius: 12,
-          child: Icon(Icons.error_outline_rounded),
-        );
+        return const CircleAvatar(backgroundColor: Colors.white, radius: 12, child: Icon(Icons.error_outline_rounded));
       },
       progressIndicatorBuilder: (context, url, progress) => CircleAvatar(
         backgroundColor: Colors.white,
@@ -154,36 +145,33 @@ class ChatAppsDropdownWidget extends StatelessWidget {
   _getOmiAvatar() {
     return Container(
       decoration: BoxDecoration(
-        image: DecorationImage(
-          image: AssetImage(Assets.images.background.path),
-          fit: BoxFit.cover,
-        ),
+        image: DecorationImage(image: AssetImage(Assets.images.background.path), fit: BoxFit.cover),
         borderRadius: const BorderRadius.all(Radius.circular(16.0)),
       ),
       height: 24,
       width: 24,
       child: Stack(
         alignment: Alignment.center,
-        children: [
-          Image.asset(
-            Assets.images.herologo.path,
-            height: 16,
-            width: 16,
-          ),
-        ],
+        children: [Image.asset(Assets.images.herologo.path, height: 16, width: 16)],
       ),
     );
   }
 
   List<PopupMenuItem<String>> _getAppsDropdownItems(
-      BuildContext context, MessageProvider messageProvider, AppProvider appProvider) {
+    BuildContext context,
+    MessageProvider messageProvider,
+    AppProvider appProvider,
+  ) {
     return mode == ChatMode.chat_clone
         ? _getCloneChatDropdownItems(context, messageProvider, appProvider)
         : _getChatDropdownItems(context, messageProvider, appProvider);
   }
 
   List<PopupMenuItem<String>> _getCloneChatDropdownItems(
-      BuildContext context, MessageProvider messageProvider, AppProvider appProvider) {
+    BuildContext context,
+    MessageProvider messageProvider,
+    AppProvider appProvider,
+  ) {
     var selectedApp = messageProvider.chatApps.firstWhereOrNull((app) => app.id == appProvider.selectedChatAppId);
     return [
       PopupMenuItem<String>(
@@ -196,18 +184,12 @@ class ChatAppsDropdownWidget extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(context.l10n.clearChatAction, style: const TextStyle(color: Colors.redAccent, fontSize: 16)),
-              const SizedBox(
-                width: 24,
-                child: Icon(Icons.delete, color: Colors.redAccent, size: 16),
-              ),
+              const SizedBox(width: 24, child: Icon(Icons.delete, color: Colors.redAccent, size: 16)),
             ],
           ),
         ),
       ),
-      const PopupMenuItem<String>(
-        height: 1,
-        child: Divider(height: 1),
-      ),
+      const PopupMenuItem<String>(height: 1, child: Divider(height: 1)),
       // Add Omi option to the dropdown
       PopupMenuItem<String>(
         height: 40,
@@ -227,10 +209,7 @@ class ChatAppsDropdownWidget extends StatelessWidget {
                       style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w500, fontSize: 16),
                     ),
                     selectedApp == null
-                        ? const SizedBox(
-                            width: 24,
-                            child: Icon(Icons.check, color: Colors.white60, size: 16),
-                          )
+                        ? const SizedBox(width: 24, child: Icon(Icons.check, color: Colors.white60, size: 16))
                         : const SizedBox.shrink(),
                   ],
                 ),
@@ -261,10 +240,7 @@ class ChatAppsDropdownWidget extends StatelessWidget {
                       ),
                     ),
                     selectedApp?.id == app.id
-                        ? const SizedBox(
-                            width: 24,
-                            child: Icon(Icons.check, color: Colors.white60, size: 16),
-                          )
+                        ? const SizedBox(width: 24, child: Icon(Icons.check, color: Colors.white60, size: 16))
                         : const SizedBox.shrink(),
                   ],
                 ),
@@ -277,7 +253,10 @@ class ChatAppsDropdownWidget extends StatelessWidget {
   }
 
   List<PopupMenuItem<String>> _getChatDropdownItems(
-      BuildContext context, MessageProvider messageProvider, AppProvider appProvider) {
+    BuildContext context,
+    MessageProvider messageProvider,
+    AppProvider appProvider,
+  ) {
     var selectedApp = messageProvider.chatApps.firstWhereOrNull((app) => app.id == appProvider.selectedChatAppId);
     return [
       PopupMenuItem<String>(
@@ -290,18 +269,12 @@ class ChatAppsDropdownWidget extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(context.l10n.clearChatAction, style: const TextStyle(color: Colors.redAccent, fontSize: 16)),
-              const SizedBox(
-                width: 24,
-                child: Icon(Icons.delete, color: Colors.redAccent, size: 16),
-              ),
+              const SizedBox(width: 24, child: Icon(Icons.delete, color: Colors.redAccent, size: 16)),
             ],
           ),
         ),
       ),
-      const PopupMenuItem<String>(
-        height: 1,
-        child: Divider(height: 1),
-      ),
+      const PopupMenuItem<String>(height: 1, child: Divider(height: 1)),
       PopupMenuItem<String>(
         value: 'enable',
         height: 40,
@@ -310,10 +283,7 @@ class ChatAppsDropdownWidget extends StatelessWidget {
           mainAxisAlignment: MainAxisAlignment.start,
           mainAxisSize: MainAxisSize.max,
           children: [
-            const SizedBox(
-              width: 24,
-              child: Icon(Icons.arrow_forward_ios, color: Colors.white, size: 16),
-            ),
+            const SizedBox(width: 24, child: Icon(Icons.arrow_forward_ios, color: Colors.white, size: 16)),
             const SizedBox(width: 8),
             Expanded(
               child: Container(
@@ -322,10 +292,7 @@ class ChatAppsDropdownWidget extends StatelessWidget {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Text(context.l10n.enableApps, style: const TextStyle(color: Colors.white, fontSize: 16)),
-                    const SizedBox(
-                      width: 24,
-                      child: Icon(Icons.apps, color: Colors.white60, size: 16),
-                    ),
+                    const SizedBox(width: 24, child: Icon(Icons.apps, color: Colors.white60, size: 16)),
                   ],
                 ),
               ),
@@ -333,10 +300,7 @@ class ChatAppsDropdownWidget extends StatelessWidget {
           ],
         ),
       ),
-      const PopupMenuItem<String>(
-        height: 1,
-        child: Divider(height: 1),
-      ),
+      const PopupMenuItem<String>(height: 1, child: Divider(height: 1)),
       PopupMenuItem<String>(
         height: 40,
         value: 'no_selected',
@@ -355,10 +319,7 @@ class ChatAppsDropdownWidget extends StatelessWidget {
                       style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w500, fontSize: 16),
                     ),
                     selectedApp == null
-                        ? const SizedBox(
-                            width: 24,
-                            child: Icon(Icons.check, color: Colors.white60, size: 16),
-                          )
+                        ? const SizedBox(width: 24, child: Icon(Icons.check, color: Colors.white60, size: 16))
                         : const SizedBox.shrink(),
                   ],
                 ),
@@ -389,10 +350,7 @@ class ChatAppsDropdownWidget extends StatelessWidget {
                       ),
                     ),
                     selectedApp?.id == app.id
-                        ? const SizedBox(
-                            width: 24,
-                            child: Icon(Icons.check, color: Colors.white60, size: 16),
-                          )
+                        ? const SizedBox(width: 24, child: Icon(Icons.check, color: Colors.white60, size: 16))
                         : const SizedBox.shrink(),
                   ],
                 ),
