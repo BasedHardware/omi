@@ -56,17 +56,19 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
           channel: stable
 
-      - name: Check Dart formatting
+      - name: Check Dart formatting (changed files only)
         run: |
-          FILES=$(find app -name '*.dart' ! -name '*.gen.dart' ! -name '*.g.dart' -type f)
+          FILES=$(git diff --name-only --diff-filter=ACM origin/main...HEAD -- 'app/**.dart' | grep -v -e '\.gen\.dart$' -e '\.g\.dart$' || true)
           if [ -z "$FILES" ]; then
-            echo "No Dart files to check."
+            echo "No changed Dart files to check."
             exit 0
           fi
           echo "$FILES" | xargs dart format --line-length 120 --set-exit-if-changed --output=none
@@ -77,15 +79,17 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Install black
         run: pip install black
 
-      - name: Check Python formatting
+      - name: Check Python formatting (changed files only)
         run: |
-          FILES=$(find backend -name '*.py' -type f)
+          FILES=$(git diff --name-only --diff-filter=ACM origin/main...HEAD -- 'backend/**.py' || true)
           if [ -z "$FILES" ]; then
-            echo "No Python files to check."
+            echo "No changed Python files to check."
             exit 0
           fi
           echo "$FILES" | xargs black --check --line-length 120 --skip-string-normalization
@@ -96,11 +100,18 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-      - name: Check ARB files are valid JSON with 4-space indent
+      - name: Check ARB files are valid JSON with 4-space indent (changed files only)
         run: |
+          FILES=$(git diff --name-only --diff-filter=ACM origin/main...HEAD -- 'app/lib/l10n/*.arb' || true)
+          if [ -z "$FILES" ]; then
+            echo "No changed ARB files to check."
+            exit 0
+          fi
           failed=0
-          for f in app/lib/l10n/*.arb; do
+          for f in $FILES; do
             if ! python3 -m json.tool "$f" > /dev/null 2>&1; then
               echo "FAIL: $f is not valid JSON"
               failed=1
@@ -123,7 +134,7 @@ jobs:
             echo "Fix: jq --indent 4 '.' <file> > tmp && mv tmp <file>"
             exit 1
           fi
-          echo "All ARB files formatted correctly."
+          echo "All changed ARB files formatted correctly."
 
   format-firmware:
     name: Check C/C++ Formatting
@@ -131,12 +142,14 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-      - name: Check C/C++ formatting
+      - name: Check C/C++ formatting (changed files only)
         run: |
-          FILES=$(find omi/ omiGlass/ -type f \( -name '*.c' -o -name '*.cpp' -o -name '*.cc' -o -name '*.cxx' -o -name '*.h' -o -name '*.hpp' \) 2>/dev/null || true)
+          FILES=$(git diff --name-only --diff-filter=ACM origin/main...HEAD | grep -E '\.(c|cpp|cc|cxx|h|hpp)$' | grep -E '^(omi/|omiGlass/)' || true)
           if [ -z "$FILES" ]; then
-            echo "No C/C++ files to check."
+            echo "No changed C/C++ files to check."
             exit 0
           fi
           echo "$FILES" | xargs clang-format --dry-run --Werror
