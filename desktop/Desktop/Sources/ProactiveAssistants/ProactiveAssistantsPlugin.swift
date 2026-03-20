@@ -39,6 +39,11 @@ public class ProactiveAssistantsPlugin: NSObject {
     private(set) var isProcessingRewindFrame = false
     private(set) var droppedFrameCount = 0
 
+    /// Periodic screen recording permission recheck interval (60 seconds).
+    /// Detects permission revocation while monitoring is active (issue #5792).
+    private var lastPermissionCheckTime: Date = .distantPast
+    private let permissionCheckInterval: TimeInterval = 60
+
     // Failure tracking for screen capture recovery
     private var consecutiveFailures = 0
     private let maxConsecutiveFailures = 5
@@ -575,6 +580,23 @@ public class ProactiveAssistantsPlugin: NSObject {
 
     private func captureFrame() async {
         guard isMonitoring, let screenCaptureService = screenCaptureService else { return }
+
+        // Periodic screen recording permission recheck (issue #5792).
+        // Detects when the user revokes permission via System Settings while monitoring is active,
+        // and stops gracefully instead of silently failing on every capture.
+        let now = Date()
+        if now.timeIntervalSince(lastPermissionCheckTime) >= permissionCheckInterval {
+            lastPermissionCheckTime = now
+            let permissionGranted = ScreenCaptureService.checkPermission()
+            _hasScreenRecordingPermission = permissionGranted
+            if !permissionGranted {
+                log("ProactiveAssistantsPlugin: Screen recording permission revoked — stopping monitoring")
+                // Send user-visible notification about lost permission
+                sendEvent(type: "permissionLost", data: ["permission": "screenRecording"])
+                stopMonitoring()
+                return
+            }
+        }
 
         // Skip capture during system modes that block ScreenCaptureKit (Mission Control, Expose, etc.)
         // This avoids burning through consecutive failures and generating unnecessary error events

@@ -5,9 +5,7 @@
 version: 2
 name: chat
 description: Chat flow — navigate to Chat page, send a message, verify AI response streams, test message actions (copy, regenerate), browse conversation history
-app: com.omi.desktop-dev
-evidence:
-  video: true
+app: com.omi.computer-macos
 covers:
   - desktop/Desktop/Sources/MainWindow/Pages/ChatPage.swift
   - desktop/Desktop/Sources/Chat/ChatProvider.swift

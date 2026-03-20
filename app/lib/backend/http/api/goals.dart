@@ -131,7 +131,7 @@ Future<Goal?> getCurrentGoal() async {
   return null;
 }
 
-/// Get all active goals (up to 3)
+/// Get all active goals (up to 4)
 Future<List<Goal>> getAllGoals() async {
   var response = await makeApiCall(url: '${Env.apiBaseUrl}v1/goals/all', headers: {}, method: 'GET', body: '');
   if (response == null) return [];

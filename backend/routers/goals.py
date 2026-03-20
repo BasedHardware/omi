@@ -108,9 +108,9 @@ async def get_current_goal(uid: str = Depends(auth.get_current_user_uid)) -> Opt
 async def get_all_goals(uid: str = Depends(auth.get_current_user_uid),
                        x_e2ee_key_hash: Optional[str] = Header(None),
                        e2ee_key_hash: Optional[str] = Query(None)) -> List[dict]:
-    """Get all active goals for the user (up to 3)."""
+    """Get all active goals for the user (up to 4)."""
     _verify_e2ee_access(uid, x_e2ee_key_hash, e2ee_key_hash)
-    goals = goals_db.get_user_goals(uid, limit=3)
+    goals = goals_db.get_user_goals(uid, limit=4)
 
     # Convert datetime objects to strings for JSON serialization
     for goal in goals:
