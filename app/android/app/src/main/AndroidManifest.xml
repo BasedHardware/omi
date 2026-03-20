@@ -67,6 +67,7 @@
     <uses-permission android:name="android.permission.FOREGROUND_CHANGE_NETWORK_STATE" />
     <uses-permission android:name="android.permission.REQUEST_COMPANION_RUN_IN_BACKGROUND" />
     <uses-permission android:name="android.permission.REQUEST_COMPANION_START_FOREGROUND_SERVICES_FROM_BACKGROUND" />
+    <uses-permission android:name="android.permission.REQUEST_OBSERVE_COMPANION_DEVICE_PRESENCE" />
 
     <uses-permission android:name="android.permission.READ_CALENDAR" />
     <uses-permission android:name="android.permission.WRITE_CALENDAR" />
@@ -183,8 +184,7 @@
             android:exported="true"
             android:permission="android.permission.BIND_COMPANION_DEVICE_SERVICE">
             <intent-filter>
-                <action android:name="android.companion.CompanionDeviceService.COMPANION_DEVICE_APPEARS" />
-                <action android:name="android.companion.CompanionDeviceService.COMPANION_DEVICE_DISAPPEARS" />
+                <action android:name="android.companion.CompanionDeviceService" />
             </intent-filter>
         </service>
 
