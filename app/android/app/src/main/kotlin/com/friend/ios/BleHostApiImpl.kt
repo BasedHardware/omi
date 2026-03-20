@@ -81,14 +81,6 @@ class BleHostApiImpl(private val getActivity: () -> Activity?) : BleHostApi {
         return bleManager.isPeripheralConnected(uuid)
     }
 
-    override fun setAudioBatchingEnabled(enabled: Boolean) {
-        bleManager.setAudioBatchingEnabled(enabled)
-    }
-
-    override fun registerAudioCharacteristic(characteristicUuid: String) {
-        bleManager.registerAudioCharacteristic(characteristicUuid)
-    }
-
     override fun requestCompanionDeviceAssociation(deviceAddress: String, callback: (Result<String>) -> Unit) {
         Log.i(TAG, "requestCompanionDeviceAssociation: $deviceAddress")
 

@@ -603,7 +603,7 @@ class WatchRecorderFlutterAPI(private val binaryMessenger: BinaryMessenger, priv
   }
 }
 /**
- * Dart → Swift: commands sent from Flutter to the native BLE module.
+ * Dart → Native: commands sent from Flutter to the native BLE module.
  *
  * Generated interface from Pigeon that represents a handler of messages from Flutter.
  */
@@ -613,8 +613,8 @@ interface BleHostApi {
   fun connectPeripheral(uuid: String)
   fun disconnectPeripheral(uuid: String)
   /**
-   * Reconnect a previously-paired peripheral using retrievePeripherals(withIdentifiers:).
-   * No active scanning — iOS handles reconnection at the chipset level.
+   * Reconnect a previously-paired peripheral. No active scanning — the platform
+   * handles reconnection at the chipset level (iOS: retrievePeripherals, Android: autoConnect).
    */
   fun reconnectKnownPeripheral(uuid: String)
   fun discoverServices(peripheralUuid: String)
@@ -624,16 +624,6 @@ interface BleHostApi {
   fun unsubscribeCharacteristic(peripheralUuid: String, serviceUuid: String, characteristicUuid: String)
   fun getBluetoothState(): String
   fun isPeripheralConnected(uuid: String): Boolean
-  /**
-   * Enable or disable audio batching. When enabled, audio characteristic
-   * notifications are coalesced every ~60ms into a single bridge call.
-   */
-  fun setAudioBatchingEnabled(enabled: Boolean)
-  /**
-   * Register a characteristic UUID as an audio stream. Notifications for this
-   * characteristic will be batched when audio batching is enabled.
-   */
-  fun registerAudioCharacteristic(characteristicUuid: String)
   /**
    * (Android only) Initiate CompanionDeviceManager association for a device.
    * Shows the system chooser dialog filtered to this device's address.
@@ -875,42 +865,6 @@ interface BleHostApi {
         }
       }
       run {
-        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.omi_pigeon.BleHostApi.setAudioBatchingEnabled$separatedMessageChannelSuffix", codec)
-        if (api != null) {
-          channel.setMessageHandler { message, reply ->
-            val args = message as List<Any?>
-            val enabledArg = args[0] as Boolean
-            val wrapped: List<Any?> = try {
-              api.setAudioBatchingEnabled(enabledArg)
-              listOf(null)
-            } catch (exception: Throwable) {
-              PigeonCommunicatorPigeonUtils.wrapError(exception)
-            }
-            reply.reply(wrapped)
-          }
-        } else {
-          channel.setMessageHandler(null)
-        }
-      }
-      run {
-        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.omi_pigeon.BleHostApi.registerAudioCharacteristic$separatedMessageChannelSuffix", codec)
-        if (api != null) {
-          channel.setMessageHandler { message, reply ->
-            val args = message as List<Any?>
-            val characteristicUuidArg = args[0] as String
-            val wrapped: List<Any?> = try {
-              api.registerAudioCharacteristic(characteristicUuidArg)
-              listOf(null)
-            } catch (exception: Throwable) {
-              PigeonCommunicatorPigeonUtils.wrapError(exception)
-            }
-            reply.reply(wrapped)
-          }
-        } else {
-          channel.setMessageHandler(null)
-        }
-      }
-      run {
         val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.omi_pigeon.BleHostApi.requestCompanionDeviceAssociation$separatedMessageChannelSuffix", codec)
         if (api != null) {
           channel.setMessageHandler { message, reply ->
@@ -934,7 +888,7 @@ interface BleHostApi {
   }
 }
 /**
- * Swift → Dart: events pushed from the native BLE module to Flutter.
+ * Native → Dart: events pushed from the native BLE module to Flutter.
  *
  * Generated class from Pigeon that represents Flutter messages that can be called from Kotlin.
  */
@@ -1037,27 +991,6 @@ class BleFlutterApi(private val binaryMessenger: BinaryMessenger, private val me
     val channelName = "dev.flutter.pigeon.omi_pigeon.BleFlutterApi.onCharacteristicValueUpdated$separatedMessageChannelSuffix"
     val channel = BasicMessageChannel<Any?>(binaryMessenger, channelName, codec)
     channel.send(listOf(peripheralUuidArg, serviceUuidArg, characteristicUuidArg, valueArg)) {
-      if (it is List<*>) {
-        if (it.size > 1) {
-          callback(Result.failure(FlutterError(it[0] as String, it[1] as String, it[2] as String?)))
-        } else {
-          callback(Result.success(Unit))
-        }
-      } else {
-        callback(Result.failure(PigeonCommunicatorPigeonUtils.createConnectionError(channelName)))
-      } 
-    }
-  }
-  /**
-   * Batched audio data — multiple BLE notifications coalesced into one bridge call.
-   * [batchedData] is the concatenated raw bytes from [notificationCount] notifications.
-   */
-  fun onAudioBatchReceived(peripheralUuidArg: String, serviceUuidArg: String, characteristicUuidArg: String, batchedDataArg: ByteArray, notificationCountArg: Long, callback: (Result<Unit>) -> Unit)
-{
-    val separatedMessageChannelSuffix = if (messageChannelSuffix.isNotEmpty()) ".$messageChannelSuffix" else ""
-    val channelName = "dev.flutter.pigeon.omi_pigeon.BleFlutterApi.onAudioBatchReceived$separatedMessageChannelSuffix"
-    val channel = BasicMessageChannel<Any?>(binaryMessenger, channelName, codec)
-    channel.send(listOf(peripheralUuidArg, serviceUuidArg, characteristicUuidArg, batchedDataArg, notificationCountArg)) {
       if (it is List<*>) {
         if (it.size > 1) {
           callback(Result.failure(FlutterError(it[0] as String, it[1] as String, it[2] as String?)))
