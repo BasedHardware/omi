@@ -26,7 +26,7 @@ type CaseResult =
   | { kind: 'not_found' }
   | { kind: 'error' };
 
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const EMAIL_RE = /^[a-zA-Z0-9.!#$&'*+/=^_`{|}~-]+@[a-zA-Z0-9-]+(?:\.[a-zA-Z0-9-]+)+$/;
 
 function safeEmail(raw?: string): string {
   return raw && EMAIL_RE.test(raw) ? raw : SUPPORT_EMAIL;
