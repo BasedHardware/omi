@@ -403,6 +403,8 @@ async def _stream_handler(
     fair_use_last_check_ts: float = 0.0
     # DG budget gate for restricted users — checked at session start + per cap-check interval
     fair_use_dg_budget_exhausted: bool = False
+    # DG usage accumulator: batch Redis writes every 60s instead of per-chunk (#5854)
+    dg_usage_ms_pending: int = 0
 
     # Session-start DG budget check: prevent reconnect bypass (#5748 reviewer fix)
     if FAIR_USE_ENABLED and FAIR_USE_RESTRICT_DAILY_DG_MS > 0:
@@ -424,6 +426,7 @@ async def _stream_handler(
         nonlocal freemium_threshold_sent
         nonlocal remaining_seconds_cache, remaining_seconds_cache_ts, remaining_seconds_cache_initialized
         nonlocal fair_use_last_check_ts, fair_use_dg_budget_exhausted
+        nonlocal dg_usage_ms_pending
 
         while websocket_active:
             await asyncio.sleep(60)
@@ -444,6 +447,11 @@ async def _stream_handler(
                 if FAIR_USE_ENABLED and speech_ms > 0:
                     record_speech_ms(uid, speech_ms)
                     logger.debug(f'fair_use: recorded {speech_ms}ms speech uid={uid} session={session_id}')
+
+            # Flush batched DG usage to Redis (#5854 — was per-chunk, now every 60s)
+            if FAIR_USE_ENABLED and FAIR_USE_RESTRICT_DAILY_DG_MS > 0 and dg_usage_ms_pending > 0:
+                record_dg_usage_ms(uid, dg_usage_ms_pending)
+                dg_usage_ms_pending = 0
 
             if last_usage_record_timestamp:
                 current_time = time.time()
@@ -2281,7 +2289,7 @@ async def _stream_handler(
         stt_buffer_flush_size = int(sample_rate * 2 * 0.03)  # 30ms at 16-bit mono (e.g., 6400 bytes at 16kHz)
 
         async def flush_stt_buffer(force: bool = False):
-            nonlocal stt_audio_buffer, soniox_profile_socket, deepgram_profile_socket
+            nonlocal stt_audio_buffer, soniox_profile_socket, deepgram_profile_socket, dg_usage_ms_pending
 
             if not stt_audio_buffer:
                 return
@@ -2301,10 +2309,10 @@ async def _stream_handler(
                         pass  # Audio not forwarded to DG — budget exhausted
                     else:
                         dg_socket.send(chunk)
-                        # Track DG usage for restricted users
+                        # Accumulate DG usage locally, flushed every 60s (#5854)
                         if FAIR_USE_ENABLED and FAIR_USE_RESTRICT_DAILY_DG_MS > 0:
                             chunk_ms = len(chunk) * 1000 // (sample_rate * 2)  # 16-bit mono
-                            record_dg_usage_ms(uid, chunk_ms)
+                            dg_usage_ms_pending += chunk_ms
                     if deepgram_profile_socket:
                         logger.info(f'Scheduling delayed close of deepgram_profile_socket {uid} {session_id}')
                         socket_to_close = deepgram_profile_socket
@@ -2331,10 +2339,10 @@ async def _stream_handler(
             if soniox_sock is not None and not fair_use_dg_budget_exhausted:
                 if profile_complete or not soniox_profile_socket:
                     await soniox_sock.send(chunk)
-                    # Track STT usage for restricted users
+                    # Accumulate DG usage locally, flushed every 60s (#5854)
                     if FAIR_USE_ENABLED and FAIR_USE_RESTRICT_DAILY_DG_MS > 0:
                         chunk_ms = len(chunk) * 1000 // (sample_rate * 2)
-                        record_dg_usage_ms(uid, chunk_ms)
+                        dg_usage_ms_pending += chunk_ms
                     if soniox_profile_socket:
                         logger.info(f'Scheduling delayed close of soniox_profile_socket {uid} {session_id}')
                         socket_to_close = soniox_profile_socket
@@ -2351,10 +2359,10 @@ async def _stream_handler(
 
             if speechmatics_sock is not None and not fair_use_dg_budget_exhausted:
                 await speechmatics_sock.send(chunk)
-                # Track STT usage for restricted users
+                # Accumulate DG usage locally, flushed every 60s (#5854)
                 if FAIR_USE_ENABLED and FAIR_USE_RESTRICT_DAILY_DG_MS > 0:
                     chunk_ms = len(chunk) * 1000 // (sample_rate * 2)
-                    record_dg_usage_ms(uid, chunk_ms)
+                    dg_usage_ms_pending += chunk_ms
 
         try:
             while websocket_active:
@@ -2413,10 +2421,10 @@ async def _stream_handler(
                                     stt_sockets_multi[ch_idx].send(pcm_16k)
                                 else:
                                     await stt_sockets_multi[ch_idx].send(pcm_16k)
-                                # Track STT usage for restricted users
+                                # Accumulate DG usage locally, flushed every 60s (#5854)
                                 if FAIR_USE_ENABLED and FAIR_USE_RESTRICT_DAILY_DG_MS > 0:
                                     mc_chunk_ms = len(pcm_16k) * 1000 // (TARGET_SAMPLE_RATE * 2)
-                                    record_dg_usage_ms(uid, mc_chunk_ms)
+                                    dg_usage_ms_pending += mc_chunk_ms
                             except Exception as e:
                                 logger.error(f"[MC-STT] ch={ch_idx} send error: {e} {uid} {session_id}")
 
@@ -2660,6 +2668,11 @@ async def _stream_handler(
                 if FAIR_USE_ENABLED and speech_ms > 0:
                     record_speech_ms(uid, speech_ms)
                     logger.debug(f'fair_use: session end flush {speech_ms}ms speech uid={uid} session={session_id}')
+
+            # Flush pending DG usage accumulator (#5854)
+            if FAIR_USE_ENABLED and FAIR_USE_RESTRICT_DAILY_DG_MS > 0 and dg_usage_ms_pending > 0:
+                record_dg_usage_ms(uid, dg_usage_ms_pending)
+                dg_usage_ms_pending = 0
 
             if transcription_seconds > 0 or words_to_record > 0 or speech_seconds_delta > 0:
                 record_usage(
