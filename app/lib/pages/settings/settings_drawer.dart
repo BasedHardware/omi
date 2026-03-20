@@ -9,6 +9,7 @@ import 'package:omi/services/auth_service.dart';
 import 'package:omi/pages/settings/developer.dart';
 import 'package:omi/pages/settings/notifications_settings_page.dart';
 import 'package:omi/pages/settings/profile.dart';
+import 'package:omi/pages/settings/speech_profile_sharing_page.dart';
 import 'package:omi/pages/settings/integrations_page.dart';
 import 'package:omi/pages/settings/usage_page.dart';
 import 'package:omi/pages/referral/referral_page.dart';
@@ -337,6 +338,14 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
                 icon: const FaIcon(FontAwesomeIcons.solidBell, color: Color(0xFF8E8E93), size: 20),
                 onTap: () {
                   routeToPage(context, const NotificationsSettingsPage());
+                },
+              ),
+              const Divider(height: 1, color: Color(0xFF3C3C43)),
+              _buildSettingsItem(
+                title: context.l10n.shareSpeechProfile,
+                icon: const FaIcon(FontAwesomeIcons.peopleGroup, color: Color(0xFF8E8E93), size: 20),
+                onTap: () {
+                  routeToPage(context, const SpeechProfileSharingPage());
                 },
               ),
               const Divider(height: 1, color: Color(0xFF3C3C43)),
