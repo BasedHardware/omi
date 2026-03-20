@@ -1,5 +1,6 @@
 #include "transport.h"
 
+#include <errno.h>
 #include <hal/nrf_power.h>
 #include <math.h> // For float conversion in logs
 #include <stdint.h>
@@ -14,6 +15,7 @@
 #include <zephyr/dt-bindings/gpio/nordic-nrf-gpio.h>
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
+#include <shell/shell_bt_nus.h>
 #include <zephyr/sys/atomic.h>
 #include <zephyr/sys/ring_buffer.h>
 
@@ -26,10 +28,10 @@
 #ifdef CONFIG_OMI_ENABLE_MONITOR
 #include "monitor.h"
 #endif
-#include "rtc.h"
 #include "sd_card.h"
 #include "settings.h"
 #include "storage.h"
+#include "rtc.h"
 LOG_MODULE_REGISTER(transport, CONFIG_LOG_DEFAULT_LEVEL);
 
 #ifdef CONFIG_OMI_ENABLE_RFSW_CTRL
@@ -97,10 +99,18 @@ features_read_handler(struct bt_conn *conn, const struct bt_gatt_attr *attr, voi
 static void update_phy(struct bt_conn *conn);
 static void update_data_length(struct bt_conn *conn);
 static void update_mtu(struct bt_conn *conn);
+static void update_conn_params(struct bt_conn *conn);
+static void schedule_mtu_recheck(void);
+static void mtu_recheck_work_handler(struct k_work *work);
 static void exchange_func(struct bt_conn *conn, uint8_t att_err, struct bt_gatt_exchange_params *params);
 
 // --- GATT Exchange MTU Params ---
 static struct bt_gatt_exchange_params exchange_params;
+
+#define MTU_RECHECK_DELAY_MS        800
+#define MTU_RECHECK_MAX_ATTEMPTS    6
+static uint8_t mtu_recheck_attempts = 0;
+K_WORK_DELAYABLE_DEFINE(mtu_recheck_work, mtu_recheck_work_handler);
 
 //
 // Service and Characteristic
@@ -222,18 +232,25 @@ static ssize_t time_sync_write_handler(struct bt_conn *conn,
 
     LOG_INF("Time sync received: %u seconds", epoch_s);
 
-    int err = rtc_set_utc_time((uint64_t) epoch_s);
+    int err = rtc_set_utc_time((uint64_t)epoch_s);
     if (err) {
         LOG_ERR("Failed to set RTC time: %d", err);
         return BT_GATT_ERR(BT_ATT_ERR_UNLIKELY);
     }
 
     LOG_INF("Time synchronized successfully");
+
+    /* Notify SD card module so it can rename temp files to real timestamps */
+    sd_notify_time_synced(epoch_s);
+
     return len;
 }
 
-static ssize_t
-time_sync_read_handler(struct bt_conn *conn, const struct bt_gatt_attr *attr, void *buf, uint16_t len, uint16_t offset)
+static ssize_t time_sync_read_handler(struct bt_conn *conn,
+                                      const struct bt_gatt_attr *attr,
+                                      void *buf,
+                                      uint16_t len,
+                                      uint16_t offset)
 {
     uint32_t epoch_s = get_utc_time();
     LOG_INF("Time sync read: %u seconds", epoch_s);
@@ -454,9 +471,12 @@ static void exchange_func(struct bt_conn *conn, uint8_t att_err, struct bt_gatt_
 //
 
 #ifdef CONFIG_OMI_ENABLE_BATTERY
-#define BATTERY_REFRESH_INTERVAL 10000      // 10 seconds
-#define CONFIG_OMI_BATTERY_CRITICAL_MV 3500 // mV
+#define BATTERY_REFRESH_INTERVAL        10000 // 10 seconds
+#define BATTERY_RETRY_INTERVAL          5000  // 5 seconds - retry when BLE TX buffer unavailable
+#define BATTERY_RETRY_MAX               3     // Maximum retries before giving up for this cycle
+#define CONFIG_OMI_BATTERY_CRITICAL_MV  3500  // mV
 uint8_t battery_percentage = 0;
+static uint8_t battery_retry_count = 0;
 void broadcast_battery_level(struct k_work *work_item);
 
 K_WORK_DELAYABLE_DEFINE(battery_work, broadcast_battery_level);
@@ -473,14 +493,23 @@ void broadcast_battery_level(struct k_work *work_item)
         // Use the Zephyr BAS function to set (and notify) the battery level
         int err = bt_bas_set_battery_level(battery_percentage);
         if (err) {
-            LOG_ERR("Error updating battery level: %d", err);
+            if (battery_retry_count < BATTERY_RETRY_MAX) {
+                battery_retry_count++;
+                LOG_WRN("Error updating battery level: %d, retrying in %d ms (attempt %d/%d)",
+                        err, BATTERY_RETRY_INTERVAL, battery_retry_count, BATTERY_RETRY_MAX);
+                k_work_reschedule(&battery_work, K_MSEC(BATTERY_RETRY_INTERVAL));
+                return;
+            }
+            LOG_ERR("Error updating battery level: %d (max retries reached)", err);
         }
+        battery_retry_count = 0;
         if (battery_millivolt < CONFIG_OMI_BATTERY_CRITICAL_MV) {
             LOG_WRN("Battery critical level reached (%d mV). Initiating shutdown.", battery_millivolt);
             turnoff_all();
         }
     } else {
         LOG_ERR("Failed to read battery level");
+        battery_retry_count = 0;
     }
 
     k_work_reschedule(&battery_work, K_MSEC(BATTERY_REFRESH_INTERVAL));
@@ -508,7 +537,7 @@ static void _transport_connected(struct bt_conn *conn, uint8_t err)
     LOG_INF("bluetooth activated");
     current_connection = bt_conn_ref(conn);
     uint16_t mtu = bt_gatt_get_mtu(conn);
-    current_mtu = MAX(mtu, CONFIG_BT_L2CAP_TX_MTU);
+    current_mtu = mtu;
 
     LOG_INF("Transport connected");
 
@@ -520,6 +549,13 @@ static void _transport_connected(struct bt_conn *conn, uint8_t err)
             info.le.latency,
             supervision_timeout);
     LOG_INF("Initial MTU: %u", mtu);
+    mtu_recheck_attempts = 0;
+
+    // Request aggressive connection params for higher BLE sync throughput.
+    update_conn_params(current_connection);
+
+        // Delay a bit before PHY request to avoid early HCI race on some phones.
+        k_sleep(K_MSEC(300));
 
     // Initiate PHY, Data Length, and MTU updates
     update_phy(current_connection);
@@ -528,21 +564,47 @@ static void _transport_connected(struct bt_conn *conn, uint8_t err)
     k_sleep(K_MSEC(1000));
     update_data_length(current_connection);
     update_mtu(current_connection);
+    schedule_mtu_recheck();
 
     is_connected = true;
+
+    if (IS_ENABLED(CONFIG_SHELL_BT_NUS)) {
+        shell_bt_nus_enable(conn);
+    }
 
     // Notify SD module about BLE connection (flush current file)
 #ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
     sd_notify_ble_state(true);
+    // Start auto-sync of stored audio data to phone
+    storage_auto_sync_start();
 #endif
 }
 
+// Number of BLE TX slots reserved for non-audio notifications (battery, status, diagnostics).
+// Audio is throttled so these slots are always available.
+#define AUDIO_TX_RESERVED_SLOTS 2
+
+// Semaphore that caps concurrent in-flight audio notifications to
+// (CONFIG_BT_CONN_TX_MAX - AUDIO_TX_RESERVED_SLOTS), preserving
+// AUDIO_TX_RESERVED_SLOTS buffers for battery/diagnostic/status notifs.
+K_SEM_DEFINE(audio_tx_sem,
+             CONFIG_BT_CONN_TX_MAX - AUDIO_TX_RESERVED_SLOTS,
+             CONFIG_BT_CONN_TX_MAX - AUDIO_TX_RESERVED_SLOTS);
+
 static void _transport_disconnected(struct bt_conn *conn, uint8_t err)
 {
+    k_work_cancel_delayable(&mtu_recheck_work);
+    mtu_recheck_attempts = 0;
+
     is_connected = false;
 
-    // Notify SD module about BLE disconnection (create new file if current was deleted)
+    if (IS_ENABLED(CONFIG_SHELL_BT_NUS)) {
+        shell_bt_nus_disable();
+    }
+
+    // Stop auto-sync and save current sync offset
 #ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
+    storage_auto_sync_stop();
     sd_notify_ble_state(false);
     storage_is_on = false;
 #endif
@@ -554,6 +616,12 @@ static void _transport_disconnected(struct bt_conn *conn, uint8_t err)
         current_connection = NULL;
     }
     current_mtu = 0;
+
+    // Reset the audio TX throttle semaphore so the pusher thread is not
+    // left blocked forever if it was waiting for a slot when the connection dropped.
+    k_sem_init(&audio_tx_sem,
+               CONFIG_BT_CONN_TX_MAX - AUDIO_TX_RESERVED_SLOTS,
+               CONFIG_BT_CONN_TX_MAX - AUDIO_TX_RESERVED_SLOTS);
 }
 
 static bool _le_param_req(struct bt_conn *conn, struct bt_le_conn_param *param)
@@ -573,6 +641,11 @@ static void _le_param_updated(struct bt_conn *conn, uint16_t interval, uint16_t 
             connection_interval,
             latency,
             supervision_timeout);
+
+    if (interval > 12) {
+        LOG_WRN("Connection interval still high (%u units). Re-requesting preferred params.", interval);
+        update_conn_params(conn);
+    }
 }
 
 static void _le_phy_updated(struct bt_conn *conn, struct bt_conn_le_phy_info *param)
@@ -600,6 +673,10 @@ static void _le_data_length_updated(struct bt_conn *conn, struct bt_conn_le_data
             info->rx_max_len,
             info->rx_max_time);
     // Note: current_mtu is updated in exchange_func after MTU negotiation
+
+    if (current_mtu <= 23) {
+        schedule_mtu_recheck();
+    }
 }
 
 static struct bt_conn_cb _callback_references = {
@@ -613,20 +690,74 @@ static struct bt_conn_cb _callback_references = {
 
 // --- Update Request Functions ---
 
+#define PHY_UPDATE_RETRY_COUNT      3
+#define PHY_UPDATE_RETRY_DELAY_MS   150
+#define MTU_UPDATE_RETRY_COUNT      3
+#define MTU_UPDATE_RETRY_DELAY_MS   120
+#define CONN_PARAM_RETRY_COUNT      3
+#define CONN_PARAM_RETRY_DELAY_MS   300
+
+static void update_conn_params(struct bt_conn *conn)
+{
+    int err = 0;
+    const struct bt_le_conn_param preferred_param = {
+        .interval_min = 6,
+        .interval_max = 12,
+        .latency = 0,
+        .timeout = 400,
+    };
+
+    LOG_INF("Requesting conn params update (7.5-15ms, latency 0)...");
+    for (int attempt = 1; attempt <= CONN_PARAM_RETRY_COUNT; attempt++) {
+        err = bt_conn_le_param_update(conn, &preferred_param);
+        if (!err) {
+            return;
+        }
+
+        if (attempt < CONN_PARAM_RETRY_COUNT) {
+            LOG_WRN("bt_conn_le_param_update() failed (err %d), retry %d/%d",
+                    err,
+                    attempt,
+                    CONN_PARAM_RETRY_COUNT);
+            k_sleep(K_MSEC(CONN_PARAM_RETRY_DELAY_MS));
+        }
+    }
+
+    LOG_WRN("bt_conn_le_param_update() still failed after retries (last err %d)", err);
+}
+
 static void update_phy(struct bt_conn *conn)
 {
-    int err;
+    int err = 0;
     // Prefer 2M PHY for higher throughput
     const struct bt_conn_le_phy_param preferred_phy = {
         .options = BT_CONN_LE_PHY_OPT_NONE,
         .pref_rx_phy = BT_GAP_LE_PHY_2M,
         .pref_tx_phy = BT_GAP_LE_PHY_2M,
     };
+
     LOG_INF("Requesting PHY update...");
-    err = bt_conn_le_phy_update(conn, &preferred_phy);
-    if (err) {
-        LOG_ERR("bt_conn_le_phy_update() failed (err %d)", err);
+    for (int attempt = 1; attempt <= PHY_UPDATE_RETRY_COUNT; attempt++) {
+        err = bt_conn_le_phy_update(conn, &preferred_phy);
+        if (!err) {
+            if (attempt > 1) {
+                LOG_INF("PHY update request accepted on retry %d", attempt);
+            }
+            return;
+        }
+
+        if (attempt < PHY_UPDATE_RETRY_COUNT) {
+            LOG_WRN("bt_conn_le_phy_update() failed (err %d), retry %d/%d",
+                    err,
+                    attempt,
+                    PHY_UPDATE_RETRY_COUNT);
+            k_sleep(K_MSEC(PHY_UPDATE_RETRY_DELAY_MS));
+        }
     }
+
+    LOG_ERR("bt_conn_le_phy_update() failed after %d retries (last err %d)",
+            PHY_UPDATE_RETRY_COUNT,
+            err);
 }
 
 static void update_data_length(struct bt_conn *conn)
@@ -644,16 +775,79 @@ static void update_data_length(struct bt_conn *conn)
     }
 }
 
+static void schedule_mtu_recheck(void)
+{
+    if (mtu_recheck_attempts >= MTU_RECHECK_MAX_ATTEMPTS) {
+        return;
+    }
+
+    k_work_reschedule(&mtu_recheck_work, K_MSEC(MTU_RECHECK_DELAY_MS));
+}
+
+static void mtu_recheck_work_handler(struct k_work *work)
+{
+    ARG_UNUSED(work);
+
+    struct bt_conn *conn = current_connection;
+    if (!conn) {
+        mtu_recheck_attempts = 0;
+        return;
+    }
+
+    uint16_t mtu = bt_gatt_get_mtu(conn);
+    current_mtu = mtu;
+    if (mtu > 23) {
+        LOG_INF("MTU recheck success: negotiated MTU is now %u (payload %u)", mtu, mtu - 3);
+        mtu_recheck_attempts = 0;
+        return;
+    }
+
+    mtu_recheck_attempts++;
+    LOG_WRN("MTU still %u, re-requesting exchange (%u/%u)",
+            mtu,
+            mtu_recheck_attempts,
+            MTU_RECHECK_MAX_ATTEMPTS);
+    update_mtu(conn);
+
+    if (mtu_recheck_attempts < MTU_RECHECK_MAX_ATTEMPTS) {
+        schedule_mtu_recheck();
+    }
+}
+
 static void update_mtu(struct bt_conn *conn)
 {
-    int err;
+    int err = 0;
     exchange_params.func = exchange_func; // Set the callback function
 
     LOG_INF("Requesting MTU exchange...");
-    err = bt_gatt_exchange_mtu(conn, &exchange_params);
-    if (err) {
+
+    for (int attempt = 1; attempt <= MTU_UPDATE_RETRY_COUNT; attempt++) {
+        err = bt_gatt_exchange_mtu(conn, &exchange_params);
+        if (!err) {
+            return;
+        }
+
+        if (err == -EALREADY) {
+            uint16_t mtu = bt_gatt_get_mtu(conn);
+            current_mtu = mtu;
+            LOG_INF("MTU exchange already in progress/done (err %d). Using MTU: %u", err, mtu);
+            return;
+        }
+
+        if ((err == -EBUSY || err == -EAGAIN) && attempt < MTU_UPDATE_RETRY_COUNT) {
+            LOG_WRN("bt_gatt_exchange_mtu() busy (err %d), retry %d/%d",
+                    err,
+                    attempt,
+                    MTU_UPDATE_RETRY_COUNT);
+            k_sleep(K_MSEC(MTU_UPDATE_RETRY_DELAY_MS));
+            continue;
+        }
+
         LOG_ERR("bt_gatt_exchange_mtu() failed (err %d)", err);
+        return;
     }
+
+    LOG_ERR("bt_gatt_exchange_mtu() failed after retries (last err %d)", err);
 }
 
 //
@@ -718,6 +912,15 @@ static bool read_from_tx_queue()
 // Pusher
 //
 
+// Called by the BT stack when an audio notification has been sent and its
+// TX buffer returned to the pool. Releases the throttle semaphore slot.
+static void on_audio_tx_done(struct bt_conn *conn, void *user_data)
+{
+    ARG_UNUSED(conn);
+    ARG_UNUSED(user_data);
+    k_sem_give(&audio_tx_sem);
+}
+
 // Thread
 K_THREAD_STACK_DEFINE(pusher_stack, 4096);
 static struct k_thread pusher_thread;
@@ -736,8 +939,14 @@ static bool push_to_gatt(struct bt_conn *conn)
     const int max_retries = 3;
 
     while (offset < tx_buffer_size) {
-        uint32_t id = packet_next_index++;
         uint32_t packet_size = MIN(current_mtu - NET_BUFFER_HEADER_SIZE, tx_buffer_size - offset);
+
+        // Block until a throttle slot is available. This preserves every audio
+        // packet while still guaranteeing AUDIO_TX_RESERVED_SLOTS remain free
+        // for battery/diagnostic/status notifications at all times.
+        k_sem_take(&audio_tx_sem, K_FOREVER);
+
+        uint32_t id = packet_next_index++;
         pusher_temp_data[0] = id & 0xFF;
         pusher_temp_data[1] = (id >> 8) & 0xFF;
         pusher_temp_data[2] = index;
@@ -748,34 +957,39 @@ static bool push_to_gatt(struct bt_conn *conn)
 
         retry_count = 0;
         while (retry_count < max_retries) {
-            // Try send notification
-            int err =
-                bt_gatt_notify(conn, &audio_service.attrs[1], pusher_temp_data, packet_size + NET_BUFFER_HEADER_SIZE);
+            // Try send notification with completion callback to release the throttle slot.
+            // bt_gatt_notify_cb only invokes the callback when it returns 0 (success),
+            // so there is no risk of double-releasing the semaphore in the error path below.
+            struct bt_gatt_notify_params params = {
+                .attr = &audio_service.attrs[1],
+                .data = pusher_temp_data,
+                .len = packet_size + NET_BUFFER_HEADER_SIZE,
+                .func = on_audio_tx_done,
+                .user_data = NULL,
+            };
+            int err = bt_gatt_notify_cb(conn, &params);
 #ifdef CONFIG_OMI_ENABLE_MONITOR
             monitor_inc_gatt_notify();
 #endif
 
             // Log failure
             if (err) {
-                LOG_DBG("bt_gatt_notify failed (err %d)", err);
+                LOG_DBG("bt_gatt_notify_cb failed (err %d)", err);
                 LOG_DBG("MTU: %d, packet_size: %d", current_mtu, packet_size + NET_BUFFER_HEADER_SIZE);
                 k_sleep(K_MSEC(1));
                 retry_count++;
                 continue;
             }
 
-            // Try to send more data if possible
-            if (err == -EAGAIN || err == -ENOMEM) {
-                retry_count++;
-                continue;
-            }
-
-            // Break if success
+            // Break if success (slot released in on_audio_tx_done callback)
             break;
         }
 
         if (retry_count >= max_retries) {
             LOG_ERR("Failed to send packet after %d retries", max_retries);
+            // bt_gatt_notify_cb never succeeded so its callback will never fire;
+            // release the throttle slot manually.
+            k_sem_give(&audio_tx_sem);
             return false;
         }
     }
@@ -876,7 +1090,6 @@ void pusher(void)
             continue;
         }
 
-        // Check BT connection and subscription
         struct bt_conn *conn = current_connection;
         bool is_subscribed = false;
         if (conn) {
@@ -887,12 +1100,10 @@ void pusher(void)
         }
 
         if (conn && is_subscribed) {
-            // Push to GATT if connected and subscribed
             push_to_gatt(conn);
             bt_conn_unref(conn);
         } else if (!conn) {
 #ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
-            // No BT connection, write to storage
             if (get_file_size() < MAX_STORAGE_BYTES && is_sd_on()) {
                 storage_full_warned = false;
                 write_to_storage();
@@ -904,11 +1115,10 @@ void pusher(void)
             }
 #endif
         } else {
-            // Connected but not subscribed, just sleep (buffer will be retried)
-            if (conn)
-                bt_conn_unref(conn);
+            bt_conn_unref(conn);
             k_sleep(K_MSEC(10));
         }
+        k_yield();
     }
 }
 
@@ -987,6 +1197,16 @@ int transport_start()
         return err;
     }
     LOG_INF("Transport bluetooth initialized");
+
+    if (IS_ENABLED(CONFIG_SHELL_BT_NUS)) {
+        err = shell_bt_nus_init();
+        if (err) {
+            LOG_ERR("BT NUS shell init failed (err %d)", err);
+            return err;
+        }
+        LOG_INF("BT NUS shell initialized");
+    }
+
     //  Enable accelerometer
 #ifdef CONFIG_OMI_ENABLE_ACCELEROMETER
     err = accel_start();

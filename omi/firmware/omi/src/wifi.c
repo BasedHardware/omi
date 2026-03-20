@@ -9,7 +9,7 @@
  */
 
 #include <zephyr/logging/log.h>
-LOG_MODULE_REGISTER(wifi, CONFIG_LOG_DEFAULT_LEVEL);
+LOG_MODULE_REGISTER(wifi, LOG_LEVEL_INF);
 
 #include <errno.h>
 #include <fcntl.h>
@@ -28,6 +28,7 @@ LOG_MODULE_REGISTER(wifi, CONFIG_LOG_DEFAULT_LEVEL);
 #include <net/wifi_ready.h>
 #include "wifi.h"
 #include "storage.h"
+#include "lib/core/mic.h"
 
 #define WIFI_SAP_MGMT_EVENTS                                                                    \
 	(NET_EVENT_WIFI_AP_ENABLE_RESULT | NET_EVENT_WIFI_AP_DISABLE_RESULT |                     \
@@ -425,6 +426,22 @@ static void wifi_ap_stations_unlocked(void)
 	}
 }
 
+static bool wifi_ap_has_station(void)
+{
+	bool has_station = false;
+
+	k_mutex_lock(&wifi_ap_sta_list_lock, K_FOREVER);
+	for (int i = 0; i < AP_MAX_STATIONS; i++) {
+		if (sta_list[i].valid) {
+			has_station = true;
+			break;
+		}
+	}
+	k_mutex_unlock(&wifi_ap_sta_list_lock);
+
+	return has_station;
+}
+
 static void handle_wifi_ap_enable_result(struct net_mgmt_event_callback *cb)
 {
 	const struct wifi_status *status =
@@ -808,31 +825,39 @@ void start_wifi_thread(void)
 			break;
 
 		case WIFI_STATE_ON:
-            LOG_INF("Wi-Fi state: ON (starting AP)");
-            if (!wifi_ready_status) {
-                    LOG_WRN("Wi-Fi not ready yet, retrying...");
+			LOG_INF("Wi-Fi state: ON (starting AP)");
+			{
+				bool ap_started = false;
+				for (int ap_attempt = 0; ap_attempt < 5; ap_attempt++) {
+					if (start_app() == 0) {
+						ap_started = true;
+						break;
+					}
+					LOG_WRN("AP start failed (attempt %d/5), retrying...", ap_attempt + 1);
 					k_sleep(K_SECONDS(1));
-                    break;
-            }
-            if (start_app() == 0) {
-                    current_wifi_state = WIFI_STATE_CONNECTING;
-						wifi_connecting_timer_reset();
-            } else {
-                    k_sleep(K_SECONDS(1));
-            }
+				}
 
+				if (ap_started) {
+					current_wifi_state = WIFI_STATE_CONNECTING;
+					wifi_connecting_timer_reset();
+				} else {
+					LOG_WRN("AP start retry budget exhausted, staying in ON");
+					k_sleep(K_SECONDS(1));
+				}
+			}
 			break;
 
 		case WIFI_STATE_CONNECTING:
 			LOG_INF("Wi-Fi state: CONNECTING (TCP)");
+			if (!wifi_ap_has_station()) {
+				wifi_connecting_timer_reset();
+				k_msleep(250);
+				break;
+			}
 			wifi_connecting_timer_start_once();
 			if (wifi_connecting_timer_expired(WIFI_CONNECTING_TIMEOUT_MS)) {
 				LOG_WRN("TCP connecting > 60s -> shutting down Wi-Fi");
 				storage_stop_transfer();
-				current_wifi_state = WIFI_STATE_SHUTDOWN;
-				break;
-			}
-			if (!wifi_ready_status) {
 				current_wifi_state = WIFI_STATE_SHUTDOWN;
 				break;
 			}
@@ -847,10 +872,6 @@ void start_wifi_thread(void)
 		case WIFI_STATE_CONNECT:
 			wifi_connecting_timer_reset();
 			/* Keep the connection; if it drops, retry connect. */
-			if (!wifi_ready_status) {
-				current_wifi_state = WIFI_STATE_SHUTDOWN;
-				break;
-			}
 			if (!tcp_client_is_connected()) {
 				LOG_WRN("tcp: disconnected");
 				tcp_client_stop();

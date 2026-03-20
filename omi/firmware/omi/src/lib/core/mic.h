@@ -21,4 +21,5 @@ void mic_on();
 void mic_set_gain(uint8_t gain_level);
 void mic_pause(void);
 void mic_resume(void);
+bool mic_is_running(void);
 #endif

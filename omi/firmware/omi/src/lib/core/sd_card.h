@@ -9,8 +9,8 @@
 #define MAX_STORAGE_BYTES 0x1E000000 // 480MB
 #define MAX_WRITE_SIZE 440
 #define MAX_FILENAME_LEN 32
-#define MAX_AUDIO_FILES 50
-#define FILE_ROTATION_INTERVAL_MS (30 * 60 * 1000) // 30 minutes in milliseconds
+#define MAX_AUDIO_FILES 100
+#define FILE_ROTATION_INTERVAL_MS (30 * 60 * 1000)  // 30 minutes in milliseconds
 
 /* Request types for the SD worker */
 typedef enum {
@@ -50,8 +50,8 @@ struct file_list_resp {
 
 /* Offset info structure stored in info.txt */
 typedef struct {
-    char oldest_filename[MAX_FILENAME_LEN]; // Oldest file being read
-    uint32_t offset_in_file;                // Offset within that file
+    char oldest_filename[MAX_FILENAME_LEN];   // Oldest file being read
+    uint32_t offset_in_file;                  // Offset within that file
 } sd_offset_info_t;
 
 /* Generic request message passed to worker */
@@ -64,7 +64,7 @@ typedef struct {
             struct read_resp *resp;
         } write;
         struct {
-            char filename[MAX_FILENAME_LEN]; // Specific file to read from
+            char filename[MAX_FILENAME_LEN];  // Specific file to read from
             uint32_t offset;
             uint32_t length;
             uint8_t *out_buf;
@@ -84,7 +84,7 @@ typedef struct {
         } file_stats;
         struct {
             char (*filenames)[MAX_FILENAME_LEN];
-            uint32_t *sizes; /* optional: per-file sizes, NULL to skip */
+            uint32_t *sizes;
             int max_files;
             struct file_list_resp *resp;
         } file_list;
@@ -220,7 +220,8 @@ int get_audio_file_list(char filenames[][MAX_FILENAME_LEN], int max_files, int *
  * @param count Pointer to store the actual number of files found
  * @return 0 on success, negative error code otherwise
  */
-int get_audio_file_list_with_sizes(char filenames[][MAX_FILENAME_LEN], uint32_t *sizes, int max_files, int *count);
+int get_audio_file_list_with_sizes(char filenames[][MAX_FILENAME_LEN],
+                                   uint32_t *sizes, int max_files, int *count);
 
 /**
  * @brief Delete a specific audio file by name.
@@ -247,19 +248,22 @@ int sd_flush_current_file(void);
 
 /**
  * @brief Update current audio filename after receiving time sync from BLE
- *
+ * 
  * When device boots without RTC time, it creates file with uptime-based name.
  * After receiving real timestamp from BLE, this function calculates the correct
  * timestamp and renames the file accordingly.
- *
+ * 
  * @param synced_utc_time The UTC timestamp received from BLE time sync
  */
 void sd_update_filename_after_timesync(uint32_t synced_utc_time);
 
 /**
- * @brief Notify SD worker that RTC time has been synced
+ * @brief Notify SD card module that time has been synced
  *
- * @param utc_time Current synced UTC epoch seconds
+ * Renames any temporary audio files to use correct UTC timestamp.
+ * Safe to call from any thread (uses message queue internally).
+ *
+ * @param utc_time The UTC timestamp that was just synced
  */
 void sd_notify_time_synced(uint32_t utc_time);
 
