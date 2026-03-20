@@ -1919,8 +1919,8 @@ class _ManualFirmwareFlashPageState extends State<_ManualFirmwareFlashPage> with
     super.dispose();
   }
 
-  Future<void> _startFlash() async { 
-    setState(() {
+  Future<void> _startFlash() async {
+    setState(() { 
       _confirmed = true;
       _error = null;
     });
