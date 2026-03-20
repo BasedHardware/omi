@@ -467,15 +467,14 @@ async def _stream_handler(
             if FAIR_USE_ENABLED and now_ts - fair_use_last_check_ts >= FAIR_USE_CHECK_INTERVAL_SECONDS:
                 fair_use_last_check_ts = now_ts
                 try:
-                    triggered_caps = check_soft_caps(uid)
+                    speech_totals = get_rolling_speech_ms(uid)
+                    triggered_caps = check_soft_caps(uid, speech_totals=speech_totals)
                     if triggered_caps:
                         logger.info(
                             f'fair_use: soft cap triggered for {uid} session={session_id} caps={triggered_caps}'
                         )
                         asyncio.create_task(trigger_classifier_if_needed(uid, triggered_caps, session_id))
                     else:
-                        # Log rolling totals only on the non-triggered path (avoids duplicate Redis read)
-                        speech_totals = get_rolling_speech_ms(uid)
                         logger.info(
                             f'fair_use: cap check ok uid={uid} session={session_id}'
                             f' daily={speech_totals["daily_ms"]}ms'
