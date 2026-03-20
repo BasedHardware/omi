@@ -1,0 +1,59 @@
+version: 2
+name: screen-recording-permission
+description: Screen Recording permission flow — verify Rewind permission state, grant flow, toggle monitoring, and Settings integration
+app: com.omi.computer-macos
+covers:
+  - desktop/Desktop/Sources/Rewind/UI/RewindPage.swift
+  - desktop/Desktop/Sources/ScreenCaptureService.swift
+  - desktop/Desktop/Sources/MainWindow/Pages/PermissionsPage.swift
+preconditions:
+  - auth_ready
+
+steps:
+  - id: S1
+    name: Navigate to Rewind page
+    do: "Click the Rewind sidebar icon (identifier: sidebar_rewind) to navigate to the Rewind page. Verify the page loads with the Rewind title, search field, date display, and settings gear icon."
+    expect:
+      interactive_count: { min: 3 }
+      text_visible:
+        - Rewind
+
+  - id: S2
+    name: Verify screen recording permission state
+    do: "Check the Rewind page for the screen recording permission state. If permission is NOT granted, verify the lock icon, 'Screen Recording Permission Required' title, description text, and 'Grant Permission' button are visible. If permission IS granted, verify the Rewind toggle (identifier: rewindToggle) and timeline controls are visible."
+    expect:
+      interactive_count: { min: 1 }
+
+  - id: S3
+    name: Interact with Grant Permission button
+    do: "If the 'Grant Permission' button is visible, click it. This should open System Settings to the Screen Recording privacy pane. Verify the system preferences window opens (or note if it does). After 3 seconds, return focus to the Omi app and re-snapshot to check if permission state changed."
+    expect:
+      interactive_count: { min: 1 }
+
+  - id: S4
+    name: Check Rewind settings gear
+    do: "Click the settings gear icon (identifier: gearshape) on the Rewind page. Verify it navigates to Settings with Rewind-related configuration options (capture interval, storage, excluded apps). Note all available settings sections."
+    expect:
+      interactive_count: { min: 3 }
+
+  - id: S5
+    name: Navigate to Settings Screen Recording section
+    do: "If in Settings, look for a Privacy or Screen Recording section. Press it to view screen recording permission settings within the app. Verify the permission status badge and any grant/reset options are shown."
+    expect:
+      interactive_count: { min: 2 }
+
+  - id: S6
+    name: Return to Rewind page and verify state
+    do: "Navigate back to the Rewind page by clicking the Rewind sidebar icon (identifier: sidebar_rewind). Verify the page reloads and shows the current permission state consistently."
+    expect:
+      interactive_count: { min: 3 }
+      text_visible:
+        - Rewind
+
+  - id: S7
+    name: Return to Dashboard
+    do: "Click the Dashboard sidebar icon (identifier: sidebar_dashboard) to return to the Dashboard page."
+    expect:
+      interactive_count: { min: 5 }
+      text_visible:
+        - Dashboard
