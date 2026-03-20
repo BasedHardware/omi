@@ -6,8 +6,6 @@ version: 2
 name: settings
 description: Settings flow — open Settings via sidebar or Cmd+comma, navigate all 9 sections (General, Rewind, Transcription, Notifications, Privacy, Account, AI Chat, Advanced, About), verify each section loads with expected controls
 app: com.omi.computer-macos
-evidence:
-  video: true
 covers:
   - desktop/Desktop/Sources/MainWindow/Pages/SettingsPage.swift
   - desktop/Desktop/Sources/MainWindow/SettingsSidebar.swift
