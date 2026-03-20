@@ -21,25 +21,21 @@ interface CaseStatus {
 }
 
 function formatDate(iso: string): string {
-  try {
-    return new Date(iso).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
-  } catch {
-    return iso;
-  }
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  return d.toLocaleDateString('en-US', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
 }
 
 function daysSince(iso: string): number {
-  try {
-    return Math.floor((Date.now() - new Date(iso).getTime()) / (1000 * 60 * 60 * 24));
-  } catch {
-    return 0;
-  }
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return 0;
+  return Math.floor((Date.now() - d.getTime()) / (1000 * 60 * 60 * 24));
 }
 
 async function getCaseStatus(ref: string): Promise<CaseStatus | null> {
