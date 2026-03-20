@@ -639,7 +639,7 @@ class WatchRecorderFlutterAPI: WatchRecorderFlutterAPIProtocol {
     }
   }
 }
-/// Dart → Swift: commands sent from Flutter to the native BLE module.
+/// Dart → Native: commands sent from Flutter to the native BLE module.
 ///
 /// Generated protocol from Pigeon that represents a handler of messages from Flutter.
 protocol BleHostApi {
@@ -647,8 +647,8 @@ protocol BleHostApi {
   func stopScan() throws
   func connectPeripheral(uuid: String) throws
   func disconnectPeripheral(uuid: String) throws
-  /// Reconnect a previously-paired peripheral using retrievePeripherals(withIdentifiers:).
-  /// No active scanning — iOS handles reconnection at the chipset level.
+  /// Reconnect a previously-paired peripheral. No active scanning — the platform
+  /// handles reconnection at the chipset level (iOS: retrievePeripherals, Android: autoConnect).
   func reconnectKnownPeripheral(uuid: String) throws
   func discoverServices(peripheralUuid: String) throws
   func readCharacteristic(peripheralUuid: String, serviceUuid: String, characteristicUuid: String, completion: @escaping (Result<FlutterStandardTypedData, Error>) -> Void)
@@ -657,12 +657,6 @@ protocol BleHostApi {
   func unsubscribeCharacteristic(peripheralUuid: String, serviceUuid: String, characteristicUuid: String) throws
   func getBluetoothState() throws -> String
   func isPeripheralConnected(uuid: String) throws -> Bool
-  /// Enable or disable audio batching. When enabled, audio characteristic
-  /// notifications are coalesced every ~60ms into a single bridge call.
-  func setAudioBatchingEnabled(enabled: Bool) throws
-  /// Register a characteristic UUID as an audio stream. Notifications for this
-  /// characteristic will be batched when audio batching is enabled.
-  func registerAudioCharacteristic(characteristicUuid: String) throws
   /// (Android only) Initiate CompanionDeviceManager association for a device.
   /// Shows the system chooser dialog filtered to this device's address.
   /// Returns the associated device address on success, empty string on failure/cancel.
@@ -735,8 +729,8 @@ class BleHostApiSetup {
     } else {
       disconnectPeripheralChannel.setMessageHandler(nil)
     }
-    /// Reconnect a previously-paired peripheral using retrievePeripherals(withIdentifiers:).
-    /// No active scanning — iOS handles reconnection at the chipset level.
+    /// Reconnect a previously-paired peripheral. No active scanning — the platform
+    /// handles reconnection at the chipset level (iOS: retrievePeripherals, Android: autoConnect).
     let reconnectKnownPeripheralChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.omi_pigeon.BleHostApi.reconnectKnownPeripheral\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
     if let api = api {
       reconnectKnownPeripheralChannel.setMessageHandler { message, reply in
@@ -868,40 +862,6 @@ class BleHostApiSetup {
     } else {
       isPeripheralConnectedChannel.setMessageHandler(nil)
     }
-    /// Enable or disable audio batching. When enabled, audio characteristic
-    /// notifications are coalesced every ~60ms into a single bridge call.
-    let setAudioBatchingEnabledChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.omi_pigeon.BleHostApi.setAudioBatchingEnabled\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
-    if let api = api {
-      setAudioBatchingEnabledChannel.setMessageHandler { message, reply in
-        let args = message as! [Any?]
-        let enabledArg = args[0] as! Bool
-        do {
-          try api.setAudioBatchingEnabled(enabled: enabledArg)
-          reply(wrapResult(nil))
-        } catch {
-          reply(wrapError(error))
-        }
-      }
-    } else {
-      setAudioBatchingEnabledChannel.setMessageHandler(nil)
-    }
-    /// Register a characteristic UUID as an audio stream. Notifications for this
-    /// characteristic will be batched when audio batching is enabled.
-    let registerAudioCharacteristicChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.omi_pigeon.BleHostApi.registerAudioCharacteristic\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
-    if let api = api {
-      registerAudioCharacteristicChannel.setMessageHandler { message, reply in
-        let args = message as! [Any?]
-        let characteristicUuidArg = args[0] as! String
-        do {
-          try api.registerAudioCharacteristic(characteristicUuid: characteristicUuidArg)
-          reply(wrapResult(nil))
-        } catch {
-          reply(wrapError(error))
-        }
-      }
-    } else {
-      registerAudioCharacteristicChannel.setMessageHandler(nil)
-    }
     /// (Android only) Initiate CompanionDeviceManager association for a device.
     /// Shows the system chooser dialog filtered to this device's address.
     /// Returns the associated device address on success, empty string on failure/cancel.
@@ -925,7 +885,7 @@ class BleHostApiSetup {
     }
   }
 }
-/// Swift → Dart: events pushed from the native BLE module to Flutter.
+/// Native → Dart: events pushed from the native BLE module to Flutter.
 ///
 /// Generated protocol from Pigeon that represents Flutter messages that can be called from Swift.
 protocol BleFlutterApiProtocol {
@@ -936,9 +896,6 @@ protocol BleFlutterApiProtocol {
   func onServicesDiscovered(peripheralUuid peripheralUuidArg: String, services servicesArg: [BleService], completion: @escaping (Result<Void, PigeonError>) -> Void)
   /// Individual characteristic value update (non-audio characteristics).
   func onCharacteristicValueUpdated(peripheralUuid peripheralUuidArg: String, serviceUuid serviceUuidArg: String, characteristicUuid characteristicUuidArg: String, value valueArg: FlutterStandardTypedData, completion: @escaping (Result<Void, PigeonError>) -> Void)
-  /// Batched audio data — multiple BLE notifications coalesced into one bridge call.
-  /// [batchedData] is the concatenated raw bytes from [notificationCount] notifications.
-  func onAudioBatchReceived(peripheralUuid peripheralUuidArg: String, serviceUuid serviceUuidArg: String, characteristicUuid characteristicUuidArg: String, batchedData batchedDataArg: FlutterStandardTypedData, notificationCount notificationCountArg: Int64, completion: @escaping (Result<Void, PigeonError>) -> Void)
   /// Called after app relaunch when iOS restores previously-connected peripherals.
   func onStateRestored(peripheralUuids peripheralUuidsArg: [String], completion: @escaping (Result<Void, PigeonError>) -> Void)
 }
@@ -1047,26 +1004,6 @@ class BleFlutterApi: BleFlutterApiProtocol {
     let channelName: String = "dev.flutter.pigeon.omi_pigeon.BleFlutterApi.onCharacteristicValueUpdated\(messageChannelSuffix)"
     let channel = FlutterBasicMessageChannel(name: channelName, binaryMessenger: binaryMessenger, codec: codec)
     channel.sendMessage([peripheralUuidArg, serviceUuidArg, characteristicUuidArg, valueArg] as [Any?]) { response in
-      guard let listResponse = response as? [Any?] else {
-        completion(.failure(createConnectionError(withChannelName: channelName)))
-        return
-      }
-      if listResponse.count > 1 {
-        let code: String = listResponse[0] as! String
-        let message: String? = nilOrValue(listResponse[1])
-        let details: String? = nilOrValue(listResponse[2])
-        completion(.failure(PigeonError(code: code, message: message, details: details)))
-      } else {
-        completion(.success(()))
-      }
-    }
-  }
-  /// Batched audio data — multiple BLE notifications coalesced into one bridge call.
-  /// [batchedData] is the concatenated raw bytes from [notificationCount] notifications.
-  func onAudioBatchReceived(peripheralUuid peripheralUuidArg: String, serviceUuid serviceUuidArg: String, characteristicUuid characteristicUuidArg: String, batchedData batchedDataArg: FlutterStandardTypedData, notificationCount notificationCountArg: Int64, completion: @escaping (Result<Void, PigeonError>) -> Void) {
-    let channelName: String = "dev.flutter.pigeon.omi_pigeon.BleFlutterApi.onAudioBatchReceived\(messageChannelSuffix)"
-    let channel = FlutterBasicMessageChannel(name: channelName, binaryMessenger: binaryMessenger, codec: codec)
-    channel.sendMessage([peripheralUuidArg, serviceUuidArg, characteristicUuidArg, batchedDataArg, notificationCountArg] as [Any?]) { response in
       guard let listResponse = response as? [Any?] else {
         completion(.failure(createConnectionError(withChannelName: channelName)))
         return

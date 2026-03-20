@@ -36,29 +36,6 @@ final class OmiBleManager: NSObject {
     /// Queued scan request if Bluetooth wasn't ready when startScan was called.
     private var pendingScan: (timeout: Int, serviceUuids: [String])?
 
-    // MARK: - Audio Batching
-
-    /// Characteristic UUIDs registered as audio streams (lowercased).
-    private var audioCharacteristicUuids: Set<String> = []
-
-    /// Whether audio batching is enabled.
-    private var audioBatchingEnabled = false
-
-    /// Per-peripheral audio batch buffers. Key: "peripheralUuid:serviceUuid:charUuid".
-    private var audioBatchBuffers: [String: Data] = [:]
-
-    /// Per-peripheral notification counts for current batch.
-    private var audioBatchCounts: [String: Int] = [:]
-
-    /// Coalescing timers per batch key.
-    private var audioBatchTimers: [String: Timer] = [:]
-
-    /// Batching interval in seconds.
-    private let audioBatchInterval: TimeInterval = 0.060 // 60ms
-
-    /// Max batch size before forced flush (4KB).
-    private let audioBatchMaxSize = 4096
-
     // MARK: - Initialization
 
     private override init() {
@@ -224,22 +201,6 @@ final class OmiBleManager: NSObject {
         peripherals[peripheralUuid]?.setNotifyValue(false, for: characteristic)
     }
 
-    // MARK: - Audio Batching Control
-
-    func setAudioBatchingEnabled(_ enabled: Bool) {
-        audioBatchingEnabled = enabled
-        if !enabled {
-            // Flush all pending batches
-            for key in audioBatchBuffers.keys {
-                flushAudioBatch(key: key)
-            }
-        }
-    }
-
-    func registerAudioCharacteristic(_ characteristicUuid: String) {
-        audioCharacteristicUuids.insert(characteristicUuid.lowercased())
-    }
-
     // MARK: - Bluetooth State
 
     func getBluetoothState() -> String {
@@ -287,97 +248,7 @@ final class OmiBleManager: NSObject {
 
     // MARK: - Audio Batch Helpers
 
-    private func isAudioCharacteristic(_ characteristic: CBCharacteristic) -> Bool {
-        return audioCharacteristicUuids.contains(fullUuidString(characteristic.uuid))
-    }
-
-    /// Batch key separator — must not appear in UUIDs (which contain hyphens and alphanumerics).
-    private static let batchKeySeparator = "|"
-
-    private func audioBatchKey(peripheralUuid: String, serviceUuid: String, characteristicUuid: String) -> String {
-        return "\(peripheralUuid)\(OmiBleManager.batchKeySeparator)\(serviceUuid)\(OmiBleManager.batchKeySeparator)\(characteristicUuid)".lowercased()
-    }
-
-    /// Number of header bytes to strip from consecutive audio frames (Omi 3-byte command prefix).
-    /// The first frame in each batch keeps its header so Dart can strip it normally.
-    var audioHeaderBytesToStrip: Int = 3
-
-    private func handleAudioNotification(peripheralUuid: String, serviceUuid: String, characteristicUuid: String, data: Data) {
-        let key = audioBatchKey(peripheralUuid: peripheralUuid, serviceUuid: serviceUuid, characteristicUuid: characteristicUuid)
-
-        let isFirstInBatch = audioBatchBuffers[key] == nil || audioBatchBuffers[key]!.isEmpty
-        if isFirstInBatch {
-            audioBatchBuffers[key] = Data()
-            audioBatchCounts[key] = 0
-        }
-
-        if isFirstInBatch {
-            // Keep the first frame's header intact — Dart strips it as normal
-            audioBatchBuffers[key]!.append(data)
-        } else {
-            // Strip header from consecutive frames
-            let strippedData = audioHeaderBytesToStrip > 0 && data.count > audioHeaderBytesToStrip
-                ? data.subdata(in: audioHeaderBytesToStrip..<data.count)
-                : data
-            audioBatchBuffers[key]!.append(strippedData)
-        }
-        audioBatchCounts[key]! += 1
-
-        // Flush if buffer exceeds max size
-        if audioBatchBuffers[key]!.count >= audioBatchMaxSize {
-            flushAudioBatch(key: key)
-            return
-        }
-
-        // Start coalescing timer if not already running
-        if audioBatchTimers[key] == nil {
-            audioBatchTimers[key] = Timer.scheduledTimer(withTimeInterval: audioBatchInterval, repeats: false) { [weak self] _ in
-                self?.flushAudioBatch(key: key)
-            }
-        }
-    }
-
-    private func flushAudioBatch(key: String) {
-        audioBatchTimers[key]?.invalidate()
-        audioBatchTimers[key] = nil
-
-        guard let buffer = audioBatchBuffers[key], !buffer.isEmpty,
-              let count = audioBatchCounts[key] else { return }
-
-        let parts = key.split(separator: Character(OmiBleManager.batchKeySeparator))
-        guard parts.count == 3 else { return }
-
-        let peripheralUuid = String(parts[0])
-        let serviceUuid = String(parts[1])
-        let characteristicUuid = String(parts[2])
-
-        let typedData = FlutterStandardTypedData(bytes: buffer)
-
-        audioBatchBuffers[key] = Data()
-        audioBatchCounts[key] = 0
-
-        flutterApi?.onAudioBatchReceived(
-            peripheralUuid: peripheralUuid,
-            serviceUuid: serviceUuid,
-            characteristicUuid: characteristicUuid,
-            batchedData: typedData,
-            notificationCount: Int64(count)
-        ) { _ in }
-    }
-
-    // MARK: - Cleanup on disconnect
-
     private func cleanupPeripheral(_ peripheralUuid: String) {
-        // Flush any pending audio batches for this peripheral
-        let keysToFlush = audioBatchBuffers.keys.filter { $0.hasPrefix(peripheralUuid.lowercased()) }
-        for key in keysToFlush {
-            flushAudioBatch(key: key)
-            audioBatchBuffers.removeValue(forKey: key)
-            audioBatchCounts.removeValue(forKey: key)
-            audioBatchTimers[key]?.invalidate()
-            audioBatchTimers.removeValue(forKey: key)
-        }
-
         discoveredServices.removeValue(forKey: peripheralUuid)
 
         // Clean up pending completions
@@ -449,7 +320,9 @@ extension OmiBleManager: CBCentralManagerDelegate {
     func centralManager(_ central: CBCentralManager, didConnect peripheral: CBPeripheral) {
         let uuid = peripheralUuidString(peripheral)
         NSLog("[OmiBle] didConnect: \(peripheral.name ?? "<nil>"), uuid=\(uuid)")
+        peripheral.delegate = self
         flutterApi?.onPeripheralConnected(peripheralUuid: uuid) { _ in }
+        peripheral.discoverServices(nil)
     }
 
     func centralManager(_ central: CBCentralManager, didFailToConnect peripheral: CBPeripheral, error: Error?) {
@@ -533,17 +406,13 @@ extension OmiBleManager: CBPeripheralDelegate {
         // Handle notification
         guard let data = characteristic.value, !data.isEmpty else { return }
 
-        if audioBatchingEnabled && isAudioCharacteristic(characteristic) {
-            handleAudioNotification(peripheralUuid: uuid, serviceUuid: serviceUuid, characteristicUuid: charUuid, data: data)
-        } else {
-            let typedData = FlutterStandardTypedData(bytes: data)
-            flutterApi?.onCharacteristicValueUpdated(
-                peripheralUuid: uuid,
-                serviceUuid: serviceUuid,
-                characteristicUuid: charUuid,
-                value: typedData
-            ) { _ in }
-        }
+        let typedData = FlutterStandardTypedData(bytes: data)
+        flutterApi?.onCharacteristicValueUpdated(
+            peripheralUuid: uuid,
+            serviceUuid: serviceUuid,
+            characteristicUuid: charUuid,
+            value: typedData
+        ) { _ in }
     }
 
     func peripheral(_ peripheral: CBPeripheral, didWriteValueFor characteristic: CBCharacteristic, error: Error?) {
