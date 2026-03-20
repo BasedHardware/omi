@@ -1921,8 +1921,8 @@ class _ManualFirmwareFlashPageState extends State<_ManualFirmwareFlashPage> with
 
   Future<void> _startFlash() async {
     setState(() {
-      _confirmed = true; 
-      _error = null;
+      _confirmed = true;
+      _error = null; 
     });
     try {
       await startDfu(widget.device, zipFilePath: widget.zipFilePath);
