@@ -443,7 +443,7 @@ async def _stream_handler(
                 # Record to Redis for rolling window tracking
                 if FAIR_USE_ENABLED and speech_ms > 0:
                     record_speech_ms(uid, speech_ms)
-                    logger.info(f'fair_use: recorded {speech_ms}ms speech uid={uid} session={session_id}')
+                    logger.debug(f'fair_use: recorded {speech_ms}ms speech uid={uid} session={session_id}')
 
             if last_usage_record_timestamp:
                 current_time = time.time()
@@ -467,7 +467,6 @@ async def _stream_handler(
             if FAIR_USE_ENABLED and now_ts - fair_use_last_check_ts >= FAIR_USE_CHECK_INTERVAL_SECONDS:
                 fair_use_last_check_ts = now_ts
                 try:
-                    speech_totals = get_rolling_speech_ms(uid)
                     triggered_caps = check_soft_caps(uid)
                     if triggered_caps:
                         logger.info(
@@ -475,6 +474,8 @@ async def _stream_handler(
                         )
                         asyncio.create_task(trigger_classifier_if_needed(uid, triggered_caps, session_id))
                     else:
+                        # Log rolling totals only on the non-triggered path (avoids duplicate Redis read)
+                        speech_totals = get_rolling_speech_ms(uid)
                         logger.info(
                             f'fair_use: cap check ok uid={uid} session={session_id}'
                             f' daily={speech_totals["daily_ms"]}ms'
@@ -2659,7 +2660,7 @@ async def _stream_handler(
                 speech_seconds_delta = speech_ms // 1000
                 if FAIR_USE_ENABLED and speech_ms > 0:
                     record_speech_ms(uid, speech_ms)
-                    logger.info(f'fair_use: session end flush {speech_ms}ms speech uid={uid} session={session_id}')
+                    logger.debug(f'fair_use: session end flush {speech_ms}ms speech uid={uid} session={session_id}')
 
             if transcription_seconds > 0 or words_to_record > 0 or speech_seconds_delta > 0:
                 record_usage(
