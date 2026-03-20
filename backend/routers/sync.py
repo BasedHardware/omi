@@ -567,6 +567,14 @@ def retrieve_vad_segments(path: str, segmented_paths: set, errors: list = None, 
             errors.append(error_msg)
         raise  # Re-raise to ensure thread failure is visible
 
+    # Accumulate raw VAD speech durations BEFORE merging (#5854)
+    # Raw segments = actual speech spans; merged segments include silence gaps up to 120s.
+    if speech_durations is not None:
+        for seg in voice_segments:
+            dur = seg['end'] - seg['start']
+            if dur >= 1:
+                speech_durations.append(dur)
+
     segments = []
     # should we merge more aggressively, to avoid too many small segments? ~ not for now
     # Pros -> lesser segments, faster, less concurrency
@@ -592,9 +600,6 @@ def retrieve_vad_segments(path: str, segmented_paths: set, errors: list = None, 
         for i, segment in enumerate(segments):
             if (segment['end'] - segment['start']) < 1:
                 continue
-            # Accumulate speech duration for fair-use tracking (#5854)
-            if speech_durations is not None:
-                speech_durations.append(segment['end'] - segment['start'])
             segment_timestamp = start_timestamp + segment['start']
             segment_path = f'{path_dir}/{segment_timestamp}.wav'
             segment_aseg = aseg[segment['start'] * 1000 : segment['end'] * 1000]
