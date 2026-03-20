@@ -42,7 +42,8 @@ class NotificationUtil {
       await onActionReceivedMethodImpl(receivedAction);
     } else {
       print(
-          'onActionReceivedMethod was called inside a parallel dart isolate, where receivePort was never initialized.');
+        'onActionReceivedMethod was called inside a parallel dart isolate, where receivePort was never initialized.',
+      );
       SendPort? sendPort = IsolateNameServer.lookupPortByName('notification_action_port');
 
       if (sendPort != null) {
@@ -82,10 +83,7 @@ class NotificationUtil {
 
     MyApp.navigatorKey.currentState?.pushReplacement(
       MaterialPageRoute(
-        builder: (context) => HomePageWrapper(
-          navigateToRoute: navigateTo,
-          autoMessage: autoMessage,
-        ),
+        builder: (context) => HomePageWrapper(navigateToRoute: navigateTo, autoMessage: autoMessage),
       ),
     );
   }

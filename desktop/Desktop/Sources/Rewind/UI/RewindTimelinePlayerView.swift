@@ -314,10 +314,10 @@ class TimelinePlayerViewModel: ObservableObject {
     }
 
     var appSegments: [AppSegment] {
-        guard !screenshots.isEmpty else { return [] }
+        guard let first = screenshots.first else { return [] }
 
         var segments: [AppSegment] = []
-        var currentApp = screenshots.first!.appName
+        var currentApp = first.appName
         var currentCount = 0
 
         for screenshot in screenshots {

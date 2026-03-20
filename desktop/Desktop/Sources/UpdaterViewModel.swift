@@ -137,15 +137,10 @@ final class UpdaterDelegate: NSObject, SPUUpdaterDelegate {
       }
 
       // SUInstallationError (4005): Sparkle's installer failed to launch.
-      // On macOS 26, AuthorizationCreate/SMJobSubmit can fail due to stricter
-      // code signature validation or on-demand-only launchd mode.
-      // Fallback: open the download page so the user can install manually.
+      // Don't open the browser — Sparkle will retry on next check cycle.
       let isInstallationError = nsError.domain == SUSparkleErrorDomain && nsError.code == 4005
       if isInstallationError {
-        logSync("Sparkle: Installation failed, opening download page as fallback")
-        if let url = URL(string: "https://macos.omi.me") {
-          NSWorkspace.shared.open(url)
-        }
+        logSync("Sparkle: Installation failed (error 4005), will retry on next check")
       }
     }
   }

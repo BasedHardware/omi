@@ -40,13 +40,11 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> with TickerProvid
   @override
   void initState() {
     super.initState();
-    _questionAnimationController = AnimationController(
-      duration: const Duration(milliseconds: 500),
-      vsync: this,
-    );
-    _questionFadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(parent: _questionAnimationController, curve: Curves.easeInOut),
-    );
+    _questionAnimationController = AnimationController(duration: const Duration(milliseconds: 500), vsync: this);
+    _questionFadeAnimation = Tween<double>(
+      begin: 0.0,
+      end: 1.0,
+    ).animate(CurvedAnimation(parent: _questionAnimationController, curve: Curves.easeInOut));
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
 
@@ -132,395 +130,391 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> with TickerProvid
           }
         }
       },
-      child: Consumer2<SpeechProfileProvider, CaptureProvider>(builder: (context, provider, _, child) {
-        return MessageListener<SpeechProfileProvider>(
-          showInfo: (info) {
-            if (info == 'SCROLL_DOWN') {
-              scrollDown();
-            } else if (info == 'NEXT_QUESTION') {
-              _questionAnimationController.reset();
-              _questionAnimationController.forward();
-            }
-          },
-          showError: (error) {
-            if (error == 'MULTIPLE_SPEAKERS') {
-              showDialog(
-                context: context,
-                builder: (c) => getDialog(
-                  context,
-                  () {
-                    provider.close();
-                    Navigator.pop(context);
-                  },
-                  () {},
-                  context.l10n.multipleSpeakersDetected,
-                  context.l10n.multipleSpeakersDescription,
-                  okButtonText: context.l10n.tryAgain,
-                  singleButton: true,
-                ),
-                barrierDismissible: false,
-              );
-            } else if (error == 'TOO_SHORT') {
-              showDialog(
-                context: context,
-                builder: (c) => getDialog(
-                  context,
-                  () {
-                    Navigator.pop(context);
-                    Navigator.pop(context);
-                  },
-                  () {},
-                  context.l10n.invalidRecordingDetected,
-                  context.l10n.notEnoughSpeechDescription,
-                  okButtonText: context.l10n.ok,
-                  singleButton: true,
-                ),
-                barrierDismissible: false,
-              );
-            } else if (error == 'INVALID_RECORDING') {
-              showDialog(
-                context: context,
-                builder: (c) => getDialog(
-                  context,
-                  () {
-                    Navigator.pop(context);
-                    Navigator.pop(context);
-                  },
-                  () {},
-                  context.l10n.invalidRecordingDetected,
-                  context.l10n.speechDurationDescription,
-                  okButtonText: context.l10n.ok,
-                  singleButton: true,
-                ),
-                barrierDismissible: false,
-              );
-            } else if (error == 'SOCKET_DISCONNECTED' || error == 'SOCKET_ERROR') {
-              showDialog(
-                context: context,
-                builder: (c) => getDialog(
-                  context,
-                  () {
-                    provider.close();
-                    Navigator.pop(context);
-                  },
-                  () {},
-                  context.l10n.connectionLost,
-                  context.l10n.connectionLostDescription,
-                  okButtonText: context.l10n.tryAgain,
-                  singleButton: true,
-                ),
-                barrierDismissible: false,
-              );
-            }
-          },
-          child: Scaffold(
-            backgroundColor: Theme.of(context).colorScheme.primary,
-            appBar: AppBar(
+      child: Consumer2<SpeechProfileProvider, CaptureProvider>(
+        builder: (context, provider, _, child) {
+          return MessageListener<SpeechProfileProvider>(
+            showInfo: (info) {
+              if (info == 'SCROLL_DOWN') {
+                scrollDown();
+              } else if (info == 'NEXT_QUESTION') {
+                _questionAnimationController.reset();
+                _questionAnimationController.forward();
+              }
+            },
+            showError: (error) {
+              if (error == 'MULTIPLE_SPEAKERS') {
+                showDialog(
+                  context: context,
+                  builder: (c) => getDialog(
+                    context,
+                    () {
+                      provider.close();
+                      Navigator.pop(context);
+                    },
+                    () {},
+                    context.l10n.multipleSpeakersDetected,
+                    context.l10n.multipleSpeakersDescription,
+                    okButtonText: context.l10n.tryAgain,
+                    singleButton: true,
+                  ),
+                  barrierDismissible: false,
+                );
+              } else if (error == 'TOO_SHORT') {
+                showDialog(
+                  context: context,
+                  builder: (c) => getDialog(
+                    context,
+                    () {
+                      Navigator.pop(context);
+                      Navigator.pop(context);
+                    },
+                    () {},
+                    context.l10n.invalidRecordingDetected,
+                    context.l10n.notEnoughSpeechDescription,
+                    okButtonText: context.l10n.ok,
+                    singleButton: true,
+                  ),
+                  barrierDismissible: false,
+                );
+              } else if (error == 'INVALID_RECORDING') {
+                showDialog(
+                  context: context,
+                  builder: (c) => getDialog(
+                    context,
+                    () {
+                      Navigator.pop(context);
+                      Navigator.pop(context);
+                    },
+                    () {},
+                    context.l10n.invalidRecordingDetected,
+                    context.l10n.speechDurationDescription,
+                    okButtonText: context.l10n.ok,
+                    singleButton: true,
+                  ),
+                  barrierDismissible: false,
+                );
+              } else if (error == 'SOCKET_DISCONNECTED' || error == 'SOCKET_ERROR') {
+                showDialog(
+                  context: context,
+                  builder: (c) => getDialog(
+                    context,
+                    () {
+                      provider.close();
+                      Navigator.pop(context);
+                    },
+                    () {},
+                    context.l10n.connectionLost,
+                    context.l10n.connectionLostDescription,
+                    okButtonText: context.l10n.tryAgain,
+                    singleButton: true,
+                  ),
+                  barrierDismissible: false,
+                );
+              }
+            },
+            child: Scaffold(
               backgroundColor: Theme.of(context).colorScheme.primary,
-              automaticallyImplyLeading: true,
-              title: const Text(
-                '',
-                style: TextStyle(color: Colors.white, fontSize: 20),
+              appBar: AppBar(
+                backgroundColor: Theme.of(context).colorScheme.primary,
+                automaticallyImplyLeading: true,
+                title: const Text('', style: TextStyle(color: Colors.white, fontSize: 20)),
+                actions: [
+                  !widget.onbording
+                      ? IconButton(
+                          onPressed: () {
+                            showDialog(
+                              context: context,
+                              builder: (c) => getDialog(
+                                context,
+                                () => Navigator.pop(context),
+                                () => Navigator.pop(context),
+                                context.l10n.howToTakeGoodSample,
+                                context.l10n.goodSampleInstructions,
+                                singleButton: true,
+                              ),
+                            );
+                          },
+                          icon: const Icon(Icons.question_mark, size: 20),
+                        )
+                      : TextButton(
+                          onPressed: () {
+                            routeToPage(context, const HomePageWrapper(), replace: true);
+                          },
+                          child: Text(
+                            context.l10n.skip,
+                            style: const TextStyle(color: Colors.white, decoration: TextDecoration.underline),
+                          ),
+                        ),
+                ],
+                centerTitle: true,
+                elevation: 0,
+                leading: widget.onbording
+                    ? const SizedBox()
+                    : IconButton(icon: const Icon(Icons.arrow_back_ios_new), onPressed: () => Navigator.pop(context)),
               ),
-              actions: [
-                !widget.onbording
-                    ? IconButton(
-                        onPressed: () {
-                          showDialog(
-                            context: context,
-                            builder: (c) => getDialog(
-                              context,
-                              () => Navigator.pop(context),
-                              () => Navigator.pop(context),
-                              context.l10n.howToTakeGoodSample,
-                              context.l10n.goodSampleInstructions,
-                              singleButton: true,
-                            ),
-                          );
-                        },
-                        icon: const Icon(
-                          Icons.question_mark,
-                          size: 20,
-                        ))
-                    : TextButton(
-                        onPressed: () {
-                          routeToPage(context, const HomePageWrapper(), replace: true);
-                        },
-                        child: Text(
-                          context.l10n.skip,
-                          style: const TextStyle(color: Colors.white, decoration: TextDecoration.underline),
-                        ),
+              body: Stack(
+                children: [
+                  Align(
+                    alignment: Alignment.topCenter,
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(24, 8, 24, 0),
+                      child: Column(
+                        children: [
+                          DeviceAnimationWidget(
+                            animatedBackground: true,
+                            deviceType: provider.device?.type,
+                            deviceName: provider.device?.name,
+                            modelNumber: provider.device?.modelNumber,
+                            isConnected: provider.device != null,
+                          ),
+                        ],
                       ),
-              ],
-              centerTitle: true,
-              elevation: 0,
-              leading: widget.onbording
-                  ? const SizedBox()
-                  : IconButton(
-                      icon: const Icon(Icons.arrow_back_ios_new),
-                      onPressed: () => Navigator.pop(context),
-                    ),
-            ),
-            body: Stack(
-              children: [
-                Align(
-                  alignment: Alignment.topCenter,
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(24, 8, 24, 0),
-                    child: Column(
-                      children: [
-                        DeviceAnimationWidget(
-                          animatedBackground: true,
-                          deviceType: provider.device?.type,
-                          deviceName: provider.device?.name,
-                          modelNumber: provider.device?.modelNumber,
-                          isConnected: provider.device != null,
-                        ),
-                      ],
                     ),
                   ),
-                ),
-                Align(
-                  alignment: Alignment.center,
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(40, 40, 40, 48),
-                    child: !provider.startedRecording
-                        ? Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              const SizedBox(height: 10),
-                              Text(
-                                context.l10n.speechProfileIntro,
-                                textAlign: TextAlign.center,
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 20,
-                                  height: 1.4,
-                                  fontWeight: FontWeight.w400,
-                                ),
-                              ),
-                              const SizedBox(height: 20),
-                            ],
-                          )
-                        : provider.text.isEmpty
-                            ? const SizedBox.shrink()
-                            : Padding(
-                                padding: const EdgeInsets.only(top: 80.0),
-                                child: LayoutBuilder(
-                                  builder: (context, constraints) {
-                                    return ShaderMask(
-                                      shaderCallback: (bounds) {
-                                        if (provider.text.split(' ').length < 10) {
-                                          return const LinearGradient(colors: [Colors.white, Colors.white])
-                                              .createShader(bounds);
-                                        }
-                                        return const LinearGradient(
-                                          colors: [Colors.transparent, Colors.white],
-                                          stops: [0.0, 0.5],
-                                          begin: Alignment.topCenter,
-                                          end: Alignment.bottomCenter,
-                                        ).createShader(bounds);
-                                      },
-                                      blendMode: BlendMode.dstIn,
-                                      child: SizedBox(
-                                        height: 130,
-                                        child: ListView(
-                                          controller: _scrollController,
-                                          shrinkWrap: true,
-                                          physics: const NeverScrollableScrollPhysics(),
-                                          children: [
-                                            Text(
-                                              provider.text,
-                                              textAlign: TextAlign.center,
-                                              style: const TextStyle(
-                                                color: Colors.white,
-                                                fontSize: 20,
-                                                fontWeight: FontWeight.w400,
-                                                height: 1.5,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                    );
-                                  },
-                                ),
-                              ),
-                  ),
-                ),
-                Align(
-                  alignment: Alignment.bottomCenter,
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(0, 0, 0, 48),
-                    child: !provider.startedRecording
-                        ? Column(
-                            mainAxisAlignment: MainAxisAlignment.end,
-                            children: [
-                              if (provider.device == null)
-                                Padding(
-                                  padding: const EdgeInsets.only(bottom: 16),
-                                  child: Text(
-                                    context.l10n.noDeviceConnectedUseMic,
-                                    style: TextStyle(color: Colors.grey.shade400, fontSize: 14),
-                                    textAlign: TextAlign.center,
+                  Align(
+                    alignment: Alignment.center,
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(40, 40, 40, 48),
+                      child: !provider.startedRecording
+                          ? Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                const SizedBox(height: 10),
+                                Text(
+                                  context.l10n.speechProfileIntro,
+                                  textAlign: TextAlign.center,
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 20,
+                                    height: 1.4,
+                                    fontWeight: FontWeight.w400,
                                   ),
                                 ),
-                              provider.isInitialising
-                                  ? const CircularProgressIndicator(
-                                      color: Colors.white,
-                                    )
-                                  : MaterialButton(
-                                      onPressed: () async {
-                                        // Check if user has set primary language, if not, show dialog
-                                        if (!context.read<HomeProvider>().hasSetPrimaryLanguage) {
-                                          await LanguageSelectionDialog.show(context);
-                                        }
-
-                                        bool usePhoneMic = false;
-
-                                        // Check if device is connected and supports opus
-                                        final currentDevice = provider.device;
-                                        if (currentDevice != null) {
-                                          try {
-                                            BleAudioCodec codec = await _getAudioCodec(currentDevice.id);
-                                            if (!codec.isOpusSupported()) {
-                                              // Device doesn't support opus, use phone mic
-                                              usePhoneMic = true;
-                                            }
-                                          } catch (e) {
-                                            // Device disconnected, use phone mic
-                                            usePhoneMic = true;
-                                          }
-                                        } else {
-                                          // No device connected, use phone mic
-                                          usePhoneMic = true;
-                                        }
-
-                                        await stopDeviceRecording();
-                                        bool success = await provider.initialise(
-                                          finalizedCallback: restartDeviceRecording,
-                                          processConversationCallback: () {
-                                            Provider.of<CaptureProvider>(context, listen: false)
-                                                .forceProcessingCurrentConversation();
-                                          },
-                                          usePhoneMic: usePhoneMic,
-                                        );
-                                        if (!success) {
-                                          // Initialization failed, error dialog will be shown
-                                          await restartDeviceRecording();
-                                          return;
-                                        }
-                                        provider.forceCompletionTimer =
-                                            Timer(Duration(seconds: provider.maxDuration), () {
-                                          provider.finalize();
-                                        });
-                                        provider.updateStartedRecording(true);
-                                        _questionAnimationController.forward();
-                                      },
-                                      color: Colors.white,
-                                      padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 14),
-                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
-                                      child: Text(
-                                        SharedPreferencesUtil().hasSpeakerProfile
-                                            ? context.l10n.doItAgain
-                                            : context.l10n.getStarted,
-                                        style: const TextStyle(color: Colors.black),
+                                const SizedBox(height: 20),
+                              ],
+                            )
+                          : provider.text.isEmpty
+                          ? const SizedBox.shrink()
+                          : Padding(
+                              padding: const EdgeInsets.only(top: 80.0),
+                              child: LayoutBuilder(
+                                builder: (context, constraints) {
+                                  return ShaderMask(
+                                    shaderCallback: (bounds) {
+                                      if (provider.text.split(' ').length < 10) {
+                                        return const LinearGradient(
+                                          colors: [Colors.white, Colors.white],
+                                        ).createShader(bounds);
+                                      }
+                                      return const LinearGradient(
+                                        colors: [Colors.transparent, Colors.white],
+                                        stops: [0.0, 0.5],
+                                        begin: Alignment.topCenter,
+                                        end: Alignment.bottomCenter,
+                                      ).createShader(bounds);
+                                    },
+                                    blendMode: BlendMode.dstIn,
+                                    child: SizedBox(
+                                      height: 130,
+                                      child: ListView(
+                                        controller: _scrollController,
+                                        shrinkWrap: true,
+                                        physics: const NeverScrollableScrollPhysics(),
+                                        children: [
+                                          Text(
+                                            provider.text,
+                                            textAlign: TextAlign.center,
+                                            style: const TextStyle(
+                                              color: Colors.white,
+                                              fontSize: 20,
+                                              fontWeight: FontWeight.w400,
+                                              height: 1.5,
+                                            ),
+                                          ),
+                                        ],
                                       ),
                                     ),
-                              const SizedBox(height: 24),
-                              SharedPreferencesUtil().hasSpeakerProfile
-                                  ? TextButton(
-                                      onPressed: () {
-                                        routeToPage(context, const UserSpeechSamples());
-                                      },
-                                      child: Text(
-                                        context.l10n.listenToSpeechProfile,
-                                        style: const TextStyle(color: Colors.white, fontSize: 16),
-                                      ))
-                                  : const SizedBox(),
-                              TextButton(
+                                  );
+                                },
+                              ),
+                            ),
+                    ),
+                  ),
+                  Align(
+                    alignment: Alignment.bottomCenter,
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(0, 0, 0, 48),
+                      child: !provider.startedRecording
+                          ? Column(
+                              mainAxisAlignment: MainAxisAlignment.end,
+                              children: [
+                                if (provider.device == null)
+                                  Padding(
+                                    padding: const EdgeInsets.only(bottom: 16),
+                                    child: Text(
+                                      context.l10n.noDeviceConnectedUseMic,
+                                      style: TextStyle(color: Colors.grey.shade400, fontSize: 14),
+                                      textAlign: TextAlign.center,
+                                    ),
+                                  ),
+                                provider.isInitialising
+                                    ? const CircularProgressIndicator(color: Colors.white)
+                                    : MaterialButton(
+                                        onPressed: () async {
+                                          // Check if user has set primary language, if not, show dialog
+                                          if (!context.read<HomeProvider>().hasSetPrimaryLanguage) {
+                                            await LanguageSelectionDialog.show(context);
+                                          }
+
+                                          bool usePhoneMic = false;
+
+                                          // Check if device is connected and supports opus
+                                          final currentDevice = provider.device;
+                                          if (currentDevice != null) {
+                                            try {
+                                              BleAudioCodec codec = await _getAudioCodec(currentDevice.id);
+                                              if (!codec.isOpusSupported()) {
+                                                // Device doesn't support opus, use phone mic
+                                                usePhoneMic = true;
+                                              }
+                                            } catch (e) {
+                                              // Device disconnected, use phone mic
+                                              usePhoneMic = true;
+                                            }
+                                          } else {
+                                            // No device connected, use phone mic
+                                            usePhoneMic = true;
+                                          }
+
+                                          await stopDeviceRecording();
+                                          bool success = await provider.initialise(
+                                            finalizedCallback: restartDeviceRecording,
+                                            processConversationCallback: () {
+                                              Provider.of<CaptureProvider>(
+                                                context,
+                                                listen: false,
+                                              ).forceProcessingCurrentConversation();
+                                            },
+                                            usePhoneMic: usePhoneMic,
+                                          );
+                                          if (!success) {
+                                            // Initialization failed, error dialog will be shown
+                                            await restartDeviceRecording();
+                                            return;
+                                          }
+                                          provider.forceCompletionTimer = Timer(
+                                            Duration(seconds: provider.maxDuration),
+                                            () {
+                                              provider.finalize();
+                                            },
+                                          );
+                                          provider.updateStartedRecording(true);
+                                          _questionAnimationController.forward();
+                                        },
+                                        color: Colors.white,
+                                        padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 14),
+                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+                                        child: Text(
+                                          SharedPreferencesUtil().hasSpeakerProfile
+                                              ? context.l10n.doItAgain
+                                              : context.l10n.getStarted,
+                                          style: const TextStyle(color: Colors.black),
+                                        ),
+                                      ),
+                                const SizedBox(height: 24),
+                                SharedPreferencesUtil().hasSpeakerProfile
+                                    ? TextButton(
+                                        onPressed: () {
+                                          routeToPage(context, const UserSpeechSamples());
+                                        },
+                                        child: Text(
+                                          context.l10n.listenToSpeechProfile,
+                                          style: const TextStyle(color: Colors.white, fontSize: 16),
+                                        ),
+                                      )
+                                    : const SizedBox(),
+                                TextButton(
                                   onPressed: () {
                                     routeToPage(context, const UserPeoplePage());
                                   },
                                   child: Text(
                                     context.l10n.recognizingOthers,
                                     style: const TextStyle(color: Colors.white, fontSize: 16),
-                                  )),
-                            ],
-                          )
-                        : provider.profileCompleted
-                            ? Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
-                                decoration: BoxDecoration(
-                                  border: const GradientBoxBorder(
-                                    gradient: LinearGradient(colors: [
+                                  ),
+                                ),
+                              ],
+                            )
+                          : provider.profileCompleted
+                          ? Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
+                              decoration: BoxDecoration(
+                                border: const GradientBoxBorder(
+                                  gradient: LinearGradient(
+                                    colors: [
                                       Color.fromARGB(127, 208, 208, 208),
                                       Color.fromARGB(127, 188, 99, 121),
                                       Color.fromARGB(127, 86, 101, 182),
-                                      Color.fromARGB(127, 126, 190, 236)
-                                    ]),
-                                    width: 2,
-                                  ),
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                child: TextButton(
-                                  onPressed: () {
-                                    // Conversation processing already triggered in finalize()
-                                    Navigator.pop(context);
-                                  },
-                                  child: Text(
-                                    context.l10n.allDone,
-                                    style: const TextStyle(color: Colors.white, fontSize: 16),
-                                  ),
-                                ),
-                              )
-                            : provider.uploadingProfile
-                                ? const CircularProgressIndicator(
-                                    valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                                  )
-                                : Column(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      const SizedBox(height: 8),
-                                      FadeTransition(
-                                        opacity: _questionFadeAnimation,
-                                        child: Text(
-                                          provider.currentQuestion,
-                                          style: const TextStyle(color: Colors.white, fontSize: 22, height: 1.3),
-                                          textAlign: TextAlign.center,
-                                        ),
-                                      ),
-                                      const SizedBox(height: 8),
-                                      SizedBox(
-                                        width: MediaQuery.sizeOf(context).width * 0.9,
-                                        child: ProgressBarWithPercentage(progressValue: provider.questionProgress),
-                                      ),
-                                      const SizedBox(height: 8),
-                                      Text(
-                                        context.l10n.keepGoingGreat,
-                                        style: TextStyle(color: Colors.grey.shade300, fontSize: 14, height: 1.3),
-                                        textAlign: TextAlign.center,
-                                      ),
-                                      const SizedBox(height: 8),
-                                      TextButton(
-                                        onPressed: () => provider.skipCurrentQuestion(),
-                                        child: Text(
-                                          context.l10n.skipThisQuestion,
-                                          style: const TextStyle(
-                                            color: Colors.white70,
-                                            fontSize: 14,
-                                          ),
-                                        ),
-                                      ),
+                                      Color.fromARGB(127, 126, 190, 236),
                                     ],
                                   ),
+                                  width: 2,
+                                ),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: TextButton(
+                                onPressed: () {
+                                  // Conversation processing already triggered in finalize()
+                                  Navigator.pop(context);
+                                },
+                                child: Text(
+                                  context.l10n.allDone,
+                                  style: const TextStyle(color: Colors.white, fontSize: 16),
+                                ),
+                              ),
+                            )
+                          : provider.uploadingProfile
+                          ? const CircularProgressIndicator(valueColor: AlwaysStoppedAnimation<Color>(Colors.white))
+                          : Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const SizedBox(height: 8),
+                                FadeTransition(
+                                  opacity: _questionFadeAnimation,
+                                  child: Text(
+                                    provider.currentQuestion,
+                                    style: const TextStyle(color: Colors.white, fontSize: 22, height: 1.3),
+                                    textAlign: TextAlign.center,
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                SizedBox(
+                                  width: MediaQuery.sizeOf(context).width * 0.9,
+                                  child: ProgressBarWithPercentage(progressValue: provider.questionProgress),
+                                ),
+                                const SizedBox(height: 8),
+                                Text(
+                                  context.l10n.keepGoingGreat,
+                                  style: TextStyle(color: Colors.grey.shade300, fontSize: 14, height: 1.3),
+                                  textAlign: TextAlign.center,
+                                ),
+                                const SizedBox(height: 8),
+                                TextButton(
+                                  onPressed: () => provider.skipCurrentQuestion(),
+                                  child: Text(
+                                    context.l10n.skipThisQuestion,
+                                    style: const TextStyle(color: Colors.white70, fontSize: 14),
+                                  ),
+                                ),
+                              ],
+                            ),
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
-        );
-      }),
+          );
+        },
+      ),
     );
   }
 }

@@ -9,12 +9,7 @@ class WavMetadata {
   final int bitsPerSample;
   final int dataSize;
 
-  WavMetadata({
-    required this.sampleRate,
-    required this.channels,
-    required this.bitsPerSample,
-    required this.dataSize,
-  });
+  WavMetadata({required this.sampleRate, required this.channels, required this.bitsPerSample, required this.dataSize});
 }
 
 class WavCombiner {
@@ -88,12 +83,7 @@ class WavCombiner {
     final bitsPerSample = _readUint16(bytes, 34);
     final dataSize = _readUint32(bytes, 40);
 
-    return WavMetadata(
-      sampleRate: sampleRate,
-      channels: channels,
-      bitsPerSample: bitsPerSample,
-      dataSize: dataSize,
-    );
+    return WavMetadata(sampleRate: sampleRate, channels: channels, bitsPerSample: bitsPerSample, dataSize: dataSize);
   }
 
   static Future<bool> validateCompatibility(List<WavMetadata> metadataList) async {

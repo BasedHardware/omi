@@ -1711,12 +1711,7 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'ENHETER',
-      one: 'ENHET',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'ENHETER', one: 'ENHET');
     return '$count $_temp0 HITTAD(E) I NÄRHETEN';
   }
 
@@ -8563,4 +8558,65 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get phoneHideKeypad => 'Dölj knappsats';
+
+  @override
+  String get fairUsePolicy => 'Rimlig användning';
+
+  @override
+  String get fairUseLoadError => 'Det gick inte att läsa in status för rimlig användning. Försök igen.';
+
+  @override
+  String get fairUseStatusNormal => 'Din användning är inom normala gränser.';
+
+  @override
+  String get fairUseStageNormal => 'Normal';
+
+  @override
+  String get fairUseStageWarning => 'Varning';
+
+  @override
+  String get fairUseStageThrottle => 'Begränsad';
+
+  @override
+  String get fairUseStageRestrict => 'Blockerad';
+
+  @override
+  String get fairUseSpeechUsage => 'Talanvändning';
+
+  @override
+  String get fairUseToday => 'Idag';
+
+  @override
+  String get fairUse3Day => '3-dagars rullande';
+
+  @override
+  String get fairUseWeekly => 'Veckovis rullande';
+
+  @override
+  String get fairUseAboutTitle => 'Om rimlig användning';
+
+  @override
+  String get fairUseAboutBody =>
+      'Omi är utformat för personliga samtal, möten och liveinteraktioner. Användningen mäts efter faktisk detekterad taltid, inte anslutningstid. Om användningen avsevärt överstiger normala mönster för icke-personligt innehåll kan justeringar tillämpas.';
+
+  @override
+  String fairUseCaseRefCopied(String caseRef) {
+    return '$caseRef kopierat';
+  }
+
+  @override
+  String get fairUseDailyTranscription => 'Daily Transcription';
+
+  @override
+  String fairUseBudgetUsed(String used, String limit) {
+    return '${used}m / ${limit}m';
+  }
+
+  @override
+  String get fairUseBudgetExhausted => 'Daily transcription limit reached';
+
+  @override
+  String fairUseBudgetResetsAt(String time) {
+    return 'Resets $time';
+  }
 }

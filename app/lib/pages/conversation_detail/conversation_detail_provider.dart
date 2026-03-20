@@ -316,10 +316,14 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
     } catch (err, stacktrace) {
       print(err);
       var conversationReporting = MixpanelManager().getConversationEventProperties(conversation);
-      await PlatformManager.instance.crashReporter.reportCrash(err, stacktrace, userAttributes: {
-        'conversation_transcript_length': conversationReporting['transcript_length'].toString(),
-        'conversation_transcript_word_count': conversationReporting['transcript_word_count'].toString(),
-      });
+      await PlatformManager.instance.crashReporter.reportCrash(
+        err,
+        stacktrace,
+        userAttributes: {
+          'conversation_transcript_length': conversationReporting['transcript_length'].toString(),
+          'conversation_transcript_word_count': conversationReporting['transcript_word_count'].toString(),
+        },
+      );
       notifyError('REPROCESS_FAILED');
       updateReprocessConversationLoadingState(false);
       updateReprocessConversationId('');
@@ -345,10 +349,7 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
     }
     // If no appResults but we have structured overview, create a fake AppResponse
     if (conversation.structured.overview.isNotEmpty) {
-      return AppResponse(
-        conversation.structured.overview,
-        appId: null,
-      );
+      return AppResponse(conversation.structured.overview, appId: null);
     }
     return null;
   }
@@ -397,8 +398,9 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
       if (_isDisposed) return;
 
       // Preserve locally added apps that aren't in the API response yet
-      final locallyAddedApps =
-          _cachedEnabledConversationApps.where((app) => _locallyAddedAppIds.contains(app.id)).toList();
+      final locallyAddedApps = _cachedEnabledConversationApps
+          .where((app) => _locallyAddedAppIds.contains(app.id))
+          .toList();
 
       _cachedEnabledConversationApps.clear();
       _cachedEnabledConversationApps.addAll(apps);
@@ -568,9 +570,7 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
     final lastUsedId = getLastUsedSummarizationAppId();
     if (lastUsedId == null || appProvider == null) return null;
 
-    return appProvider!.apps.firstWhereOrNull(
-      (app) => app.id == lastUsedId && app.worksWithMemories() && app.enabled,
-    );
+    return appProvider!.apps.firstWhereOrNull((app) => app.id == lastUsedId && app.worksWithMemories() && app.enabled);
   }
 
   bool _isDisposed = false;

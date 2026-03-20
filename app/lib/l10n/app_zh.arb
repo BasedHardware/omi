@@ -2771,5 +2771,48 @@
     "notYetSynced": "尚未同步到您的手机",
     "clearAll": "全部清除",
     "phoneKeypad": "键盘",
-    "phoneHideKeypad": "隐藏键盘"
+    "phoneHideKeypad": "隐藏键盘",
+    "fairUsePolicy": "公平使用",
+    "fairUseLoadError": "无法加载公平使用状态。请重试。",
+    "fairUseStatusNormal": "您的使用量在正常范围内。",
+    "fairUseStageNormal": "正常",
+    "fairUseStageWarning": "警告",
+    "fairUseStageThrottle": "已限制",
+    "fairUseStageRestrict": "已封锁",
+    "fairUseSpeechUsage": "语音使用量",
+    "fairUseToday": "今天",
+    "fairUse3Day": "3天滚动",
+    "fairUseWeekly": "每周滚动",
+    "fairUseAboutTitle": "关于公平使用",
+    "fairUseAboutBody": "Omi 专为个人对话、会议和实时互动而设计。使用量按检测到的实际语音时间衡量，而非连接时间。如果使用量明显超出非个人内容的正常模式，可能会进行调整。",
+    "fairUseCaseRefCopied": "{caseRef} 已复制",
+    "@fairUseCaseRefCopied": {
+        "description": "Snackbar message when case reference is copied",
+        "placeholders": {
+            "caseRef": {
+                "type": "String"
+            }
+        }
+    },
+    "fairUseDailyTranscription": "每日转写",
+    "fairUseBudgetExhausted": "已达到每日转写限额",
+    "fairUseBudgetResetsAt": "重置时间 {time}",
+    "fairUseBudgetUsed": "{used}分 / {limit}分",
+    "@fairUseBudgetUsed": {
+        "placeholders": {
+            "used": {
+                "type": "String"
+            },
+            "limit": {
+                "type": "String"
+            }
+        }
+    },
+    "@fairUseBudgetResetsAt": {
+        "placeholders": {
+            "time": {
+                "type": "String"
+            }
+        }
+    }
 }

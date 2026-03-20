@@ -15,68 +15,144 @@ The Omi uses three interconnected PCBs:
 
 ---
 
-## Mainboard
+<Tabs>
+  <Tab title="Mainboard" icon="microchip">
+    The main PCB carries all active electronics.
 
-The main PCB carries all active electronics.
+    **Key ICs:**
 
-**Key ICs:**
-- **nRF5340-CLAA** — Dual-core Bluetooth LE SoC (application + network cores)
-- **nRF7002-CEAA-R7** — Wi-Fi 6 companion IC
-- **CSNP4GCR01-DPW** — 8GB NAND Flash
-- **LSM6DS3TR-C** — 6-axis IMU
-- **BQ25101YFPR** — Li-Ion/Li-Poly battery charger
-- **TPS628438YKAR** — DC-DC buck converter
-- **2x MMICT5838-00-012** — TDK T5838 PDM microphones
+    | IC | Function |
+    |----|----------|
+    | nRF5340-CLAA | Dual-core Bluetooth LE SoC (application + network cores) |
+    | nRF7002-CEAA-R7 | Wi-Fi 6 companion IC |
+    | CSNP4GCR01-DPW | 8GB NAND Flash |
+    | LSM6DS3TR-C | 6-axis IMU |
+    | BQ25101YFPR | Li-Ion/Li-Poly battery charger |
+    | TPS628438YKAR | DC-DC buck converter |
+    | 2x MMICT5838-00-012 | TDK T5838 PDM microphones |
 
-**Files:**
-- [`schematic.pdf`](https://github.com/BasedHardware/omi/blob/main/omi/hardware/consumer/electrical/mainboard/schematic.pdf) — Full schematic
-- [`gerbers/`](https://github.com/BasedHardware/omi/tree/main/omi/hardware/consumer/electrical/mainboard/gerbers) — Gerber + drill files for PCB fabrication
-- [`altium/`](https://github.com/BasedHardware/omi/tree/main/omi/hardware/consumer/electrical/mainboard/altium) — Altium Designer source project
+    **Files:**
 
----
+    | File | Description |
+    |------|-------------|
+    | [`schematic.pdf`](https://github.com/BasedHardware/omi/blob/main/omi/hardware/consumer/electrical/mainboard/schematic.pdf) | Full schematic |
+    | [`gerbers/`](https://github.com/BasedHardware/omi/tree/main/omi/hardware/consumer/electrical/mainboard/gerbers) | Gerber + drill files for PCB fabrication |
+    | [`altium/`](https://github.com/BasedHardware/omi/tree/main/omi/hardware/consumer/electrical/mainboard/altium) | Altium Designer source project |
 
-## Charger Board
+    <Warning>
+    The nRF5340 (WLCSP-95, 4.4x4.0mm) and nRF7002 (WLCSP-81, 3.75x3.4mm) are fine-pitch wafer-level packages. Requires stencil + solder paste + reflow. Do not hand solder.
+    </Warning>
+  </Tab>
+  <Tab title="Charger Board" icon="plug">
+    Magnetic charging dock with USB-C input.
 
-Magnetic charging dock with USB-C input.
+    **Key ICs:**
 
-**Key ICs:**
-- **TPS25200DRVR** — eFuse power manager (6.5V, 2.8A)
-- **TPD1E10B06DPYR** — ESD protection diode
+    | IC | Function |
+    |----|----------|
+    | TPS25200DRVR | eFuse power manager (6.5V, 2.8A) |
+    | TPD1E10B06DPYR | ESD protection diode |
 
-**Files:**
-- [`schematic.pdf`](https://github.com/BasedHardware/omi/blob/main/omi/hardware/consumer/electrical/charger-board/schematic.pdf)
-- [`gerbers/`](https://github.com/BasedHardware/omi/tree/main/omi/hardware/consumer/electrical/charger-board/gerbers)
-- [`altium/`](https://github.com/BasedHardware/omi/tree/main/omi/hardware/consumer/electrical/charger-board/altium)
+    **Files:**
 
----
+    | File | Description |
+    |------|-------------|
+    | [`schematic.pdf`](https://github.com/BasedHardware/omi/blob/main/omi/hardware/consumer/electrical/charger-board/schematic.pdf) | Schematic |
+    | [`gerbers/`](https://github.com/BasedHardware/omi/tree/main/omi/hardware/consumer/electrical/charger-board/gerbers) | Gerber files |
+    | [`altium/`](https://github.com/BasedHardware/omi/tree/main/omi/hardware/consumer/electrical/charger-board/altium) | Altium source |
 
-## FPC (Flexible PCB)
+    <Tip>The charger board is the simplest of the 3 — a good starting point if you're new to PCB assembly.</Tip>
+  </Tab>
+  <Tab title="FPC" icon="link">
+    Connects the mainboard to the charging contact ring via a board-to-board connector.
 
-Connects the mainboard to the charging contact ring via a board-to-board connector.
+    **Key Components:**
 
-**Key Components:**
-- **ST-BTB-K3570606M** — BTB male connector (6+4P)
-- Charging contact ring (D9.9mm)
+    | Component | Description |
+    |-----------|-------------|
+    | ST-BTB-K3570606M | BTB male connector (6+4P) |
+    | Charging contact ring | D9.9mm |
 
-**Files:**
-- [`schematic.pdf`](https://github.com/BasedHardware/omi/blob/main/omi/hardware/consumer/electrical/fpc-board/schematic.pdf)
-- [`gerbers/`](https://github.com/BasedHardware/omi/tree/main/omi/hardware/consumer/electrical/fpc-board/gerbers)
-- [`altium/`](https://github.com/BasedHardware/omi/tree/main/omi/hardware/consumer/electrical/fpc-board/altium)
+    **Files:**
+
+    | File | Description |
+    |------|-------------|
+    | [`schematic.pdf`](https://github.com/BasedHardware/omi/blob/main/omi/hardware/consumer/electrical/fpc-board/schematic.pdf) | Schematic |
+    | [`gerbers/`](https://github.com/BasedHardware/omi/tree/main/omi/hardware/consumer/electrical/fpc-board/gerbers) | Gerber files |
+    | [`altium/`](https://github.com/BasedHardware/omi/tree/main/omi/hardware/consumer/electrical/fpc-board/altium) | Altium source |
+
+    <Warning>FPC is delicate — handle with care during assembly. The board-to-board connector has a limited insertion cycle count.</Warning>
+  </Tab>
+</Tabs>
 
 ---
 
 ## How to Order PCBs
 
-Upload the Gerber ZIP to any PCB manufacturer. Recommended specs:
+Upload the Gerber ZIP to any PCB manufacturer. Use the exact specs below per board:
 
-| Parameter | Value |
-|-----------|-------|
-| Layers | Check schematic (multi-layer) |
-| Thickness | 1.0mm (standard) |
-| Surface Finish | ENIG recommended |
-| Min Trace/Space | 0.1mm / 0.1mm |
-| Solder Mask | Both sides |
+| Parameter | Mainboard | Charger Board | FPC |
+|-----------|-----------|---------------|-----|
+| Layers | 4 (F.Cu, In1.Cu, In2.Cu, B.Cu) | 2 | 2 |
+| Material | FR4 | FR4 | Polyimide (flex) |
+| Thickness | 0.6mm | 1.0mm | 0.3mm |
+| Board Size | 21.0 x 21.0 mm | 13.0 x 20.0 mm | 29.3 x 12.5 mm |
+| Surface Finish | ENIG (immersion gold) | ENIG | ENIG |
+| Min Trace/Space | 0.076mm / 0.076mm (3 mil) | 0.2mm / 0.127mm | 0.254mm / 0.1mm |
+| Solder Mask | Both sides | Both sides | Both sides |
+| Copper Weight | 1 oz outer, 1/3 oz inner | 1 oz | 1 oz |
+
+<Warning>
+The mainboard has blind vias (L1-L2, L3-L4) and buried vias (L2-L3) — confirm your fab supports these before ordering. Total 414 drill hits including 159 blind + 55 buried vias.
+</Warning>
+
+<Tip>
+Use **ENIG** surface finish for all boards. HASL causes bridging on the nRF5340 and nRF7002 fine-pitch pads (0.4mm).
+</Tip>
 
 <Card title="View Full BOM" icon="list" href="/doc/hardware/consumer/assembly">
   See the complete Bill of Materials with all 88 components
 </Card>
+
+---
+
+## First Power-On Checklist
+
+<Steps>
+  <Step title="Visual Inspection">
+    Check for solder bridges on QFN pads with a microscope or loupe. Verify all passives are placed correctly (check orientation of polarized capacitors).
+  </Step>
+  <Step title="Power Rails">
+    Connect bench supply (set to 3.7V, current limit 100mA). Measure VBAT (3.7V at battery input), VDD_nRF (1.0V for nRF5340 core), and VDDH (3.3V for nRF5340 I/O).
+
+    <Warning>If current draw exceeds 50mA before firmware flash, disconnect immediately — likely a short.</Warning>
+  </Step>
+  <Step title="Flash Firmware">
+    Connect SWD debugger (J-Link or nRF DK). Flash using nRF Connect SDK. See [firmware guide](/doc/developer/firmware/Compile_firmware).
+  </Step>
+  <Step title="Verify BLE">
+    Open nRF Connect mobile app. The device should appear advertising as "Omi". If not, check 32MHz crystal and antenna matching network.
+  </Step>
+</Steps>
+
+---
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Board doesn't power on" icon="bolt">
+    Check BQ25101 output (3.7-4.2V). Verify TPS628438 buck converter has correct input. Look for solder bridges on QFN pads with microscope. Measure resistance between VCC and GND — should be more than 1k ohm before power.
+  </Accordion>
+  <Accordion title="No BLE advertising" icon="bluetooth">
+    Verify 32MHz crystal is soldered (not just tacked). Check 32.768kHz crystal for RTC. Measure nRF5340 VDDH (should be 3.3V) and VDD (1.0V). Check antenna trace and matching network.
+  </Accordion>
+  <Accordion title="No Wi-Fi scan results" icon="wifi">
+    nRF7002 requires its own 40MHz crystal. Check BUCKA/BUCKB rails. Verify SPI connection between nRF5340 and nRF7002. Wi-Fi requires firmware support enabled.
+  </Accordion>
+  <Accordion title="Poor or no audio" icon="microphone">
+    T5838 microphones are top-port — verify sound inlet faces the enclosure acoustic holes. Check PDM clock (1-3.25MHz) and data lines. Both mics must be in the correct PDM channel (L/R).
+  </Accordion>
+  <Accordion title="Charging doesn't work" icon="battery-half">
+    Check pogo pin contact resistance (less than 0.5 ohm). Verify FPC connection. Measure charger board USB-C VBUS (5V). Check TPS25200 eFuse output. Verify magnet polarity alignment.
+  </Accordion>
+</AccordionGroup>

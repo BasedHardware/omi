@@ -105,27 +105,16 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
 
   Widget _getSpeakerAvatar(int speakerId, bool isUser, Person? person) {
     if (speakerId == omiSpeakerId) {
-      return Image.asset(
-        Assets.images.herologo.path,
-        height: 16,
-        width: 16,
-      );
+      return Image.asset(Assets.images.herologo.path, height: 16, width: 16);
     }
     if (isUser) {
-      return Image.asset(
-        Assets.images.speaker0Icon.path,
-        width: 24,
-        height: 24,
-      );
+      return Image.asset(Assets.images.speaker0Icon.path, width: 24, height: 24);
     }
     // Always modulo by speakerImagePath.length to prevent index out of bounds
-    final imageIndex =
-        person != null ? person.colorIdx! % speakerImagePath.length : speakerId % speakerImagePath.length;
-    return Image.asset(
-      speakerImagePath[imageIndex],
-      width: 24,
-      height: 24,
-    );
+    final imageIndex = person != null
+        ? person.colorIdx! % speakerImagePath.length
+        : speakerId % speakerImagePath.length;
+    return Image.asset(speakerImagePath[imageIndex], width: 24, height: 24);
   }
 
   @override
@@ -247,13 +236,9 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
     _scrollController.jumpTo(startOffset);
 
     _isAutoScrolling = true;
-    _scrollController
-        .animateTo(
-      maxExtent,
-      duration: const Duration(milliseconds: 500),
-      curve: Curves.easeInOut,
-    )
-        .then((_) {
+    _scrollController.animateTo(maxExtent, duration: const Duration(milliseconds: 500), curve: Curves.easeInOut).then((
+      _,
+    ) {
       _isAutoScrolling = false;
     });
   }
@@ -337,13 +322,13 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
       _isAutoScrolling = true;
       _scrollController
           .animateTo(
-        targetOffset.clamp(0.0, _scrollController.position.maxScrollExtent),
-        duration: const Duration(milliseconds: 400),
-        curve: Curves.easeInOutCubic,
-      )
+            targetOffset.clamp(0.0, _scrollController.position.maxScrollExtent),
+            duration: const Duration(milliseconds: 400),
+            curve: Curves.easeInOutCubic,
+          )
           .then((_) {
-        _isAutoScrolling = false;
-      });
+            _isAutoScrolling = false;
+          });
     }
   }
 
@@ -355,11 +340,7 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
   }
 
   // Create highlighted text spans
-  List<InlineSpan> _highlightSearchMatchesWithKeys(
-    String text,
-    String searchQuery,
-    int segmentIndex,
-  ) {
+  List<InlineSpan> _highlightSearchMatchesWithKeys(String text, String searchQuery, int segmentIndex) {
     if (searchQuery.isEmpty) {
       return [TextSpan(text: text)];
     }
@@ -391,23 +372,22 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
 
       final matchKey = currentGlobalIndex < _matchKeys.length ? _matchKeys[currentGlobalIndex] : null;
 
-      spans.add(WidgetSpan(
-        child: Container(
-          key: matchKey,
-          decoration: BoxDecoration(
-            color: isCurrentResult ? Colors.orange.withValues(alpha: 0.9) : Colors.deepPurple.withValues(alpha: 0.6),
-            borderRadius: BorderRadius.circular(2),
-          ),
-          padding: const EdgeInsets.symmetric(horizontal: 1),
-          child: Text(
-            text.substring(matchStart, matchEnd),
-            style: const TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.bold,
+      spans.add(
+        WidgetSpan(
+          child: Container(
+            key: matchKey,
+            decoration: BoxDecoration(
+              color: isCurrentResult ? Colors.orange.withValues(alpha: 0.9) : Colors.deepPurple.withValues(alpha: 0.6),
+              borderRadius: BorderRadius.circular(2),
+            ),
+            padding: const EdgeInsets.symmetric(horizontal: 1),
+            child: Text(
+              text.substring(matchStart, matchEnd),
+              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
             ),
           ),
         ),
-      ));
+      );
 
       start = matchEnd;
       globalMatchIndex++;
@@ -450,10 +430,7 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
           if (widget.separator && idx > 1) {
             return Column(
               mainAxisSize: MainAxisSize.min,
-              children: [
-                const SizedBox(height: 4),
-                _buildSegmentItem(idx - 1),
-              ],
+              children: [const SizedBox(height: 4), _buildSegmentItem(idx - 1)],
             );
           }
 
@@ -475,243 +452,254 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
     final isTagging = widget.taggingSegmentIds.contains(data.id);
     final bool isUser = data.isUser;
     return Container(
-        key: segmentIdx >= 0 && segmentIdx < _segmentKeys.length ? _segmentKeys[segmentIdx] : null,
-        child: Padding(
-          padding: EdgeInsetsDirectional.fromSTEB(
-              widget.horizontalMargin ? 16 : 0, 4.0, widget.horizontalMargin ? 16 : 0, 4.0),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              if (!isUser) ...[
-                // Avatar for other speakers (left side)
-                GestureDetector(
-                  onTap: data.speakerId == omiSpeakerId
-                      ? null
-                      : () {
-                          widget.editSegment?.call(data.id, data.speakerId);
-                          MixpanelManager().tagSheetOpened();
-                        },
-                  child: Column(
-                    children: [
-                      CircleAvatar(
-                        radius: 16,
-                        backgroundColor: _getSpeakerAvatarColor(isUser, data.speakerId, person),
-                        child: _getSpeakerAvatar(data.speakerId, isUser, person),
-                      ),
-                      const SizedBox(height: 2),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 8),
-              ],
-
-              // Message bubble
-              Expanded(
+      key: segmentIdx >= 0 && segmentIdx < _segmentKeys.length ? _segmentKeys[segmentIdx] : null,
+      child: Padding(
+        padding: EdgeInsetsDirectional.fromSTEB(
+          widget.horizontalMargin ? 16 : 0,
+          4.0,
+          widget.horizontalMargin ? 16 : 0,
+          4.0,
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            if (!isUser) ...[
+              // Avatar for other speakers (left side)
+              GestureDetector(
+                onTap: data.speakerId == omiSpeakerId
+                    ? null
+                    : () {
+                        widget.editSegment?.call(data.id, data.speakerId);
+                        MixpanelManager().tagSheetOpened();
+                      },
                 child: Column(
-                  crossAxisAlignment: isUser ? CrossAxisAlignment.end : CrossAxisAlignment.start,
                   children: [
-                    if (!isUser) ...[
-                      Padding(
-                        padding: const EdgeInsets.only(left: 4, bottom: 2),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            GestureDetector(
-                              onTap: data.speakerId == omiSpeakerId
-                                  ? null
-                                  : () {
-                                      widget.editSegment?.call(data.id, data.speakerId);
-                                      MixpanelManager().tagSheetOpened();
-                                    },
-                              child: Text(
-                                data.speakerId == omiSpeakerId
-                                    ? 'omi'
-                                    : (person?.name ??
+                    CircleAvatar(
+                      radius: 16,
+                      backgroundColor: _getSpeakerAvatarColor(isUser, data.speakerId, person),
+                      child: _getSpeakerAvatar(data.speakerId, isUser, person),
+                    ),
+                    const SizedBox(height: 2),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+            ],
+
+            // Message bubble
+            Expanded(
+              child: Column(
+                crossAxisAlignment: isUser ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+                children: [
+                  if (!isUser) ...[
+                    Padding(
+                      padding: const EdgeInsets.only(left: 4, bottom: 2),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          GestureDetector(
+                            onTap: data.speakerId == omiSpeakerId
+                                ? null
+                                : () {
+                                    widget.editSegment?.call(data.id, data.speakerId);
+                                    MixpanelManager().tagSheetOpened();
+                                  },
+                            child: Text(
+                              data.speakerId == omiSpeakerId
+                                  ? 'omi'
+                                  : (person?.name ??
                                         context.l10n.speakerWithId(
-                                            '${TranscriptSegment.getDisplaySpeakerId(data.speakerId, widget.segments)}')),
-                                style: TextStyle(
-                                  color: data.speakerId == omiSpeakerId || person != null
-                                      ? Colors.grey.shade300
-                                      : Colors.grey.shade400,
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w500,
-                                ),
+                                          '${TranscriptSegment.getDisplaySpeakerId(data.speakerId, widget.segments)}',
+                                        )),
+                              style: TextStyle(
+                                color: data.speakerId == omiSpeakerId || person != null
+                                    ? Colors.grey.shade300
+                                    : Colors.grey.shade400,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w500,
                               ),
                             ),
-                            if (isTagging) ...[
-                              const SizedBox(width: 6),
-                              const SizedBox(
-                                width: 12,
-                                height: 12,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 1.5,
-                                  valueColor: AlwaysStoppedAnimation(Colors.white),
-                                ),
-                              )
-                            ],
-                          ],
-                        ),
-                      ),
-                    ],
-
-                    // Chat bubble
-                    Row(
-                      mainAxisAlignment: isUser ? MainAxisAlignment.end : MainAxisAlignment.start,
-                      children: [
-                        Flexible(
-                          child: Container(
-                            constraints: BoxConstraints(
-                              maxWidth: MediaQuery.of(context).size.width * 0.75,
+                          ),
+                          if (isTagging) ...[
+                            const SizedBox(width: 6),
+                            const SizedBox(
+                              width: 12,
+                              height: 12,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 1.5,
+                                valueColor: AlwaysStoppedAnimation(Colors.white),
+                              ),
                             ),
-                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                            decoration: BoxDecoration(
-                              color: _getSpeakerBubbleColor(isUser, data.speakerId, person),
-                              borderRadius: BorderRadius.only(
-                                topLeft: Radius.circular(isUser
+                          ],
+                        ],
+                      ),
+                    ),
+                  ],
+
+                  // Chat bubble
+                  Row(
+                    mainAxisAlignment: isUser ? MainAxisAlignment.end : MainAxisAlignment.start,
+                    children: [
+                      Flexible(
+                        child: Container(
+                          constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.75),
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                          decoration: BoxDecoration(
+                            color: _getSpeakerBubbleColor(isUser, data.speakerId, person),
+                            borderRadius: BorderRadius.only(
+                              topLeft: Radius.circular(
+                                isUser
                                     ? 18
                                     : (segmentIdx > 0 && !widget.segments[segmentIdx - 1].isUser)
-                                        ? 6
-                                        : 18),
-                                topRight: Radius.circular(isUser ? 18 : 18),
-                                bottomLeft: Radius.circular(18),
-                                bottomRight: Radius.circular(isUser ? 6 : 18),
+                                    ? 6
+                                    : 18,
                               ),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.black.withValues(alpha: 0.15),
-                                  blurRadius: 4,
-                                  offset: const Offset(0, 1),
-                                ),
-                              ],
+                              topRight: Radius.circular(isUser ? 18 : 18),
+                              bottomLeft: Radius.circular(18),
+                              bottomRight: Radius.circular(isUser ? 6 : 18),
                             ),
-                            child: SelectionArea(
-                              child: GestureDetector(
-                                behavior: HitTestBehavior.translucent,
-                                onDoubleTap: widget.isConversationDetail && widget.onEditSegmentText != null
-                                    ? () {
-                                        HapticFeedback.mediumImpact();
-                                        widget.onEditSegmentText!(segmentIdx);
-                                      }
-                                    : null,
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    _buildSegmentText(data, segmentIdx, isUser),
-                                    if (data.translations.isNotEmpty) ...[
-                                      const SizedBox(height: 8),
-                                      ...data.translations.map((translation) => Padding(
-                                            padding: const EdgeInsets.only(top: 4),
-                                            child: Text(
-                                              _getDecodedText(translation.text),
-                                              style: TextStyle(
-                                                letterSpacing: 0.0,
-                                                color: isUser
-                                                    ? Colors.white.withValues(alpha: 0.8)
-                                                    : Colors.grey.shade300.withValues(alpha: 0.8),
-                                                fontSize: 14,
-                                                fontStyle: FontStyle.italic,
-                                                height: 1.3,
-                                              ),
-                                              textAlign: TextAlign.left,
-                                            ),
-                                          )),
-                                      const SizedBox(height: 4),
-                                      _buildTranslationNotice(),
-                                    ],
-                                    // Timestamp, provider, and play button
-                                    if (widget.canDisplaySeconds ||
-                                        data.sttProvider != null ||
-                                        widget.onSegmentTap != null) ...[
-                                      const SizedBox(height: 4),
-                                      Row(
-                                        mainAxisAlignment: MainAxisAlignment.end,
-                                        children: [
-                                          if (data.sttProvider != null) ...[
-                                            Text(
-                                              SttProviderConfig.getDisplayName(data.sttProvider),
-                                              style: TextStyle(
-                                                color:
-                                                    isUser ? Colors.white.withValues(alpha: 0.5) : Colors.grey.shade500,
-                                                fontSize: 10,
-                                                fontStyle: FontStyle.italic,
-                                              ),
-                                            ),
-                                            if (widget.canDisplaySeconds) ...[
-                                              Text(
-                                                ' · ',
-                                                style: TextStyle(
-                                                  color: isUser
-                                                      ? Colors.white.withValues(alpha: 0.5)
-                                                      : Colors.grey.shade500,
-                                                  fontSize: 10,
-                                                ),
-                                              ),
-                                            ],
-                                          ],
-                                          // Play button for tap-to-seek
-                                          if (widget.onSegmentTap != null) ...[
-                                            GestureDetector(
-                                              onTap: () {
-                                                HapticFeedback.lightImpact();
-                                                widget.onSegmentTap?.call(data);
-                                              },
-                                              child: Icon(
-                                                Icons.play_circle_outline,
-                                                size: 16,
-                                                color:
-                                                    isUser ? Colors.white.withValues(alpha: 0.7) : Colors.grey.shade400,
-                                              ),
-                                            ),
-                                            const SizedBox(width: 6),
-                                          ],
-                                          if (widget.canDisplaySeconds)
-                                            Text(
-                                              data.getTimestampString(),
-                                              style: TextStyle(
-                                                color:
-                                                    isUser ? Colors.white.withValues(alpha: 0.7) : Colors.grey.shade400,
-                                                fontSize: 11,
-                                              ),
-                                            ),
-                                        ],
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withValues(alpha: 0.15),
+                                blurRadius: 4,
+                                offset: const Offset(0, 1),
+                              ),
+                            ],
+                          ),
+                          child: SelectionArea(
+                            child: GestureDetector(
+                              behavior: HitTestBehavior.translucent,
+                              onDoubleTap: widget.isConversationDetail && widget.onEditSegmentText != null
+                                  ? () {
+                                      HapticFeedback.mediumImpact();
+                                      widget.onEditSegmentText!(segmentIdx);
+                                    }
+                                  : null,
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  _buildSegmentText(data, segmentIdx, isUser),
+                                  if (data.translations.isNotEmpty) ...[
+                                    const SizedBox(height: 8),
+                                    ...data.translations.map(
+                                      (translation) => Padding(
+                                        padding: const EdgeInsets.only(top: 4),
+                                        child: Text(
+                                          _getDecodedText(translation.text),
+                                          style: TextStyle(
+                                            letterSpacing: 0.0,
+                                            color: isUser
+                                                ? Colors.white.withValues(alpha: 0.8)
+                                                : Colors.grey.shade300.withValues(alpha: 0.8),
+                                            fontSize: 14,
+                                            fontStyle: FontStyle.italic,
+                                            height: 1.3,
+                                          ),
+                                          textAlign: TextAlign.left,
+                                        ),
                                       ),
-                                    ],
+                                    ),
+                                    const SizedBox(height: 4),
+                                    _buildTranslationNotice(),
                                   ],
-                                ),
+                                  // Timestamp, provider, and play button
+                                  if (widget.canDisplaySeconds ||
+                                      data.sttProvider != null ||
+                                      widget.onSegmentTap != null) ...[
+                                    const SizedBox(height: 4),
+                                    Row(
+                                      mainAxisAlignment: MainAxisAlignment.end,
+                                      children: [
+                                        if (data.sttProvider != null) ...[
+                                          Text(
+                                            SttProviderConfig.getDisplayName(data.sttProvider),
+                                            style: TextStyle(
+                                              color: isUser
+                                                  ? Colors.white.withValues(alpha: 0.5)
+                                                  : Colors.grey.shade500,
+                                              fontSize: 10,
+                                              fontStyle: FontStyle.italic,
+                                            ),
+                                          ),
+                                          if (widget.canDisplaySeconds) ...[
+                                            Text(
+                                              ' · ',
+                                              style: TextStyle(
+                                                color: isUser
+                                                    ? Colors.white.withValues(alpha: 0.5)
+                                                    : Colors.grey.shade500,
+                                                fontSize: 10,
+                                              ),
+                                            ),
+                                          ],
+                                        ],
+                                        // Play button for tap-to-seek
+                                        if (widget.onSegmentTap != null) ...[
+                                          GestureDetector(
+                                            onTap: () {
+                                              HapticFeedback.lightImpact();
+                                              widget.onSegmentTap?.call(data);
+                                            },
+                                            child: Icon(
+                                              Icons.play_circle_outline,
+                                              size: 16,
+                                              color: isUser
+                                                  ? Colors.white.withValues(alpha: 0.7)
+                                                  : Colors.grey.shade400,
+                                            ),
+                                          ),
+                                          const SizedBox(width: 6),
+                                        ],
+                                        if (widget.canDisplaySeconds)
+                                          Text(
+                                            data.getTimestampString(),
+                                            style: TextStyle(
+                                              color: isUser
+                                                  ? Colors.white.withValues(alpha: 0.7)
+                                                  : Colors.grey.shade400,
+                                              fontSize: 11,
+                                            ),
+                                          ),
+                                      ],
+                                    ),
+                                  ],
+                                ],
                               ),
                             ),
                           ),
                         ),
-                      ],
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+
+            if (isUser) ...[
+              const SizedBox(width: 8),
+              // Avatar for user (right side)
+              GestureDetector(
+                onTap: () {
+                  widget.editSegment?.call(data.id, data.speakerId);
+                  MixpanelManager().tagSheetOpened();
+                },
+                child: Column(
+                  children: [
+                    CircleAvatar(
+                      radius: 16,
+                      backgroundColor: _getSpeakerAvatarColor(isUser, data.speakerId, person),
+                      child: _getSpeakerAvatar(data.speakerId, isUser, person),
                     ),
+                    const SizedBox(height: 2),
                   ],
                 ),
               ),
-
-              if (isUser) ...[
-                const SizedBox(width: 8),
-                // Avatar for user (right side)
-                GestureDetector(
-                  onTap: () {
-                    widget.editSegment?.call(data.id, data.speakerId);
-                    MixpanelManager().tagSheetOpened();
-                  },
-                  child: Column(
-                    children: [
-                      CircleAvatar(
-                        radius: 16,
-                        backgroundColor: _getSpeakerAvatarColor(isUser, data.speakerId, person),
-                        child: _getSpeakerAvatar(data.speakerId, isUser, person),
-                      ),
-                      const SizedBox(height: 2),
-                    ],
-                  ),
-                ),
-              ],
             ],
-          ),
-        ));
+          ],
+        ),
+      ),
+    );
   }
 
   Widget _buildSegmentText(TranscriptSegment data, int segmentIdx, bool isUser) {
@@ -725,11 +713,7 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
           height: 1.4,
         ),
         children: widget.searchQuery.isNotEmpty
-            ? _highlightSearchMatchesWithKeys(
-                _getDecodedText(data.text),
-                widget.searchQuery,
-                segmentIdx,
-              )
+            ? _highlightSearchMatchesWithKeys(_getDecodedText(data.text), widget.searchQuery, segmentIdx)
             : [TextSpan(text: _getDecodedText(data.text))],
       ),
     );
@@ -744,10 +728,7 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
           builder: (BuildContext context) {
             return AlertDialog(
               title: Text(context.l10n.translationNotice),
-              content: Text(
-                context.l10n.translationNoticeMessage,
-                style: const TextStyle(fontSize: 14),
-              ),
+              content: Text(context.l10n.translationNoticeMessage, style: const TextStyle(fontSize: 14)),
               actions: [
                 TextButton(
                   child: Text(context.l10n.ok),
@@ -765,19 +746,11 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(
-              Icons.check_circle,
-              size: 12,
-              color: Colors.grey,
-            ),
+            Icon(Icons.check_circle, size: 12, color: Colors.grey),
             SizedBox(width: 4),
             Text(
               'translated by omi',
-              style: TextStyle(
-                fontSize: 12,
-                color: Colors.grey,
-                fontStyle: FontStyle.italic,
-              ),
+              style: TextStyle(fontSize: 12, color: Colors.grey, fontStyle: FontStyle.italic),
             ),
           ],
         ),
@@ -789,10 +762,7 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
 class LiteTranscriptWidget extends StatelessWidget {
   final List<TranscriptSegment> segments;
 
-  const LiteTranscriptWidget({
-    super.key,
-    required this.segments,
-  });
+  const LiteTranscriptWidget({super.key, required this.segments});
 
   static String? _processText(List<TranscriptSegment> segments) {
     if (segments.isEmpty) return null;
@@ -816,21 +786,25 @@ class LiteTranscriptWidget extends StatelessWidget {
         processedText,
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
-        style: Theme.of(context).textTheme.bodyMedium!.copyWith(
-              color: Colors.grey.shade300.withValues(alpha: 0.6),
-              height: 1.3,
-            ),
+        style: Theme.of(
+          context,
+        ).textTheme.bodyMedium!.copyWith(color: Colors.grey.shade300.withValues(alpha: 0.6), height: 1.3),
         textAlign: TextAlign.right,
       ),
     );
   }
 }
 
-String getLastTranscript(List<TranscriptSegment> transcriptSegments,
-    {int? maxCount, bool generate = false, bool includeTimestamps = true}) {
+String getLastTranscript(
+  List<TranscriptSegment> transcriptSegments, {
+  int? maxCount,
+  bool generate = false,
+  bool includeTimestamps = true,
+}) {
   var transcript = TranscriptSegment.segmentsAsString(
-      transcriptSegments.sublist(transcriptSegments.length >= 50 ? transcriptSegments.length - 50 : 0),
-      includeTimestamps: includeTimestamps);
+    transcriptSegments.sublist(transcriptSegments.length >= 50 ? transcriptSegments.length - 50 : 0),
+    includeTimestamps: includeTimestamps,
+  );
   if (maxCount != null) transcript = transcript.substring(max(transcript.length - maxCount, 0));
   return tryDecodingText(transcript);
 }

@@ -31,19 +31,10 @@ class OmiCheckbox extends AdaptiveWidget {
         height: size,
         decoration: BoxDecoration(
           color: value ? activeColor : Colors.transparent,
-          border: Border.all(
-            color: value ? activeColor : ResponsiveHelper.textTertiary,
-            width: 1.5,
-          ),
+          border: Border.all(color: value ? activeColor : ResponsiveHelper.textTertiary, width: 1.5),
           borderRadius: BorderRadius.circular(4),
         ),
-        child: value
-            ? const Icon(
-                Icons.check,
-                size: 10,
-                color: Colors.white,
-              )
-            : null,
+        child: value ? const Icon(Icons.check, size: 10, color: Colors.white) : null,
       ),
     );
   }

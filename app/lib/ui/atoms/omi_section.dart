@@ -32,25 +32,13 @@ class OmiSection extends AdaptiveWidget {
       decoration: BoxDecoration(
         color: ResponsiveHelper.backgroundSecondary.withValues(alpha: 0.6),
         borderRadius: BorderRadius.circular(borderRadius ?? 16),
-        border: Border.all(
-          color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.5),
-          width: 1,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 15,
-            offset: const Offset(0, 4),
-          ),
-        ],
+        border: Border.all(color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.5), width: 1),
+        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 15, offset: const Offset(0, 4))],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          OmiSectionHeader(
-            icon: icon,
-            title: title,
-          ),
+          OmiSectionHeader(icon: icon, title: title),
           const SizedBox(height: 20),
           ...children,
         ],

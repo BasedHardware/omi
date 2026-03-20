@@ -22,10 +22,7 @@ import 'package:omi/utils/l10n_extensions.dart';
 
 class UsagePage extends StatefulWidget {
   final bool showUpgradeDialog;
-  const UsagePage({
-    super.key,
-    this.showUpgradeDialog = false,
-  });
+  const UsagePage({super.key, this.showUpgradeDialog = false});
 
   @override
   State<UsagePage> createState() => _UsagePageState();
@@ -97,11 +94,17 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
     // Draw logo
     final logoRect = Rect.fromLTWH(xPos, yPos + (totalWatermarkHeight - logoHeight) / 2, logoWidth, logoHeight);
     canvas.drawImageRect(
-        logoImage, Rect.fromLTWH(0, 0, logoImage.width.toDouble(), logoImage.height.toDouble()), logoRect, Paint());
+      logoImage,
+      Rect.fromLTWH(0, 0, logoImage.width.toDouble(), logoImage.height.toDouble()),
+      logoRect,
+      Paint(),
+    );
 
     // Draw text
     textPainter.paint(
-        canvas, Offset(xPos + logoWidth + padding, yPos + (totalWatermarkHeight - textPainter.height) / 2));
+      canvas,
+      Offset(xPos + logoWidth + padding, yPos + (totalWatermarkHeight - textPainter.height) / 2),
+    );
 
     // Convert the canvas to a new image and then to bytes
     final watermarkedImage = await recorder.endRecording().toImage(image.width, image.height);
@@ -177,10 +180,7 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
       shareText = baseText;
     }
 
-    await SharePlus.instance.share(ShareParams(
-      files: [XFile(file.path)],
-      text: shareText,
-    ));
+    await SharePlus.instance.share(ShareParams(files: [XFile(file.path)], text: shareText));
   }
 
   String _getPeriodForIndex(int index) {
@@ -231,27 +231,16 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
     super.initState();
     _tabController = TabController(length: 4, vsync: this);
     _tabController.addListener(_handleTabSelection);
-    _waveController = AnimationController(
-      duration: const Duration(milliseconds: 18000),
-      vsync: this,
-    )..repeat();
-    _notesController = AnimationController(
-      duration: const Duration(milliseconds: 36000),
-      vsync: this,
-    )..repeat();
+    _waveController = AnimationController(duration: const Duration(milliseconds: 18000), vsync: this)..repeat();
+    _notesController = AnimationController(duration: const Duration(milliseconds: 36000), vsync: this)..repeat();
 
-    _arrowController = AnimationController(
-      duration: const Duration(milliseconds: 600),
-      vsync: this,
-    )..repeat(reverse: true);
+    _arrowController = AnimationController(duration: const Duration(milliseconds: 600), vsync: this)
+      ..repeat(reverse: true);
 
     _arrowAnimation = Tween<double>(
       begin: 0,
       end: 4,
-    ).animate(CurvedAnimation(
-      parent: _arrowController,
-      curve: Curves.easeInOut,
-    ));
+    ).animate(CurvedAnimation(parent: _arrowController, curve: Curves.easeInOut));
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<UsageProvider>().fetchUsageStats(period: 'today');
@@ -282,16 +271,8 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
         title: Text(context.l10n.yourOmiInsights),
         centerTitle: true,
         elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new),
-          onPressed: () => Navigator.of(context).pop(),
-        ),
-        actions: [
-          IconButton(
-            icon: const FaIcon(FontAwesomeIcons.solidShareFromSquare),
-            onPressed: _shareUsage,
-          ),
-        ],
+        leading: IconButton(icon: const Icon(Icons.arrow_back_ios_new), onPressed: () => Navigator.of(context).pop()),
+        actions: [IconButton(icon: const FaIcon(FontAwesomeIcons.solidShareFromSquare), onPressed: _shareUsage)],
         bottom: TabBar(
           controller: _tabController,
           indicatorColor: Colors.deepPurple,
@@ -309,7 +290,8 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
       ),
       body: Consumer<UsageProvider>(
         builder: (context, provider, child) {
-          final hasAnyData = provider.todayUsage != null ||
+          final hasAnyData =
+              provider.todayUsage != null ||
               provider.monthlyUsage != null ||
               provider.yearlyUsage != null ||
               provider.allTimeUsage != null;
@@ -343,13 +325,33 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
                   controller: _tabController,
                   children: [
                     _buildUsageListView(
-                        provider.todayUsage, provider.todayHistory, 'today', _screenshotKeys[0], provider),
+                      provider.todayUsage,
+                      provider.todayHistory,
+                      'today',
+                      _screenshotKeys[0],
+                      provider,
+                    ),
                     _buildUsageListView(
-                        provider.monthlyUsage, provider.monthlyHistory, 'monthly', _screenshotKeys[1], provider),
+                      provider.monthlyUsage,
+                      provider.monthlyHistory,
+                      'monthly',
+                      _screenshotKeys[1],
+                      provider,
+                    ),
                     _buildUsageListView(
-                        provider.yearlyUsage, provider.yearlyHistory, 'yearly', _screenshotKeys[2], provider),
+                      provider.yearlyUsage,
+                      provider.yearlyHistory,
+                      'yearly',
+                      _screenshotKeys[2],
+                      provider,
+                    ),
                     _buildUsageListView(
-                        provider.allTimeUsage, provider.allTimeHistory, 'all_time', _screenshotKeys[3], provider),
+                      provider.allTimeUsage,
+                      provider.allTimeHistory,
+                      'all_time',
+                      _screenshotKeys[3],
+                      provider,
+                    ),
                   ],
                 ),
               ),
@@ -398,10 +400,7 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
                   onTap: _isUpgrading ? null : _showPlansSheet,
                   child: Row(
                     children: [
-                      Text(
-                        context.l10n.managePlan,
-                        style: TextStyle(color: Colors.grey.shade400, fontSize: 14),
-                      ),
+                      Text(context.l10n.managePlan, style: TextStyle(color: Colors.grey.shade400, fontSize: 14)),
                       const SizedBox(width: 4),
                       Icon(Icons.chevron_right, color: Colors.grey.shade400, size: 20),
                     ],
@@ -411,10 +410,7 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
           ),
           if (!isUnlimited) ...[
             const SizedBox(height: 4),
-            Text(
-              context.l10n.basicPlanDescription,
-              style: TextStyle(fontSize: 13, color: Colors.grey.shade500),
-            ),
+            Text(context.l10n.basicPlanDescription, style: TextStyle(fontSize: 13, color: Colors.grey.shade500)),
             const SizedBox(height: 16),
             SizedBox(
               width: double.infinity,
@@ -425,9 +421,7 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
                   backgroundColor: Colors.white,
                   foregroundColor: Colors.black,
                   elevation: 0,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                 ),
                 child: _isUpgrading
                     ? const SizedBox(
@@ -440,10 +434,7 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
                         children: [
                           Text(
                             context.l10n.upgradeToUnlimited,
-                            style: const TextStyle(
-                              fontSize: 15,
-                              fontWeight: FontWeight.w600,
-                            ),
+                            style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
                           ),
                           const SizedBox(width: 8),
                           const Icon(Icons.arrow_forward, size: 18),
@@ -466,10 +457,11 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
         return StatefulBuilder(
           builder: (BuildContext context, StateSetter setModalState) {
             return PlansSheet(
-                waveController: _waveController,
-                notesController: _notesController,
-                arrowController: _arrowController,
-                arrowAnimation: _arrowAnimation);
+              waveController: _waveController,
+              notesController: _notesController,
+              arrowController: _arrowController,
+              arrowAnimation: _arrowAnimation,
+            );
           },
         );
       },
@@ -481,10 +473,7 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Text(
-            context.l10n.noActivityYet,
-            style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
-          ),
+          Text(context.l10n.noActivityYet, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
           const SizedBox(height: 8),
           Text(
             context.l10n.startConversationToSeeInsights,
@@ -497,13 +486,15 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
   }
 
   Widget _buildUsageListView(
-      UsageStats? stats, List<UsageHistoryPoint>? history, String period, GlobalKey key, UsageProvider provider) {
+    UsageStats? stats,
+    List<UsageHistoryPoint>? history,
+    String period,
+    GlobalKey key,
+    UsageProvider provider,
+  ) {
     Future<void> onRefresh() async {
       // Using Future.wait to run both fetches concurrently
-      await Future.wait([
-        provider.fetchUsageStats(period: period),
-        provider.fetchSubscription(),
-      ]);
+      await Future.wait([provider.fetchUsageStats(period: period), provider.fetchSubscription()]);
     }
 
     if (stats == null) {
@@ -521,15 +512,14 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
           key: key,
           child: Container(
             color: Colors.black,
-            child: LayoutBuilder(builder: (context, constraints) {
-              return SingleChildScrollView(
-                physics: const AlwaysScrollableScrollPhysics(),
-                child: SizedBox(
-                  height: constraints.maxHeight,
-                  child: _buildEmptyState(),
-                ),
-              );
-            }),
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                return SingleChildScrollView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  child: SizedBox(height: constraints.maxHeight, child: _buildEmptyState()),
+                );
+              },
+            ),
           ),
         ),
       );
@@ -548,10 +538,7 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
           child: ListView(
             padding: const EdgeInsets.fromLTRB(16, 24, 16, 16),
             children: [
-              if (history != null && history.isNotEmpty) ...[
-                _buildChart(history, period),
-                const SizedBox(height: 24),
-              ],
+              if (history != null && history.isNotEmpty) ...[_buildChart(history, period), const SizedBox(height: 24)],
               _buildUsageCard(
                 context,
                 icon: FontAwesomeIcons.microphone,
@@ -612,11 +599,12 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
           }
           final date = DateTime(now.year, now.month, now.day, hour);
           return UsageHistoryPoint(
-              date: date.toIso8601String(),
-              transcriptionSeconds: 0,
-              wordsTranscribed: 0,
-              insightsGained: 0,
-              memoriesCreated: 0);
+            date: date.toIso8601String(),
+            transcriptionSeconds: 0,
+            wordsTranscribed: 0,
+            insightsGained: 0,
+            memoriesCreated: 0,
+          );
         });
         break;
       case 'monthly':
@@ -629,11 +617,12 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
           }
           final date = DateTime(now.year, now.month, day);
           return UsageHistoryPoint(
-              date: date.toIso8601String(),
-              transcriptionSeconds: 0,
-              wordsTranscribed: 0,
-              insightsGained: 0,
-              memoriesCreated: 0);
+            date: date.toIso8601String(),
+            transcriptionSeconds: 0,
+            wordsTranscribed: 0,
+            insightsGained: 0,
+            memoriesCreated: 0,
+          );
         });
         break;
       case 'yearly':
@@ -645,11 +634,12 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
           }
           final date = DateTime(now.year, month, 1);
           return UsageHistoryPoint(
-              date: date.toIso8601String(),
-              transcriptionSeconds: 0,
-              wordsTranscribed: 0,
-              insightsGained: 0,
-              memoriesCreated: 0);
+            date: date.toIso8601String(),
+            transcriptionSeconds: 0,
+            wordsTranscribed: 0,
+            insightsGained: 0,
+            memoriesCreated: 0,
+          );
         });
         break;
       case 'all_time':
@@ -666,23 +656,19 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
           }
           final date = DateTime(year, 1, 1);
           return UsageHistoryPoint(
-              date: date.toIso8601String(),
-              transcriptionSeconds: 0,
-              wordsTranscribed: 0,
-              insightsGained: 0,
-              memoriesCreated: 0);
+            date: date.toIso8601String(),
+            transcriptionSeconds: 0,
+            wordsTranscribed: 0,
+            insightsGained: 0,
+            memoriesCreated: 0,
+          );
         }).toList();
         break;
       default:
         processedHistory = List.from(history);
     }
 
-    final metricColors = [
-      Colors.blue.shade300,
-      Colors.green.shade300,
-      Colors.orange.shade300,
-      Colors.purple.shade300,
-    ];
+    final metricColors = [Colors.blue.shade300, Colors.green.shade300, Colors.orange.shade300, Colors.purple.shade300];
 
     double maxY = 0;
     for (var point in processedHistory) {
@@ -715,25 +701,24 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
     List<LineChartBarData> lineBarsData = [];
     for (var i = 0; i < allSpots.length; i++) {
       if (_isMetricVisible[i]) {
-        lineBarsData.add(LineChartBarData(
-          spots: allSpots[i],
-          isCurved: true,
-          color: metricColors[i],
-          barWidth: 3,
-          isStrokeCapRound: true,
-          dotData: const FlDotData(show: false),
-          belowBarData: BarAreaData(
-            show: true,
-            gradient: LinearGradient(
-              colors: [
-                metricColors[i].withValues(alpha: 0.3),
-                metricColors[i].withValues(alpha: 0.0),
-              ],
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
+        lineBarsData.add(
+          LineChartBarData(
+            spots: allSpots[i],
+            isCurved: true,
+            color: metricColors[i],
+            barWidth: 3,
+            isStrokeCapRound: true,
+            dotData: const FlDotData(show: false),
+            belowBarData: BarAreaData(
+              show: true,
+              gradient: LinearGradient(
+                colors: [metricColors[i].withValues(alpha: 0.3), metricColors[i].withValues(alpha: 0.0)],
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+              ),
             ),
           ),
-        ));
+        );
       }
     }
 
@@ -745,9 +730,7 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
       gridData: const FlGridData(show: false),
       borderData: FlBorderData(
         show: true,
-        border: Border(
-          bottom: BorderSide(color: Colors.white.withValues(alpha: 0.2), width: 1),
-        ),
+        border: Border(bottom: BorderSide(color: Colors.white.withValues(alpha: 0.2), width: 1)),
       ),
       lineTouchData: LineTouchData(
         handleBuiltInTouches: true,
@@ -761,24 +744,18 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
                     context.l10n.listeningMins,
                     context.l10n.understandingWords,
                     context.l10n.insights,
-                    context.l10n.memories
+                    context.l10n.memories,
                   ];
                   final originalIndex = metricColors.indexOf(flSpot.bar.color!);
                   if (originalIndex == -1) return null;
 
                   return LineTooltipItem(
                     '${metricNames[originalIndex]}\n',
-                    TextStyle(
-                      color: metricColors[originalIndex],
-                      fontWeight: FontWeight.bold,
-                    ),
+                    TextStyle(color: metricColors[originalIndex], fontWeight: FontWeight.bold),
                     children: [
                       TextSpan(
                         text: NumberFormat.compact(locale: 'en_US').format(flSpot.y),
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 12,
-                        ),
+                        style: const TextStyle(color: Colors.white, fontSize: 12),
                       ),
                     ],
                   );
@@ -874,10 +851,7 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
             borderRadius: BorderRadius.circular(16),
             border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
           ),
-          child: LineChart(
-            lineChartData,
-            duration: const Duration(milliseconds: 250),
-          ),
+          child: LineChart(lineChartData, duration: const Duration(milliseconds: 250)),
         ),
         const SizedBox(height: 16),
         _buildLegend(),
@@ -929,33 +903,27 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
     );
   }
 
-  Widget _buildUsageCard(BuildContext context,
-      {required IconData icon,
-      required String title,
-      required String value,
-      required String subtitle,
-      required Color color,
-      UserSubscriptionResponse? subscription}) {
+  Widget _buildUsageCard(
+    BuildContext context, {
+    required IconData icon,
+    required String title,
+    required String value,
+    required String subtitle,
+    required Color color,
+    UserSubscriptionResponse? subscription,
+  }) {
     final numberFormatter = NumberFormat.decimalPattern('en_US');
     return Container(
       decoration: BoxDecoration(
         gradient: const LinearGradient(
-          colors: [
-            Color(0xFF2A2A2E),
-            Color(0xFF1F1F25),
-          ],
+          colors: [Color(0xFF2A2A2E), Color(0xFF1F1F25)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
         boxShadow: [
-          BoxShadow(
-            color: color.withValues(alpha: 0.1),
-            blurRadius: 10,
-            spreadRadius: 1,
-            offset: const Offset(0, 2),
-          ),
+          BoxShadow(color: color.withValues(alpha: 0.1), blurRadius: 10, spreadRadius: 1, offset: const Offset(0, 2)),
         ],
       ),
       child: Padding(
@@ -972,195 +940,197 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
               children: [
                 FaIcon(icon, color: color, size: 16),
                 const SizedBox(width: 8),
-                Text(
-                  title,
-                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
-                ),
+                Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500)),
               ],
             ),
             const SizedBox(height: 8),
-            Text(
-              subtitle,
-              style: TextStyle(fontSize: 14, color: Colors.grey.shade400, height: 1.4),
-            ),
+            Text(subtitle, style: TextStyle(fontSize: 14, color: Colors.grey.shade400, height: 1.4)),
             if (icon == FontAwesomeIcons.microphone &&
                 subscription != null &&
                 subscription.subscription.plan == PlanType.basic &&
                 subscription.transcriptionSecondsLimit > 0) ...[
               const SizedBox(height: 16),
-              Builder(builder: (context) {
-                final minutesUsed = (subscription.transcriptionSecondsUsed / 60).round();
-                final minutesLimit = (subscription.transcriptionSecondsLimit / 60).round();
-                final percentage =
-                    (subscription.transcriptionSecondsUsed / subscription.transcriptionSecondsLimit).clamp(0.0, 1.0);
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      context.l10n.minsUsedThisMonth(numberFormatter.format(minutesUsed), minutesLimit),
-                      style: TextStyle(fontSize: 12, color: Colors.grey.shade400),
-                    ),
-                    const SizedBox(height: 8),
-                    LinearProgressIndicator(
-                      value: percentage,
-                      backgroundColor: Colors.grey.shade700,
-                      valueColor: AlwaysStoppedAnimation<Color>(color),
-                      minHeight: 4,
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                    if (percentage >= 1.0) ...[
+              Builder(
+                builder: (context) {
+                  final minutesUsed = (subscription.transcriptionSecondsUsed / 60).round();
+                  final minutesLimit = (subscription.transcriptionSecondsLimit / 60).round();
+                  final percentage = (subscription.transcriptionSecondsUsed / subscription.transcriptionSecondsLimit)
+                      .clamp(0.0, 1.0);
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        context.l10n.minsUsedThisMonth(numberFormatter.format(minutesUsed), minutesLimit),
+                        style: TextStyle(fontSize: 12, color: Colors.grey.shade400),
+                      ),
                       const SizedBox(height: 8),
-                      GestureDetector(
-                        onTap: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(builder: (context) => const TranscriptionSettingsPage()),
-                          );
-                        },
-                        child: Text.rich(
-                          TextSpan(
-                            children: [
-                              TextSpan(
-                                text: '${context.l10n.premiumMinutesUsed} ',
-                                style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
-                              ),
-                              TextSpan(
-                                text: context.l10n.setupOnDevice,
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  color: Colors.grey.shade400,
-                                  decoration: TextDecoration.underline,
+                      LinearProgressIndicator(
+                        value: percentage,
+                        backgroundColor: Colors.grey.shade700,
+                        valueColor: AlwaysStoppedAnimation<Color>(color),
+                        minHeight: 4,
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                      if (percentage >= 1.0) ...[
+                        const SizedBox(height: 8),
+                        GestureDetector(
+                          onTap: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(builder: (context) => const TranscriptionSettingsPage()),
+                            );
+                          },
+                          child: Text.rich(
+                            TextSpan(
+                              children: [
+                                TextSpan(
+                                  text: '${context.l10n.premiumMinutesUsed} ',
+                                  style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
                                 ),
-                              ),
-                              TextSpan(
-                                text: ' ${context.l10n.forUnlimitedFreeTranscription}',
-                                style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
-                              ),
-                            ],
+                                TextSpan(
+                                  text: context.l10n.setupOnDevice,
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: Colors.grey.shade400,
+                                    decoration: TextDecoration.underline,
+                                  ),
+                                ),
+                                TextSpan(
+                                  text: ' ${context.l10n.forUnlimitedFreeTranscription}',
+                                  style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
+                                ),
+                              ],
+                            ),
                           ),
                         ),
-                      ),
-                    ] else if (percentage >= 0.8) ...[
-                      const SizedBox(height: 8),
-                      GestureDetector(
-                        onTap: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(builder: (context) => const TranscriptionSettingsPage()),
-                          );
-                        },
-                        child: Text.rich(
-                          TextSpan(
-                            children: [
-                              TextSpan(
-                                text: '${context.l10n.premiumMinsLeft(minutesLimit - minutesUsed)} ',
-                                style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
-                              ),
-                              TextSpan(
-                                text: context.l10n.onDevice,
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  color: Colors.grey.shade400,
-                                  decoration: TextDecoration.underline,
+                      ] else if (percentage >= 0.8) ...[
+                        const SizedBox(height: 8),
+                        GestureDetector(
+                          onTap: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(builder: (context) => const TranscriptionSettingsPage()),
+                            );
+                          },
+                          child: Text.rich(
+                            TextSpan(
+                              children: [
+                                TextSpan(
+                                  text: '${context.l10n.premiumMinsLeft(minutesLimit - minutesUsed)} ',
+                                  style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
                                 ),
-                              ),
-                              TextSpan(
-                                text: ' ${context.l10n.alwaysAvailable}',
-                                style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
-                              ),
-                            ],
+                                TextSpan(
+                                  text: context.l10n.onDevice,
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: Colors.grey.shade400,
+                                    decoration: TextDecoration.underline,
+                                  ),
+                                ),
+                                TextSpan(
+                                  text: ' ${context.l10n.alwaysAvailable}',
+                                  style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
+                                ),
+                              ],
+                            ),
                           ),
                         ),
-                      ),
+                      ],
                     ],
-                  ],
-                );
-              })
+                  );
+                },
+              ),
             ],
             if (icon == FontAwesomeIcons.comments &&
                 subscription != null &&
                 subscription.subscription.plan == PlanType.basic &&
                 subscription.wordsTranscribedLimit > 0) ...[
               const SizedBox(height: 16),
-              Builder(builder: (context) {
-                final used = subscription.wordsTranscribedUsed;
-                final limit = subscription.wordsTranscribedLimit;
-                final percentage = (limit > 0) ? (used / limit).clamp(0.0, 1.0) : 0.0;
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      context.l10n.wordsUsedThisMonth(numberFormatter.format(used), numberFormatter.format(limit)),
-                      style: TextStyle(fontSize: 12, color: Colors.grey.shade400),
-                    ),
-                    const SizedBox(height: 8),
-                    LinearProgressIndicator(
-                      value: percentage,
-                      backgroundColor: Colors.grey.shade700,
-                      valueColor: AlwaysStoppedAnimation<Color>(color),
-                      minHeight: 4,
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  ],
-                );
-              })
+              Builder(
+                builder: (context) {
+                  final used = subscription.wordsTranscribedUsed;
+                  final limit = subscription.wordsTranscribedLimit;
+                  final percentage = (limit > 0) ? (used / limit).clamp(0.0, 1.0) : 0.0;
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        context.l10n.wordsUsedThisMonth(numberFormatter.format(used), numberFormatter.format(limit)),
+                        style: TextStyle(fontSize: 12, color: Colors.grey.shade400),
+                      ),
+                      const SizedBox(height: 8),
+                      LinearProgressIndicator(
+                        value: percentage,
+                        backgroundColor: Colors.grey.shade700,
+                        valueColor: AlwaysStoppedAnimation<Color>(color),
+                        minHeight: 4,
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ],
+                  );
+                },
+              ),
             ],
             if (icon == FontAwesomeIcons.wandMagicSparkles &&
                 subscription != null &&
                 subscription.subscription.plan == PlanType.basic &&
                 subscription.insightsGainedLimit > 0) ...[
               const SizedBox(height: 16),
-              Builder(builder: (context) {
-                final used = subscription.insightsGainedUsed;
-                final limit = subscription.insightsGainedLimit;
-                final percentage = (limit > 0) ? (used / limit).clamp(0.0, 1.0) : 0.0;
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      context.l10n.insightsUsedThisMonth(numberFormatter.format(used), numberFormatter.format(limit)),
-                      style: TextStyle(fontSize: 12, color: Colors.grey.shade400),
-                    ),
-                    const SizedBox(height: 8),
-                    LinearProgressIndicator(
-                      value: percentage,
-                      backgroundColor: Colors.grey.shade700,
-                      valueColor: AlwaysStoppedAnimation<Color>(color),
-                      minHeight: 4,
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  ],
-                );
-              })
+              Builder(
+                builder: (context) {
+                  final used = subscription.insightsGainedUsed;
+                  final limit = subscription.insightsGainedLimit;
+                  final percentage = (limit > 0) ? (used / limit).clamp(0.0, 1.0) : 0.0;
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        context.l10n.insightsUsedThisMonth(numberFormatter.format(used), numberFormatter.format(limit)),
+                        style: TextStyle(fontSize: 12, color: Colors.grey.shade400),
+                      ),
+                      const SizedBox(height: 8),
+                      LinearProgressIndicator(
+                        value: percentage,
+                        backgroundColor: Colors.grey.shade700,
+                        valueColor: AlwaysStoppedAnimation<Color>(color),
+                        minHeight: 4,
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ],
+                  );
+                },
+              ),
             ],
             if (icon == FontAwesomeIcons.brain &&
                 subscription != null &&
                 subscription.subscription.plan == PlanType.basic &&
                 subscription.memoriesCreatedLimit > 0) ...[
               const SizedBox(height: 16),
-              Builder(builder: (context) {
-                final used = subscription.memoriesCreatedUsed;
-                final limit = subscription.memoriesCreatedLimit;
-                final percentage = (limit > 0) ? (used / limit).clamp(0.0, 1.0) : 0.0;
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      context.l10n.memoriesUsedThisMonth(numberFormatter.format(used), numberFormatter.format(limit)),
-                      style: TextStyle(fontSize: 12, color: Colors.grey.shade400),
-                    ),
-                    const SizedBox(height: 8),
-                    LinearProgressIndicator(
-                      value: percentage,
-                      backgroundColor: Colors.grey.shade700,
-                      valueColor: AlwaysStoppedAnimation<Color>(color),
-                      minHeight: 4,
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  ],
-                );
-              })
-            ]
+              Builder(
+                builder: (context) {
+                  final used = subscription.memoriesCreatedUsed;
+                  final limit = subscription.memoriesCreatedLimit;
+                  final percentage = (limit > 0) ? (used / limit).clamp(0.0, 1.0) : 0.0;
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        context.l10n.memoriesUsedThisMonth(numberFormatter.format(used), numberFormatter.format(limit)),
+                        style: TextStyle(fontSize: 12, color: Colors.grey.shade400),
+                      ),
+                      const SizedBox(height: 8),
+                      LinearProgressIndicator(
+                        value: percentage,
+                        backgroundColor: Colors.grey.shade700,
+                        valueColor: AlwaysStoppedAnimation<Color>(color),
+                        minHeight: 4,
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ],
+                  );
+                },
+              ),
+            ],
           ],
         ),
       ),

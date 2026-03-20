@@ -123,10 +123,7 @@ class ForegroundUtil {
           //   name: 'launcher',
           // ),
         ),
-        iosNotificationOptions: const IOSNotificationOptions(
-          showNotification: false,
-          playSound: false,
-        ),
+        iosNotificationOptions: const IOSNotificationOptions(showNotification: false, playSound: false),
         foregroundTaskOptions: ForegroundTaskOptions(
           // Warn: 5m, for location tracking. If we want to support other services, we use the differenct interval,
           // such as 1m + self-validation in each service.

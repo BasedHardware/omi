@@ -1705,12 +1705,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'DISPOSITIVOS',
-      one: 'DISPOSITIVO',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'DISPOSITIVOS', one: 'DISPOSITIVO');
     return '$count $_temp0 ENCONTRADOS CERCA';
   }
 
@@ -8577,4 +8572,65 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get phoneHideKeypad => 'Ocultar teclado';
+
+  @override
+  String get fairUsePolicy => 'Uso razonable';
+
+  @override
+  String get fairUseLoadError => 'No se pudo cargar el estado de uso razonable. Por favor, inténtelo de nuevo.';
+
+  @override
+  String get fairUseStatusNormal => 'Su uso está dentro de los límites normales.';
+
+  @override
+  String get fairUseStageNormal => 'Normal';
+
+  @override
+  String get fairUseStageWarning => 'Advertencia';
+
+  @override
+  String get fairUseStageThrottle => 'Limitado';
+
+  @override
+  String get fairUseStageRestrict => 'Restringido';
+
+  @override
+  String get fairUseSpeechUsage => 'Uso del habla';
+
+  @override
+  String get fairUseToday => 'Hoy';
+
+  @override
+  String get fairUse3Day => '3 días continuos';
+
+  @override
+  String get fairUseWeekly => 'Semanal continuo';
+
+  @override
+  String get fairUseAboutTitle => 'Sobre el uso razonable';
+
+  @override
+  String get fairUseAboutBody =>
+      'Omi está diseñado para conversaciones personales, reuniones e interacciones en vivo. El uso se mide por el tiempo real de habla detectado, no por el tiempo de conexión. Si el uso supera significativamente los patrones normales para contenido no personal, se pueden aplicar ajustes.';
+
+  @override
+  String fairUseCaseRefCopied(String caseRef) {
+    return '$caseRef copiado';
+  }
+
+  @override
+  String get fairUseDailyTranscription => 'Transcripción diaria';
+
+  @override
+  String fairUseBudgetUsed(String used, String limit) {
+    return '${used}m / ${limit}m';
+  }
+
+  @override
+  String get fairUseBudgetExhausted => 'Límite diario de transcripción alcanzado';
+
+  @override
+  String fairUseBudgetResetsAt(String time) {
+    return 'Se reinicia $time';
+  }
 }

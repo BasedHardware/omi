@@ -81,11 +81,143 @@ private struct BrowserConfig {
 actor GmailReaderService {
   static let shared = GmailReaderService()
 
-  /// Read emails from the last 24 hours using browser cookies + Gmail Atom feed.
-  /// Tries Arc, Chrome, Brave, Edge, Vivaldi in order.
-  func readRecentEmails(maxResults: Int = 50) async throws -> [GmailEmail] {
-    let emails = try fetchGmailViaAtomFeed(maxResults: maxResults)
+  /// Read emails using browser cookies + Gmail Atom feed.
+  /// - Parameters:
+  ///   - maxResults: Maximum number of emails to return
+  ///   - query: Gmail search query (default: "newer_than:1d"). For onboarding use "newer_than:30d".
+  func readRecentEmails(maxResults: Int = 50, query: String = "newer_than:1d") async throws -> [GmailEmail] {
+    let emails = try fetchGmailViaAtomFeed(maxResults: maxResults, query: query)
     return emails.sorted { $0.date > $1.date }
+  }
+
+  /// Synthesize profile memories and tasks from a batch of emails.
+  /// Uses an LLM call to extract ~10 memories and 2-3 tasks.
+  func synthesizeFromEmails(emails: [GmailEmail]) async -> (memories: Int, tasks: Int, profileSummary: String) {
+    guard !emails.isEmpty else { return (0, 0, "") }
+
+    // Format emails compactly for the LLM
+    var emailLines: [String] = []
+    let dateFormatter = DateFormatter()
+    dateFormatter.dateFormat = "MMM d"
+    for email in emails {
+      let date = dateFormatter.string(from: email.date)
+      let sender =
+        email.from.components(separatedBy: "<").first?.trimmingCharacters(in: .whitespaces) ?? email.from
+      emailLines.append("[\(date)] From: \(sender) | Subject: \(email.subject) | \(email.snippet)")
+    }
+    let emailText = emailLines.joined(separator: "\n")
+
+    let synthesisPrompt = """
+    Analyze these \(emails.count) recent emails and extract profile information about the user.
+
+    EMAILS:
+    \(emailText)
+
+    Respond ONLY with valid JSON (no markdown, no code fences, no backticks):
+    {
+      "memories": [
+        "factual statement about the user based on email patterns"
+      ],
+      "tasks": [
+        {"description": "actionable follow-up item", "priority": "high"}
+      ],
+      "profile": "2-3 sentence summary of who this user is"
+    }
+
+    RULES:
+    - Extract exactly 10 memories (facts about their role, company, projects, relationships, interests, tools, communication patterns)
+    - Extract 2-3 tasks (pending replies, upcoming deadlines, things to follow up on)
+    - Each memory should be a single clear factual statement
+    - Task priorities: "high", "medium", or "low"
+    - Profile should summarize professional identity and key interests
+    - Do NOT include raw email content — synthesize and generalize
+    - Output ONLY the JSON object, nothing else
+    """
+
+    do {
+      let bridge = ACPBridge(passApiKey: true)
+      try await bridge.start()
+      defer { Task { await bridge.stop() } }
+
+      let result = try await bridge.query(
+        prompt: synthesisPrompt,
+        systemPrompt:
+          "You are a profile extraction assistant. Output ONLY valid JSON. No markdown, no code fences, no explanation.",
+        model: "claude-opus-4-6",
+        onTextDelta: { @Sendable _ in },
+        onToolCall: { @Sendable _, _, _ in return "" },
+        onToolActivity: { @Sendable _, _, _, _ in }
+      )
+
+      var responseText = result.text.trimmingCharacters(in: .whitespacesAndNewlines)
+      log("GmailReaderService: Synthesis response length: \(responseText.count) chars")
+
+      // Strip markdown code fences if present (```json ... ``` or ``` ... ```)
+      if responseText.hasPrefix("```") {
+        // Remove opening fence (```json or ```)
+        if let firstNewline = responseText.firstIndex(of: "\n") {
+          responseText = String(responseText[responseText.index(after: firstNewline)...])
+        }
+        // Remove closing fence
+        if responseText.hasSuffix("```") {
+          responseText = String(responseText.dropLast(3)).trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+      }
+
+      // Parse the JSON response
+      guard let jsonData = responseText.data(using: .utf8),
+        let parsed = try? JSONSerialization.jsonObject(with: jsonData) as? [String: Any]
+      else {
+        log("GmailReaderService: Failed to parse synthesis response: \(responseText.prefix(500))")
+        return (0, 0, "")
+      }
+
+      let memoryStrings = parsed["memories"] as? [String] ?? []
+      let taskDicts = parsed["tasks"] as? [[String: Any]] ?? []
+      let profileSummary = parsed["profile"] as? String ?? ""
+
+      log("GmailReaderService: Parsed \(memoryStrings.count) memories, \(taskDicts.count) tasks")
+
+      // Save memories
+      var memoriesSaved = 0
+      for memory in memoryStrings {
+        do {
+          _ = try await APIClient.shared.createMemory(
+            content: memory,
+            visibility: "private",
+            tags: ["gmail", "onboarding", "profile"],
+            source: "gmail",
+            headline: "Email Profile Insight"
+          )
+          memoriesSaved += 1
+        } catch {
+          log("GmailReaderService: Failed to save synthesized memory: \(error)")
+        }
+      }
+
+      // Save tasks
+      var tasksSaved = 0
+      for taskDict in taskDicts {
+        guard let description = taskDict["description"] as? String else { continue }
+        let priority = taskDict["priority"] as? String ?? "medium"
+        let task = await TasksStore.shared.createTask(
+          description: description,
+          dueAt: nil,
+          priority: priority,
+          tags: ["gmail", "onboarding"]
+        )
+        if task != nil { tasksSaved += 1 }
+      }
+
+      log(
+        "GmailReaderService: Synthesis complete — \(memoriesSaved) memories, \(tasksSaved) tasks"
+      )
+      return (memoriesSaved, tasksSaved, profileSummary)
+
+    } catch {
+      log("GmailReaderService: Synthesis failed: \(error)")
+      return (0, 0, "")
+    }
   }
 
   /// Save fetched emails as memories via the OMI backend API.
@@ -119,7 +251,7 @@ actor GmailReaderService {
 
   // MARK: - All-in-one Python: decrypt cookies + fetch Atom feed + return JSON
 
-  private func fetchGmailViaAtomFeed(maxResults: Int) throws -> [GmailEmail] {
+  private func fetchGmailViaAtomFeed(maxResults: Int, query: String = "newer_than:1d") throws -> [GmailEmail] {
     // Build browser configs as JSON for Python
     var browserConfigs: [[String: String]] = []
     for browser in BrowserConfig.allBrowsers() {
@@ -187,6 +319,7 @@ actor GmailReaderService {
 
       browsers = json.loads(sys.argv[1])
       max_results = int(sys.argv[2]) if len(sys.argv) > 2 else 50
+      query = sys.argv[3] if len(sys.argv) > 3 else 'newer_than:1d'
 
       def decrypt_cookies_with_domains(db_path, password):
           key = hashlib.pbkdf2_hmac('sha1', password.encode('utf-8'), b'saltysalt', 1003, dklen=16)
@@ -259,7 +392,7 @@ actor GmailReaderService {
 
       def fetch_atom_feed(jar):
           opener = build_opener(HTTPCookieProcessor(jar))
-          req = Request('https://mail.google.com/mail/feed/atom?q=newer_than:1d')
+          req = Request(f'https://mail.google.com/mail/feed/atom?q={query}')
           req.add_header('User-Agent', 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/122.0.0.0 Safari/537.36')
           try:
               resp = opener.open(req, timeout=30)
@@ -346,7 +479,7 @@ actor GmailReaderService {
 
     let process = Process()
     process.executableURL = URL(fileURLWithPath: pythonPath)
-    process.arguments = ["-c", pythonScript, configJSON, String(maxResults)]
+    process.arguments = ["-c", pythonScript, configJSON, String(maxResults), query]
     let pipe = Pipe()
     let errPipe = Pipe()
     process.standardOutput = pipe

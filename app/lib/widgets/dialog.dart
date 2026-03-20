@@ -22,14 +22,17 @@ getDialog(
           TextButton(
             onPressed: () => onCancel(),
             child: Text(okText, style: const TextStyle(color: Colors.white)),
-          )
+          ),
         ]
       : [
           TextButton(
             onPressed: () => onCancel(),
             child: Text(cancelText, style: const TextStyle(color: Colors.white)),
           ),
-          TextButton(onPressed: () => onConfirm(), child: Text(okText, style: const TextStyle(color: Colors.white))),
+          TextButton(
+            onPressed: () => onConfirm(),
+            child: Text(okText, style: const TextStyle(color: Colors.white)),
+          ),
         ];
   if (PlatformService.isApple) {
     return CupertinoAlertDialog(title: Text(title), content: Text(content), actions: actions);

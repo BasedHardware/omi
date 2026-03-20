@@ -20,9 +20,7 @@ class FolderProvider extends ChangeNotifier {
 
   String? get error => _error;
 
-  Folder? get selectedFolder => _folders.firstWhereOrNull(
-        (f) => f.id == _selectedFolderId,
-      );
+  Folder? get selectedFolder => _folders.firstWhereOrNull((f) => f.id == _selectedFolderId);
 
   List<Folder> get systemFolders => _folders.where((f) => f.isSystem).toList();
 
@@ -55,19 +53,9 @@ class FolderProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<Folder?> createFolder({
-    required String name,
-    String? description,
-    String? color,
-    String? icon,
-  }) async {
+  Future<Folder?> createFolder({required String name, String? description, String? color, String? icon}) async {
     try {
-      final folder = await createFolderApi(
-        name: name,
-        description: description,
-        color: color,
-        icon: icon,
-      );
+      final folder = await createFolderApi(name: name, description: description, color: color, icon: icon);
       if (folder != null) {
         _folders.add(folder);
         _folders.sort((a, b) => a.order.compareTo(b.order));
@@ -153,15 +141,9 @@ class FolderProvider extends ChangeNotifier {
     return false;
   }
 
-  Future<int> bulkMoveConversations(
-    List<String> conversationIds,
-    String folderId,
-  ) async {
+  Future<int> bulkMoveConversations(List<String> conversationIds, String folderId) async {
     try {
-      final movedCount = await bulkMoveConversationsToFolderApi(
-        folderId,
-        conversationIds,
-      );
+      final movedCount = await bulkMoveConversationsToFolderApi(folderId, conversationIds);
       if (movedCount > 0) {
         await loadFolders();
       }

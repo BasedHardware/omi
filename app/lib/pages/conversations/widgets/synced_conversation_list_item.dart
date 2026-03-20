@@ -63,19 +63,13 @@ class _SyncedConversationListItemState extends State<SyncedConversationListItem>
       onTap: () async {
         context.read<ConversationDetailProvider>().updateConversation(widget.conversation.id, widget.date);
         Provider.of<ConversationProvider>(context, listen: false).onConversationTap(widget.conversation.id);
-        routeToPage(
-          context,
-          ConversationDetailPage(conversation: widget.conversation, isFromOnboarding: false),
-        );
+        routeToPage(context, ConversationDetailPage(conversation: widget.conversation, isFromOnboarding: false));
       },
       child: Padding(
         padding: const EdgeInsets.only(top: 12, left: 16, right: 16),
         child: Container(
           width: double.maxFinite,
-          decoration: BoxDecoration(
-            color: const Color(0xFF1F1F25),
-            borderRadius: BorderRadius.circular(24.0),
-          ),
+          decoration: BoxDecoration(color: const Color(0xFF1F1F25), borderRadius: BorderRadius.circular(24.0)),
           child: Padding(
             padding: const EdgeInsetsDirectional.all(16),
             child: Row(
@@ -123,18 +117,13 @@ class _SyncedConversationListItemState extends State<SyncedConversationListItem>
                                   child: SizedBox(
                                     height: 20,
                                     width: 20,
-                                    child: CircularProgressIndicator(
-                                      color: Colors.white,
-                                    ),
+                                    child: CircularProgressIndicator(color: Colors.white),
                                   ),
                                 ),
                               )
                             : Padding(
                                 padding: const EdgeInsets.all(8.0),
-                                child: Icon(
-                                  Icons.refresh_outlined,
-                                  color: Colors.grey.shade400,
-                                ),
+                                child: Icon(Icons.refresh_outlined, color: Colors.grey.shade400),
                               ),
                       )
                     : const SizedBox.shrink(),
@@ -154,17 +143,16 @@ class _SyncedConversationListItemState extends State<SyncedConversationListItem>
         children: [
           conversation.discarded
               ? const SizedBox.shrink()
-              : Text(conversation.structured.getEmoji(),
-                  style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w500)),
+              : Text(
+                  conversation.structured.getEmoji(),
+                  style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w500),
+                ),
           conversation.structured.category.isNotEmpty && !conversation.discarded
               ? const SizedBox(width: 12)
               : const SizedBox.shrink(),
           conversation.structured.category.isNotEmpty
               ? Container(
-                  decoration: BoxDecoration(
-                    color: conversation.getTagColor(),
-                    borderRadius: BorderRadius.circular(16),
-                  ),
+                  decoration: BoxDecoration(color: conversation.getTagColor(), borderRadius: BorderRadius.circular(16)),
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                   child: Text(
                     conversation.getTag(),
@@ -173,9 +161,7 @@ class _SyncedConversationListItemState extends State<SyncedConversationListItem>
                   ),
                 )
               : const SizedBox.shrink(),
-          const SizedBox(
-            width: 16,
-          ),
+          const SizedBox(width: 16),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.end,
@@ -191,10 +177,7 @@ class _SyncedConversationListItemState extends State<SyncedConversationListItem>
                     padding: const EdgeInsets.only(top: 2.0),
                     child: Container(
                       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF35343B),
-                        borderRadius: BorderRadius.circular(4),
-                      ),
+                      decoration: BoxDecoration(color: const Color(0xFF35343B), borderRadius: BorderRadius.circular(4)),
                       child: Text(
                         _getConversationDuration(context),
                         style: const TextStyle(color: Colors.white, fontSize: 11),
@@ -205,7 +188,7 @@ class _SyncedConversationListItemState extends State<SyncedConversationListItem>
                   ),
               ],
             ),
-          )
+          ),
         ],
       ),
     );

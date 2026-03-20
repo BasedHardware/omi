@@ -1,0 +1,141 @@
+# E2E Flow: Conversation Folders — create, filter, and manage conversation folders
+# Tests: Folder tabs (All, Starred, Work, Personal), create new folder, filter conversations, delete folder
+# Core feature: organizing conversations into user-defined folders with icons and colors
+
+version: 2
+name: conversation-folders
+description: Conversation folders flow — browse folder tabs, filter by Starred/Work/Personal, create a new folder with icon and color, move conversation to folder, delete folder
+app: com.friend.ios.dev
+evidence:
+  video: true
+covers:
+  - app/lib/pages/conversations/widgets/folder_tabs.dart
+  - app/lib/pages/conversations/widgets/create_folder_sheet.dart
+  - app/lib/pages/conversations/widgets/move_to_folder_sheet.dart
+  - app/lib/providers/folder_provider.dart
+preconditions:
+  - auth_ready  # User signed in and onboarding completed. App shows home screen.
+  - has_conversations  # At least 2 conversations in the list for meaningful folder filtering.
+
+steps:
+  - id: S1
+    name: Verify home screen with folder tabs
+    do: "Verify the home screen shows the Conversations section with folder tabs: 'All' (active by default), 'Starred' (star icon), 'Work' (briefcase icon), 'Personal' (heart icon), and a '+' button (circle) at the right. Below the tabs is the conversation list."
+    verify: true
+    expect:
+      - kind: text_visible
+        values: ["Conversations", "All"]
+      - kind: interactive_count
+        min: 5
+    evidence:
+      - screenshot: step-S1.webp
+    note: "Folder tabs are in folder_tabs.dart. Default tabs: All (clears filters), Starred (pseudo-folder), then custom folders sorted by order field. The '+' button is a 32x32 circle at the right end of the scrollable row."
+
+  - id: S2
+    name: Tap Starred tab to filter
+    do: "Tap the 'Starred' tab (star icon, second tab). Verify the conversation list updates to show only starred conversations. If no conversations are starred, the list should be empty. The 'Starred' tab should appear selected (highlighted)."
+    verify: true
+    expect:
+      - kind: interactive_count
+        min: 3
+    evidence:
+      - screenshot: step-S2.webp
+    note: "Starred tab toggles ConversationProvider.showStarredOnly filter. Tapping again deselects. Starred conversations have starred=true field. API param: ?starred=true."
+
+  - id: S3
+    name: Tap All tab to clear filter
+    do: "Tap the 'All' tab (first tab) to clear the starred filter and show all conversations again. Verify the full conversation list is restored."
+    verify: true
+    expect:
+      - kind: text_visible
+        values: ["Conversations"]
+      - kind: interactive_count
+        min: 5
+    evidence:
+      - screenshot: step-S3.webp
+    note: "All tab clears selectedFolderId, showStarredOnly, and showDailySummaries filters."
+
+  - id: S4
+    name: Tap + to create new folder
+    do: "Tap the '+' button at the right end of the folder tabs row. The CreateFolderBottomSheet opens as a modal bottom sheet. Verify the sheet shows: 'Create Folder' title, folder name text field (autofocused), description text field, icon picker (horizontally scrollable row of 20 emoji icons), color picker (horizontally scrollable row of 10 color circles), and 'Create' button."
+    verify: true
+    expect:
+      - kind: text_visible
+        values: ["Create"]
+      - kind: interactive_count
+        min: 5
+    evidence:
+      - screenshot: step-S4.webp
+    note: "CreateFolderBottomSheet in create_folder_sheet.dart. 20 emoji options: folder, briefcase, house, book, family, heart, gaming, travel, medical, cart, money, music, art, notes, chat, globe, tools, food, trophy, lock. 10 colors: blue, red, green, purple, amber, cyan, pink, indigo, orange, gray."
+
+  - id: S5
+    name: Fill folder name and create
+    do: "Type 'Test Folder' in the folder name field. Optionally select a different icon (e.g., trophy emoji) and color (e.g., green). Tap the 'Create' button. The sheet closes and the new folder tab appears in the folder tabs row."
+    verify: true
+    expect:
+      - kind: text_visible
+        values: ["Conversations"]
+      - kind: interactive_count
+        min: 5
+    evidence:
+      - screenshot: step-S5.webp
+    note: "createFolderApi() POSTs to v1/folders. Folder name max 30 chars, description max 100 chars. Empty name shows red snackbar error. New folder appears in tabs sorted by order field. Analytics: folderCreated event."
+
+  - id: S6
+    name: Tap new folder tab to filter
+    do: "Tap the newly created 'Test Folder' tab. Verify the conversation list filters to show only conversations in that folder (likely empty since no conversations were moved yet). The tab should appear selected."
+    verify: true
+    expect:
+      - kind: interactive_count
+        min: 3
+    evidence:
+      - screenshot: step-S6.webp
+    note: "Folder-filtered conversations are fetched from server with ?folder_id= param, not cached locally. Clicking selected tab again deselects it (toggles)."
+
+  - id: S7
+    name: Tap All and open conversation detail
+    do: "Tap 'All' to clear the folder filter. Tap the first conversation in the list to open the conversation detail page. Verify the detail page shows: back arrow, conversation title, info chips row (date, time, duration, folder chip showing 'No Folder' or a folder name, visibility chip)."
+    verify: true
+    expect:
+      - kind: interactive_count
+        min: 4
+    evidence:
+      - screenshot: step-S7.webp
+    note: "Folder chip in conversation detail (widgets.dart) shows current folder or 'No Folder'. Tapping the folder chip opens the MoveToFolderSheet."
+
+  - id: S8
+    name: Move conversation to folder
+    do: "Tap the folder chip in the info chips row to open the 'Move to Folder' bottom sheet. The sheet lists all available folders with their icons and colors. Tap 'Test Folder' to move this conversation into it. The sheet closes and the folder chip updates to show 'Test Folder'."
+    verify: true
+    expect:
+      - kind: interactive_count
+        min: 3
+    evidence:
+      - screenshot: step-S8.webp
+    note: "MoveToFolderSheet in move_to_folder_sheet.dart. Each folder shows: icon (40x40 colored box), name (bold if current), description (ellipsized), checkmark for current. FolderProvider.moveConversation() updates locally and calls API. Analytics: conversationMovedToFolder."
+
+  - id: S9
+    name: Return to home and verify folder count
+    do: "Press back to return to the home screen. Verify the 'Test Folder' tab now shows a count of 1 (one conversation moved). Tap the 'Test Folder' tab to verify the moved conversation appears in the filtered list."
+    verify: true
+    expect:
+      - kind: text_visible
+        values: ["Conversations"]
+      - kind: interactive_count
+        min: 4
+    evidence:
+      - screenshot: step-S9.webp
+    note: "Folder count updated via FolderProvider.updateFolderCount(folderId, delta). Count displayed next to folder name in tab."
+
+  - id: S10
+    name: Long-press folder to delete
+    do: "Long-press the 'Test Folder' tab to open the folder context menu. The menu shows 'Edit Folder', 'Delete Folder', and 'Cancel'. Tap 'Delete Folder'. A delete confirmation sheet appears asking where to move the conversations. Select 'No Folder' (removes conversations from all folders). Confirm deletion. The folder tab disappears from the tabs row."
+    verify: true
+    expect:
+      - kind: text_visible
+        values: ["Conversations", "All"]
+      - kind: interactive_count
+        min: 5
+    evidence:
+      - screenshot: step-S10.webp
+    note: "Long-press opens _FolderContextMenu. Delete shows _DeleteFolderSheet with move options: 'No Folder' or other folders. API: DELETE v1/folders/{id}?move_to_folder_id={target}. System folders cannot be deleted. Analytics: folderDeleted."

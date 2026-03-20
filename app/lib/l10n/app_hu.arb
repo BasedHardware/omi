@@ -2845,5 +2845,48 @@
     "notYetSynced": "Még nincs szinkronizálva a telefonjával",
     "clearAll": "Összes törlése",
     "phoneKeypad": "Billentyűzet",
-    "phoneHideKeypad": "Billentyűzet elrejtése"
+    "phoneHideKeypad": "Billentyűzet elrejtése",
+    "fairUsePolicy": "Méltányos használat",
+    "fairUseLoadError": "Nem sikerült betölteni a méltányos használat állapotát. Kérjük, próbálja újra.",
+    "fairUseStatusNormal": "Használata a normális határokon belül van.",
+    "fairUseStageNormal": "Normál",
+    "fairUseStageWarning": "Figyelmeztetés",
+    "fairUseStageThrottle": "Korlátozott",
+    "fairUseStageRestrict": "Letiltva",
+    "fairUseSpeechUsage": "Beszédhasználat",
+    "fairUseToday": "Ma",
+    "fairUse3Day": "3 napos gördülő",
+    "fairUseWeekly": "Heti gördülő",
+    "fairUseAboutTitle": "A méltányos használatról",
+    "fairUseAboutBody": "Az Omi személyes beszélgetésekhez, megbeszélésekhez és élő interakciókhoz készült. A használatot a ténylegesen észlelt beszédidő alapján mérik, nem a csatlakozási idő alapján. Ha a használat jelentősen meghaladja a nem személyes tartalom normális mintáit, módosítások alkalmazhatók.",
+    "fairUseCaseRefCopied": "{caseRef} másolva",
+    "@fairUseCaseRefCopied": {
+        "description": "Snackbar message when case reference is copied",
+        "placeholders": {
+            "caseRef": {
+                "type": "String"
+            }
+        }
+    },
+    "fairUseDailyTranscription": "Daily Transcription",
+    "fairUseBudgetExhausted": "Daily transcription limit reached",
+    "fairUseBudgetResetsAt": "Resets {time}",
+    "fairUseBudgetUsed": "{used}m / {limit}m",
+    "@fairUseBudgetUsed": {
+        "placeholders": {
+            "used": {
+                "type": "String"
+            },
+            "limit": {
+                "type": "String"
+            }
+        }
+    },
+    "@fairUseBudgetResetsAt": {
+        "placeholders": {
+            "time": {
+                "type": "String"
+            }
+        }
+    }
 }

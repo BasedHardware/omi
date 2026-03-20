@@ -2749,5 +2749,48 @@
     "notYetSynced": "아직 휴대폰에 동기화되지 않음",
     "clearAll": "모두 지우기",
     "phoneKeypad": "키패드",
-    "phoneHideKeypad": "키패드 숨기기"
+    "phoneHideKeypad": "키패드 숨기기",
+    "fairUsePolicy": "공정 사용",
+    "fairUseLoadError": "공정 사용 상태를 불러올 수 없습니다. 다시 시도해 주세요.",
+    "fairUseStatusNormal": "사용량이 정상 범위 내에 있습니다.",
+    "fairUseStageNormal": "정상",
+    "fairUseStageWarning": "경고",
+    "fairUseStageThrottle": "제한됨",
+    "fairUseStageRestrict": "차단됨",
+    "fairUseSpeechUsage": "음성 사용량",
+    "fairUseToday": "오늘",
+    "fairUse3Day": "3일 누적",
+    "fairUseWeekly": "주간 누적",
+    "fairUseAboutTitle": "공정 사용에 대하여",
+    "fairUseAboutBody": "Omi는 개인 대화, 회의 및 실시간 상호작용을 위해 설계되었습니다. 사용량은 연결 시간이 아닌 감지된 실제 발화 시간으로 측정됩니다. 비개인적 콘텐츠에 대해 정상 패턴을 크게 초과하는 사용이 있을 경우 조정이 적용될 수 있습니다.",
+    "fairUseCaseRefCopied": "{caseRef} 복사됨",
+    "@fairUseCaseRefCopied": {
+        "description": "Snackbar message when case reference is copied",
+        "placeholders": {
+            "caseRef": {
+                "type": "String"
+            }
+        }
+    },
+    "fairUseDailyTranscription": "일일 음성 인식",
+    "fairUseBudgetExhausted": "일일 음성 인식 한도에 도달했습니다",
+    "fairUseBudgetResetsAt": "재설정 {time}",
+    "fairUseBudgetUsed": "{used}분 / {limit}분",
+    "@fairUseBudgetUsed": {
+        "placeholders": {
+            "used": {
+                "type": "String"
+            },
+            "limit": {
+                "type": "String"
+            }
+        }
+    },
+    "@fairUseBudgetResetsAt": {
+        "placeholders": {
+            "time": {
+                "type": "String"
+            }
+        }
+    }
 }

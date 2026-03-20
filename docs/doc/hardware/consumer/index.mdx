@@ -7,6 +7,20 @@ description: "Complete open-source design files for the Omi Consumer — PCB sch
 
 The Omi Consumer is fully open source. All design files needed to study, modify, manufacture, and sell the hardware are available under the MIT license.
 
+<Frame caption="Omi Consumer — all components identified">
+  <img src="https://raw.githubusercontent.com/BasedHardware/omi/main/omi/hardware/consumer/assembly/photos/materials-labelled-exploded-view.jpg" />
+</Frame>
+
+<Info>
+**What you'll need to build an Omi:**
+- **Tools:** Soldering station with hot air, solder paste + stencils, multimeter, tweezers, UV lamp (for adhesive)
+- **Software:** KiCad or Altium (PCB), FreeCAD or Fusion 360 (mechanical), nRF Connect SDK (firmware)
+- **Accounts:** PCB fabricator (JLCPCB/PCBWay), component distributor (Mouser/DigiKey/LCSC)
+- **Skills:** SMT soldering (QFN packages), basic mechanical assembly, firmware flashing via SWD
+- **Budget:** ~$30-50 per unit in small quantities (PCBs + components + enclosure, excluding tools)
+- **Time:** 2-3 weeks (PCB fabrication) + 1-2 hours (assembly per unit)
+</Info>
+
 <CardGroup cols={2}>
   <Card title="Electronics" icon="microchip" href="/doc/hardware/consumer/electronics">
     PCB schematics, Altium source, Gerber files for mainboard, charger, and FPC
@@ -57,22 +71,75 @@ The Omi Consumer is fully open source. All design files needed to study, modify,
 
 ---
 
-## How to Use These Files
+## Build Journey
 
 <Steps>
-  <Step title="Order PCBs">
-    Upload the Gerber ZIP files from [`electrical/*/gerbers/`](https://github.com/BasedHardware/omi/tree/main/omi/hardware/consumer/electrical) to your PCB manufacturer (JLCPCB, PCBWay, etc.)
+  <Step title="Order PCBs (Week 1)">
+    Upload Gerber ZIPs to your PCB manufacturer. Order all 3 boards together to save on shipping.
+
+    <CardGroup cols={3}>
+      <Card title="Mainboard Gerbers" icon="download" href="https://github.com/BasedHardware/omi/tree/main/omi/hardware/consumer/electrical/mainboard/gerbers">
+        4-layer FR4, 0.6mm, 21x21mm, ENIG, blind/buried vias
+      </Card>
+      <Card title="Charger Gerbers" icon="download" href="https://github.com/BasedHardware/omi/tree/main/omi/hardware/consumer/electrical/charger-board/gerbers">
+        2-layer FR4, 1.0mm, 13x20mm, ENIG
+      </Card>
+      <Card title="FPC Gerbers" icon="download" href="https://github.com/BasedHardware/omi/tree/main/omi/hardware/consumer/electrical/fpc-board/gerbers">
+        2-layer polyimide, 0.3mm, 29x13mm
+      </Card>
+    </CardGroup>
+
+    <Tip>Order 5-10 boards minimum — MOQ is usually 5 and extras cost very little. You'll want spares for rework practice.</Tip>
   </Step>
-  <Step title="Source Components">
-    Use the [BOM CSV](https://github.com/BasedHardware/omi/blob/main/omi/hardware/consumer/bom/omi-bom.csv) with manufacturer part numbers (MPN column) to order from Mouser, DigiKey, or LCSC
+  <Step title="Source Components (Week 1)">
+    Use the [BOM CSV](https://github.com/BasedHardware/omi/blob/main/omi/hardware/consumer/bom/omi-bom.csv) to order from distributors. The MPN column has exact manufacturer part numbers.
+
+    <Warning>
+    **Long-lead items to order first:** nRF5340-CLAA (SoC), nRF7002-CEAA-R7 (Wi-Fi), CSNP4GCR01-DPW (8GB Flash). These can take 2-4 weeks from Mouser/DigiKey. Check LCSC for faster China-based shipping.
+    </Warning>
+
+    <Tip>The 150mAh LiPo battery (D16×H6.1mm) is a custom form factor. Search for "GRP1654M1" or order the closest match and verify dimensions.</Tip>
   </Step>
-  <Step title="Manufacture Enclosure">
-    Use STEP files from [`mechanical/parts/`](https://github.com/BasedHardware/omi/tree/main/omi/hardware/consumer/mechanical/parts) — each subfolder indicates the manufacturing process (CNC, injection molding, SLA, silicone)
+  <Step title="Manufacture Enclosure (Week 1-2)">
+    Parts are organized by manufacturing process in [`mechanical/parts/`](https://github.com/BasedHardware/omi/tree/main/omi/hardware/consumer/mechanical/parts).
+
+    <Tabs>
+      <Tab title="CNC Parts" icon="gears">
+        Aluminium covers (Case A + B) and copper touch pins. Send STEP files to a CNC vendor. Minimum order typically 10-50 units.
+
+        <Note>For prototyping, you can 3D print the covers in SLA resin first to verify fit before committing to CNC.</Note>
+      </Tab>
+      <Tab title="3D Printed Parts" icon="print">
+        Frame, LED guide, charger cases, and enhance plate can all be SLA printed. Use white/translucent resin for light guide parts.
+
+        <Tip>If you have an SLA printer (Formlabs, Elegoo), this is the fastest path — print overnight and assemble the next day.</Tip>
+      </Tab>
+      <Tab title="Injection Molding" icon="fill-drip">
+        The wrapper/shell is injection molded in PC+ABS for production. For prototyping, SLA print it instead.
+
+        <Note>Injection molding only makes sense at 500+ units. Below that, SLA or CNC is more economical.</Note>
+      </Tab>
+    </Tabs>
   </Step>
-  <Step title="Assemble">
-    Reference the assembly photos and exploded views in [`assembly/`](https://github.com/BasedHardware/omi/tree/main/omi/hardware/consumer/assembly)
+  <Step title="Assemble PCBs (Week 2-3)">
+    Apply solder paste with stencil, place components, reflow. See the [full assembly guide](/doc/hardware/consumer/assembly).
+
+    <Warning>
+    **Critical:** The nRF5340 (WLCSP-95, 4.4x4.0mm) and nRF7002 (WLCSP-81, 3.75x3.4mm) are fine-pitch wafer-level packages. You MUST use solder paste + stencil + reflow (hot air or oven). Do not attempt hand soldering these ICs.
+    </Warning>
   </Step>
-  <Step title="Flash Firmware">
-    Follow the [firmware compilation guide](/doc/developer/firmware/Compile_firmware) to build and flash
+  <Step title="Mechanical Assembly">
+    <Frame caption="Components ready for assembly">
+      <img src="https://raw.githubusercontent.com/BasedHardware/omi/main/omi/hardware/consumer/assembly/photos/components-disassembled.jpg" />
+    </Frame>
+
+    Follow the [assembly reference](/doc/hardware/consumer/assembly) to combine PCB, battery, enclosure, and magnets into the final device.
+  </Step>
+  <Step title="Flash & Test">
+    Flash firmware via SWD debug port using a J-Link or nRF DK. Follow the [firmware compilation guide](/doc/developer/firmware/Compile_firmware).
+
+    <Check>
+    **Verification checklist:** BLE advertising visible in nRF Connect app, both microphones recording audio, Wi-Fi scanning networks, IMU reporting orientation, LED cycling RGB, charger detecting dock contact.
+    </Check>
   </Step>
 </Steps>

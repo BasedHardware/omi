@@ -3,23 +3,14 @@ import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/services/wals/wal_interfaces.dart';
 
 /// Represents the current step of WiFi connection process
-enum WifiConnectionStep {
-  enablingWifi,
-  connectingToDevice,
-  connected,
-  failed,
-}
+enum WifiConnectionStep { enablingWifi, connectingToDevice, connected, failed }
 
 /// Shows a bottom sheet displaying WiFi connection progress
 class WifiConnectionSheet extends StatefulWidget {
   final String deviceName;
   final VoidCallback? onCancel;
 
-  const WifiConnectionSheet({
-    super.key,
-    this.deviceName = 'Omi',
-    this.onCancel,
-  });
+  const WifiConnectionSheet({super.key, this.deviceName = 'Omi', this.onCancel});
 
   /// Shows the WiFi connection sheet and returns a controller to update progress
   static Future<WifiConnectionSheetController> show(
@@ -166,10 +157,7 @@ class _WifiConnectionSheetContentState extends State<_WifiConnectionSheetContent
                 child: Container(
                   width: 36,
                   height: 4,
-                  decoration: BoxDecoration(
-                    color: Colors.grey.shade700,
-                    borderRadius: BorderRadius.circular(2),
-                  ),
+                  decoration: BoxDecoration(color: Colors.grey.shade700, borderRadius: BorderRadius.circular(2)),
                 ),
               ),
               const SizedBox(height: 20),
@@ -178,12 +166,10 @@ class _WifiConnectionSheetContentState extends State<_WifiConnectionSheetContent
                 children: [
                   Expanded(
                     child: Text(
-                      isFailed ? context.l10n.wifiConnectionFailedTitle : context.l10n.connectingToDeviceName(widget.deviceName),
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 20,
-                        fontWeight: FontWeight.w600,
-                      ),
+                      isFailed
+                          ? context.l10n.wifiConnectionFailedTitle
+                          : context.l10n.connectingToDeviceName(widget.deviceName),
+                      style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w600),
                     ),
                   ),
                   if (isFailed || step != WifiConnectionStep.connected)
@@ -208,7 +194,8 @@ class _WifiConnectionSheetContentState extends State<_WifiConnectionSheetContent
                 title: context.l10n.enableDeviceWifi(widget.deviceName),
                 isActive: step == WifiConnectionStep.enablingWifi,
                 isCompleted: step.index > WifiConnectionStep.enablingWifi.index && !isFailed,
-                isFailed: isFailed &&
+                isFailed:
+                    isFailed &&
                     step == WifiConnectionStep.failed &&
                     widget.controller.currentStep == WifiConnectionStep.enablingWifi,
               ),
@@ -255,22 +242,14 @@ class _WifiConnectionSheetContentState extends State<_WifiConnectionSheetContent
                       backgroundColor: Colors.blue,
                       foregroundColor: Colors.white,
                       padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                     ),
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         const Icon(Icons.refresh, size: 20),
                         const SizedBox(width: 8),
-                        Text(
-                          context.l10n.retry,
-                          style: const TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
+                        Text(context.l10n.retry, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
                       ],
                     ),
                   ),
@@ -309,10 +288,7 @@ class _WifiConnectionSheetContentState extends State<_WifiConnectionSheetContent
       statusWidget = const SizedBox(
         width: 24,
         height: 24,
-        child: CircularProgressIndicator(
-          strokeWidth: 2.5,
-          color: Colors.blue,
-        ),
+        child: CircularProgressIndicator(strokeWidth: 2.5, color: Colors.blue),
       );
     } else {
       iconBgColor = const Color(0xFF2A2A2E);
@@ -325,10 +301,7 @@ class _WifiConnectionSheetContentState extends State<_WifiConnectionSheetContent
         Container(
           width: 44,
           height: 44,
-          decoration: BoxDecoration(
-            color: iconBgColor,
-            borderRadius: BorderRadius.circular(12),
-          ),
+          decoration: BoxDecoration(color: iconBgColor, borderRadius: BorderRadius.circular(12)),
           child: Icon(icon, color: iconColor, size: 22),
         ),
         const SizedBox(width: 14),

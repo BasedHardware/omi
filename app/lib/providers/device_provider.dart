@@ -168,7 +168,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
             body: ctx?.l10n.lowBatteryAlertBody ?? "Your device is running low on battery. Time for a recharge! 🔋",
           );
         } else if (batteryLevel > 20) {
-          _hasLowBatteryAlerted = true;
+          _hasLowBatteryAlerted = false;
         }
         // Throttle notifyListeners to reduce battery drain from excessive UI rebuilds
         // Only notify when: first reading, >=5% change, 15min elapsed, or crosses 20% threshold

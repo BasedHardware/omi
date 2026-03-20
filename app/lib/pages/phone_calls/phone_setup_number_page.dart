@@ -90,10 +90,7 @@ class _PhoneSetupNumberPageState extends State<PhoneSetupNumberPage> {
       setState(() => _isLoading = false);
       Navigator.of(context).push(
         MaterialPageRoute(
-          builder: (_) => PhoneSetupVerifyPage(
-            phoneNumber: _fullNumber,
-            validationCode: provider.validationCode,
-          ),
+          builder: (_) => PhoneSetupVerifyPage(phoneNumber: _fullNumber, validationCode: provider.validationCode),
         ),
       );
     } else {
@@ -136,10 +133,7 @@ class _PhoneSetupNumberPageState extends State<PhoneSetupNumberPage> {
               ),
               const SizedBox(height: 40),
               Container(
-                decoration: BoxDecoration(
-                  color: const Color(0xFF1F1F25),
-                  borderRadius: BorderRadius.circular(16),
-                ),
+                decoration: BoxDecoration(color: const Color(0xFF1F1F25), borderRadius: BorderRadius.circular(16)),
                 child: Row(
                   children: [
                     GestureDetector(
@@ -320,10 +314,7 @@ class _CountryPickerSheetState extends State<_CountryPickerSheet> {
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),
-                        Text(
-                          '+${c.fullCountryCode}',
-                          style: TextStyle(fontSize: 14, color: Colors.grey[500]),
-                        ),
+                        Text('+${c.fullCountryCode}', style: TextStyle(fontSize: 14, color: Colors.grey[500])),
                       ],
                     ),
                   ),

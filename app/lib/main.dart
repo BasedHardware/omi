@@ -214,23 +214,16 @@ Future _init() async {
 }
 
 void main() {
-  runZonedGuarded(
-    () async {
-      // Ensure
-      if (kDebugMode) {
-        MarionetteBinding.ensureInitialized();
-      } else {
-        WidgetsFlutterBinding.ensureInitialized();
-      }
-      await _init();
-      runApp(const MyApp());
-    },
-    (error, stack) => FirebaseCrashlytics.instance.recordError(
-      error,
-      stack,
-      fatal: true,
-    ),
-  );
+  runZonedGuarded(() async {
+    // Ensure
+    if (kDebugMode) {
+      MarionetteBinding.ensureInitialized();
+    } else {
+      WidgetsFlutterBinding.ensureInitialized();
+    }
+    await _init();
+    runApp(const MyApp());
+  }, (error, stack) => FirebaseCrashlytics.instance.recordError(error, stack, fatal: true));
 }
 
 class MyApp extends StatefulWidget {
@@ -295,8 +288,13 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
           update: (BuildContext context, value, MessageProvider? previous) =>
               (previous?..updateAppProvider(value)) ?? MessageProvider(),
         ),
-        ChangeNotifierProxyProvider4<ConversationProvider, MessageProvider, PeopleProvider, UsageProvider,
-            CaptureProvider>(
+        ChangeNotifierProxyProvider4<
+          ConversationProvider,
+          MessageProvider,
+          PeopleProvider,
+          UsageProvider,
+          CaptureProvider
+        >(
           create: (context) => CaptureProvider(),
           update: (BuildContext context, conversation, message, people, usage, CaptureProvider? previous) =>
               (previous?..updateProviderInstances(conversation, message, people, usage)) ?? CaptureProvider(),
@@ -432,11 +430,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                       ),
                     ),
                     Expanded(
-                      child: MediaQuery.removePadding(
-                        context: context,
-                        removeTop: true,
-                        child: child!,
-                      ),
+                      child: MediaQuery.removePadding(context: context, removeTop: true, child: child!),
                     ),
                   ],
                 );

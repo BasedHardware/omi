@@ -52,10 +52,7 @@ class FilesHandlerWidget extends StatelessWidget {
                       message.files[index].name,
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 14,
-                      ),
+                      style: const TextStyle(color: Colors.white, fontSize: 14),
                     ),
                   ],
                 ),
@@ -101,11 +98,7 @@ class FilesHandlerWidget extends StatelessWidget {
       placeholder: (context, url) => SizedBox(
         width: width,
         height: height,
-        child: const Center(
-          child: CircularProgressIndicator(
-            valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-          ),
-        ),
+        child: const Center(child: CircularProgressIndicator(valueColor: AlwaysStoppedAnimation<Color>(Colors.white))),
       ),
       errorWidget: (context, url, error) => Container(
         margin: const EdgeInsets.only(bottom: 6, top: 2),

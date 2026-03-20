@@ -2749,5 +2749,48 @@
     "notYetSynced": "ยังไม่ได้ซิงค์กับโทรศัพท์ของคุณ",
     "clearAll": "ล้างทั้งหมด",
     "phoneKeypad": "แป้นกด",
-    "phoneHideKeypad": "ซ่อนแป้นกด"
+    "phoneHideKeypad": "ซ่อนแป้นกด",
+    "fairUsePolicy": "การใช้งานอย่างเป็นธรรม",
+    "fairUseLoadError": "ไม่สามารถโหลดสถานะการใช้งานอย่างเป็นธรรมได้ กรุณาลองอีกครั้ง",
+    "fairUseStatusNormal": "การใช้งานของคุณอยู่ในขีดจำกัดปกติ",
+    "fairUseStageNormal": "ปกติ",
+    "fairUseStageWarning": "คำเตือน",
+    "fairUseStageThrottle": "ถูกจำกัด",
+    "fairUseStageRestrict": "ถูกระงับ",
+    "fairUseSpeechUsage": "การใช้งานเสียงพูด",
+    "fairUseToday": "วันนี้",
+    "fairUse3Day": "3 วันต่อเนื่อง",
+    "fairUseWeekly": "รายสัปดาห์ต่อเนื่อง",
+    "fairUseAboutTitle": "เกี่ยวกับการใช้งานอย่างเป็นธรรม",
+    "fairUseAboutBody": "Omi ออกแบบมาสำหรับการสนทนาส่วนตัว การประชุม และการโต้ตอบสด การใช้งานวัดจากเวลาพูดจริงที่ตรวจพบ ไม่ใช่เวลาเชื่อมต่อ หากการใช้งานเกินรูปแบบปกติอย่างมากสำหรับเนื้อหาที่ไม่ใช่ส่วนบุคคล อาจมีการปรับเปลี่ยน",
+    "fairUseCaseRefCopied": "คัดลอก {caseRef} แล้ว",
+    "@fairUseCaseRefCopied": {
+        "description": "Snackbar message when case reference is copied",
+        "placeholders": {
+            "caseRef": {
+                "type": "String"
+            }
+        }
+    },
+    "fairUseDailyTranscription": "Daily Transcription",
+    "fairUseBudgetExhausted": "Daily transcription limit reached",
+    "fairUseBudgetResetsAt": "Resets {time}",
+    "fairUseBudgetUsed": "{used}m / {limit}m",
+    "@fairUseBudgetUsed": {
+        "placeholders": {
+            "used": {
+                "type": "String"
+            },
+            "limit": {
+                "type": "String"
+            }
+        }
+    },
+    "@fairUseBudgetResetsAt": {
+        "placeholders": {
+            "time": {
+                "type": "String"
+            }
+        }
+    }
 }

@@ -51,3 +51,15 @@ pytest tests/unit/test_action_item_date_validation.py -v
 pytest tests/unit/test_kg_user_type_mismatch.py -v
 pytest tests/unit/test_kg_edge_id_sanitization.py -v
 pytest tests/unit/test_listen_pipeline.py -v
+pytest tests/unit/test_fair_use_models.py -v
+pytest tests/unit/test_fair_use_engine.py -v
+pytest tests/unit/test_fair_use_classifier.py -v
+pytest tests/unit/test_fair_use_async.py -v
+
+# Fair-use integration tests (require Redis; skip gracefully if unavailable)
+if redis-cli ping >/dev/null 2>&1; then
+  pytest tests/integration/test_fair_use_live.py -v
+  pytest tests/integration/test_fair_use_api.py -v
+else
+  echo "SKIP: fair-use integration tests (Redis not available)"
+fi

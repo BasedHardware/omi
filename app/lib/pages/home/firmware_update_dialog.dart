@@ -10,12 +10,7 @@ class FirmwareUpdateStep {
   final IconData icon;
   final bool isLastStep;
 
-  FirmwareUpdateStep({
-    required this.title,
-    required this.description,
-    required this.icon,
-    this.isLastStep = false,
-  });
+  FirmwareUpdateStep({required this.title, required this.description, required this.icon, this.isLastStep = false});
 }
 
 /// Shows the firmware update bottom sheet
@@ -28,10 +23,7 @@ void showFirmwareUpdateSheet({
     context: context,
     backgroundColor: Colors.transparent,
     isScrollControlled: true,
-    builder: (context) => FirmwareUpdateSheet(
-      steps: steps,
-      onUpdateStart: onUpdateStart,
-    ),
+    builder: (context) => FirmwareUpdateSheet(steps: steps, onUpdateStart: onUpdateStart),
   );
 }
 
@@ -39,11 +31,7 @@ class FirmwareUpdateSheet extends StatefulWidget {
   final Function() onUpdateStart;
   final List<String> steps;
 
-  const FirmwareUpdateSheet({
-    super.key,
-    required this.onUpdateStart,
-    required this.steps,
-  });
+  const FirmwareUpdateSheet({super.key, required this.onUpdateStart, required this.steps});
 
   @override
   State<FirmwareUpdateSheet> createState() => _FirmwareUpdateSheetState();
@@ -86,10 +74,7 @@ class _FirmwareUpdateSheetState extends State<FirmwareUpdateSheet> {
       widget.onUpdateStart();
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(context.l10n.failedToStartUpdate(e.toString())),
-          backgroundColor: Colors.red,
-        ),
+        SnackBar(content: Text(context.l10n.failedToStartUpdate(e.toString())), backgroundColor: Colors.red),
       );
     }
   }
@@ -111,10 +96,7 @@ class _FirmwareUpdateSheetState extends State<FirmwareUpdateSheet> {
               margin: const EdgeInsets.only(top: 12),
               width: 36,
               height: 4,
-              decoration: BoxDecoration(
-                color: Colors.grey.shade600,
-                borderRadius: BorderRadius.circular(2),
-              ),
+              decoration: BoxDecoration(color: Colors.grey.shade600, borderRadius: BorderRadius.circular(2)),
             ),
 
             // Header
@@ -123,19 +105,11 @@ class _FirmwareUpdateSheetState extends State<FirmwareUpdateSheet> {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const FaIcon(
-                    FontAwesomeIcons.circleExclamation,
-                    color: Color(0xFFFFB800),
-                    size: 20,
-                  ),
+                  const FaIcon(FontAwesomeIcons.circleExclamation, color: Color(0xFFFFB800), size: 20),
                   const SizedBox(width: 10),
                   Text(
                     context.l10n.beforeUpdateMakeSure,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 18,
-                      fontWeight: FontWeight.w600,
-                    ),
+                    style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
                   ),
                 ],
               ),
@@ -146,17 +120,13 @@ class _FirmwareUpdateSheetState extends State<FirmwareUpdateSheet> {
             // Steps list
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 24),
-              child: Column(
-                children: stepKeys.map((key) => _buildStepItem(_getStepMap(context)[key]!)).toList(),
-              ),
+              child: Column(children: stepKeys.map((key) => _buildStepItem(_getStepMap(context)[key]!)).toList()),
             ),
 
             // Footer with swipe to confirm
             Padding(
               padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
-              child: SwipeToConfirm(
-                onConfirmed: _onConfirmed,
-              ),
+              child: SwipeToConfirm(onConfirmed: _onConfirmed),
             ),
           ],
         ),
@@ -169,26 +139,14 @@ class _FirmwareUpdateSheetState extends State<FirmwareUpdateSheet> {
       padding: const EdgeInsets.only(bottom: 16),
       child: Container(
         padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: const Color(0xFF2A2A2E),
-          borderRadius: BorderRadius.circular(14),
-        ),
+        decoration: BoxDecoration(color: const Color(0xFF2A2A2E), borderRadius: BorderRadius.circular(14)),
         child: Row(
           children: [
             Container(
               width: 44,
               height: 44,
-              decoration: BoxDecoration(
-                color: const Color(0xFF1C1C1E),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Center(
-                child: FaIcon(
-                  step.icon,
-                  size: 18,
-                  color: Colors.white,
-                ),
-              ),
+              decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(12)),
+              child: Center(child: FaIcon(step.icon, size: 18, color: Colors.white)),
             ),
             const SizedBox(width: 14),
             Expanded(
@@ -197,21 +155,10 @@ class _FirmwareUpdateSheetState extends State<FirmwareUpdateSheet> {
                 children: [
                   Text(
                     step.title,
-                    style: const TextStyle(
-                      fontSize: 15,
-                      color: Colors.white,
-                      fontWeight: FontWeight.w600,
-                    ),
+                    style: const TextStyle(fontSize: 15, color: Colors.white, fontWeight: FontWeight.w600),
                   ),
                   const SizedBox(height: 4),
-                  Text(
-                    step.description,
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: Colors.grey.shade400,
-                      height: 1.3,
-                    ),
-                  ),
+                  Text(step.description, style: TextStyle(fontSize: 13, color: Colors.grey.shade400, height: 1.3)),
                 ],
               ),
             ),
@@ -225,10 +172,7 @@ class _FirmwareUpdateSheetState extends State<FirmwareUpdateSheet> {
 class SwipeToConfirm extends StatefulWidget {
   final VoidCallback onConfirmed;
 
-  const SwipeToConfirm({
-    super.key,
-    required this.onConfirmed,
-  });
+  const SwipeToConfirm({super.key, required this.onConfirmed});
 
   @override
   State<SwipeToConfirm> createState() => _SwipeToConfirmState();
@@ -248,13 +192,11 @@ class _SwipeToConfirmState extends State<SwipeToConfirm> with SingleTickerProvid
   @override
   void initState() {
     super.initState();
-    _animationController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 300),
-    );
-    _animation = Tween<double>(begin: 0, end: 0).animate(
-      CurvedAnimation(parent: _animationController, curve: Curves.easeOut),
-    );
+    _animationController = AnimationController(vsync: this, duration: const Duration(milliseconds: 300));
+    _animation = Tween<double>(
+      begin: 0,
+      end: 0,
+    ).animate(CurvedAnimation(parent: _animationController, curve: Curves.easeOut));
     _animationController.addListener(() {
       setState(() {
         _dragPosition = _animation.value;
@@ -292,11 +234,7 @@ class _SwipeToConfirmState extends State<SwipeToConfirm> with SingleTickerProvid
                   child: Container(
                     width: _dragPosition + _buttonSize + _horizontalPadding,
                     decoration: BoxDecoration(
-                      color: Color.lerp(
-                        const Color(0xFF2A2A2E),
-                        const Color(0xFF22C55E),
-                        progress,
-                      ),
+                      color: Color.lerp(const Color(0xFF2A2A2E), const Color(0xFF22C55E), progress),
                       borderRadius: BorderRadius.circular(_trackHeight / 2),
                     ),
                   ),
@@ -312,11 +250,7 @@ class _SwipeToConfirmState extends State<SwipeToConfirm> with SingleTickerProvid
                           children: [
                             Text(
                               context.l10n.confirmed,
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 16,
-                                fontWeight: FontWeight.w600,
-                              ),
+                              style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
                             ),
                             const SizedBox(width: 8),
                             Container(
@@ -326,33 +260,21 @@ class _SwipeToConfirmState extends State<SwipeToConfirm> with SingleTickerProvid
                                 color: Colors.white.withOpacity(0.2),
                                 borderRadius: BorderRadius.circular(12),
                               ),
-                              child: const Icon(
-                                Icons.check,
-                                color: Colors.white,
-                                size: 16,
-                              ),
+                              child: const Icon(Icons.check, color: Colors.white, size: 16),
                             ),
                           ],
                         )
                       : _isDragging && progress > 0.3
-                          ? Text(
-                              context.l10n.release,
-                              key: const ValueKey('release'),
-                              style: TextStyle(
-                                color: Colors.grey.shade400,
-                                fontSize: 16,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            )
-                          : Text(
-                              context.l10n.slideToUpdate,
-                              key: const ValueKey('slide'),
-                              style: TextStyle(
-                                color: Colors.grey.shade400,
-                                fontSize: 16,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
+                      ? Text(
+                          context.l10n.release,
+                          key: const ValueKey('release'),
+                          style: TextStyle(color: Colors.grey.shade400, fontSize: 16, fontWeight: FontWeight.w500),
+                        )
+                      : Text(
+                          context.l10n.slideToUpdate,
+                          key: const ValueKey('slide'),
+                          style: TextStyle(color: Colors.grey.shade400, fontSize: 16, fontWeight: FontWeight.w500),
+                        ),
                 ),
               ),
               // Draggable button
@@ -387,9 +309,10 @@ class _SwipeToConfirmState extends State<SwipeToConfirm> with SingleTickerProvid
                           widget.onConfirmed();
                         });
                       } else {
-                        _animation = Tween<double>(begin: _dragPosition, end: 0).animate(
-                          CurvedAnimation(parent: _animationController, curve: Curves.easeOut),
-                        );
+                        _animation = Tween<double>(
+                          begin: _dragPosition,
+                          end: 0,
+                        ).animate(CurvedAnimation(parent: _animationController, curve: Curves.easeOut));
                         _animationController.forward(from: 0);
                       }
 
@@ -404,19 +327,11 @@ class _SwipeToConfirmState extends State<SwipeToConfirm> with SingleTickerProvid
                         color: Colors.white,
                         borderRadius: BorderRadius.circular(_buttonSize / 2),
                         boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withOpacity(0.2),
-                            blurRadius: 8,
-                            offset: const Offset(0, 2),
-                          ),
+                          BoxShadow(color: Colors.black.withOpacity(0.2), blurRadius: 8, offset: const Offset(0, 2)),
                         ],
                       ),
                       child: const Center(
-                        child: FaIcon(
-                          FontAwesomeIcons.chevronRight,
-                          color: Color(0xFF2A2A2E),
-                          size: 18,
-                        ),
+                        child: FaIcon(FontAwesomeIcons.chevronRight, color: Color(0xFF2A2A2E), size: 18),
                       ),
                     ),
                   ),

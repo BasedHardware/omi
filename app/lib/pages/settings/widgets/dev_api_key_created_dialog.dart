@@ -39,10 +39,7 @@ class _DevApiKeyCreatedSheetState extends State<DevApiKeyCreatedSheet> {
               margin: const EdgeInsets.only(top: 12, bottom: 8),
               width: 40,
               height: 4,
-              decoration: BoxDecoration(
-                color: const Color(0xFF3C3C43),
-                borderRadius: BorderRadius.circular(2),
-              ),
+              decoration: BoxDecoration(color: const Color(0xFF3C3C43), borderRadius: BorderRadius.circular(2)),
             ),
           ),
           // Success header
@@ -66,20 +63,10 @@ class _DevApiKeyCreatedSheetState extends State<DevApiKeyCreatedSheet> {
                 const SizedBox(height: 16),
                 Text(
                   context.l10n.apiKeyCreated,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 22,
-                    fontWeight: FontWeight.w600,
-                  ),
+                  style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w600),
                 ),
                 const SizedBox(height: 6),
-                Text(
-                  widget.apiKey.name,
-                  style: const TextStyle(
-                    color: Color(0xFF8E8E93),
-                    fontSize: 14,
-                  ),
-                ),
+                Text(widget.apiKey.name, style: const TextStyle(color: Color(0xFF8E8E93), fontSize: 14)),
               ],
             ),
           ),
@@ -101,11 +88,7 @@ class _DevApiKeyCreatedSheetState extends State<DevApiKeyCreatedSheet> {
                   Expanded(
                     child: Text(
                       context.l10n.saveKeyWarning,
-                      style: const TextStyle(
-                        color: Color(0xFFF59E0B),
-                        fontSize: 13,
-                        fontWeight: FontWeight.w500,
-                      ),
+                      style: const TextStyle(color: Color(0xFFF59E0B), fontSize: 13, fontWeight: FontWeight.w500),
                     ),
                   ),
                 ],
@@ -199,14 +182,9 @@ class _DevApiKeyCreatedSheetState extends State<DevApiKeyCreatedSheet> {
                     onPressed: () => _copyKey(context),
                     style: OutlinedButton.styleFrom(
                       foregroundColor: _copied ? const Color(0xFF10B981) : const Color(0xFF8B5CF6),
-                      side: BorderSide(
-                        color: _copied ? const Color(0xFF10B981) : const Color(0xFF8B5CF6),
-                        width: 1.5,
-                      ),
+                      side: BorderSide(color: _copied ? const Color(0xFF10B981) : const Color(0xFF8B5CF6), width: 1.5),
                       padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                     ),
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.center,
@@ -215,10 +193,7 @@ class _DevApiKeyCreatedSheetState extends State<DevApiKeyCreatedSheet> {
                         const SizedBox(width: 8),
                         Text(
                           _copied ? context.l10n.copied : context.l10n.copyKey,
-                          style: const TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w600,
-                          ),
+                          style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
                         ),
                       ],
                     ),
@@ -232,18 +207,10 @@ class _DevApiKeyCreatedSheetState extends State<DevApiKeyCreatedSheet> {
                       backgroundColor: const Color(0xFF252525),
                       foregroundColor: Colors.white,
                       padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                       elevation: 0,
                     ),
-                    child: Text(
-                      context.l10n.done,
-                      style: const TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
+                    child: Text(context.l10n.done, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
                   ),
                 ),
               ],
