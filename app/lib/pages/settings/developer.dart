@@ -1930,8 +1930,8 @@ class _ManualFirmwareFlashPageState extends State<_ManualFirmwareFlashPage> with
       if (mounted) {
         setState(() => _error = e.toString());
       }
-    } 
-  }
+    }
+  } 
 
   @override
   Widget build(BuildContext context) {
