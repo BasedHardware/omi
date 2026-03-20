@@ -92,6 +92,11 @@ Prioritized feature map to guide flow-walker E2E coverage of core Omi desktop ma
 | Flow | Steps | Result | Report URL |
 |------|-------|--------|------------|
 | navigation | 6/6 | PASS | flow-walker.beastoin.workers.dev/runs/fdgrFDXKF9.html |
+| dashboard | 3/6 | PARTIAL | flow-walker.beastoin.workers.dev/runs/yl3s45rcWs.html |
+| chat | 4/5 | PARTIAL | flow-walker.beastoin.workers.dev/runs/LTIKXmnSVl.html |
+| memories | 5/6 | PARTIAL | flow-walker.beastoin.workers.dev/runs/uwLzVzqwG1.html |
+| tasks | 5/5 | PASS | flow-walker.beastoin.workers.dev/runs/RH8Pka9BKQ.html |
+| settings | 9/9 | PASS | flow-walker.beastoin.workers.dev/runs/wUppwKLVf8.html |
 
 ---
 
