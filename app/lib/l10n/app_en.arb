@@ -10302,5 +10302,48 @@
   "phoneHideKeypad": "Hide Keypad",
   "@phoneHideKeypad": {
     "description": "Label for the button to dismiss the in-call keypad"
+  },
+  "fairUsePolicy": "Fair Use",
+  "fairUseLoadError": "Unable to load fair use status. Please try again.",
+  "fairUseStatusNormal": "Your usage is within normal limits.",
+  "fairUseStageNormal": "Normal",
+  "fairUseStageWarning": "Warning",
+  "fairUseStageThrottle": "Throttled",
+  "fairUseStageRestrict": "Restricted",
+  "fairUseSpeechUsage": "Speech Usage",
+  "fairUseToday": "Today",
+  "fairUse3Day": "3-Day Rolling",
+  "fairUseWeekly": "Weekly Rolling",
+  "fairUseAboutTitle": "About Fair Use",
+  "fairUseAboutBody": "Omi is designed for personal conversations, meetings, and live interactions. Usage is measured by real speech time detected, not connection time. If usage significantly exceeds normal patterns for non-personal content, adjustments may apply.",
+  "fairUseCaseRefCopied": "{caseRef} copied",
+  "@fairUseCaseRefCopied": {
+    "description": "Snackbar message when case reference is copied to clipboard",
+    "placeholders": {
+      "caseRef": {
+        "type": "String"
+      }
+    }
+  },
+  "fairUseDailyTranscription": "Daily Transcription",
+  "fairUseBudgetUsed": "{used}m / {limit}m",
+  "@fairUseBudgetUsed": {
+    "placeholders": {
+      "used": {
+        "type": "String"
+      },
+      "limit": {
+        "type": "String"
+      }
+    }
+  },
+  "fairUseBudgetExhausted": "Daily transcription limit reached",
+  "fairUseBudgetResetsAt": "Resets {time}",
+  "@fairUseBudgetResetsAt": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
   }
 }

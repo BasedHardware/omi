@@ -8551,4 +8551,65 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get phoneHideKeypad => 'Hide Keypad';
+
+  @override
+  String get fairUsePolicy => 'Fair Use';
+
+  @override
+  String get fairUseLoadError => 'Unable to load fair use status. Please try again.';
+
+  @override
+  String get fairUseStatusNormal => 'Your usage is within normal limits.';
+
+  @override
+  String get fairUseStageNormal => 'Normal';
+
+  @override
+  String get fairUseStageWarning => 'Warning';
+
+  @override
+  String get fairUseStageThrottle => 'Throttled';
+
+  @override
+  String get fairUseStageRestrict => 'Restricted';
+
+  @override
+  String get fairUseSpeechUsage => 'Speech Usage';
+
+  @override
+  String get fairUseToday => 'Today';
+
+  @override
+  String get fairUse3Day => '3-Day Rolling';
+
+  @override
+  String get fairUseWeekly => 'Weekly Rolling';
+
+  @override
+  String get fairUseAboutTitle => 'About Fair Use';
+
+  @override
+  String get fairUseAboutBody =>
+      'Omi is designed for personal conversations, meetings, and live interactions. Usage is measured by real speech time detected, not connection time. If usage significantly exceeds normal patterns for non-personal content, adjustments may apply.';
+
+  @override
+  String fairUseCaseRefCopied(String caseRef) {
+    return '$caseRef copied';
+  }
+
+  @override
+  String get fairUseDailyTranscription => 'Daily Transcription';
+
+  @override
+  String fairUseBudgetUsed(String used, String limit) {
+    return '${used}m / ${limit}m';
+  }
+
+  @override
+  String get fairUseBudgetExhausted => 'Daily transcription limit reached';
+
+  @override
+  String fairUseBudgetResetsAt(String time) {
+    return 'Resets $time';
+  }
 }

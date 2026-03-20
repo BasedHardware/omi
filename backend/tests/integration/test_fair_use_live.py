@@ -324,6 +324,7 @@ class TestCacheInvalidation:
         cached = fair_use.redis_client.get(f'fair_use:stage:{TEST_UID}')
         assert cached is None
 
+
 class TestRedisLockLive:
     """Test the compare-and-delete lock against real Redis."""
 

@@ -2791,5 +2791,48 @@
     "notYetSynced": "Belum disinkronkan ke ponsel Anda",
     "clearAll": "Hapus semua",
     "phoneKeypad": "Keypad",
-    "phoneHideKeypad": "Sembunyikan keypad"
+    "phoneHideKeypad": "Sembunyikan keypad",
+    "fairUsePolicy": "Penggunaan Wajar",
+    "fairUseLoadError": "Tidak dapat memuat status penggunaan wajar. Silakan coba lagi.",
+    "fairUseStatusNormal": "Penggunaan Anda dalam batas normal.",
+    "fairUseStageNormal": "Normal",
+    "fairUseStageWarning": "Peringatan",
+    "fairUseStageThrottle": "Dibatasi",
+    "fairUseStageRestrict": "Diblokir",
+    "fairUseSpeechUsage": "Penggunaan Ucapan",
+    "fairUseToday": "Hari ini",
+    "fairUse3Day": "3 hari bergulir",
+    "fairUseWeekly": "Mingguan bergulir",
+    "fairUseAboutTitle": "Tentang Penggunaan Wajar",
+    "fairUseAboutBody": "Omi dirancang untuk percakapan pribadi, rapat, dan interaksi langsung. Penggunaan diukur berdasarkan waktu bicara nyata yang terdeteksi, bukan waktu koneksi. Jika penggunaan secara signifikan melebihi pola normal untuk konten non-pribadi, penyesuaian dapat diterapkan.",
+    "fairUseCaseRefCopied": "{caseRef} disalin",
+    "@fairUseCaseRefCopied": {
+        "description": "Snackbar message when case reference is copied",
+        "placeholders": {
+            "caseRef": {
+                "type": "String"
+            }
+        }
+    },
+    "fairUseDailyTranscription": "Daily Transcription",
+    "fairUseBudgetExhausted": "Daily transcription limit reached",
+    "fairUseBudgetResetsAt": "Resets {time}",
+    "fairUseBudgetUsed": "{used}m / {limit}m",
+    "@fairUseBudgetUsed": {
+        "placeholders": {
+            "used": {
+                "type": "String"
+            },
+            "limit": {
+                "type": "String"
+            }
+        }
+    },
+    "@fairUseBudgetResetsAt": {
+        "placeholders": {
+            "time": {
+                "type": "String"
+            }
+        }
+    }
 }

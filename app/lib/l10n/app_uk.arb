@@ -2749,5 +2749,48 @@
     "notYetSynced": "Ще не синхронізовано з вашим телефоном",
     "clearAll": "Очистити все",
     "phoneKeypad": "Клавіатура",
-    "phoneHideKeypad": "Сховати клавіатуру"
+    "phoneHideKeypad": "Сховати клавіатуру",
+    "fairUsePolicy": "Справедливе використання",
+    "fairUseLoadError": "Не вдалося завантажити статус справедливого використання. Будь ласка, спробуйте ще раз.",
+    "fairUseStatusNormal": "Ваше використання в межах норми.",
+    "fairUseStageNormal": "Нормальне",
+    "fairUseStageWarning": "Попередження",
+    "fairUseStageThrottle": "Обмежене",
+    "fairUseStageRestrict": "Заблоковане",
+    "fairUseSpeechUsage": "Використання мовлення",
+    "fairUseToday": "Сьогодні",
+    "fairUse3Day": "3-денний період",
+    "fairUseWeekly": "Тижневий період",
+    "fairUseAboutTitle": "Про справедливе використання",
+    "fairUseAboutBody": "Omi призначений для особистих розмов, зустрічей та живої взаємодії. Використання вимірюється за фактичним виявленим часом мовлення, а не за часом підключення. Якщо використання значно перевищує звичайні шаблони для неособистого контенту, можуть бути застосовані коригування.",
+    "fairUseCaseRefCopied": "{caseRef} скопійовано",
+    "@fairUseCaseRefCopied": {
+        "description": "Snackbar message when case reference is copied",
+        "placeholders": {
+            "caseRef": {
+                "type": "String"
+            }
+        }
+    },
+    "fairUseDailyTranscription": "Щоденна транскрипція",
+    "fairUseBudgetExhausted": "Досягнуто денний ліміт транскрипції",
+    "fairUseBudgetResetsAt": "Скидання {time}",
+    "fairUseBudgetUsed": "{used}хв / {limit}хв",
+    "@fairUseBudgetUsed": {
+        "placeholders": {
+            "used": {
+                "type": "String"
+            },
+            "limit": {
+                "type": "String"
+            }
+        }
+    },
+    "@fairUseBudgetResetsAt": {
+        "placeholders": {
+            "time": {
+                "type": "String"
+            }
+        }
+    }
 }

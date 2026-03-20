@@ -8562,4 +8562,65 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get phoneHideKeypad => 'Slėpti klaviatūrą';
+
+  @override
+  String get fairUsePolicy => 'Sąžiningas naudojimas';
+
+  @override
+  String get fairUseLoadError => 'Nepavyko įkelti sąžiningo naudojimo būsenos. Bandykite dar kartą.';
+
+  @override
+  String get fairUseStatusNormal => 'Jūsų naudojimas yra normaliose ribose.';
+
+  @override
+  String get fairUseStageNormal => 'Normalus';
+
+  @override
+  String get fairUseStageWarning => 'Įspėjimas';
+
+  @override
+  String get fairUseStageThrottle => 'Apribotas';
+
+  @override
+  String get fairUseStageRestrict => 'Užblokuotas';
+
+  @override
+  String get fairUseSpeechUsage => 'Kalbos naudojimas';
+
+  @override
+  String get fairUseToday => 'Šiandien';
+
+  @override
+  String get fairUse3Day => '3 dienų slankus';
+
+  @override
+  String get fairUseWeekly => 'Savaitinis slankus';
+
+  @override
+  String get fairUseAboutTitle => 'Apie sąžiningą naudojimą';
+
+  @override
+  String get fairUseAboutBody =>
+      'Omi sukurtas asmeniniams pokalbiams, susitikimams ir tiesioginei sąveikai. Naudojimas matuojamas pagal aptiktą tikrąjį kalbos laiką, o ne prisijungimo laiką. Jei naudojimas žymiai viršija įprastus modelius ne asmeniniam turiniui, gali būti taikomi koregavimai.';
+
+  @override
+  String fairUseCaseRefCopied(String caseRef) {
+    return '$caseRef nukopijuota';
+  }
+
+  @override
+  String get fairUseDailyTranscription => 'Daily Transcription';
+
+  @override
+  String fairUseBudgetUsed(String used, String limit) {
+    return '${used}m / ${limit}m';
+  }
+
+  @override
+  String get fairUseBudgetExhausted => 'Daily transcription limit reached';
+
+  @override
+  String fairUseBudgetResetsAt(String time) {
+    return 'Resets $time';
+  }
 }

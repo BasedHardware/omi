@@ -8405,4 +8405,64 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get phoneHideKeypad => '隐藏键盘';
+
+  @override
+  String get fairUsePolicy => '公平使用';
+
+  @override
+  String get fairUseLoadError => '无法加载公平使用状态。请重试。';
+
+  @override
+  String get fairUseStatusNormal => '您的使用量在正常范围内。';
+
+  @override
+  String get fairUseStageNormal => '正常';
+
+  @override
+  String get fairUseStageWarning => '警告';
+
+  @override
+  String get fairUseStageThrottle => '已限制';
+
+  @override
+  String get fairUseStageRestrict => '已封锁';
+
+  @override
+  String get fairUseSpeechUsage => '语音使用量';
+
+  @override
+  String get fairUseToday => '今天';
+
+  @override
+  String get fairUse3Day => '3天滚动';
+
+  @override
+  String get fairUseWeekly => '每周滚动';
+
+  @override
+  String get fairUseAboutTitle => '关于公平使用';
+
+  @override
+  String get fairUseAboutBody => 'Omi 专为个人对话、会议和实时互动而设计。使用量按检测到的实际语音时间衡量，而非连接时间。如果使用量明显超出非个人内容的正常模式，可能会进行调整。';
+
+  @override
+  String fairUseCaseRefCopied(String caseRef) {
+    return '$caseRef 已复制';
+  }
+
+  @override
+  String get fairUseDailyTranscription => '每日转写';
+
+  @override
+  String fairUseBudgetUsed(String used, String limit) {
+    return '$used分 / $limit分';
+  }
+
+  @override
+  String get fairUseBudgetExhausted => '已达到每日转写限额';
+
+  @override
+  String fairUseBudgetResetsAt(String time) {
+    return '重置时间 $time';
+  }
 }

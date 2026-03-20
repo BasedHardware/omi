@@ -675,3 +675,13 @@ Future<String?> exportUserDataToFile(String filePath) async {
     return null;
   }
 }
+
+Future<Map<String, dynamic>?> getFairUseStatus() async {
+  var response = await makeApiCall(url: '${Env.apiBaseUrl}v1/fair-use/status', headers: {}, method: 'GET', body: '');
+  if (response == null) return null;
+  Logger.debug('getFairUseStatus response: ${response.statusCode}');
+  if (response.statusCode == 200) {
+    return jsonDecode(response.body);
+  }
+  return null;
+}

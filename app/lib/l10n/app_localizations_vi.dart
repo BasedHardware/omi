@@ -8557,4 +8557,65 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get phoneHideKeypad => 'Ẩn bàn phím';
+
+  @override
+  String get fairUsePolicy => 'Sử dụng hợp lý';
+
+  @override
+  String get fairUseLoadError => 'Không thể tải trạng thái sử dụng hợp lý. Vui lòng thử lại.';
+
+  @override
+  String get fairUseStatusNormal => 'Mức sử dụng của bạn trong giới hạn bình thường.';
+
+  @override
+  String get fairUseStageNormal => 'Bình thường';
+
+  @override
+  String get fairUseStageWarning => 'Cảnh báo';
+
+  @override
+  String get fairUseStageThrottle => 'Bị hạn chế';
+
+  @override
+  String get fairUseStageRestrict => 'Bị chặn';
+
+  @override
+  String get fairUseSpeechUsage => 'Sử dụng giọng nói';
+
+  @override
+  String get fairUseToday => 'Hôm nay';
+
+  @override
+  String get fairUse3Day => '3 ngày liên tục';
+
+  @override
+  String get fairUseWeekly => 'Hàng tuần liên tục';
+
+  @override
+  String get fairUseAboutTitle => 'Về sử dụng hợp lý';
+
+  @override
+  String get fairUseAboutBody =>
+      'Omi được thiết kế cho các cuộc trò chuyện cá nhân, cuộc họp và tương tác trực tiếp. Mức sử dụng được đo bằng thời gian nói thực tế được phát hiện, không phải thời gian kết nối. Nếu mức sử dụng vượt quá đáng kể các mẫu bình thường cho nội dung không cá nhân, có thể áp dụng các điều chỉnh.';
+
+  @override
+  String fairUseCaseRefCopied(String caseRef) {
+    return 'Đã sao chép $caseRef';
+  }
+
+  @override
+  String get fairUseDailyTranscription => 'Chuyển giọng hàng ngày';
+
+  @override
+  String fairUseBudgetUsed(String used, String limit) {
+    return '${used}p / ${limit}p';
+  }
+
+  @override
+  String get fairUseBudgetExhausted => 'Đã đạt giới hạn chuyển giọng hàng ngày';
+
+  @override
+  String fairUseBudgetResetsAt(String time) {
+    return 'Đặt lại $time';
+  }
 }

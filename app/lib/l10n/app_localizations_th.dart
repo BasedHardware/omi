@@ -8510,4 +8510,65 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get phoneHideKeypad => 'ซ่อนแป้นกด';
+
+  @override
+  String get fairUsePolicy => 'การใช้งานอย่างเป็นธรรม';
+
+  @override
+  String get fairUseLoadError => 'ไม่สามารถโหลดสถานะการใช้งานอย่างเป็นธรรมได้ กรุณาลองอีกครั้ง';
+
+  @override
+  String get fairUseStatusNormal => 'การใช้งานของคุณอยู่ในขีดจำกัดปกติ';
+
+  @override
+  String get fairUseStageNormal => 'ปกติ';
+
+  @override
+  String get fairUseStageWarning => 'คำเตือน';
+
+  @override
+  String get fairUseStageThrottle => 'ถูกจำกัด';
+
+  @override
+  String get fairUseStageRestrict => 'ถูกระงับ';
+
+  @override
+  String get fairUseSpeechUsage => 'การใช้งานเสียงพูด';
+
+  @override
+  String get fairUseToday => 'วันนี้';
+
+  @override
+  String get fairUse3Day => '3 วันต่อเนื่อง';
+
+  @override
+  String get fairUseWeekly => 'รายสัปดาห์ต่อเนื่อง';
+
+  @override
+  String get fairUseAboutTitle => 'เกี่ยวกับการใช้งานอย่างเป็นธรรม';
+
+  @override
+  String get fairUseAboutBody =>
+      'Omi ออกแบบมาสำหรับการสนทนาส่วนตัว การประชุม และการโต้ตอบสด การใช้งานวัดจากเวลาพูดจริงที่ตรวจพบ ไม่ใช่เวลาเชื่อมต่อ หากการใช้งานเกินรูปแบบปกติอย่างมากสำหรับเนื้อหาที่ไม่ใช่ส่วนบุคคล อาจมีการปรับเปลี่ยน';
+
+  @override
+  String fairUseCaseRefCopied(String caseRef) {
+    return 'คัดลอก $caseRef แล้ว';
+  }
+
+  @override
+  String get fairUseDailyTranscription => 'Daily Transcription';
+
+  @override
+  String fairUseBudgetUsed(String used, String limit) {
+    return '${used}m / ${limit}m';
+  }
+
+  @override
+  String get fairUseBudgetExhausted => 'Daily transcription limit reached';
+
+  @override
+  String fairUseBudgetResetsAt(String time) {
+    return 'Resets $time';
+  }
 }

@@ -8549,4 +8549,65 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get phoneHideKeypad => 'Skjul tastatur';
+
+  @override
+  String get fairUsePolicy => 'Rimelig bruk';
+
+  @override
+  String get fairUseLoadError => 'Kunne ikke laste status for rimelig bruk. Vennligst prøv igjen.';
+
+  @override
+  String get fairUseStatusNormal => 'Bruken din er innenfor normale grenser.';
+
+  @override
+  String get fairUseStageNormal => 'Normal';
+
+  @override
+  String get fairUseStageWarning => 'Advarsel';
+
+  @override
+  String get fairUseStageThrottle => 'Begrenset';
+
+  @override
+  String get fairUseStageRestrict => 'Blokkert';
+
+  @override
+  String get fairUseSpeechUsage => 'Talebruk';
+
+  @override
+  String get fairUseToday => 'I dag';
+
+  @override
+  String get fairUse3Day => '3-dagers rullende';
+
+  @override
+  String get fairUseWeekly => 'Ukentlig rullende';
+
+  @override
+  String get fairUseAboutTitle => 'Om rimelig bruk';
+
+  @override
+  String get fairUseAboutBody =>
+      'Omi er designet for personlige samtaler, møter og direkte interaksjoner. Bruken måles etter faktisk oppdaget taletid, ikke tilkoblingstid. Hvis bruken vesentlig overstiger normale mønstre for ikke-personlig innhold, kan justeringer gjelde.';
+
+  @override
+  String fairUseCaseRefCopied(String caseRef) {
+    return '$caseRef kopiert';
+  }
+
+  @override
+  String get fairUseDailyTranscription => 'Daily Transcription';
+
+  @override
+  String fairUseBudgetUsed(String used, String limit) {
+    return '${used}m / ${limit}m';
+  }
+
+  @override
+  String get fairUseBudgetExhausted => 'Daily transcription limit reached';
+
+  @override
+  String fairUseBudgetResetsAt(String time) {
+    return 'Resets $time';
+  }
 }

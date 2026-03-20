@@ -2718,5 +2718,48 @@
     "notYetSynced": "Все още не е синхронизирано с телефона ви",
     "clearAll": "Изчисти всичко",
     "phoneKeypad": "Клавиатура",
-    "phoneHideKeypad": "Скрий клавиатурата"
+    "phoneHideKeypad": "Скрий клавиатурата",
+    "fairUsePolicy": "Честна употреба",
+    "fairUseLoadError": "Неуспешно зареждане на статуса на честна употреба. Моля, опитайте отново.",
+    "fairUseStatusNormal": "Вашата употреба е в нормалните граници.",
+    "fairUseStageNormal": "Нормална",
+    "fairUseStageWarning": "Предупреждение",
+    "fairUseStageThrottle": "Ограничена",
+    "fairUseStageRestrict": "Забранена",
+    "fairUseSpeechUsage": "Употреба на реч",
+    "fairUseToday": "Днес",
+    "fairUse3Day": "3-дневен период",
+    "fairUseWeekly": "Седмичен период",
+    "fairUseAboutTitle": "Относно честната употреба",
+    "fairUseAboutBody": "Omi е проектиран за лични разговори, срещи и взаимодействия на живо. Употребата се измерва по реалното открито време на реч, а не по времето на връзка. Ако употребата значително надвишава нормалните модели за неличностно съдържание, може да се приложат корекции.",
+    "fairUseCaseRefCopied": "{caseRef} копирано",
+    "@fairUseCaseRefCopied": {
+        "description": "Snackbar message when case reference is copied",
+        "placeholders": {
+            "caseRef": {
+                "type": "String"
+            }
+        }
+    },
+    "fairUseDailyTranscription": "Daily Transcription",
+    "fairUseBudgetExhausted": "Daily transcription limit reached",
+    "fairUseBudgetResetsAt": "Resets {time}",
+    "fairUseBudgetUsed": "{used}m / {limit}m",
+    "@fairUseBudgetUsed": {
+        "placeholders": {
+            "used": {
+                "type": "String"
+            },
+            "limit": {
+                "type": "String"
+            }
+        }
+    },
+    "@fairUseBudgetResetsAt": {
+        "placeholders": {
+            "time": {
+                "type": "String"
+            }
+        }
+    }
 }

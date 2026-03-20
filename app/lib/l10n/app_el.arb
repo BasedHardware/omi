@@ -2749,5 +2749,48 @@
     "notYetSynced": "Δεν έχει συγχρονιστεί ακόμα με το τηλέφωνό σας",
     "clearAll": "Εκκαθάριση όλων",
     "phoneKeypad": "Πληκτρολόγιο",
-    "phoneHideKeypad": "Απόκρυψη πληκτρολογίου"
+    "phoneHideKeypad": "Απόκρυψη πληκτρολογίου",
+    "fairUsePolicy": "Δίκαιη χρήση",
+    "fairUseLoadError": "Δεν ήταν δυνατή η φόρτωση της κατάστασης δίκαιης χρήσης. Παρακαλώ δοκιμάστε ξανά.",
+    "fairUseStatusNormal": "Η χρήση σας είναι εντός κανονικών ορίων.",
+    "fairUseStageNormal": "Κανονική",
+    "fairUseStageWarning": "Προειδοποίηση",
+    "fairUseStageThrottle": "Περιορισμένη",
+    "fairUseStageRestrict": "Αποκλεισμένη",
+    "fairUseSpeechUsage": "Χρήση ομιλίας",
+    "fairUseToday": "Σήμερα",
+    "fairUse3Day": "3ήμερο κυλιόμενο",
+    "fairUseWeekly": "Εβδομαδιαίο κυλιόμενο",
+    "fairUseAboutTitle": "Σχετικά με τη δίκαιη χρήση",
+    "fairUseAboutBody": "Το Omi είναι σχεδιασμένο για προσωπικές συνομιλίες, συναντήσεις και ζωντανές αλληλεπιδράσεις. Η χρήση μετράται βάσει του πραγματικού χρόνου ομιλίας που ανιχνεύεται, όχι του χρόνου σύνδεσης. Εάν η χρήση υπερβαίνει σημαντικά τα κανονικά πρότυπα για μη προσωπικό περιεχόμενο, ενδέχεται να εφαρμοστούν προσαρμογές.",
+    "fairUseCaseRefCopied": "{caseRef} αντιγράφηκε",
+    "@fairUseCaseRefCopied": {
+        "description": "Snackbar message when case reference is copied",
+        "placeholders": {
+            "caseRef": {
+                "type": "String"
+            }
+        }
+    },
+    "fairUseDailyTranscription": "Daily Transcription",
+    "fairUseBudgetExhausted": "Daily transcription limit reached",
+    "fairUseBudgetResetsAt": "Resets {time}",
+    "fairUseBudgetUsed": "{used}m / {limit}m",
+    "@fairUseBudgetUsed": {
+        "placeholders": {
+            "used": {
+                "type": "String"
+            },
+            "limit": {
+                "type": "String"
+            }
+        }
+    },
+    "@fairUseBudgetResetsAt": {
+        "placeholders": {
+            "time": {
+                "type": "String"
+            }
+        }
+    }
 }

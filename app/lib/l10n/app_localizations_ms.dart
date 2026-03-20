@@ -8578,4 +8578,65 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get phoneHideKeypad => 'Sembunyikan pad kekunci';
+
+  @override
+  String get fairUsePolicy => 'Penggunaan Saksama';
+
+  @override
+  String get fairUseLoadError => 'Tidak dapat memuatkan status penggunaan saksama. Sila cuba lagi.';
+
+  @override
+  String get fairUseStatusNormal => 'Penggunaan anda dalam had biasa.';
+
+  @override
+  String get fairUseStageNormal => 'Normal';
+
+  @override
+  String get fairUseStageWarning => 'Amaran';
+
+  @override
+  String get fairUseStageThrottle => 'Dihadkan';
+
+  @override
+  String get fairUseStageRestrict => 'Disekat';
+
+  @override
+  String get fairUseSpeechUsage => 'Penggunaan Pertuturan';
+
+  @override
+  String get fairUseToday => 'Hari ini';
+
+  @override
+  String get fairUse3Day => '3 hari bergulir';
+
+  @override
+  String get fairUseWeekly => 'Mingguan bergulir';
+
+  @override
+  String get fairUseAboutTitle => 'Tentang Penggunaan Saksama';
+
+  @override
+  String get fairUseAboutBody =>
+      'Omi direka untuk perbualan peribadi, mesyuarat dan interaksi secara langsung. Penggunaan diukur berdasarkan masa pertuturan sebenar yang dikesan, bukan masa sambungan. Jika penggunaan melebihi corak biasa dengan ketara untuk kandungan bukan peribadi, pelarasan mungkin dikenakan.';
+
+  @override
+  String fairUseCaseRefCopied(String caseRef) {
+    return '$caseRef disalin';
+  }
+
+  @override
+  String get fairUseDailyTranscription => 'Daily Transcription';
+
+  @override
+  String fairUseBudgetUsed(String used, String limit) {
+    return '${used}m / ${limit}m';
+  }
+
+  @override
+  String get fairUseBudgetExhausted => 'Daily transcription limit reached';
+
+  @override
+  String fairUseBudgetResetsAt(String time) {
+    return 'Resets $time';
+  }
 }
