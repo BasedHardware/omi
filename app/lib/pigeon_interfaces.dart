@@ -87,7 +87,7 @@ class BleService {
   BleService({required this.uuid, required this.characteristicUuids});
 }
 
-/// Dart → Swift: commands sent from Flutter to the native BLE module.
+/// Dart → Native: commands sent from Flutter to the native BLE module.
 @HostApi()
 abstract class BleHostApi {
   // Scanning
@@ -104,8 +104,8 @@ abstract class BleHostApi {
   @SwiftFunction('disconnectPeripheral(uuid:)')
   void disconnectPeripheral(String uuid);
 
-  /// Reconnect a previously-paired peripheral using retrievePeripherals(withIdentifiers:).
-  /// No active scanning — iOS handles reconnection at the chipset level.
+  /// Reconnect a previously-paired peripheral. No active scanning — the platform
+  /// handles reconnection at the chipset level (iOS: retrievePeripherals, Android: autoConnect).
   @SwiftFunction('reconnectKnownPeripheral(uuid:)')
   void reconnectKnownPeripheral(String uuid);
 
@@ -154,7 +154,7 @@ abstract class BleHostApi {
   String requestCompanionDeviceAssociation(String deviceAddress);
 }
 
-/// Swift → Dart: events pushed from the native BLE module to Flutter.
+/// Native → Dart: events pushed from the native BLE module to Flutter.
 @FlutterApi()
 abstract class BleFlutterApi {
   void onBluetoothStateChanged(String state);

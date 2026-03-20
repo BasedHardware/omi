@@ -7,10 +7,8 @@ import 'package:omi/services/devices/models.dart';
 import 'package:omi/utils/logger.dart';
 import 'device_transport.dart';
 
-/// iOS-only BLE transport that uses native CoreBluetooth via Pigeon.
-///
-/// Drop-in replacement for [BleTransport]. Uses [OmiBleManager] on the native
-/// side for state restoration, chipset-level reconnection, and audio batching.
+/// BLE transport backed by native platform APIs via Pigeon.
+/// iOS: CoreBluetooth. Android: BluetoothGatt + CompanionDeviceManager.
 class NativeBleTransport extends DeviceTransport {
   final String _peripheralUuid;
   final BleHostApi _hostApi = BleHostApi();

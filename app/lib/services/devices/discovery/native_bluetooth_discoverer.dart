@@ -8,8 +8,8 @@ import 'package:omi/services/devices/models.dart';
 import 'package:omi/utils/logger.dart';
 import 'device_discoverer.dart';
 
-/// iOS-only BLE discoverer that uses native CoreBluetooth via Pigeon.
-/// Replaces [BluetoothDeviceDiscoverer] on iOS — no flutter_blue_plus dependency.
+/// BLE discoverer backed by native platform APIs via Pigeon.
+/// iOS: CoreBluetooth. Android: BluetoothLeScanner + CompanionDeviceManager.
 class NativeBluetoothDiscoverer extends DeviceDiscoverer {
   final BleHostApi _hostApi = BleHostApi();
 
@@ -45,10 +45,7 @@ class NativeBluetoothDiscoverer extends DeviceDiscoverer {
 
       _hostApi.stopScan();
 
-      final devices = results
-          .where(_isSupportedPeripheral)
-          .map(_peripheralToDevice)
-          .toList()
+      final devices = results.where(_isSupportedPeripheral).map(_peripheralToDevice).toList()
         ..sort((a, b) => b.rssi.compareTo(a.rssi));
 
       return DeviceDiscoveryResult(devices: devices);
@@ -69,7 +66,13 @@ class NativeBluetoothDiscoverer extends DeviceDiscoverer {
   // MARK: - Device type detection (mirrors BtDevice.isSupportedDevice without ScanResult)
 
   static bool _isSupportedPeripheral(BlePeripheral p) {
-    return _isBee(p) || _isPlaud(p) || _isFieldy(p) || _isFriendPendant(p) || _isLimitless(p) || _isOmi(p) || _isFrame(p);
+    return _isBee(p) ||
+        _isPlaud(p) ||
+        _isFieldy(p) ||
+        _isFriendPendant(p) ||
+        _isLimitless(p) ||
+        _isOmi(p) ||
+        _isFrame(p);
   }
 
   static bool _isBee(BlePeripheral p) {
