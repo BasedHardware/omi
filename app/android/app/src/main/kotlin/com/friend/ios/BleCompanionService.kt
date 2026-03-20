@@ -110,10 +110,10 @@ class BleCompanionService : CompanionDeviceService() {
         val address = association?.deviceMacAddress?.toString()?.uppercase(Locale.ROOT)
 
         when (event.event) {
-            0 -> { // BLE_APPEARED
+            DevicePresenceEvent.EVENT_BLE_APPEARED -> {
                 if (address != null) handleDeviceAppeared(address)
             }
-            1 -> { // BLE_DISAPPEARED
+            DevicePresenceEvent.EVENT_BLE_DISAPPEARED -> {
                 handleDeviceDisappeared()
             }
         }
