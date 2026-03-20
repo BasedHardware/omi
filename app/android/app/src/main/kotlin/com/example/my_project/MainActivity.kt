@@ -62,4 +62,14 @@ class MainActivity: FlutterActivity() {
             OmiBleForegroundService.startService(this, address)
         }
     }
+
+    override fun onDestroy() {
+        // When user closes the app (swipe away), disconnect BLE and stop the foreground service.
+        // Omi streams via WebSocket which requires the app — no point keeping BLE alive without it.
+        // isFinishing distinguishes user close from config changes (rotation, etc.)
+        if (isFinishing) {
+            OmiBleManager.instance.disconnectAllPeripherals()
+        }
+        super.onDestroy()
+    }
 }
