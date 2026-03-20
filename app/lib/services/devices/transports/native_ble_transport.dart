@@ -14,7 +14,8 @@ import 'device_transport.dart';
 class NativeBleTransport extends DeviceTransport {
   final String _peripheralUuid;
   final BleHostApi _hostApi = BleHostApi();
-  final StreamController<DeviceTransportState> _connectionStateController = StreamController<DeviceTransportState>.broadcast();
+  final StreamController<DeviceTransportState> _connectionStateController =
+      StreamController<DeviceTransportState>.broadcast();
 
   /// Characteristic notification streams, keyed by "serviceUuid:charUuid" (lowercased).
   final Map<String, StreamController<List<int>>> _streamControllers = {};
@@ -53,6 +54,9 @@ class NativeBleTransport extends DeviceTransport {
 
     try {
       _connectCompleter = Completer<void>();
+      // Set services completer early — native may send onServicesDiscovered
+      // together with onPeripheralConnected (when already connected)
+      _servicesCompleter = Completer<List<BleService>>();
       _hostApi.connectPeripheral(_peripheralUuid);
 
       // Wait for onPeripheralConnected callback
@@ -61,9 +65,13 @@ class NativeBleTransport extends DeviceTransport {
       _connectCompleter = null;
       print('[NativeBleTransport] peripheral connected, discovering services...');
 
-      // Discover services
-      _servicesCompleter = Completer<List<BleService>>();
-      _hostApi.discoverServices(_peripheralUuid);
+      // If services already arrived (from already-connected path), use them
+      if (_servicesCompleter!.isCompleted || _services.isNotEmpty) {
+        if (!_servicesCompleter!.isCompleted) _servicesCompleter!.complete(_services);
+      } else {
+        // Trigger discovery — native hasn't sent services yet (fresh connection)
+        _hostApi.discoverServices(_peripheralUuid);
+      }
 
       _services = await _servicesCompleter!.future.timeout(const Duration(seconds: 15));
       _servicesCompleter = null;
@@ -276,6 +284,8 @@ class NativeBleTransport extends DeviceTransport {
   }
 
   void _handleServicesDiscovered(List<BleService> services) {
+    print(
+        '[NativeBleTransport] _handleServicesDiscovered: ${services.length} services, completer=${_servicesCompleter != null}, completed=${_servicesCompleter?.isCompleted}');
     _services = services;
     if (_servicesCompleter != null && !_servicesCompleter!.isCompleted) {
       _servicesCompleter!.complete(services);
@@ -290,7 +300,8 @@ class NativeBleTransport extends DeviceTransport {
 
   void _handleAudioBatch(String serviceUuid, String characteristicUuid, Uint8List batchedData, int notificationCount) {
     if (!_loggedFirstAudioBatch) {
-      print('[NativeBleTransport] First audio batch: ${batchedData.length} bytes, $notificationCount notifications, service=$serviceUuid, char=$characteristicUuid');
+      print(
+          '[NativeBleTransport] First audio batch: ${batchedData.length} bytes, $notificationCount notifications, service=$serviceUuid, char=$characteristicUuid');
       _loggedFirstAudioBatch = true;
     }
     _addToStream(serviceUuid, characteristicUuid, batchedData);
