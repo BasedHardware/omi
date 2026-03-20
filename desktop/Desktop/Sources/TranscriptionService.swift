@@ -122,13 +122,14 @@ class TranscriptionService {
     ///   - language: Language code for transcription (e.g., "en", "uk", "ru", "multi" for auto-detect)
     ///   - vocabulary: Custom vocabulary/keyterms to improve transcription accuracy (Nova-3 limit: 500 tokens total)
     init(apiKey: String? = nil, language: String = "en", vocabulary: [String] = [], channels: Int = 2) throws {
-        // Prefer backend proxy (no client-side API key needed)
-        if !Self.proxyBaseURL.isEmpty && Self.deepgramBaseURL.isEmpty {
-            self.apiKey = ""  // Not used in proxy mode
-            self.useProxy = true
-        } else if let key = apiKey ?? APIKeyService.currentDeepgramKey {
+        // Prefer direct Deepgram if DEEPGRAM_API_URL is explicitly set (developer override)
+        if !Self.deepgramBaseURL.isEmpty, let key = apiKey ?? APIKeyService.currentDeepgramKey {
             self.apiKey = key
             self.useProxy = false
+        } else if !Self.proxyBaseURL.isEmpty {
+            // Backend proxy mode: no client-side API key needed
+            self.apiKey = ""
+            self.useProxy = true
         } else {
             throw TranscriptionError.missingAPIKey
         }
