@@ -73,19 +73,14 @@ class OmiGlassConnection extends DeviceConnection {
   StreamSubscription? _otaStatusSubscription;
 
   @override
-  Future<void> connect({
-    Function(String deviceId, DeviceConnectionState state)? onConnectionStateChanged,
-  }) async {
+  Future<void> connect({Function(String deviceId, DeviceConnectionState state)? onConnectionStateChanged}) async {
     await super.connect(onConnectionStateChanged: onConnectionStateChanged);
   }
 
   @override
   Future<int> performRetrieveBatteryLevel() async {
     try {
-      final data = await transport.readCharacteristic(
-        batteryServiceUuid,
-        batteryLevelCharacteristicUuid,
-      );
+      final data = await transport.readCharacteristic(batteryServiceUuid, batteryLevelCharacteristicUuid);
       if (data.isNotEmpty) return data[0];
       return -1;
     } catch (e) {
@@ -99,10 +94,7 @@ class OmiGlassConnection extends DeviceConnection {
     void Function(int)? onBatteryLevelChange,
   }) async {
     try {
-      final stream = transport.getCharacteristicStream(
-        batteryServiceUuid,
-        batteryLevelCharacteristicUuid,
-      );
+      final stream = transport.getCharacteristicStream(batteryServiceUuid, batteryLevelCharacteristicUuid);
 
       final subscription = stream.listen((value) {
         if (value.isNotEmpty && onBatteryLevelChange != null) {
@@ -123,10 +115,7 @@ class OmiGlassConnection extends DeviceConnection {
     required void Function(List<int>) onAudioBytesReceived,
   }) async {
     try {
-      final stream = transport.getCharacteristicStream(
-        omiServiceUuid,
-        audioDataStreamCharacteristicUuid,
-      );
+      final stream = transport.getCharacteristicStream(omiServiceUuid, audioDataStreamCharacteristicUuid);
 
       final subscription = stream.listen((value) {
         if (value.isNotEmpty) {
@@ -144,10 +133,7 @@ class OmiGlassConnection extends DeviceConnection {
   @override
   Future<BleAudioCodec> performGetAudioCodec() async {
     try {
-      final codecData = await transport.readCharacteristic(
-        omiServiceUuid,
-        audioCodecCharacteristicUuid,
-      );
+      final codecData = await transport.readCharacteristic(omiServiceUuid, audioCodecCharacteristicUuid);
       if (codecData.isNotEmpty) {
         final codecId = codecData[0];
         switch (codecId) {
@@ -251,10 +237,7 @@ class OmiGlassConnection extends DeviceConnection {
   Future<bool> isOtaSupported() async {
     try {
       // Try to read from OTA control characteristic
-      await transport.readCharacteristic(
-        omiGlassOtaServiceUuid,
-        omiGlassOtaControlCharacteristicUuid,
-      );
+      await transport.readCharacteristic(omiGlassOtaServiceUuid, omiGlassOtaControlCharacteristicUuid);
       return true;
     } catch (e) {
       Logger.debug('OmiGlassConnection: OTA not supported - $e');
@@ -287,11 +270,7 @@ class OmiGlassConnection extends DeviceConnection {
       command.add(passwordBytes.length);
       command.addAll(passwordBytes);
 
-      await transport.writeCharacteristic(
-        omiGlassOtaServiceUuid,
-        omiGlassOtaControlCharacteristicUuid,
-        command,
-      );
+      await transport.writeCharacteristic(omiGlassOtaServiceUuid, omiGlassOtaControlCharacteristicUuid, command);
 
       Logger.debug('OmiGlassConnection: WiFi credentials set for SSID: $ssid');
       return true;
@@ -318,11 +297,7 @@ class OmiGlassConnection extends DeviceConnection {
       command.add(urlBytes.length & 0xFF);
       command.addAll(urlBytes);
 
-      await transport.writeCharacteristic(
-        omiGlassOtaServiceUuid,
-        omiGlassOtaControlCharacteristicUuid,
-        command,
-      );
+      await transport.writeCharacteristic(omiGlassOtaServiceUuid, omiGlassOtaControlCharacteristicUuid, command);
 
       Logger.debug('OmiGlassConnection: Firmware URL set: $url');
       return true;
@@ -335,11 +310,9 @@ class OmiGlassConnection extends DeviceConnection {
   /// Start OTA update process
   Future<bool> startOtaUpdate() async {
     try {
-      await transport.writeCharacteristic(
-        omiGlassOtaServiceUuid,
-        omiGlassOtaControlCharacteristicUuid,
-        [otaCmdStartOta],
-      );
+      await transport.writeCharacteristic(omiGlassOtaServiceUuid, omiGlassOtaControlCharacteristicUuid, [
+        otaCmdStartOta,
+      ]);
 
       Logger.debug('OmiGlassConnection: OTA update started');
       return true;
@@ -352,11 +325,9 @@ class OmiGlassConnection extends DeviceConnection {
   /// Cancel ongoing OTA update
   Future<bool> cancelOtaUpdate() async {
     try {
-      await transport.writeCharacteristic(
-        omiGlassOtaServiceUuid,
-        omiGlassOtaControlCharacteristicUuid,
-        [otaCmdCancelOta],
-      );
+      await transport.writeCharacteristic(omiGlassOtaServiceUuid, omiGlassOtaControlCharacteristicUuid, [
+        otaCmdCancelOta,
+      ]);
 
       Logger.debug('OmiGlassConnection: OTA update cancelled');
       return true;
@@ -369,10 +340,7 @@ class OmiGlassConnection extends DeviceConnection {
   /// Get current OTA status
   Future<OmiGlassOtaStatus?> getOtaStatus() async {
     try {
-      final data = await transport.readCharacteristic(
-        omiGlassOtaServiceUuid,
-        omiGlassOtaControlCharacteristicUuid,
-      );
+      final data = await transport.readCharacteristic(omiGlassOtaServiceUuid, omiGlassOtaControlCharacteristicUuid);
 
       if (data.length >= 2) {
         return OmiGlassOtaStatus(data[0], data[1]);
@@ -393,18 +361,12 @@ class OmiGlassConnection extends DeviceConnection {
     void Function(dynamic error)? onStreamError,
   }) async {
     try {
-      final stream = transport.getCharacteristicStream(
-        omiGlassOtaServiceUuid,
-        omiGlassOtaDataCharacteristicUuid,
-      );
+      final stream = transport.getCharacteristicStream(omiGlassOtaServiceUuid, omiGlassOtaDataCharacteristicUuid);
 
       _otaStatusSubscription = stream.listen(
         (value) {
           if (value.isNotEmpty) {
-            final status = OmiGlassOtaStatus(
-              value[0],
-              value.length > 1 ? value[1] : 0,
-            );
+            final status = OmiGlassOtaStatus(value[0], value.length > 1 ? value[1] : 0);
             Logger.debug('OmiGlassConnection: OTA status update: ${status.statusMessage}');
             onStatusReceived(status);
           }
@@ -491,10 +453,7 @@ class OmiGlassConnection extends DeviceConnection {
     required void Function(List<int>) onImageBytesReceived,
   }) async {
     try {
-      final stream = transport.getCharacteristicStream(
-        omiServiceUuid,
-        imageDataStreamCharacteristicUuid,
-      );
+      final stream = transport.getCharacteristicStream(omiServiceUuid, imageDataStreamCharacteristicUuid);
 
       final subscription = stream.listen((value) {
         if (value.isNotEmpty) {
@@ -517,9 +476,7 @@ class OmiGlassConnection extends DeviceConnection {
   Future<List<int>> performGetButtonState() async => [];
 
   @override
-  Future<StreamSubscription?> performGetBleButtonListener({
-    required void Function(List<int>) onButtonReceived,
-  }) async =>
+  Future<StreamSubscription?> performGetBleButtonListener({required void Function(List<int>) onButtonReceived}) async =>
       null;
 
   @override
@@ -565,10 +522,7 @@ class OmiGlassConnection extends DeviceConnection {
   Future<bool> performHasPhotoStreamingCharacteristic() async {
     // OmiGlass has camera capability
     try {
-      await transport.readCharacteristic(
-        omiServiceUuid,
-        imageDataStreamCharacteristicUuid,
-      );
+      await transport.readCharacteristic(omiServiceUuid, imageDataStreamCharacteristicUuid);
       return true;
     } catch (e) {
       return false;
@@ -580,10 +534,7 @@ class OmiGlassConnection extends DeviceConnection {
     required void Function(OrientedImage orientedImage) onImageReceived,
   }) async {
     try {
-      final stream = transport.getCharacteristicStream(
-        omiServiceUuid,
-        imageDataStreamCharacteristicUuid,
-      );
+      final stream = transport.getCharacteristicStream(omiServiceUuid, imageDataStreamCharacteristicUuid);
 
       var buffer = BytesBuilder();
       var nextExpectedFrame = 0;
@@ -612,10 +563,12 @@ class OmiGlassConnection extends DeviceConnection {
             if (imageBytes.isNotEmpty) {
               Logger.debug('OmiGlass: Completed image bytes length: ${imageBytes.length}');
               try {
-                onImageReceived(OrientedImage(
-                  imageBytes: imageBytes,
-                  orientation: currentOrientation ?? ImageOrientation.orientation0,
-                ));
+                onImageReceived(
+                  OrientedImage(
+                    imageBytes: imageBytes,
+                    orientation: currentOrientation ?? ImageOrientation.orientation0,
+                  ),
+                );
               } catch (e) {
                 Logger.debug('OmiGlass: Error processing image: $e');
               }
@@ -692,9 +645,7 @@ class OmiGlassConnection extends DeviceConnection {
   }
 
   @override
-  Future<StreamSubscription<List<int>>?> performGetAccelListener({
-    void Function(int)? onAccelChange,
-  }) async {
+  Future<StreamSubscription<List<int>>?> performGetAccelListener({void Function(int)? onAccelChange}) async {
     // OmiGlass doesn't have accelerometer
     return null;
   }

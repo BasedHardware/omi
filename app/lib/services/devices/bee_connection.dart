@@ -90,9 +90,7 @@ class BeeDeviceConnection extends CustomDeviceConnection {
   }
 
   @override
-  Future<void> connect({
-    Function(String deviceId, DeviceConnectionState state)? onConnectionStateChanged,
-  }) async {
+  Future<void> connect({Function(String deviceId, DeviceConnectionState state)? onConnectionStateChanged}) async {
     await super.connect(onConnectionStateChanged: onConnectionStateChanged);
     await _queryFirmwareVersion();
     if (_cachedFirmwareVersion != null) {

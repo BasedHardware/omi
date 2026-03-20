@@ -13,12 +13,7 @@ class MyUpgrader extends Upgrader {
 }
 
 class MyUpgradeAlert extends UpgradeAlert {
-  MyUpgradeAlert({
-    super.key,
-    super.upgrader,
-    super.child,
-    super.dialogStyle,
-  });
+  MyUpgradeAlert({super.key, super.upgrader, super.child, super.dialogStyle});
 
   /// Override the [createState] method to provide a custom class
   /// with overridden methods.
@@ -38,35 +33,10 @@ class MyUpgradeAlertState extends UpgradeAlertState {
     required UpgraderMessages messages,
   }) {
     showDialog(
-        context: context,
-        builder: (BuildContext context) {
-          if (widget.dialogStyle == UpgradeDialogStyle.cupertino) {
-            return CupertinoAlertDialog(
-              key: key,
-              title: Text(
-                context.l10n.newVersionAvailable,
-                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
-              ),
-              content: SingleChildScrollView(child: ListBody(children: <Widget>[Text(message)])),
-              actions: <Widget>[
-                TextButton(
-                  child: Text(context.l10n.no, style: TextStyle(color: Colors.grey.shade200, fontSize: 16)),
-                  onPressed: () {
-                    onUserIgnored(context, true);
-                    MixpanelManager().upgradeModalDismissed();
-                  },
-                ),
-                TextButton(
-                  child: Text(context.l10n.upgrade, style: const TextStyle(color: Colors.white, fontSize: 16)),
-                  onPressed: () {
-                    onUserUpdated(context, !widget.upgrader.blocked());
-                    MixpanelManager().upgradeModalClicked();
-                  },
-                ),
-              ],
-            );
-          }
-          return AlertDialog(
+      context: context,
+      builder: (BuildContext context) {
+        if (widget.dialogStyle == UpgradeDialogStyle.cupertino) {
+          return CupertinoAlertDialog(
             key: key,
             title: Text(
               context.l10n.newVersionAvailable,
@@ -78,16 +48,42 @@ class MyUpgradeAlertState extends UpgradeAlertState {
                 child: Text(context.l10n.no, style: TextStyle(color: Colors.grey.shade200, fontSize: 16)),
                 onPressed: () {
                   onUserIgnored(context, true);
+                  MixpanelManager().upgradeModalDismissed();
                 },
               ),
               TextButton(
                 child: Text(context.l10n.upgrade, style: const TextStyle(color: Colors.white, fontSize: 16)),
                 onPressed: () {
                   onUserUpdated(context, !widget.upgrader.blocked());
+                  MixpanelManager().upgradeModalClicked();
                 },
               ),
             ],
           );
-        });
+        }
+        return AlertDialog(
+          key: key,
+          title: Text(
+            context.l10n.newVersionAvailable,
+            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+          ),
+          content: SingleChildScrollView(child: ListBody(children: <Widget>[Text(message)])),
+          actions: <Widget>[
+            TextButton(
+              child: Text(context.l10n.no, style: TextStyle(color: Colors.grey.shade200, fontSize: 16)),
+              onPressed: () {
+                onUserIgnored(context, true);
+              },
+            ),
+            TextButton(
+              child: Text(context.l10n.upgrade, style: const TextStyle(color: Colors.white, fontSize: 16)),
+              onPressed: () {
+                onUserUpdated(context, !widget.upgrader.blocked());
+              },
+            ),
+          ],
+        );
+      },
+    );
   }
 }

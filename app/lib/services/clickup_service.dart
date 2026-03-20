@@ -41,10 +41,7 @@ class ClickUpService {
         return false;
       }
 
-      await launchUrl(
-        authUri,
-        mode: LaunchMode.externalApplication,
-      );
+      await launchUrl(authUri, mode: LaunchMode.externalApplication);
 
       return true;
     } catch (e) {
@@ -95,18 +92,9 @@ class ClickUpService {
   }
 
   /// Create a task in ClickUp
-  Future<bool> createTask({
-    required String name,
-    String? description,
-    DateTime? dueDate,
-  }) async {
+  Future<bool> createTask({required String name, String? description, DateTime? dueDate}) async {
     try {
-      final result = await createTaskViaIntegration(
-        'clickup',
-        title: name,
-        description: description,
-        dueDate: dueDate,
-      );
+      final result = await createTaskViaIntegration('clickup', title: name, description: description, dueDate: dueDate);
 
       if (result != null && result['success'] == true) {
         Logger.debug('Task created successfully in ClickUp');

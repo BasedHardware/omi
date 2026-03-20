@@ -201,6 +201,7 @@ export function TaskCard({
         'border-l-4 transition-all duration-150',
         'bg-white/[0.02] hover:bg-white/[0.05]',
         'p-4',
+        showDatePicker && 'z-10',
         // Left border color based on status
         task.completed
           ? 'border-l-success/50'

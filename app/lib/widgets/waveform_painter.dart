@@ -8,11 +8,7 @@ class WaveformPainter extends CustomPainter {
   final List<double>? waveformData;
   final double playbackProgress;
 
-  const WaveformPainter({
-    required this.isPlaying,
-    this.waveformData,
-    this.playbackProgress = 0.0,
-  });
+  const WaveformPainter({required this.isPlaying, this.waveformData, this.playbackProgress = 0.0});
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -87,7 +83,8 @@ class WaveformPainter extends CustomPainter {
     if (isPlaying && playbackProgress > 0) {
       final progressX = (barCount * playbackProgress) * (barWidth + spacing);
       final dotPaint = Paint()
-        ..color = const Color(0xFF4A90E2) // Blue color like in the image
+        ..color =
+            const Color(0xFF4A90E2) // Blue color like in the image
         ..style = PaintingStyle.fill;
 
       // Draw the progress dot above the waveform
@@ -102,11 +99,7 @@ class WaveformPainter extends CustomPainter {
         ..color = const Color(0xFF4A90E2).withOpacity(0.5)
         ..strokeWidth = 1.0;
 
-      canvas.drawLine(
-        Offset(progressX, size.height * 0.05 + 6),
-        Offset(progressX, size.height * 0.95),
-        linePaint,
-      );
+      canvas.drawLine(Offset(progressX, size.height * 0.05 + 6), Offset(progressX, size.height * 0.95), linePaint);
     }
   }
 
@@ -121,11 +114,7 @@ class WaveformPainter extends CustomPainter {
   ) {
     // Paint a single center line when no waveform data is available
     final centerY = size.height / 2;
-    canvas.drawLine(
-      Offset(0, centerY),
-      Offset(size.width, centerY),
-      paint..strokeWidth = 1,
-    );
+    canvas.drawLine(Offset(0, centerY), Offset(size.width, centerY), paint..strokeWidth = 1);
   }
 
   @override

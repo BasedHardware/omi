@@ -69,10 +69,7 @@ class FastTransferSuggestionDialog {
                 onTap: () => Navigator.of(context).pop('continue'),
                 child: Container(
                   padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF2A2A2E),
-                    borderRadius: BorderRadius.circular(16),
-                  ),
+                  decoration: BoxDecoration(color: const Color(0xFF2A2A2E), borderRadius: BorderRadius.circular(16)),
                   child: Row(
                     children: [
                       Container(
@@ -94,10 +91,7 @@ class FastTransferSuggestionDialog {
                               style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
                             ),
                             const SizedBox(height: 2),
-                            Text(
-                              context.l10n.bleSpeed,
-                              style: TextStyle(color: Colors.grey.shade500, fontSize: 13),
-                            ),
+                            Text(context.l10n.bleSpeed, style: TextStyle(color: Colors.grey.shade500, fontSize: 13)),
                           ],
                         ),
                       ),

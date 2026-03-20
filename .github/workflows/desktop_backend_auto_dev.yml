@@ -5,6 +5,7 @@ on:
     branches: [ "main" ]
     paths:
       - 'desktop/Backend-Rust/**'
+  workflow_dispatch:
 
 env:
   SERVICE: desktop-backend
@@ -69,6 +70,9 @@ jobs:
             REDIS_DB_HOST=REDIS_DB_HOST:latest
             REDIS_DB_PORT=REDIS_DB_PORT:latest
             PINECONE_HOST=PINECONE_HOST:latest
+            DEEPGRAM_API_KEY=DESKTOP_DEEPGRAM_API_KEY:latest
+            ANTHROPIC_API_KEY=DESKTOP_ANTHROPIC_API_KEY:latest
+            GOOGLE_CALENDAR_API_KEY=DESKTOP_GOOGLE_CALENDAR_API_KEY:latest
 
       - name: Show Output
         run: echo "Desktop backend deployed to development environment"

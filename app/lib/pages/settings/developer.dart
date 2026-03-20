@@ -344,10 +344,7 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
             onPressed: () async {
               Navigator.of(ctx).pop();
               await SharedPreferencesUtil().saveString('testFlightApiEnvironment', targetEnvironment);
-              AppSnackbar.showSnackbar(
-                context.l10n.apiEnvSavedRestartRequired,
-                duration: const Duration(seconds: 5),
-              );
+              AppSnackbar.showSnackbar(context.l10n.apiEnvSavedRestartRequired, duration: const Duration(seconds: 5));
             },
             child: Text(context.l10n.switchAndRestart, style: const TextStyle(color: Colors.orange)),
           ),
@@ -1677,10 +1674,7 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                   // API Environment Section (TestFlight only)
                   if (Env.isTestFlight) ...[
                     const SizedBox(height: 32),
-                    _buildSectionHeader(
-                      context.l10n.apiEnvironment,
-                      subtitle: context.l10n.apiEnvironmentDescription,
-                    ),
+                    _buildSectionHeader(context.l10n.apiEnvironment, subtitle: context.l10n.apiEnvironmentDescription),
                     Container(
                       padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(

@@ -12,11 +12,7 @@ class AppleWatchSetupBottomSheet extends StatefulWidget {
   final String deviceId;
   final VoidCallback? onConnected;
 
-  const AppleWatchSetupBottomSheet({
-    Key? key,
-    required this.deviceId,
-    this.onConnected,
-  }) : super(key: key);
+  const AppleWatchSetupBottomSheet({Key? key, required this.deviceId, this.onConnected}) : super(key: key);
 
   @override
   State<AppleWatchSetupBottomSheet> createState() => _AppleWatchSetupBottomSheetState();
@@ -61,10 +57,7 @@ class _AppleWatchSetupBottomSheetState extends State<AppleWatchSetupBottomSheet>
     return Container(
       decoration: const BoxDecoration(
         color: ResponsiveHelper.backgroundSecondary,
-        borderRadius: BorderRadius.only(
-          topLeft: Radius.circular(24),
-          topRight: Radius.circular(24),
-        ),
+        borderRadius: BorderRadius.only(topLeft: Radius.circular(24), topRight: Radius.circular(24)),
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -74,10 +67,7 @@ class _AppleWatchSetupBottomSheetState extends State<AppleWatchSetupBottomSheet>
             margin: const EdgeInsets.only(top: 12),
             width: 40,
             height: 4,
-            decoration: BoxDecoration(
-              color: ResponsiveHelper.textTertiary,
-              borderRadius: BorderRadius.circular(2),
-            ),
+            decoration: BoxDecoration(color: ResponsiveHelper.textTertiary, borderRadius: BorderRadius.circular(2)),
           ),
 
           // Main content
@@ -96,20 +86,13 @@ class _AppleWatchSetupBottomSheetState extends State<AppleWatchSetupBottomSheet>
                   ),
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(20),
-                    child: Image.asset(
-                      Assets.images.appleWatch.path,
-                      fit: BoxFit.cover,
-                    ),
+                    child: Image.asset(Assets.images.appleWatch.path, fit: BoxFit.cover),
                   ),
                 ),
                 const SizedBox(height: 32),
 
                 if (_isLoading) ...[
-                  Text(
-                    context.l10n.checkingAppleWatch,
-                    style: responsive.titleLarge,
-                    textAlign: TextAlign.center,
-                  ),
+                  Text(context.l10n.checkingAppleWatch, style: responsive.titleLarge, textAlign: TextAlign.center),
                   const SizedBox(height: 16),
                   const CircularProgressIndicator(
                     valueColor: AlwaysStoppedAnimation<Color>(ResponsiveHelper.purplePrimary),
@@ -155,9 +138,7 @@ class _AppleWatchSetupBottomSheetState extends State<AppleWatchSetupBottomSheet>
                         style: ElevatedButton.styleFrom(
                           backgroundColor: ResponsiveHelper.purplePrimary,
                           foregroundColor: Colors.white,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                           padding: const EdgeInsets.symmetric(vertical: 16),
                           elevation: 0,
                         ),
@@ -172,10 +153,7 @@ class _AppleWatchSetupBottomSheetState extends State<AppleWatchSetupBottomSheet>
                               )
                             : Text(
                                 _getPrimaryButtonText(context),
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.w600,
-                                  fontSize: 16,
-                                ),
+                                style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 16),
                               ),
                       ),
                     ),
@@ -185,13 +163,7 @@ class _AppleWatchSetupBottomSheetState extends State<AppleWatchSetupBottomSheet>
                 const SizedBox(height: 20),
                 InkWell(
                   onTap: () => Navigator.of(context).pop(),
-                  child: Text(
-                    context.l10n.cancel,
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w400,
-                    ),
-                  ),
+                  child: Text(context.l10n.cancel, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w400)),
                 ),
 
                 SizedBox(height: MediaQuery.of(context).padding.bottom + 16),
@@ -229,10 +201,7 @@ class _AppleWatchSetupBottomSheetState extends State<AppleWatchSetupBottomSheet>
         Navigator.of(context).pop();
       }
     } catch (e) {
-      AppSnackbar.showSnackbar(
-        context.l10n.unableToOpenWatchApp,
-        duration: const Duration(seconds: 6),
-      );
+      AppSnackbar.showSnackbar(context.l10n.unableToOpenWatchApp, duration: const Duration(seconds: 6));
 
       Navigator.of(context).pop();
     }
@@ -248,19 +217,13 @@ class _AppleWatchSetupBottomSheetState extends State<AppleWatchSetupBottomSheet>
       final bool isReachable = await hostAPI.isWatchReachable();
 
       if (isReachable) {
-        AppSnackbar.showSnackbar(
-          context.l10n.appleWatchConnectedSuccessfully,
-          duration: const Duration(seconds: 2),
-        );
+        AppSnackbar.showSnackbar(context.l10n.appleWatchConnectedSuccessfully, duration: const Duration(seconds: 2));
 
         // Close the bottom sheet and notify parent
         Navigator.of(context).pop();
         widget.onConnected?.call();
       } else {
-        AppSnackbar.showSnackbar(
-          context.l10n.appleWatchNotReachable,
-          duration: const Duration(seconds: 4),
-        );
+        AppSnackbar.showSnackbar(context.l10n.appleWatchNotReachable, duration: const Duration(seconds: 4));
       }
     } catch (e) {
       AppSnackbar.showSnackbar(

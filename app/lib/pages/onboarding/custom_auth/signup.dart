@@ -72,9 +72,7 @@ class CustomAuthSignUpState extends State<CustomAuthSignUp> {
       print(jsonString);
 
       // You can show a success message or navigate to another page here
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(context.l10n.signUpSuccess)),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.l10n.signUpSuccess)));
     }
   }
 
@@ -106,9 +104,7 @@ class CustomAuthSignUpState extends State<CustomAuthSignUp> {
             padding: const EdgeInsets.symmetric(horizontal: 24.0),
             child: Card(
               elevation: 8.0,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16.0),
-              ),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16.0)),
               margin: const EdgeInsets.symmetric(vertical: 24.0),
               child: Padding(
                 padding: const EdgeInsets.all(24.0),
@@ -119,11 +115,7 @@ class CustomAuthSignUpState extends State<CustomAuthSignUp> {
                     children: [
                       Text(
                         context.l10n.createAccountTitle,
-                        style: TextStyle(
-                          fontSize: 28.0,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.blueAccent[700],
-                        ),
+                        style: TextStyle(fontSize: 28.0, fontWeight: FontWeight.bold, color: Colors.blueAccent[700]),
                       ),
                       const SizedBox(height: 20),
                       TextFormField(
@@ -131,9 +123,7 @@ class CustomAuthSignUpState extends State<CustomAuthSignUp> {
                         decoration: InputDecoration(
                           labelText: context.l10n.nameLabel,
                           prefixIcon: const Icon(Icons.person),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12.0),
-                          ),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12.0)),
                         ),
                         validator: (value) => _validateName(value, context),
                       ),
@@ -143,9 +133,7 @@ class CustomAuthSignUpState extends State<CustomAuthSignUp> {
                         decoration: InputDecoration(
                           labelText: context.l10n.emailLabel,
                           prefixIcon: const Icon(Icons.email),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12.0),
-                          ),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12.0)),
                         ),
                         validator: (value) => _validateEmail(value, context),
                         keyboardType: TextInputType.emailAddress,
@@ -156,9 +144,7 @@ class CustomAuthSignUpState extends State<CustomAuthSignUp> {
                         decoration: InputDecoration(
                           labelText: context.l10n.passwordLabel,
                           prefixIcon: const Icon(Icons.lock),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12.0),
-                          ),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12.0)),
                         ),
                         obscureText: true,
                         validator: (value) => _validatePassword(value, context),
@@ -169,9 +155,7 @@ class CustomAuthSignUpState extends State<CustomAuthSignUp> {
                         decoration: InputDecoration(
                           labelText: context.l10n.repeatPasswordLabel,
                           prefixIcon: const Icon(Icons.lock_outline),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12.0),
-                          ),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12.0)),
                         ),
                         obscureText: true,
                         validator: (value) => _validateRepeatPassword(value, context),
@@ -183,15 +167,10 @@ class CustomAuthSignUpState extends State<CustomAuthSignUp> {
                           onPressed: _submitForm,
                           style: ElevatedButton.styleFrom(
                             padding: const EdgeInsets.symmetric(vertical: 16.0),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12.0),
-                            ),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12.0)),
                             backgroundColor: Colors.blueAccent[700],
                           ),
-                          child: Text(
-                            context.l10n.signUpButton,
-                            style: const TextStyle(fontSize: 18.0),
-                          ),
+                          child: Text(context.l10n.signUpButton, style: const TextStyle(fontSize: 18.0)),
                         ),
                       ),
                       const SizedBox(height: 16),
@@ -199,10 +178,7 @@ class CustomAuthSignUpState extends State<CustomAuthSignUp> {
                         onPressed: () {
                           // Navigate to login page
                         },
-                        child: Text(
-                          context.l10n.alreadyHaveAccountLogin,
-                          style: const TextStyle(color: Colors.grey),
-                        ),
+                        child: Text(context.l10n.alreadyHaveAccountLogin, style: const TextStyle(color: Colors.grey)),
                       ),
                     ],
                   ),

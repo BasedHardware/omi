@@ -26,10 +26,7 @@ class AudioPollingConfig {
 }
 
 abstract class ISttProvider {
-  Future<SttTranscriptionResult?> transcribe(
-    Uint8List audioData, {
-    double audioOffsetSeconds = 0,
-  });
+  Future<SttTranscriptionResult?> transcribe(Uint8List audioData, {double audioOffsetSeconds = 0});
 
   void dispose();
 }
@@ -68,10 +65,7 @@ class PurePollingSocket implements IPureSocket {
   bool _isProcessing = false;
   double _audioOffsetSeconds = 0;
 
-  PurePollingSocket({
-    required this.config,
-    required this.sttProvider,
-  });
+  PurePollingSocket({required this.config, required this.sttProvider});
 
   @override
   Future<bool> connect() async {
@@ -97,10 +91,7 @@ class PurePollingSocket implements IPureSocket {
       return true;
     } catch (e) {
       CustomSttLogService.instance.error(serviceId, 'Connection error: $e');
-      DebugLogManager.logWarning('polling_socket_connect_error', {
-        'service_id': serviceId,
-        'error': e.toString(),
-      });
+      DebugLogManager.logWarning('polling_socket_connect_error', {'service_id': serviceId, 'error': e.toString()});
       _status = PurePollingStatus.notConnected;
       return false;
     }
@@ -158,24 +149,23 @@ class PurePollingSocket implements IPureSocket {
 
     final serviceId = config.serviceId ?? 'Polling';
     try {
-      final result = await sttProvider.transcribe(
-        audioData,
-        audioOffsetSeconds: _audioOffsetSeconds,
-      );
+      final result = await sttProvider.transcribe(audioData, audioOffsetSeconds: _audioOffsetSeconds);
       if (result != null && result.isNotEmpty) {
         if (result.segments.isNotEmpty) {
           _audioOffsetSeconds = result.segments.last.end;
         }
         final segmentsJson = result.segments
             .where((s) => s.text.trim().isNotEmpty)
-            .map((s) => {
-                  'text': s.text.trim(),
-                  'speaker': 'SPEAKER_${s.speakerId}',
-                  'speaker_id': s.speakerId,
-                  'is_user': false,
-                  'start': s.start,
-                  'end': s.end,
-                })
+            .map(
+              (s) => {
+                'text': s.text.trim(),
+                'speaker': 'SPEAKER_${s.speakerId}',
+                'speaker_id': s.speakerId,
+                'is_user': false,
+                'start': s.start,
+                'end': s.end,
+              },
+            )
             .toList();
         if (segmentsJson.isNotEmpty) {
           onMessage(jsonEncode(segmentsJson));
@@ -183,9 +173,7 @@ class PurePollingSocket implements IPureSocket {
       }
     } catch (e, trace) {
       CustomSttLogService.instance.error(serviceId, 'Transcription error: $e');
-      DebugLogManager.logError(e, trace, 'polling_socket_transcription_error', {
-        'service_id': serviceId,
-      });
+      DebugLogManager.logError(e, trace, 'polling_socket_transcription_error', {'service_id': serviceId});
       onError(e, trace);
     } finally {
       _isProcessing = false;
@@ -207,9 +195,7 @@ class PurePollingSocket implements IPureSocket {
 
   @override
   Future stop() async {
-    DebugLogManager.logEvent('polling_socket_stopping', {
-      'service_id': config.serviceId ?? 'Polling',
-    });
+    DebugLogManager.logEvent('polling_socket_stopping', {'service_id': config.serviceId ?? 'Polling'});
     await disconnect();
     _bufferFlushTimer?.cancel();
     _audioFrames.clear();
@@ -231,9 +217,7 @@ class PurePollingSocket implements IPureSocket {
   @override
   void onError(Object err, StackTrace trace) {
     CustomSttLogService.instance.error(config.serviceId ?? 'Polling', 'Error: $err');
-    DebugLogManager.logError(err, trace, 'polling_socket_error', {
-      'service_id': config.serviceId ?? 'Polling',
-    });
+    DebugLogManager.logError(err, trace, 'polling_socket_error', {'service_id': config.serviceId ?? 'Polling'});
     _listener?.onError(err, trace);
   }
 

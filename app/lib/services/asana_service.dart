@@ -41,10 +41,7 @@ class AsanaService {
         return false;
       }
 
-      await launchUrl(
-        authUri,
-        mode: LaunchMode.externalApplication,
-      );
+      await launchUrl(authUri, mode: LaunchMode.externalApplication);
 
       return true;
     } catch (e) {
@@ -87,18 +84,9 @@ class AsanaService {
   }
 
   /// Create a task in Asana
-  Future<bool> createTask({
-    required String name,
-    String? notes,
-    DateTime? dueDate,
-  }) async {
+  Future<bool> createTask({required String name, String? notes, DateTime? dueDate}) async {
     try {
-      final result = await createTaskViaIntegration(
-        'asana',
-        title: name,
-        description: notes,
-        dueDate: dueDate,
-      );
+      final result = await createTaskViaIntegration('asana', title: name, description: notes, dueDate: dueDate);
 
       if (result != null && result['success'] == true) {
         Logger.debug('Task created successfully in Asana');

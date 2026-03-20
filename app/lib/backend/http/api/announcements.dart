@@ -26,12 +26,7 @@ Future<List<Announcement>> getAppChangelogs({
     }
   }
 
-  var res = await makeApiCall(
-    url: url,
-    headers: {},
-    body: '',
-    method: 'GET',
-  );
+  var res = await makeApiCall(url: url, headers: {}, body: '', method: 'GET');
 
   if (res == null || res.statusCode != 200) {
     return [];
@@ -56,7 +51,8 @@ Future<List<Announcement>> getPendingAnnouncements({
   String? deviceModel,
 }) async {
   final encodedAppVersion = Uri.encodeComponent(appVersion);
-  var url = "${Env.apiBaseUrl}v1/announcements/pending"
+  var url =
+      "${Env.apiBaseUrl}v1/announcements/pending"
       "?app_version=$encodedAppVersion"
       "&platform=$platform"
       "&trigger=$trigger";
@@ -68,12 +64,7 @@ Future<List<Announcement>> getPendingAnnouncements({
     url += "&device_model=${Uri.encodeComponent(deviceModel)}";
   }
 
-  var res = await makeApiCall(
-    url: url,
-    headers: {},
-    body: '',
-    method: 'GET',
-  );
+  var res = await makeApiCall(url: url, headers: {}, body: '', method: 'GET');
 
   if (res == null || res.statusCode != 200) {
     return [];

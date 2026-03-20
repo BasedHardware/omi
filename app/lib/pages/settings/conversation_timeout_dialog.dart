@@ -28,11 +28,7 @@ class ConversationTimeoutDialog {
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
               title: Text(
                 context.l10n.conversationTimeout,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 20,
-                  fontWeight: FontWeight.w600,
-                ),
+                style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w600),
               ),
               content: SizedBox(
                 width: double.maxFinite,
@@ -42,10 +38,7 @@ class ConversationTimeoutDialog {
                   children: [
                     Text(
                       context.l10n.conversationTimeoutDesc,
-                      style: const TextStyle(
-                        color: Color(0xFF8E8E93),
-                        fontSize: 14,
-                      ),
+                      style: const TextStyle(color: Color(0xFF8E8E93), fontSize: 14),
                     ),
                     const SizedBox(height: 16),
                     ...timeoutOptions.map((option) {
@@ -96,12 +89,7 @@ class ConversationTimeoutDialog {
                                       ],
                                     ),
                                   ),
-                                  if (isSelected)
-                                    const Icon(
-                                      Icons.check_circle,
-                                      color: Colors.white,
-                                      size: 20,
-                                    ),
+                                  if (isSelected) const Icon(Icons.check_circle, color: Colors.white, size: 20),
                                 ],
                               ),
                             ),
@@ -117,10 +105,7 @@ class ConversationTimeoutDialog {
                   onPressed: () {
                     Navigator.of(context).pop();
                   },
-                  child: Text(
-                    context.l10n.cancel,
-                    style: const TextStyle(color: Color(0xFF8E8E93)),
-                  ),
+                  child: Text(context.l10n.cancel, style: const TextStyle(color: Color(0xFF8E8E93))),
                 ),
                 TextButton(
                   onPressed: () {

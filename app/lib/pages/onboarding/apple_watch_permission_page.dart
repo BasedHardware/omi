@@ -9,11 +9,7 @@ class AppleWatchPermissionPage extends StatefulWidget {
   final AppleWatchDeviceConnection connection;
   final VoidCallback? onPermissionGranted;
 
-  const AppleWatchPermissionPage({
-    super.key,
-    required this.connection,
-    this.onPermissionGranted,
-  });
+  const AppleWatchPermissionPage({super.key, required this.connection, this.onPermissionGranted});
 
   @override
   State<AppleWatchPermissionPage> createState() => _AppleWatchPermissionPageState();
@@ -36,10 +32,7 @@ class _AppleWatchPermissionPageState extends State<AppleWatchPermissionPage> {
           icon: const Icon(Icons.arrow_back, color: ResponsiveHelper.textPrimary),
           onPressed: () => Navigator.of(context).pop(),
         ),
-        title: Text(
-          context.l10n.appleWatchSetup,
-          style: const TextStyle(color: ResponsiveHelper.textPrimary),
-        ),
+        title: Text(context.l10n.appleWatchSetup, style: const TextStyle(color: ResponsiveHelper.textPrimary)),
       ),
       body: SafeArea(
         child: Padding(
@@ -53,16 +46,10 @@ class _AppleWatchPermissionPageState extends State<AppleWatchPermissionPage> {
                 duration: const Duration(milliseconds: 300),
                 height: 160,
                 width: 160,
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(24),
-                  boxShadow: responsive.mediumShadow,
-                ),
+                decoration: BoxDecoration(borderRadius: BorderRadius.circular(24), boxShadow: responsive.mediumShadow),
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(24),
-                  child: Image.asset(
-                    'assets/images/apple_watch.png',
-                    fit: BoxFit.cover,
-                  ),
+                  child: Image.asset('assets/images/apple_watch.png', fit: BoxFit.cover),
                 ),
               ),
               const SizedBox(height: 48),
@@ -70,10 +57,7 @@ class _AppleWatchPermissionPageState extends State<AppleWatchPermissionPage> {
               // Title
               Text(
                 _permissionRequested ? context.l10n.permissionRequestedExclaim : context.l10n.microphonePermission,
-                style: responsive.titleLarge.copyWith(
-                  fontSize: 28,
-                  height: 1.2,
-                ),
+                style: responsive.titleLarge.copyWith(fontSize: 28, height: 1.2),
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 24),
@@ -81,9 +65,7 @@ class _AppleWatchPermissionPageState extends State<AppleWatchPermissionPage> {
               // Instructions
               Text(
                 _permissionRequested ? context.l10n.permissionGrantedNow : context.l10n.needMicrophonePermission,
-                style: responsive.bodyLarge.copyWith(
-                  height: 1.6,
-                ),
+                style: responsive.bodyLarge.copyWith(height: 1.6),
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 48),
@@ -99,9 +81,7 @@ class _AppleWatchPermissionPageState extends State<AppleWatchPermissionPage> {
                     style: ElevatedButton.styleFrom(
                       backgroundColor: ResponsiveHelper.purplePrimary,
                       foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16),
-                      ),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                       elevation: 0,
                     ),
                     child: _isRequestingPermission
@@ -115,10 +95,7 @@ class _AppleWatchPermissionPageState extends State<AppleWatchPermissionPage> {
                           )
                         : Text(
                             context.l10n.grantPermissionButton,
-                            style: const TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.w600,
-                            ),
+                            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
                           ),
                   ),
                 ),
@@ -132,17 +109,12 @@ class _AppleWatchPermissionPageState extends State<AppleWatchPermissionPage> {
                     style: ElevatedButton.styleFrom(
                       backgroundColor: ResponsiveHelper.purplePrimary,
                       foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16),
-                      ),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                       elevation: 0,
                     ),
                     child: Text(
                       context.l10n.continueButton,
-                      style: const TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w600,
-                      ),
+                      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
                     ),
                   ),
                 ),
@@ -155,13 +127,7 @@ class _AppleWatchPermissionPageState extends State<AppleWatchPermissionPage> {
                     foregroundColor: ResponsiveHelper.purplePrimary,
                     padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
                   ),
-                  child: Text(
-                    context.l10n.needHelp,
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
+                  child: Text(context.l10n.needHelp, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500)),
                 ),
               ],
 
@@ -202,24 +168,15 @@ class _AppleWatchPermissionPageState extends State<AppleWatchPermissionPage> {
       final bool recordingStarted = await widget.connection.checkPermissionAndStartRecording();
 
       if (recordingStarted) {
-        AppSnackbar.showSnackbar(
-          context.l10n.recordingStartedSuccessfully,
-          duration: const Duration(seconds: 3),
-        );
+        AppSnackbar.showSnackbar(context.l10n.recordingStartedSuccessfully, duration: const Duration(seconds: 3));
 
         widget.onPermissionGranted?.call();
         Navigator.of(context).pop();
       } else {
-        AppSnackbar.showSnackbar(
-          context.l10n.permissionNotGrantedYet,
-          duration: const Duration(seconds: 5),
-        );
+        AppSnackbar.showSnackbar(context.l10n.permissionNotGrantedYet, duration: const Duration(seconds: 5));
       }
     } catch (e) {
-      AppSnackbar.showSnackbar(
-        context.l10n.errorStartingRecording(e.toString()),
-        duration: const Duration(seconds: 3),
-      );
+      AppSnackbar.showSnackbar(context.l10n.errorStartingRecording(e.toString()), duration: const Duration(seconds: 3));
     }
   }
 
@@ -230,17 +187,9 @@ class _AppleWatchPermissionPageState extends State<AppleWatchPermissionPage> {
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: ResponsiveHelper.backgroundSecondary,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-        ),
-        title: Text(
-          context.l10n.needHelp,
-          style: responsive.titleLarge.copyWith(fontSize: 20),
-        ),
-        content: Text(
-          context.l10n.troubleshootingSteps,
-          style: responsive.bodyMedium,
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text(context.l10n.needHelp, style: responsive.titleLarge.copyWith(fontSize: 20)),
+        content: Text(context.l10n.troubleshootingSteps, style: responsive.bodyMedium),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
@@ -248,10 +197,7 @@ class _AppleWatchPermissionPageState extends State<AppleWatchPermissionPage> {
               foregroundColor: ResponsiveHelper.purplePrimary,
               padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
             ),
-            child: Text(
-              context.l10n.gotIt,
-              style: const TextStyle(fontWeight: FontWeight.w500),
-            ),
+            child: Text(context.l10n.gotIt, style: const TextStyle(fontWeight: FontWeight.w500)),
           ),
         ],
       ),

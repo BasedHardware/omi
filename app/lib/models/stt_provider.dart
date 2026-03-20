@@ -19,10 +19,7 @@ enum SttProvider {
   onDeviceWhisper;
 
   static SttProvider fromString(String value) {
-    return SttProvider.values.firstWhere(
-      (e) => e.name == value,
-      orElse: () => SttProvider.omi,
-    );
+    return SttProvider.values.firstWhere((e) => e.name == value, orElse: () => SttProvider.omi);
   }
 }
 
@@ -80,7 +77,7 @@ class SttLanguages {
     'tr',
     'vi',
     'th',
-    'id'
+    'id',
   ];
 
   static const List<String> deepgramSupported = [
@@ -99,7 +96,7 @@ class SttLanguages {
     'ru',
     'pl',
     'tr',
-    'id'
+    'id',
   ];
 
   static const List<String> geminiSupported = ['en', 'es', 'fr', 'de', 'it', 'pt', 'ja', 'ko', 'zh', 'ar', 'hi', 'ru'];
@@ -328,44 +325,25 @@ class SttProviderConfig {
 
   /// Available request config templates for custom STT configuration
   static Map<String, Map<String, dynamic>> get requestTemplates => {
-        'OpenAI': get(SttProvider.openai).buildRequestConfig(
-          apiKey: 'YOUR_API_KEY',
-          language: 'en',
-          model: 'whisper-1',
-        ),
-        'Deepgram': get(SttProvider.deepgramLive).buildRequestConfig(
-          apiKey: 'YOUR_API_KEY',
-          language: 'multi',
-          model: 'nova-3',
-        ),
-        'Fal.AI': get(SttProvider.falai).buildRequestConfig(
-          apiKey: 'YOUR_API_KEY',
-          language: 'en',
-        ),
-        'Google Gemini': get(SttProvider.geminiLive).buildRequestConfig(
-          apiKey: 'YOUR_API_KEY',
-          language: 'en',
-          model: 'gemini-2.5-flash',
-        ),
-        'Whisper': get(SttProvider.localWhisper).buildRequestConfig(
-          language: 'en',
-        ),
-      };
+    'OpenAI': get(SttProvider.openai).buildRequestConfig(apiKey: 'YOUR_API_KEY', language: 'en', model: 'whisper-1'),
+    'Deepgram': get(
+      SttProvider.deepgramLive,
+    ).buildRequestConfig(apiKey: 'YOUR_API_KEY', language: 'multi', model: 'nova-3'),
+    'Fal.AI': get(SttProvider.falai).buildRequestConfig(apiKey: 'YOUR_API_KEY', language: 'en'),
+    'Google Gemini': get(
+      SttProvider.geminiLive,
+    ).buildRequestConfig(apiKey: 'YOUR_API_KEY', language: 'en', model: 'gemini-2.5-flash'),
+    'Whisper': get(SttProvider.localWhisper).buildRequestConfig(language: 'en'),
+  };
 
   Map<String, dynamic> getFullTemplateJson() => {
-        'request_type': requestType,
-        'response_schema': responseSchema.toJson(),
-      };
+    'request_type': requestType,
+    'response_schema': responseSchema.toJson(),
+  };
 
   /// Build complete request config with API key, language, and model
   /// Returns unified structure: url, request_type, headers, params, audio_field_name
-  Map<String, dynamic> buildRequestConfig({
-    String? apiKey,
-    String? language,
-    String? model,
-    String? host,
-    int? port,
-  }) {
+  Map<String, dynamic> buildRequestConfig({String? apiKey, String? language, String? model, String? host, int? port}) {
     final config = <String, dynamic>{};
     final lang = language ?? defaultLanguage;
     final mdl = model ?? defaultModel;
@@ -399,10 +377,7 @@ class SttProviderConfig {
 
       case SttProvider.deepgram:
         config['url'] = 'https://api.deepgram.com/v1/listen';
-        config['headers'] = {
-          'Authorization': 'Token ${apiKey ?? ''}',
-          'Content-Type': 'audio/wav',
-        };
+        config['headers'] = {'Authorization': 'Token ${apiKey ?? ''}', 'Content-Type': 'audio/wav'};
         config['params'] = {
           'model': mdl.isNotEmpty ? mdl : 'nova-3',
           'language': lang,
@@ -431,10 +406,7 @@ class SttProviderConfig {
 
       case SttProvider.falai:
         config['url'] = 'https://fal.run/fal-ai/wizper';
-        config['headers'] = {
-          'Authorization': 'Key ${apiKey ?? ''}',
-          'Content-Type': 'application/json',
-        };
+        config['headers'] = {'Authorization': 'Key ${apiKey ?? ''}', 'Content-Type': 'application/json'};
         config['params'] = {'language': lang};
         break;
 

@@ -53,10 +53,7 @@ class AppListItem extends StatelessWidget {
                   child: Container(
                     width: 60,
                     height: 60,
-                    decoration: BoxDecoration(
-                      color: Color(0xFF35343B),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
+                    decoration: BoxDecoration(color: Color(0xFF35343B), borderRadius: BorderRadius.circular(12)),
                     child: CachedNetworkImage(
                       imageUrl: app.getImageUrl(),
                       httpHeaders: const {
@@ -76,11 +73,7 @@ class AppListItem extends StatelessWidget {
                           ),
                         ),
                       ),
-                      errorWidget: (context, url, error) => Icon(
-                        Icons.apps,
-                        size: 30,
-                        color: Colors.grey.shade600,
-                      ),
+                      errorWidget: (context, url, error) => Icon(Icons.apps, size: 30, color: Colors.grey.shade600),
                     ),
                   ),
                 ),
@@ -94,21 +87,14 @@ class AppListItem extends StatelessWidget {
                     children: [
                       Text(
                         app.name.decodeString + (app.private && showPrivateIcon ? " 🔒".decodeString : ''),
-                        style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w500,
-                          color: Colors.white,
-                        ),
+                        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: Colors.white),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
                       const SizedBox(height: 2),
                       Text(
                         app.description.length > 50 ? '${app.description.substring(0, 50)}...' : app.description,
-                        style: TextStyle(
-                          fontSize: 13,
-                          color: Colors.grey.shade400,
-                        ),
+                        style: TextStyle(fontSize: 13, color: Colors.grey.shade400),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
@@ -116,28 +102,14 @@ class AppListItem extends StatelessWidget {
                         const SizedBox(height: 4),
                         Row(
                           children: [
-                            Icon(
-                              Icons.star_rounded,
-                              color: Color(0xFF8B5CF6),
-                              size: 14,
-                            ),
+                            Icon(Icons.star_rounded, color: Color(0xFF8B5CF6), size: 14),
                             const SizedBox(width: 4),
                             Text(
                               app.getRatingAvg()!,
-                              style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w500,
-                                color: Colors.grey.shade300,
-                              ),
+                              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: Colors.grey.shade300),
                             ),
                             const SizedBox(width: 4),
-                            Text(
-                              '(${app.ratingCount})',
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: Colors.grey.shade500,
-                              ),
-                            ),
+                            Text('(${app.ratingCount})', style: TextStyle(fontSize: 12, color: Colors.grey.shade500)),
                           ],
                         ),
                       ],
@@ -152,10 +124,7 @@ class AppListItem extends StatelessWidget {
                     ? Container(
                         width: 72,
                         height: 32,
-                        decoration: BoxDecoration(
-                          color: Colors.grey.shade700,
-                          borderRadius: BorderRadius.circular(16),
-                        ),
+                        decoration: BoxDecoration(color: Colors.grey.shade700, borderRadius: BorderRadius.circular(16)),
                         child: const Center(
                           child: SizedBox(
                             height: 16,
@@ -208,11 +177,7 @@ class AppListItem extends StatelessWidget {
                           child: Center(
                             child: Text(
                               state.enabled ? 'Open' : 'Get',
-                              style: const TextStyle(
-                                fontSize: 14,
-                                fontWeight: FontWeight.w600,
-                                color: Colors.white,
-                              ),
+                              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.white),
                             ),
                           ),
                         ),

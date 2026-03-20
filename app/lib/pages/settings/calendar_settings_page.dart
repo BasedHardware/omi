@@ -58,11 +58,7 @@ class _CalendarSettingsPageState extends State<CalendarSettingsPage> {
         elevation: 0,
         title: Text(
           context.l10n.calendarSettings,
-          style: const TextStyle(
-            color: ResponsiveHelper.textPrimary,
-            fontSize: 20,
-            fontWeight: FontWeight.w600,
-          ),
+          style: const TextStyle(color: ResponsiveHelper.textPrimary, fontSize: 20, fontWeight: FontWeight.w600),
         ),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back, color: ResponsiveHelper.textPrimary),
@@ -127,11 +123,7 @@ class _CalendarSettingsPageState extends State<CalendarSettingsPage> {
                     provider.updateShowMeetingsInMenuBar(value);
                   },
                 ),
-                const Divider(
-                  height: 1,
-                  thickness: 1,
-                  color: ResponsiveHelper.backgroundTertiary,
-                ),
+                const Divider(height: 1, thickness: 1, color: ResponsiveHelper.backgroundTertiary),
                 _buildSettingItem(
                   icon: FontAwesomeIcons.calendarDay,
                   iconColor: ResponsiveHelper.textSecondary,
@@ -163,10 +155,7 @@ class _CalendarSettingsPageState extends State<CalendarSettingsPage> {
                         ),
                         child: Text(
                           context.l10n.refresh,
-                          style: const TextStyle(
-                            color: ResponsiveHelper.purplePrimary,
-                            fontSize: 13,
-                          ),
+                          style: const TextStyle(color: ResponsiveHelper.purplePrimary, fontSize: 13),
                         ),
                       ),
                   ],
@@ -184,11 +173,7 @@ class _CalendarSettingsPageState extends State<CalendarSettingsPage> {
   Widget _buildSectionHeader(String title) {
     return Text(
       title,
-      style: const TextStyle(
-        color: ResponsiveHelper.textPrimary,
-        fontSize: 16,
-        fontWeight: FontWeight.w600,
-      ),
+      style: const TextStyle(color: ResponsiveHelper.textPrimary, fontSize: 16, fontWeight: FontWeight.w600),
     );
   }
 
@@ -206,25 +191,15 @@ class _CalendarSettingsPageState extends State<CalendarSettingsPage> {
       decoration: BoxDecoration(
         color: ResponsiveHelper.backgroundSecondary.withValues(alpha: 0.4),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(
-          color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.3),
-          width: 1,
-        ),
+        border: Border.all(color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.3), width: 1),
       ),
       child: Row(
         children: [
           Container(
             width: 32,
             height: 32,
-            decoration: BoxDecoration(
-              color: iconColor.withValues(alpha: 0.15),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Icon(
-              icon,
-              color: iconColor,
-              size: 16,
-            ),
+            decoration: BoxDecoration(color: iconColor.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(8)),
+            child: Icon(icon, color: iconColor, size: 16),
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -240,24 +215,14 @@ class _CalendarSettingsPageState extends State<CalendarSettingsPage> {
                   ),
                 ),
                 const SizedBox(height: 2),
-                Text(
-                  description,
-                  style: const TextStyle(
-                    color: ResponsiveHelper.textSecondary,
-                    fontSize: 12,
-                  ),
-                ),
+                Text(description, style: const TextStyle(color: ResponsiveHelper.textSecondary, fontSize: 12)),
               ],
             ),
           ),
           const SizedBox(width: 10),
           Transform.scale(
             scale: 0.8,
-            child: CupertinoSwitch(
-              value: isEnabled,
-              onChanged: onToggle,
-              activeColor: ResponsiveHelper.purplePrimary,
-            ),
+            child: CupertinoSwitch(value: isEnabled, onChanged: onToggle, activeColor: ResponsiveHelper.purplePrimary),
           ),
         ],
       ),
@@ -269,14 +234,9 @@ class _CalendarSettingsPageState extends State<CalendarSettingsPage> {
       decoration: BoxDecoration(
         color: ResponsiveHelper.backgroundSecondary.withValues(alpha: 0.4),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(
-          color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.3),
-          width: 1,
-        ),
+        border: Border.all(color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.3), width: 1),
       ),
-      child: Column(
-        children: children,
-      ),
+      child: Column(children: children),
     );
   }
 
@@ -295,15 +255,8 @@ class _CalendarSettingsPageState extends State<CalendarSettingsPage> {
           Container(
             width: 32,
             height: 32,
-            decoration: BoxDecoration(
-              color: iconColor.withValues(alpha: 0.15),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Icon(
-              icon,
-              color: iconColor,
-              size: 16,
-            ),
+            decoration: BoxDecoration(color: iconColor.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(8)),
+            child: Icon(icon, color: iconColor, size: 16),
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -319,24 +272,14 @@ class _CalendarSettingsPageState extends State<CalendarSettingsPage> {
                   ),
                 ),
                 const SizedBox(height: 2),
-                Text(
-                  description,
-                  style: const TextStyle(
-                    color: ResponsiveHelper.textSecondary,
-                    fontSize: 12,
-                  ),
-                ),
+                Text(description, style: const TextStyle(color: ResponsiveHelper.textSecondary, fontSize: 12)),
               ],
             ),
           ),
           const SizedBox(width: 10),
           Transform.scale(
             scale: 0.8,
-            child: CupertinoSwitch(
-              value: value,
-              onChanged: onChanged,
-              activeColor: ResponsiveHelper.purplePrimary,
-            ),
+            child: CupertinoSwitch(value: value, onChanged: onChanged, activeColor: ResponsiveHelper.purplePrimary),
           ),
         ],
       ),
@@ -348,21 +291,14 @@ class _CalendarSettingsPageState extends State<CalendarSettingsPage> {
       decoration: BoxDecoration(
         color: ResponsiveHelper.backgroundSecondary.withValues(alpha: 0.4),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(
-          color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.3),
-          width: 1,
-        ),
+        border: Border.all(color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.3), width: 1),
       ),
       child: ListView.separated(
         shrinkWrap: true,
         physics: const NeverScrollableScrollPhysics(),
         itemCount: provider.systemCalendars.length,
-        separatorBuilder: (context, index) => const Divider(
-          height: 1,
-          thickness: 1,
-          color: ResponsiveHelper.backgroundTertiary,
-          indent: 50,
-        ),
+        separatorBuilder: (context, index) =>
+            const Divider(height: 1, thickness: 1, color: ResponsiveHelper.backgroundTertiary, indent: 50),
         itemBuilder: (context, index) {
           final calendar = provider.systemCalendars[index];
           final isEnabled = _enabledCalendarIds.contains(calendar.id);
@@ -426,34 +362,20 @@ class _CalendarSettingsPageState extends State<CalendarSettingsPage> {
         decoration: BoxDecoration(
           color: ResponsiveHelper.backgroundSecondary.withValues(alpha: 0.4),
           borderRadius: BorderRadius.circular(10),
-          border: Border.all(
-            color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.3),
-            width: 1,
-          ),
+          border: Border.all(color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.3), width: 1),
         ),
         child: Column(
           children: [
-            const Icon(
-              Icons.event_busy,
-              color: ResponsiveHelper.textTertiary,
-              size: 40,
-            ),
+            const Icon(Icons.event_busy, color: ResponsiveHelper.textTertiary, size: 40),
             const SizedBox(height: 12),
             Text(
               context.l10n.noUpcomingMeetings,
-              style: const TextStyle(
-                color: ResponsiveHelper.textSecondary,
-                fontSize: 14,
-                fontWeight: FontWeight.w500,
-              ),
+              style: const TextStyle(color: ResponsiveHelper.textSecondary, fontSize: 14, fontWeight: FontWeight.w500),
             ),
             const SizedBox(height: 6),
             Text(
               context.l10n.checkingNextDays,
-              style: const TextStyle(
-                color: ResponsiveHelper.textTertiary,
-                fontSize: 12,
-              ),
+              style: const TextStyle(color: ResponsiveHelper.textTertiary, fontSize: 12),
             ),
           ],
         ),
@@ -498,10 +420,7 @@ class _CalendarSettingsPageState extends State<CalendarSettingsPage> {
               decoration: BoxDecoration(
                 color: ResponsiveHelper.backgroundSecondary.withValues(alpha: 0.4),
                 borderRadius: BorderRadius.circular(10),
-                border: Border.all(
-                  color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.3),
-                  width: 1,
-                ),
+                border: Border.all(color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.3), width: 1),
               ),
               child: ListView.separated(
                 shrinkWrap: true,
@@ -577,10 +496,7 @@ class _CalendarSettingsPageState extends State<CalendarSettingsPage> {
                   children: [
                     Text(
                       '${dateFormat.format(meeting.startTime)} • $durationString',
-                      style: const TextStyle(
-                        color: ResponsiveHelper.textSecondary,
-                        fontSize: 12,
-                      ),
+                      style: const TextStyle(color: ResponsiveHelper.textSecondary, fontSize: 12),
                     ),
                     const SizedBox(width: 8),
                     Container(

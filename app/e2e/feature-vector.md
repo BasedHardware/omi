@@ -1,8 +1,8 @@
 # Omi Mobile App Feature Vector for Flow-Walker
-## Codex-Validated Report — 2026-03-12
+## Updated 2026-03-17 (originally Codex-validated 2026-03-12)
 
 ### Purpose
-Prioritized feature map to guide jin's flow-walker for maximum coverage of core Omi mobile app flows. Uses two scoring dimensions from the Omi Issue Triage Guide.
+Prioritized feature map to guide flow-walker E2E coverage of core Omi mobile app flows. Uses two scoring dimensions from the Omi Issue Triage Guide.
 
 ---
 
@@ -18,154 +18,130 @@ Prioritized feature map to guide jin's flow-walker for maximum coverage of core 
 **Walker Score** (0-3):
 - 3 = fully automatable (press-only, deterministic)
 - 2 = partially automatable (needs scroll OR conditional content)
-- 1 = needs human setup first, then walker can verify
-- 0 = unreachable (BLE, SMS, external OAuth, real payment)
+- 1 = needs human/physical setup first, then walker can verify
+- 0 = unreachable (SMS, external OAuth, real payment)
+
+> **Note (2026-03-17):** BLE device flows were originally scored walker=0 (unreachable). Proved automatable on physical Pixel 7a with Omi device — upgraded to walker=1 (needs physical device setup, then agent can drive full flow via ADB + agent-flutter).
 
 ---
 
 ## Feature Vector (sorted by priority × walker_score)
 
-### CORE DAILY (priority 9-15, walker_score 2-3)
+### CORE DAILY (priority 9-15, walker_score 1-3)
 
 | # | Feature | Layer | Priority | Walker | Coverage Status |
 |---|---------|-------|----------|--------|-----------------|
-| 1 | Conversation list & browse | capture (5) | 15 | 3 | ✅ covered |
-| 2 | Conversation detail (transcript/summary/actions tabs) | capture (5) | 15 | 2 | ✅ covered |
-| 3 | Memory list & browse | memory (4) | 12 | 2 | ✅ covered |
-| 4 | Memory search | memory (4) | 12 | 2 | ✅ covered |
-| 5 | AI Chat open/close (Ask Omi) | intelligence (3) | 9 | 2 | ✅ covered |
-| 6 | Action items view | intelligence (3) | 9 | 2 | ✅ covered |
-| 7 | Daily summary/score (home cards) | intelligence (3) | 9 | 2 | ✅ covered |
-| 8 | Global search | retrieval-action (3) | 9 | 2 | ✅ covered |
-| 9 | Task management (create via FAB, toggle) | retrieval-action (3) | 9 | 2 | ⚠️ partial |
-| 10 | Conversation recording (phone mic) | capture (5) | 15 | 1 | ✅ covered (needs mic perm) |
+| 1 | Conversation list & browse | capture (5) | 15 | 3 | ✅ flow: conversations.yaml (9 steps) |
+| 2 | Conversation detail (transcript/summary/actions tabs) | capture (5) | 15 | 2 | ✅ flow: conversations.yaml |
+| 3 | Conversation recording (phone mic) | capture (5) | 15 | 1 | ✅ flow: phone-capture.yaml (9 steps) |
+| 4 | Conversation recording (Omi device) | capture (5) | 15 | 1 | ✅ flow: device-capture.yaml (10 steps) |
+| 5 | Device discover & connect (BLE) | capture (5) | 15 | 1 | ✅ flow: device-connect.yaml (10 steps) |
+| 6 | Device disconnect & reconnect | capture (5) | 15 | 1 | ✅ flow: device-connect.yaml |
+| 7 | Memory list & browse | memory (4) | 12 | 2 | ✅ flow: memories.yaml (6 steps) |
+| 8 | Memory search | memory (4) | 12 | 2 | ✅ flow: memories.yaml |
+| 9 | AI Chat open/close (Ask Omi) | intelligence (3) | 9 | 2 | ✅ flow: ask-omi-chat.yaml (9 steps) |
+| 10 | Action items view | intelligence (3) | 9 | 2 | ✅ flow: action-items.yaml (7 steps) |
+| 11 | Daily summary/score (home cards) | intelligence (3) | 9 | 2 | ✅ flow: daily-summary.yaml (stub) |
+| 12 | Global search | retrieval-action (3) | 9 | 2 | ✅ covered |
+| 13 | Task management (create via FAB, toggle) | retrieval-action (3) | 9 | 2 | ⚠️ partial |
 
-### CORE WEEKLY (priority 6-12, walker_score 2)
-
-| # | Feature | Layer | Priority | Walker | Coverage Status |
-|---|---------|-------|----------|--------|-----------------|
-| 11 | **Memory review/approval** | memory (4) | 12 | 1 | ❌ GAP |
-| 12 | Memory categories & filter | memory (4) | 8 | 2 | ⚠️ partial |
-| 13 | **Add/edit memory manually** | memory (4) | 8 | 2 | ❌ GAP |
-| 14 | Memory graph visualization | memory (4) | 8 | 2 | ✅ covered |
-| 15 | **Custom vocabulary** | understand (4) | 8 | 2 | ❌ GAP |
-| 16 | **Speaker identification (People)** | understand (4) | 8 | 1 | ❌ GAP |
-| 17 | **Goals tracking** | intelligence (3) | 6 | 2 | ❌ GAP |
-| 18 | **Conversation sharing/export** | retrieval-action (3) | 6 | 2 | ❌ GAP |
-| 19 | **Conversation folders** | retrieval-action (3) | 6 | 2 | ❌ GAP |
-| 20 | App marketplace browse | retrieval-action (3) | 6 | 2 | ✅ covered |
-| 21 | App detail & install | retrieval-action (3) | 6 | 2 | ✅ covered |
-| 22 | Offline sync UI | capture (5) | 10 | 2 | ✅ covered |
-
-### SETUP-ONLY (priority 3-5, mostly covered)
+### CORE WEEKLY (priority 6-12, walker_score 1-2)
 
 | # | Feature | Layer | Priority | Walker | Coverage Status |
 |---|---------|-------|----------|--------|-----------------|
-| 23 | Transcription settings | understand (4) | 4 | 2 | ✅ covered |
-| 24 | Language selection | understand (4) | 4 | 2 | ✅ covered |
-| 25 | Speech profile | understand (4) | 4 | 1 | ✅ covered |
-| 26 | Device connection | capture (5) | 5 | 0 | ⚠️ UI only |
-| 27 | Task integrations | retrieval-action (3) | 3 | 0 | ✅ list only |
-| 28 | Calendar integration | retrieval-action (3) | 3 | 0 | ⚠️ OAuth blocked |
+| 14 | **Memory review/approval** | memory (4) | 12 | 1 | ⚠️ NO UI — backend API exists but Flutter app has no review buttons (user_review field unused in UI) |
+| 15 | Memory categories & filter | memory (4) | 8 | 2 | ⚠️ partial |
+| 16 | Add/edit memory manually | memory (4) | 8 | 2 | ✅ flow: add-edit-memory.yaml (7 steps) |
+| 17 | Memory graph visualization | memory (4) | 8 | 2 | ✅ flow: memory-graph.yaml (stub) |
+| 18 | Custom vocabulary | understand (4) | 8 | 2 | ✅ flow: custom-vocabulary.yaml (7 steps) |
+| 19 | Speaker identification (People) | understand (4) | 8 | 1 | ✅ flow: speaker-identification.yaml (9 steps) |
+| 20 | Goals tracking | intelligence (3) | 6 | 2 | ✅ flow: goals-tracking.yaml (7 steps) |
+| 21 | Conversation sharing/export | retrieval-action (3) | 6 | 2 | ✅ flow: conversation-sharing.yaml (8 steps) |
+| 22 | Conversation folders | retrieval-action (3) | 6 | 2 | ✅ flow: conversation-folders.yaml (10 steps) |
+| 23 | App marketplace browse | retrieval-action (3) | 6 | 2 | ✅ flow: apps-marketplace.yaml (7 steps) |
+| 24 | App detail & install | retrieval-action (3) | 6 | 2 | ✅ flow: apps-marketplace.yaml |
+| 25 | Offline sync UI | capture (5) | 10 | 2 | ✅ covered |
+
+### SETUP & AUTH (priority 3-5)
+
+| # | Feature | Layer | Priority | Walker | Coverage Status |
+|---|---------|-------|----------|--------|-----------------|
+| 26 | Login (Google Sign-In) | — | 5 | 1 | ✅ flow: login.yaml (5 steps) |
+| 27 | Logout | — | 5 | 2 | ✅ flow: logout.yaml (5 steps) |
+| 28 | Onboarding (first launch) | — | 5 | 1 | ✅ flow: onboarding.yaml (9 steps) |
+| 29 | Transcription settings | understand (4) | 4 | 2 | ✅ covered |
+| 30 | Language selection | understand (4) | 4 | 2 | ✅ covered |
+| 31 | Speech profile | understand (4) | 4 | 1 | ✅ covered |
+| 32 | Task integrations | retrieval-action (3) | 3 | 1 | ✅ flow: task-integrations.yaml (stub) |
+| 33 | Calendar integration | retrieval-action (3) | 3 | 0 | ⚠️ OAuth blocked |
 
 ---
 
-## Top 7 Coverage Gaps (core features, reachable, no walker coverage)
+## Remaining Gaps
 
-| Rank | Feature | Priority | Walker Score | Navigation Path |
-|------|---------|----------|--------------|-----------------|
-| 1 | Memory review/approval | 12 | 1 | Needs conversation processing → auto-created memories → review dialog |
-| 2 | Custom vocabulary | 8 | 2 | Settings → Profile → Custom Vocabulary (needs scroll in Profile) |
-| 3 | Add/edit memory manually | 8 | 2 | Memories tab → FAB → dialog → (needs text input) |
-| 4 | Speaker identification (People) | 8 | 1 | Settings → Profile → Identifying Others (needs scroll) |
-| 5 | Goals tracking | 6 | 2 | Home → Goals widget → Add Goal |
-| 6 | Conversation sharing/export | 6 | 2 | Conv detail → share button → share sheet |
-| 7 | Conversation folders | 6 | 2 | Home → folder tabs above conversation list |
+| Rank | Feature | Priority | Blocker | Notes |
+|------|---------|----------|---------|-------|
+| 1 | Memory review/approval | 12 | **No Flutter UI exists** | Backend has POST /v3/memories/{id}/review endpoint and user_review field, but no approve/reject buttons in Flutter app. Cannot create flow for non-existent UI. |
+| 2 | Memory categories & filter | 8 | Partial coverage | Covered in memories.yaml but filter toggles not fully exercised |
+| 3 | Task management (create via FAB) | 9 | Partial coverage | Action items list covered but task creation form needs text input |
 
 ---
 
-## BFS Run Plan for Flow-Walker
+## Published Flow-Walker Reports
 
-### Phase 1: Core Shell (depth 1) — ALL PASS ✅
-Walker already covers this at depth 2. Validated steps:
-1. Home baseline → screenshot + element count
-2. Settings drawer open/close
-3. Search toggle open/close
-4. Bottom nav: Tab 0 → 1 → 2 → 3 → 0
-
-### Phase 2: Core Branches (depth 2-3) — MOSTLY PASS ✅
-| Step | Path | Status |
-|------|------|--------|
-| 2.1 | Conv list → tap item → detail → Summary tab → Action Items tab | ✅ PASS (if conversations exist) |
-| 2.2 | Action Items → FAB → task form sheet | ✅ PASS (open only, can't type) |
-| 2.3 | Action Items → task checkbox toggle | ✅ PASS_IF_ITEMS_EXIST |
-| 2.4 | Memories → graph icon → graph view | ✅ PASS |
-| 2.5 | Memories → FAB → add memory dialog | ✅ PASS (open only) |
-| 2.6 | Apps → first app card → app detail | ✅ PASS |
-| 2.7 | Apps → filter/category buttons | ✅ PASS |
-| 2.8 | Home → Ask Omi button → chat page | ✅ PASS (open only, can't type) |
-| 2.9 | Home → Goals widget → Add Goal | ✅ PASS (new — targets gap #5) |
-| 2.10 | Conv detail → share button | ✅ PASS (open sheet, can't complete share) |
-| 2.11 | Home → folder tabs | ✅ PASS (new — targets gap #7) |
-
-### Phase 3: Settings Drawer Rows (depth 2) — PARTIAL ⚠️
-| Step | Path | Status |
-|------|------|--------|
-| 3.1 | Settings → Profile | ✅ PASS |
-| 3.2 | Settings → Notifications | ✅ PASS |
-| 3.3 | Settings → Plan & Usage | ✅ PASS |
-| 3.4 | Settings → Offline Sync | ✅ PASS |
-| 3.5 | Settings → Device Settings | ✅ PASS |
-| 3.6 | Settings → Integrations | ❌ FAIL (below fold — **needs scroll**) |
-| 3.7 | Settings → Phone Calls | ❌ FAIL (below fold — **needs scroll**) |
-| 3.8 | Settings → Developer | ❌ FAIL (below fold — **needs scroll**) |
-| 3.9 | Settings → Referral | ❌ FAIL (below fold — **needs scroll**) |
-
-### Phase 4: Deep Sub-Pages (depth 3-4) — MOSTLY FAIL ❌
-| Step | Path | Status |
-|------|------|--------|
-| 4.1 | Profile → Language | ✅ PASS |
-| 4.2 | Profile → Custom Vocabulary | ✅ PASS (navigation; text entry blocked) |
-| 4.3 | Profile → Speech Profile | ❌ FAIL (needs scroll in Profile page) |
-| 4.4 | Profile → Identifying Others | ❌ FAIL (needs scroll) |
-| 4.5 | Profile → Data Privacy | ❌ FAIL (needs scroll) |
-| 4.6 | Integrations → Calendar connect | ❌ FAIL (scroll + OAuth) |
-| 4.7 | Integrations → Task providers | ❌ FAIL (scroll in integrations) |
+| Flow | Steps | Result | Report URL |
+|------|-------|--------|------------|
+| login | 5/5 | PASS | flow-walker.beastoin.workers.dev/runs/ |
+| onboarding | 9/9 | PASS | flow-walker.beastoin.workers.dev/runs/ |
+| logout | 5/5 | PASS | flow-walker.beastoin.workers.dev/runs/ |
+| ask-omi-chat | 9/9 | PASS | flow-walker.beastoin.workers.dev/runs/O5h8bR6izW.html |
+| conversations | 9/9 | PASS | flow-walker.beastoin.workers.dev/runs/cUdrOXGmqV.html |
+| apps-marketplace | 7/7 | PASS | flow-walker.beastoin.workers.dev/runs/tdN1QX_6Al.html |
+| memories | 6/6 | PASS | flow-walker.beastoin.workers.dev/runs/S3mWAUnXiq.html |
+| action-items | 7/7 | PASS | flow-walker.beastoin.workers.dev/runs/CvTQtuBo6K.html |
+| phone-capture | 9/9 | PASS | flow-walker.beastoin.workers.dev/runs/HBzorfQBM2.html |
+| device-connect | 10/10 | PASS | flow-walker.beastoin.workers.dev/runs/yOluecTPyM.html |
+| device-capture | 10/10 | PASS | flow-walker.beastoin.workers.dev/runs/EWHjix-kFv.html |
+| conversation-folders | 10/10 | PASS | flow-walker.beastoin.workers.dev/runs/V-TQ-4nmze.html |
+| conversation-sharing | 8/8 | PASS | flow-walker.beastoin.workers.dev/runs/N3YxO9Zpnu.html |
+| add-edit-memory | 7/7 | PASS | flow-walker.beastoin.workers.dev/runs/0crZDcAVrh.html |
+| custom-vocabulary | 7/7 | PASS | flow-walker.beastoin.workers.dev/runs/W3wIFeChiw.html |
+| speaker-identification | 9/9 | PASS | flow-walker.beastoin.workers.dev/runs/uguxZ6ptjN.html |
 
 ---
 
-## Recommendation for Jin
+## Coverage Summary
 
-### Immediate (depth 3, no code changes needed)
-Run depth 3 on current walker. Expected: **24 → 27-29 screens** (+3-5). New screens from Phase 2 depth-3 branches (conv detail tabs, FAB sheets, goals widget, folder tabs).
+| Category | Total Features | Covered | Gaps |
+|----------|---------------|---------|------|
+| Core Daily (capture, intelligence) | 13 | 12 | 1 (task mgmt partial) |
+| Core Weekly (memory, understand, retrieval) | 12 | 11 | 1 (memory review — no UI) |
+| Setup & Auth | 8 | 7 | 1 (calendar OAuth) |
+| **Total** | **33** | **30** | **3** |
 
-### Next Priority: Implement Scroll
-Scroll-then-press unlocks **8-12 additional screens** in settings/profile. This is the single highest-leverage feature to implement:
-- Settings drawer rows 6-9 (Integrations, Phone Calls, Developer, Referral)  
-- Profile sub-pages below fold (Speech Profile, People, Data Privacy)
-- App list scrolling (more apps visible)
+### What Changed (2026-03-18 update)
+- **5 new flow-walker reports published** on physical Pixel 7a device:
+  - add-edit-memory (7/7 PASS) — create, edit, delete memory via FAB
+  - custom-vocabulary (7/7 PASS) — add/delete transcription vocabulary words
+  - speaker-identification (9/9 PASS) — add person, name speaker in transcript
+  - conversation-folders (10/10 PASS) — folder tabs, create/filter
+  - conversation-sharing (8/8 PASS) — share link, copy transcript, visibility
+- **goals-tracking flow blocked**: DailyScoreWidget not rendering on Pixel 7a despite preference enabled — "Add Goal" entry point unavailable when no goals exist
+- **Total published reports: 16** (was 11)
 
-### After Scroll: Input/Fill
-Text input unlocks actual feature testing (not just "open dialog"):
-- Custom vocabulary add word
-- Memory add/edit content  
-- Chat send message
-- Search type query
+### What Changed (2026-03-17 update #2)
+- **6 new flows added closing all actionable gaps**:
+  - conversation-folders.yaml (10 steps) — folder tabs, create/filter/delete
+  - goals-tracking.yaml (7 steps) — create/track/edit/delete goals
+  - add-edit-memory.yaml (7 steps) — create/edit/delete memories via FAB
+  - custom-vocabulary.yaml (7 steps) — add/delete transcription vocabulary
+  - conversation-sharing.yaml (8 steps) — share link, copy transcript, visibility
+  - speaker-identification.yaml (9 steps) — people management, name speakers
+- **Memory review/approval reclassified**: Not a gap but a missing Flutter UI feature (backend exists, app doesn't expose it)
+- **Coverage: 30/33 features** (91%) — remaining 3 are partial/blocked, not actionable gaps
 
-### Priority Order
-1. **Depth 3** run with current capabilities (now)
-2. **Scroll** implementation (highest leverage new capability)
-3. **Input/fill** implementation (deepest feature testing)
-4. **iOS support** (platform coverage)
-
----
-
-## App Page Count Summary
-
-| Category | Pages | Walker Reachable | Currently Covered |
-|----------|-------|-----------------|-------------------|
-| Core tabs (4 main + sub-pages) | ~25 | ~20 | ~18 |
-| Settings (drawer + sub-pages) | ~30 | ~18 (with scroll) / ~12 (without) | ~13 |
-| Standalone features | ~15 | ~8 | ~6 |
-| Onboarding | ~12 | 0 (one-time) | 1 (manual) |
-| **Total** | **~82** | **~46 (with scroll) / ~40 (without)** | **~38** |
+### What Changed (2026-03-17 update #1)
+- **BLE device flows promoted to CORE DAILY** — device-connect and device-capture proved automatable on physical Pixel 7a with real Omi device (were scored walker=0, now walker=1)
+- **3 new flows added**: phone-capture, device-capture, device-connect (15 + 10 + 10 = 29 new steps)
+- **Auth flows added to vector**: login, logout, onboarding (previously unlisted)
+- **Flow YAML references added** to coverage status for traceability

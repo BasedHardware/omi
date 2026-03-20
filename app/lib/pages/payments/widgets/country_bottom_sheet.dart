@@ -39,92 +39,86 @@ class _CountryBottomSheetState extends State<CountryBottomSheet> {
       maxChildSize: 0.9,
       expand: false,
       builder: (context, scrollController) {
-        return Consumer<PaymentMethodProvider>(builder: (context, provider, child) {
-          return Padding(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-            child: Column(
-              children: [
-                Container(
-                  width: 40,
-                  height: 4,
-                  margin: const EdgeInsets.symmetric(vertical: 8),
-                  decoration: BoxDecoration(
-                    color: Colors.grey[600],
-                    borderRadius: BorderRadius.circular(2),
+        return Consumer<PaymentMethodProvider>(
+          builder: (context, provider, child) {
+            return Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+              child: Column(
+                children: [
+                  Container(
+                    width: 40,
+                    height: 4,
+                    margin: const EdgeInsets.symmetric(vertical: 8),
+                    decoration: BoxDecoration(color: Colors.grey[600], borderRadius: BorderRadius.circular(2)),
                   ),
-                ),
-                TextField(
-                  controller: _searchController,
-                  style: const TextStyle(color: Colors.white),
-                  decoration: InputDecoration(
-                    hintText: context.l10n.searchCountries,
-                    hintStyle: TextStyle(color: Colors.grey[400]),
-                    filled: true,
-                    fillColor: Colors.white.withOpacity(0.1),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: BorderSide.none,
+                  TextField(
+                    controller: _searchController,
+                    style: const TextStyle(color: Colors.white),
+                    decoration: InputDecoration(
+                      hintText: context.l10n.searchCountries,
+                      hintStyle: TextStyle(color: Colors.grey[400]),
+                      filled: true,
+                      fillColor: Colors.white.withOpacity(0.1),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                      prefixIcon: const Icon(Icons.search, color: Colors.white),
+                      suffixIcon: provider.searchQuery.isNotEmpty
+                          ? IconButton(
+                              icon: const Icon(Icons.clear, color: Colors.white),
+                              onPressed: () {
+                                _searchController.clear();
+                                provider.updateSearchQuery('');
+                              },
+                            )
+                          : null,
                     ),
-                    prefixIcon: const Icon(Icons.search, color: Colors.white),
-                    suffixIcon: provider.searchQuery.isNotEmpty
-                        ? IconButton(
-                            icon: const Icon(Icons.clear, color: Colors.white),
-                            onPressed: () {
-                              _searchController.clear();
-                              provider.updateSearchQuery('');
-                            },
-                          )
-                        : null,
-                  ),
-                  onChanged: (value) {
-                    context.read<PaymentMethodProvider>().updateSearchQuery(value);
-                  },
-                ),
-                const SizedBox(height: 16),
-                Expanded(
-                  child: Builder(
-                    builder: (context) {
-                      if (provider.isLoading) {
-                        return const Center(
-                          child: CircularProgressIndicator(color: Color(0xFF635BFF)),
-                        );
-                      }
-
-                      return ListView.builder(
-                        controller: scrollController,
-                        itemCount: provider.filteredCountries.length,
-                        itemBuilder: (context, index) {
-                          final country = provider.filteredCountries[index];
-                          final isSelected = provider.selectedCountryId == country['id'];
-
-                          return ListTile(
-                            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-                            title: Text(
-                              (country['name'] as String).decodeString,
-                              style: TextStyle(
-                                color: isSelected ? const Color(0xFF635BFF) : Colors.white,
-                                fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                              ),
-                            ),
-                            leading: Text(
-                              countryFlagFromCode(country['id'] as String),
-                              style: const TextStyle(fontSize: 24),
-                            ),
-                            selected: isSelected,
-                            onTap: () {
-                              provider.setSelectedCountryId(country['id']);
-                              Navigator.pop(context);
-                            },
-                          );
-                        },
-                      );
+                    onChanged: (value) {
+                      context.read<PaymentMethodProvider>().updateSearchQuery(value);
                     },
                   ),
-                ),
-              ],
-            ),
-          );
-        });
+                  const SizedBox(height: 16),
+                  Expanded(
+                    child: Builder(
+                      builder: (context) {
+                        if (provider.isLoading) {
+                          return const Center(child: CircularProgressIndicator(color: Color(0xFF635BFF)));
+                        }
+
+                        return ListView.builder(
+                          controller: scrollController,
+                          itemCount: provider.filteredCountries.length,
+                          itemBuilder: (context, index) {
+                            final country = provider.filteredCountries[index];
+                            final isSelected = provider.selectedCountryId == country['id'];
+
+                            return ListTile(
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                              title: Text(
+                                (country['name'] as String).decodeString,
+                                style: TextStyle(
+                                  color: isSelected ? const Color(0xFF635BFF) : Colors.white,
+                                  fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                                ),
+                              ),
+                              leading: Text(
+                                countryFlagFromCode(country['id'] as String),
+                                style: const TextStyle(fontSize: 24),
+                              ),
+                              selected: isSelected,
+                              onTap: () {
+                                provider.setSelectedCountryId(country['id']);
+                                Navigator.pop(context);
+                              },
+                            );
+                          },
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
       },
     );
   }

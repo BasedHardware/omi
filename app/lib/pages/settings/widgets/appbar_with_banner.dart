@@ -30,7 +30,5 @@ class AppBarWithBanner extends StatelessWidget implements PreferredSizeWidget {
   }
 
   @override
-  Size get preferredSize => Size.fromHeight(
-        appBar.preferredSize.height + (bannerHeight),
-      );
+  Size get preferredSize => Size.fromHeight(appBar.preferredSize.height + (bannerHeight));
 }

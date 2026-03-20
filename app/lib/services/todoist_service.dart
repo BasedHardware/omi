@@ -37,10 +37,7 @@ class TodoistService {
         return false;
       }
 
-      await launchUrl(
-        authUri,
-        mode: LaunchMode.externalApplication,
-      );
+      await launchUrl(authUri, mode: LaunchMode.externalApplication);
 
       return true;
     } catch (e) {
@@ -57,11 +54,7 @@ class TodoistService {
   }
 
   /// Create a task in Todoist (via backend API)
-  Future<bool> createTask({
-    required String content,
-    String? description,
-    DateTime? dueDate,
-  }) async {
+  Future<bool> createTask({required String content, String? description, DateTime? dueDate}) async {
     try {
       final result = await createTaskViaIntegration(
         'todoist',

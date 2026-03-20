@@ -21,6 +21,8 @@ class ChatToolExecutor {
     static var onKnowledgeGraphUpdated: (() -> Void)?
     /// Called when scan_files completes — used to kick off parallel exploration
     static var onScanFilesCompleted: ((_ fileCount: Int) -> Void)?
+    /// Called when request_permission returns "pending" — used to trigger the permission help timer
+    static var onPermissionPending: ((_ permissionType: String) -> Void)?
 
     private static var fileScanFileCount = 0
     private static var followupContinuation: CheckedContinuation<String, Never>?
@@ -54,7 +56,11 @@ class ChatToolExecutor {
         case "request_permission":
             let result = await executeRequestPermission(toolCall.arguments)
             let permType = toolCall.arguments["type"] as? String ?? "unknown"
-            AnalyticsManager.shared.onboardingChatToolUsed(tool: "request_permission", properties: ["permission": permType, "result": result.contains("granted") ? "granted" : "pending"])
+            let granted = result.contains("granted")
+            AnalyticsManager.shared.onboardingChatToolUsed(tool: "request_permission", properties: ["permission": permType, "result": granted ? "granted" : "pending"])
+            if !granted {
+                DispatchQueue.main.async { onPermissionPending?(permType) }
+            }
             return result
 
         case "check_permission_status":
@@ -970,6 +976,7 @@ class ChatToolExecutor {
         onQuickReplyQuestion = nil
         onKnowledgeGraphUpdated = nil
         onScanFilesCompleted = nil
+        onPermissionPending = nil
         fileScanFileCount = 0
 
         return "Onboarding completed successfully! The app is now set up."

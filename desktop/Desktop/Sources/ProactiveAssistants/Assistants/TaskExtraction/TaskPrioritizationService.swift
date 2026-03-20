@@ -25,22 +25,34 @@ actor TaskPrioritizationService {
     private let checkIntervalSeconds: TimeInterval = 300    // Check every 5 minutes
     private let minimumTaskCount = 2
 
+    private var geminiClientInitAttempted = false
+
     private init() {
         // Restore persisted timestamps
         self.lastFullRunTime = UserDefaults.standard.object(forKey: Self.fullRunKey) as? Date
-
-        do {
-            self.geminiClient = try GeminiClient(model: "gemini-pro-latest")
-        } catch {
-            log("TaskPrioritize: Failed to initialize GeminiClient: \(error)")
-            self.geminiClient = nil
-        }
+        // Don't eagerly init GeminiClient — API key may not be available yet
 
         if let last = self.lastFullRunTime {
             let hoursAgo = Int(Date().timeIntervalSince(last) / 3600)
             log("TaskPrioritize: Last full rescore was \(hoursAgo)h ago")
         } else {
             log("TaskPrioritize: No previous full rescore recorded")
+        }
+    }
+
+    /// Lazy-initialize GeminiClient; retries if APIKeyService hasn't loaded yet.
+    private func getGeminiClient() -> GeminiClient? {
+        if let client = geminiClient { return client }
+        guard APIKeyService.keysAvailable || !geminiClientInitAttempted else { return nil }
+        geminiClientInitAttempted = true
+        do {
+            let client = try GeminiClient(model: "gemini-pro-latest")
+            geminiClient = client
+            return client
+        } catch {
+            if !APIKeyService.keysAvailable { geminiClientInitAttempted = false }
+            log("TaskPrioritize: Failed to initialize GeminiClient: \(error)")
+            return nil
         }
     }
 
@@ -107,7 +119,7 @@ actor TaskPrioritizationService {
             log("TaskPrioritize: [FULL] Skipping — scoring already in progress")
             return
         }
-        guard let client = geminiClient else {
+        guard let client = getGeminiClient() else {
             log("TaskPrioritize: Skipping full rescore — Gemini client not initialized")
             return
         }

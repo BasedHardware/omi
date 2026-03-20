@@ -67,26 +67,15 @@ class CapabilitiesCard extends StatelessWidget {
               final color = _getCapabilityColor(capability.id);
               return Container(
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                decoration: BoxDecoration(
-                  color: color.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(12),
-                ),
+                decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(12)),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    FaIcon(
-                      _getCapabilityIcon(capability.id),
-                      size: 14,
-                      color: color,
-                    ),
+                    FaIcon(_getCapabilityIcon(capability.id), size: 14, color: color),
                     const SizedBox(width: 8),
                     Text(
                       capability.getLocalizedTitle(context),
-                      style: TextStyle(
-                        color: color,
-                        fontSize: 13,
-                        fontWeight: FontWeight.w500,
-                      ),
+                      style: TextStyle(color: color, fontSize: 13, fontWeight: FontWeight.w500),
                     ),
                   ],
                 ),

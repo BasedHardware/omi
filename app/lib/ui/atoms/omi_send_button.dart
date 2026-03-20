@@ -8,11 +8,7 @@ class OmiSendButton extends AdaptiveWidget {
   final bool enabled;
   final VoidCallback? onPressed;
 
-  const OmiSendButton({
-    super.key,
-    required this.enabled,
-    required this.onPressed,
-  });
+  const OmiSendButton({super.key, required this.enabled, required this.onPressed});
 
   @override
   Widget buildDesktop(BuildContext context) => _base();
@@ -48,11 +44,7 @@ class OmiSendButton extends AdaptiveWidget {
                   ]
                 : [],
           ),
-          child: Icon(
-            Icons.send_rounded,
-            color: enabled ? Colors.white : ResponsiveHelper.textQuaternary,
-            size: 18,
-          ),
+          child: Icon(Icons.send_rounded, color: enabled ? Colors.white : ResponsiveHelper.textQuaternary, size: 18),
         ),
       ),
     );

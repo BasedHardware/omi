@@ -2,20 +2,20 @@ import Foundation
 
 actor APIClient {
     static let shared = APIClient()
-
-    // OMI Backend base URL - loaded from .env file (OMI_API_URL)
-    // Production URL is set in .env.app, dev URL is set by run.sh
+    // OMI Backend base URL — must be set via OMI_API_URL env var (in .env)
     var baseURL: String {
         // First check getenv() for values set by setenv() in loadEnvironment()
         if let cString = getenv("OMI_API_URL"), let url = String(validatingUTF8: cString), !url.isEmpty {
-            return url.hasSuffix("/") ? url : url + "/"
+            let normalized = url.hasSuffix("/") ? url : url + "/"
+            return normalized
         }
         // Fallback to ProcessInfo (launch-time snapshot)
         if let envURL = ProcessInfo.processInfo.environment["OMI_API_URL"], !envURL.isEmpty {
-            return envURL.hasSuffix("/") ? envURL : envURL + "/"
+            let normalized = envURL.hasSuffix("/") ? envURL : envURL + "/"
+            return normalized
         }
-        // No hardcoded default - must be set via .env file
-        fatalError("OMI_API_URL not set. Ensure .env file is present in app bundle.")
+        NSLog("OMI API: OMI_API_URL not set — API calls will fail")
+        return ""
     }
 
     let session: URLSession
@@ -1956,7 +1956,7 @@ struct PromoteResponse: Codable {
 
 extension APIClient {
 
-    /// Fetches all active goals (up to 3). Uses 5-second cache to deduplicate parallel calls.
+    /// Fetches all active goals (up to 4). Uses 5-second cache to deduplicate parallel calls.
     func getGoals() async throws -> [Goal] {
         if let cache = goalsCache, let time = goalsCacheTime, Date().timeIntervalSince(time) < 5 {
             return cache
@@ -4605,11 +4605,15 @@ extension APIClient {
         let deepgramApiKey: String?
         let geminiApiKey: String?
         let anthropicApiKey: String?
+        let firebaseApiKey: String?
+        let googleCalendarApiKey: String?
 
         enum CodingKeys: String, CodingKey {
             case deepgramApiKey = "deepgram_api_key"
             case geminiApiKey = "gemini_api_key"
             case anthropicApiKey = "anthropic_api_key"
+            case firebaseApiKey = "firebase_api_key"
+            case googleCalendarApiKey = "google_calendar_api_key"
         }
     }
 

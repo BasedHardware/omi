@@ -11,12 +11,7 @@ Future<Map<String, dynamic>?> getStripeAccountLink(String? country) async {
     if (country != null) {
       url += '?country=$country';
     }
-    var response = await makeApiCall(
-      url: url,
-      headers: {},
-      body: '',
-      method: 'POST',
-    );
+    var response = await makeApiCall(url: url, headers: {}, body: '', method: 'POST');
     if (response == null || response.statusCode != 200) {
       return null;
     }
@@ -29,12 +24,7 @@ Future<Map<String, dynamic>?> getStripeAccountLink(String? country) async {
 
 Future<bool> isStripeOnboardingComplete() async {
   try {
-    var response = await makeApiCall(
-      url: '${Env.apiBaseUrl}v1/stripe/onboarded',
-      headers: {},
-      body: '',
-      method: 'GET',
-    );
+    var response = await makeApiCall(url: '${Env.apiBaseUrl}v1/stripe/onboarded', headers: {}, body: '', method: 'GET');
     if (response == null || response.statusCode != 200) {
       return false;
     }

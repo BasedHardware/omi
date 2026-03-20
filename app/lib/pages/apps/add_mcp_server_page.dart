@@ -76,10 +76,7 @@ class _AddMcpServerPageState extends State<AddMcpServerPage> {
       if (mounted) {
         try {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(context.l10n.mcpServerConnected(toolsCount)),
-              backgroundColor: Colors.green,
-            ),
+            SnackBar(content: Text(context.l10n.mcpServerConnected(toolsCount)), backgroundColor: Colors.green),
           );
         } catch (_) {}
         _navigateToAppDetail(_appId!);
@@ -134,10 +131,7 @@ class _AddMcpServerPageState extends State<AddMcpServerPage> {
           setState(() => _isPolling = false);
           try {
             ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(context.l10n.mcpServerConnected(toolsCount)),
-                backgroundColor: Colors.green,
-              ),
+              SnackBar(content: Text(context.l10n.mcpServerConnected(toolsCount)), backgroundColor: Colors.green),
             );
             final app = App.fromJson(appData);
             Navigator.pop(context);
@@ -163,9 +157,7 @@ class _AddMcpServerPageState extends State<AddMcpServerPage> {
   void _showError(String message) {
     if (!mounted) return;
     try {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(message), backgroundColor: Colors.red),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message), backgroundColor: Colors.red));
     } catch (_) {
       // Widget may be deactivated during async navigation
     }
@@ -178,10 +170,7 @@ class _AddMcpServerPageState extends State<AddMcpServerPage> {
       appBar: AppBar(
         backgroundColor: Theme.of(context).colorScheme.surface,
         title: Text(context.l10n.addMcpServer, style: const TextStyle(fontSize: 18)),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed: () => Navigator.pop(context),
-        ),
+        leading: IconButton(icon: const Icon(Icons.arrow_back), onPressed: () => Navigator.pop(context)),
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(24),
@@ -192,9 +181,7 @@ class _AddMcpServerPageState extends State<AddMcpServerPage> {
             children: [
               Text(
                 context.l10n.connectExternalAiTools,
-                style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                      color: Colors.white.withOpacity(0.7),
-                    ),
+                style: Theme.of(context).textTheme.bodyLarge?.copyWith(color: Colors.white.withOpacity(0.7)),
               ),
               const SizedBox(height: 32),
               TextFormField(
@@ -287,8 +274,10 @@ class _AddMcpServerPageState extends State<AddMcpServerPage> {
                             ),
                             if (_isPolling) ...[
                               const SizedBox(width: 12),
-                              Text(context.l10n.authorizingMcpServer,
-                                  style: const TextStyle(fontSize: 14, color: Colors.black)),
+                              Text(
+                                context.l10n.authorizingMcpServer,
+                                style: const TextStyle(fontSize: 14, color: Colors.black),
+                              ),
                             ],
                           ],
                         )

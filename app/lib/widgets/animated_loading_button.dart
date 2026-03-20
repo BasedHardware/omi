@@ -49,10 +49,7 @@ class _AnimatedLoadingButtonState extends State<AnimatedLoadingButton> {
       duration: widget.animationDuration,
       width: _isLoading ? widget.height : widget.width,
       height: widget.height,
-      decoration: BoxDecoration(
-        color: widget.color,
-        borderRadius: BorderRadius.circular(widget.height / 2),
-      ),
+      decoration: BoxDecoration(color: widget.color, borderRadius: BorderRadius.circular(widget.height / 2)),
       child: InkWell(
         onTap: _isLoading ? null : _handleOnPressed,
         borderRadius: BorderRadius.circular(widget.height / 2),
@@ -69,11 +66,7 @@ class _AnimatedLoadingButtonState extends State<AnimatedLoadingButton> {
                       strokeWidth: 3.0,
                     ),
                   )
-                : Text(
-                    widget.text,
-                    key: const ValueKey('buttonText'),
-                    style: widget.textStyle,
-                  ),
+                : Text(widget.text, key: const ValueKey('buttonText'), style: widget.textStyle),
           ),
         ),
       ),
