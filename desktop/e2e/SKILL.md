@@ -102,33 +102,39 @@ System Tray Menu
 
 Reference flows in `desktop/e2e/flows/*.yaml` describe the app's key user journeys. Read these to understand navigation paths, expected elements, and UI state at each step.
 
-| Flow | Covers | What it describes |
-|------|--------|-------------------|
-| `flows/navigation.yaml` | SidebarView, DesktopHomeView, OmiApp | Sidebar icons, section switching, text input, scroll, tray menu |
-| `flows/language.yaml` | SettingsPage, SettingsSidebar, SidebarView | Settings nav, Transcription, language mode toggle, picker |
-| `flows/dashboard.yaml` | DashboardPage, GoalsWidget, TasksWidget | Goals CRUD, task toggle, embedded conversations |
-| `flows/chat.yaml` | ChatPage, ChatProvider | Send message, AI response, message actions |
-| `flows/memories.yaml` | MemoriesPage, MemoryGraphPage | Tag filtering, search, visibility toggle, memory graph |
-| `flows/tasks.yaml` | TasksPage, TasksStore | Task categories, filters, create task, toggle completion |
-| `flows/settings.yaml` | SettingsPage, SettingsSidebar | All 9 settings sections (General through About) |
+| Flow | Covers | Steps | Report |
+|------|--------|-------|--------|
+| `flows/navigation.yaml` | SidebarView, DesktopHomeView | 6/6 PASS | [report](https://flow-walker.beastoin.workers.dev/runs/RVS7NChPvj.html) |
+| `flows/dashboard.yaml` | DashboardPage, GoalsWidget, TasksWidget | 3/6 (3 skipped) | [report](https://flow-walker.beastoin.workers.dev/runs/ghCdGIUAA2.html) |
+| `flows/chat.yaml` | ChatPage, ChatProvider | 5/5 PASS | [report](https://flow-walker.beastoin.workers.dev/runs/z62Nll0IzR.html) |
+| `flows/memories.yaml` | MemoriesPage, MemoryGraphPage | 5/6 (1 skipped) | [report](https://flow-walker.beastoin.workers.dev/runs/Mkp6ahc12I.html) |
+| `flows/tasks.yaml` | TasksPage, TasksStore | 4/5 (1 skipped) | [report](https://flow-walker.beastoin.workers.dev/runs/ealB_-UdqS.html) |
+| `flows/settings.yaml` | SettingsPage, SettingsSidebar | 9/9 PASS | [report](https://flow-walker.beastoin.workers.dev/runs/RoTW8GeljN.html) |
+| `flows/language.yaml` | SettingsPage, SettingsSidebar | 5 steps | — |
 
 When you modify a Swift file, check if any flow's `covers:` includes it. That flow describes the user journey your change affects.
 
 ### Adding a New Flow
-Create `desktop/e2e/flows/<name>.yaml`:
+Create `desktop/e2e/flows/<name>.yaml` in v2 format:
 ```yaml
+version: 2
 name: my-flow
 description: What this flow covers
+app: com.omi.computer-macos
 covers:
-  - Desktop/Sources/path/to/YourView.swift
-setup: normal   # normal | fresh_auth | signed_out
+  - desktop/Desktop/Sources/path/to/YourView.swift
+preconditions:
+  - auth_ready
 steps:
-  - name: Step description
-    click: { type: image, label: "gearshape.fill" }
-    screenshot: step-name
-  - name: Verify result
-    assert: { text: "Expected Text" }
+  - id: S1
+    name: Step description
+    do: "Click the element (identifier: my_element). Verify the page loads."
+    expect:
+      interactive_count: { min: 5 }
+      text_visible:
+        - Expected Text
 ```
+**Important:** Always use quoted strings for `do:` fields (not YAML `>` or `|`).
 
 ## Verification & Evidence
 
@@ -151,8 +157,9 @@ After making changes, verify them in the live app:
 ## Guard Conditions
 
 **NEVER:**
-- Automate the production app (`com.omi.computer-macos`)
 - Kill or restart the production Omi app
 - Use development env vars to bypass auth — test real auth flows
 - Set `hasCompletedOnboarding` to skip onboarding — test the real flow
 - Modify source code to make tests pass — report the failure instead
+
+**NOTE:** The beta app (`com.omi.computer-macos`) is the standard target for flow-walker E2E testing. The dev app (`com.omi.desktop-dev`) is for local development only.
