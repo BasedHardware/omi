@@ -3,55 +3,12 @@ name: Lint Check
 on:
   push:
     branches: main
-    paths:
-      - 'web/frontend/**'
-      - 'web/personas-open-source/**'
-      - 'app/**.dart'
-      - 'app/lib/l10n/**'
-      - 'backend/**.py'
-      - 'omi/**'
-      - 'omiGlass/**'
   pull_request:
     branches: main
-    paths:
-      - 'web/frontend/**'
-      - 'web/personas-open-source/**'
-      - 'app/**.dart'
-      - 'app/lib/l10n/**'
-      - 'backend/**.py'
-      - 'omi/**'
-      - 'omiGlass/**'
 
 jobs:
-  lint-frontend:
-    name: Lint Frontend
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: ./web/frontend
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '18'
-          cache: 'npm'
-          cache-dependency-path: './web/frontend/package-lock.json'
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Run ESLint
-        run: npm run lint
-
-      - name: Check Prettier formatting
-        run: npm run lint:format -- --check
-
-  format-dart:
-    name: Check Dart Formatting
+  lint:
+    name: Lint & Format Check
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -59,57 +16,54 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Get changed files
+        id: changed
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            DIFF_BASE="origin/${{ github.base_ref }}"
+          else
+            DIFF_BASE="HEAD~1"
+          fi
+          FILES=$(git diff --name-only --diff-filter=ACM "$DIFF_BASE"...HEAD)
+          echo "$FILES"
+          echo "$FILES" > /tmp/changed-files.txt
+          echo "has_dart=$(echo "$FILES" | grep -q '\.dart$' && echo true || echo false)" >> $GITHUB_OUTPUT
+          echo "has_python=$(echo "$FILES" | grep -q 'backend/.*\.py$' && echo true || echo false)" >> $GITHUB_OUTPUT
+          echo "has_arb=$(echo "$FILES" | grep -q '\.arb$' && echo true || echo false)" >> $GITHUB_OUTPUT
+          echo "has_firmware=$(echo "$FILES" | grep -qE '^(omi|omiGlass)/.*\.(c|cpp|cc|cxx|h|hpp)$' && echo true || echo false)" >> $GITHUB_OUTPUT
+          echo "has_frontend=$(echo "$FILES" | grep -q '^web/frontend/' && echo true || echo false)" >> $GITHUB_OUTPUT
+          echo "has_personas=$(echo "$FILES" | grep -q '^web/personas-open-source/' && echo true || echo false)" >> $GITHUB_OUTPUT
+
+      # -- Dart --
       - name: Setup Flutter
+        if: steps.changed.outputs.has_dart == 'true'
         uses: subosito/flutter-action@v2
         with:
           channel: stable
 
-      - name: Check Dart formatting (changed files only)
+      - name: Check Dart formatting
+        if: steps.changed.outputs.has_dart == 'true'
         run: |
-          FILES=$(git diff --name-only --diff-filter=ACM origin/main...HEAD -- 'app/**.dart' | grep -v -e '\.gen\.dart$' -e '\.g\.dart$' || true)
-          if [ -z "$FILES" ]; then
-            echo "No changed Dart files to check."
-            exit 0
+          FILES=$(grep '\.dart$' /tmp/changed-files.txt | grep -v -e '\.gen\.dart$' -e '\.g\.dart$' || true)
+          if [ -n "$FILES" ]; then
+            echo "$FILES" | xargs dart format --line-length 120 --set-exit-if-changed --output=none
           fi
-          echo "$FILES" | xargs dart format --line-length 120 --set-exit-if-changed --output=none
 
-  format-python:
-    name: Check Python Formatting
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Install black
-        run: pip install black
-
-      - name: Check Python formatting (changed files only)
+      # -- Python --
+      - name: Check Python formatting
+        if: steps.changed.outputs.has_python == 'true'
         run: |
-          FILES=$(git diff --name-only --diff-filter=ACM origin/main...HEAD -- 'backend/**.py' || true)
-          if [ -z "$FILES" ]; then
-            echo "No changed Python files to check."
-            exit 0
+          pip install -q black
+          FILES=$(grep 'backend/.*\.py$' /tmp/changed-files.txt || true)
+          if [ -n "$FILES" ]; then
+            echo "$FILES" | xargs black --check --line-length 120 --skip-string-normalization
           fi
-          echo "$FILES" | xargs black --check --line-length 120 --skip-string-normalization
 
-  format-arb:
-    name: Check ARB Formatting
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Check ARB files are valid JSON with 4-space indent (changed files only)
+      # -- ARB --
+      - name: Check ARB formatting
+        if: steps.changed.outputs.has_arb == 'true'
         run: |
-          FILES=$(git diff --name-only --diff-filter=ACM origin/main...HEAD -- 'app/lib/l10n/*.arb' || true)
-          if [ -z "$FILES" ]; then
-            echo "No changed ARB files to check."
-            exit 0
-          fi
+          FILES=$(grep '\.arb$' /tmp/changed-files.txt || true)
           failed=0
           for f in $FILES; do
             if ! python3 -m json.tool "$f" > /dev/null 2>&1; then
@@ -119,61 +73,53 @@ jobs:
             fi
             if ! python3 -c "
           import json, sys
-          with open('$f') as fh:
+          f = sys.argv[1]
+          with open(f) as fh:
               original = fh.read()
           formatted = json.dumps(json.loads(original), indent=4, ensure_ascii=False) + '\n'
           if original != formatted:
               sys.exit(1)
-          " 2>/dev/null; then
+          " "$f" 2>/dev/null; then
               echo "FAIL: $f not formatted with 4-space indent"
               failed=1
             fi
           done
           if [ "$failed" -eq 1 ]; then
-            echo ""
             echo "Fix: jq --indent 4 '.' <file> > tmp && mv tmp <file>"
             exit 1
           fi
-          echo "All changed ARB files formatted correctly."
 
-  format-firmware:
-    name: Check C/C++ Formatting
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Check C/C++ formatting (changed files only)
+      # -- C/C++ --
+      - name: Check C/C++ formatting
+        if: steps.changed.outputs.has_firmware == 'true'
         run: |
-          FILES=$(git diff --name-only --diff-filter=ACM origin/main...HEAD | grep -E '\.(c|cpp|cc|cxx|h|hpp)$' | grep -E '^(omi/|omiGlass/)' || true)
-          if [ -z "$FILES" ]; then
-            echo "No changed C/C++ files to check."
-            exit 0
+          FILES=$(grep -E '^(omi|omiGlass)/.*\.(c|cpp|cc|cxx|h|hpp)$' /tmp/changed-files.txt || true)
+          if [ -n "$FILES" ]; then
+            echo "$FILES" | xargs clang-format --dry-run --Werror
           fi
-          echo "$FILES" | xargs clang-format --dry-run --Werror
 
-  lint-personas:
-    name: Lint Personas Open Source
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: ./web/personas-open-source
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
+      # -- Frontend --
       - name: Setup Node.js
+        if: steps.changed.outputs.has_frontend == 'true' || steps.changed.outputs.has_personas == 'true'
         uses: actions/setup-node@v4
         with:
           node-version: '18'
           cache: 'npm'
-          cache-dependency-path: './web/personas-open-source/package-lock.json'
+          cache-dependency-path: |
+            web/frontend/package-lock.json
+            web/personas-open-source/package-lock.json
 
-      - name: Install dependencies
-        run: npm ci --legacy-peer-deps
+      - name: Lint Frontend
+        if: steps.changed.outputs.has_frontend == 'true'
+        working-directory: ./web/frontend
+        run: |
+          npm ci
+          npm run lint
+          npm run lint:format -- --check
 
-      - name: Run ESLint
-        run: npm run lint
+      - name: Lint Personas
+        if: steps.changed.outputs.has_personas == 'true'
+        working-directory: ./web/personas-open-source
+        run: |
+          npm ci --legacy-peer-deps
+          npm run lint
