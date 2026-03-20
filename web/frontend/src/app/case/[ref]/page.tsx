@@ -3,6 +3,7 @@ import { cn } from '@/src/lib/utils';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://api.omi.me';
 const SUPPORT_EMAIL = 'team@basedhardware.com';
+const FETCH_TIMEOUT_MS = 10_000;
 
 const STAGE_META: Record<string, { label: string; dot: string; text: string; bg: string }> = {
   none: { label: 'Normal', dot: 'bg-green-400', text: 'text-green-400', bg: 'bg-green-500/[0.06]' },
@@ -18,6 +19,17 @@ interface CaseStatus {
   created_at: string;
   updated_at: string;
   support_email?: string;
+}
+
+type CaseResult =
+  | { kind: 'ok'; data: CaseStatus }
+  | { kind: 'not_found' }
+  | { kind: 'error' };
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+function safeEmail(raw?: string): string {
+  return raw && EMAIL_RE.test(raw) ? raw : SUPPORT_EMAIL;
 }
 
 function formatDate(iso: string): string {
@@ -38,16 +50,17 @@ function daysSince(iso: string): number {
   return Math.floor((Date.now() - d.getTime()) / (1000 * 60 * 60 * 24));
 }
 
-async function getCaseStatus(ref: string): Promise<CaseStatus | null> {
+async function getCaseStatus(ref: string): Promise<CaseResult> {
   try {
     const res = await fetch(`${API_BASE_URL}/v1/fair-use/case/${encodeURIComponent(ref)}/status`, {
       cache: 'no-store',
+      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
     });
-    if (res.status === 404) return null;
-    if (!res.ok) return null;
-    return await res.json();
+    if (res.status === 404) return { kind: 'not_found' };
+    if (!res.ok) return { kind: 'error' };
+    return { kind: 'ok', data: await res.json() };
   } catch {
-    return null;
+    return { kind: 'error' };
   }
 }
 
@@ -58,10 +71,9 @@ export default async function CaseStatusPage({ params }: { params: Promise<{ ref
     notFound();
   }
 
-  const status = await getCaseStatus(ref);
-  const email = status?.support_email || SUPPORT_EMAIL;
+  const result = await getCaseStatus(ref);
 
-  if (!status) {
+  if (result.kind === 'not_found') {
     return (
       <div className="min-h-screen bg-zinc-950 flex items-center justify-center p-6">
         <div className="max-w-md w-full text-center">
@@ -80,6 +92,26 @@ export default async function CaseStatusPage({ params }: { params: Promise<{ ref
     );
   }
 
+  if (result.kind === 'error') {
+    return (
+      <div className="min-h-screen bg-zinc-950 flex items-center justify-center p-6">
+        <div className="max-w-md w-full text-center">
+          <h1 className="text-lg font-semibold text-white mb-2">Something Went Wrong</h1>
+          <p className="text-sm text-zinc-400 mb-1">
+            Unable to load case <span className="font-mono text-zinc-300">{ref}</span> right now.
+          </p>
+          <p className="text-xs text-zinc-500 mt-4">Please try again later or contact{' '}
+            <a href={`mailto:${SUPPORT_EMAIL}`} className="text-purple-400 hover:text-purple-300">
+              {SUPPORT_EMAIL}
+            </a>
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  const status = result.data;
+  const email = safeEmail(status.support_email);
   const meta = STAGE_META[status.stage] ?? STAGE_META['none'];
   const updatedDays = daysSince(status.updated_at);
 
