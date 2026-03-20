@@ -1,0 +1,159 @@
+"""Tests for sync endpoint fair-use gates (#5854)."""
+
+from unittest.mock import patch, MagicMock
+
+import pytest
+
+# --- Stubs to isolate from heavy deps ---
+import sys
+from types import ModuleType
+
+# Stub database modules
+for mod_name in [
+    'database._client',
+    'database.redis_db',
+    'database.fair_use',
+    'database.users',
+    'database.user_usage',
+    'database.conversations',
+    'firebase_admin',
+    'firebase_admin.messaging',
+]:
+    if mod_name not in sys.modules:
+        sys.modules[mod_name] = ModuleType(mod_name)
+
+# Stub redis_db.r
+_mock_redis = MagicMock()
+sys.modules['database.redis_db'].r = _mock_redis
+
+# Stub database._client.db
+sys.modules['database._client'].db = MagicMock()
+
+import utils.fair_use as fair_use_mod
+
+
+class TestRecordSpeechMsSource:
+    """Test that source param is accepted and doesn't change Redis behavior."""
+
+    def setup_method(self):
+        _mock_redis.reset_mock()
+        _mock_redis.pipeline.return_value = MagicMock()
+        _mock_redis.zrangebyscore.return_value = []
+
+    @patch.object(fair_use_mod, 'FAIR_USE_ENABLED', True)
+    def test_source_defaults_to_realtime(self):
+        """Calling without source uses 'realtime' default."""
+        fair_use_mod.record_speech_ms('user1', 5000)
+        pipe = _mock_redis.pipeline.return_value
+        pipe.hincrby.assert_called_once()
+
+    @patch.object(fair_use_mod, 'FAIR_USE_ENABLED', True)
+    def test_source_sync_accepted(self):
+        """Calling with source='sync' works the same — same Redis keys."""
+        fair_use_mod.record_speech_ms('user1', 5000, source='sync')
+        pipe = _mock_redis.pipeline.return_value
+        pipe.hincrby.assert_called_once()
+        # Verify same Redis key pattern (no source in key)
+        call_args = pipe.hincrby.call_args
+        assert 'fair_use:bucket:user1' in str(call_args)
+
+    @patch.object(fair_use_mod, 'FAIR_USE_ENABLED', True)
+    def test_source_does_not_change_redis_keys(self):
+        """Source param is for logging only — Redis keys are identical."""
+        pipe_mock = MagicMock()
+        _mock_redis.pipeline.return_value = pipe_mock
+
+        fair_use_mod.record_speech_ms('user1', 1000, source='realtime')
+        realtime_calls = [str(c) for c in pipe_mock.method_calls]
+
+        pipe_mock.reset_mock()
+        _mock_redis.pipeline.return_value = pipe_mock
+
+        fair_use_mod.record_speech_ms('user1', 1000, source='sync')
+        sync_calls = [str(c) for c in pipe_mock.method_calls]
+
+        # Same Redis operations regardless of source
+        assert realtime_calls == sync_calls
+
+
+class TestCheckSoftCapsWithPrecomputedTotals:
+    """Test check_soft_caps with speech_totals param (used by sync path)."""
+
+    @patch.object(fair_use_mod, 'FAIR_USE_ENABLED', True)
+    @patch.object(fair_use_mod, 'FAIR_USE_KILL_SWITCH', False)
+    @patch.object(fair_use_mod, 'FAIR_USE_EXEMPT_UIDS', set())
+    @patch.object(fair_use_mod, 'FAIR_USE_DAILY_SPEECH_MS', 7200000)
+    @patch.object(fair_use_mod, 'get_rolling_speech_ms')
+    def test_precomputed_totals_trigger_caps(self, mock_speech):
+        """When speech_totals passed, uses them and skips Redis."""
+        precomputed = {'daily_ms': 8000000, 'three_day_ms': 8000000, 'weekly_ms': 8000000}
+        result = fair_use_mod.check_soft_caps('user1', speech_totals=precomputed)
+        assert len(result) > 0
+        mock_speech.assert_not_called()
+
+
+class TestSpeechDurationComputation:
+    """Test the speech duration accumulation logic used in sync endpoint."""
+
+    def test_duration_from_vad_segments(self):
+        """Segments with start/end produce correct total duration."""
+        segments = [
+            {'start': 0.0, 'end': 30.0},
+            {'start': 150.0, 'end': 180.0},
+        ]
+        durations = [s['end'] - s['start'] for s in segments if (s['end'] - s['start']) >= 1]
+        assert sum(durations) == pytest.approx(60.0)
+
+    def test_short_segments_excluded(self):
+        """Segments shorter than 1s are excluded."""
+        segments = [
+            {'start': 0.0, 'end': 0.5},   # Too short
+            {'start': 10.0, 'end': 40.0},  # Valid
+        ]
+        durations = [s['end'] - s['start'] for s in segments if (s['end'] - s['start']) >= 1]
+        assert len(durations) == 1
+        assert durations[0] == pytest.approx(30.0)
+
+    def test_empty_segments(self):
+        """No segments produce zero duration."""
+        segments = []
+        durations = [s['end'] - s['start'] for s in segments if (s['end'] - s['start']) >= 1]
+        assert sum(durations) == 0
+
+    def test_conversion_to_ms(self):
+        """Seconds to milliseconds conversion for record_speech_ms."""
+        total_seconds = 45
+        total_ms = total_seconds * 1000
+        assert total_ms == 45000
+
+
+class TestIsHardRestrictedGate:
+    """Test is_hard_restricted works for sync pre-check."""
+
+    @patch.object(fair_use_mod, 'FAIR_USE_ENABLED', False)
+    def test_disabled_returns_false(self):
+        assert fair_use_mod.is_hard_restricted('user1') is False
+
+    @patch.object(fair_use_mod, 'FAIR_USE_ENABLED', True)
+    @patch.object(fair_use_mod, 'FAIR_USE_KILL_SWITCH', True)
+    def test_kill_switch_returns_false(self):
+        assert fair_use_mod.is_hard_restricted('user1') is False
+
+    @patch.object(fair_use_mod, 'FAIR_USE_ENABLED', True)
+    @patch.object(fair_use_mod, 'FAIR_USE_KILL_SWITCH', False)
+    @patch.object(fair_use_mod, 'FAIR_USE_EXEMPT_UIDS', {'exempt-user'})
+    def test_exempt_user_returns_false(self):
+        assert fair_use_mod.is_hard_restricted('exempt-user') is False
+
+
+class TestSyncEndpointImports:
+    """Verify that all fair-use imports are available from utils.fair_use."""
+
+    def test_all_required_functions_importable(self):
+        """All functions needed by sync.py are importable from utils.fair_use."""
+        assert callable(fair_use_mod.record_speech_ms)
+        assert callable(fair_use_mod.get_rolling_speech_ms)
+        assert callable(fair_use_mod.check_soft_caps)
+        assert callable(fair_use_mod.is_hard_restricted)
+        assert hasattr(fair_use_mod, 'FAIR_USE_ENABLED')
+        assert hasattr(fair_use_mod, 'trigger_classifier_if_needed')
