@@ -233,6 +233,30 @@ class TestCheckSoftCaps:
         result = fair_use_mod.check_soft_caps('user1')
         assert result == []
 
+    @patch.object(fair_use_mod, 'FAIR_USE_ENABLED', True)
+    @patch.object(fair_use_mod, 'FAIR_USE_KILL_SWITCH', False)
+    @patch.object(fair_use_mod, 'FAIR_USE_EXEMPT_UIDS', set())
+    @patch.object(fair_use_mod, 'FAIR_USE_DAILY_SPEECH_MS', 7200000)
+    @patch.object(fair_use_mod, 'get_rolling_speech_ms')
+    def test_precomputed_speech_totals_skips_redis(self, mock_speech):
+        """When speech_totals is passed, check_soft_caps uses it instead of calling get_rolling_speech_ms."""
+        precomputed = {'daily_ms': 8000000, 'three_day_ms': 8000000, 'weekly_ms': 8000000}
+        result = fair_use_mod.check_soft_caps('user1', speech_totals=precomputed)
+        triggers = [t['trigger'] for t in result]
+        assert SoftCapTrigger.DAILY in triggers
+        mock_speech.assert_not_called()
+
+    @patch.object(fair_use_mod, 'FAIR_USE_ENABLED', True)
+    @patch.object(fair_use_mod, 'FAIR_USE_KILL_SWITCH', False)
+    @patch.object(fair_use_mod, 'FAIR_USE_EXEMPT_UIDS', set())
+    @patch.object(fair_use_mod, 'get_rolling_speech_ms')
+    def test_no_speech_totals_calls_redis(self, mock_speech):
+        """When speech_totals is not passed, check_soft_caps fetches from Redis."""
+        mock_speech.return_value = {'daily_ms': 1000, 'three_day_ms': 2000, 'weekly_ms': 3000}
+        result = fair_use_mod.check_soft_caps('user1')
+        assert result == []
+        mock_speech.assert_called_once_with('user1')
+
     @patch.object(fair_use_mod, 'FAIR_USE_ENABLED', False)
     def test_disabled_returns_empty(self):
         result = fair_use_mod.check_soft_caps('user1')
