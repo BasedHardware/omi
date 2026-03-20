@@ -91,12 +91,12 @@ Prioritized feature map to guide flow-walker E2E coverage of core Omi desktop ma
 
 | Flow | Steps | Result | Report URL |
 |------|-------|--------|------------|
-| navigation | 6/6 | PASS | flow-walker.beastoin.workers.dev/runs/7U1UIQVhn_.html |
-| dashboard | 3/6 | PASS (3 skipped) | flow-walker.beastoin.workers.dev/runs/lsrr7mj88s.html |
-| chat | 4/5 | FAIL (S3 backend) | flow-walker.beastoin.workers.dev/runs/w7hW4JTzUY.html |
-| memories | 5/6 | PASS (1 skipped) | flow-walker.beastoin.workers.dev/runs/pEc75RTjYP.html |
-| tasks | 5/5 | PASS | flow-walker.beastoin.workers.dev/runs/P85edp-ONe.html |
-| settings | 9/9 | PASS | flow-walker.beastoin.workers.dev/runs/ZZT_H1Zy9Z.html |
+| navigation | 6/6 | PASS | flow-walker.beastoin.workers.dev/runs/RVS7NChPvj.html |
+| dashboard | 3/6 | PASS (3 skipped) | flow-walker.beastoin.workers.dev/runs/ghCdGIUAA2.html |
+| chat | 5/5 | PASS | flow-walker.beastoin.workers.dev/runs/z62Nll0IzR.html |
+| memories | 5/6 | PASS (1 skipped) | flow-walker.beastoin.workers.dev/runs/Mkp6ahc12I.html |
+| tasks | 4/5 | PASS (1 skipped) | flow-walker.beastoin.workers.dev/runs/ealB_-UdqS.html |
+| settings | 9/9 | PASS | flow-walker.beastoin.workers.dev/runs/RoTW8GeljN.html |
 
 ---
 
