@@ -22,13 +22,12 @@ export default function TranscriptionSegment({
   const isUser = segment.is_user;
 
   // Get person name if available
-  const personName = segment.person_id && people
-    ? people.find(p => p.id === segment.person_id)?.name
-    : null;
+  const personName =
+    segment.person_id && people
+      ? people.find((p) => p.id === segment.person_id)?.name
+      : null;
 
-  const displayName = isUser 
-    ? 'Owner' 
-    : personName || `Speaker ${segment.speaker_id}`;
+  const displayName = isUser ? 'Owner' : personName || `Speaker ${segment.speaker_id}`;
 
   return (
     <li className="my-5 flex gap-2">
@@ -42,9 +41,7 @@ export default function TranscriptionSegment({
         </div>
       )}
       <div>
-        <p className="text-base font-semibold md:text-lg">
-          {displayName}
-        </p>
+        <p className="text-base font-semibold md:text-lg">{displayName}</p>
         <p className="text-base font-extralight leading-7 md:text-lg md:leading-9">
           {showMore
             ? textFormatted
