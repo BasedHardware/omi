@@ -226,8 +226,8 @@ export default function Chat({
                     <div className="max-w-[85%] rounded-2xl bg-zinc-800/80 px-4 py-3 text-gray-100 shadow-lg">
                       <p className="text-sm leading-relaxed md:text-base">
                         Hi! I can help you explore this conversation. Ask me questions
-                        about the transcript, key points, or any details you'd like to
-                        know more about.
+                        about the transcript, key points, or any details you&apos;d like
+                        to know more about.
                       </p>
                     </div>
                   </div>
