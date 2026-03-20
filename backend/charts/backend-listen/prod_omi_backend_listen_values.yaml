@@ -313,7 +313,7 @@ env:
     value: "active"
   # Fair-use system (PR #5748)
   - name: FAIR_USE_ENABLED
-    value: "false"
+    value: "true"
   - name: FAIR_USE_KILL_SWITCH
     value: "false"
   - name: FAIR_USE_DAILY_SPEECH_MS
