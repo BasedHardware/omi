@@ -92,6 +92,7 @@ from utils.fair_use import (
     FAIR_USE_CHECK_INTERVAL_SECONDS,
     FAIR_USE_RESTRICT_DAILY_DG_MS,
     record_speech_ms,
+    get_rolling_speech_ms,
     check_soft_caps,
     trigger_classifier_if_needed,
     get_enforcement_stage,
@@ -407,12 +408,15 @@ async def _stream_handler(
     if FAIR_USE_ENABLED and FAIR_USE_RESTRICT_DAILY_DG_MS > 0:
         try:
             _init_stage = get_enforcement_stage(uid)
+            logger.info(f'fair_use: session start uid={uid} session={session_id} stage={_init_stage}')
             if _init_stage == 'restrict':
                 fair_use_dg_budget_exhausted = is_dg_budget_exhausted(uid)
                 if fair_use_dg_budget_exhausted:
                     logger.info(f'fair_use: DG budget already exhausted at session start for {uid}')
         except Exception as e:
             logger.error(f'fair_use: session-start budget check error for {uid}: {e}')
+    elif FAIR_USE_ENABLED:
+        logger.info(f'fair_use: session start uid={uid} session={session_id} (no DG budget cap configured)')
 
     async def _record_usage_periodically():
         nonlocal websocket_active, last_usage_record_timestamp, words_transcribed_since_last_record
@@ -439,6 +443,7 @@ async def _stream_handler(
                 # Record to Redis for rolling window tracking
                 if FAIR_USE_ENABLED and speech_ms > 0:
                     record_speech_ms(uid, speech_ms)
+                    logger.debug(f'fair_use: recorded {speech_ms}ms speech uid={uid} session={session_id}')
 
             if last_usage_record_timestamp:
                 current_time = time.time()
@@ -462,12 +467,20 @@ async def _stream_handler(
             if FAIR_USE_ENABLED and now_ts - fair_use_last_check_ts >= FAIR_USE_CHECK_INTERVAL_SECONDS:
                 fair_use_last_check_ts = now_ts
                 try:
-                    triggered_caps = check_soft_caps(uid)
+                    speech_totals = get_rolling_speech_ms(uid)
+                    triggered_caps = check_soft_caps(uid, speech_totals=speech_totals)
                     if triggered_caps:
                         logger.info(
                             f'fair_use: soft cap triggered for {uid} session={session_id} caps={triggered_caps}'
                         )
                         asyncio.create_task(trigger_classifier_if_needed(uid, triggered_caps, session_id))
+                    else:
+                        logger.info(
+                            f'fair_use: cap check ok uid={uid} session={session_id}'
+                            f' daily={speech_totals["daily_ms"]}ms'
+                            f' 3day={speech_totals["three_day_ms"]}ms'
+                            f' weekly={speech_totals["weekly_ms"]}ms'
+                        )
                 except Exception as e:
                     logger.error(f'fair_use: cap check error for {uid}: {e}')
 
@@ -2646,6 +2659,7 @@ async def _stream_handler(
                 speech_seconds_delta = speech_ms // 1000
                 if FAIR_USE_ENABLED and speech_ms > 0:
                     record_speech_ms(uid, speech_ms)
+                    logger.debug(f'fair_use: session end flush {speech_ms}ms speech uid={uid} session={session_id}')
 
             if transcription_seconds > 0 or words_to_record > 0 or speech_seconds_delta > 0:
                 record_usage(
