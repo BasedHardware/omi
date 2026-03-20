@@ -91,7 +91,7 @@ android {
     defaultConfig {
         // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
         applicationId "com.friend.ios"
-        minSdkVersion 24
+        minSdkVersion 25
         targetSdkVersion 35
         versionCode flutterVersionCode.toInteger()
         versionName flutterVersionName
@@ -155,5 +155,5 @@ dependencies {
     implementation 'com.squareup.okhttp3:okhttp:4.12.0'
     implementation 'androidx.constraintlayout:constraintlayout:2.0.0-alpha3'
     implementation 'io.intercom.android:intercom-sdk:latest.release'
-    implementation 'com.twilio:voice-android:5.7.2'
+    implementation 'com.twilio:voice-android:6.10.2'
 }
