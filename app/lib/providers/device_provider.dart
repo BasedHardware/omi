@@ -202,9 +202,8 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     // Throttle notifyListeners to reduce battery drain from excessive UI rebuilds
     // Only notify when: first reading, >=5% change, 15min elapsed, or crosses 20% threshold
     final delta = (_lastNotifiedBatteryLevel - value).abs();
-    final elapsed = _lastBatteryNotifyTime == null
-        ? const Duration(minutes: 999)
-        : currentTime.difference(_lastBatteryNotifyTime!);
+    final elapsed =
+        _lastBatteryNotifyTime == null ? const Duration(minutes: 999) : currentTime.difference(_lastBatteryNotifyTime!);
     final crossedLowBatteryThreshold =
         (value < 20 && _lastNotifiedBatteryLevel >= 20) || (value >= 20 && _lastNotifiedBatteryLevel < 20);
     final shouldNotify =
@@ -234,14 +233,15 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
       // Already connected — nothing to do
       if (isConnected || connectedDevice != null) return;
 
-      // Known device — use native chipset-level reconnection (no scanning, no polling)
+      // Known device — use ensureConnection which creates the NativeBleTransport first,
+      // then connects natively. If native is already connected, it just re-notifies Dart.
       if (pairedDeviceId.isNotEmpty) {
-        Logger.debug('periodicConnect (native): requesting chipset-level reconnect for $pairedDeviceId');
+        Logger.debug('periodicConnect (native): ensureConnection for $pairedDeviceId');
         try {
-          BleHostApi().reconnectKnownPeripheral(pairedDeviceId);
+          await ServiceManager.instance().device.ensureConnection(pairedDeviceId, force: false);
           return;
         } catch (e) {
-          Logger.debug('periodicConnect (native): reconnect failed: $e, falling back to scan');
+          Logger.debug('periodicConnect (native): ensureConnection failed: $e, falling back to scan');
         }
       }
 
