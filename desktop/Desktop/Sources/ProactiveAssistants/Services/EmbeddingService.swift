@@ -16,9 +16,18 @@ actor EmbeddingService {
   /// Cap in-memory embeddings to limit memory (~12KB each, 5000 = ~60MB max)
   private let maxIndexSize = 5000
 
-  /// Prefer APIKeyService (backend-fetched, includes dev overrides) over raw getenv().
-  private var geminiApiKey: String? {
-    APIKeyService.currentGeminiKey
+  /// Backend proxy base URL (from OMI_API_URL env var)
+  private static var proxyBaseURL: String {
+    if let cString = getenv("OMI_API_URL"), let url = String(validatingUTF8: cString), !url.isEmpty {
+      return url.hasSuffix("/") ? url : url + "/"
+    }
+    return ""
+  }
+
+  /// Get Firebase auth header for proxy requests
+  private func authHeader() async throws -> String {
+    let authService = await MainActor.run { AuthService.shared }
+    return try await authService.getAuthHeader()
   }
 
   private init() {}
@@ -30,7 +39,7 @@ actor EmbeddingService {
   ///   - text: Text to embed
   ///   - taskType: Optional Gemini task type (e.g. "RETRIEVAL_DOCUMENT", "RETRIEVAL_QUERY")
   func embed(text: String, taskType: String? = nil) async throws -> [Float] {
-    guard let apiKey = geminiApiKey else {
+    guard !Self.proxyBaseURL.isEmpty else {
       throw EmbeddingError.missingAPIKey
     }
 
@@ -46,12 +55,12 @@ actor EmbeddingService {
     }
 
     let url = URL(
-      string:
-        "https://generativelanguage.googleapis.com/v1beta/models/\(modelName):embedContent?key=\(apiKey)"
+      string: "\(Self.proxyBaseURL)v1/proxy/gemini/models/\(modelName):embedContent"
     )!
     var request = URLRequest(url: url)
     request.httpMethod = "POST"
     request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+    request.setValue(try await authHeader(), forHTTPHeaderField: "Authorization")
     request.timeoutInterval = 30
     request.httpBody = try JSONSerialization.data(withJSONObject: requestBody)
 
@@ -73,7 +82,7 @@ actor EmbeddingService {
   ///   - texts: Texts to embed
   ///   - taskType: Optional Gemini task type (e.g. "RETRIEVAL_DOCUMENT", "RETRIEVAL_QUERY")
   func embedBatch(texts: [String], taskType: String? = nil) async throws -> [[Float]] {
-    guard let apiKey = geminiApiKey else {
+    guard !Self.proxyBaseURL.isEmpty else {
       throw EmbeddingError.missingAPIKey
     }
 
@@ -94,12 +103,12 @@ actor EmbeddingService {
     let requestBody: [String: Any] = ["requests": requests]
 
     let url = URL(
-      string:
-        "https://generativelanguage.googleapis.com/v1beta/models/\(modelName):batchEmbedContents?key=\(apiKey)"
+      string: "\(Self.proxyBaseURL)v1/proxy/gemini/models/\(modelName):batchEmbedContents"
     )!
     var request = URLRequest(url: url)
     request.httpMethod = "POST"
     request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+    request.setValue(try await authHeader(), forHTTPHeaderField: "Authorization")
     request.timeoutInterval = 60
     request.httpBody = try JSONSerialization.data(withJSONObject: requestBody)
 
