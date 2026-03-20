@@ -103,7 +103,7 @@ class OmiCompanionManager(
 
         @Suppress("deprecation")
         val scanResult = data?.getParcelableExtra<android.bluetooth.le.ScanResult>(
-            "android.companion.extra.DEVICE"
+            CompanionDeviceManager.EXTRA_DEVICE
         ) ?: return null
 
         val address = scanResult.device.address
