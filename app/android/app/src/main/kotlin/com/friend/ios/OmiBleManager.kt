@@ -326,6 +326,9 @@ class OmiBleManager private constructor(private val application: Application) {
                 Log.e(TAG, "writeCharacteristic returned $result for $key")
                 writeCompletions.remove(key)?.invoke(Result.failure(Exception("Write request rejected: $result")))
                 completeCommand()
+            } else if (writeType == BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE) {
+                // No onCharacteristicWrite callback for no-response writes
+                completeCommand()
             }
         }
 
