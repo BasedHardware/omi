@@ -3,9 +3,9 @@ import Foundation
 /// Fetches API keys from the backend at runtime instead of bundling them in the app.
 /// Developer overrides (set in Settings) take precedence over backend-provided keys.
 ///
-/// NOTE: The current desktop app is slopped on security — API keys were hardcoded in
-/// Swift source and env files. This service moves secrets server-side via /v1/config/api-keys.
-/// Will remove the env-var bridge once all client-side key slop is cleaned up. — CTO
+/// NOTE: Deepgram and Gemini keys are NO LONGER fetched from the backend —
+/// they are proxied server-side (issue #5861). Only Anthropic, Firebase, and
+/// Calendar keys are still served via /v1/config/api-keys.
 @MainActor
 final class APIKeyService: ObservableObject {
     static let shared = APIKeyService()
