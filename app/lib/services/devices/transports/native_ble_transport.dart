@@ -31,7 +31,6 @@ class NativeBleTransport extends DeviceTransport {
       onConnectionState: _handleConnectionState,
       onServicesDiscovered: _handleServicesDiscovered,
       onCharacteristicValue: _handleCharacteristicValue,
-      onAudioBatch: _handleAudioBatch,
     );
   }
 
@@ -48,7 +47,6 @@ class NativeBleTransport extends DeviceTransport {
     if (_state == DeviceTransportState.connected) return;
 
     _updateState(DeviceTransportState.connecting);
-    print('[NativeBleTransport] connecting to $_peripheralUuid');
 
     try {
       _connectCompleter = Completer<void>();
@@ -57,11 +55,8 @@ class NativeBleTransport extends DeviceTransport {
       _servicesCompleter = Completer<List<BleService>>();
       _hostApi.connectPeripheral(_peripheralUuid);
 
-      // Wait for onPeripheralConnected callback
-      print('[NativeBleTransport] waiting for onPeripheralConnected...');
       await _connectCompleter!.future.timeout(const Duration(seconds: 30));
       _connectCompleter = null;
-      print('[NativeBleTransport] peripheral connected, discovering services...');
 
       // If services already arrived (from already-connected path), use them
       if (_servicesCompleter!.isCompleted || _services.isNotEmpty) {
@@ -73,13 +68,11 @@ class NativeBleTransport extends DeviceTransport {
 
       _services = await _servicesCompleter!.future.timeout(const Duration(seconds: 15));
       _servicesCompleter = null;
-      print('[NativeBleTransport] services discovered (${_services.length} services)');
 
       // Audio batching disabled — backend expects one Opus frame per WebSocket message.
       // Batching would require backend changes to handle concatenated frames.
 
       _updateState(DeviceTransportState.connected);
-      print('[NativeBleTransport] fully connected');
     } catch (e) {
       print('[NativeBleTransport] connect failed: $e');
       _connectCompleter = null;
@@ -138,7 +131,6 @@ class NativeBleTransport extends DeviceTransport {
   @override
   Stream<List<int>> getCharacteristicStream(String serviceUuid, String characteristicUuid) {
     final key = '${serviceUuid.toLowerCase()}:${characteristicUuid.toLowerCase()}';
-    print('[NativeBleTransport] getCharacteristicStream $serviceUuid:$characteristicUuid (key=$key)');
 
     if (!_streamControllers.containsKey(key)) {
       _streamControllers[key] = StreamController<List<int>>.broadcast();
@@ -150,7 +142,6 @@ class NativeBleTransport extends DeviceTransport {
 
   void _subscribeCharacteristic(String serviceUuid, String characteristicUuid) {
     try {
-      print('[NativeBleTransport] subscribing to $serviceUuid:$characteristicUuid');
       _hostApi.subscribeCharacteristic(_peripheralUuid, serviceUuid, characteristicUuid);
     } catch (e) {
       print('[NativeBleTransport] Failed to subscribe $serviceUuid:$characteristicUuid: $e');
@@ -160,9 +151,7 @@ class NativeBleTransport extends DeviceTransport {
   @override
   Future<List<int>> readCharacteristic(String serviceUuid, String characteristicUuid) async {
     try {
-      print('[NativeBleTransport] reading $serviceUuid:$characteristicUuid');
       final data = await _hostApi.readCharacteristic(_peripheralUuid, serviceUuid, characteristicUuid);
-      print('[NativeBleTransport] read ${data.length} bytes');
       return data.toList();
     } catch (e) {
       print('[NativeBleTransport] Failed to read $serviceUuid:$characteristicUuid: $e');
@@ -225,7 +214,6 @@ class NativeBleTransport extends DeviceTransport {
         _connectCompleter!.complete();
       } else {
         // Auto-reconnect from native — re-discover services and re-subscribe
-        print('[NativeBleTransport] Auto-reconnected, re-discovering services...');
         _resubscribeAfterReconnect();
       }
     } else {
@@ -271,7 +259,6 @@ class NativeBleTransport extends DeviceTransport {
       }
 
       _updateState(DeviceTransportState.connected);
-      print('[NativeBleTransport] Re-subscribed to ${_activeSubscriptionKeys.length} characteristics after reconnect');
     } catch (e) {
       print('[NativeBleTransport] Failed to re-subscribe after reconnect: $e');
       _servicesCompleter = null;
@@ -282,8 +269,6 @@ class NativeBleTransport extends DeviceTransport {
   }
 
   void _handleServicesDiscovered(List<BleService> services) {
-    print(
-        '[NativeBleTransport] _handleServicesDiscovered: ${services.length} services, completer=${_servicesCompleter != null}, completed=${_servicesCompleter?.isCompleted}');
     _services = services;
     if (_servicesCompleter != null && !_servicesCompleter!.isCompleted) {
       _servicesCompleter!.complete(services);
@@ -292,16 +277,5 @@ class NativeBleTransport extends DeviceTransport {
 
   void _handleCharacteristicValue(String serviceUuid, String characteristicUuid, Uint8List value) {
     _addToStream(serviceUuid, characteristicUuid, value);
-  }
-
-  bool _loggedFirstAudioBatch = false;
-
-  void _handleAudioBatch(String serviceUuid, String characteristicUuid, Uint8List batchedData, int notificationCount) {
-    if (!_loggedFirstAudioBatch) {
-      print(
-          '[NativeBleTransport] First audio batch: ${batchedData.length} bytes, $notificationCount notifications, service=$serviceUuid, char=$characteristicUuid');
-      _loggedFirstAudioBatch = true;
-    }
-    _addToStream(serviceUuid, characteristicUuid, batchedData);
   }
 }

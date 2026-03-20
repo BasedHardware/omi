@@ -798,7 +798,7 @@ abstract class WatchRecorderFlutterAPI {
   }
 }
 
-/// Dart → Swift: commands sent from Flutter to the native BLE module.
+/// Dart → Native: commands sent from Flutter to the native BLE module.
 class BleHostApi {
   /// Constructor for [BleHostApi].  The [binaryMessenger] named argument is
   /// available for dependency injection.  If it is left null, the default
@@ -904,8 +904,8 @@ class BleHostApi {
     }
   }
 
-  /// Reconnect a previously-paired peripheral using retrievePeripherals(withIdentifiers:).
-  /// No active scanning — iOS handles reconnection at the chipset level.
+  /// Reconnect a previously-paired peripheral. No active scanning — the platform
+  /// handles reconnection at the chipset level (iOS: retrievePeripherals, Android: autoConnect).
   Future<void> reconnectKnownPeripheral(String uuid) async {
     final String pigeonVar_channelName = 'dev.flutter.pigeon.omi_pigeon.BleHostApi.reconnectKnownPeripheral$pigeonVar_messageChannelSuffix';
     final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
@@ -1105,56 +1105,6 @@ class BleHostApi {
     }
   }
 
-  /// Enable or disable audio batching. When enabled, audio characteristic
-  /// notifications are coalesced every ~60ms into a single bridge call.
-  Future<void> setAudioBatchingEnabled(bool enabled) async {
-    final String pigeonVar_channelName = 'dev.flutter.pigeon.omi_pigeon.BleHostApi.setAudioBatchingEnabled$pigeonVar_messageChannelSuffix';
-    final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
-      pigeonVar_channelName,
-      pigeonChannelCodec,
-      binaryMessenger: pigeonVar_binaryMessenger,
-    );
-    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[enabled]);
-    final List<Object?>? pigeonVar_replyList =
-        await pigeonVar_sendFuture as List<Object?>?;
-    if (pigeonVar_replyList == null) {
-      throw _createConnectionError(pigeonVar_channelName);
-    } else if (pigeonVar_replyList.length > 1) {
-      throw PlatformException(
-        code: pigeonVar_replyList[0]! as String,
-        message: pigeonVar_replyList[1] as String?,
-        details: pigeonVar_replyList[2],
-      );
-    } else {
-      return;
-    }
-  }
-
-  /// Register a characteristic UUID as an audio stream. Notifications for this
-  /// characteristic will be batched when audio batching is enabled.
-  Future<void> registerAudioCharacteristic(String characteristicUuid) async {
-    final String pigeonVar_channelName = 'dev.flutter.pigeon.omi_pigeon.BleHostApi.registerAudioCharacteristic$pigeonVar_messageChannelSuffix';
-    final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
-      pigeonVar_channelName,
-      pigeonChannelCodec,
-      binaryMessenger: pigeonVar_binaryMessenger,
-    );
-    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[characteristicUuid]);
-    final List<Object?>? pigeonVar_replyList =
-        await pigeonVar_sendFuture as List<Object?>?;
-    if (pigeonVar_replyList == null) {
-      throw _createConnectionError(pigeonVar_channelName);
-    } else if (pigeonVar_replyList.length > 1) {
-      throw PlatformException(
-        code: pigeonVar_replyList[0]! as String,
-        message: pigeonVar_replyList[1] as String?,
-        details: pigeonVar_replyList[2],
-      );
-    } else {
-      return;
-    }
-  }
-
   /// (Android only) Initiate CompanionDeviceManager association for a device.
   /// Shows the system chooser dialog filtered to this device's address.
   /// Returns the associated device address on success, empty string on failure/cancel.
@@ -1188,7 +1138,7 @@ class BleHostApi {
   }
 }
 
-/// Swift → Dart: events pushed from the native BLE module to Flutter.
+/// Native → Dart: events pushed from the native BLE module to Flutter.
 abstract class BleFlutterApi {
   static const MessageCodec<Object?> pigeonChannelCodec = _PigeonCodec();
 
@@ -1204,10 +1154,6 @@ abstract class BleFlutterApi {
 
   /// Individual characteristic value update (non-audio characteristics).
   void onCharacteristicValueUpdated(String peripheralUuid, String serviceUuid, String characteristicUuid, Uint8List value);
-
-  /// Batched audio data — multiple BLE notifications coalesced into one bridge call.
-  /// [batchedData] is the concatenated raw bytes from [notificationCount] notifications.
-  void onAudioBatchReceived(String peripheralUuid, String serviceUuid, String characteristicUuid, Uint8List batchedData, int notificationCount);
 
   /// Called after app relaunch when iOS restores previously-connected peripherals.
   void onStateRestored(List<String> peripheralUuids);
@@ -1368,43 +1314,6 @@ abstract class BleFlutterApi {
               'Argument for dev.flutter.pigeon.omi_pigeon.BleFlutterApi.onCharacteristicValueUpdated was null, expected non-null Uint8List.');
           try {
             api.onCharacteristicValueUpdated(arg_peripheralUuid!, arg_serviceUuid!, arg_characteristicUuid!, arg_value!);
-            return wrapResponse(empty: true);
-          } on PlatformException catch (e) {
-            return wrapResponse(error: e);
-          }          catch (e) {
-            return wrapResponse(error: PlatformException(code: 'error', message: e.toString()));
-          }
-        });
-      }
-    }
-    {
-      final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
-          'dev.flutter.pigeon.omi_pigeon.BleFlutterApi.onAudioBatchReceived$messageChannelSuffix', pigeonChannelCodec,
-          binaryMessenger: binaryMessenger);
-      if (api == null) {
-        pigeonVar_channel.setMessageHandler(null);
-      } else {
-        pigeonVar_channel.setMessageHandler((Object? message) async {
-          assert(message != null,
-          'Argument for dev.flutter.pigeon.omi_pigeon.BleFlutterApi.onAudioBatchReceived was null.');
-          final List<Object?> args = (message as List<Object?>?)!;
-          final String? arg_peripheralUuid = (args[0] as String?);
-          assert(arg_peripheralUuid != null,
-              'Argument for dev.flutter.pigeon.omi_pigeon.BleFlutterApi.onAudioBatchReceived was null, expected non-null String.');
-          final String? arg_serviceUuid = (args[1] as String?);
-          assert(arg_serviceUuid != null,
-              'Argument for dev.flutter.pigeon.omi_pigeon.BleFlutterApi.onAudioBatchReceived was null, expected non-null String.');
-          final String? arg_characteristicUuid = (args[2] as String?);
-          assert(arg_characteristicUuid != null,
-              'Argument for dev.flutter.pigeon.omi_pigeon.BleFlutterApi.onAudioBatchReceived was null, expected non-null String.');
-          final Uint8List? arg_batchedData = (args[3] as Uint8List?);
-          assert(arg_batchedData != null,
-              'Argument for dev.flutter.pigeon.omi_pigeon.BleFlutterApi.onAudioBatchReceived was null, expected non-null Uint8List.');
-          final int? arg_notificationCount = (args[4] as int?);
-          assert(arg_notificationCount != null,
-              'Argument for dev.flutter.pigeon.omi_pigeon.BleFlutterApi.onAudioBatchReceived was null, expected non-null int.');
-          try {
-            api.onAudioBatchReceived(arg_peripheralUuid!, arg_serviceUuid!, arg_characteristicUuid!, arg_batchedData!, arg_notificationCount!);
             return wrapResponse(empty: true);
           } on PlatformException catch (e) {
             return wrapResponse(error: e);

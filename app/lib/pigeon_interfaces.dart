@@ -135,16 +135,6 @@ abstract class BleHostApi {
   @SwiftFunction('isPeripheralConnected(uuid:)')
   bool isPeripheralConnected(String uuid);
 
-  /// Enable or disable audio batching. When enabled, audio characteristic
-  /// notifications are coalesced every ~60ms into a single bridge call.
-  @SwiftFunction('setAudioBatchingEnabled(enabled:)')
-  void setAudioBatchingEnabled(bool enabled);
-
-  /// Register a characteristic UUID as an audio stream. Notifications for this
-  /// characteristic will be batched when audio batching is enabled.
-  @SwiftFunction('registerAudioCharacteristic(characteristicUuid:)')
-  void registerAudioCharacteristic(String characteristicUuid);
-
   /// (Android only) Initiate CompanionDeviceManager association for a device.
   /// Shows the system chooser dialog filtered to this device's address.
   /// Returns the associated device address on success, empty string on failure/cancel.
@@ -173,16 +163,6 @@ abstract class BleFlutterApi {
     String serviceUuid,
     String characteristicUuid,
     Uint8List value,
-  );
-
-  /// Batched audio data — multiple BLE notifications coalesced into one bridge call.
-  /// [batchedData] is the concatenated raw bytes from [notificationCount] notifications.
-  void onAudioBatchReceived(
-    String peripheralUuid,
-    String serviceUuid,
-    String characteristicUuid,
-    Uint8List batchedData,
-    int notificationCount,
   );
 
   /// Called after app relaunch when iOS restores previously-connected peripherals.
