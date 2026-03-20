@@ -433,6 +433,12 @@ async def _stream_handler(
             if not websocket_active:
                 break
 
+            # Flush batched DG usage to Redis (#5854 — was per-chunk, now every 60s)
+            # Placed before use_custom_stt guard so all STT paths get flushed
+            if FAIR_USE_ENABLED and FAIR_USE_RESTRICT_DAILY_DG_MS > 0 and dg_usage_ms_pending > 0:
+                record_dg_usage_ms(uid, dg_usage_ms_pending)
+                dg_usage_ms_pending = 0
+
             if use_custom_stt:
                 continue
 
@@ -447,11 +453,6 @@ async def _stream_handler(
                 if FAIR_USE_ENABLED and speech_ms > 0:
                     record_speech_ms(uid, speech_ms)
                     logger.debug(f'fair_use: recorded {speech_ms}ms speech uid={uid} session={session_id}')
-
-            # Flush batched DG usage to Redis (#5854 — was per-chunk, now every 60s)
-            if FAIR_USE_ENABLED and FAIR_USE_RESTRICT_DAILY_DG_MS > 0 and dg_usage_ms_pending > 0:
-                record_dg_usage_ms(uid, dg_usage_ms_pending)
-                dg_usage_ms_pending = 0
 
             if last_usage_record_timestamp:
                 current_time = time.time()
@@ -2279,7 +2280,7 @@ async def _stream_handler(
     async def receive_data(dg_socket, dg_profile_socket, soniox_sock, soniox_profile_sock, speechmatics_sock):
         nonlocal websocket_active, websocket_close_code, last_audio_received_time, last_activity_time, current_conversation_id
         nonlocal realtime_photo_buffers, speaker_to_person_map, first_audio_byte_timestamp, last_usage_record_timestamp
-        nonlocal soniox_profile_socket, deepgram_profile_socket, audio_ring_buffer
+        nonlocal soniox_profile_socket, deepgram_profile_socket, audio_ring_buffer, dg_usage_ms_pending
         timer_start = time.time()
         last_audio_received_time = timer_start
         last_activity_time = timer_start
