@@ -53,8 +53,8 @@ Already documented below. Use for connected SwiftUI/AppKit apps.
 
 ## Setup
 
-### Install Pre-commit Hook
-Run once to enable auto-formatting on commit:
+### Install Pre-commit Hook (required)
+Run before your first commit — formatting is enforced by CI:
 ```bash
 ln -s -f ../../scripts/pre-commit .git/hooks/pre-commit
 ```

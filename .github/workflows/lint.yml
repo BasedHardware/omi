@@ -6,11 +6,21 @@ on:
     paths:
       - 'web/frontend/**'
       - 'web/personas-open-source/**'
+      - 'app/**.dart'
+      - 'app/lib/l10n/**'
+      - 'backend/**.py'
+      - 'omi/**'
+      - 'omiGlass/**'
   pull_request:
     branches: main
     paths:
       - 'web/frontend/**'
       - 'web/personas-open-source/**'
+      - 'app/**.dart'
+      - 'app/lib/l10n/**'
+      - 'backend/**.py'
+      - 'omi/**'
+      - 'omiGlass/**'
 
 jobs:
   lint-frontend:
@@ -19,7 +29,7 @@ jobs:
     defaults:
       run:
         working-directory: ./web/frontend
-    
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -40,13 +50,117 @@ jobs:
       - name: Check Prettier formatting
         run: npm run lint:format -- --check
 
+  format-dart:
+    name: Check Dart Formatting
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+
+      - name: Check Dart formatting (changed files only)
+        run: |
+          FILES=$(git diff --name-only --diff-filter=ACM origin/main...HEAD -- 'app/**.dart' | grep -v -e '\.gen\.dart$' -e '\.g\.dart$' || true)
+          if [ -z "$FILES" ]; then
+            echo "No changed Dart files to check."
+            exit 0
+          fi
+          echo "$FILES" | xargs dart format --line-length 120 --set-exit-if-changed --output=none
+
+  format-python:
+    name: Check Python Formatting
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install black
+        run: pip install black
+
+      - name: Check Python formatting (changed files only)
+        run: |
+          FILES=$(git diff --name-only --diff-filter=ACM origin/main...HEAD -- 'backend/**.py' || true)
+          if [ -z "$FILES" ]; then
+            echo "No changed Python files to check."
+            exit 0
+          fi
+          echo "$FILES" | xargs black --check --line-length 120 --skip-string-normalization
+
+  format-arb:
+    name: Check ARB Formatting
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check ARB files are valid JSON with 4-space indent (changed files only)
+        run: |
+          FILES=$(git diff --name-only --diff-filter=ACM origin/main...HEAD -- 'app/lib/l10n/*.arb' || true)
+          if [ -z "$FILES" ]; then
+            echo "No changed ARB files to check."
+            exit 0
+          fi
+          failed=0
+          for f in $FILES; do
+            if ! python3 -m json.tool "$f" > /dev/null 2>&1; then
+              echo "FAIL: $f is not valid JSON"
+              failed=1
+              continue
+            fi
+            if ! python3 -c "
+          import json, sys
+          with open('$f') as fh:
+              original = fh.read()
+          formatted = json.dumps(json.loads(original), indent=4, ensure_ascii=False) + '\n'
+          if original != formatted:
+              sys.exit(1)
+          " 2>/dev/null; then
+              echo "FAIL: $f not formatted with 4-space indent"
+              failed=1
+            fi
+          done
+          if [ "$failed" -eq 1 ]; then
+            echo ""
+            echo "Fix: jq --indent 4 '.' <file> > tmp && mv tmp <file>"
+            exit 1
+          fi
+          echo "All changed ARB files formatted correctly."
+
+  format-firmware:
+    name: Check C/C++ Formatting
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check C/C++ formatting (changed files only)
+        run: |
+          FILES=$(git diff --name-only --diff-filter=ACM origin/main...HEAD | grep -E '\.(c|cpp|cc|cxx|h|hpp)$' | grep -E '^(omi/|omiGlass/)' || true)
+          if [ -z "$FILES" ]; then
+            echo "No changed C/C++ files to check."
+            exit 0
+          fi
+          echo "$FILES" | xargs clang-format --dry-run --Werror
+
   lint-personas:
     name: Lint Personas Open Source
     runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: ./web/personas-open-source
-    
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
