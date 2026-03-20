@@ -5,7 +5,7 @@
 version: 2
 name: memories
 description: Memories flow — navigate to Memories page, browse memory list, filter by tags (focus, tips, system, etc.), search memories, toggle visibility, open memory graph
-app: com.omi.desktop-dev
+app: com.omi.computer-macos
 evidence:
   video: true
 covers:
