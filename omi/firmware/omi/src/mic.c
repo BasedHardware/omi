@@ -1,3 +1,9 @@
+/*
+ * Copyright (c) 2023 Omi Inc.
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
 #include "lib/core/mic.h"
 
 #include <nrfx_pdm.h>

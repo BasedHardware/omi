@@ -472,7 +472,7 @@ static void exchange_func(struct bt_conn *conn, uint8_t att_err, struct bt_gatt_
 
 #ifdef CONFIG_OMI_ENABLE_BATTERY
 #define BATTERY_REFRESH_INTERVAL        10000 // 10 seconds
-#define BATTERY_RETRY_INTERVAL          5000  // 5 seconds - retry when BLE TX buffer unavailable
+#define BATTERY_RETRY_INTERVAL          1000  // 1 second - retry when BLE TX buffer unavailable
 #define BATTERY_RETRY_MAX               3     // Maximum retries before giving up for this cycle
 #define CONFIG_OMI_BATTERY_CRITICAL_MV  3500  // mV
 uint8_t battery_percentage = 0;
@@ -483,6 +483,7 @@ K_WORK_DELAYABLE_DEFINE(battery_work, broadcast_battery_level);
 
 void broadcast_battery_level(struct k_work *work_item)
 {
+    (void)work_item;
     uint16_t battery_millivolt;
 
     if (battery_get_millivolt(&battery_millivolt) == 0 &&
@@ -490,19 +491,23 @@ void broadcast_battery_level(struct k_work *work_item)
 
         LOG_PRINTK("Battery at %d mV (capacity %d%%)\n", battery_millivolt, battery_percentage);
 
-        // Use the Zephyr BAS function to set (and notify) the battery level
-        int err = bt_bas_set_battery_level(battery_percentage);
-        if (err) {
-            if (battery_retry_count < BATTERY_RETRY_MAX) {
-                battery_retry_count++;
-                LOG_WRN("Error updating battery level: %d, retrying in %d ms (attempt %d/%d)",
-                        err, BATTERY_RETRY_INTERVAL, battery_retry_count, BATTERY_RETRY_MAX);
-                k_work_reschedule(&battery_work, K_MSEC(BATTERY_RETRY_INTERVAL));
-                return;
+        if (is_connected && current_connection != NULL) {
+            // Use the Zephyr BAS function to set (and notify) the battery level
+            int err = bt_bas_set_battery_level(battery_percentage);
+            if (err) {
+                if (battery_retry_count < BATTERY_RETRY_MAX) {
+                    battery_retry_count++;
+                    LOG_WRN("Error updating battery level: %d, retrying in %d ms (attempt %d/%d)",
+                            err, BATTERY_RETRY_INTERVAL, battery_retry_count, BATTERY_RETRY_MAX);
+                    k_work_reschedule(&battery_work, K_MSEC(BATTERY_RETRY_INTERVAL));
+                    return;
+                }
+                LOG_ERR("Error updating battery level: %d (max retries reached)", err);
             }
-            LOG_ERR("Error updating battery level: %d (max retries reached)", err);
+            battery_retry_count = 0;
+        } else {
+            battery_retry_count = 0;
         }
-        battery_retry_count = 0;
         if (battery_millivolt < CONFIG_OMI_BATTERY_CRITICAL_MV) {
             LOG_WRN("Battery critical level reached (%d mV). Initiating shutdown.", battery_millivolt);
             turnoff_all();
@@ -642,7 +647,7 @@ static void _le_param_updated(struct bt_conn *conn, uint16_t interval, uint16_t 
             latency,
             supervision_timeout);
 
-    if (interval > 12) {
+    if (interval > 24) {
         LOG_WRN("Connection interval still high (%u units). Re-requesting preferred params.", interval);
         update_conn_params(conn);
     }
@@ -702,7 +707,7 @@ static void update_conn_params(struct bt_conn *conn)
     int err = 0;
     const struct bt_le_conn_param preferred_param = {
         .interval_min = 6,
-        .interval_max = 12,
+        .interval_max = 24,
         .latency = 0,
         .timeout = 400,
     };
@@ -861,6 +866,7 @@ static uint8_t tx_buffer[CODEC_OUTPUT_MAX_BYTES + RING_BUFFER_HEADER_SIZE];
 static uint8_t tx_buffer_2[CODEC_OUTPUT_MAX_BYTES + RING_BUFFER_HEADER_SIZE];
 static uint32_t tx_buffer_size = 0;
 static struct ring_buf ring_buf;
+K_SEM_DEFINE(tx_queue_sem, 0, NETWORK_RING_BUF_SIZE);
 
 static bool write_to_tx_queue(uint8_t *data, size_t size)
 {
@@ -886,6 +892,7 @@ static bool write_to_tx_queue(uint8_t *data, size_t size)
     if (written != CODEC_OUTPUT_MAX_BYTES + RING_BUFFER_HEADER_SIZE) {
         return false;
     } else {
+        k_sem_give(&tx_queue_sem);
         return true;
     }
 }
@@ -1084,41 +1091,41 @@ void pusher(void)
 {
     k_msleep(500);
     while (!atomic_get(&pusher_stop_flag)) {
-        // Check if there is a new buffer
-        if (!read_from_tx_queue()) {
-            k_sleep(K_MSEC(10));
-            continue;
+        k_sem_take(&tx_queue_sem, K_FOREVER);
+        if (atomic_get(&pusher_stop_flag)) {
+            break;
         }
 
-        struct bt_conn *conn = current_connection;
-        bool is_subscribed = false;
-        if (conn) {
-            conn = bt_conn_ref(conn);
-            if (current_mtu >= MINIMAL_PACKET_SIZE) {
-                is_subscribed = bt_gatt_is_subscribed(conn, &audio_service.attrs[1], BT_GATT_CCC_NOTIFY);
-            }
-        }
-
-        if (conn && is_subscribed) {
-            push_to_gatt(conn);
-            bt_conn_unref(conn);
-        } else if (!conn) {
-#ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
-            if (get_file_size() < MAX_STORAGE_BYTES && is_sd_on()) {
-                storage_full_warned = false;
-                write_to_storage();
-            } else {
-                if (!storage_full_warned) {
-                    LOG_WRN("Storage full, stopping offline storage");
-                    storage_full_warned = true;
+        while (read_from_tx_queue()) {
+            struct bt_conn *conn = current_connection;
+            bool is_subscribed = false;
+            if (conn) {
+                conn = bt_conn_ref(conn);
+                if (current_mtu >= MINIMAL_PACKET_SIZE) {
+                    is_subscribed = bt_gatt_is_subscribed(conn, &audio_service.attrs[1], BT_GATT_CCC_NOTIFY);
                 }
             }
+
+            if (conn && is_subscribed) {
+                push_to_gatt(conn);
+                bt_conn_unref(conn);
+            } else if (!conn) {
+#ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
+                if (get_file_size() < MAX_STORAGE_BYTES && is_sd_on()) {
+                    storage_full_warned = false;
+                    write_to_storage();
+                } else {
+                    if (!storage_full_warned) {
+                        LOG_WRN("Storage full, stopping offline storage");
+                        storage_full_warned = true;
+                    }
+                }
 #endif
-        } else {
-            bt_conn_unref(conn);
-            k_sleep(K_MSEC(10));
+            } else {
+                bt_conn_unref(conn);
+                k_sleep(K_MSEC(10));
+            }
         }
-        k_yield();
     }
 }
 
@@ -1126,6 +1133,7 @@ int transport_off()
 {
     // Stop pusher thread when transport is turned off
     atomic_set(&pusher_stop_flag, 1);
+    k_sem_give(&tx_queue_sem);
     int ret = k_thread_join(&pusher_thread, K_MSEC(500));
     if (ret != 0) {
         LOG_WRN("Pusher thread did not terminate in time (err %d)", ret);
@@ -1253,7 +1261,12 @@ int transport_start()
     memset(storage_temp_data, 0, OPUS_PADDED_LENGTH * 4);
     bt_gatt_service_register(&storage_service);
 #endif
-    err = bt_le_adv_start(BT_LE_ADV_CONN, bt_ad, ARRAY_SIZE(bt_ad), bt_sd, ARRAY_SIZE(bt_sd));
+    const struct bt_le_adv_param *low_power_adv = BT_LE_ADV_PARAM(
+        BT_LE_ADV_OPT_CONNECTABLE,
+        BT_GAP_ADV_SLOW_INT_MIN,
+        BT_GAP_ADV_SLOW_INT_MAX,
+        NULL);
+    err = bt_le_adv_start(low_power_adv, bt_ad, ARRAY_SIZE(bt_ad), bt_sd, ARRAY_SIZE(bt_sd));
     if (err) {
         LOG_ERR("Transport advertising failed to start (err %d)", err);
         return err;

@@ -135,6 +135,9 @@ static struct bt_gatt_attr storage_service_attr[] = {
 
 struct bt_gatt_service storage_service = BT_GATT_SERVICE(storage_service_attr);
 
+#define STORAGE_IDLE_POLL_MS_OFFLINE 500
+#define STORAGE_IDLE_POLL_MS_CONNECTED 1
+
 #define STORAGE_WRITE_NOTIFY_ATTR_IDX 2
 
 bool storage_is_on = false;
@@ -1211,7 +1214,10 @@ void storage_write(void)
                     }
                 }
             } else {
-                k_msleep(10);
+                uint32_t idle_sleep_ms = get_current_connection()
+                    ? STORAGE_IDLE_POLL_MS_CONNECTED
+                    : STORAGE_IDLE_POLL_MS_OFFLINE;
+                k_msleep(idle_sleep_ms);
             }
         } else {
             k_yield();

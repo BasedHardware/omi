@@ -29,8 +29,8 @@ LOG_MODULE_REGISTER(sd_card, CONFIG_LOG_DEFAULT_LEVEL);
 
 #define DISK_DRIVE_NAME     CONFIG_SDMMC_VOLUME_NAME
 #define SD_REQ_QUEUE_MSGS   100
-#define SD_FSYNC_THRESHOLD  20000
-#define WRITE_BATCH_COUNT   10
+#define SD_FSYNC_INTERVAL_MS          (5 * 60 * 1000)
+#define WRITE_BATCH_COUNT   100
 #define ERROR_THRESHOLD     5
 
 /* LittleFS paths are relative to FS root (no mount-point prefix) */
@@ -194,6 +194,7 @@ static bool     is_mounted  = false;
 static bool     sd_enabled  = false;
 static uint32_t current_file_size  = 0;
 static size_t   bytes_since_sync   = 0;
+static int64_t  last_file_sync_uptime_ms = 0;
 
 /* Current writing file info */
 static char    current_filename[MAX_FILENAME_LEN] = {0};
@@ -510,6 +511,7 @@ static int try_continue_latest_file(void)
     bytes_since_sync              = 0;
     write_batch_offset            = 0;
     write_batch_counter           = 0;
+    last_file_sync_uptime_ms      = k_uptime_get();
     current_file_created_uptime_ms = k_uptime_get();
     current_file_needs_rename     = false;
 
@@ -572,6 +574,7 @@ static int create_audio_file_with_timestamp(void)
     write_batch_counter           = 0;
     writing_error_counter         = 0;
     sd_write_blocked              = false;
+    last_file_sync_uptime_ms      = k_uptime_get();
     current_file_created_uptime_ms = k_uptime_get();
 
     LOG_INF("Audio file created: %s", current_filename);
@@ -655,6 +658,8 @@ void sd_update_filename_after_timesync(uint32_t synced_utc_time)
     if (write_batch_offset > 0) flush_batch_buffer();
     lfs_file_sync(&lfs_fs, &lfs_fil_data);
     data_sync_gen++;
+    bytes_since_sync = 0;
+    last_file_sync_uptime_ms = k_uptime_get();
     lfs_file_close(&lfs_fs, &lfs_fil_data);
 
     char new_path[64];
@@ -838,8 +843,10 @@ void sd_worker_thread(void)
             goto handle_req;
         }
 
-        /* Regular write queue with short timeout so we re-check prio */
-        if (k_msgq_get(&sd_msgq, &req, K_MSEC(10)) != 0) continue;
+        /* Regular write queue timeout: short when BLE connected (keep read/sync responsive),
+         * long when offline (save power). */
+        k_timeout_t write_wait = ble_connected ? K_MSEC(50) : K_MSEC(500);
+        if (k_msgq_get(&sd_msgq, &req, write_wait) != 0) continue;
 
 handle_req:
         switch (req.type) {
@@ -869,10 +876,15 @@ handle_req:
                 flush_batch_buffer();
             }
 
-            if (bytes_since_sync >= SD_FSYNC_THRESHOLD) {
+            bool sync_due_to_interval =
+                (bytes_since_sync > 0) &&
+                ((k_uptime_get() - last_file_sync_uptime_ms) >= SD_FSYNC_INTERVAL_MS);
+
+            if (sync_due_to_interval) {
                 lfs_file_sync(&lfs_fs, &lfs_fil_data);
                 data_sync_gen++;
                 bytes_since_sync = 0;
+                last_file_sync_uptime_ms = k_uptime_get();
             }
             break;
 
@@ -939,6 +951,7 @@ handle_req:
                     lfs_file_sync(&lfs_fs, &lfs_fil_data);
                     data_sync_gen++;
                     bytes_since_sync = 0;
+                    last_file_sync_uptime_ms = k_uptime_get();
                 }
                 /* Reopen read handle to pick up new file size */
                 close_read_handle();
@@ -1109,6 +1122,8 @@ handle_req:
                         flush_res = sr;
                     } else {
                         data_sync_gen++;
+                        bytes_since_sync = 0;
+                        last_file_sync_uptime_ms = k_uptime_get();
                         LOG_INF("[SD_WORK] Flushed %s (%u bytes)",
                                 current_filename, current_file_size);
                     }
@@ -1143,6 +1158,7 @@ handle_req:
                 current_file_path[0] = '\0';
                 current_file_size    = 0;
                 bytes_since_sync     = 0;
+                last_file_sync_uptime_ms = 0;
                 write_batch_offset   = 0;
                 write_batch_counter  = 0;
                 current_file_deleted = true;
