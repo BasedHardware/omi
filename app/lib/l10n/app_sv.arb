@@ -2750,6 +2750,8 @@
     "clearAll": "Rensa allt",
     "phoneKeypad": "Knappsats",
     "phoneHideKeypad": "Dölj knappsats",
+    "transcriptionPaused": "Spelar in, återansluter",
+    "transcriptionPausedReconnecting": "Spelar fortfarande in — återansluter till transkription...",
     "fairUsePolicy": "Rimlig användning",
     "fairUseLoadError": "Det gick inte att läsa in status för rimlig användning. Försök igen.",
     "fairUseStatusNormal": "Din användning är inom normala gränser.",

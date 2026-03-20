@@ -2750,6 +2750,8 @@
     "clearAll": "Tyhjennä kaikki",
     "phoneKeypad": "Näppäimistö",
     "phoneHideKeypad": "Piilota näppäimistö",
+    "transcriptionPaused": "Nauhoittaa, yhdistetään uudelleen",
+    "transcriptionPausedReconnecting": "Nauhoittaa yhä — yhdistetään uudelleen puheentunnistukseen...",
     "fairUsePolicy": "Kohtuullinen käyttö",
     "fairUseLoadError": "Kohtuullisen käytön tilaa ei voitu ladata. Yritä uudelleen.",
     "fairUseStatusNormal": "Käyttösi on normaalien rajojen sisällä.",

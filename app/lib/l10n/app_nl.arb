@@ -2750,6 +2750,8 @@
     "clearAll": "Alles wissen",
     "phoneKeypad": "Toetsenbord",
     "phoneHideKeypad": "Toetsenbord verbergen",
+    "transcriptionPaused": "Opname, opnieuw verbinden",
+    "transcriptionPausedReconnecting": "Neemt nog steeds op — opnieuw verbinden met transcriptie...",
     "fairUsePolicy": "Redelijk gebruik",
     "fairUseLoadError": "Kan de status van redelijk gebruik niet laden. Probeer het opnieuw.",
     "fairUseStatusNormal": "Uw gebruik is binnen de normale grenzen.",

@@ -8600,4 +8600,10 @@ class AppLocalizationsHi extends AppLocalizations {
   String fairUseBudgetResetsAt(String time) {
     return 'रीसेट $time';
   }
+
+  @override
+  String get transcriptionPaused => 'रिकॉर्डिंग जारी, पुन: कनेक्ट हो रहा है';
+
+  @override
+  String get transcriptionPausedReconnecting => 'अभी भी रिकॉर्ड हो रहा है — ट्रांसक्रिप्शन से पुनः कनेक्ट हो रहा है...';
 }

@@ -1722,7 +1722,12 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'GERÄTE', one: 'GERÄT');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'GERÄTE',
+      one: 'GERÄT',
+    );
     return '$count $_temp0 IN DER NÄHE GEFUNDEN';
   }
 
@@ -8688,4 +8693,11 @@ class AppLocalizationsDe extends AppLocalizations {
   String fairUseBudgetResetsAt(String time) {
     return 'Zurücksetzung $time';
   }
+
+  @override
+  String get transcriptionPaused => 'Aufnahme läuft, verbinde neu';
+
+  @override
+  String get transcriptionPausedReconnecting =>
+      'Nimmt weiterhin auf — Verbindung zur Transkription wird wiederhergestellt...';
 }

@@ -2200,7 +2200,7 @@ async def _stream_handler(
         await send_event_func(PhotoProcessingEvent(temp_id=temp_id, photo_id=photo_id))
 
         try:
-            description = await describe_image(image_b64)
+            description = await describe_image(uid, image_b64)
             discarded = not description or not description.strip()
         except Exception as e:
             logger.error(f"Error describing image: {e} {uid} {session_id}")

@@ -2846,6 +2846,8 @@
     "clearAll": "Összes törlése",
     "phoneKeypad": "Billentyűzet",
     "phoneHideKeypad": "Billentyűzet elrejtése",
+    "transcriptionPaused": "Felvétel, újrakapcsolódás",
+    "transcriptionPausedReconnecting": "A felvétel folytatódik — újrakapcsolódás az átíráshoz...",
     "fairUsePolicy": "Méltányos használat",
     "fairUseLoadError": "Nem sikerült betölteni a méltányos használat állapotát. Kérjük, próbálja újra.",
     "fairUseStatusNormal": "Használata a normális határokon belül van.",

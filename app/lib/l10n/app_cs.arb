@@ -2719,6 +2719,8 @@
     "clearAll": "Vymazat vše",
     "phoneKeypad": "Klávesnice",
     "phoneHideKeypad": "Skrýt klávesnici",
+    "transcriptionPaused": "Nahrávání, připojování",
+    "transcriptionPausedReconnecting": "Stále se nahrává — připojování k přepisu...",
     "fairUsePolicy": "Spravedlivé používání",
     "fairUseLoadError": "Nepodařilo se načíst stav spravedlivého používání. Zkuste to prosím znovu.",
     "fairUseStatusNormal": "Vaše používání je v normálních mezích.",

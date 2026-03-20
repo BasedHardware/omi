@@ -18,14 +18,17 @@ export async function generateMetadata(
 ): Promise<Metadata> {
   const prevData = (await parent) as Metadata;
   let memory: { structured?: { title?: string; overview?: string } } | null = null;
-  
+
   try {
-    const response = await fetch(`${envConfig.API_URL}/v1/conversations/${params.id}/shared`, {
-      next: {
-        revalidate: 60,
+    const response = await fetch(
+      `${envConfig.API_URL}/v1/conversations/${params.id}/shared`,
+      {
+        next: {
+          revalidate: 60,
+        },
       },
-    });
-    
+    );
+
     if (response.ok) {
       const contentType = response.headers.get('content-type');
       if (contentType && contentType.includes('application/json')) {
@@ -66,7 +69,7 @@ export default async function MemoryPage({ params, searchParams }: MemoryPagePro
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-[#1a0a1f] via-[#0a0a2f] to-black font-system-ui">
+    <div className="font-system-ui min-h-screen bg-gradient-to-b from-[#1a0a1f] via-[#0a0a2f] to-black">
       <div className="absolute inset-0 bg-[radial-gradient(circle_500px_at_50%_200px,rgba(88,28,135,0.2),transparent)]" />
       <section className="relative mx-auto max-w-screen-md px-6 py-16 md:px-12 md:py-24">
         <MemoryHeader />

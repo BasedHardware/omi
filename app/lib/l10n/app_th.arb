@@ -2750,6 +2750,8 @@
     "clearAll": "ล้างทั้งหมด",
     "phoneKeypad": "แป้นกด",
     "phoneHideKeypad": "ซ่อนแป้นกด",
+    "transcriptionPaused": "กำลังบันทึก, กำลังเชื่อมต่อใหม่",
+    "transcriptionPausedReconnecting": "ยังคงบันทึกอยู่ — กำลังเชื่อมต่อกับการถอดเสียงใหม่...",
     "fairUsePolicy": "การใช้งานอย่างเป็นธรรม",
     "fairUseLoadError": "ไม่สามารถโหลดสถานะการใช้งานอย่างเป็นธรรมได้ กรุณาลองอีกครั้ง",
     "fairUseStatusNormal": "การใช้งานของคุณอยู่ในขีดจำกัดปกติ",

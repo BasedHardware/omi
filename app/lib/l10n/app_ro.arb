@@ -2750,6 +2750,8 @@
     "clearAll": "Șterge tot",
     "phoneKeypad": "Tastatură",
     "phoneHideKeypad": "Ascunde tastatura",
+    "transcriptionPaused": "Înregistrare, reconectare",
+    "transcriptionPausedReconnecting": "Încă înregistrează — reconectare la transcriere...",
     "fairUsePolicy": "Utilizare echitabilă",
     "fairUseLoadError": "Nu s-a putut încărca starea de utilizare echitabilă. Vă rugăm să încercați din nou.",
     "fairUseStatusNormal": "Utilizarea dvs. este în limitele normale.",

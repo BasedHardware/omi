@@ -2772,6 +2772,8 @@
     "clearAll": "全部清除",
     "phoneKeypad": "键盘",
     "phoneHideKeypad": "隐藏键盘",
+    "transcriptionPaused": "录音中，正在重连",
+    "transcriptionPausedReconnecting": "仍在录音 — 正在重新连接转录...",
     "fairUsePolicy": "公平使用",
     "fairUseLoadError": "无法加载公平使用状态。请重试。",
     "fairUseStatusNormal": "您的使用量在正常范围内。",

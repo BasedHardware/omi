@@ -2785,6 +2785,8 @@
     "clearAll": "Tümünü temizle",
     "phoneKeypad": "Tuş takımı",
     "phoneHideKeypad": "Tuş takımını gizle",
+    "transcriptionPaused": "Kaydediyor, yeniden bağlanıyor",
+    "transcriptionPausedReconnecting": "Hâlâ kaydediyor — transkripsiyona yeniden bağlanıyor...",
     "fairUsePolicy": "Adil Kullanım",
     "fairUseLoadError": "Adil kullanım durumu yüklenemedi. Lütfen tekrar deneyin.",
     "fairUseStatusNormal": "Kullanımınız normal sınırlar içinde.",

@@ -2750,6 +2750,8 @@
     "clearAll": "Notīrīt visu",
     "phoneKeypad": "Tastatūra",
     "phoneHideKeypad": "Paslēpt tastatūru",
+    "transcriptionPaused": "Ierakstīšana, atkārtota savienošana",
+    "transcriptionPausedReconnecting": "Joprojām ieraksta — atkārtoti savienojas ar transkripciju...",
     "fairUsePolicy": "Godīga lietošana",
     "fairUseLoadError": "Nevarēja ielādēt godīgas lietošanas statusu. Lūdzu, mēģiniet vēlreiz.",
     "fairUseStatusNormal": "Jūsu lietojums ir normas robežās.",

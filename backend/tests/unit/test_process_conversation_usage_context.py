@@ -191,6 +191,8 @@ def test_discard_call_uses_discard_feature_tracking():
     conversation.photos = []
     conversation.get_person_ids.return_value = []
     conversation.external_data = None  # Prevent CalendarMeetingContext parsing
+    conversation.started_at = None
+    conversation.finished_at = None
 
     # Mock notification_db
     notifications_mod = sys.modules["database.notifications"]
@@ -256,6 +258,8 @@ def test_no_umbrella_conversation_processing_tracking():
     conversation.photos = []
     conversation.get_person_ids.return_value = []
     conversation.external_data = None
+    conversation.started_at = None
+    conversation.finished_at = None
 
     notifications_mod = sys.modules["database.notifications"]
     notifications_mod.get_user_time_zone = MagicMock(return_value="UTC")
@@ -299,6 +303,8 @@ def test_action_items_tracked_separately_from_structure():
     conversation.photos = []
     conversation.get_person_ids.return_value = []
     conversation.external_data = None
+    conversation.started_at = None
+    conversation.finished_at = None
 
     notifications_mod = sys.modules["database.notifications"]
     notifications_mod.get_user_time_zone = MagicMock(return_value="UTC")
@@ -341,6 +347,8 @@ def test_structure_and_apps_tracked_at_runtime():
     conversation.photos = []
     conversation.get_person_ids.return_value = []
     conversation.external_data = None
+    conversation.started_at = None
+    conversation.finished_at = None
     conversation.structured = MagicMock()
     conversation.structured.title = "Test"
     conversation.structured.overview = "Test overview"
@@ -393,6 +401,8 @@ def test_action_items_skipped_on_discard():
     conversation.photos = []
     conversation.get_person_ids.return_value = []
     conversation.external_data = None
+    conversation.started_at = None
+    conversation.finished_at = None
 
     notifications_mod = sys.modules["database.notifications"]
     notifications_mod.get_user_time_zone = MagicMock(return_value="UTC")

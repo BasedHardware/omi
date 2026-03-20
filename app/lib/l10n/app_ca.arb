@@ -2719,6 +2719,8 @@
     "clearAll": "Esborrar tot",
     "phoneKeypad": "Teclat",
     "phoneHideKeypad": "Amaga el teclat",
+    "transcriptionPaused": "Gravant, reconnectant",
+    "transcriptionPausedReconnecting": "Encara gravant — reconnectant a la transcripció...",
     "fairUsePolicy": "Ús raonable",
     "fairUseLoadError": "No s'ha pogut carregar l'estat d'ús raonable. Si us plau, torneu-ho a provar.",
     "fairUseStatusNormal": "El vostre ús està dins dels límits normals.",

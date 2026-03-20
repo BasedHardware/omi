@@ -1,15 +1,20 @@
 import 'dart:async';
 
 import 'package:connectivity_plus_platform_interface/connectivity_plus_platform_interface.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/message_event.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
+import 'package:omi/l10n/app_localizations.dart';
+import 'package:omi/main.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/people_provider.dart';
 import 'package:omi/services/services.dart';
+import 'package:omi/utils/enums.dart';
 
 /// Mock PeopleProvider that tracks setPeople calls
 class MockPeopleProvider extends PeopleProvider {
@@ -414,6 +419,63 @@ void main() {
 
       // Should trigger a new call
       expect(mockPeopleProvider.setPeopleCallCount, 2);
+    });
+  });
+
+  group('onClosed warning snackbar', () {
+    Future<void> _pumpAppWithScaffold(WidgetTester tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          navigatorKey: MyApp.navigatorKey,
+          localizationsDelegates: const [
+            AppLocalizations.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: const Scaffold(body: SizedBox.shrink()),
+        ),
+      );
+      await tester.pump();
+    }
+
+    testWidgets('shows reconnecting warning when socket closes during phone mic recording', (tester) async {
+      final provider = CaptureProvider();
+      provider.onConnectionStateChanged(true);
+      provider.updateRecordingState(RecordingState.record);
+
+      await _pumpAppWithScaffold(tester);
+
+      provider.onClosed();
+      // Prevent keepalive reconnect branch from attempting websocket work in this test.
+      provider.updateRecordingState(RecordingState.stop);
+      await tester.pump();
+
+      final context = tester.element(find.byType(Scaffold));
+      final expectedText = AppLocalizations.of(context)!.transcriptionPausedReconnecting;
+
+      expect(find.byType(SnackBar), findsOneWidget);
+      expect(find.text(expectedText), findsOneWidget);
+      provider.dispose();
+    });
+
+    testWidgets('does not show reconnecting warning when not phone mic recording', (tester) async {
+      final provider = CaptureProvider();
+      provider.onConnectionStateChanged(true);
+      provider.updateRecordingState(RecordingState.stop);
+
+      await _pumpAppWithScaffold(tester);
+
+      provider.onClosed();
+      await tester.pump();
+
+      final context = tester.element(find.byType(Scaffold));
+      final expectedText = AppLocalizations.of(context)!.transcriptionPausedReconnecting;
+
+      expect(find.byType(SnackBar), findsNothing);
+      expect(find.text(expectedText), findsNothing);
+      provider.dispose();
     });
   });
 }

@@ -8478,4 +8478,10 @@ class AppLocalizationsKo extends AppLocalizations {
   String fairUseBudgetResetsAt(String time) {
     return '재설정 $time';
   }
+
+  @override
+  String get transcriptionPaused => '녹음 중, 재연결 중';
+
+  @override
+  String get transcriptionPausedReconnecting => '계속 녹음 중 — 음성 인식에 재연결하는 중...';
 }

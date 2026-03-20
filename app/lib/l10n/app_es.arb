@@ -2751,6 +2751,8 @@
     "clearAll": "Borrar todo",
     "phoneKeypad": "Teclado",
     "phoneHideKeypad": "Ocultar teclado",
+    "transcriptionPaused": "Grabando, reconectando",
+    "transcriptionPausedReconnecting": "Aún grabando — reconectando a la transcripción...",
     "fairUsePolicy": "Uso razonable",
     "fairUseLoadError": "No se pudo cargar el estado de uso razonable. Por favor, inténtelo de nuevo.",
     "fairUseStatusNormal": "Su uso está dentro de los límites normales.",

@@ -2750,6 +2750,8 @@
     "clearAll": "Cancella tutto",
     "phoneKeypad": "Tastiera",
     "phoneHideKeypad": "Nascondi tastiera",
+    "transcriptionPaused": "Registrazione, riconnessione",
+    "transcriptionPausedReconnecting": "Registrazione in corso — riconnessione alla trascrizione...",
     "fairUsePolicy": "Uso corretto",
     "fairUseLoadError": "Impossibile caricare lo stato di uso corretto. Riprova.",
     "fairUseStatusNormal": "Il tuo utilizzo è entro i limiti normali.",

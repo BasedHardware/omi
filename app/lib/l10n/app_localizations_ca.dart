@@ -1719,7 +1719,12 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'DISPOSITIUS', one: 'DISPOSITIU');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'DISPOSITIUS',
+      one: 'DISPOSITIU',
+    );
     return '$count $_temp0 TROBATS A PROP';
   }
 
@@ -8667,4 +8672,10 @@ class AppLocalizationsCa extends AppLocalizations {
   String fairUseBudgetResetsAt(String time) {
     return 'Resets $time';
   }
+
+  @override
+  String get transcriptionPaused => 'Gravant, reconnectant';
+
+  @override
+  String get transcriptionPausedReconnecting => 'Encara gravant — reconnectant a la transcripció...';
 }
