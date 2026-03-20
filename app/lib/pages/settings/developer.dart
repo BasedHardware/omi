@@ -1929,8 +1929,8 @@ class _ManualFirmwareFlashPageState extends State<_ManualFirmwareFlashPage> with
     } catch (e) {
       if (mounted) {
         setState(() => _error = e.toString());
-      } 
-    }
+      }
+    } 
   }
 
   @override
