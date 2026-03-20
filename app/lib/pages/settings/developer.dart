@@ -1931,8 +1931,8 @@ class _ManualFirmwareFlashPageState extends State<_ManualFirmwareFlashPage> with
         setState(() => _error = e.toString());
       }
     }
-  } 
-
+  }
+ 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
