@@ -40,7 +40,7 @@ async fn gemini_proxy(
 
     // Validate the action is in our allowlist
     let action = path.rsplit(':').next().unwrap_or("");
-    if !GEMINI_ALLOWED_ACTIONS.iter().any(|a| action.starts_with(a)) {
+    if !GEMINI_ALLOWED_ACTIONS.contains(&action) {
         tracing::warn!("gemini_proxy: blocked action '{}' in path '{}'", action, path);
         return Err(StatusCode::FORBIDDEN);
     }
@@ -88,7 +88,7 @@ async fn gemini_stream_proxy(
 
     // Validate the action
     let action = path.rsplit(':').next().unwrap_or("");
-    if !GEMINI_ALLOWED_ACTIONS.iter().any(|a| action.starts_with(a)) {
+    if !GEMINI_ALLOWED_ACTIONS.contains(&action) {
         tracing::warn!("gemini_stream_proxy: blocked action '{}'", action);
         return Err(StatusCode::FORBIDDEN);
     }
