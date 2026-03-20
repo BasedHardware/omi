@@ -39,16 +39,13 @@ async fn gemini_proxy(
         .ok_or(StatusCode::SERVICE_UNAVAILABLE)?;
 
     // Validate the action is in our allowlist
-    let action = path.rsplit(':').next().unwrap_or("");
-    if !GEMINI_ALLOWED_ACTIONS.contains(&action) {
+    let action = extract_gemini_action(&path);
+    if !is_gemini_action_allowed(action) {
         tracing::warn!("gemini_proxy: blocked action '{}' in path '{}'", action, path);
         return Err(StatusCode::FORBIDDEN);
     }
 
-    let url = format!(
-        "https://generativelanguage.googleapis.com/v1beta/{}?key={}",
-        path, gemini_key
-    );
+    let url = build_gemini_url(&path, gemini_key);
 
     let upstream = reqwest::Client::new()
         .post(&url)
@@ -87,23 +84,14 @@ async fn gemini_stream_proxy(
         .ok_or(StatusCode::SERVICE_UNAVAILABLE)?;
 
     // Validate the action
-    let action = path.rsplit(':').next().unwrap_or("");
-    if !GEMINI_ALLOWED_ACTIONS.contains(&action) {
+    let action = extract_gemini_action(&path);
+    if !is_gemini_action_allowed(action) {
         tracing::warn!("gemini_stream_proxy: blocked action '{}'", action);
         return Err(StatusCode::FORBIDDEN);
     }
 
     // Build upstream URL with query params (e.g., alt=sse)
-    let mut upstream_url = format!(
-        "https://generativelanguage.googleapis.com/v1beta/{}?key={}",
-        path, gemini_key
-    );
-    for (k, v) in &query {
-        upstream_url.push('&');
-        upstream_url.push_str(&urlencoding::encode(k));
-        upstream_url.push('=');
-        upstream_url.push_str(&urlencoding::encode(v));
-    }
+    let upstream_url = build_gemini_stream_url(&path, gemini_key, &query);
 
     let upstream = reqwest::Client::new()
         .post(&upstream_url)
@@ -147,11 +135,11 @@ async fn deepgram_listen_proxy(
 
     // Forward query params from the original request
     let query = original_uri.query().unwrap_or("");
-    let url = format!("https://api.deepgram.com/v1/listen?{}", query);
+    let url = build_deepgram_rest_url(query);
 
     let upstream = reqwest::Client::new()
         .post(&url)
-        .header("authorization", format!("Token {}", dg_key))
+        .header("authorization", build_deepgram_auth_header(dg_key))
         .header("content-type", "application/octet-stream")
         .body(body)
         .send()
@@ -188,7 +176,7 @@ async fn deepgram_ws_proxy(
         .clone();
 
     let query = original_uri.query().unwrap_or("").to_string();
-    let upstream_url = format!("wss://api.deepgram.com/v1/listen?{}", query);
+    let upstream_url = build_deepgram_ws_url(&query);
 
     Ok(ws.on_upgrade(move |client_socket| async move {
         if let Err(e) = proxy_ws_bidirectional(client_socket, &upstream_url, &dg_key).await {
@@ -268,6 +256,58 @@ async fn proxy_ws_bidirectional(
     Ok(())
 }
 
+/// Extract the action from a Gemini API path (e.g., "models/gemini-3-flash:generateContent" → "generateContent")
+fn extract_gemini_action(path: &str) -> &str {
+    path.rsplit(':').next().unwrap_or("")
+}
+
+/// Check if a Gemini action is in the allowlist
+fn is_gemini_action_allowed(action: &str) -> bool {
+    GEMINI_ALLOWED_ACTIONS.contains(&action)
+}
+
+/// Build upstream Gemini URL for non-streaming requests
+fn build_gemini_url(path: &str, api_key: &str) -> String {
+    format!(
+        "https://generativelanguage.googleapis.com/v1beta/{}?key={}",
+        path, api_key
+    )
+}
+
+/// Build upstream Gemini URL for streaming requests with extra query params
+fn build_gemini_stream_url(
+    path: &str,
+    api_key: &str,
+    query: &std::collections::HashMap<String, String>,
+) -> String {
+    let mut url = format!(
+        "https://generativelanguage.googleapis.com/v1beta/{}?key={}",
+        path, api_key
+    );
+    for (k, v) in query {
+        url.push('&');
+        url.push_str(&urlencoding::encode(k));
+        url.push('=');
+        url.push_str(&urlencoding::encode(v));
+    }
+    url
+}
+
+/// Build upstream Deepgram REST URL preserving query params
+fn build_deepgram_rest_url(query: &str) -> String {
+    format!("https://api.deepgram.com/v1/listen?{}", query)
+}
+
+/// Build upstream Deepgram WS URL preserving query params
+fn build_deepgram_ws_url(query: &str) -> String {
+    format!("wss://api.deepgram.com/v1/listen?{}", query)
+}
+
+/// Build Deepgram auth header
+fn build_deepgram_auth_header(api_key: &str) -> String {
+    format!("Token {}", api_key)
+}
+
 pub fn proxy_routes() -> Router<AppState> {
     Router::new()
         // Gemini HTTP proxy (non-streaming)
@@ -281,4 +321,144 @@ pub fn proxy_routes() -> Router<AppState> {
             "/v1/proxy/deepgram/ws/v1/listen",
             any(deepgram_ws_proxy),
         )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // --- Gemini action extraction ---
+
+    #[test]
+    fn extract_action_generate_content() {
+        assert_eq!(
+            extract_gemini_action("models/gemini-3-flash:generateContent"),
+            "generateContent"
+        );
+    }
+
+    #[test]
+    fn extract_action_stream() {
+        assert_eq!(
+            extract_gemini_action("models/gemini-3-flash:streamGenerateContent"),
+            "streamGenerateContent"
+        );
+    }
+
+    #[test]
+    fn extract_action_embed() {
+        assert_eq!(
+            extract_gemini_action("models/gemini-embedding-001:embedContent"),
+            "embedContent"
+        );
+    }
+
+    #[test]
+    fn extract_action_batch_embed() {
+        assert_eq!(
+            extract_gemini_action("models/gemini-embedding-001:batchEmbedContents"),
+            "batchEmbedContents"
+        );
+    }
+
+    #[test]
+    fn extract_action_empty_path() {
+        assert_eq!(extract_gemini_action(""), "");
+    }
+
+    #[test]
+    fn extract_action_no_colon() {
+        assert_eq!(extract_gemini_action("models/gemini"), "models/gemini");
+    }
+
+    // --- Gemini action allowlist ---
+
+    #[test]
+    fn allowlist_permits_valid_actions() {
+        assert!(is_gemini_action_allowed("generateContent"));
+        assert!(is_gemini_action_allowed("streamGenerateContent"));
+        assert!(is_gemini_action_allowed("embedContent"));
+        assert!(is_gemini_action_allowed("batchEmbedContents"));
+    }
+
+    #[test]
+    fn allowlist_blocks_prefix_bypass() {
+        assert!(!is_gemini_action_allowed("generateContentX"));
+        assert!(!is_gemini_action_allowed("embedContentFoo"));
+    }
+
+    #[test]
+    fn allowlist_blocks_unknown_actions() {
+        assert!(!is_gemini_action_allowed("deleteModel"));
+        assert!(!is_gemini_action_allowed("foo"));
+        assert!(!is_gemini_action_allowed(""));
+    }
+
+    // --- Gemini URL construction ---
+
+    #[test]
+    fn gemini_url_construction() {
+        let url = build_gemini_url("models/gemini-3-flash:generateContent", "test-key-123");
+        assert_eq!(
+            url,
+            "https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash:generateContent?key=test-key-123"
+        );
+    }
+
+    #[test]
+    fn gemini_stream_url_with_query_params() {
+        let mut params = std::collections::HashMap::new();
+        params.insert("alt".to_string(), "sse".to_string());
+        let url = build_gemini_stream_url(
+            "models/gemini-3-flash:streamGenerateContent",
+            "key-456",
+            &params,
+        );
+        assert!(url.starts_with("https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash:streamGenerateContent?key=key-456"));
+        assert!(url.contains("&alt=sse"));
+    }
+
+    #[test]
+    fn gemini_stream_url_empty_params() {
+        let params = std::collections::HashMap::new();
+        let url = build_gemini_stream_url(
+            "models/gemini-3-flash:generateContent",
+            "key-789",
+            &params,
+        );
+        assert_eq!(
+            url,
+            "https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash:generateContent?key=key-789"
+        );
+    }
+
+    // --- Deepgram URL construction ---
+
+    #[test]
+    fn deepgram_rest_url_preserves_query() {
+        let url = build_deepgram_rest_url("model=nova-3&language=en&encoding=linear16");
+        assert_eq!(
+            url,
+            "https://api.deepgram.com/v1/listen?model=nova-3&language=en&encoding=linear16"
+        );
+    }
+
+    #[test]
+    fn deepgram_ws_url_preserves_query() {
+        let url = build_deepgram_ws_url("model=nova-3&channels=2");
+        assert_eq!(
+            url,
+            "wss://api.deepgram.com/v1/listen?model=nova-3&channels=2"
+        );
+    }
+
+    // --- Deepgram auth header ---
+
+    #[test]
+    fn deepgram_auth_header_format() {
+        assert_eq!(
+            build_deepgram_auth_header("dg-test-key"),
+            "Token dg-test-key"
+        );
+    }
 }
