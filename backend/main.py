@@ -16,6 +16,7 @@ from routers import (
     transcribe,
     notifications,
     speech_profile,
+    speech_profile_sharing,
     agents,
     users,
     trends,
@@ -71,6 +72,7 @@ app.include_router(memories.router)
 app.include_router(chat.router)
 app.include_router(plugins.router)
 app.include_router(speech_profile.router)
+app.include_router(speech_profile_sharing.router)
 # app.include_router(screenpipe.router)
 app.include_router(notifications.router)
 app.include_router(workflow.router)
