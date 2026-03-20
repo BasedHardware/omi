@@ -1,5 +1,5 @@
 import { notFound } from 'next/navigation';
-import { cn } from '@/lib/utils';
+import { cn } from '@/src/lib/utils';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://api.omi.me';
 const SUPPORT_EMAIL = 'team@basedhardware.com';
