@@ -60,6 +60,7 @@ class OmiBleManager private constructor(private val application: Application) {
     private val readCompletions = ConcurrentHashMap<String, (Result<ByteArray>) -> Unit>()
     private val writeCompletions = ConcurrentHashMap<String, (Result<Unit>) -> Unit>()
     private val manuallyDisconnected = ConcurrentHashMap.newKeySet<String>()
+    @Volatile var appClosed = false
 
     private val reconnectRetryCount = ConcurrentHashMap<String, Int>()
 
@@ -78,15 +79,6 @@ class OmiBleManager private constructor(private val application: Application) {
 
     private var stabilityTimerRunnable: Runnable? = null
     private var pendingReconnectRunnable: Runnable? = null
-    private val audioCharacteristicUuids = ConcurrentHashMap.newKeySet<String>()
-    @Volatile
-    private var audioBatchingEnabled = false
-    private val audioBatchBuffers = ConcurrentHashMap<String, ByteArray>()
-    private val audioBatchCounts = ConcurrentHashMap<String, Int>()
-    private val audioBatchRunnables = ConcurrentHashMap<String, Runnable>()
-    private val audioBatchInterval = 60L // ms
-    private val audioBatchMaxSize = 4096
-    var audioHeaderBytesToStrip = 3
 
     init {
         Log.i(TAG, "OmiBleManager initialized")
@@ -174,6 +166,7 @@ class OmiBleManager private constructor(private val application: Application) {
 
     fun connectPeripheral(address: String) {
         val addr = address.uppercase()
+        appClosed = false
         manuallyDisconnected.remove(addr)
         reconnectRetryCount[addr] = 0
 
@@ -219,6 +212,7 @@ class OmiBleManager private constructor(private val application: Application) {
     }
 
     fun disconnectAllPeripherals() {
+        appClosed = true
         for ((addr, gatt) in connectedGatts) {
             manuallyDisconnected.add(addr)
             cleanupPeripheral(addr)
@@ -231,6 +225,7 @@ class OmiBleManager private constructor(private val application: Application) {
 
     fun reconnectKnownPeripheral(address: String) {
         val addr = address.uppercase()
+        appClosed = false
         manuallyDisconnected.remove(addr)
         reconnectRetryCount[addr] = 0
 
@@ -371,19 +366,6 @@ class OmiBleManager private constructor(private val application: Application) {
         }
     }
 
-    fun setAudioBatchingEnabled(enabled: Boolean) {
-        audioBatchingEnabled = enabled
-        if (!enabled) {
-            for (key in audioBatchBuffers.keys().toList()) {
-                flushAudioBatch(key)
-            }
-        }
-    }
-
-    fun registerAudioCharacteristic(characteristicUuid: String) {
-        audioCharacteristicUuids.add(characteristicUuid.lowercase())
-    }
-
     private fun startRssiKeepAlive(address: String) {
         stopRssiKeepAlive()
         val runnable = object : Runnable {
@@ -460,79 +442,10 @@ class OmiBleManager private constructor(private val application: Application) {
         return service.getCharacteristic(UUID.fromString(characteristicUuid))
     }
 
-    private fun isAudioCharacteristic(characteristicUuid: String): Boolean {
-        return audioCharacteristicUuids.contains(characteristicUuid.lowercase())
-    }
-
-    private fun handleAudioNotification(address: String, serviceUuid: String, charUuid: String, data: ByteArray) {
-        val key = "$address|$serviceUuid|$charUuid".lowercase()
-
-        val isFirstInBatch = audioBatchBuffers[key] == null || audioBatchBuffers[key]!!.isEmpty()
-        if (isFirstInBatch) {
-            audioBatchBuffers[key] = ByteArray(0)
-            audioBatchCounts[key] = 0
-        }
-
-        val bytesToAppend = if (isFirstInBatch) {
-            data // Keep first frame's header intact
-        } else if (audioHeaderBytesToStrip > 0 && data.size > audioHeaderBytesToStrip) {
-            data.copyOfRange(audioHeaderBytesToStrip, data.size)
-        } else {
-            data
-        }
-
-        audioBatchBuffers[key] = audioBatchBuffers[key]!! + bytesToAppend
-        audioBatchCounts[key] = audioBatchCounts[key]!! + 1
-
-        // Flush if buffer exceeds max size
-        if (audioBatchBuffers[key]!!.size >= audioBatchMaxSize) {
-            flushAudioBatch(key)
-            return
-        }
-
-        // Start coalescing timer if not already running
-        if (audioBatchRunnables[key] == null) {
-            val runnable = Runnable { flushAudioBatch(key) }
-            audioBatchRunnables[key] = runnable
-            mainHandler.postDelayed(runnable, audioBatchInterval)
-        }
-    }
-
-    private fun flushAudioBatch(key: String) {
-        audioBatchRunnables[key]?.let { mainHandler.removeCallbacks(it) }
-        audioBatchRunnables.remove(key)
-
-        val buffer = audioBatchBuffers[key] ?: return
-        if (buffer.isEmpty()) return
-        val count = audioBatchCounts[key] ?: return
-
-        val parts = key.split("|")
-        if (parts.size != 3) return
-
-        val address = parts[0]
-        val serviceUuid = parts[1]
-        val charUuid = parts[2]
-
-        audioBatchBuffers[key] = ByteArray(0)
-        audioBatchCounts[key] = 0
-
-        mainHandler.post {
-            flutterApi?.onAudioBatchReceived(address, serviceUuid, charUuid, buffer, count.toLong()) {}
-        }
-    }
-
     private fun cleanupPeripheral(address: String) {
         val addr = address.uppercase()
         servicesDiscoveredFor.remove(addr)
         stopRssiKeepAlive()
-
-        for (key in audioBatchBuffers.keys().toList().filter { it.startsWith(addr.lowercase()) }) {
-            flushAudioBatch(key)
-            audioBatchBuffers.remove(key)
-            audioBatchCounts.remove(key)
-            audioBatchRunnables[key]?.let { mainHandler.removeCallbacks(it) }
-            audioBatchRunnables.remove(key)
-        }
 
         for (key in readCompletions.keys().toList().filter { it.startsWith(addr.lowercase()) }) {
             readCompletions.remove(key)?.invoke(Result.failure(Exception("Peripheral disconnected")))
@@ -679,13 +592,8 @@ class OmiBleManager private constructor(private val application: Application) {
             val address = gatt.device.address.uppercase()
             val serviceUuid = characteristic.service.uuid.toString().lowercase()
             val charUuid = characteristic.uuid.toString().lowercase()
-
-            if (audioBatchingEnabled && isAudioCharacteristic(charUuid)) {
-                handleAudioNotification(address, serviceUuid, charUuid, value)
-            } else {
-                mainHandler.post {
-                    flutterApi?.onCharacteristicValueUpdated(address, serviceUuid, charUuid, value) {}
-                }
+            mainHandler.post {
+                flutterApi?.onCharacteristicValueUpdated(address, serviceUuid, charUuid, value) {}
             }
         }
 
