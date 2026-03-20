@@ -97,8 +97,8 @@ Prioritized feature map to guide flow-walker E2E coverage of core Omi desktop ma
 | rewind | 4/4 | PASS | flow-walker.beastoin.workers.dev/runs/1HE5OsPOOy.html |
 | apps | 6/6 | PASS | flow-walker.beastoin.workers.dev/runs/VDGw-wbHqa.html |
 | refer | 3/3 | PASS | flow-walker.beastoin.workers.dev/runs/Jz8ymviOy1.html |
-| screen-recording-permission | 7/7 | PASS | flow-walker.beastoin.workers.dev/runs/kaoYEY0VIG.html |
-| audio-recording | 7/7 | PASS | flow-walker.beastoin.workers.dev/runs/KGjFkEEQQ4.html |
+| screen-recording-permission | 7/7 | PASS | flow-walker.beastoin.workers.dev/runs/3WoXUG6xkT.html |
+| audio-recording | 7/7 | PASS | flow-walker.beastoin.workers.dev/runs/UdkzB-dYG_.html |
 
 ---
 
