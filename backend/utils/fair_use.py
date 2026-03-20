@@ -202,8 +202,13 @@ def get_rolling_speech_ms(uid: str) -> dict:
 # ---------------------------------------------------------------------------
 
 
-def check_soft_caps(uid: str) -> list:
+def check_soft_caps(uid: str, speech_totals: dict = None) -> list:
     """Check if user exceeds any rolling speech cap.
+
+    Args:
+        uid: User ID.
+        speech_totals: Optional precomputed result from get_rolling_speech_ms().
+            If None, fetches fresh from Redis.
 
     Returns list of triggered caps, e.g.:
       [{'trigger': 'daily', 'speech_ms': 7500000, 'threshold_ms': 7200000}]
@@ -214,7 +219,7 @@ def check_soft_caps(uid: str) -> list:
     if uid in FAIR_USE_EXEMPT_UIDS:
         return []
 
-    speech = get_rolling_speech_ms(uid)
+    speech = speech_totals if speech_totals is not None else get_rolling_speech_ms(uid)
     triggered = []
 
     if speech['daily_ms'] > FAIR_USE_DAILY_SPEECH_MS:
