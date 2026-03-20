@@ -227,8 +227,9 @@ actor GeminiClient {
   }
 
   init(apiKey: String? = nil, model: String = "gemini-3-flash-preview") throws {
-    // apiKey parameter kept for backward compatibility but is ignored —
-    // the backend proxy supplies the key server-side.
+    // BREAKING CHANGE (issue #5861): apiKey parameter is ignored.
+    // All Gemini requests now route through the backend proxy which supplies
+    // the key server-side. Requires OMI_API_URL to be set (standard dev flow via run.sh).
     guard !Self.proxyBaseURL.isEmpty else {
       throw GeminiClientError.missingAPIKey
     }
