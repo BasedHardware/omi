@@ -68,7 +68,7 @@ async fn get_messages(
     State(state): State<AppState>,
     user: AuthUser,
     Query(query): Query<GetMessagesQuery>,
-) -> Json<Vec<MessageDB>> {
+) -> Result<Json<Vec<MessageDB>>, (StatusCode, String)> {
     tracing::info!(
         "Getting messages for user {} (app_id={:?}, session_id={:?}, limit={}, offset={})",
         user.uid,
@@ -89,10 +89,10 @@ async fn get_messages(
         )
         .await
     {
-        Ok(messages) => Json(messages),
+        Ok(messages) => Ok(Json(messages)),
         Err(e) => {
             tracing::error!("Failed to get messages: {}", e);
-            Json(vec![])
+            Err((StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to get messages: {}", e)))
         }
     }
 }

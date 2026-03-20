@@ -19,6 +19,7 @@ from models.conversation import CategoryEnum, Conversation, ActionItem, Event, C
 from models.other import Person
 from models.transcript_segment import TranscriptSegment
 from utils.llms.memory import get_prompt_memories
+from utils.llm.usage_tracker import track_usage, Features
 import logging
 
 logger = logging.getLogger(__name__)
@@ -49,7 +50,8 @@ You know the following about {user_name}: {memories_str}.
 As {plugin.name}, fully embrace your personality and characteristics in your {"initial" if not prev_messages_str else "follow-up"} message to {user_name}. Use language, tone, and style that reflect your unique personality traits. {"Start" if not prev_messages_str else "Continue"} the conversation naturally with a short, engaging message that showcases your personality and humor, and connects with {user_name}. Do not mention that you are an AI or that this is an initial message.
 """
     prompt = prompt.strip()
-    return llm_medium.invoke(prompt).content
+    with track_usage(uid, Features.CHAT):
+        return llm_medium.invoke(prompt).content
 
 
 # *********************************************
@@ -907,7 +909,8 @@ def obtain_emotional_message(uid: str, memory: Conversation, context: str, emoti
     {context}
     ```
     """.replace('    ', '').strip()
-    return llm_mini.invoke(prompt).content
+    with track_usage(uid, Features.CHAT):
+        return llm_mini.invoke(prompt).content
 
 
 # **********************************************
@@ -1070,7 +1073,8 @@ def retrieve_metadata_fields_from_transcript(
     ```
     '''.replace('    ', '')
     try:
-        result: ExtractedInformation = llm_mini.with_structured_output(ExtractedInformation).invoke(prompt)
+        with track_usage(uid, Features.CONVERSATION_PROCESSING):
+            result: ExtractedInformation = llm_mini.with_structured_output(ExtractedInformation).invoke(prompt)
     except Exception as e:
         logger.error(f'e {e}')
         return {'people': [], 'topics': [], 'entities': [], 'dates': []}
@@ -1307,7 +1311,8 @@ def extract_question_from_transcript(uid: str, segments: List[TranscriptSegment]
     {TranscriptSegment.segments_as_string(segments, people=people, user_name=user_name)}
     ```
     '''.replace('    ', '').strip()
-    return llm_mini.with_structured_output(OutputQuestion).invoke(prompt).question
+    with track_usage(uid, Features.REALTIME_INTEGRATIONS):
+        return llm_mini.with_structured_output(OutputQuestion).invoke(prompt).question
 
 
 class OutputMessage(BaseModel):
@@ -1356,4 +1361,5 @@ def provide_advice_message(uid: str, segments: List[TranscriptSegment], context:
     {context}
     ```
     """.replace('    ', '').strip()
-    return llm_mini.with_structured_output(OutputMessage).invoke(prompt).message
+    with track_usage(uid, Features.REALTIME_INTEGRATIONS):
+        return llm_mini.with_structured_output(OutputMessage).invoke(prompt).message

@@ -8572,4 +8572,72 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get phoneHideKeypad => 'Сховати клавіатуру';
+
+  @override
+  String get fairUsePolicy => 'Справедливе використання';
+
+  @override
+  String get fairUseLoadError =>
+      'Не вдалося завантажити статус справедливого використання. Будь ласка, спробуйте ще раз.';
+
+  @override
+  String get fairUseStatusNormal => 'Ваше використання в межах норми.';
+
+  @override
+  String get fairUseStageNormal => 'Нормальне';
+
+  @override
+  String get fairUseStageWarning => 'Попередження';
+
+  @override
+  String get fairUseStageThrottle => 'Обмежене';
+
+  @override
+  String get fairUseStageRestrict => 'Заблоковане';
+
+  @override
+  String get fairUseSpeechUsage => 'Використання мовлення';
+
+  @override
+  String get fairUseToday => 'Сьогодні';
+
+  @override
+  String get fairUse3Day => '3-денний період';
+
+  @override
+  String get fairUseWeekly => 'Тижневий період';
+
+  @override
+  String get fairUseAboutTitle => 'Про справедливе використання';
+
+  @override
+  String get fairUseAboutBody =>
+      'Omi призначений для особистих розмов, зустрічей та живої взаємодії. Використання вимірюється за фактичним виявленим часом мовлення, а не за часом підключення. Якщо використання значно перевищує звичайні шаблони для неособистого контенту, можуть бути застосовані коригування.';
+
+  @override
+  String fairUseCaseRefCopied(String caseRef) {
+    return '$caseRef скопійовано';
+  }
+
+  @override
+  String get fairUseDailyTranscription => 'Щоденна транскрипція';
+
+  @override
+  String fairUseBudgetUsed(String used, String limit) {
+    return '$usedхв / $limitхв';
+  }
+
+  @override
+  String get fairUseBudgetExhausted => 'Досягнуто денний ліміт транскрипції';
+
+  @override
+  String fairUseBudgetResetsAt(String time) {
+    return 'Скидання $time';
+  }
+
+  @override
+  String get transcriptionPaused => 'Запис, повторне підключення';
+
+  @override
+  String get transcriptionPausedReconnecting => 'Запис продовжується — повторне підключення до транскрипції...';
 }

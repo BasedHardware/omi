@@ -15992,6 +15992,126 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Hide Keypad'**
   String get phoneHideKeypad;
+
+  /// No description provided for @fairUsePolicy.
+  ///
+  /// In en, this message translates to:
+  /// **'Fair Use'**
+  String get fairUsePolicy;
+
+  /// No description provided for @fairUseLoadError.
+  ///
+  /// In en, this message translates to:
+  /// **'Unable to load fair use status. Please try again.'**
+  String get fairUseLoadError;
+
+  /// No description provided for @fairUseStatusNormal.
+  ///
+  /// In en, this message translates to:
+  /// **'Your usage is within normal limits.'**
+  String get fairUseStatusNormal;
+
+  /// No description provided for @fairUseStageNormal.
+  ///
+  /// In en, this message translates to:
+  /// **'Normal'**
+  String get fairUseStageNormal;
+
+  /// No description provided for @fairUseStageWarning.
+  ///
+  /// In en, this message translates to:
+  /// **'Warning'**
+  String get fairUseStageWarning;
+
+  /// No description provided for @fairUseStageThrottle.
+  ///
+  /// In en, this message translates to:
+  /// **'Throttled'**
+  String get fairUseStageThrottle;
+
+  /// No description provided for @fairUseStageRestrict.
+  ///
+  /// In en, this message translates to:
+  /// **'Restricted'**
+  String get fairUseStageRestrict;
+
+  /// No description provided for @fairUseSpeechUsage.
+  ///
+  /// In en, this message translates to:
+  /// **'Speech Usage'**
+  String get fairUseSpeechUsage;
+
+  /// No description provided for @fairUseToday.
+  ///
+  /// In en, this message translates to:
+  /// **'Today'**
+  String get fairUseToday;
+
+  /// No description provided for @fairUse3Day.
+  ///
+  /// In en, this message translates to:
+  /// **'3-Day Rolling'**
+  String get fairUse3Day;
+
+  /// No description provided for @fairUseWeekly.
+  ///
+  /// In en, this message translates to:
+  /// **'Weekly Rolling'**
+  String get fairUseWeekly;
+
+  /// No description provided for @fairUseAboutTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'About Fair Use'**
+  String get fairUseAboutTitle;
+
+  /// No description provided for @fairUseAboutBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Omi is designed for personal conversations, meetings, and live interactions. Usage is measured by real speech time detected, not connection time. If usage significantly exceeds normal patterns for non-personal content, adjustments may apply.'**
+  String get fairUseAboutBody;
+
+  /// Snackbar message when case reference is copied to clipboard
+  ///
+  /// In en, this message translates to:
+  /// **'{caseRef} copied'**
+  String fairUseCaseRefCopied(String caseRef);
+
+  /// No description provided for @fairUseDailyTranscription.
+  ///
+  /// In en, this message translates to:
+  /// **'Daily Transcription'**
+  String get fairUseDailyTranscription;
+
+  /// No description provided for @fairUseBudgetUsed.
+  ///
+  /// In en, this message translates to:
+  /// **'{used}m / {limit}m'**
+  String fairUseBudgetUsed(String used, String limit);
+
+  /// No description provided for @fairUseBudgetExhausted.
+  ///
+  /// In en, this message translates to:
+  /// **'Daily transcription limit reached'**
+  String get fairUseBudgetExhausted;
+
+  /// No description provided for @fairUseBudgetResetsAt.
+  ///
+  /// In en, this message translates to:
+  /// **'Resets {time}'**
+  String fairUseBudgetResetsAt(String time);
+
+  /// No description provided for @transcriptionPaused.
+  ///
+  /// In en, this message translates to:
+  /// **'Recording, reconnecting'**
+  String get transcriptionPaused;
+
+  /// No description provided for @transcriptionPausedReconnecting.
+  ///
+  /// In en, this message translates to:
+  /// **'Still recording — reconnecting to transcription...'**
+  String get transcriptionPausedReconnecting;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

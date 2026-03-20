@@ -8587,4 +8587,71 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get phoneHideKeypad => 'Toetsenbord verbergen';
+
+  @override
+  String get fairUsePolicy => 'Redelijk gebruik';
+
+  @override
+  String get fairUseLoadError => 'Kan de status van redelijk gebruik niet laden. Probeer het opnieuw.';
+
+  @override
+  String get fairUseStatusNormal => 'Uw gebruik is binnen de normale grenzen.';
+
+  @override
+  String get fairUseStageNormal => 'Normaal';
+
+  @override
+  String get fairUseStageWarning => 'Waarschuwing';
+
+  @override
+  String get fairUseStageThrottle => 'Beperkt';
+
+  @override
+  String get fairUseStageRestrict => 'Geblokkeerd';
+
+  @override
+  String get fairUseSpeechUsage => 'Spraakgebruik';
+
+  @override
+  String get fairUseToday => 'Vandaag';
+
+  @override
+  String get fairUse3Day => '3-daags voortschrijdend';
+
+  @override
+  String get fairUseWeekly => 'Wekelijks voortschrijdend';
+
+  @override
+  String get fairUseAboutTitle => 'Over redelijk gebruik';
+
+  @override
+  String get fairUseAboutBody =>
+      'Omi is ontworpen voor persoonlijke gesprekken, vergaderingen en live interacties. Het gebruik wordt gemeten aan de hand van de werkelijke gedetecteerde spreektijd, niet de verbindingstijd. Als het gebruik de normale patronen voor niet-persoonlijke inhoud aanzienlijk overschrijdt, kunnen aanpassingen worden toegepast.';
+
+  @override
+  String fairUseCaseRefCopied(String caseRef) {
+    return '$caseRef gekopieerd';
+  }
+
+  @override
+  String get fairUseDailyTranscription => 'Daily Transcription';
+
+  @override
+  String fairUseBudgetUsed(String used, String limit) {
+    return '${used}m / ${limit}m';
+  }
+
+  @override
+  String get fairUseBudgetExhausted => 'Daily transcription limit reached';
+
+  @override
+  String fairUseBudgetResetsAt(String time) {
+    return 'Resets $time';
+  }
+
+  @override
+  String get transcriptionPaused => 'Opname, opnieuw verbinden';
+
+  @override
+  String get transcriptionPausedReconnecting => 'Neemt nog steeds op — opnieuw verbinden met transcriptie...';
 }

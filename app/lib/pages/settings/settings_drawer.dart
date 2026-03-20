@@ -10,6 +10,7 @@ import 'package:omi/pages/settings/developer.dart';
 import 'package:omi/pages/settings/notifications_settings_page.dart';
 import 'package:omi/pages/settings/profile.dart';
 import 'package:omi/pages/settings/integrations_page.dart';
+import 'package:omi/pages/settings/fair_use_page.dart';
 import 'package:omi/pages/settings/usage_page.dart';
 import 'package:omi/pages/referral/referral_page.dart';
 import 'package:omi/providers/device_provider.dart';
@@ -333,6 +334,14 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
                         Navigator.of(context).push(MaterialPageRoute(builder: (context) => const UsagePage()));
                       },
                     );
+                  },
+                ),
+                const Divider(height: 1, color: Color(0xFF3C3C43)),
+                _buildSettingsItem(
+                  title: context.l10n.fairUsePolicy,
+                  icon: const FaIcon(FontAwesomeIcons.scaleBalanced, color: Color(0xFF8E8E93), size: 20),
+                  onTap: () {
+                    Navigator.of(context).push(MaterialPageRoute(builder: (context) => const FairUsePage()));
                   },
                 ),
                 const Divider(height: 1, color: Color(0xFF3C3C43)),

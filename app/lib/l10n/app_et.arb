@@ -2749,5 +2749,50 @@
     "notYetSynced": "Pole veel teie telefoniga sünkroniseeritud",
     "clearAll": "Tühjenda kõik",
     "phoneKeypad": "Klahvistik",
-    "phoneHideKeypad": "Peida klahvistik"
+    "phoneHideKeypad": "Peida klahvistik",
+    "transcriptionPaused": "Salvestamine, taasühendamine",
+    "transcriptionPausedReconnecting": "Salvestamine jätkub — ühenduse taastamine transkriptsiooniga...",
+    "fairUsePolicy": "Õiglane kasutus",
+    "fairUseLoadError": "Õiglase kasutuse olekut ei õnnestunud laadida. Palun proovige uuesti.",
+    "fairUseStatusNormal": "Teie kasutus on tavapiirides.",
+    "fairUseStageNormal": "Tavaline",
+    "fairUseStageWarning": "Hoiatus",
+    "fairUseStageThrottle": "Piiratud",
+    "fairUseStageRestrict": "Keelatud",
+    "fairUseSpeechUsage": "Kõne kasutus",
+    "fairUseToday": "Täna",
+    "fairUse3Day": "3-päevane periood",
+    "fairUseWeekly": "Nädalane periood",
+    "fairUseAboutTitle": "Õiglase kasutuse kohta",
+    "fairUseAboutBody": "Omi on loodud isiklikeks vestlusteks, koosolekuteks ja reaalajas suhtluseks. Kasutust mõõdetakse tuvastatud tegeliku kõneaja, mitte ühenduse aja järgi. Kui kasutus ületab oluliselt tavapäraseid mustreid mitteisikliku sisu puhul, võidakse rakendada kohandusi.",
+    "fairUseCaseRefCopied": "{caseRef} kopeeritud",
+    "@fairUseCaseRefCopied": {
+        "description": "Snackbar message when case reference is copied",
+        "placeholders": {
+            "caseRef": {
+                "type": "String"
+            }
+        }
+    },
+    "fairUseDailyTranscription": "Daily Transcription",
+    "fairUseBudgetExhausted": "Daily transcription limit reached",
+    "fairUseBudgetResetsAt": "Resets {time}",
+    "fairUseBudgetUsed": "{used}m / {limit}m",
+    "@fairUseBudgetUsed": {
+        "placeholders": {
+            "used": {
+                "type": "String"
+            },
+            "limit": {
+                "type": "String"
+            }
+        }
+    },
+    "@fairUseBudgetResetsAt": {
+        "placeholders": {
+            "time": {
+                "type": "String"
+            }
+        }
+    }
 }

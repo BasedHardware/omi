@@ -2716,5 +2716,50 @@
     "notYetSynced": "لم تتم المزامنة بعد مع هاتفك",
     "clearAll": "مسح الكل",
     "phoneKeypad": "لوحة المفاتيح",
-    "phoneHideKeypad": "إخفاء لوحة المفاتيح"
+    "phoneHideKeypad": "إخفاء لوحة المفاتيح",
+    "transcriptionPaused": "جارٍ التسجيل، إعادة الاتصال",
+    "transcriptionPausedReconnecting": "لا يزال التسجيل جاريًا — إعادة الاتصال بالنسخ...",
+    "fairUsePolicy": "الاستخدام العادل",
+    "fairUseLoadError": "تعذر تحميل حالة الاستخدام العادل. يرجى المحاولة مرة أخرى.",
+    "fairUseStatusNormal": "استخدامك ضمن الحدود الطبيعية.",
+    "fairUseStageNormal": "طبيعي",
+    "fairUseStageWarning": "تحذير",
+    "fairUseStageThrottle": "مقيّد",
+    "fairUseStageRestrict": "محظور",
+    "fairUseSpeechUsage": "استخدام الكلام",
+    "fairUseToday": "اليوم",
+    "fairUse3Day": "آخر 3 أيام",
+    "fairUseWeekly": "أسبوعي",
+    "fairUseAboutTitle": "حول الاستخدام العادل",
+    "fairUseAboutBody": "تم تصميم Omi للمحادثات الشخصية والاجتماعات والتفاعلات المباشرة. يُقاس الاستخدام بوقت الكلام الفعلي المكتشف وليس بوقت الاتصال. إذا تجاوز الاستخدام بشكل كبير الأنماط الطبيعية لمحتوى غير شخصي، فقد يتم تطبيق تعديلات.",
+    "fairUseCaseRefCopied": "تم نسخ {caseRef}",
+    "@fairUseCaseRefCopied": {
+        "description": "Snackbar message when case reference is copied",
+        "placeholders": {
+            "caseRef": {
+                "type": "String"
+            }
+        }
+    },
+    "fairUseDailyTranscription": "النسخ اليومي",
+    "fairUseBudgetExhausted": "تم الوصول إلى حد النسخ اليومي",
+    "fairUseBudgetResetsAt": "يُعاد التعيين {time}",
+    "fairUseBudgetUsed": "{used}د / {limit}د",
+    "@fairUseBudgetUsed": {
+        "placeholders": {
+            "used": {
+                "type": "String"
+            },
+            "limit": {
+                "type": "String"
+            }
+        }
+    },
+    "@fairUseBudgetResetsAt": {
+        "placeholders": {
+            "time": {
+                "type": "String"
+            }
+        }
+    }
 }

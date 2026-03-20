@@ -2718,5 +2718,50 @@
     "notYetSynced": "Encara no sincronitzat amb el vostre telèfon",
     "clearAll": "Esborrar tot",
     "phoneKeypad": "Teclat",
-    "phoneHideKeypad": "Amaga el teclat"
+    "phoneHideKeypad": "Amaga el teclat",
+    "transcriptionPaused": "Gravant, reconnectant",
+    "transcriptionPausedReconnecting": "Encara gravant — reconnectant a la transcripció...",
+    "fairUsePolicy": "Ús raonable",
+    "fairUseLoadError": "No s'ha pogut carregar l'estat d'ús raonable. Si us plau, torneu-ho a provar.",
+    "fairUseStatusNormal": "El vostre ús està dins dels límits normals.",
+    "fairUseStageNormal": "Normal",
+    "fairUseStageWarning": "Avís",
+    "fairUseStageThrottle": "Limitat",
+    "fairUseStageRestrict": "Restringit",
+    "fairUseSpeechUsage": "Ús de la parla",
+    "fairUseToday": "Avui",
+    "fairUse3Day": "Últims 3 dies",
+    "fairUseWeekly": "Setmanal",
+    "fairUseAboutTitle": "Sobre l'ús raonable",
+    "fairUseAboutBody": "Omi està dissenyat per a converses personals, reunions i interaccions en directe. L'ús es mesura pel temps real de parla detectat, no pel temps de connexió. Si l'ús supera significativament els patrons normals per a contingut no personal, es podrien aplicar ajustos.",
+    "fairUseCaseRefCopied": "{caseRef} copiat",
+    "@fairUseCaseRefCopied": {
+        "description": "Snackbar message when case reference is copied",
+        "placeholders": {
+            "caseRef": {
+                "type": "String"
+            }
+        }
+    },
+    "fairUseDailyTranscription": "Daily Transcription",
+    "fairUseBudgetExhausted": "Daily transcription limit reached",
+    "fairUseBudgetResetsAt": "Resets {time}",
+    "fairUseBudgetUsed": "{used}m / {limit}m",
+    "@fairUseBudgetUsed": {
+        "placeholders": {
+            "used": {
+                "type": "String"
+            },
+            "limit": {
+                "type": "String"
+            }
+        }
+    },
+    "@fairUseBudgetResetsAt": {
+        "placeholders": {
+            "time": {
+                "type": "String"
+            }
+        }
+    }
 }

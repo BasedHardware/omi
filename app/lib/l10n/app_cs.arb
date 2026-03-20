@@ -2718,5 +2718,50 @@
     "notYetSynced": "Zatím nesynchronizováno s vaším telefonem",
     "clearAll": "Vymazat vše",
     "phoneKeypad": "Klávesnice",
-    "phoneHideKeypad": "Skrýt klávesnici"
+    "phoneHideKeypad": "Skrýt klávesnici",
+    "transcriptionPaused": "Nahrávání, připojování",
+    "transcriptionPausedReconnecting": "Stále se nahrává — připojování k přepisu...",
+    "fairUsePolicy": "Spravedlivé používání",
+    "fairUseLoadError": "Nepodařilo se načíst stav spravedlivého používání. Zkuste to prosím znovu.",
+    "fairUseStatusNormal": "Vaše používání je v normálních mezích.",
+    "fairUseStageNormal": "Normální",
+    "fairUseStageWarning": "Upozornění",
+    "fairUseStageThrottle": "Omezeno",
+    "fairUseStageRestrict": "Zakázáno",
+    "fairUseSpeechUsage": "Využití řeči",
+    "fairUseToday": "Dnes",
+    "fairUse3Day": "3denní období",
+    "fairUseWeekly": "Týdenní období",
+    "fairUseAboutTitle": "O spravedlivém používání",
+    "fairUseAboutBody": "Omi je navržen pro osobní konverzace, schůzky a živé interakce. Používání se měří skutečným detekovaným časem řeči, nikoli časem připojení. Pokud používání výrazně překročí běžné vzorce pro neosobní obsah, mohou být provedeny úpravy.",
+    "fairUseCaseRefCopied": "{caseRef} zkopírováno",
+    "@fairUseCaseRefCopied": {
+        "description": "Snackbar message when case reference is copied",
+        "placeholders": {
+            "caseRef": {
+                "type": "String"
+            }
+        }
+    },
+    "fairUseDailyTranscription": "Daily Transcription",
+    "fairUseBudgetExhausted": "Daily transcription limit reached",
+    "fairUseBudgetResetsAt": "Resets {time}",
+    "fairUseBudgetUsed": "{used}m / {limit}m",
+    "@fairUseBudgetUsed": {
+        "placeholders": {
+            "used": {
+                "type": "String"
+            },
+            "limit": {
+                "type": "String"
+            }
+        }
+    },
+    "@fairUseBudgetResetsAt": {
+        "placeholders": {
+            "time": {
+                "type": "String"
+            }
+        }
+    }
 }

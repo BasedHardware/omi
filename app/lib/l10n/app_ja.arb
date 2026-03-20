@@ -2750,5 +2750,50 @@
     "notYetSynced": "まだスマホに同期されていません",
     "clearAll": "すべて削除",
     "phoneKeypad": "キーパッド",
-    "phoneHideKeypad": "キーパッドを隠す"
+    "phoneHideKeypad": "キーパッドを隠す",
+    "transcriptionPaused": "録音中、再接続中",
+    "transcriptionPausedReconnecting": "録音は継続中 — 文字起こしに再接続しています...",
+    "fairUsePolicy": "フェアユース",
+    "fairUseLoadError": "フェアユースの状態を読み込めませんでした。もう一度お試しください。",
+    "fairUseStatusNormal": "ご利用は通常の範囲内です。",
+    "fairUseStageNormal": "通常",
+    "fairUseStageWarning": "警告",
+    "fairUseStageThrottle": "制限中",
+    "fairUseStageRestrict": "利用停止",
+    "fairUseSpeechUsage": "音声使用量",
+    "fairUseToday": "今日",
+    "fairUse3Day": "3日間",
+    "fairUseWeekly": "週間",
+    "fairUseAboutTitle": "フェアユースについて",
+    "fairUseAboutBody": "Omiは個人的な会話、会議、ライブのやり取りのために設計されています。使用量は接続時間ではなく、検出された実際の発話時間で測定されます。非個人的なコンテンツに対して通常のパターンを大幅に超える使用がある場合、調整が適用されることがあります。",
+    "fairUseCaseRefCopied": "{caseRef} をコピーしました",
+    "@fairUseCaseRefCopied": {
+        "description": "Snackbar message when case reference is copied",
+        "placeholders": {
+            "caseRef": {
+                "type": "String"
+            }
+        }
+    },
+    "fairUseDailyTranscription": "日次文字起こし",
+    "fairUseBudgetExhausted": "日次文字起こし上限に達しました",
+    "fairUseBudgetResetsAt": "リセット {time}",
+    "fairUseBudgetUsed": "{used}分 / {limit}分",
+    "@fairUseBudgetUsed": {
+        "placeholders": {
+            "used": {
+                "type": "String"
+            },
+            "limit": {
+                "type": "String"
+            }
+        }
+    },
+    "@fairUseBudgetResetsAt": {
+        "placeholders": {
+            "time": {
+                "type": "String"
+            }
+        }
+    }
 }

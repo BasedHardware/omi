@@ -8577,4 +8577,71 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get phoneHideKeypad => 'Paslēpt tastatūru';
+
+  @override
+  String get fairUsePolicy => 'Godīga lietošana';
+
+  @override
+  String get fairUseLoadError => 'Nevarēja ielādēt godīgas lietošanas statusu. Lūdzu, mēģiniet vēlreiz.';
+
+  @override
+  String get fairUseStatusNormal => 'Jūsu lietojums ir normas robežās.';
+
+  @override
+  String get fairUseStageNormal => 'Normāls';
+
+  @override
+  String get fairUseStageWarning => 'Brīdinājums';
+
+  @override
+  String get fairUseStageThrottle => 'Ierobežots';
+
+  @override
+  String get fairUseStageRestrict => 'Bloķēts';
+
+  @override
+  String get fairUseSpeechUsage => 'Runas lietojums';
+
+  @override
+  String get fairUseToday => 'Šodien';
+
+  @override
+  String get fairUse3Day => '3 dienu periods';
+
+  @override
+  String get fairUseWeekly => 'Nedēļas periods';
+
+  @override
+  String get fairUseAboutTitle => 'Par godīgu lietošanu';
+
+  @override
+  String get fairUseAboutBody =>
+      'Omi ir izstrādāts personīgām sarunām, sanāksmēm un tiešsaistes mijiedarbībai. Lietojums tiek mērīts pēc konstatētā reālā runas laika, nevis savienojuma laika. Ja lietojums ievērojami pārsniedz parastos modeļus nepersoniskam saturam, var tikt piemēroti pielāgojumi.';
+
+  @override
+  String fairUseCaseRefCopied(String caseRef) {
+    return '$caseRef nokopēts';
+  }
+
+  @override
+  String get fairUseDailyTranscription => 'Daily Transcription';
+
+  @override
+  String fairUseBudgetUsed(String used, String limit) {
+    return '${used}m / ${limit}m';
+  }
+
+  @override
+  String get fairUseBudgetExhausted => 'Daily transcription limit reached';
+
+  @override
+  String fairUseBudgetResetsAt(String time) {
+    return 'Resets $time';
+  }
+
+  @override
+  String get transcriptionPaused => 'Ierakstīšana, atkārtota savienošana';
+
+  @override
+  String get transcriptionPausedReconnecting => 'Joprojām ieraksta — atkārtoti savienojas ar transkripciju...';
 }

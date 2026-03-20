@@ -2784,5 +2784,50 @@
     "notYetSynced": "Pas encore synchronisé avec votre téléphone",
     "clearAll": "Tout effacer",
     "phoneKeypad": "Clavier",
-    "phoneHideKeypad": "Masquer le clavier"
+    "phoneHideKeypad": "Masquer le clavier",
+    "transcriptionPaused": "Enregistrement, reconnexion",
+    "transcriptionPausedReconnecting": "Enregistrement en cours — reconnexion à la transcription...",
+    "fairUsePolicy": "Utilisation raisonnable",
+    "fairUseLoadError": "Impossible de charger le statut d'utilisation raisonnable. Veuillez réessayer.",
+    "fairUseStatusNormal": "Votre utilisation est dans les limites normales.",
+    "fairUseStageNormal": "Normal",
+    "fairUseStageWarning": "Avertissement",
+    "fairUseStageThrottle": "Limité",
+    "fairUseStageRestrict": "Restreint",
+    "fairUseSpeechUsage": "Utilisation de la parole",
+    "fairUseToday": "Aujourd'hui",
+    "fairUse3Day": "3 jours glissants",
+    "fairUseWeekly": "Hebdomadaire glissant",
+    "fairUseAboutTitle": "À propos de l'utilisation raisonnable",
+    "fairUseAboutBody": "Omi est conçu pour les conversations personnelles, les réunions et les interactions en direct. L'utilisation est mesurée par le temps de parole réel détecté, et non par le temps de connexion. Si l'utilisation dépasse significativement les schémas normaux pour du contenu non personnel, des ajustements peuvent s'appliquer.",
+    "fairUseCaseRefCopied": "{caseRef} copié",
+    "@fairUseCaseRefCopied": {
+        "description": "Snackbar message when case reference is copied",
+        "placeholders": {
+            "caseRef": {
+                "type": "String"
+            }
+        }
+    },
+    "fairUseDailyTranscription": "Transcription quotidienne",
+    "fairUseBudgetExhausted": "Limite quotidienne de transcription atteinte",
+    "fairUseBudgetResetsAt": "Réinitialisation {time}",
+    "fairUseBudgetUsed": "{used}m / {limit}m",
+    "@fairUseBudgetUsed": {
+        "placeholders": {
+            "used": {
+                "type": "String"
+            },
+            "limit": {
+                "type": "String"
+            }
+        }
+    },
+    "@fairUseBudgetResetsAt": {
+        "placeholders": {
+            "time": {
+                "type": "String"
+            }
+        }
+    }
 }

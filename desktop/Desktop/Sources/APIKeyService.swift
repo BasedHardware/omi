@@ -2,6 +2,10 @@ import Foundation
 
 /// Fetches API keys from the backend at runtime instead of bundling them in the app.
 /// Developer overrides (set in Settings) take precedence over backend-provided keys.
+///
+/// NOTE: The current desktop app is slopped on security — API keys were hardcoded in
+/// Swift source and env files. This service moves secrets server-side via /v1/config/api-keys.
+/// Will remove the env-var bridge once all client-side key slop is cleaned up. — CTO
 @MainActor
 final class APIKeyService: ObservableObject {
     static let shared = APIKeyService()
@@ -10,6 +14,8 @@ final class APIKeyService: ObservableObject {
     @Published private(set) var deepgramApiKey: String?
     @Published private(set) var geminiApiKey: String?
     @Published private(set) var anthropicApiKey: String?
+    @Published private(set) var firebaseApiKey: String?
+    @Published private(set) var googleCalendarApiKey: String?
     @Published private(set) var isLoaded: Bool = false
     @Published private(set) var loadError: String?
 
@@ -26,6 +32,14 @@ final class APIKeyService: ObservableObject {
         nonEmpty(UserDefaults.standard.string(forKey: "dev_anthropic_api_key")) ?? anthropicApiKey
     }
 
+    var effectiveFirebaseApiKey: String? {
+        firebaseApiKey
+    }
+
+    var effectiveGoogleCalendarApiKey: String? {
+        googleCalendarApiKey
+    }
+
     /// Fetch keys from the backend. Call after Firebase auth is ready.
     func fetchKeys() async {
         loadError = nil
@@ -37,12 +51,14 @@ final class APIKeyService: ObservableObject {
                 self.deepgramApiKey = keys.deepgramApiKey
                 self.geminiApiKey = keys.geminiApiKey
                 self.anthropicApiKey = keys.anthropicApiKey
+                self.firebaseApiKey = keys.firebaseApiKey
+                self.googleCalendarApiKey = keys.googleCalendarApiKey
                 self.isLoaded = true
 
                 // Set env vars so existing getenv() consumers keep working during transition
                 applyToEnvironment()
 
-                log("APIKeyService: Fetched keys from backend (deepgram=\(keys.deepgramApiKey != nil), gemini=\(keys.geminiApiKey != nil), anthropic=\(keys.anthropicApiKey != nil))")
+                log("APIKeyService: Fetched keys from backend (deepgram=\(keys.deepgramApiKey != nil), gemini=\(keys.geminiApiKey != nil), anthropic=\(keys.anthropicApiKey != nil), firebase=\(keys.firebaseApiKey != nil), calendar=\(keys.googleCalendarApiKey != nil))")
                 return
             } catch {
                 let delay = pow(2.0, Double(attempt - 1))
@@ -65,12 +81,17 @@ final class APIKeyService: ObservableObject {
         deepgramApiKey = nil
         geminiApiKey = nil
         anthropicApiKey = nil
+        firebaseApiKey = nil
+        googleCalendarApiKey = nil
         isLoaded = false
         loadError = nil
 
         unsetenv("DEEPGRAM_API_KEY")
         unsetenv("GEMINI_API_KEY")
         unsetenv("ANTHROPIC_API_KEY")
+        // NOTE: Do NOT unset FIREBASE_API_KEY — it's needed for the next sign-in
+        // (auth bootstrap requires Firebase key before backend is reachable)
+        unsetenv("GOOGLE_CALENDAR_API_KEY")
     }
 
     /// Push effective keys into the process environment for backward compatibility.
@@ -84,9 +105,44 @@ final class APIKeyService: ObservableObject {
         if let key = effectiveAnthropicKey {
             setenv("ANTHROPIC_API_KEY", key, 1)
         }
+        if let key = effectiveFirebaseApiKey {
+            setenv("FIREBASE_API_KEY", key, 1)
+        }
+        if let key = effectiveGoogleCalendarApiKey {
+            setenv("GOOGLE_CALENDAR_API_KEY", key, 1)
+        }
     }
 
     private func nonEmpty(_ s: String?) -> String? {
+        guard let s, !s.trimmingCharacters(in: .whitespaces).isEmpty else { return nil }
+        return s
+    }
+
+    // MARK: - Thread-safe key access (for non-MainActor contexts)
+    // These read from UserDefaults (thread-safe) and getenv() (set by applyToEnvironment).
+    // Use these from actors, nonisolated inits, and background threads.
+
+    nonisolated static var currentGeminiKey: String? {
+        nonEmptyStatic(UserDefaults.standard.string(forKey: "dev_gemini_api_key"))
+            ?? (getenv("GEMINI_API_KEY").flatMap { String(validatingUTF8: $0) })
+    }
+
+    nonisolated static var currentDeepgramKey: String? {
+        nonEmptyStatic(UserDefaults.standard.string(forKey: "dev_deepgram_api_key"))
+            ?? (getenv("DEEPGRAM_API_KEY").flatMap { String(validatingUTF8: $0) })
+    }
+
+    nonisolated static var currentAnthropicKey: String? {
+        nonEmptyStatic(UserDefaults.standard.string(forKey: "dev_anthropic_api_key"))
+            ?? (getenv("ANTHROPIC_API_KEY").flatMap { String(validatingUTF8: $0) })
+    }
+
+    /// True once fetchKeys() has called applyToEnvironment() (proxy: env var is set).
+    nonisolated static var keysAvailable: Bool {
+        getenv("GEMINI_API_KEY") != nil || getenv("DEEPGRAM_API_KEY") != nil
+    }
+
+    private nonisolated static func nonEmptyStatic(_ s: String?) -> String? {
         guard let s, !s.trimmingCharacters(in: .whitespaces).isEmpty else { return nil }
         return s
     }

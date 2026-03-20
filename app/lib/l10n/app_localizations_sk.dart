@@ -8549,4 +8549,71 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get phoneHideKeypad => 'Skryť klávesnicu';
+
+  @override
+  String get fairUsePolicy => 'Spravodlivé používanie';
+
+  @override
+  String get fairUseLoadError => 'Nepodarilo sa načítať stav spravodlivého používania. Skúste to znova.';
+
+  @override
+  String get fairUseStatusNormal => 'Vaše používanie je v normálnych medziach.';
+
+  @override
+  String get fairUseStageNormal => 'Normálne';
+
+  @override
+  String get fairUseStageWarning => 'Upozornenie';
+
+  @override
+  String get fairUseStageThrottle => 'Obmedzené';
+
+  @override
+  String get fairUseStageRestrict => 'Zablokované';
+
+  @override
+  String get fairUseSpeechUsage => 'Používanie reči';
+
+  @override
+  String get fairUseToday => 'Dnes';
+
+  @override
+  String get fairUse3Day => '3-dňové obdobie';
+
+  @override
+  String get fairUseWeekly => 'Týždenné obdobie';
+
+  @override
+  String get fairUseAboutTitle => 'O spravodlivom používaní';
+
+  @override
+  String get fairUseAboutBody =>
+      'Omi je navrhnutý pre osobné konverzácie, stretnutia a živé interakcie. Používanie sa meria skutočným detegovaným časom reči, nie časom pripojenia. Ak používanie výrazne prekročí bežné vzory pre neosobný obsah, môžu sa uplatniť úpravy.';
+
+  @override
+  String fairUseCaseRefCopied(String caseRef) {
+    return '$caseRef skopírované';
+  }
+
+  @override
+  String get fairUseDailyTranscription => 'Daily Transcription';
+
+  @override
+  String fairUseBudgetUsed(String used, String limit) {
+    return '${used}m / ${limit}m';
+  }
+
+  @override
+  String get fairUseBudgetExhausted => 'Daily transcription limit reached';
+
+  @override
+  String fairUseBudgetResetsAt(String time) {
+    return 'Resets $time';
+  }
+
+  @override
+  String get transcriptionPaused => 'Nahrávanie, opätovné pripojenie';
+
+  @override
+  String get transcriptionPausedReconnecting => 'Stále nahráva — opätovné pripojenie k prepisu...';
 }

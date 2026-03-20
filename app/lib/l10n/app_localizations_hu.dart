@@ -8597,4 +8597,71 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get phoneHideKeypad => 'Billentyűzet elrejtése';
+
+  @override
+  String get fairUsePolicy => 'Méltányos használat';
+
+  @override
+  String get fairUseLoadError => 'Nem sikerült betölteni a méltányos használat állapotát. Kérjük, próbálja újra.';
+
+  @override
+  String get fairUseStatusNormal => 'Használata a normális határokon belül van.';
+
+  @override
+  String get fairUseStageNormal => 'Normál';
+
+  @override
+  String get fairUseStageWarning => 'Figyelmeztetés';
+
+  @override
+  String get fairUseStageThrottle => 'Korlátozott';
+
+  @override
+  String get fairUseStageRestrict => 'Letiltva';
+
+  @override
+  String get fairUseSpeechUsage => 'Beszédhasználat';
+
+  @override
+  String get fairUseToday => 'Ma';
+
+  @override
+  String get fairUse3Day => '3 napos gördülő';
+
+  @override
+  String get fairUseWeekly => 'Heti gördülő';
+
+  @override
+  String get fairUseAboutTitle => 'A méltányos használatról';
+
+  @override
+  String get fairUseAboutBody =>
+      'Az Omi személyes beszélgetésekhez, megbeszélésekhez és élő interakciókhoz készült. A használatot a ténylegesen észlelt beszédidő alapján mérik, nem a csatlakozási idő alapján. Ha a használat jelentősen meghaladja a nem személyes tartalom normális mintáit, módosítások alkalmazhatók.';
+
+  @override
+  String fairUseCaseRefCopied(String caseRef) {
+    return '$caseRef másolva';
+  }
+
+  @override
+  String get fairUseDailyTranscription => 'Daily Transcription';
+
+  @override
+  String fairUseBudgetUsed(String used, String limit) {
+    return '${used}m / ${limit}m';
+  }
+
+  @override
+  String get fairUseBudgetExhausted => 'Daily transcription limit reached';
+
+  @override
+  String fairUseBudgetResetsAt(String time) {
+    return 'Resets $time';
+  }
+
+  @override
+  String get transcriptionPaused => 'Felvétel, újrakapcsolódás';
+
+  @override
+  String get transcriptionPausedReconnecting => 'A felvétel folytatódik — újrakapcsolódás az átíráshoz...';
 }

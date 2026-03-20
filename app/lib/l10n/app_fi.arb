@@ -2749,5 +2749,50 @@
     "notYetSynced": "Ei vielä synkronoitu puhelimeesi",
     "clearAll": "Tyhjennä kaikki",
     "phoneKeypad": "Näppäimistö",
-    "phoneHideKeypad": "Piilota näppäimistö"
+    "phoneHideKeypad": "Piilota näppäimistö",
+    "transcriptionPaused": "Nauhoittaa, yhdistetään uudelleen",
+    "transcriptionPausedReconnecting": "Nauhoittaa yhä — yhdistetään uudelleen puheentunnistukseen...",
+    "fairUsePolicy": "Kohtuullinen käyttö",
+    "fairUseLoadError": "Kohtuullisen käytön tilaa ei voitu ladata. Yritä uudelleen.",
+    "fairUseStatusNormal": "Käyttösi on normaalien rajojen sisällä.",
+    "fairUseStageNormal": "Normaali",
+    "fairUseStageWarning": "Varoitus",
+    "fairUseStageThrottle": "Rajoitettu",
+    "fairUseStageRestrict": "Estetty",
+    "fairUseSpeechUsage": "Puheen käyttö",
+    "fairUseToday": "Tänään",
+    "fairUse3Day": "3 päivän jakso",
+    "fairUseWeekly": "Viikkojakso",
+    "fairUseAboutTitle": "Tietoa kohtuullisesta käytöstä",
+    "fairUseAboutBody": "Omi on suunniteltu henkilökohtaisiin keskusteluihin, kokouksiin ja reaaliaikaiseen vuorovaikutukseen. Käyttöä mitataan havaitun todellisen puheajan, ei yhteysajan perusteella. Jos käyttö ylittää merkittävästi normaalit mallit ei-henkilökohtaisen sisällön osalta, säätöjä voidaan soveltaa.",
+    "fairUseCaseRefCopied": "{caseRef} kopioitu",
+    "@fairUseCaseRefCopied": {
+        "description": "Snackbar message when case reference is copied",
+        "placeholders": {
+            "caseRef": {
+                "type": "String"
+            }
+        }
+    },
+    "fairUseDailyTranscription": "Daily Transcription",
+    "fairUseBudgetExhausted": "Daily transcription limit reached",
+    "fairUseBudgetResetsAt": "Resets {time}",
+    "fairUseBudgetUsed": "{used}m / {limit}m",
+    "@fairUseBudgetUsed": {
+        "placeholders": {
+            "used": {
+                "type": "String"
+            },
+            "limit": {
+                "type": "String"
+            }
+        }
+    },
+    "@fairUseBudgetResetsAt": {
+        "placeholders": {
+            "time": {
+                "type": "String"
+            }
+        }
+    }
 }

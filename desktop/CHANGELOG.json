@@ -2,6 +2,101 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.11.146",
+      "date": "2026-03-20",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.145",
+      "date": "2026-03-19",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.144",
+      "date": "2026-03-19",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.143",
+      "date": "2026-03-19",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.142",
+      "date": "2026-03-19",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.141",
+      "date": "2026-03-19",
+      "changes": [
+        "Reduced auth error log spam with exponential backoff across all polling operations",
+        "Fixed Tasks page showing misleading \"No Matching Tasks\" when user has no tasks",
+        "API keys are now served securely from the backend instead of bundled in the app",
+        "Fixed tasks disappearing when switching to Dashboard (missing safety guard on empty API responses)"
+      ]
+    },
+    {
+      "version": "0.11.139",
+      "date": "2026-03-19",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.138",
+      "date": "2026-03-19",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.136",
+      "date": "2026-03-19",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.135",
+      "date": "2026-03-19",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.134",
+      "date": "2026-03-18",
+      "changes": [
+        "Removed intro video from Rewind tab \u2014 screenshots are shown immediately",
+        "Fixed delayed screenshot capture after onboarding \u2014 first screenshot is now taken instantly"
+      ]
+    },
+    {
+      "version": "0.11.133",
+      "date": "2026-03-18",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.132",
+      "date": "2026-03-18",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
       "version": "0.11.131",
       "date": "2026-03-18",
       "changes": [

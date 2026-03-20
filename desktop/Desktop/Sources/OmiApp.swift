@@ -137,6 +137,53 @@ struct OMIApp: App {
           resetWindowToDefaultSize()
         }
       }
+
+      // Sidebar navigation shortcuts: Cmd+1..6 for main pages, Cmd+, for Settings
+      CommandGroup(after: .sidebar) {
+        Button("Dashboard") {
+          NotificationCenter.default.post(name: .navigateToSidebarItem, object: nil,
+            userInfo: ["rawValue": SidebarNavItem.dashboard.rawValue])
+        }
+        .keyboardShortcut("1", modifiers: .command)
+
+        Button("Chat") {
+          NotificationCenter.default.post(name: .navigateToSidebarItem, object: nil,
+            userInfo: ["rawValue": SidebarNavItem.chat.rawValue])
+        }
+        .keyboardShortcut("2", modifiers: .command)
+
+        Button("Memories") {
+          NotificationCenter.default.post(name: .navigateToSidebarItem, object: nil,
+            userInfo: ["rawValue": SidebarNavItem.memories.rawValue])
+        }
+        .keyboardShortcut("3", modifiers: .command)
+
+        Button("Tasks") {
+          NotificationCenter.default.post(name: .navigateToSidebarItem, object: nil,
+            userInfo: ["rawValue": SidebarNavItem.tasks.rawValue])
+        }
+        .keyboardShortcut("4", modifiers: .command)
+
+        Button("Rewind") {
+          NotificationCenter.default.post(name: .navigateToSidebarItem, object: nil,
+            userInfo: ["rawValue": SidebarNavItem.rewind.rawValue])
+        }
+        .keyboardShortcut("5", modifiers: .command)
+
+        Button("Apps") {
+          NotificationCenter.default.post(name: .navigateToSidebarItem, object: nil,
+            userInfo: ["rawValue": SidebarNavItem.apps.rawValue])
+        }
+        .keyboardShortcut("6", modifiers: .command)
+
+        Divider()
+
+        Button("Settings") {
+          NotificationCenter.default.post(name: .navigateToSidebarItem, object: nil,
+            userInfo: ["rawValue": SidebarNavItem.settings.rawValue])
+        }
+        .keyboardShortcut(",", modifiers: .command)
+      }
     }
 
     // Note: Menu bar is now handled by NSStatusBar in AppDelegate.setupMenuBar()
@@ -403,7 +450,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     // Activate app and show main window after a brief delay
     DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
       log("AppDelegate: Checking windows after 0.2s delay, count=\(NSApp.windows.count)")
-      NSApp.activate(ignoringOtherApps: true)
+      NSApp.activate()
       var foundOmiWindow = false
       for window in NSApp.windows {
         log("AppDelegate: Window title='\(window.title)', isVisible=\(window.isVisible)")
@@ -548,7 +595,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         DispatchQueue.main.async {
           log("AppDelegate: [HOTKEY] Activating app and posting notification")
           // Bring app to front
-          NSApp.activate(ignoringOtherApps: true)
+          NSApp.activate()
           // Find and show main window
           for window in NSApp.windows {
             if window.title.hasPrefix("Omi") {
@@ -797,14 +844,14 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
   @MainActor @objc private func openOmiFromMenu() {
     AnalyticsManager.shared.menuBarActionClicked(action: "open_omi")
-    NSApp.activate(ignoringOtherApps: true)
+    NSApp.activate()
     var foundWindow = revealMainWindowIfAvailable()
     if !foundWindow {
       Self.openMainWindow?()
       foundWindow = revealMainWindowIfAvailable()
     }
     // Dock icon is always visible; just activate the app
-    NSApp.activate(ignoringOtherApps: true)
+    NSApp.activate()
     if !foundWindow {
       log("AppDelegate: [MENUBAR] WARNING - No Omi window found when opening from menu bar")
     }
@@ -1036,6 +1083,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     Task { @MainActor in
       AuthService.shared.handleOAuthCallback(url: url)
+      // Bring app to foreground after OAuth redirect — Safari stays in front otherwise
+      NSApp.activate()
     }
   }
 

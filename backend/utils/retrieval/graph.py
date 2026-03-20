@@ -18,15 +18,21 @@ from models.app import App
 from models.chat import ChatSession, Message, PageContext
 from models.conversation import Conversation
 from utils.llm.chat import retrieve_is_file_question
-from utils.llm.persona import answer_persona_question_stream
 from utils.other.chat_file import FileChatTool
 from utils.retrieval.agentic import AsyncStreamingCallback, execute_agentic_chat_stream
 from utils.observability.langsmith import get_chat_tracer_callbacks
+from utils.llm.usage_tracker import get_usage_callback
 import logging
 
 logger = logging.getLogger(__name__)
 
-llm_medium_stream = ChatOpenAI(model='gpt-4.1', streaming=True)
+_usage_callback = get_usage_callback()
+llm_medium_stream = ChatOpenAI(
+    model='gpt-4.1',
+    streaming=True,
+    callbacks=[_usage_callback],
+    stream_options={"include_usage": True},
+)
 
 
 # ---------------------------------------------------------------------------

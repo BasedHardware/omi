@@ -1,11 +1,6 @@
-import { SearchParamsTypes } from '@/src/types/params.types';
 import { Metadata } from 'next';
 import './styles.css';
 import { redirect } from 'next/navigation';
-
-interface MemoriesPageProps {
-  searchParams: SearchParamsTypes;
-}
 
 export const metadata: Metadata = {
   title: 'Community Memories',

@@ -91,6 +91,8 @@ class CrispManager: ObservableObject {
 
     private func pollForMessages() {
         Task {
+            // Skip if in auth backoff period (recent 401 errors)
+            guard !AuthBackoffTracker.shared.shouldSkipRequest() else { return }
             do {
                 let messages = try await fetchUnreadMessages()
                 log("CrispManager: poll returned \(messages.count) messages (since=\(self.lastSeenTimestamp))")
@@ -122,7 +124,11 @@ class CrispManager: ObservableObject {
                         assistantId: "crisp"
                     )
                 }
+                AuthBackoffTracker.shared.reportSuccess()
             } catch {
+                if case APIError.unauthorized = error {
+                    AuthBackoffTracker.shared.reportAuthFailure()
+                }
                 log("CrispManager: poll failed: \(error)")
             }
         }

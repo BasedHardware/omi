@@ -3,63 +3,128 @@ name: Lint Check
 on:
   push:
     branches: main
-    paths:
-      - 'web/frontend/**'
-      - 'web/personas-open-source/**'
   pull_request:
     branches: main
-    paths:
-      - 'web/frontend/**'
-      - 'web/personas-open-source/**'
 
 jobs:
-  lint-frontend:
-    name: Lint Frontend
+  lint:
+    name: Lint & Format Check
     runs-on: ubuntu-latest
-    defaults:
-      run:
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Get changed files
+        id: changed
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            DIFF_BASE="origin/${{ github.base_ref }}"
+          else
+            DIFF_BASE="HEAD~1"
+          fi
+          FILES=$(git diff --name-only --diff-filter=ACM "$DIFF_BASE"...HEAD)
+          echo "$FILES"
+          echo "$FILES" > /tmp/changed-files.txt
+          echo "has_dart=$(echo "$FILES" | grep -q '\.dart$' && echo true || echo false)" >> $GITHUB_OUTPUT
+          echo "has_python=$(echo "$FILES" | grep -q 'backend/.*\.py$' && echo true || echo false)" >> $GITHUB_OUTPUT
+          echo "has_arb=$(echo "$FILES" | grep -q '\.arb$' && echo true || echo false)" >> $GITHUB_OUTPUT
+          echo "has_firmware=$(echo "$FILES" | grep -qE '^(omi|omiGlass)/.*\.(c|cpp|cc|cxx|h|hpp)$' && echo true || echo false)" >> $GITHUB_OUTPUT
+          echo "has_frontend=$(echo "$FILES" | grep -q '^web/frontend/' && echo true || echo false)" >> $GITHUB_OUTPUT
+          echo "has_personas=$(echo "$FILES" | grep -q '^web/personas-open-source/' && echo true || echo false)" >> $GITHUB_OUTPUT
+
+      # -- Dart --
+      - name: Setup Flutter
+        if: steps.changed.outputs.has_dart == 'true'
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+
+      - name: Resolve Flutter dependencies
+        if: steps.changed.outputs.has_dart == 'true'
+        working-directory: app
+        run: flutter pub get
+
+      - name: Check Dart formatting
+        if: steps.changed.outputs.has_dart == 'true'
+        run: |
+          FILES=$(grep '\.dart$' /tmp/changed-files.txt | grep -v -e '\.gen\.dart$' -e '\.g\.dart$' || true)
+          if [ -n "$FILES" ]; then
+            echo "$FILES" | xargs dart format --line-length 120 --set-exit-if-changed --output=none
+          fi
+
+      # -- Python --
+      - name: Check Python formatting
+        if: steps.changed.outputs.has_python == 'true'
+        run: |
+          pip install -q black
+          FILES=$(grep 'backend/.*\.py$' /tmp/changed-files.txt || true)
+          if [ -n "$FILES" ]; then
+            echo "$FILES" | xargs black --check --line-length 120 --skip-string-normalization
+          fi
+
+      # -- ARB --
+      - name: Check ARB formatting
+        if: steps.changed.outputs.has_arb == 'true'
+        run: |
+          FILES=$(grep '\.arb$' /tmp/changed-files.txt || true)
+          failed=0
+          for f in $FILES; do
+            if ! python3 -m json.tool "$f" > /dev/null 2>&1; then
+              echo "FAIL: $f is not valid JSON"
+              failed=1
+              continue
+            fi
+            if ! python3 -c "
+          import json, sys
+          f = sys.argv[1]
+          with open(f) as fh:
+              original = fh.read()
+          formatted = json.dumps(json.loads(original), indent=4, ensure_ascii=False) + '\n'
+          if original != formatted:
+              sys.exit(1)
+          " "$f" 2>/dev/null; then
+              echo "FAIL: $f not formatted with 4-space indent"
+              failed=1
+            fi
+          done
+          if [ "$failed" -eq 1 ]; then
+            echo "Fix: jq --indent 4 '.' <file> > tmp && mv tmp <file>"
+            exit 1
+          fi
+
+      # -- C/C++ --
+      - name: Check C/C++ formatting
+        if: steps.changed.outputs.has_firmware == 'true'
+        run: |
+          FILES=$(grep -E '^(omi|omiGlass)/.*\.(c|cpp|cc|cxx|h|hpp)$' /tmp/changed-files.txt || true)
+          if [ -n "$FILES" ]; then
+            echo "$FILES" | xargs clang-format --dry-run --Werror
+          fi
+
+      # -- Frontend --
+      - name: Setup Node.js
+        if: steps.changed.outputs.has_frontend == 'true' || steps.changed.outputs.has_personas == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: |
+            web/frontend/package-lock.json
+            web/personas-open-source/package-lock.json
+
+      - name: Lint Frontend
+        if: steps.changed.outputs.has_frontend == 'true'
         working-directory: ./web/frontend
-    
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+        run: |
+          npm ci
+          npm run lint
+          npm run lint:format -- --check
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '18'
-          cache: 'npm'
-          cache-dependency-path: './web/frontend/package-lock.json'
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Run ESLint
-        run: npm run lint
-
-      - name: Check Prettier formatting
-        run: npm run lint:format -- --check
-
-  lint-personas:
-    name: Lint Personas Open Source
-    runs-on: ubuntu-latest
-    defaults:
-      run:
+      - name: Lint Personas
+        if: steps.changed.outputs.has_personas == 'true'
         working-directory: ./web/personas-open-source
-    
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '18'
-          cache: 'npm'
-          cache-dependency-path: './web/personas-open-source/package-lock.json'
-
-      - name: Install dependencies
-        run: npm ci --legacy-peer-deps
-
-      - name: Run ESLint
-        run: npm run lint
+        run: |
+          npm ci --legacy-peer-deps
+          npm run lint

@@ -9,11 +9,12 @@ import SwiftUI
 class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     private static let positionKey = "FloatingControlBarPosition"
     private static let sizeKey = "FloatingControlBarSize"
-    private static let defaultSize = NSSize(width: 40, height: 10)
-    private static let minBarSize = NSSize(width: 40, height: 10)
+    private static let defaultSize = NSSize(width: 40, height: 14)
+    private static let minBarSize = NSSize(width: 40, height: 14)
     static let expandedBarSize = NSSize(width: 210, height: 50)
     private static let maxBarSize = NSSize(width: 1200, height: 1000)
     private static let expandedWidth: CGFloat = 430
+    private static let notificationWidth: CGFloat = 300
     private static let notificationHeight: CGFloat = 108
     private static let notificationSpacing: CGFloat = 8
     /// Minimum window height when AI response first appears.
@@ -565,7 +566,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         guard !state.showingAIConversation else { return }
         state.currentNotification = notification
         let targetSize = NSSize(
-            width: Self.expandedWidth,
+            width: Self.notificationWidth,
             height: Self.expandedBarSize.height + Self.notificationSpacing + Self.notificationHeight
         )
         resizeAnchored(to: targetSize, makeResizable: false, animated: animated, anchorTop: true)

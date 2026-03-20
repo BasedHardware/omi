@@ -8611,4 +8611,71 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get phoneHideKeypad => 'Amaga el teclat';
+
+  @override
+  String get fairUsePolicy => 'Ús raonable';
+
+  @override
+  String get fairUseLoadError => 'No s\'ha pogut carregar l\'estat d\'ús raonable. Si us plau, torneu-ho a provar.';
+
+  @override
+  String get fairUseStatusNormal => 'El vostre ús està dins dels límits normals.';
+
+  @override
+  String get fairUseStageNormal => 'Normal';
+
+  @override
+  String get fairUseStageWarning => 'Avís';
+
+  @override
+  String get fairUseStageThrottle => 'Limitat';
+
+  @override
+  String get fairUseStageRestrict => 'Restringit';
+
+  @override
+  String get fairUseSpeechUsage => 'Ús de la parla';
+
+  @override
+  String get fairUseToday => 'Avui';
+
+  @override
+  String get fairUse3Day => 'Últims 3 dies';
+
+  @override
+  String get fairUseWeekly => 'Setmanal';
+
+  @override
+  String get fairUseAboutTitle => 'Sobre l\'ús raonable';
+
+  @override
+  String get fairUseAboutBody =>
+      'Omi està dissenyat per a converses personals, reunions i interaccions en directe. L\'ús es mesura pel temps real de parla detectat, no pel temps de connexió. Si l\'ús supera significativament els patrons normals per a contingut no personal, es podrien aplicar ajustos.';
+
+  @override
+  String fairUseCaseRefCopied(String caseRef) {
+    return '$caseRef copiat';
+  }
+
+  @override
+  String get fairUseDailyTranscription => 'Daily Transcription';
+
+  @override
+  String fairUseBudgetUsed(String used, String limit) {
+    return '${used}m / ${limit}m';
+  }
+
+  @override
+  String get fairUseBudgetExhausted => 'Daily transcription limit reached';
+
+  @override
+  String fairUseBudgetResetsAt(String time) {
+    return 'Resets $time';
+  }
+
+  @override
+  String get transcriptionPaused => 'Gravant, reconnectant';
+
+  @override
+  String get transcriptionPausedReconnecting => 'Encara gravant — reconnectant a la transcripció...';
 }

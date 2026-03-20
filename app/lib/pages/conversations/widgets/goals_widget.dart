@@ -23,7 +23,7 @@ class GoalsWidget extends StatefulWidget {
 
 class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
   static const String _goalsEmojiKey = 'goals_tracker_emojis';
-  static const int _maxGoals = 3;
+  static const int _maxGoals = 4;
 
   // Available emojis for goals
   static const List<String> _availableEmojis = [

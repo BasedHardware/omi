@@ -2754,5 +2754,50 @@
     "notYetSynced": "Chưa đồng bộ với điện thoại của bạn",
     "clearAll": "Xóa tất cả",
     "phoneKeypad": "Bàn phím",
-    "phoneHideKeypad": "Ẩn bàn phím"
+    "phoneHideKeypad": "Ẩn bàn phím",
+    "transcriptionPaused": "Đang ghi, đang kết nối lại",
+    "transcriptionPausedReconnecting": "Vẫn đang ghi — đang kết nối lại với phiên âm...",
+    "fairUsePolicy": "Sử dụng hợp lý",
+    "fairUseLoadError": "Không thể tải trạng thái sử dụng hợp lý. Vui lòng thử lại.",
+    "fairUseStatusNormal": "Mức sử dụng của bạn trong giới hạn bình thường.",
+    "fairUseStageNormal": "Bình thường",
+    "fairUseStageWarning": "Cảnh báo",
+    "fairUseStageThrottle": "Bị hạn chế",
+    "fairUseStageRestrict": "Bị chặn",
+    "fairUseSpeechUsage": "Sử dụng giọng nói",
+    "fairUseToday": "Hôm nay",
+    "fairUse3Day": "3 ngày liên tục",
+    "fairUseWeekly": "Hàng tuần liên tục",
+    "fairUseAboutTitle": "Về sử dụng hợp lý",
+    "fairUseAboutBody": "Omi được thiết kế cho các cuộc trò chuyện cá nhân, cuộc họp và tương tác trực tiếp. Mức sử dụng được đo bằng thời gian nói thực tế được phát hiện, không phải thời gian kết nối. Nếu mức sử dụng vượt quá đáng kể các mẫu bình thường cho nội dung không cá nhân, có thể áp dụng các điều chỉnh.",
+    "fairUseCaseRefCopied": "Đã sao chép {caseRef}",
+    "@fairUseCaseRefCopied": {
+        "description": "Snackbar message when case reference is copied",
+        "placeholders": {
+            "caseRef": {
+                "type": "String"
+            }
+        }
+    },
+    "fairUseDailyTranscription": "Chuyển giọng hàng ngày",
+    "fairUseBudgetExhausted": "Đã đạt giới hạn chuyển giọng hàng ngày",
+    "fairUseBudgetResetsAt": "Đặt lại {time}",
+    "fairUseBudgetUsed": "{used}p / {limit}p",
+    "@fairUseBudgetUsed": {
+        "placeholders": {
+            "used": {
+                "type": "String"
+            },
+            "limit": {
+                "type": "String"
+            }
+        }
+    },
+    "@fairUseBudgetResetsAt": {
+        "placeholders": {
+            "time": {
+                "type": "String"
+            }
+        }
+    }
 }

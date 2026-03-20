@@ -2749,5 +2749,50 @@
     "notYetSynced": "Belum disegerakkan ke telefon anda",
     "clearAll": "Kosongkan semua",
     "phoneKeypad": "Pad kekunci",
-    "phoneHideKeypad": "Sembunyikan pad kekunci"
+    "phoneHideKeypad": "Sembunyikan pad kekunci",
+    "transcriptionPaused": "Merakam, menyambung semula",
+    "transcriptionPausedReconnecting": "Masih merakam — menyambung semula ke transkripsi...",
+    "fairUsePolicy": "Penggunaan Saksama",
+    "fairUseLoadError": "Tidak dapat memuatkan status penggunaan saksama. Sila cuba lagi.",
+    "fairUseStatusNormal": "Penggunaan anda dalam had biasa.",
+    "fairUseStageNormal": "Normal",
+    "fairUseStageWarning": "Amaran",
+    "fairUseStageThrottle": "Dihadkan",
+    "fairUseStageRestrict": "Disekat",
+    "fairUseSpeechUsage": "Penggunaan Pertuturan",
+    "fairUseToday": "Hari ini",
+    "fairUse3Day": "3 hari bergulir",
+    "fairUseWeekly": "Mingguan bergulir",
+    "fairUseAboutTitle": "Tentang Penggunaan Saksama",
+    "fairUseAboutBody": "Omi direka untuk perbualan peribadi, mesyuarat dan interaksi secara langsung. Penggunaan diukur berdasarkan masa pertuturan sebenar yang dikesan, bukan masa sambungan. Jika penggunaan melebihi corak biasa dengan ketara untuk kandungan bukan peribadi, pelarasan mungkin dikenakan.",
+    "fairUseCaseRefCopied": "{caseRef} disalin",
+    "@fairUseCaseRefCopied": {
+        "description": "Snackbar message when case reference is copied",
+        "placeholders": {
+            "caseRef": {
+                "type": "String"
+            }
+        }
+    },
+    "fairUseDailyTranscription": "Daily Transcription",
+    "fairUseBudgetExhausted": "Daily transcription limit reached",
+    "fairUseBudgetResetsAt": "Resets {time}",
+    "fairUseBudgetUsed": "{used}m / {limit}m",
+    "@fairUseBudgetUsed": {
+        "placeholders": {
+            "used": {
+                "type": "String"
+            },
+            "limit": {
+                "type": "String"
+            }
+        }
+    },
+    "@fairUseBudgetResetsAt": {
+        "placeholders": {
+            "time": {
+                "type": "String"
+            }
+        }
+    }
 }

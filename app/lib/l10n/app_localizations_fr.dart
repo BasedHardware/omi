@@ -8638,4 +8638,71 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get phoneHideKeypad => 'Masquer le clavier';
+
+  @override
+  String get fairUsePolicy => 'Utilisation raisonnable';
+
+  @override
+  String get fairUseLoadError => 'Impossible de charger le statut d\'utilisation raisonnable. Veuillez réessayer.';
+
+  @override
+  String get fairUseStatusNormal => 'Votre utilisation est dans les limites normales.';
+
+  @override
+  String get fairUseStageNormal => 'Normal';
+
+  @override
+  String get fairUseStageWarning => 'Avertissement';
+
+  @override
+  String get fairUseStageThrottle => 'Limité';
+
+  @override
+  String get fairUseStageRestrict => 'Restreint';
+
+  @override
+  String get fairUseSpeechUsage => 'Utilisation de la parole';
+
+  @override
+  String get fairUseToday => 'Aujourd\'hui';
+
+  @override
+  String get fairUse3Day => '3 jours glissants';
+
+  @override
+  String get fairUseWeekly => 'Hebdomadaire glissant';
+
+  @override
+  String get fairUseAboutTitle => 'À propos de l\'utilisation raisonnable';
+
+  @override
+  String get fairUseAboutBody =>
+      'Omi est conçu pour les conversations personnelles, les réunions et les interactions en direct. L\'utilisation est mesurée par le temps de parole réel détecté, et non par le temps de connexion. Si l\'utilisation dépasse significativement les schémas normaux pour du contenu non personnel, des ajustements peuvent s\'appliquer.';
+
+  @override
+  String fairUseCaseRefCopied(String caseRef) {
+    return '$caseRef copié';
+  }
+
+  @override
+  String get fairUseDailyTranscription => 'Transcription quotidienne';
+
+  @override
+  String fairUseBudgetUsed(String used, String limit) {
+    return '${used}m / ${limit}m';
+  }
+
+  @override
+  String get fairUseBudgetExhausted => 'Limite quotidienne de transcription atteinte';
+
+  @override
+  String fairUseBudgetResetsAt(String time) {
+    return 'Réinitialisation $time';
+  }
+
+  @override
+  String get transcriptionPaused => 'Enregistrement, reconnexion';
+
+  @override
+  String get transcriptionPausedReconnecting => 'Enregistrement en cours — reconnexion à la transcription...';
 }

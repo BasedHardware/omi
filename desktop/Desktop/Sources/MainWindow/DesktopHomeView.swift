@@ -15,6 +15,7 @@ struct DesktopHomeView: View {
   @StateObject private var appState = AppState()
   @StateObject private var viewModelContainer = ViewModelContainer()
   @ObservedObject private var authState = AuthState.shared
+  @ObservedObject private var apiKeyService = APIKeyService.shared
   @State private var selectedIndex: Int = {
     if OMIApp.launchMode == .rewind { return SidebarNavItem.rewind.rawValue }
     let tier = UserDefaults.standard.integer(forKey: "currentTierLevel")
@@ -115,10 +116,15 @@ struct DesktopHomeView: View {
 
               let settings = AssistantSettings.shared
 
-              // Auto-start transcription if enabled in settings
+              // Auto-start transcription if enabled in settings.
+              // If API keys aren't loaded yet, onChange below retries.
               if settings.transcriptionEnabled && !appState.isTranscribing {
-                log("DesktopHomeView: Auto-starting transcription")
-                appState.startTranscription()
+                if APIKeyService.keysAvailable {
+                  log("DesktopHomeView: Auto-starting transcription")
+                  appState.startTranscription()
+                } else {
+                  log("DesktopHomeView: Deferring transcription — API keys not yet loaded")
+                }
               } else if !settings.transcriptionEnabled {
                 log("DesktopHomeView: Transcription disabled in settings, skipping auto-start")
               }
@@ -140,16 +146,23 @@ struct DesktopHomeView: View {
                 Task { await SettingsSyncManager.shared.syncToServer() }
               }
 
-              // Start proactive assistants monitoring if enabled in settings
+              // Start proactive assistants monitoring if enabled in settings.
+              // If API keys aren't loaded yet, this may fail — onChange below retries.
               if settings.screenAnalysisEnabled {
-                ProactiveAssistantsPlugin.shared.startMonitoring { success, error in
-                  if success {
-                    log("DesktopHomeView: Screen analysis started")
-                  } else {
-                    log(
-                      "DesktopHomeView: Screen analysis failed to start: \(error ?? "unknown") — setting remains enabled for next launch"
-                    )
+                if APIKeyService.keysAvailable {
+                  ProactiveAssistantsPlugin.shared.startMonitoring { success, error in
+                    if success {
+                      log("DesktopHomeView: Screen analysis started")
+                    } else {
+                      log(
+                        "DesktopHomeView: Screen analysis failed to start: \(error ?? "unknown") — setting remains enabled for next launch"
+                      )
+                    }
                   }
+                } else {
+                  log(
+                    "DesktopHomeView: Deferring screen analysis — API keys not yet loaded"
+                  )
                 }
               } else {
                 log("DesktopHomeView: Screen analysis disabled in settings, skipping auto-start")
@@ -195,6 +208,28 @@ struct DesktopHomeView: View {
                 if plugin.hasScreenRecordingPermission {
                   log("DesktopHomeView: Permission available on app active — starting monitoring")
                   plugin.startMonitoring { _, _ in }
+                }
+              }
+            }
+            .onChange(of: apiKeyService.isLoaded) { loaded in
+              guard loaded else { return }
+              log("DesktopHomeView: API keys loaded — retrying deferred services")
+              // Retry transcription
+              if AssistantSettings.shared.transcriptionEnabled && !appState.isTranscribing {
+                log("DesktopHomeView: Starting deferred transcription")
+                appState.startTranscription()
+              }
+              // Retry screen analysis
+              let plugin = ProactiveAssistantsPlugin.shared
+              if AssistantSettings.shared.screenAnalysisEnabled && !plugin.isMonitoring {
+                plugin.startMonitoring { success, error in
+                  if success {
+                    log("DesktopHomeView: Screen analysis started (after key load)")
+                  } else {
+                    log(
+                      "DesktopHomeView: Screen analysis retry failed: \(error ?? "unknown")"
+                    )
+                  }
                 }
               }
             }
@@ -443,7 +478,7 @@ struct DesktopHomeView: View {
     let activateApp = notification.userInfo?["activateApp"] as? Bool ?? true
 
     if activateApp {
-      NSApp.activate(ignoringOtherApps: true)
+      NSApp.activate()
       if let window = NSApp.windows.first(where: { $0.title.lowercased().hasPrefix("omi") }) {
         window.makeKeyAndOrderFront(nil)
       }
@@ -613,7 +648,7 @@ struct DesktopHomeView: View {
       }
     }
     .onReceive(NotificationCenter.default.publisher(for: .navigateToFloatingBarSettings)) { _ in
-      selectedSettingsSection = .advanced
+      selectedSettingsSection = .floatingBar
       withAnimation(.easeInOut(duration: 0.2)) {
         selectedIndex = SidebarNavItem.settings.rawValue
       }
@@ -649,6 +684,15 @@ struct DesktopHomeView: View {
     .onReceive(NotificationCenter.default.publisher(for: .navigateToTasks)) { _ in
       withAnimation(.easeInOut(duration: 0.2)) {
         selectedIndex = SidebarNavItem.tasks.rawValue
+      }
+    }
+    .onReceive(NotificationCenter.default.publisher(for: .navigateToSidebarItem)) { notification in
+      if let rawValue = notification.userInfo?["rawValue"] as? Int,
+        let item = SidebarNavItem(rawValue: rawValue)
+      {
+        withAnimation(.easeInOut(duration: 0.2)) {
+          selectedIndex = item.rawValue
+        }
       }
     }
     .onChange(of: selectedIndex) { oldValue, newValue in
