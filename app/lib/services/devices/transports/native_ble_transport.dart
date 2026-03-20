@@ -74,7 +74,7 @@ class NativeBleTransport extends DeviceTransport {
 
       _updateState(DeviceTransportState.connected);
     } catch (e) {
-      print('[NativeBleTransport] connect failed: $e');
+      Logger.debug('[NativeBleTransport] connect failed: $e');
       _connectCompleter = null;
       _servicesCompleter = null;
       _updateState(DeviceTransportState.disconnected);
@@ -144,7 +144,7 @@ class NativeBleTransport extends DeviceTransport {
     try {
       _hostApi.subscribeCharacteristic(_peripheralUuid, serviceUuid, characteristicUuid);
     } catch (e) {
-      print('[NativeBleTransport] Failed to subscribe $serviceUuid:$characteristicUuid: $e');
+      Logger.debug('[NativeBleTransport] Failed to subscribe $serviceUuid:$characteristicUuid: $e');
     }
   }
 
@@ -154,7 +154,7 @@ class NativeBleTransport extends DeviceTransport {
       final data = await _hostApi.readCharacteristic(_peripheralUuid, serviceUuid, characteristicUuid);
       return data.toList();
     } catch (e) {
-      print('[NativeBleTransport] Failed to read $serviceUuid:$characteristicUuid: $e');
+      Logger.debug('[NativeBleTransport] Failed to read $serviceUuid:$characteristicUuid: $e');
       return [];
     }
   }
@@ -164,7 +164,7 @@ class NativeBleTransport extends DeviceTransport {
     try {
       await _hostApi.writeCharacteristic(_peripheralUuid, serviceUuid, characteristicUuid, Uint8List.fromList(data));
     } catch (e) {
-      print('[NativeBleTransport] Failed to write characteristic: $e');
+      Logger.debug('[NativeBleTransport] Failed to write characteristic: $e');
       rethrow;
     }
   }
@@ -260,7 +260,7 @@ class NativeBleTransport extends DeviceTransport {
 
       _updateState(DeviceTransportState.connected);
     } catch (e) {
-      print('[NativeBleTransport] Failed to re-subscribe after reconnect: $e');
+      Logger.debug('[NativeBleTransport] Failed to re-subscribe after reconnect: $e');
       _servicesCompleter = null;
       _updateState(DeviceTransportState.disconnected);
     } finally {

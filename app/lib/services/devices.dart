@@ -63,7 +63,6 @@ class DeviceService implements IDeviceService {
   DeviceServiceStatus _status = DeviceServiceStatus.init;
   List<BtDevice> _devices = [];
 
-
   final List<DeviceDiscoverer> _discoverers = [
     NativeBluetoothDiscoverer(),
     AppleWatchDiscoverer(),
@@ -130,20 +129,20 @@ class DeviceService implements IDeviceService {
     _connection = null;
 
     var device = _devices.firstWhereOrNull((f) => f.id == id);
-    print('[DeviceService] device lookup result: ${device?.name ?? "NULL"} (locator: ${device?.locator?.kind})');
+    Logger.debug('[DeviceService] device lookup result: ${device?.name ?? "NULL"} (locator: ${device?.locator?.kind})');
 
     // If device not in discovered list, try to get it from SharedPreferences
     // This allows background reconnection without scanning
     if (device == null) {
-      print('[DeviceService] Device not in discovered list, checking stored device');
+      Logger.debug('[DeviceService] Device not in discovered list, checking stored device');
       device = _getStoredDevice(id);
       if (device != null) {
-        print('[DeviceService] Using stored device: ${device.name}');
+        Logger.debug('[DeviceService] Using stored device: ${device.name}');
         if (!_devices.any((d) => d.id == device!.id)) {
           _devices.add(device);
         }
       } else {
-        print('[DeviceService] No stored device available for $id, returning');
+        Logger.debug('[DeviceService] No stored device available for $id, returning');
         return;
       }
     }
