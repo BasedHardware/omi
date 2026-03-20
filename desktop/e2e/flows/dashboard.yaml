@@ -5,7 +5,7 @@
 version: 2
 name: dashboard
 description: Dashboard flow — verify productivity widgets load, create/update/delete goals, toggle task completion, view embedded conversations
-app: com.omi.desktop-dev
+app: com.omi.computer-macos
 evidence:
   video: true
 covers:
