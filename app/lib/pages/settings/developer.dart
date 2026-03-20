@@ -1926,8 +1926,8 @@ class _ManualFirmwareFlashPageState extends State<_ManualFirmwareFlashPage> with
     });
     try {
       await startDfu(widget.device, zipFilePath: widget.zipFilePath);
-    } catch (e) { 
-      if (mounted) {
+    } catch (e) {
+      if (mounted) { 
         setState(() => _error = e.toString());
       }
     }
