@@ -27,6 +27,13 @@ from websockets.exceptions import ConnectionClosed
 
 from firebase_admin.auth import InvalidIdTokenError
 
+from utils.speech_profile_sharing import (
+    load_shared_profiles,
+    share_redis_channel,
+    shared_profile_key,
+    load_embedding_from_gcs,
+)
+
 from utils.speaker_assignment import (
     process_speaker_assigned_segments,
     update_speaker_assignment_maps,
@@ -40,6 +47,7 @@ from database import redis_db
 from database.redis_db import (
     check_credits_invalidation,
     get_cached_user_geolocation,
+    r,
 )
 from models.conversation import (
     Conversation,
@@ -176,6 +184,60 @@ def resample_pcm(pcm_data: bytes, source_rate: int, target_rate: int) -> bytes:
         src_idx = min(int(i / ratio), num_samples - 1)
         resampled.append(samples[src_idx])
     return struct.pack(f'<{len(resampled)}h', *resampled)
+
+
+async def _subscribe_share_updates(
+    uid: str,
+    embeddings_cache: dict,       # mutated in-place
+    share_names_cache: dict,      # mutated in-place: shared_key → display_name
+    stop_event: asyncio.Event,
+) -> None:
+    """Background coroutine: subscribes to Redis share events for *uid*.
+
+    On a 'share' event  → downloads the new embedding and inserts it.
+    On a 'revoke' event → removes the embedding from the cache.
+    Exits cleanly when *stop_event* is set (i.e. WebSocket closes).
+    """
+    channel = share_redis_channel(uid)
+    pubsub = r.pubsub()
+    pubsub.subscribe(channel)
+    logger.info("Subscribed to share updates: channel=%s uid=%s", channel, uid)
+    try:
+        while not stop_event.is_set():
+            message = pubsub.get_message(ignore_subscribe_messages=True, timeout=0.05)
+            if message and message["type"] == "message":
+                try:
+                    event = json.loads(message["data"])
+                except (json.JSONDecodeError, TypeError):
+                    logger.error("Malformed share event on channel=%s", channel)
+                    continue
+                action = event.get("action")
+                sharer_uid = event.get("sharer_uid", "")
+                display_name = event.get("display_name", sharer_uid)
+                key = shared_profile_key(sharer_uid)
+                if action == "share":
+                    embedding = await asyncio.get_event_loop().run_in_executor(
+                        None, load_embedding_from_gcs, sharer_uid
+                    )
+                    if embedding is not None:
+                        embeddings_cache[key] = embedding
+                        share_names_cache[key] = display_name
+                        logger.info(
+                            "Real-time share loaded: sharer=%s label=%r uid=%s",
+                            sharer_uid, display_name, uid,
+                        )
+                elif action == "revoke":
+                    embeddings_cache.pop(key, None)
+                    share_names_cache.pop(key, None)
+                    logger.info(
+                        "Real-time revoke applied: sharer=%s uid=%s", sharer_uid, uid
+                    )
+            await asyncio.sleep(0)  # yield to event loop
+    except Exception:
+        logger.exception("Error in share update subscriber uid=%s", uid)
+    finally:
+        pubsub.unsubscribe(channel)
+        logger.info("Unsubscribed from share updates: channel=%s", channel)
 
 
 class CustomSttMode(str, Enum):
@@ -327,6 +389,10 @@ async def _stream_handler(
     speaker_id_segment_queue: asyncio.Queue[dict] = asyncio.Queue(maxsize=100)
     person_embeddings_cache: Dict[str, dict] = {}  # person_id -> {embedding, name}
     speaker_id_enabled = False  # Will be set after private_cloud_sync_enabled is known
+
+    # --- shared speech profiles -------------------------------------------
+    share_names_cache: dict[str, str] = {}   # shared_key → display_name
+    # ----------------------------------------------------------------------
 
     # Track background tasks to cancel on cleanup (prevents memory leaks from fire-and-forget tasks)
     bg_tasks: Set[asyncio.Task] = set()
@@ -1723,6 +1789,23 @@ async def _stream_handler(
                         'name': person['name'],
                     }
             logger.info(f"Speaker ID: loaded {len(person_embeddings_cache)} person embeddings {uid} {session_id}")
+            
+            # --- shared speech profiles -------------------------------------------
+            shared = await asyncio.get_event_loop().run_in_executor(
+                None, load_shared_profiles, uid
+            )
+            for key, (embedding, display_name) in shared.items():
+                person_embeddings_cache[key] = {
+                    'embedding': embedding.reshape(1, -1),
+                    'name': display_name,
+                }
+                share_names_cache[key] = display_name
+
+            stop_share_listener = asyncio.Event()
+            share_listener_task = asyncio.create_task(
+                _subscribe_share_updates(uid, person_embeddings_cache, share_names_cache, stop_share_listener)
+            )
+            # ----------------------------------------------------------------------
         except Exception as e:
             logger.error(f"Speaker ID: failed to load embeddings: {e} {uid} {session_id}")
             return
@@ -1847,6 +1930,11 @@ async def _stream_handler(
 
             if best_match and best_distance < SPEAKER_MATCH_THRESHOLD:
                 person_id, person_name = best_match
+                
+                # Resolve display name: own people cache first, then shared profiles
+                if person_id in share_names_cache:
+                    person_name = share_names_cache[person_id]
+                
                 logger.info(
                     f"Speaker ID: speaker {speaker_id} -> {sanitize_pii(person_name)} (distance={best_distance:.3f}) {uid} {session_id}"
                 )
@@ -2621,6 +2709,18 @@ async def _stream_handler(
             realtime_segment_buffers.clear()
             realtime_photo_buffers.clear()
             image_chunks.clear()
+            
+            # Cleanup share listener
+            try:
+                stop_share_listener.set()
+                share_listener_task.cancel()
+                try:
+                    await share_listener_task
+                except asyncio.CancelledError:
+                    pass
+            except NameError:
+                pass  # Share listener may not be defined if error occurred early
+            
             person_embeddings_cache.clear()
             # Release conversation cache
             _cached_conversation_data = None
