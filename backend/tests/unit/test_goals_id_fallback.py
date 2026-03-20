@@ -64,8 +64,7 @@ import importlib.util
 
 _goals_path = os.path.join(os.path.dirname(__file__), "..", "..", "database", "goals.py")
 _goals_path = os.path.normpath(_goals_path)
-spec = importlib.util.spec_from_file_location("database.goals", _goals_path,
-                                                submodule_search_locations=[])
+spec = importlib.util.spec_from_file_location("database.goals", _goals_path, submodule_search_locations=[])
 goals_mod = importlib.util.module_from_spec(spec)
 sys.modules["database.goals"] = goals_mod
 spec.loader.exec_module(goals_mod)
