@@ -5,7 +5,7 @@
  * Uses Node.js built-in test runner (node:test) — no additional deps needed.
  * Tests pure functions and fetch behavior extracted from page.tsx.
  */
-import { describe, it, mock, beforeEach, afterEach } from 'node:test';
+import { describe, it, mock } from 'node:test';
 import assert from 'node:assert/strict';
 
 // ── Pure logic copied from page.tsx (same implementation) ──────────────
@@ -38,18 +38,42 @@ function daysSince(iso) {
 const REF_RE = /^FU-[A-Fa-f0-9]{6,12}$/i;
 
 const STAGE_META = {
-  none: { label: 'Normal', dot: 'bg-green-400', text: 'text-green-400', bg: 'bg-green-500/[0.06]' },
-  warning: { label: 'Warning', dot: 'bg-amber-400', text: 'text-amber-400', bg: 'bg-amber-500/[0.06]' },
-  throttle: { label: 'Throttled', dot: 'bg-orange-400', text: 'text-orange-400', bg: 'bg-orange-500/[0.06]' },
-  restrict: { label: 'Restricted', dot: 'bg-red-400', text: 'text-red-400', bg: 'bg-red-500/[0.06]' },
+  none: {
+    label: 'Normal',
+    dot: 'bg-green-400',
+    text: 'text-green-400',
+    bg: 'bg-green-500/[0.06]',
+  },
+  warning: {
+    label: 'Warning',
+    dot: 'bg-amber-400',
+    text: 'text-amber-400',
+    bg: 'bg-amber-500/[0.06]',
+  },
+  throttle: {
+    label: 'Throttled',
+    dot: 'bg-orange-400',
+    text: 'text-orange-400',
+    bg: 'bg-orange-500/[0.06]',
+  },
+  restrict: {
+    label: 'Restricted',
+    dot: 'bg-red-400',
+    text: 'text-red-400',
+    bg: 'bg-red-500/[0.06]',
+  },
 };
 
+// eslint-disable-next-line no-undef
 async function getCaseStatus(ref, fetchFn = globalThis.fetch) {
   try {
-    const res = await fetchFn(`https://api.omi.me/v1/fair-use/case/${encodeURIComponent(ref)}/status`, {
-      cache: 'no-store',
-      signal: AbortSignal.timeout(10_000),
-    });
+    const res = await fetchFn(
+      `https://api.omi.me/v1/fair-use/case/${encodeURIComponent(ref)}/status`,
+      {
+        cache: 'no-store',
+        signal: AbortSignal.timeout(10_000),
+      },
+    );
     if (res.status === 404) return { kind: 'not_found' };
     if (!res.ok) return { kind: 'error' };
     return { kind: 'ok', data: await res.json() };
@@ -120,7 +144,7 @@ describe('safeEmail', () => {
     assert.equal(safeEmail('user@sub.example.com'), 'user@sub.example.com');
   });
   it('accepts special RFC chars in local part', () => {
-    assert.equal(safeEmail("user.name+tag@example.com"), "user.name+tag@example.com");
+    assert.equal(safeEmail('user.name+tag@example.com'), 'user.name+tag@example.com');
   });
 });
 
@@ -188,7 +212,13 @@ describe('STAGE_META', () => {
 
 describe('getCaseStatus', () => {
   it('returns ok for 200 response', async () => {
-    const mockData = { case_ref: 'FU-ABC123', stage: 'none', message: '', created_at: '', updated_at: '' };
+    const mockData = {
+      case_ref: 'FU-ABC123',
+      stage: 'none',
+      message: '',
+      created_at: '',
+      updated_at: '',
+    };
     const fakeFetch = mock.fn(async () => ({
       ok: true,
       status: 200,
@@ -213,13 +243,17 @@ describe('getCaseStatus', () => {
   });
 
   it('returns error for network failure', async () => {
-    const fakeFetch = mock.fn(async () => { throw new Error('network down'); });
+    const fakeFetch = mock.fn(async () => {
+      throw new Error('network down');
+    });
     const result = await getCaseStatus('FU-ABC123', fakeFetch);
     assert.deepEqual(result, { kind: 'error' });
   });
 
   it('returns error for timeout (AbortError)', async () => {
-    const fakeFetch = mock.fn(async () => { throw new DOMException('Aborted', 'AbortError'); });
+    const fakeFetch = mock.fn(async () => {
+      throw new DOMException('Aborted', 'AbortError');
+    });
     const result = await getCaseStatus('FU-ABC123', fakeFetch);
     assert.deepEqual(result, { kind: 'error' });
   });
