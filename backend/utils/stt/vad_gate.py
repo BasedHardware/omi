@@ -704,6 +704,7 @@ class GatedDeepgramSocket:
     def __init__(self, dg_connection, gate: Optional['VADStreamingGate'] = None):
         self._conn = dg_connection
         self._gate = gate
+        self._dg_dead = False
         # Audio capture for transcript quality validation (off by default)
         self._capture_dir = os.getenv('VAD_GATE_AUDIO_CAPTURE_DIR', '')
         self._raw_file = None
@@ -714,8 +715,15 @@ class GatedDeepgramSocket:
             self._raw_file = open(os.path.join(self._capture_dir, f'{session_id}_raw.pcm'), 'wb')
             self._gated_file = open(os.path.join(self._capture_dir, f'{session_id}_gated.pcm'), 'wb')
 
+    @property
+    def is_connection_dead(self) -> bool:
+        """True if DG connection has been detected as dead."""
+        return self._dg_dead
+
     def send(self, data: bytes, wall_time: Optional[float] = None) -> None:
         """Send audio through VAD gate (if active), then to DG."""
+        if self._dg_dead:
+            return
         if self._gate is None:
             return self._conn.send(data)
 
@@ -732,14 +740,30 @@ class GatedDeepgramSocket:
         if self._gated_file and gate_out.audio_to_send:
             self._gated_file.write(gate_out.audio_to_send)
         if gate_out.audio_to_send:
-            self._conn.send(gate_out.audio_to_send)
+            ret = self._conn.send(gate_out.audio_to_send)
+            if ret is False:
+                logger.warning(
+                    'DG send returned False, connection dead uid=%s session=%s', self._gate.uid, self._gate.session_id
+                )
+                self._dg_dead = True
         elif self._gate.needs_keepalive(now):
             # Prevent DG 10s idle timeout during extended silence
             try:
-                self._conn.keep_alive()
-                self._gate.record_keepalive(now)
+                ret = self._conn.keep_alive()
+                if ret is False:
+                    logger.warning(
+                        'DG keep_alive returned False, connection dead uid=%s session=%s',
+                        self._gate.uid,
+                        self._gate.session_id,
+                    )
+                    self._dg_dead = True
+                else:
+                    self._gate.record_keepalive(now)
             except Exception:
-                logger.debug('keepalive failed uid=%s', self._gate.uid)
+                logger.warning(
+                    'DG keepalive exception, connection dead uid=%s session=%s', self._gate.uid, self._gate.session_id
+                )
+                self._dg_dead = True
         if gate_out.should_finalize:
             try:
                 self._conn.finalize()
