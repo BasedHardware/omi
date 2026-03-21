@@ -666,10 +666,9 @@ def process_segment(
             finished_at=finished_at,
             transcript_segments=transcript_segments,
             source=source,
+            is_locked=is_locked,
         )
         created = process_conversation(uid, language, create_memory)
-        if is_locked:
-            conversations_db.update_conversation(uid, created.id, {'is_locked': True})
         response['new_memories'].add(created.id)
     else:
 
