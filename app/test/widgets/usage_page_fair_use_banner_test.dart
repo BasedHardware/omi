@@ -3,6 +3,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:omi/l10n/app_localizations.dart';
+import 'package:omi/pages/settings/fair_use_page.dart';
 
 /// Wraps [child] in a MaterialApp with l10n delegates so context.l10n works.
 Widget buildTestApp(Widget child) {
@@ -66,7 +67,9 @@ class FairUseBannerHarness extends StatelessWidget {
 
     return GestureDetector(
       key: const Key('fair_use_banner_tap'),
-      onTap: () {},
+      onTap: () {
+        Navigator.of(context).push(MaterialPageRoute(builder: (context) => const FairUsePage()));
+      },
       child: Container(
         margin: const EdgeInsets.fromLTRB(16, 8, 16, 0),
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
@@ -181,14 +184,19 @@ void main() {
   });
 
   group('Fair Use banner tap target', () {
-    testWidgets('banner is tappable via GestureDetector', (tester) async {
+    testWidgets('tapping banner navigates to FairUsePage', (tester) async {
       await tester.pumpWidget(buildTestApp(const FairUseBannerHarness(fairUseStatus: {'stage': 'restrict'})));
       await tester.pumpAndSettle();
 
       final gesture = find.byKey(const Key('fair_use_banner_tap'));
       expect(gesture, findsOneWidget);
-      // Verify it's a GestureDetector (tappable)
-      expect(tester.widget(gesture), isA<GestureDetector>());
+
+      // Tap the banner
+      await tester.tap(gesture);
+      await tester.pumpAndSettle();
+
+      // Verify FairUsePage was pushed onto the navigator
+      expect(find.byType(FairUsePage), findsOneWidget);
     });
   });
 
