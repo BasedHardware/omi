@@ -31,7 +31,6 @@ from utils.fair_use import (
     is_hard_restricted,
 )
 from utils.other import endpoints as auth
-from utils.other.endpoints import rate_limit_dependency
 from utils.other.storage import (
     get_syncing_file_temporal_signed_url,
     delete_syncing_temporal_file,
@@ -638,7 +637,9 @@ def _reprocess_conversation_after_update(uid: str, conversation_id: str, languag
     logger.info(f'Successfully reprocessed conversation {conversation_id}')
 
 
-def process_segment(path: str, uid: str, response: dict, source: ConversationSource = ConversationSource.omi):
+def process_segment(
+    path: str, uid: str, response: dict, source: ConversationSource = ConversationSource.omi, is_locked: bool = False
+):
     url = get_syncing_file_temporal_signed_url(path)
 
     def delete_file():
@@ -667,6 +668,8 @@ def process_segment(path: str, uid: str, response: dict, source: ConversationSou
             source=source,
         )
         created = process_conversation(uid, language, create_memory)
+        if is_locked:
+            conversations_db.update_conversation(uid, created.id, {'is_locked': True})
         response['new_memories'].add(created.id)
     else:
 
@@ -705,6 +708,8 @@ def process_segment(path: str, uid: str, response: dict, source: ConversationSou
         # save with updated finished_at
         response['updated_memories'].add(closest_memory['id'])
         update_conversation_segments(uid, closest_memory['id'], segments, finished_at=new_finished_at)
+        if is_locked:
+            conversations_db.update_conversation(uid, closest_memory['id'], {'is_locked': True})
 
         # If the conversation was previously discarded, reprocess it with the new segments
         if closest_memory.get('discarded', False):
@@ -722,18 +727,14 @@ def _cleanup_files(file_paths):
             logger.error(f"Failed to cleanup file {path}: {e}")
 
 
-@router.post(
-    "/v1/sync-local-files",
-    dependencies=[
-        Depends(rate_limit_dependency(endpoint="sync_local_files", requests_per_window=20, window_seconds=3600))
-    ],
-)
+@router.post("/v1/sync-local-files")
 async def sync_local_files(files: List[UploadFile] = File(...), uid: str = Depends(auth.get_current_user_uid)):
-    # Pre-check gates: block over-limit users before any processing (#5854)
-    if not has_transcription_credits(uid):
-        raise HTTPException(status_code=402, detail="Monthly transcription limit reached")
+    # Pre-check gates (#5854)
     if is_hard_restricted(uid):
         raise HTTPException(status_code=429, detail="Account temporarily restricted due to fair-use policy")
+
+    # Check credits: if exhausted, still process but lock the conversation so user can pay to unlock
+    should_lock = not has_transcription_credits(uid)
 
     # Detect source from filenames
     source = ConversationSource.omi
@@ -803,6 +804,7 @@ async def sync_local_files(files: List[UploadFile] = File(...), uid: str = Depen
                     uid,
                     response,
                     source,
+                    should_lock,
                 ),
             )
             for path in segmented_paths
