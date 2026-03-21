@@ -3,6 +3,7 @@
 #include <errno.h>
 #include <hal/nrf_power.h>
 #include <math.h> // For float conversion in logs
+#include <shell/shell_bt_nus.h>
 #include <stdint.h>
 #include <zephyr/bluetooth/bluetooth.h>
 #include <zephyr/bluetooth/gatt.h>
@@ -15,7 +16,6 @@
 #include <zephyr/dt-bindings/gpio/nordic-nrf-gpio.h>
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
-#include <shell/shell_bt_nus.h>
 #include <zephyr/sys/atomic.h>
 #include <zephyr/sys/ring_buffer.h>
 
@@ -28,10 +28,10 @@
 #ifdef CONFIG_OMI_ENABLE_MONITOR
 #include "monitor.h"
 #endif
+#include "rtc.h"
 #include "sd_card.h"
 #include "settings.h"
 #include "storage.h"
-#include "rtc.h"
 LOG_MODULE_REGISTER(transport, CONFIG_LOG_DEFAULT_LEVEL);
 
 #ifdef CONFIG_OMI_ENABLE_RFSW_CTRL
@@ -107,8 +107,8 @@ static void exchange_func(struct bt_conn *conn, uint8_t att_err, struct bt_gatt_
 // --- GATT Exchange MTU Params ---
 static struct bt_gatt_exchange_params exchange_params;
 
-#define MTU_RECHECK_DELAY_MS        800
-#define MTU_RECHECK_MAX_ATTEMPTS    6
+#define MTU_RECHECK_DELAY_MS 800
+#define MTU_RECHECK_MAX_ATTEMPTS 6
 static uint8_t mtu_recheck_attempts = 0;
 K_WORK_DELAYABLE_DEFINE(mtu_recheck_work, mtu_recheck_work_handler);
 
@@ -232,7 +232,7 @@ static ssize_t time_sync_write_handler(struct bt_conn *conn,
 
     LOG_INF("Time sync received: %u seconds", epoch_s);
 
-    int err = rtc_set_utc_time((uint64_t)epoch_s);
+    int err = rtc_set_utc_time((uint64_t) epoch_s);
     if (err) {
         LOG_ERR("Failed to set RTC time: %d", err);
         return BT_GATT_ERR(BT_ATT_ERR_UNLIKELY);
@@ -246,11 +246,8 @@ static ssize_t time_sync_write_handler(struct bt_conn *conn,
     return len;
 }
 
-static ssize_t time_sync_read_handler(struct bt_conn *conn,
-                                      const struct bt_gatt_attr *attr,
-                                      void *buf,
-                                      uint16_t len,
-                                      uint16_t offset)
+static ssize_t
+time_sync_read_handler(struct bt_conn *conn, const struct bt_gatt_attr *attr, void *buf, uint16_t len, uint16_t offset)
 {
     uint32_t epoch_s = get_utc_time();
     LOG_INF("Time sync read: %u seconds", epoch_s);
@@ -468,11 +465,11 @@ static void exchange_func(struct bt_conn *conn, uint8_t att_err, struct bt_gatt_
 //
 
 #ifdef CONFIG_OMI_ENABLE_BATTERY
-#define BATTERY_REFRESH_INTERVAL_CONNECTED   10000 // 10 seconds
+#define BATTERY_REFRESH_INTERVAL_CONNECTED 10000    // 10 seconds
 #define BATTERY_REFRESH_INTERVAL_DISCONNECTED 30000 // 30 seconds
-#define BATTERY_RETRY_INTERVAL          1000  // 1 second - retry when BLE TX buffer unavailable
-#define BATTERY_RETRY_MAX               3     // Maximum retries before giving up for this cycle
-#define CONFIG_OMI_BATTERY_CRITICAL_MV  3500  // mV
+#define BATTERY_RETRY_INTERVAL 1000                 // 1 second - retry when BLE TX buffer unavailable
+#define BATTERY_RETRY_MAX 3                         // Maximum retries before giving up for this cycle
+#define CONFIG_OMI_BATTERY_CRITICAL_MV 3500         // mV
 uint8_t battery_percentage = 0;
 static uint8_t battery_retry_count = 0;
 void broadcast_battery_level(struct k_work *work_item);
@@ -481,12 +478,11 @@ K_WORK_DELAYABLE_DEFINE(battery_work, broadcast_battery_level);
 
 void broadcast_battery_level(struct k_work *work_item)
 {
-    (void)work_item;
+    (void) work_item;
     uint16_t battery_millivolt;
-    uint32_t next_refresh_interval =
-        (is_connected && current_connection != NULL)
-            ? BATTERY_REFRESH_INTERVAL_CONNECTED
-            : BATTERY_REFRESH_INTERVAL_DISCONNECTED;
+    uint32_t next_refresh_interval = (is_connected && current_connection != NULL)
+                                         ? BATTERY_REFRESH_INTERVAL_CONNECTED
+                                         : BATTERY_REFRESH_INTERVAL_DISCONNECTED;
 
     if (battery_get_millivolt(&battery_millivolt) == 0 &&
         battery_get_percentage(&battery_percentage, battery_millivolt) == 0) {
@@ -505,7 +501,10 @@ void broadcast_battery_level(struct k_work *work_item)
                 if (battery_retry_count < BATTERY_RETRY_MAX) {
                     battery_retry_count++;
                     LOG_WRN("Error updating battery level: %d, retrying in %d ms (attempt %d/%d)",
-                            err, BATTERY_RETRY_INTERVAL, battery_retry_count, BATTERY_RETRY_MAX);
+                            err,
+                            BATTERY_RETRY_INTERVAL,
+                            battery_retry_count,
+                            BATTERY_RETRY_MAX);
                     k_work_reschedule(&battery_work, K_MSEC(BATTERY_RETRY_INTERVAL));
                     return;
                 }
@@ -566,8 +565,8 @@ static void _transport_connected(struct bt_conn *conn, uint8_t err)
     // Request aggressive connection params for higher BLE sync throughput.
     update_conn_params(current_connection);
 
-        // Delay a bit before PHY request to avoid early HCI race on some phones.
-        k_sleep(K_MSEC(300));
+    // Delay a bit before PHY request to avoid early HCI race on some phones.
+    k_sleep(K_MSEC(300));
 
     // Initiate PHY, Data Length, and MTU updates
     update_phy(current_connection);
@@ -699,12 +698,12 @@ static struct bt_conn_cb _callback_references = {
 
 // --- Update Request Functions ---
 
-#define PHY_UPDATE_RETRY_COUNT      3
-#define PHY_UPDATE_RETRY_DELAY_MS   150
-#define MTU_UPDATE_RETRY_COUNT      3
-#define MTU_UPDATE_RETRY_DELAY_MS   120
-#define CONN_PARAM_RETRY_COUNT      3
-#define CONN_PARAM_RETRY_DELAY_MS   300
+#define PHY_UPDATE_RETRY_COUNT 3
+#define PHY_UPDATE_RETRY_DELAY_MS 150
+#define MTU_UPDATE_RETRY_COUNT 3
+#define MTU_UPDATE_RETRY_DELAY_MS 120
+#define CONN_PARAM_RETRY_COUNT 3
+#define CONN_PARAM_RETRY_DELAY_MS 300
 
 static void update_conn_params(struct bt_conn *conn)
 {
@@ -724,10 +723,7 @@ static void update_conn_params(struct bt_conn *conn)
         }
 
         if (attempt < CONN_PARAM_RETRY_COUNT) {
-            LOG_WRN("bt_conn_le_param_update() failed (err %d), retry %d/%d",
-                    err,
-                    attempt,
-                    CONN_PARAM_RETRY_COUNT);
+            LOG_WRN("bt_conn_le_param_update() failed (err %d), retry %d/%d", err, attempt, CONN_PARAM_RETRY_COUNT);
             k_sleep(K_MSEC(CONN_PARAM_RETRY_DELAY_MS));
         }
     }
@@ -756,17 +752,12 @@ static void update_phy(struct bt_conn *conn)
         }
 
         if (attempt < PHY_UPDATE_RETRY_COUNT) {
-            LOG_WRN("bt_conn_le_phy_update() failed (err %d), retry %d/%d",
-                    err,
-                    attempt,
-                    PHY_UPDATE_RETRY_COUNT);
+            LOG_WRN("bt_conn_le_phy_update() failed (err %d), retry %d/%d", err, attempt, PHY_UPDATE_RETRY_COUNT);
             k_sleep(K_MSEC(PHY_UPDATE_RETRY_DELAY_MS));
         }
     }
 
-    LOG_ERR("bt_conn_le_phy_update() failed after %d retries (last err %d)",
-            PHY_UPDATE_RETRY_COUNT,
-            err);
+    LOG_ERR("bt_conn_le_phy_update() failed after %d retries (last err %d)", PHY_UPDATE_RETRY_COUNT, err);
 }
 
 static void update_data_length(struct bt_conn *conn)
@@ -812,10 +803,7 @@ static void mtu_recheck_work_handler(struct k_work *work)
     }
 
     mtu_recheck_attempts++;
-    LOG_WRN("MTU still %u, re-requesting exchange (%u/%u)",
-            mtu,
-            mtu_recheck_attempts,
-            MTU_RECHECK_MAX_ATTEMPTS);
+    LOG_WRN("MTU still %u, re-requesting exchange (%u/%u)", mtu, mtu_recheck_attempts, MTU_RECHECK_MAX_ATTEMPTS);
     update_mtu(conn);
 
     if (mtu_recheck_attempts < MTU_RECHECK_MAX_ATTEMPTS) {
@@ -844,10 +832,7 @@ static void update_mtu(struct bt_conn *conn)
         }
 
         if ((err == -EBUSY || err == -EAGAIN) && attempt < MTU_UPDATE_RETRY_COUNT) {
-            LOG_WRN("bt_gatt_exchange_mtu() busy (err %d), retry %d/%d",
-                    err,
-                    attempt,
-                    MTU_UPDATE_RETRY_COUNT);
+            LOG_WRN("bt_gatt_exchange_mtu() busy (err %d), retry %d/%d", err, attempt, MTU_UPDATE_RETRY_COUNT);
             k_sleep(K_MSEC(MTU_UPDATE_RETRY_DELAY_MS));
             continue;
         }
@@ -1141,6 +1126,8 @@ int transport_off()
     int ret = k_thread_join(&pusher_thread, K_MSEC(500));
     if (ret != 0) {
         LOG_WRN("Pusher thread did not terminate in time (err %d)", ret);
+        k_thread_abort(&pusher_thread);
+        LOG_WRN("Pusher thread aborted during transport_off");
     }
 
     // First disconnect any active connections
@@ -1265,11 +1252,8 @@ int transport_start()
     memset(storage_temp_data, 0, OPUS_PADDED_LENGTH * 4);
     bt_gatt_service_register(&storage_service);
 #endif
-    const struct bt_le_adv_param *low_power_adv = BT_LE_ADV_PARAM(
-        BT_LE_ADV_OPT_CONNECTABLE,
-        BT_GAP_ADV_SLOW_INT_MIN,
-        BT_GAP_ADV_SLOW_INT_MAX,
-        NULL);
+    const struct bt_le_adv_param *low_power_adv =
+        BT_LE_ADV_PARAM(BT_LE_ADV_OPT_CONNECTABLE, BT_GAP_ADV_SLOW_INT_MIN, BT_GAP_ADV_SLOW_INT_MAX, NULL);
     err = bt_le_adv_start(low_power_adv, bt_ad, ARRAY_SIZE(bt_ad), bt_sd, ARRAY_SIZE(bt_sd));
     if (err) {
         LOG_ERR("Transport advertising failed to start (err %d)", err);

@@ -26,19 +26,14 @@ static uint32_t current_read_offset = 0;
 #define OPUS_ENTRY_LENGTH 80
 #define FRAME_PREFIX_LENGTH 3
 
-/* Legacy commands (backward compatible) */
-#define READ_COMMAND 0
-#define DELETE_COMMAND 1
-#define NUKE 2
-#define STOP_COMMAND 3
+/* Control commands */
+#define CMD_STOP_SYNC      0x03
 
 /* New multi-file sync commands */
 #define CMD_LIST_FILES      0x10   // Get list of audio files
 #define CMD_READ_FILE       0x11   // Read specific file: [cmd][file_index][offset:4]
 #define CMD_DELETE_FILE     0x12   // Delete specific file: [cmd][file_index]
 
-#define INVALID_FILE_SIZE 3
-#define ZERO_FILE_SIZE 4
 #define INVALID_COMMAND 6
 #define FILE_NOT_FOUND 7
 #define FILE_INDEX_OUT_OF_RANGE 8
@@ -50,7 +45,7 @@ static uint32_t current_read_offset = 0;
 static char sync_file_list[MAX_AUDIO_FILES][MAX_FILENAME_LEN];
 static uint32_t sync_file_sizes[MAX_AUDIO_FILES];
 static int sync_file_count = 0;
-static int current_sync_file_index = -1;  /* -1 = legacy mode, >=0 = new protocol */
+static int current_sync_file_index = -1;
 static uint8_t list_files_requested = 0;  /* Deferred to storage thread */
 static int8_t delete_file_index = -1;     /* -1 = no delete, >=0 = file index to delete */
 
@@ -178,9 +173,7 @@ uint8_t transport_started = 0;
 #define STORAGE_CHUNK_COUNT 20
 #define STORAGE_BUFFER_SIZE (SD_BLE_SIZE * STORAGE_CHUNK_COUNT + 5 * STORAGE_CHUNK_COUNT)  /* ~8.9KB */
 static uint8_t storage_buffer[STORAGE_BUFFER_SIZE];
-static uint32_t offset = 0;
 static uint8_t stop_started = 0;
-static uint8_t delete_started = 0;
 uint32_t remaining_length = 0;
 
 #define SYNC_SPEED_LOG_INTERVAL_MS (30 * 1000)
@@ -243,62 +236,6 @@ static uint16_t get_ble_chunk_size(struct bt_conn *conn, uint8_t include_timesta
     return MIN(chunk, (uint16_t)SD_BLE_SIZE);
 }
 
-static int setup_storage_tx()
-{
-    transport_started = (uint8_t) 0;
-    LOG_INF("about to transmit storage");
-    k_msleep(200);
-
-    int file_count = 0;
-    int ret = get_audio_file_list_with_sizes(sync_file_list, sync_file_sizes,
-                                             MAX_AUDIO_FILES, &file_count);
-    if (ret < 0 || file_count == 0) {
-        LOG_ERR("No audio files available");
-        remaining_length = 0;
-        return -1;
-    }
-    sync_file_count = file_count;
-    
-    /* Get current offset info to find where we left off */
-    char offset_filename[MAX_FILENAME_LEN] = {0};
-    uint32_t offset_in_file = 0;
-    get_offset(offset_filename, &offset_in_file);
-    
-    /* Find the file to start reading from */
-    int start_file_idx = 0;
-    if (offset_filename[0] != '\0') {
-        for (int i = 0; i < file_count; i++) {
-            if (strcmp(sync_file_list[i], offset_filename) == 0) {
-                start_file_idx = i;
-                break;
-            }
-        }
-    }
-    
-    /* Use the oldest unread file or the specified offset file */
-    strncpy(current_read_filename, sync_file_list[start_file_idx], MAX_FILENAME_LEN - 1);
-    current_read_offset = (start_file_idx == 0 && offset_filename[0] != '\0') ? offset_in_file : 0;
-    
-    /* If a specific offset was requested, use it */
-    if (offset > 0) {
-        current_read_offset = offset;
-    }
-    
-    /* Calculate remaining from current file using cached sizes */
-    uint32_t cur_file_size = sync_file_sizes[start_file_idx];
-    if (cur_file_size > current_read_offset) {
-        remaining_length = cur_file_size - current_read_offset;
-    } else {
-        remaining_length = 0;
-    }
-    
-    LOG_INF("remaining length: %d", remaining_length);
-    LOG_INF("current file: %s, offset: %d", current_read_filename, current_read_offset);
-
-    return 0;
-}
-
-uint8_t nuke_started = 0;
 static uint8_t heartbeat_count = 0;
 
 /**
@@ -465,49 +402,20 @@ static uint8_t parse_storage_command(void *buf, uint16_t len, struct bt_conn *co
         delete_file_index = file_index;  /* Defer to storage thread */
         return 0xFF;
     }
-    
-    /* ===== LEGACY COMMANDS ===== */
-    
-    if (len != 6 && len != 2) {
-        LOG_INF("invalid legacy command");
-        return INVALID_COMMAND;
-    }
-    
-    const uint8_t file_num = ((uint8_t *) buf)[1];
-    uint32_t request_offset = 0;
-    if (len == 6) {
-        request_offset = ((uint8_t *) buf)[2] << 24 | ((uint8_t *) buf)[3] << 16 | 
-                        ((uint8_t *) buf)[4] << 8 | ((uint8_t *) buf)[5];
-    }
-    LOG_INF("Legacy cmd: %d file: %d offset: %d", command, file_num, request_offset);
 
-    if (command == READ_COMMAND && file_num != 1) {
-        return INVALID_FILE_SIZE;
-    }
-
-    if (command == READ_COMMAND) {
-        current_sync_file_index = -1;  /* Legacy mode - no timestamp prefix */
-        uint32_t file_size = get_file_size();
-        if (request_offset >= file_size) {
-            return INVALID_FILE_SIZE;
-        } else if (file_size == 0) {
-            return ZERO_FILE_SIZE;
-        } else {
-            offset = request_offset;
-            transport_started = 1;
-        }
-    } else if (command == DELETE_COMMAND) {
-        delete_started = 1;
-    } else if (command == NUKE) {
-        nuke_started = 1;
-    } else if (command == STOP_COMMAND) {
+    /* Control commands */
+    if (command == CMD_STOP_SYNC) {
         storage_stop_transfer();
-    } else if (command == HEARTBEAT) {
-        heartbeat_count = 0;
-    } else {
-        return INVALID_COMMAND;
+        return 0;
     }
-    return 0;
+
+    if (command == HEARTBEAT) {
+        heartbeat_count = 0;
+        return 0;
+    }
+
+    /* Accept only multi-file protocol commands above. */
+    return INVALID_COMMAND;
 }
 
 static ssize_t storage_write_handler(struct bt_conn *conn,
@@ -554,9 +462,14 @@ static void write_to_gatt(struct bt_conn *conn)
     }
     uint16_t ble_chunk = get_ble_chunk_size(conn, current_sync_file_index >= 0);
     
+    if (current_sync_file_index < 0) {
+        LOG_ERR("write_to_gatt called without active multi-file transfer");
+        remaining_length = 0;
+        return;
+    }
+
     /* New protocol: add 4-byte timestamp prefix */
-    if (current_sync_file_index >= 0) {
-        uint32_t timestamp = (uint32_t)strtoul(sync_file_list[current_sync_file_index], NULL, 16);
+    uint32_t timestamp = (uint32_t)strtoul(sync_file_list[current_sync_file_index], NULL, 16);
         
         /* Build timestamp header once */
         ble_notify_buf[0] = (timestamp >> 24) & 0xFF;
@@ -572,6 +485,11 @@ static void write_to_gatt(struct bt_conn *conn)
          * persists, which lets BLE run at full connection-event throughput.
          */
         while (remaining_length > 0) {
+            if (stop_started) {
+                remaining_length = 0;
+                return;
+            }
+
             uint32_t batch_audio_size = MIN(remaining_length, (uint32_t)(ble_chunk * BLE_BATCH_PACKETS));
             if (batch_audio_size > STORAGE_BUFFER_SIZE) {
                 batch_audio_size = STORAGE_BUFFER_SIZE;
@@ -587,11 +505,20 @@ static void write_to_gatt(struct bt_conn *conn)
             uint32_t bytes_sent = 0;
 
             while (bytes_sent < bytes_read && remaining_length > 0) {
+                if (stop_started) {
+                    remaining_length = 0;
+                    return;
+                }
+
                 uint32_t chunk = MIN(bytes_read - bytes_sent, ble_chunk);
                 memcpy(ble_notify_buf + 4, storage_buffer + bytes_sent, chunk);
 
                 err = storage_notify(conn, ble_notify_buf, 4 + chunk);
                 if (err == -ENOMEM) {
+                    if (stop_started) {
+                        remaining_length = 0;
+                        return;
+                    }
                     k_yield();
                     continue;
                 }
@@ -606,53 +533,9 @@ static void write_to_gatt(struct bt_conn *conn)
                 bytes_sent += chunk;
                 sync_speed_add_bytes(chunk);
                 current_read_offset += chunk;
-                offset = current_read_offset;
                 remaining_length -= chunk;
             }
         }
-    } else {
-        /* Legacy: raw audio data without timestamp */
-        while (remaining_length > 0) {
-            uint32_t batch_audio_size = MIN(remaining_length, (uint32_t)(ble_chunk * BLE_BATCH_PACKETS));
-            if (batch_audio_size > STORAGE_BUFFER_SIZE) {
-                batch_audio_size = STORAGE_BUFFER_SIZE;
-            }
-
-            int r = read_audio_data(current_read_filename, storage_buffer, batch_audio_size, current_read_offset);
-            if (r <= 0) {
-                LOG_ERR("Failed to read audio data: %d", r);
-                remaining_length = 0;
-                return;
-            }
-
-            uint32_t bytes_read = (uint32_t)r;
-            uint32_t bytes_sent = 0;
-
-            while (bytes_sent < bytes_read && remaining_length > 0) {
-                uint32_t chunk = MIN(bytes_read - bytes_sent, ble_chunk);
-
-                err = storage_notify(conn, storage_buffer + bytes_sent, chunk);
-                if (err == -ENOMEM) {
-                    k_yield();
-                    continue;
-                }
-
-                if (err == -EAGAIN) {
-                    return;
-                }
-                if (err && err != -ENOMEM) {
-                    LOG_ERR("GATT notify error: %d", err);
-                    return;
-                }
-
-                bytes_sent += chunk;
-                sync_speed_add_bytes(chunk);
-                current_read_offset += chunk;
-                offset = current_read_offset;
-                remaining_length -= chunk;
-            }
-        }
-    }
 }
 
 void storage_stop_transfer()
@@ -679,48 +562,11 @@ void storage_write(void)
             sync_speed_mode = SYNC_SPEED_MODE_NONE;
             sync_speed_window_bytes = 0;
             sync_speed_window_start_ms = 0;
-            /* Only call legacy setup for legacy mode (current_sync_file_index == -1)
-             * New protocol (CMD_READ_FILE) already set up via setup_file_transfer() */
             if (current_sync_file_index < 0) {
-                setup_storage_tx();
+                LOG_ERR("Transfer start requested without CMD_READ_FILE setup");
+                remaining_length = 0;
             }
             transport_started = 0;  /* Clear flag after setup */
-        }
-        // probably prefer to implement using work orders for delete,nuke,etc...
-        if (delete_started) {
-            LOG_INF("delete:%d\n", delete_started);
-            uint8_t result = FILE_NOT_FOUND;
-            char recording_name[MAX_FILENAME_LEN] = {0};
-            get_current_filename(recording_name, sizeof(recording_name));
-
-            if (current_read_filename[0] != '\0' &&
-                (recording_name[0] == '\0' || strcmp(current_read_filename, recording_name) != 0)) {
-                int err = delete_audio_file(current_read_filename);
-                if (err == 0) {
-                    LOG_INF("Deleted synced file: %s", current_read_filename);
-                    offset = 0;
-                    current_read_offset = 0;
-                    current_read_filename[0] = '\0';
-                    save_offset("", 0);
-                    result = 200;
-                } else {
-                    LOG_ERR("Failed to delete synced file %s: %d", current_read_filename, err);
-                }
-            } else if (recording_name[0] != '\0' &&
-                       strcmp(current_read_filename, recording_name) == 0) {
-                LOG_INF("Skipping delete of active recording file: %s", current_read_filename);
-            }
-
-            if (conn) {
-                storage_notify(get_current_connection(), &result, 1);
-            }
-            delete_started = 0;
-            k_msleep(10);
-        }
-        if (nuke_started) {
-            clear_audio_directory();
-            offset = 0;
-            nuke_started = 0;
         }
         if (list_files_requested) {
             list_files_requested = 0;
@@ -785,16 +631,14 @@ void storage_write(void)
                     save_offset(current_read_filename, current_read_offset);
                     LOG_INF("File done: %s", current_read_filename);
 
-                    /* Auto-delete only in multi-file mode.
-                     * Legacy mode (current_sync_file_index == -1) must never auto-delete. */
+                    /* Auto-delete after successful multi-file sync. */
                     {
-                        bool allow_auto_delete = (current_sync_file_index >= 0);
                         char recording_name[MAX_FILENAME_LEN] = {0};
                         get_current_filename(recording_name, sizeof(recording_name));
                         bool is_recording_file = (recording_name[0] != '\0' &&
                             strcmp(current_read_filename, recording_name) == 0);
 
-                        if (allow_auto_delete && !is_recording_file && current_read_filename[0] != '\0') {
+                        if (!is_recording_file && current_read_filename[0] != '\0') {
                             LOG_INF("Auto-delete synced file: %s", current_read_filename);
                             int del_ret = delete_audio_file(current_read_filename);
                             if (del_ret < 0) {
@@ -802,12 +646,12 @@ void storage_write(void)
                             }
                             /* Clear saved offset since deleted file is gone */
                             save_offset("", 0);
-                        } else if (allow_auto_delete && is_recording_file) {
+                        } else if (is_recording_file) {
                             LOG_INF("Skipping delete of active recording file: %s", current_read_filename);
                         }
                     }
 
-                    /* BLE: notify completion (legacy or manual sync) */
+                    /* BLE: notify completion */
                     LOG_PRINTK("done. attempting to download more files\n");
                     uint8_t stop_result[1] = {100};
                     (void)storage_notify(get_current_connection(), &stop_result, 1);
@@ -817,7 +661,7 @@ void storage_write(void)
         }
 
         // Sleep when there's no work
-        if (remaining_length == 0 && !delete_started && !nuke_started && !stop_started) {
+        if (remaining_length == 0 && !stop_started) {
             uint32_t idle_sleep_ms = get_current_connection()
                 ? STORAGE_IDLE_POLL_MS_CONNECTED
                 : STORAGE_IDLE_POLL_MS_OFFLINE;
