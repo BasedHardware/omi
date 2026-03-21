@@ -92,14 +92,26 @@ class OmiBleManager private constructor(private val application: Application) {
             val address = device.address.uppercase()
 
             Log.i(TAG, "Bond state changed: $address → $bondState")
-            if (bondState == BluetoothDevice.BOND_BONDED) {
-                val gatt = connectedGatts[address] ?: return
-                Log.i(TAG, "Bonding complete for $address, re-discovering services")
-                servicesDiscoveredFor.remove(address)
-                enqueueCommand {
-                    if (!gatt.discoverServices()) {
-                        Log.e(TAG, "discoverServices returned false after bonding")
-                        completeCommand()
+            val gatt = connectedGatts[address] ?: return
+            when (bondState) {
+                BluetoothDevice.BOND_BONDED -> {
+                    Log.i(TAG, "Bonding complete for $address, discovering services")
+                    servicesDiscoveredFor.remove(address)
+                    enqueueCommand {
+                        if (!gatt.discoverServices()) {
+                            Log.e(TAG, "discoverServices returned false after bonding")
+                            completeCommand()
+                        }
+                    }
+                }
+                BluetoothDevice.BOND_NONE -> {
+                    Log.w(TAG, "Bonding failed for $address, attempting service discovery anyway")
+                    servicesDiscoveredFor.remove(address)
+                    enqueueCommand {
+                        if (!gatt.discoverServices()) {
+                            Log.e(TAG, "discoverServices returned false after bond failure")
+                            completeCommand()
+                        }
                     }
                 }
             }
