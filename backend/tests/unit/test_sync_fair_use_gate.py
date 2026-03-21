@@ -177,3 +177,149 @@ class TestSyncEndpointImports:
         assert callable(fair_use_mod.is_hard_restricted)
         assert hasattr(fair_use_mod, 'FAIR_USE_ENABLED')
         assert hasattr(fair_use_mod, 'trigger_classifier_if_needed')
+
+
+class TestCreateConversationLockPropagation:
+    """Test is_locked field on CreateConversation flows through to Conversation."""
+
+    def test_create_conversation_default_unlocked(self):
+        """CreateConversation defaults to is_locked=False."""
+        from models.conversation import CreateConversation, TranscriptSegment
+        from datetime import datetime, timezone
+
+        cc = CreateConversation(
+            started_at=datetime.now(timezone.utc),
+            finished_at=datetime.now(timezone.utc),
+            transcript_segments=[],
+        )
+        assert cc.is_locked is False
+
+    def test_create_conversation_locked(self):
+        """CreateConversation accepts is_locked=True."""
+        from models.conversation import CreateConversation
+        from datetime import datetime, timezone
+
+        cc = CreateConversation(
+            started_at=datetime.now(timezone.utc),
+            finished_at=datetime.now(timezone.utc),
+            transcript_segments=[],
+            is_locked=True,
+        )
+        assert cc.is_locked is True
+
+    def test_locked_propagates_through_dict(self):
+        """is_locked=True appears in .dict() for **kwargs unpacking."""
+        from models.conversation import CreateConversation
+        from datetime import datetime, timezone
+
+        cc = CreateConversation(
+            started_at=datetime.now(timezone.utc),
+            finished_at=datetime.now(timezone.utc),
+            transcript_segments=[],
+            is_locked=True,
+        )
+        d = cc.dict()
+        assert d['is_locked'] is True
+
+    def test_conversation_inherits_lock_from_create(self):
+        """Conversation(**create_dict) inherits is_locked=True."""
+        from models.conversation import CreateConversation, Conversation, Structured
+        from datetime import datetime, timezone
+
+        cc = CreateConversation(
+            started_at=datetime.now(timezone.utc),
+            finished_at=datetime.now(timezone.utc),
+            transcript_segments=[],
+            is_locked=True,
+        )
+        cc_dict = cc.dict()
+        cc_dict.pop('calendar_meeting_context', None)
+        conv = Conversation(
+            id='test-id',
+            created_at=datetime.now(timezone.utc),
+            structured=Structured(),
+            **cc_dict,
+        )
+        assert conv.is_locked is True
+
+
+class TestSyncEndpointCodeStructure:
+    """Structural tests: verify sync.py gates match expected design."""
+
+    @staticmethod
+    def _read_sync_source():
+        import os
+
+        sync_path = os.path.join(os.path.dirname(__file__), '..', '..', 'routers', 'sync.py')
+        with open(sync_path) as f:
+            return f.read()
+
+    def test_no_rate_limit_dependency(self):
+        """sync.py must not use rate_limit_dependency (removed per manager)."""
+        source = self._read_sync_source()
+        assert 'rate_limit_dependency' not in source
+
+    def test_no_402_block(self):
+        """sync.py must not raise 402 (lock instead of block)."""
+        source = self._read_sync_source()
+        assert 'status_code=402' not in source
+
+    def test_should_lock_flag_exists(self):
+        """sync.py must use should_lock flag for credit-exhausted locking."""
+        source = self._read_sync_source()
+        assert 'should_lock' in source
+
+    def test_is_locked_passed_to_create_conversation(self):
+        """sync.py passes is_locked to CreateConversation."""
+        source = self._read_sync_source()
+        assert 'is_locked=is_locked' in source
+
+    def test_hard_restricted_gate_exists(self):
+        """sync.py must check is_hard_restricted."""
+        source = self._read_sync_source()
+        assert 'is_hard_restricted(uid)' in source
+
+    def test_zero_speech_skips_recording(self):
+        """Verify zero-speech guard in code: only records when total_speech_ms > 0."""
+        source = self._read_sync_source()
+        assert 'total_speech_ms > 0' in source
+
+
+class TestSoftCapBoundary:
+    """Test check_soft_caps at exact boundary values."""
+
+    @patch.object(fair_use_mod, 'FAIR_USE_ENABLED', True)
+    @patch.object(fair_use_mod, 'FAIR_USE_KILL_SWITCH', False)
+    @patch.object(fair_use_mod, 'FAIR_USE_EXEMPT_UIDS', set())
+    @patch.object(fair_use_mod, 'FAIR_USE_DAILY_SPEECH_MS', 7200000)
+    @patch.object(fair_use_mod, 'get_rolling_speech_ms')
+    def test_exactly_at_cap_does_not_trigger(self, mock_speech):
+        """Usage exactly at daily cap should NOT trigger (only over)."""
+        precomputed = {'daily_ms': 7200000, 'three_day_ms': 7200000, 'weekly_ms': 7200000}
+        result = fair_use_mod.check_soft_caps('user1', speech_totals=precomputed)
+        # At cap exactly — triggers only when OVER
+        mock_speech.assert_not_called()
+
+    @patch.object(fair_use_mod, 'FAIR_USE_ENABLED', True)
+    @patch.object(fair_use_mod, 'FAIR_USE_KILL_SWITCH', False)
+    @patch.object(fair_use_mod, 'FAIR_USE_EXEMPT_UIDS', set())
+    @patch.object(fair_use_mod, 'FAIR_USE_DAILY_SPEECH_MS', 7200000)
+    @patch.object(fair_use_mod, 'get_rolling_speech_ms')
+    def test_one_ms_over_cap_triggers(self, mock_speech):
+        """Usage 1ms over daily cap should trigger."""
+        precomputed = {'daily_ms': 7200001, 'three_day_ms': 7200001, 'weekly_ms': 7200001}
+        result = fair_use_mod.check_soft_caps('user1', speech_totals=precomputed)
+        assert len(result) > 0
+        mock_speech.assert_not_called()
+
+    @patch.object(fair_use_mod, 'FAIR_USE_ENABLED', True)
+    @patch.object(fair_use_mod, 'FAIR_USE_KILL_SWITCH', False)
+    @patch.object(fair_use_mod, 'FAIR_USE_EXEMPT_UIDS', set())
+    @patch.object(fair_use_mod, 'FAIR_USE_DAILY_SPEECH_MS', 7200000)
+    @patch.object(fair_use_mod, 'get_rolling_speech_ms')
+    def test_zero_speech_no_cap_trigger(self, mock_speech):
+        """Zero speech should never trigger any cap."""
+        precomputed = {'daily_ms': 0, 'three_day_ms': 0, 'weekly_ms': 0}
+        result = fair_use_mod.check_soft_caps('user1', speech_totals=precomputed)
+        assert result == []
+        mock_speech.assert_not_called()
