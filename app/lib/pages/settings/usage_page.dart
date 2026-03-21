@@ -525,6 +525,7 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
     }
 
     return GestureDetector(
+      key: const Key('fair_use_banner_tap'),
       onTap: () {
         Navigator.of(context).push(MaterialPageRoute(builder: (context) => const FairUsePage()));
       },
@@ -537,7 +538,11 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
         ),
         child: Row(
           children: [
-            Container(width: 8, height: 8, decoration: BoxDecoration(color: dotColor, shape: BoxShape.circle)),
+            Container(
+                key: const Key('fair_use_dot'),
+                width: 8,
+                height: 8,
+                decoration: BoxDecoration(color: dotColor, shape: BoxShape.circle)),
             const SizedBox(width: 10),
             Text(
               context.l10n.fairUseBannerStatus(stageLabel),
