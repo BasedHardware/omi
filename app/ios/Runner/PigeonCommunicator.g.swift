@@ -657,6 +657,9 @@ protocol BleHostApi {
   func unsubscribeCharacteristic(peripheralUuid: String, serviceUuid: String, characteristicUuid: String) throws
   func getBluetoothState() throws -> String
   func isPeripheralConnected(uuid: String) throws -> Bool
+  /// (Android only) Check if any CompanionDeviceManager association exists.
+  /// Returns true on iOS (state restoration handles background reconnection).
+  func hasCompanionDeviceAssociation() throws -> Bool
   /// (Android only) Initiate CompanionDeviceManager association for a device.
   /// Shows the system chooser dialog filtered to this device's address.
   /// Returns the associated device address on success, empty string on failure/cancel.
@@ -861,6 +864,21 @@ class BleHostApiSetup {
       }
     } else {
       isPeripheralConnectedChannel.setMessageHandler(nil)
+    }
+    /// (Android only) Check if any CompanionDeviceManager association exists.
+    /// Returns true on iOS (state restoration handles background reconnection).
+    let hasCompanionDeviceAssociationChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.omi_pigeon.BleHostApi.hasCompanionDeviceAssociation\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
+    if let api = api {
+      hasCompanionDeviceAssociationChannel.setMessageHandler { _, reply in
+        do {
+          let result = try api.hasCompanionDeviceAssociation()
+          reply(wrapResult(result))
+        } catch {
+          reply(wrapError(error))
+        }
+      }
+    } else {
+      hasCompanionDeviceAssociationChannel.setMessageHandler(nil)
     }
     /// (Android only) Initiate CompanionDeviceManager association for a device.
     /// Shows the system chooser dialog filtered to this device's address.

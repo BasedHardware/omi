@@ -78,6 +78,10 @@ final class BleHostApiImpl: BleHostApi {
         return bleManager.isPeripheralConnected(uuid: uuid)
     }
 
+    func hasCompanionDeviceAssociation() throws -> Bool {
+        return true // iOS uses state restoration
+    }
+
     func requestCompanionDeviceAssociation(deviceAddress: String, completion: @escaping (Result<String, Error>) -> Void) {
         // No-op on iOS — state restoration handles background reconnection
         completion(.success(""))
