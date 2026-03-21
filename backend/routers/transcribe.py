@@ -403,6 +403,8 @@ async def _stream_handler(
     fair_use_last_check_ts: float = 0.0
     # DG budget gate for restricted users — checked at session start + per cap-check interval
     fair_use_dg_budget_exhausted: bool = False
+    # Batched DG usage tracking — flushed to Redis every 60s (#5854)
+    dg_usage_ms_pending: int = 0
 
     # Session-start DG budget check: prevent reconnect bypass (#5748 reviewer fix)
     if FAIR_USE_ENABLED and FAIR_USE_RESTRICT_DAILY_DG_MS > 0:
@@ -423,7 +425,7 @@ async def _stream_handler(
         nonlocal last_audio_received_time, last_transcript_time, user_has_credits
         nonlocal freemium_threshold_sent
         nonlocal remaining_seconds_cache, remaining_seconds_cache_ts, remaining_seconds_cache_initialized
-        nonlocal fair_use_last_check_ts, fair_use_dg_budget_exhausted
+        nonlocal fair_use_last_check_ts, fair_use_dg_budget_exhausted, dg_usage_ms_pending
 
         while websocket_active:
             await asyncio.sleep(60)
