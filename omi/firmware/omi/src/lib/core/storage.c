@@ -49,6 +49,10 @@ static uint32_t current_read_offset = 0;
 #define MAX_HEARTBEAT_FRAMES 100
 #define HEARTBEAT 50
 
+#ifndef STORAGE_ENABLE_AUTO_SYNC
+#define STORAGE_ENABLE_AUTO_SYNC 0
+#endif
+
 /* Multi-file sync state */
 static char sync_file_list[MAX_AUDIO_FILES][MAX_FILENAME_LEN];
 static uint32_t sync_file_sizes[MAX_AUDIO_FILES];
@@ -141,6 +145,9 @@ struct bt_gatt_service storage_service = BT_GATT_SERVICE(storage_service_attr);
 #define STORAGE_WRITE_NOTIFY_ATTR_IDX 2
 
 bool storage_is_on = false;
+static uint32_t cached_file_count = 0;
+static uint64_t cached_total_size = 0;
+static int64_t storage_stats_next_refresh_ms = 0;
 
 static bool storage_notify_ready(struct bt_conn *conn)
 {
@@ -165,7 +172,7 @@ static void storage_config_changed_handler(const struct bt_gatt_attr *attr, uint
     if (value == BT_GATT_CCC_NOTIFY) {
         LOG_INF("Client subscribed for notifications");
         /* Also trigger auto-sync in case subscription arrives after connect */
-        if (!auto_sync_active) {
+        if (STORAGE_ENABLE_AUTO_SYNC && !auto_sync_active) {
             auto_sync_requested = 1;
         }
     } else if (value == 0) {
@@ -181,10 +188,18 @@ static ssize_t storage_read_characteristic(struct bt_conn *conn,
                                            uint16_t len,
                                            uint16_t offset)
 {
-    /* Get file statistics: total file count and total size */
-    uint32_t file_count = 0;
-    uint64_t total_size = 0;
-    get_audio_file_stats(&file_count, &total_size);
+    int64_t now = k_uptime_get();
+    if (now >= storage_stats_next_refresh_ms) {
+        uint32_t file_count = 0;
+        uint64_t total_size = 0;
+        if (get_audio_file_stats(&file_count, &total_size) == 0) {
+            cached_file_count = file_count;
+            cached_total_size = total_size;
+            storage_stats_next_refresh_ms = now + 2000;
+        } else {
+            storage_stats_next_refresh_ms = now + 500;
+        }
+    }
     
     /* Phone app expects (little-endian):
      *   [0..3]  total_used_bytes  (uint32)
@@ -193,8 +208,8 @@ static ssize_t storage_read_characteristic(struct bt_conn *conn,
      *   [12..15] status_flags     (uint32)  — optional, newer firmware
      */
     uint32_t payload[4] = {0};
-    payload[0] = (uint32_t)total_size;   /* total used bytes */
-    payload[1] = file_count;             /* number of audio files */
+    payload[0] = (uint32_t)cached_total_size;   /* total used bytes */
+    payload[1] = cached_file_count;             /* number of audio files */
     payload[2] = 0;                      /* free_bytes — TODO: implement disk_access_ioctl */
     payload[3] = 0;                      /* status_flags: bit0=charging, bit1=warning, bit2=error */
     
@@ -211,6 +226,45 @@ static uint32_t offset = 0;
 static uint8_t stop_started = 0;
 static uint8_t delete_started = 0;
 uint32_t remaining_length = 0;
+
+#define SYNC_SPEED_LOG_INTERVAL_MS (30 * 1000)
+
+typedef enum {
+    SYNC_SPEED_MODE_NONE = 0,
+    SYNC_SPEED_MODE_BLE,
+    SYNC_SPEED_MODE_WIFI,
+} sync_speed_mode_t;
+
+static sync_speed_mode_t sync_speed_mode = SYNC_SPEED_MODE_NONE;
+static int64_t sync_speed_window_start_ms = 0;
+static uint64_t sync_speed_window_bytes = 0;
+
+static void sync_speed_reset(sync_speed_mode_t mode)
+{
+    sync_speed_mode = mode;
+    sync_speed_window_start_ms = k_uptime_get();
+    sync_speed_window_bytes = 0;
+}
+
+static void sync_speed_add_bytes(uint32_t bytes)
+{
+    if (sync_speed_mode == SYNC_SPEED_MODE_NONE || bytes == 0) {
+        return;
+    }
+
+    sync_speed_window_bytes += bytes;
+    int64_t now = k_uptime_get();
+    int64_t elapsed_ms = now - sync_speed_window_start_ms;
+
+    if (elapsed_ms >= SYNC_SPEED_LOG_INTERVAL_MS) {
+        uint64_t kbps = (sync_speed_window_bytes * 1000U) / (elapsed_ms * 1024U);
+        const char *mode_str = (sync_speed_mode == SYNC_SPEED_MODE_WIFI) ? "WiFi" : "BLE";
+        LOG_INF("Sync speed (%s): %u KB/s", mode_str, (uint32_t)kbps);
+
+        sync_speed_window_start_ms = now;
+        sync_speed_window_bytes = 0;
+    }
+}
 
 static uint16_t get_ble_chunk_size(struct bt_conn *conn, uint8_t include_timestamp)
 {
@@ -656,6 +710,9 @@ static uint8_t ble_notify_buf[4 + SD_BLE_SIZE];
 static void write_to_gatt(struct bt_conn *conn)
 {
     int err;
+    if (sync_speed_mode != SYNC_SPEED_MODE_BLE) {
+        sync_speed_reset(SYNC_SPEED_MODE_BLE);
+    }
     uint16_t ble_chunk = get_ble_chunk_size(conn, current_sync_file_index >= 0);
     
     /* New protocol: add 4-byte timestamp prefix */
@@ -721,6 +778,7 @@ static void write_to_gatt(struct bt_conn *conn)
 
                 consecutive_enomem = 0;  /* successful send — reset counter */
                 bytes_sent += chunk;
+                sync_speed_add_bytes(chunk);
                 current_read_offset += chunk;
                 offset = current_read_offset;
                 remaining_length -= chunk;
@@ -728,25 +786,56 @@ static void write_to_gatt(struct bt_conn *conn)
         }
     } else {
         /* Legacy: raw audio data without timestamp */
-        uint32_t packet_size = MIN(remaining_length, (uint32_t)ble_chunk);
-        int r = read_audio_data(current_read_filename, storage_buffer, packet_size, current_read_offset);
-        if (r < 0) {
-            LOG_ERR("Failed to read audio data: %d", r);
-            remaining_length = 0;
-            return;
-        }
-        
-        err = storage_notify(conn, storage_buffer, packet_size);
-        
-        current_read_offset = current_read_offset + packet_size;
-        offset = current_read_offset;
-        
-        if (err == -EAGAIN) {
-            return;
-        } else if (err) {
-            LOG_PRINTK("error writing to gatt: %d\n", err);
-        } else {
-            remaining_length = remaining_length - packet_size;
+        int consecutive_enomem = 0;
+        while (remaining_length > 0 && consecutive_enomem < 3) {
+            uint32_t batch_audio_size = MIN(remaining_length, (uint32_t)(ble_chunk * BLE_BATCH_PACKETS));
+            if (batch_audio_size > STORAGE_BUFFER_SIZE) {
+                batch_audio_size = STORAGE_BUFFER_SIZE;
+            }
+
+            int r = read_audio_data(current_read_filename, storage_buffer, batch_audio_size, current_read_offset);
+            if (r <= 0) {
+                LOG_ERR("Failed to read audio data: %d", r);
+                remaining_length = 0;
+                return;
+            }
+
+            uint32_t bytes_read = (uint32_t)r;
+            uint32_t bytes_sent = 0;
+
+            while (bytes_sent < bytes_read && remaining_length > 0) {
+                uint32_t chunk = MIN(bytes_read - bytes_sent, ble_chunk);
+
+                err = storage_notify(conn, storage_buffer + bytes_sent, chunk);
+                if (err == -ENOMEM) {
+                    k_yield();
+                    err = storage_notify(conn, storage_buffer + bytes_sent, chunk);
+                    if (err == -ENOMEM) {
+                        k_msleep(1);
+                        err = storage_notify(conn, storage_buffer + bytes_sent, chunk);
+                        if (err == -ENOMEM) {
+                            consecutive_enomem++;
+                            k_msleep(2);
+                            continue;
+                        }
+                    }
+                }
+
+                if (err == -EAGAIN) {
+                    return;
+                }
+                if (err && err != -ENOMEM) {
+                    LOG_ERR("GATT notify error: %d", err);
+                    return;
+                }
+
+                consecutive_enomem = 0;
+                bytes_sent += chunk;
+                sync_speed_add_bytes(chunk);
+                current_read_offset += chunk;
+                offset = current_read_offset;
+                remaining_length -= chunk;
+            }
         }
     }
 }
@@ -754,6 +843,10 @@ static void write_to_gatt(struct bt_conn *conn)
 #ifdef CONFIG_OMI_ENABLE_WIFI
 static void write_to_tcp()
 {
+    if (sync_speed_mode != SYNC_SPEED_MODE_WIFI) {
+        sync_speed_reset(SYNC_SPEED_MODE_WIFI);
+    }
+
     /* Use valid storage buffer capacity for one large packet */
     /* Protocol V2: [idx:1][ts:4][len:2][data:len] */
     uint32_t max_payload = STORAGE_BUFFER_SIZE - 7;
@@ -796,6 +889,10 @@ static void write_to_tcp()
             int n = wifi_send_data(storage_buffer + sent, packet_len - sent);
             if (n <= 0) { k_msleep(10); } else { sent += n; k_yield(); }
         }
+        if (sent > 7) {
+            uint32_t sent_audio = MIN(to_read, (uint32_t)(sent - 7));
+            sync_speed_add_bytes(sent_audio);
+        }
     } else {
         /* Legacy: raw audio data without timestamp */
         uint32_t legacy_chunk = MIN(remaining_length, SD_BLE_SIZE * 10); /* Keep legacy size reasonable */
@@ -810,6 +907,9 @@ static void write_to_tcp()
                 int n = wifi_send_data(storage_buffer + sent, ret - sent);
                 if (n <= 0) { k_msleep(10); } else { sent += n; k_yield(); }
             }
+            if (sent > 0) {
+                sync_speed_add_bytes((uint32_t)sent);
+            }
         } else {
             LOG_ERR("Failed to read audio data: %d", ret);
             remaining_length = 0;
@@ -823,18 +923,29 @@ void storage_stop_transfer()
 {
     remaining_length = 0;
     stop_started = 1;
+#if STORAGE_ENABLE_AUTO_SYNC
     auto_sync_active = false;
+#endif
+}
+
+bool storage_transfer_active(void)
+{
+    return (remaining_length > 0) || (transport_started != 0);
 }
 
 void storage_auto_sync_start(void)
 {
+#if STORAGE_ENABLE_AUTO_SYNC
     auto_sync_requested = 1;
+#endif
 }
 
 void storage_auto_sync_stop(void)
 {
+#if STORAGE_ENABLE_AUTO_SYNC
     auto_sync_active = false;
     auto_sync_requested = 0;
+#endif
     if (remaining_length > 0) {
         storage_stop_transfer();
     }
@@ -850,6 +961,9 @@ void storage_write(void)
 
         if (transport_started) {
             LOG_INF("transport started in side : %d", transport_started);
+            sync_speed_mode = SYNC_SPEED_MODE_NONE;
+            sync_speed_window_bytes = 0;
+            sync_speed_window_start_ms = 0;
             /* Only call legacy setup for legacy mode (current_sync_file_index == -1)
              * New protocol (CMD_READ_FILE) already set up via setup_file_transfer() */
             if (current_sync_file_index < 0) {
@@ -976,7 +1090,7 @@ void storage_write(void)
         }
 
         /* Auto-sync: start syncing stored audio when BLE connects */
-        if (auto_sync_requested && !auto_sync_active) {
+        if (STORAGE_ENABLE_AUTO_SYNC && auto_sync_requested && !auto_sync_active) {
             auto_sync_requested = 0;
             struct bt_conn *sync_conn = get_current_connection();
             if (sync_conn) {
@@ -1138,7 +1252,7 @@ void storage_write(void)
                     } else
 #endif
                     {
-                        if (auto_sync_active && current_sync_file_index >= 0) {
+                        if (STORAGE_ENABLE_AUTO_SYNC && auto_sync_active && current_sync_file_index >= 0) {
                             /* BLE auto-sync: continue to next file */
                             refresh_file_list_cache();
                             int next_idx = 0;  /* Re-scan from beginning since we deleted a file */
@@ -1170,11 +1284,11 @@ void storage_write(void)
 
         // Sleep when there's no work
         if (remaining_length == 0 && !delete_started && !nuke_started && !stop_started) {
-            if (auto_sync_active && get_current_connection()) {
+            if (STORAGE_ENABLE_AUTO_SYNC && auto_sync_active && get_current_connection()) {
                 /* Tail mode: periodically check for new audio data to sync */
                 k_msleep(3000);
 
-                if (!auto_sync_active || !get_current_connection()) {
+                if (!(STORAGE_ENABLE_AUTO_SYNC && auto_sync_active) || !get_current_connection()) {
                     continue;  /* Disconnected or sync stopped during sleep */
                 }
 

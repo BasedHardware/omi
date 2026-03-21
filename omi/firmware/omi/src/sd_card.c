@@ -201,6 +201,11 @@ static char    current_filename[MAX_FILENAME_LEN] = {0};
 static char    current_file_path[64]              = {0};
 static int64_t current_file_created_uptime_ms     = 0;
 static bool    current_file_needs_rename          = false;
+static bool    deferred_timesync_rename_pending   = false;
+static uint32_t deferred_timesync_utc_time        = 0;
+static uint32_t cached_stats_file_count           = 0;
+static uint64_t cached_stats_total_size           = 0;
+static int64_t cached_stats_valid_until_ms        = 0;
 
 /* BLE connection tracking for file rotation */
 static bool    ble_connected    = false;
@@ -449,6 +454,9 @@ static void print_audio_files_at_boot(void)
         }
     }
     lfs_dir_close(&lfs_fs, &dir);
+    cached_stats_file_count = file_count;
+    cached_stats_total_size = total_size;
+    cached_stats_valid_until_ms = k_uptime_get() + 45000;
     LOG_INF("[SD_BOOT] %u files, %u bytes total", file_count, (unsigned)total_size);
     LOG_INF("=============================================");
 }
@@ -838,8 +846,6 @@ void sd_worker_thread(void)
         /* Priority queue first: reads, flush, file-list, delete, etc.
          * These never wait behind pending audio writes. */
         if (k_msgq_get(&sd_prio_msgq, &req, K_NO_WAIT) == 0) {
-            /* Flush any buffered writes before handling control op */
-            if (write_batch_offset > 0) flush_batch_buffer();
             goto handle_req;
         }
 
@@ -1178,7 +1184,14 @@ handle_req:
         /* ---- Time synced ---- */
         case REQ_TIME_SYNCED:
             if (current_file_needs_rename && current_filename[0] != '\0') {
-                sd_update_filename_after_timesync(req.u.time_synced.utc_time);
+                if (ble_connected) {
+                    deferred_timesync_rename_pending = true;
+                    deferred_timesync_utc_time = req.u.time_synced.utc_time;
+                    LOG_INF("[SD_WORK] Deferring TMP rename while BLE connected");
+                } else {
+                    sd_update_filename_after_timesync(req.u.time_synced.utc_time);
+                    deferred_timesync_rename_pending = false;
+                }
             } else if (current_filename[0] == '\0') {
                 res = create_audio_file_with_timestamp();
                 if (res < 0) LOG_ERR("[SD_WORK] create after time sync failed: %d", res);
@@ -1263,6 +1276,18 @@ void sd_notify_ble_state(bool connected)
         if (ret) LOG_WRN("Flush on BLE connect: queue full (%d)", ret);
     } else if (!connected && ble_connected) {
         LOG_INF("BLE disconnected");
+        if (deferred_timesync_rename_pending) {
+            sd_req_t req = {0};
+            req.type = REQ_TIME_SYNCED;
+            req.u.time_synced.utc_time = deferred_timesync_utc_time;
+            int ret = k_msgq_put(&sd_prio_msgq, &req, K_NO_WAIT);
+            if (ret == 0) {
+                deferred_timesync_rename_pending = false;
+                LOG_INF("Queued deferred TMP rename after BLE disconnect");
+            } else {
+                LOG_WRN("Failed to queue deferred TMP rename: %d", ret);
+            }
+        }
         if (current_file_deleted) {
             int cr = create_new_audio_file();
             if (cr < 0) LOG_ERR("create file on BLE disconnect failed: %d", cr);
@@ -1524,12 +1549,25 @@ int get_audio_file_stats(uint32_t *file_count, uint64_t *total_size)
 
     static struct file_stats_resp resp;
     static volatile bool stats_in_flight;
+    int64_t now = k_uptime_get();
+    k_timeout_t wait_timeout = ble_connected ? K_MSEC(300) : K_MSEC(30000);
+
+    if (now < cached_stats_valid_until_ms) {
+        *file_count = cached_stats_file_count;
+        *total_size = cached_stats_total_size;
+        return 0;
+    }
 
     if (stats_in_flight) {
         if (k_sem_take(&resp.sem, K_NO_WAIT) == 0) {
             stats_in_flight = false;
         } else {
             LOG_WRN("get_audio_file_stats: previous request still in-flight");
+            if (cached_stats_valid_until_ms > 0) {
+                *file_count = cached_stats_file_count;
+                *total_size = cached_stats_total_size;
+                return 0;
+            }
             return -EBUSY;
         }
     }
@@ -1544,15 +1582,30 @@ int get_audio_file_stats(uint32_t *file_count, uint64_t *total_size)
     if (ret) {
         LOG_ERR("Failed to queue get_file_stats: %d", ret);
         stats_in_flight = false;
+        if (cached_stats_valid_until_ms > 0) {
+            *file_count = cached_stats_file_count;
+            *total_size = cached_stats_total_size;
+            return 0;
+        }
         return -1;
     }
 
-    if (k_sem_take(&resp.sem, K_MSEC(15000)) != 0) {
+    if (k_sem_take(&resp.sem, wait_timeout) != 0) {
         LOG_ERR("Timeout waiting for get_file_stats");
-        return -1;
+        stats_in_flight = false;
+        if (cached_stats_valid_until_ms > 0) {
+            *file_count = cached_stats_file_count;
+            *total_size = cached_stats_total_size;
+            return 0;
+        }
+        return -ETIMEDOUT;
     }
     stats_in_flight = false;
     if (resp.res) { LOG_ERR("get_audio_file_stats failed: %d", resp.res); return -1; }
+
+    cached_stats_file_count = resp.file_count;
+    cached_stats_total_size = resp.total_size;
+    cached_stats_valid_until_ms = k_uptime_get() + 2000;
 
     *file_count = resp.file_count;
     *total_size = resp.total_size;
@@ -1592,8 +1645,9 @@ int get_audio_file_list(char filenames[][MAX_FILENAME_LEN], int max_files, int *
         return ret;
     }
 
-    if (k_sem_take(&resp.sem, K_MSEC(15000)) != 0) {
+    if (k_sem_take(&resp.sem, K_MSEC(30000)) != 0) {
         LOG_ERR("Timeout waiting for get_file_list");
+        list_in_flight = false;
         return -ETIMEDOUT;
     }
     list_in_flight = false;
@@ -1637,8 +1691,9 @@ int get_audio_file_list_with_sizes(char filenames[][MAX_FILENAME_LEN],
         return ret;
     }
 
-    if (k_sem_take(&resp.sem, K_MSEC(15000)) != 0) {
+    if (k_sem_take(&resp.sem, K_MSEC(30000)) != 0) {
         LOG_ERR("Timeout waiting for get_file_list");
+        list_sizes_in_flight = false;
         return -ETIMEDOUT;
     }
     list_sizes_in_flight = false;

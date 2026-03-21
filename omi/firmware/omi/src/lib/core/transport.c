@@ -492,6 +492,11 @@ void broadcast_battery_level(struct k_work *work_item)
         LOG_PRINTK("Battery at %d mV (capacity %d%%)\n", battery_millivolt, battery_percentage);
 
         if (is_connected && current_connection != NULL) {
+            if (storage_transfer_active()) {
+                battery_retry_count = 0;
+                k_work_reschedule(&battery_work, K_MSEC(BATTERY_REFRESH_INTERVAL));
+                return;
+            }
             // Use the Zephyr BAS function to set (and notify) the battery level
             int err = bt_bas_set_battery_level(battery_percentage);
             if (err) {
@@ -707,7 +712,7 @@ static void update_conn_params(struct bt_conn *conn)
     int err = 0;
     const struct bt_le_conn_param preferred_param = {
         .interval_min = 6,
-        .interval_max = 24,
+        .interval_max = 12,
         .latency = 0,
         .timeout = 400,
     };
