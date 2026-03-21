@@ -228,25 +228,24 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   Future periodicConnect(String printer, {bool boundDeviceOnly = false}) async {
     _reconnectionTimer?.cancel();
 
-      final pairedDeviceId = SharedPreferencesUtil().btDevice.id;
+    final pairedDeviceId = SharedPreferencesUtil().btDevice.id;
 
-      // Already connected — nothing to do
-      if (isConnected || connectedDevice != null) return;
+    // Already connected — nothing to do
+    if (isConnected || connectedDevice != null) return;
 
-      // Known device — use ensureConnection which creates the NativeBleTransport first,
-      // then connects natively. If native is already connected, it just re-notifies Dart.
-      if (pairedDeviceId.isNotEmpty) {
-        try {
-          await ServiceManager.instance().device.ensureConnection(pairedDeviceId, force: false);
-          return;
-        } catch (e) {
-          Logger.debug('periodicConnect (native): ensureConnection failed: $e, falling back to scan');
-        }
+    // Known device — use ensureConnection which creates the NativeBleTransport first,
+    // then connects natively. If native is already connected, it just re-notifies Dart.
+    if (pairedDeviceId.isNotEmpty) {
+      try {
+        await ServiceManager.instance().device.ensureConnection(pairedDeviceId, force: false);
+        return;
+      } catch (e) {
+        Logger.debug('periodicConnect (native): ensureConnection failed: $e, falling back to scan');
       }
+    }
 
-      // No paired device (onboarding) — fall through to active scanning
-      if (pairedDeviceId.isEmpty && boundDeviceOnly) return;
-
+    // No paired device (onboarding) — fall through to active scanning
+    if (pairedDeviceId.isEmpty && boundDeviceOnly) return;
 
     _startPollingReconnect(boundDeviceOnly: boundDeviceOnly);
   }
@@ -480,7 +479,36 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     // Check firmware updates
     _checkFirmwareUpdates();
 
+    if (Platform.isAndroid) {
+      _ensureCompanionAssociation(device);
+    }
+
     onDeviceConnected?.call(device);
+  }
+
+  Future<void> _ensureCompanionAssociation(BtDevice device) async {
+    try {
+      if (SharedPreferencesUtil().companionAssociationPrompted) return;
+      if (await BleHostApi().hasCompanionDeviceAssociation()) return;
+      final ctx = MyApp.navigatorKey.currentContext;
+      if (ctx == null || !ctx.mounted) return;
+      SharedPreferencesUtil().companionAssociationPrompted = true;
+      await showDialog(
+        context: ctx,
+        builder: (context) => AlertDialog(
+          title: Text(context.l10n.improveConnectionTitle),
+          content: Text(context.l10n.improveConnectionContent),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: Text(context.l10n.improveConnectionAction, style: const TextStyle(color: Colors.white)),
+            ),
+          ],
+        ),
+      );
+    } catch (e) {
+      Logger.debug('CompanionDevice association check failed: $e');
+    }
   }
 
   void _handleDeviceConnected(String deviceId) async {
