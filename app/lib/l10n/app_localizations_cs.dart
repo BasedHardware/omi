@@ -8623,4 +8623,9 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get transcriptionPausedReconnecting => 'Stále se nahrává — připojování k přepisu...';
+
+  @override
+  String fairUseBannerStatus(String status) {
+    return 'Spravedlivé užívání: $status';
+  }
 }

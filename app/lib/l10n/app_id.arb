@@ -2836,5 +2836,13 @@
                 "type": "String"
             }
         }
+    },
+    "fairUseBannerStatus": "Penggunaan Wajar: {status}",
+    "@fairUseBannerStatus": {
+        "placeholders": {
+            "status": {
+                "type": "String"
+            }
+        }
     }
 }

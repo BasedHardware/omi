@@ -8568,4 +8568,9 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get transcriptionPausedReconnecting => 'لا يزال التسجيل جاريًا — إعادة الاتصال بالنسخ...';
+
+  @override
+  String fairUseBannerStatus(String status) {
+    return 'الاستخدام العادل: $status';
+  }
 }

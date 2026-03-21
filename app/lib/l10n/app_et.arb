@@ -2794,5 +2794,13 @@
                 "type": "String"
             }
         }
+    },
+    "fairUseBannerStatus": "Õiglane kasutus: {status}",
+    "@fairUseBannerStatus": {
+        "placeholders": {
+            "status": {
+                "type": "String"
+            }
+        }
     }
 }

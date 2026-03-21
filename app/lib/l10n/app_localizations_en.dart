@@ -8623,4 +8623,9 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get transcriptionPausedReconnecting => 'Still recording — reconnecting to transcription...';
+
+  @override
+  String fairUseBannerStatus(String status) {
+    return 'Fair Use: $status';
+  }
 }

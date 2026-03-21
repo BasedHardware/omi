@@ -8610,4 +8610,9 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get transcriptionPausedReconnecting => 'Optager stadig — genopretter forbindelse til transskription...';
+
+  @override
+  String fairUseBannerStatus(String status) {
+    return 'Fair brug: $status';
+  }
 }

@@ -2794,5 +2794,13 @@
                 "type": "String"
             }
         }
+    },
+    "fairUseBannerStatus": "공정 사용: {status}",
+    "@fairUseBannerStatus": {
+        "placeholders": {
+            "status": {
+                "type": "String"
+            }
+        }
     }
 }

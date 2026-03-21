@@ -2794,5 +2794,13 @@
                 "type": "String"
             }
         }
+    },
+    "fairUseBannerStatus": "Sąžiningas naudojimas: {status}",
+    "@fairUseBannerStatus": {
+        "placeholders": {
+            "status": {
+                "type": "String"
+            }
+        }
     }
 }

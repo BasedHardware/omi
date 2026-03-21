@@ -8678,4 +8678,9 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get transcriptionPausedReconnecting => 'Encara gravant — reconnectant a la transcripció...';
+
+  @override
+  String fairUseBannerStatus(String status) {
+    return 'Ús raonable: $status';
+  }
 }

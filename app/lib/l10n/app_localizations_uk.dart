@@ -8640,4 +8640,9 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get transcriptionPausedReconnecting => 'Запис продовжується — повторне підключення до транскрипції...';
+
+  @override
+  String fairUseBannerStatus(String status) {
+    return 'Справедливе використання: $status';
+  }
 }

@@ -2803,5 +2803,13 @@
                 "type": "String"
             }
         }
+    },
+    "fairUseBannerStatus": "Fair brug: {status}",
+    "@fairUseBannerStatus": {
+        "placeholders": {
+            "status": {
+                "type": "String"
+            }
+        }
     }
 }

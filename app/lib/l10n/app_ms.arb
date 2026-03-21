@@ -2794,5 +2794,13 @@
                 "type": "String"
             }
         }
+    },
+    "fairUseBannerStatus": "Penggunaan Saksama: {status}",
+    "@fairUseBannerStatus": {
+        "placeholders": {
+            "status": {
+                "type": "String"
+            }
+        }
     }
 }

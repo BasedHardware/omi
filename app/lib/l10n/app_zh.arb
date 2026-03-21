@@ -2816,5 +2816,13 @@
                 "type": "String"
             }
         }
+    },
+    "fairUseBannerStatus": "公平使用：{status}",
+    "@fairUseBannerStatus": {
+        "placeholders": {
+            "status": {
+                "type": "String"
+            }
+        }
     }
 }

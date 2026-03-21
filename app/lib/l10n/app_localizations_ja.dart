@@ -8482,4 +8482,9 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get transcriptionPausedReconnecting => '録音は継続中 — 文字起こしに再接続しています...';
+
+  @override
+  String fairUseBannerStatus(String status) {
+    return '公正使用：$status';
+  }
 }

@@ -13,8 +13,10 @@ import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
 
+import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/models/subscription.dart';
 import 'package:omi/models/user_usage.dart';
+import 'package:omi/pages/settings/fair_use_page.dart';
 import 'package:omi/pages/settings/transcription_settings_page.dart';
 import 'package:omi/pages/settings/widgets/plans_sheet.dart';
 import 'package:omi/providers/usage_provider.dart';
@@ -38,6 +40,18 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
   late AnimationController _arrowController;
   late Animation<double> _arrowAnimation;
   String selectedPlan = 'yearly'; // 'yearly' or 'monthly'
+  Map<String, dynamic>? _fairUseStatus;
+
+  Future<void> _loadFairUseStatus() async {
+    try {
+      final result = await getFairUseStatus();
+      if (mounted && result != null) {
+        setState(() => _fairUseStatus = result);
+      }
+    } catch (_) {
+      // Silently ignore — banner simply won't appear
+    }
+  }
 
   Future<void> _loadAvailablePlans() async {
     final provider = context.read<UsageProvider>();
@@ -246,6 +260,7 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
       context.read<UsageProvider>().fetchUsageStats(period: 'today');
       context.read<UsageProvider>().fetchSubscription();
       _loadAvailablePlans();
+      _loadFairUseStatus();
       if (widget.showUpgradeDialog) {
         _showPlansSheet();
       }
@@ -290,36 +305,53 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
       ),
       body: Consumer<UsageProvider>(
         builder: (context, provider, child) {
-          final hasAnyData =
-              provider.todayUsage != null ||
+          final hasAnyData = provider.todayUsage != null ||
               provider.monthlyUsage != null ||
               provider.yearlyUsage != null ||
               provider.allTimeUsage != null;
 
           if (provider.isLoading && !hasAnyData) {
-            return const Center(child: CircularProgressIndicator(color: Colors.deepPurple));
+            return Column(
+              children: [
+                _buildFairUseBanner(),
+                const Expanded(child: Center(child: CircularProgressIndicator(color: Colors.deepPurple))),
+              ],
+            );
           }
 
           if (provider.error != null && !hasAnyData) {
-            return Center(
-              child: Padding(
-                padding: const EdgeInsets.all(24.0),
-                child: Text(
-                  provider.error!,
-                  textAlign: TextAlign.center,
-                  style: TextStyle(color: Colors.grey.shade400, fontSize: 16),
+            return Column(
+              children: [
+                _buildFairUseBanner(),
+                Expanded(
+                  child: Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(24.0),
+                      child: Text(
+                        provider.error!,
+                        textAlign: TextAlign.center,
+                        style: TextStyle(color: Colors.grey.shade400, fontSize: 16),
+                      ),
+                    ),
+                  ),
                 ),
-              ),
+              ],
             );
           }
 
           if (!provider.isLoading && !hasAnyData && provider.error == null) {
-            return _buildEmptyState();
+            return Column(
+              children: [
+                _buildFairUseBanner(),
+                Expanded(child: _buildEmptyState()),
+              ],
+            );
           }
 
           return Column(
             children: [
               _buildSubscriptionInfo(context, provider),
+              _buildFairUseBanner(),
               Expanded(
                 child: TabBarView(
                   controller: _tabController,
@@ -465,6 +497,62 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
           },
         );
       },
+    );
+  }
+
+  Widget _buildFairUseBanner() {
+    if (_fairUseStatus == null) return const SizedBox.shrink();
+    final stage = _fairUseStatus!['stage'] as String? ?? 'none';
+    if (stage == 'none') return const SizedBox.shrink();
+
+    Color dotColor;
+    String stageLabel;
+    switch (stage) {
+      case 'warning':
+        dotColor = const Color(0xFFFBBF24);
+        stageLabel = context.l10n.fairUseStageWarning;
+        break;
+      case 'throttle':
+        dotColor = const Color(0xFFF97316);
+        stageLabel = context.l10n.fairUseStageThrottle;
+        break;
+      case 'restrict':
+        dotColor = const Color(0xFFEF4444);
+        stageLabel = context.l10n.fairUseStageRestrict;
+        break;
+      default:
+        return const SizedBox.shrink();
+    }
+
+    return GestureDetector(
+      key: const Key('fair_use_banner_tap'),
+      onTap: () {
+        Navigator.of(context).push(MaterialPageRoute(builder: (context) => const FairUsePage()));
+      },
+      child: Container(
+        margin: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(
+          color: dotColor.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Row(
+          children: [
+            Container(
+                key: const Key('fair_use_dot'),
+                width: 8,
+                height: 8,
+                decoration: BoxDecoration(color: dotColor, shape: BoxShape.circle)),
+            const SizedBox(width: 10),
+            Text(
+              context.l10n.fairUseBannerStatus(stageLabel),
+              style: TextStyle(color: dotColor, fontSize: 13, fontWeight: FontWeight.w500),
+            ),
+            const Spacer(),
+            Icon(Icons.chevron_right, color: dotColor, size: 18),
+          ],
+        ),
+      ),
     );
   }
 
@@ -954,8 +1042,8 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
                 builder: (context) {
                   final minutesUsed = (subscription.transcriptionSecondsUsed / 60).round();
                   final minutesLimit = (subscription.transcriptionSecondsLimit / 60).round();
-                  final percentage = (subscription.transcriptionSecondsUsed / subscription.transcriptionSecondsLimit)
-                      .clamp(0.0, 1.0);
+                  final percentage =
+                      (subscription.transcriptionSecondsUsed / subscription.transcriptionSecondsLimit).clamp(0.0, 1.0);
                   return Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [

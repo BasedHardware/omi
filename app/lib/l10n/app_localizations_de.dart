@@ -8700,4 +8700,9 @@ class AppLocalizationsDe extends AppLocalizations {
   @override
   String get transcriptionPausedReconnecting =>
       'Nimmt weiterhin auf — Verbindung zur Transkription wird wiederhergestellt...';
+
+  @override
+  String fairUseBannerStatus(String status) {
+    return 'Faire Nutzung: $status';
+  }
 }

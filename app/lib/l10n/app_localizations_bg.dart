@@ -8662,4 +8662,9 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get transcriptionPausedReconnecting => 'Все още се записва — свързване с транскрипцията...';
+
+  @override
+  String fairUseBannerStatus(String status) {
+    return 'Добросъвестно ползване: $status';
+  }
 }

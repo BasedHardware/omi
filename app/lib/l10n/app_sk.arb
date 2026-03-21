@@ -2799,5 +2799,13 @@
                 "type": "String"
             }
         }
+    },
+    "fairUseBannerStatus": "Spravodlivé používanie: {status}",
+    "@fairUseBannerStatus": {
+        "placeholders": {
+            "status": {
+                "type": "String"
+            }
+        }
     }
 }

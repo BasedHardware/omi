@@ -8678,4 +8678,9 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get transcriptionPausedReconnecting => 'Registrazione in corso — riconnessione alla trascrizione...';
+
+  @override
+  String fairUseBannerStatus(String status) {
+    return 'Uso corretto: $status';
+  }
 }

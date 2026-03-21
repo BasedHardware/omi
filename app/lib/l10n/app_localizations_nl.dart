@@ -8654,4 +8654,9 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get transcriptionPausedReconnecting => 'Neemt nog steeds op — opnieuw verbinden met transcriptie...';
+
+  @override
+  String fairUseBannerStatus(String status) {
+    return 'Eerlijk gebruik: $status';
+  }
 }

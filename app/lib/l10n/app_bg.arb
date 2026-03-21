@@ -2763,5 +2763,13 @@
                 "type": "String"
             }
         }
+    },
+    "fairUseBannerStatus": "Добросъвестно ползване: {status}",
+    "@fairUseBannerStatus": {
+        "placeholders": {
+            "status": {
+                "type": "String"
+            }
+        }
     }
 }

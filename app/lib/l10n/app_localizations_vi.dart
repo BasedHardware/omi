@@ -8629,4 +8629,9 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get transcriptionPausedReconnecting => 'Vẫn đang ghi — đang kết nối lại với phiên âm...';
+
+  @override
+  String fairUseBannerStatus(String status) {
+    return 'Sử dụng hợp lý: $status';
+  }
 }
