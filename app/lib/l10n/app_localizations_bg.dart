@@ -8665,6 +8665,6 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String fairUseBannerStatus(String status) {
-    return 'Fair Use: $status';
+    return 'Добросъвестно ползване: $status';
   }
 }

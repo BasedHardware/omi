@@ -2763,7 +2763,7 @@
             }
         }
     },
-    "fairUseBannerStatus": "Fair Use: {status}",
+    "fairUseBannerStatus": "Faire Nutzung: {status}",
     "@fairUseBannerStatus": {
         "placeholders": {
             "status": {

@@ -8703,6 +8703,6 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String fairUseBannerStatus(String status) {
-    return 'Fair Use: $status';
+    return 'Faire Nutzung: $status';
   }
 }

@@ -2764,7 +2764,7 @@
             }
         }
     },
-    "fairUseBannerStatus": "Fair Use: {status}",
+    "fairUseBannerStatus": "Добросъвестно ползване: {status}",
     "@fairUseBannerStatus": {
         "placeholders": {
             "status": {

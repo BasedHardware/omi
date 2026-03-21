@@ -2764,7 +2764,7 @@
             }
         }
     },
-    "fairUseBannerStatus": "Fair Use: {status}",
+    "fairUseBannerStatus": "Ús raonable: {status}",
     "@fairUseBannerStatus": {
         "placeholders": {
             "status": {

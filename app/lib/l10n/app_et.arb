@@ -2795,7 +2795,7 @@
             }
         }
     },
-    "fairUseBannerStatus": "Fair Use: {status}",
+    "fairUseBannerStatus": "Õiglane kasutus: {status}",
     "@fairUseBannerStatus": {
         "placeholders": {
             "status": {

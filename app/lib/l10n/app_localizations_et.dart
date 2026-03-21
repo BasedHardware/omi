@@ -8627,6 +8627,6 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String fairUseBannerStatus(String status) {
-    return 'Fair Use: $status';
+    return 'Õiglane kasutus: $status';
   }
 }

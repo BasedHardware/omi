@@ -2800,7 +2800,7 @@
             }
         }
     },
-    "fairUseBannerStatus": "Fair Use: {status}",
+    "fairUseBannerStatus": "Spravodlivé používanie: {status}",
     "@fairUseBannerStatus": {
         "placeholders": {
             "status": {

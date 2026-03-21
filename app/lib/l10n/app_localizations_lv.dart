@@ -8647,6 +8647,6 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String fairUseBannerStatus(String status) {
-    return 'Fair Use: $status';
+    return 'Godprātīga izmantošana: $status';
   }
 }

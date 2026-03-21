@@ -2795,7 +2795,7 @@
             }
         }
     },
-    "fairUseBannerStatus": "Fair Use: {status}",
+    "fairUseBannerStatus": "Sąžiningas naudojimas: {status}",
     "@fairUseBannerStatus": {
         "placeholders": {
             "status": {

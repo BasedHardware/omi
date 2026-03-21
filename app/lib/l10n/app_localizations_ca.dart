@@ -8681,6 +8681,6 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String fairUseBannerStatus(String status) {
-    return 'Fair Use: $status';
+    return 'Ús raonable: $status';
   }
 }
