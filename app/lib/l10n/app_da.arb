@@ -2803,5 +2803,8 @@
                 "type": "String"
             }
         }
-    }
+    },
+    "improveConnectionTitle": "Forbedre forbindelsen",
+    "improveConnectionContent": "Vi har forbedret, hvordan Omi forbliver forbundet til din enhed. For at aktivere dette, gå til enhedsinfosiden, tryk på \"Afbryd enhed\", og tilslut din enhed igen.",
+    "improveConnectionAction": "Forstået"
 }

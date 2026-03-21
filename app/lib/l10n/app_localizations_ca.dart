@@ -8678,4 +8678,14 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get transcriptionPausedReconnecting => 'Encara gravant — reconnectant a la transcripció...';
+
+  @override
+  String get improveConnectionTitle => 'Millorar la connexió';
+
+  @override
+  String get improveConnectionContent =>
+      'Hem millorat com Omi es manté connectat al teu dispositiu. Per activar-ho, ves a la pàgina d\'informació del dispositiu, toca \"Desconnectar dispositiu\" i torna a vincular el teu dispositiu.';
+
+  @override
+  String get improveConnectionAction => 'Entesos';
 }

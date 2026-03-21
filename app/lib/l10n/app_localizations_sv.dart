@@ -8630,4 +8630,14 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get transcriptionPausedReconnecting => 'Spelar fortfarande in — återansluter till transkription...';
+
+  @override
+  String get improveConnectionTitle => 'Förbättra anslutning';
+
+  @override
+  String get improveConnectionContent =>
+      'Vi har förbättrat hur Omi förblir ansluten till din enhet. För att aktivera detta, gå till sidan Enhetsinformation, tryck på \"Koppla från enhet\" och para ihop din enhet igen.';
+
+  @override
+  String get improveConnectionAction => 'Förstått';
 }

@@ -8482,4 +8482,14 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get transcriptionPausedReconnecting => '録音は継続中 — 文字起こしに再接続しています...';
+
+  @override
+  String get improveConnectionTitle => '接続を改善';
+
+  @override
+  String get improveConnectionContent =>
+      'Omiがデバイスとの接続を維持する方法を改善しました。これを有効にするには、デバイス情報ページに移動し、「デバイスを切断」をタップしてから、デバイスを再度ペアリングしてください。';
+
+  @override
+  String get improveConnectionAction => '了解';
 }

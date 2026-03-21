@@ -8484,4 +8484,14 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get transcriptionPausedReconnecting => '계속 녹음 중 — 음성 인식에 재연결하는 중...';
+
+  @override
+  String get improveConnectionTitle => '연결 개선';
+
+  @override
+  String get improveConnectionContent =>
+      'Omi가 기기와 연결을 유지하는 방식을 개선했습니다. 이를 활성화하려면 기기 정보 페이지로 이동하여 \"기기 연결 해제\"를 탭한 다음 기기를 다시 페어링하세요.';
+
+  @override
+  String get improveConnectionAction => '알겠습니다';
 }

@@ -8634,4 +8634,14 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get transcriptionPausedReconnecting => 'Vis dar įrašoma — jungiamasi prie transkripcijos...';
+
+  @override
+  String get improveConnectionTitle => 'Pagerinti ryšį';
+
+  @override
+  String get improveConnectionContent =>
+      'Patobulinome, kaip Omi lieka prisijungęs prie jūsų įrenginio. Norėdami tai aktyvuoti, eikite į įrenginio informacijos puslapį, bakstelėkite \"Atjungti įrenginį\" ir vėl susiekite savo įrenginį.';
+
+  @override
+  String get improveConnectionAction => 'Supratau';
 }

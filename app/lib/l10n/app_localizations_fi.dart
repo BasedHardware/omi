@@ -8625,4 +8625,14 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get transcriptionPausedReconnecting => 'Nauhoittaa yhä — yhdistetään uudelleen puheentunnistukseen...';
+
+  @override
+  String get improveConnectionTitle => 'Paranna yhteyttä';
+
+  @override
+  String get improveConnectionContent =>
+      'Olemme parantaneet Omin yhteydenpitoa laitteeseesi. Aktivoidaksesi tämän, siirry Laitteen tiedot -sivulle, napauta \"Katkaise laitteen yhteys\" ja yhdistä laitteesi uudelleen.';
+
+  @override
+  String get improveConnectionAction => 'Selvä';
 }

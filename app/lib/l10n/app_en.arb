@@ -10347,5 +10347,8 @@
         }
     },
     "transcriptionPaused": "Recording, reconnecting",
-    "transcriptionPausedReconnecting": "Still recording — reconnecting to transcription..."
+    "transcriptionPausedReconnecting": "Still recording — reconnecting to transcription...",
+    "improveConnectionTitle": "Improve Connection",
+    "improveConnectionContent": "We've improved how Omi stays connected to your device. To activate this, please go to the Device Info page, tap \"Disconnect Device\", and then pair your device again.",
+    "improveConnectionAction": "Got it"
 }

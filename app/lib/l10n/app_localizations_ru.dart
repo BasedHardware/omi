@@ -8655,4 +8655,14 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get transcriptionPausedReconnecting => 'Запись продолжается — переподключение к транскрипции...';
+
+  @override
+  String get improveConnectionTitle => 'Улучшить соединение';
+
+  @override
+  String get improveConnectionContent =>
+      'Мы улучшили способ подключения Omi к вашему устройству. Чтобы активировать это, перейдите на страницу информации об устройстве, нажмите \"Отключить устройство\" и снова подключите ваше устройство.';
+
+  @override
+  String get improveConnectionAction => 'Понятно';
 }

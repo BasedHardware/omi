@@ -8700,4 +8700,14 @@ class AppLocalizationsDe extends AppLocalizations {
   @override
   String get transcriptionPausedReconnecting =>
       'Nimmt weiterhin auf — Verbindung zur Transkription wird wiederhergestellt...';
+
+  @override
+  String get improveConnectionTitle => 'Verbindung verbessern';
+
+  @override
+  String get improveConnectionContent =>
+      'Wir haben verbessert, wie Omi mit deinem Gerät verbunden bleibt. Um dies zu aktivieren, gehe zur Geräteinfo-Seite, tippe auf \"Gerät trennen\" und verbinde dein Gerät erneut.';
+
+  @override
+  String get improveConnectionAction => 'Verstanden';
 }

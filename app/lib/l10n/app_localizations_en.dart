@@ -8623,4 +8623,14 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get transcriptionPausedReconnecting => 'Still recording — reconnecting to transcription...';
+
+  @override
+  String get improveConnectionTitle => 'Improve Connection';
+
+  @override
+  String get improveConnectionContent =>
+      'We\'ve improved how Omi stays connected to your device. To activate this, please go to the Device Info page, tap \"Disconnect Device\", and then pair your device again.';
+
+  @override
+  String get improveConnectionAction => 'Got it';
 }

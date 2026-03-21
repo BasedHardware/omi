@@ -8654,4 +8654,14 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get transcriptionPausedReconnecting => 'Neemt nog steeds op — opnieuw verbinden met transcriptie...';
+
+  @override
+  String get improveConnectionTitle => 'Verbinding verbeteren';
+
+  @override
+  String get improveConnectionContent =>
+      'We hebben verbeterd hoe Omi verbonden blijft met je apparaat. Om dit te activeren, ga naar de Apparaatinfo-pagina, tik op \"Apparaat loskoppelen\" en koppel je apparaat opnieuw.';
+
+  @override
+  String get improveConnectionAction => 'Begrepen';
 }

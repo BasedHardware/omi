@@ -8662,4 +8662,14 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get transcriptionPausedReconnecting => 'Все още се записва — свързване с транскрипцията...';
+
+  @override
+  String get improveConnectionTitle => 'Подобряване на връзката';
+
+  @override
+  String get improveConnectionContent =>
+      'Подобрихме начина, по който Omi остава свързан с вашето устройство. За да активирате това, моля, отидете на страницата с информация за устройството, натиснете \"Изключване на устройството\" и сдвоете устройството си отново.';
+
+  @override
+  String get improveConnectionAction => 'Разбрах';
 }
