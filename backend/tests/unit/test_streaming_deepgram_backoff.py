@@ -40,6 +40,7 @@ sys.modules['deepgram.clients.live.v1'].LiveOptions = MagicMock
 sys.modules['utils.stt.vad_gate'].GatedDeepgramSocket = MagicMock
 
 from utils.stt.streaming import connect_to_deepgram_with_backoff, process_audio_dg  # noqa: E402
+from utils.stt.streaming import deepgram_options, deepgram_cloud_options  # noqa: E402
 
 
 @pytest.mark.asyncio
@@ -263,3 +264,11 @@ async def test_process_audio_dg_no_vad_wrap_on_none():
             is_active=lambda: False,
         )
     assert result is None
+
+
+def test_deepgram_options_no_keepalive():
+    """SDK keepalive option must not be present — it spawns a dangerous background thread (#5870)."""
+    for name, opts in [('deepgram_options', deepgram_options), ('deepgram_cloud_options', deepgram_cloud_options)]:
+        # DeepgramClientOptions stores options dict — keepalive key must be absent
+        if hasattr(opts, 'options') and isinstance(opts.options, dict):
+            assert 'keepalive' not in opts.options, f'{name} must not contain "keepalive" key'
