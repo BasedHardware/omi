@@ -46,10 +46,6 @@ static uint32_t current_read_offset = 0;
 #define MAX_HEARTBEAT_FRAMES 100
 #define HEARTBEAT 50
 
-#ifndef STORAGE_ENABLE_AUTO_SYNC
-#define STORAGE_ENABLE_AUTO_SYNC 0
-#endif
-
 /* Multi-file sync state */
 static char sync_file_list[MAX_AUDIO_FILES][MAX_FILENAME_LEN];
 static uint32_t sync_file_sizes[MAX_AUDIO_FILES];
@@ -58,9 +54,6 @@ static int current_sync_file_index = -1;  /* -1 = legacy mode, >=0 = new protoco
 static uint8_t list_files_requested = 0;  /* Deferred to storage thread */
 static int8_t delete_file_index = -1;     /* -1 = no delete, >=0 = file index to delete */
 
-/* Auto-sync state: automatically sync stored audio to phone on BLE connect */
-static volatile uint8_t auto_sync_requested = 0;
-static volatile bool auto_sync_active = false;
 static void storage_config_changed_handler(const struct bt_gatt_attr *attr, uint16_t value);
 static ssize_t storage_write_handler(struct bt_conn *conn,
                                      const struct bt_gatt_attr *attr,
@@ -138,10 +131,6 @@ static void storage_config_changed_handler(const struct bt_gatt_attr *attr, uint
     storage_is_on = true;
     if (value == BT_GATT_CCC_NOTIFY) {
         LOG_INF("Client subscribed for notifications");
-        /* Also trigger auto-sync in case subscription arrives after connect */
-        if (STORAGE_ENABLE_AUTO_SYNC && !auto_sync_active) {
-            auto_sync_requested = 1;
-        }
     } else if (value == 0) {
         LOG_INF("Client unsubscribed from notifications");
     } else {
@@ -186,8 +175,8 @@ static ssize_t storage_read_characteristic(struct bt_conn *conn,
 
 uint8_t transport_started = 0;
 #define SD_BLE_SIZE 440
-#define TCP_CHUNK_COUNT 10
-#define STORAGE_BUFFER_SIZE (SD_BLE_SIZE * TCP_CHUNK_COUNT + 5 * TCP_CHUNK_COUNT)  /* Restore safe size ~4.5KB */
+#define STORAGE_CHUNK_COUNT 20
+#define STORAGE_BUFFER_SIZE (SD_BLE_SIZE * STORAGE_CHUNK_COUNT + 5 * STORAGE_CHUNK_COUNT)  /* ~8.9KB */
 static uint8_t storage_buffer[STORAGE_BUFFER_SIZE];
 static uint32_t offset = 0;
 static uint8_t stop_started = 0;
@@ -547,7 +536,6 @@ static ssize_t storage_write_handler(struct bt_conn *conn,
         storage_notify(conn, &result_buffer, 1);
     }
     
-    k_msleep(10);
     return len;
 }
 
@@ -555,7 +543,7 @@ static ssize_t storage_write_handler(struct bt_conn *conn,
  * Batch-read buffer for BLE sync: reuse storage_buffer (4450 bytes).
  * Only need a small separate buffer for building BLE notifications.
  */
-#define BLE_BATCH_PACKETS 10
+#define BLE_BATCH_PACKETS 20
 static uint8_t ble_notify_buf[4 + SD_BLE_SIZE];
 
 static void write_to_gatt(struct bt_conn *conn)
@@ -583,8 +571,7 @@ static void write_to_gatt(struct bt_conn *conn)
          * throughput to 10-15 KB/s.  Now we keep going until -ENOMEM
          * persists, which lets BLE run at full connection-event throughput.
          */
-        int consecutive_enomem = 0;
-        while (remaining_length > 0 && consecutive_enomem < 3) {
+        while (remaining_length > 0) {
             uint32_t batch_audio_size = MIN(remaining_length, (uint32_t)(ble_chunk * BLE_BATCH_PACKETS));
             if (batch_audio_size > STORAGE_BUFFER_SIZE) {
                 batch_audio_size = STORAGE_BUFFER_SIZE;
@@ -605,19 +592,8 @@ static void write_to_gatt(struct bt_conn *conn)
 
                 err = storage_notify(conn, ble_notify_buf, 4 + chunk);
                 if (err == -ENOMEM) {
-                    /* TX buffer full — brief yield, then retry */
                     k_yield();
-                    err = storage_notify(conn, ble_notify_buf, 4 + chunk);
-                    if (err == -ENOMEM) {
-                        k_msleep(1);
-                        err = storage_notify(conn, ble_notify_buf, 4 + chunk);
-                        if (err == -ENOMEM) {
-                            consecutive_enomem++;
-                            /* Force wait for BLE to drain, then retry this packet */
-                            k_msleep(2);
-                            continue;
-                        }
-                    }
+                    continue;
                 }
                 if (err == -EAGAIN) {
                     return;
@@ -627,7 +603,6 @@ static void write_to_gatt(struct bt_conn *conn)
                     return;
                 }
 
-                consecutive_enomem = 0;  /* successful send — reset counter */
                 bytes_sent += chunk;
                 sync_speed_add_bytes(chunk);
                 current_read_offset += chunk;
@@ -637,8 +612,7 @@ static void write_to_gatt(struct bt_conn *conn)
         }
     } else {
         /* Legacy: raw audio data without timestamp */
-        int consecutive_enomem = 0;
-        while (remaining_length > 0 && consecutive_enomem < 3) {
+        while (remaining_length > 0) {
             uint32_t batch_audio_size = MIN(remaining_length, (uint32_t)(ble_chunk * BLE_BATCH_PACKETS));
             if (batch_audio_size > STORAGE_BUFFER_SIZE) {
                 batch_audio_size = STORAGE_BUFFER_SIZE;
@@ -660,16 +634,7 @@ static void write_to_gatt(struct bt_conn *conn)
                 err = storage_notify(conn, storage_buffer + bytes_sent, chunk);
                 if (err == -ENOMEM) {
                     k_yield();
-                    err = storage_notify(conn, storage_buffer + bytes_sent, chunk);
-                    if (err == -ENOMEM) {
-                        k_msleep(1);
-                        err = storage_notify(conn, storage_buffer + bytes_sent, chunk);
-                        if (err == -ENOMEM) {
-                            consecutive_enomem++;
-                            k_msleep(2);
-                            continue;
-                        }
-                    }
+                    continue;
                 }
 
                 if (err == -EAGAIN) {
@@ -680,7 +645,6 @@ static void write_to_gatt(struct bt_conn *conn)
                     return;
                 }
 
-                consecutive_enomem = 0;
                 bytes_sent += chunk;
                 sync_speed_add_bytes(chunk);
                 current_read_offset += chunk;
@@ -695,32 +659,11 @@ void storage_stop_transfer()
 {
     remaining_length = 0;
     stop_started = 1;
-#if STORAGE_ENABLE_AUTO_SYNC
-    auto_sync_active = false;
-#endif
 }
 
 bool storage_transfer_active(void)
 {
     return (remaining_length > 0) || (transport_started != 0);
-}
-
-void storage_auto_sync_start(void)
-{
-#if STORAGE_ENABLE_AUTO_SYNC
-    auto_sync_requested = 1;
-#endif
-}
-
-void storage_auto_sync_stop(void)
-{
-#if STORAGE_ENABLE_AUTO_SYNC
-    auto_sync_active = false;
-    auto_sync_requested = 0;
-#endif
-    if (remaining_length > 0) {
-        storage_stop_transfer();
-    }
 }
 
 void storage_write(void)
@@ -821,90 +764,6 @@ void storage_write(void)
             heartbeat_count = 0;
         }
 
-        /* Auto-sync: start syncing stored audio when BLE connects */
-        if (STORAGE_ENABLE_AUTO_SYNC && auto_sync_requested && !auto_sync_active) {
-            auto_sync_requested = 0;
-            struct bt_conn *sync_conn = get_current_connection();
-            if (sync_conn) {
-                if (!storage_notify_ready(sync_conn)) {
-                    auto_sync_requested = 1;
-                    k_msleep(200);
-                    continue;
-                }
-
-                LOG_INF("Auto-sync: waiting for BLE setup to complete...");
-                k_msleep(3000);  /* Wait for MTU negotiation */
-
-                /* Handle any file-list request that arrived during the wait.
-                 * This avoids an extra ~15 s delay before the phone receives
-                 * the list — the refresh here is shared with the auto-sync
-                 * setup that follows immediately below. */
-                sync_conn = get_current_connection();
-                if (list_files_requested && sync_conn) {
-                    list_files_requested = 0;
-                    refresh_file_list_cache();
-                    send_file_list_response(sync_conn);
-                    /* Cache is now fresh; auto-sync setup reuses it below. */
-                }
-
-                /* Re-fetch connection: the SD operations above may have taken
-                 * several seconds during which BLE could have disconnected. */
-                sync_conn = get_current_connection();
-                if (sync_conn) {
-                    LOG_INF("Auto-sync: starting from last saved offset");
-                    sd_flush_current_file();
-                    k_msleep(100);
-
-                    refresh_file_list_cache();
-                    if (sync_file_count > 0) {
-                        char offset_file[MAX_FILENAME_LEN] = {0};
-                        uint32_t offset_pos = 0;
-                        get_offset(offset_file, &offset_pos);
-
-                        int start_idx = 0;
-                        uint32_t start_offset = 0;
-
-                        if (offset_file[0] != '\0') {
-                            for (int i = 0; i < sync_file_count; i++) {
-                                if (strcmp(sync_file_list[i], offset_file) == 0) {
-                                    start_idx = i;
-                                    start_offset = offset_pos;
-                                    break;
-                                }
-                            }
-                        }
-
-                        /* Skip files that are already fully synced */
-                        while (start_idx < sync_file_count &&
-                               sync_file_sizes[start_idx] > 0 &&
-                               start_offset >= sync_file_sizes[start_idx]) {
-                            start_idx++;
-                            start_offset = 0;
-                        }
-                        /* Skip empty files */
-                        while (start_idx < sync_file_count && sync_file_sizes[start_idx] == 0) {
-                            start_idx++;
-                        }
-
-                        if (start_idx < sync_file_count) {
-                            setup_file_transfer(start_idx, start_offset);
-                            auto_sync_active = true;
-                            LOG_INF("Auto-sync: starting from file %d/%d, offset %u",
-                                    start_idx + 1, sync_file_count, start_offset);
-                        } else {
-                            LOG_INF("Auto-sync: all files already synced, entering tail mode");
-                            auto_sync_active = true;
-                        }
-                    } else {
-                        LOG_INF("Auto-sync: no files to sync, entering tail mode");
-                        auto_sync_active = true;
-                    }
-                } else {
-                    LOG_WRN("Auto-sync: BLE disconnected during setup");
-                }
-            }
-        }
-
         if (remaining_length > 0) {
             if (conn == NULL) {
                 LOG_ERR("invalid connection");
@@ -948,86 +807,21 @@ void storage_write(void)
                         }
                     }
 
-                    if (STORAGE_ENABLE_AUTO_SYNC && auto_sync_active && current_sync_file_index >= 0) {
-                        /* BLE auto-sync: continue to next file */
-                        refresh_file_list_cache();
-                        int next_idx = 0;  /* Re-scan from beginning since we deleted a file */
-
-                        /* Skip empty files */
-                        while (next_idx < sync_file_count && sync_file_sizes[next_idx] == 0) {
-                            LOG_INF("Auto-sync: skipping empty file %d/%d", next_idx + 1, sync_file_count);
-                            next_idx++;
-                        }
-
-                        if (next_idx < sync_file_count) {
-                            LOG_INF("Auto-sync: moving to file %d/%d", next_idx + 1, sync_file_count);
-                            setup_file_transfer(next_idx, 0);
-                        } else {
-                            LOG_INF("Auto-sync: all files synced, entering tail mode");
-                            /* remaining_length stays 0, tail mode will check for new data */
-                        }
-                    } else {
-                        /* BLE: notify completion (legacy or manual sync) */
-                        LOG_PRINTK("done. attempting to download more files\n");
-                        uint8_t stop_result[1] = {100};
-                        (void)storage_notify(get_current_connection(), &stop_result, 1);
-                        k_msleep(10);
-                    }
+                    /* BLE: notify completion (legacy or manual sync) */
+                    LOG_PRINTK("done. attempting to download more files\n");
+                    uint8_t stop_result[1] = {100};
+                    (void)storage_notify(get_current_connection(), &stop_result, 1);
+                    k_msleep(10);
                 }
             }
         }
 
         // Sleep when there's no work
         if (remaining_length == 0 && !delete_started && !nuke_started && !stop_started) {
-            if (STORAGE_ENABLE_AUTO_SYNC && auto_sync_active && get_current_connection()) {
-                /* Tail mode: periodically check for new audio data to sync */
-                k_msleep(3000);
-
-                if (!(STORAGE_ENABLE_AUTO_SYNC && auto_sync_active) || !get_current_connection()) {
-                    continue;  /* Disconnected or sync stopped during sleep */
-                }
-
-                /* Flush current recording file to get accurate size */
-                sd_flush_current_file();
-                k_msleep(100);
-                refresh_file_list_cache();
-
-                if (sync_file_count > 0) {
-                    char last_file[MAX_FILENAME_LEN] = {0};
-                    uint32_t last_offset = 0;
-                    get_offset(last_file, &last_offset);
-
-                    bool found_data = false;
-                    for (int i = 0; i < sync_file_count; i++) {
-                        if (last_file[0] != '\0' && strcmp(sync_file_list[i], last_file) == 0) {
-                            /* Check if this file has grown since last sync */
-                            if (sync_file_sizes[i] > last_offset) {
-                                LOG_INF("Tail: %u new bytes in %s",
-                                        sync_file_sizes[i] - last_offset, last_file);
-                                setup_file_transfer(i, last_offset);
-                                found_data = true;
-                            } else if (i + 1 < sync_file_count && sync_file_sizes[i + 1] > 0) {
-                                /* Current file fully synced, move to next file */
-                                LOG_INF("Tail: new file %s", sync_file_list[i + 1]);
-                                setup_file_transfer(i + 1, 0);
-                                found_data = true;
-                            }
-                            break;
-                        }
-                    }
-
-                    if (!found_data && last_file[0] == '\0' && sync_file_count > 0) {
-                        /* No offset saved yet, start from first file */
-                        LOG_INF("Tail: no saved offset, starting from first file");
-                        setup_file_transfer(0, 0);
-                    }
-                }
-            } else {
-                uint32_t idle_sleep_ms = get_current_connection()
-                    ? STORAGE_IDLE_POLL_MS_CONNECTED
-                    : STORAGE_IDLE_POLL_MS_OFFLINE;
-                k_msleep(idle_sleep_ms);
-            }
+            uint32_t idle_sleep_ms = get_current_connection()
+                ? STORAGE_IDLE_POLL_MS_CONNECTED
+                : STORAGE_IDLE_POLL_MS_OFFLINE;
+            k_msleep(idle_sleep_ms);
         } else {
             k_yield();
         }

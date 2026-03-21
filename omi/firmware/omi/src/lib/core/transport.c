@@ -587,8 +587,6 @@ static void _transport_connected(struct bt_conn *conn, uint8_t err)
     // Notify SD module about BLE connection (flush current file)
 #ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
     sd_notify_ble_state(true);
-    // Start auto-sync of stored audio data to phone
-    storage_auto_sync_start();
 #endif
 }
 
@@ -616,7 +614,6 @@ static void _transport_disconnected(struct bt_conn *conn, uint8_t err)
 
     // Stop auto-sync and save current sync offset
 #ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
-    storage_auto_sync_stop();
     sd_notify_ble_state(false);
     storage_is_on = false;
 #endif
