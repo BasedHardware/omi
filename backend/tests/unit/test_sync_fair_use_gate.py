@@ -293,6 +293,7 @@ class TestSoftCapBoundary:
         precomputed = {'daily_ms': 7200000, 'three_day_ms': 7200000, 'weekly_ms': 7200000}
         result = fair_use_mod.check_soft_caps('user1', speech_totals=precomputed)
         # At cap exactly — triggers only when OVER
+        assert result == [], f"Expected no caps triggered at exact threshold, got: {result}"
         mock_speech.assert_not_called()
 
     @patch.object(fair_use_mod, 'FAIR_USE_ENABLED', True)
