@@ -2304,8 +2304,8 @@ async def _stream_handler(
             profile_complete = speech_profile_complete.is_set()
 
             if dg_socket is not None:
-                # Check if DG connection died (keepalive or send failure)
-                if hasattr(dg_socket, 'is_connection_dead') and dg_socket.is_connection_dead:
+                # Check if DG connection died (keepalive or send failure) (#5870)
+                if dg_socket.is_connection_dead:
                     logger.error('DG connection died mid-session uid=%s session=%s', uid, session_id)
                     dg_socket = None  # Stop sending to dead connection
                 elif profile_complete or not deepgram_profile_socket:
