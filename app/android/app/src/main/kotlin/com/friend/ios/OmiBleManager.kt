@@ -4,6 +4,10 @@ import android.annotation.SuppressLint
 import android.app.Application
 import android.bluetooth.*
 import android.bluetooth.le.*
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
 import android.os.Handler
 import android.os.Looper
 import android.os.ParcelUuid
@@ -80,8 +84,31 @@ class OmiBleManager private constructor(private val application: Application) {
     private var stabilityTimerRunnable: Runnable? = null
     private var pendingReconnectRunnable: Runnable? = null
 
+    private val bondStateReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            if (intent.action != BluetoothDevice.ACTION_BOND_STATE_CHANGED) return
+            val device = intent.getParcelableExtra<BluetoothDevice>(BluetoothDevice.EXTRA_DEVICE) ?: return
+            val bondState = intent.getIntExtra(BluetoothDevice.EXTRA_BOND_STATE, BluetoothDevice.BOND_NONE)
+            val address = device.address.uppercase()
+
+            Log.i(TAG, "Bond state changed: $address → $bondState")
+            if (bondState == BluetoothDevice.BOND_BONDED) {
+                val gatt = connectedGatts[address] ?: return
+                Log.i(TAG, "Bonding complete for $address, re-discovering services")
+                servicesDiscoveredFor.remove(address)
+                enqueueCommand {
+                    if (!gatt.discoverServices()) {
+                        Log.e(TAG, "discoverServices returned false after bonding")
+                        completeCommand()
+                    }
+                }
+            }
+        }
+    }
+
     init {
         Log.i(TAG, "OmiBleManager initialized")
+        application.registerReceiver(bondStateReceiver, IntentFilter(BluetoothDevice.ACTION_BOND_STATE_CHANGED))
     }
 
     fun startScan(timeout: Int, serviceUuids: List<String>) {
@@ -491,11 +518,19 @@ class OmiBleManager private constructor(private val application: Application) {
 
                     startRssiKeepAlive(address)
                     startStabilityTimer(address)
-                    enqueueCommand {
-                        if (!gatt.discoverServices()) {
-                            Log.e(TAG, "discoverServices returned false")
-                            completeCommand()
+
+                    if (gatt.device.bondState == BluetoothDevice.BOND_BONDED) {
+                        Log.i(TAG, "Device $address already bonded, discovering services")
+                        enqueueCommand {
+                            if (!gatt.discoverServices()) {
+                                Log.e(TAG, "discoverServices returned false")
+                                completeCommand()
+                            }
                         }
+                    } else {
+                        Log.i(TAG, "Device $address not bonded (state=${gatt.device.bondState}), calling createBond()")
+                        gatt.device.createBond()
+                        // Service discovery happens in bondStateReceiver after bonding completes
                     }
                 }
                 BluetoothProfile.STATE_DISCONNECTED -> {
