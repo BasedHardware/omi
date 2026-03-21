@@ -10,7 +10,7 @@ from deepgram import DeepgramClient, DeepgramClientOptions, LiveTranscriptionEve
 from deepgram.clients.live.v1 import LiveOptions
 
 from utils.stt.soniox_util import *
-from utils.stt.vad_gate import GatedDeepgramSocket
+from utils.stt.vad_gate import GatedDeepgramSocket, SafeDeepgramSocket
 import logging
 
 logger = logging.getLogger(__name__)
@@ -391,10 +391,13 @@ async def process_audio_dg(
     if dg_connection is None:
         return None
 
+    # Always wrap with SafeDeepgramSocket for dead-connection detection (#5870)
+    safe_conn = SafeDeepgramSocket(dg_connection)
+
     # Wrap with VAD gate if provided
     if vad_gate is not None:
-        return GatedDeepgramSocket(dg_connection, gate=vad_gate)
-    return dg_connection
+        return GatedDeepgramSocket(safe_conn, gate=vad_gate)
+    return safe_conn
 
 
 # Calculate backoff with jitter
