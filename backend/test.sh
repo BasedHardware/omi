@@ -55,6 +55,7 @@ pytest tests/unit/test_fair_use_models.py -v
 pytest tests/unit/test_fair_use_engine.py -v
 pytest tests/unit/test_fair_use_classifier.py -v
 pytest tests/unit/test_fair_use_async.py -v
+pytest tests/unit/test_dg_usage_batch.py -v
 
 # Fair-use integration tests (require Redis; skip gracefully if unavailable)
 if redis-cli ping >/dev/null 2>&1; then
