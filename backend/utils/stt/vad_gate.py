@@ -688,6 +688,60 @@ class VADStreamingGate:
 # ---------------------------------------------------------------------------
 # Gated Deepgram Socket — wraps raw DG connection with VAD gate
 # ---------------------------------------------------------------------------
+# SafeDeepgramSocket — thin wrapper with dead-connection detection (#5870)
+# ---------------------------------------------------------------------------
+class SafeDeepgramSocket:
+    """Wraps a raw Deepgram LiveConnection with dead-connection detection.
+
+    Monitors send() and keep_alive() return values. When either returns False
+    or raises, marks connection as permanently dead (one-way latch).
+
+    This ensures dead-detection works regardless of whether a VAD gate is used.
+    """
+
+    def __init__(self, dg_connection):
+        self._conn = dg_connection
+        self._dg_dead = False
+
+    @property
+    def is_connection_dead(self) -> bool:
+        """True if DG connection has been detected as dead."""
+        return self._dg_dead
+
+    def send(self, data: bytes) -> None:
+        """Send audio to DG, marking connection dead if send fails."""
+        if self._dg_dead:
+            return
+        ret = self._conn.send(data)
+        if ret is False:
+            logger.warning('DG send returned False, connection dead')
+            self._dg_dead = True
+
+    def keep_alive(self):
+        """Send keepalive to DG, marking connection dead on failure."""
+        if self._dg_dead:
+            return False
+        try:
+            ret = self._conn.keep_alive()
+            if ret is False:
+                logger.warning('DG keep_alive returned False, connection dead')
+                self._dg_dead = True
+            return ret
+        except Exception:
+            logger.warning('DG keep_alive exception, connection dead')
+            self._dg_dead = True
+            return False
+
+    def finalize(self) -> None:
+        """Flush pending transcript."""
+        self._conn.finalize()
+
+    def finish(self) -> None:
+        """Close DG connection."""
+        self._conn.finish()
+
+
+# ---------------------------------------------------------------------------
 class GatedDeepgramSocket:
     """Wraps a Deepgram LiveConnection with built-in VAD gate.
 
@@ -704,7 +758,6 @@ class GatedDeepgramSocket:
     def __init__(self, dg_connection, gate: Optional['VADStreamingGate'] = None):
         self._conn = dg_connection
         self._gate = gate
-        self._dg_dead = False
         # Audio capture for transcript quality validation (off by default)
         self._capture_dir = os.getenv('VAD_GATE_AUDIO_CAPTURE_DIR', '')
         self._raw_file = None
@@ -717,12 +770,14 @@ class GatedDeepgramSocket:
 
     @property
     def is_connection_dead(self) -> bool:
-        """True if DG connection has been detected as dead."""
-        return self._dg_dead
+        """True if DG connection has been detected as dead. Delegates to SafeDeepgramSocket."""
+        if isinstance(self._conn, SafeDeepgramSocket):
+            return self._conn.is_connection_dead
+        return False
 
     def send(self, data: bytes, wall_time: Optional[float] = None) -> None:
         """Send audio through VAD gate (if active), then to DG."""
-        if self._dg_dead:
+        if self.is_connection_dead:
             return
         if self._gate is None:
             return self._conn.send(data)
@@ -740,30 +795,14 @@ class GatedDeepgramSocket:
         if self._gated_file and gate_out.audio_to_send:
             self._gated_file.write(gate_out.audio_to_send)
         if gate_out.audio_to_send:
-            ret = self._conn.send(gate_out.audio_to_send)
-            if ret is False:
-                logger.warning(
-                    'DG send returned False, connection dead uid=%s session=%s', self._gate.uid, self._gate.session_id
-                )
-                self._dg_dead = True
+            # SafeDeepgramSocket.send() handles dead detection internally
+            self._conn.send(gate_out.audio_to_send)
         elif self._gate.needs_keepalive(now):
             # Prevent DG 10s idle timeout during extended silence
-            try:
-                ret = self._conn.keep_alive()
-                if ret is False:
-                    logger.warning(
-                        'DG keep_alive returned False, connection dead uid=%s session=%s',
-                        self._gate.uid,
-                        self._gate.session_id,
-                    )
-                    self._dg_dead = True
-                else:
-                    self._gate.record_keepalive(now)
-            except Exception:
-                logger.warning(
-                    'DG keepalive exception, connection dead uid=%s session=%s', self._gate.uid, self._gate.session_id
-                )
-                self._dg_dead = True
+            # SafeDeepgramSocket.keep_alive() handles dead detection internally
+            ret = self._conn.keep_alive()
+            if ret is not False:
+                self._gate.record_keepalive(now)
         if gate_out.should_finalize:
             try:
                 self._conn.finalize()
