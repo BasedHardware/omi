@@ -600,6 +600,12 @@ class OmiBleManager private constructor(private val application: Application) {
             }
         }
 
+        // Deprecated overload called on Android < 13 (API < 33)
+        @Suppress("deprecation")
+        override fun onCharacteristicChanged(gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic) {
+            onCharacteristicChanged(gatt, characteristic, characteristic.value ?: return)
+        }
+
         override fun onCharacteristicRead(gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic, value: ByteArray, status: Int) {
             val address = gatt.device.address.uppercase()
             val serviceUuid = characteristic.service.uuid.toString().lowercase()
@@ -614,6 +620,12 @@ class OmiBleManager private constructor(private val application: Application) {
             }
 
             completeCommand()
+        }
+
+        // Deprecated overload called on Android < 13 (API < 33)
+        @Suppress("deprecation")
+        override fun onCharacteristicRead(gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic, status: Int) {
+            onCharacteristicRead(gatt, characteristic, characteristic.value ?: ByteArray(0), status)
         }
 
         override fun onCharacteristicWrite(gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic, status: Int) {
