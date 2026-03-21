@@ -1,3 +1,4 @@
+import asyncio
 import io
 import os
 import re
@@ -779,7 +780,7 @@ async def sync_local_files(files: List[UploadFile] = File(...), uid: str = Depen
             if triggered_caps:
                 should_lock = True
                 logger.info(f'sync: soft caps triggered for {uid}: {triggered_caps}')
-            trigger_classifier_if_needed(uid, speech_totals)
+                asyncio.create_task(trigger_classifier_if_needed(uid, triggered_caps))
 
         is_locked = should_lock
 
