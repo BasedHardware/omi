@@ -441,9 +441,6 @@ features_read_handler(struct bt_conn *conn, const struct bt_gatt_attr *attr, voi
 #ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
     features |= OMI_FEATURE_OFFLINE_STORAGE;
 #endif
-#ifdef CONFIG_OMI_ENABLE_WIFI
-    features |= OMI_FEATURE_WIFI;
-#endif
     // LED dimming is always enabled now with PWM.
     features |= OMI_FEATURE_LED_DIMMING;
     // Mic gain control is always enabled.
@@ -471,7 +468,8 @@ static void exchange_func(struct bt_conn *conn, uint8_t att_err, struct bt_gatt_
 //
 
 #ifdef CONFIG_OMI_ENABLE_BATTERY
-#define BATTERY_REFRESH_INTERVAL        10000 // 10 seconds
+#define BATTERY_REFRESH_INTERVAL_CONNECTED   10000 // 10 seconds
+#define BATTERY_REFRESH_INTERVAL_DISCONNECTED 30000 // 30 seconds
 #define BATTERY_RETRY_INTERVAL          1000  // 1 second - retry when BLE TX buffer unavailable
 #define BATTERY_RETRY_MAX               3     // Maximum retries before giving up for this cycle
 #define CONFIG_OMI_BATTERY_CRITICAL_MV  3500  // mV
@@ -485,6 +483,10 @@ void broadcast_battery_level(struct k_work *work_item)
 {
     (void)work_item;
     uint16_t battery_millivolt;
+    uint32_t next_refresh_interval =
+        (is_connected && current_connection != NULL)
+            ? BATTERY_REFRESH_INTERVAL_CONNECTED
+            : BATTERY_REFRESH_INTERVAL_DISCONNECTED;
 
     if (battery_get_millivolt(&battery_millivolt) == 0 &&
         battery_get_percentage(&battery_percentage, battery_millivolt) == 0) {
@@ -494,7 +496,7 @@ void broadcast_battery_level(struct k_work *work_item)
         if (is_connected && current_connection != NULL) {
             if (storage_transfer_active()) {
                 battery_retry_count = 0;
-                k_work_reschedule(&battery_work, K_MSEC(BATTERY_REFRESH_INTERVAL));
+                k_work_reschedule(&battery_work, K_MSEC(next_refresh_interval));
                 return;
             }
             // Use the Zephyr BAS function to set (and notify) the battery level
@@ -522,7 +524,7 @@ void broadcast_battery_level(struct k_work *work_item)
         battery_retry_count = 0;
     }
 
-    k_work_reschedule(&battery_work, K_MSEC(BATTERY_REFRESH_INTERVAL));
+    k_work_reschedule(&battery_work, K_MSEC(next_refresh_interval));
 }
 #endif
 

@@ -8,7 +8,7 @@
 
 #define MAX_STORAGE_BYTES 0x1E000000 // 480MB
 #define MAX_WRITE_SIZE 440
-#define MAX_FILENAME_LEN 32
+#define MAX_FILENAME_LEN 64
 #define MAX_AUDIO_FILES 100
 #define FILE_ROTATION_INTERVAL_MS (30 * 60 * 1000)  // 30 minutes in milliseconds
 
@@ -239,7 +239,7 @@ int delete_audio_file(const char *filename);
  * @brief Flush current audio file to SD card.
  *
  * Flushes the batch write buffer and syncs the file to ensure all
- * pending data is written to SD. Useful before WiFi sync to ensure
+ * pending data is written to SD. Useful before sync operations to ensure
  * file sizes are accurate.
  *
  * @return 0 on success, negative error code otherwise

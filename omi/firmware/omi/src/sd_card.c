@@ -30,7 +30,7 @@ LOG_MODULE_REGISTER(sd_card, CONFIG_LOG_DEFAULT_LEVEL);
 #define DISK_DRIVE_NAME     CONFIG_SDMMC_VOLUME_NAME
 #define SD_REQ_QUEUE_MSGS   100
 #define SD_FSYNC_INTERVAL_MS          (5 * 60 * 1000)
-#define WRITE_BATCH_COUNT   100
+#define WRITE_BATCH_COUNT   200
 #define ERROR_THRESHOLD     5
 
 /* LittleFS paths are relative to FS root (no mount-point prefix) */
@@ -851,7 +851,7 @@ void sd_worker_thread(void)
 
         /* Regular write queue timeout: short when BLE connected (keep read/sync responsive),
          * long when offline (save power). */
-        k_timeout_t write_wait = ble_connected ? K_MSEC(50) : K_MSEC(500);
+        k_timeout_t write_wait = ble_connected ? K_MSEC(50) : K_MSEC(2000);
         if (k_msgq_get(&sd_msgq, &req, write_wait) != 0) continue;
 
 handle_req:
@@ -871,6 +871,15 @@ handle_req:
                 LOG_INF("[SD_WORK] Rotating file after 30 min");
                 flush_batch_buffer();
                 create_audio_file_with_timestamp();
+            }
+
+            if (write_batch_offset + req.u.write.len > sizeof(write_batch_buffer)) {
+                flush_batch_buffer();
+                if (write_batch_offset + req.u.write.len > sizeof(write_batch_buffer)) {
+                    LOG_ERR("[SD_WORK] batch buffer overflow guard len=%u off=%u",
+                            (unsigned)req.u.write.len, (unsigned)write_batch_offset);
+                    break;
+                }
             }
 
             memcpy(write_batch_buffer + write_batch_offset,
