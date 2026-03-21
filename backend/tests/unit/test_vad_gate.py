@@ -13,6 +13,7 @@ from utils.stt.vad_gate import (
     DgWallMapper,
     GateState,
     GatedDeepgramSocket,
+    SafeDeepgramSocket,
     VAD_GATE_KEEPALIVE_SEC,
     VADStreamingGate,
     is_gate_enabled,
@@ -865,7 +866,7 @@ class TestGatedDeepgramSocket:
 
 
 class TestDgDeadDetection:
-    """Tests for _dg_dead flag and connection death detection (#5870)."""
+    """Tests for dead-connection detection via SafeDeepgramSocket + GatedDeepgramSocket (#5870)."""
 
     def _make_gate(self, mode='active'):
         return VADStreamingGate(
@@ -876,18 +877,61 @@ class TestDgDeadDetection:
             session_id='test',
         )
 
-    def test_is_connection_dead_initially_false(self):
-        """New socket should not be dead."""
-        mock_conn = MagicMock()
-        socket = GatedDeepgramSocket(mock_conn, gate=self._make_gate())
-        assert socket.is_connection_dead is False
+    def _wrap(self, mock_conn):
+        """Wrap mock connection with SafeDeepgramSocket (matches production flow)."""
+        return SafeDeepgramSocket(mock_conn)
 
-    def test_send_returns_false_sets_dead(self):
-        """When DG send() returns False, socket should be marked dead."""
+    def test_safe_socket_dead_initially_false(self):
+        """SafeDeepgramSocket should not be dead initially."""
+        mock_conn = MagicMock()
+        safe = self._wrap(mock_conn)
+        assert safe.is_connection_dead is False
+
+    def test_safe_socket_send_false_sets_dead(self):
+        """SafeDeepgramSocket marks dead when send() returns False."""
         mock_conn = MagicMock()
         mock_conn.send.return_value = False
+        safe = self._wrap(mock_conn)
+        safe.send(b'\x00' * 960)
+        assert safe.is_connection_dead is True
+
+    def test_safe_socket_keepalive_false_sets_dead(self):
+        """SafeDeepgramSocket marks dead when keep_alive() returns False."""
+        mock_conn = MagicMock()
+        mock_conn.keep_alive.return_value = False
+        safe = self._wrap(mock_conn)
+        ret = safe.keep_alive()
+        assert safe.is_connection_dead is True
+        assert ret is False
+
+    def test_safe_socket_keepalive_exception_sets_dead(self):
+        """SafeDeepgramSocket marks dead when keep_alive() raises."""
+        mock_conn = MagicMock()
+        mock_conn.keep_alive.side_effect = RuntimeError("connection reset")
+        safe = self._wrap(mock_conn)
+        ret = safe.keep_alive()
+        assert safe.is_connection_dead is True
+        assert ret is False
+
+    def test_safe_socket_dead_stops_sending(self):
+        """After SafeDeepgramSocket is dead, send() silently drops audio."""
+        mock_conn = MagicMock()
+        mock_conn.send.return_value = False
+        safe = self._wrap(mock_conn)
+        safe.send(b'\x00' * 960)
+        assert safe.is_connection_dead is True
+        count_at_death = mock_conn.send.call_count
+        safe.send(b'\x00' * 960)
+        assert mock_conn.send.call_count == count_at_death
+
+    def test_gated_delegates_dead_to_safe(self):
+        """GatedDeepgramSocket.is_connection_dead delegates to SafeDeepgramSocket."""
+        mock_conn = MagicMock()
+        mock_conn.send.return_value = False
+        safe = self._wrap(mock_conn)
         gate = self._make_gate()
-        socket = GatedDeepgramSocket(mock_conn, gate=gate)
+        socket = GatedDeepgramSocket(safe, gate=gate)
+        assert socket.is_connection_dead is False
 
         _set_vad_speech(True)
         t = 1000.0
@@ -895,46 +939,33 @@ class TestDgDeadDetection:
             socket.send(_make_pcm(30), wall_time=t + i * 0.03)
 
         assert socket.is_connection_dead is True
+        assert safe.is_connection_dead is True
 
-    def test_keepalive_returns_false_sets_dead(self):
-        """When DG keep_alive() returns False, socket should be marked dead."""
+    def test_gated_keepalive_dead_delegates(self):
+        """GatedDeepgramSocket keepalive failure detected via SafeDeepgramSocket."""
         mock_conn = MagicMock()
         mock_conn.keep_alive.return_value = False
+        safe = self._wrap(mock_conn)
         gate = self._make_gate()
         gate.record_keepalive = MagicMock(wraps=gate.record_keepalive)
-        socket = GatedDeepgramSocket(mock_conn, gate=gate)
+        socket = GatedDeepgramSocket(safe, gate=gate)
 
         t = 1000.0
         _set_vad_speech(False)
         for i in range(5):
             socket.send(_make_pcm(30), wall_time=t + i * 0.03)
-        # Trigger keepalive after 25s silence
         socket.send(_make_pcm(30), wall_time=t + 25.0)
 
         assert socket.is_connection_dead is True
         gate.record_keepalive.assert_not_called()
 
-    def test_keepalive_exception_sets_dead(self):
-        """When DG keep_alive() raises, socket should be marked dead."""
-        mock_conn = MagicMock()
-        mock_conn.keep_alive.side_effect = RuntimeError("connection reset")
-        gate = self._make_gate()
-        socket = GatedDeepgramSocket(mock_conn, gate=gate)
-
-        t = 1000.0
-        _set_vad_speech(False)
-        for i in range(5):
-            socket.send(_make_pcm(30), wall_time=t + i * 0.03)
-        socket.send(_make_pcm(30), wall_time=t + 25.0)
-
-        assert socket.is_connection_dead is True
-
-    def test_dead_socket_stops_sending(self):
-        """After connection dies, send() should not forward audio."""
+    def test_gated_dead_stops_sending(self):
+        """After connection dies through SafeDeepgramSocket, GatedDeepgramSocket stops sending."""
         mock_conn = MagicMock()
         mock_conn.send.return_value = False
+        safe = self._wrap(mock_conn)
         gate = self._make_gate()
-        socket = GatedDeepgramSocket(mock_conn, gate=gate)
+        socket = GatedDeepgramSocket(safe, gate=gate)
 
         _set_vad_speech(True)
         t = 1000.0
@@ -944,33 +975,29 @@ class TestDgDeadDetection:
         assert socket.is_connection_dead is True
         call_count_at_death = mock_conn.send.call_count
 
-        # Send more audio — should be silently dropped
         for i in range(5):
             socket.send(_make_pcm(30), wall_time=t + 0.15 + i * 0.03)
 
         assert mock_conn.send.call_count == call_count_at_death
 
     def test_passthrough_dead_on_send_false(self):
-        """Without gate, send() returning False should not crash (passthrough mode)."""
+        """Without gate, SafeDeepgramSocket still detects dead connection."""
         mock_conn = MagicMock()
         mock_conn.send.return_value = False
-        socket = GatedDeepgramSocket(mock_conn, gate=None)
-        # Passthrough mode — no _dg_dead check needed, just don't crash
+        safe = self._wrap(mock_conn)
+        socket = GatedDeepgramSocket(safe, gate=None)
         socket.send(b'\x00' * 960)
+        assert socket.is_connection_dead is True
         mock_conn.send.assert_called_once()
 
-    def test_dead_socket_nulled_by_caller(self):
-        """Simulates the flush_stt_buffer pattern: caller checks is_connection_dead and nulls socket (#5870).
-
-        This tests the integration contract between GatedDeepgramSocket.is_connection_dead
-        and the flush_stt_buffer code in transcribe.py that nulls dg_socket when dead.
-        """
+    def test_dead_socket_nulled_by_caller_gated(self):
+        """Simulates flush_stt_buffer pattern with GatedDeepgramSocket (VAD gate enabled)."""
         mock_conn = MagicMock()
         mock_conn.send.return_value = False
+        safe = self._wrap(mock_conn)
         gate = self._make_gate()
-        dg_socket = GatedDeepgramSocket(mock_conn, gate=gate)
+        dg_socket = GatedDeepgramSocket(safe, gate=gate)
 
-        # Simulate speech causing send → returns False → dead
         _set_vad_speech(True)
         t = 1000.0
         for i in range(5):
@@ -980,9 +1007,21 @@ class TestDgDeadDetection:
 
         # Simulate the flush_stt_buffer dead-socket detection pattern
         # (mirrors backend/routers/transcribe.py:2307-2310)
-        if hasattr(dg_socket, 'is_connection_dead') and dg_socket.is_connection_dead:
-            dg_socket = None  # Stop sending to dead connection
+        if dg_socket.is_connection_dead:
+            dg_socket = None
+        assert dg_socket is None
 
+    def test_dead_socket_nulled_by_caller_no_gate(self):
+        """Simulates flush_stt_buffer pattern with SafeDeepgramSocket only (no VAD gate)."""
+        mock_conn = MagicMock()
+        mock_conn.send.return_value = False
+        dg_socket = self._wrap(mock_conn)  # SafeDeepgramSocket directly
+
+        dg_socket.send(b'\x00' * 960)
+        assert dg_socket.is_connection_dead is True
+
+        if dg_socket.is_connection_dead:
+            dg_socket = None
         assert dg_socket is None
 
         # Subsequent flushes skip sending entirely (dg_socket is None)
