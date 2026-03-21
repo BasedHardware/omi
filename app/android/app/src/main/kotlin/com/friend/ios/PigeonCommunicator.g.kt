@@ -625,6 +625,11 @@ interface BleHostApi {
   fun getBluetoothState(): String
   fun isPeripheralConnected(uuid: String): Boolean
   /**
+   * (Android only) Check if any CompanionDeviceManager association exists.
+   * Returns true on iOS (state restoration handles background reconnection).
+   */
+  fun hasCompanionDeviceAssociation(): Boolean
+  /**
    * (Android only) Initiate CompanionDeviceManager association for a device.
    * Shows the system chooser dialog filtered to this device's address.
    * Returns the associated device address on success, empty string on failure/cancel.
@@ -855,6 +860,21 @@ interface BleHostApi {
             val uuidArg = args[0] as String
             val wrapped: List<Any?> = try {
               listOf(api.isPeripheralConnected(uuidArg))
+            } catch (exception: Throwable) {
+              PigeonCommunicatorPigeonUtils.wrapError(exception)
+            }
+            reply.reply(wrapped)
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.omi_pigeon.BleHostApi.hasCompanionDeviceAssociation$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { _, reply ->
+            val wrapped: List<Any?> = try {
+              listOf(api.hasCompanionDeviceAssociation())
             } catch (exception: Throwable) {
               PigeonCommunicatorPigeonUtils.wrapError(exception)
             }

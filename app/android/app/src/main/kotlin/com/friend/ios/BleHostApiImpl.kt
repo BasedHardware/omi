@@ -81,6 +81,11 @@ class BleHostApiImpl(private val getActivity: () -> Activity?) : BleHostApi {
         return bleManager.isPeripheralConnected(uuid)
     }
 
+    override fun hasCompanionDeviceAssociation(): Boolean {
+        val cm = companionManager ?: return false
+        return cm.getMacAddresses().isNotEmpty()
+    }
+
     override fun requestCompanionDeviceAssociation(deviceAddress: String, callback: (Result<String>) -> Unit) {
         Log.i(TAG, "requestCompanionDeviceAssociation: $deviceAddress")
 
