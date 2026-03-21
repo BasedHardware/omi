@@ -540,7 +540,7 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
             Container(width: 8, height: 8, decoration: BoxDecoration(color: dotColor, shape: BoxShape.circle)),
             const SizedBox(width: 10),
             Text(
-              '${context.l10n.fairUsePolicy}: $stageLabel',
+              context.l10n.fairUseBannerStatus(stageLabel),
               style: TextStyle(color: dotColor, fontSize: 13, fontWeight: FontWeight.w500),
             ),
             const Spacer(),
