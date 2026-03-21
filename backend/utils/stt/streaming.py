@@ -287,9 +287,9 @@ async def send_initial_file(data: List[List[int]], transcript_socket):
 
 # Initialize Deepgram client based on environment configuration
 is_dg_self_hosted = os.getenv('DEEPGRAM_SELF_HOSTED_ENABLED', '').lower() == 'true'
-deepgram_options = DeepgramClientOptions(options={"keepalive": "true", "termination_exception_connect": "true"})
+deepgram_options = DeepgramClientOptions(options={"termination_exception_connect": "true"})
 
-deepgram_cloud_options = DeepgramClientOptions(options={"keepalive": "true", "termination_exception_connect": "true"})
+deepgram_cloud_options = DeepgramClientOptions(options={"termination_exception_connect": "true"})
 deepgram_cloud_options.url = "https://api.deepgram.com"
 
 if is_dg_self_hosted:
