@@ -1947,8 +1947,8 @@ class _ManualFirmwareFlashPageState extends State<_ManualFirmwareFlashPage> with
         padding: const EdgeInsets.all(24),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
-          children: [ 
-            // File info
+          children: [
+            // File info 
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
