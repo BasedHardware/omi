@@ -43,9 +43,13 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
   Map<String, dynamic>? _fairUseStatus;
 
   Future<void> _loadFairUseStatus() async {
-    final result = await getFairUseStatus();
-    if (mounted && result != null) {
-      setState(() => _fairUseStatus = result);
+    try {
+      final result = await getFairUseStatus();
+      if (mounted && result != null) {
+        setState(() => _fairUseStatus = result);
+      }
+    } catch (_) {
+      // Silently ignore — banner simply won't appear
     }
   }
 
@@ -307,24 +311,41 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
               provider.allTimeUsage != null;
 
           if (provider.isLoading && !hasAnyData) {
-            return const Center(child: CircularProgressIndicator(color: Colors.deepPurple));
+            return Column(
+              children: [
+                _buildFairUseBanner(),
+                const Expanded(child: Center(child: CircularProgressIndicator(color: Colors.deepPurple))),
+              ],
+            );
           }
 
           if (provider.error != null && !hasAnyData) {
-            return Center(
-              child: Padding(
-                padding: const EdgeInsets.all(24.0),
-                child: Text(
-                  provider.error!,
-                  textAlign: TextAlign.center,
-                  style: TextStyle(color: Colors.grey.shade400, fontSize: 16),
+            return Column(
+              children: [
+                _buildFairUseBanner(),
+                Expanded(
+                  child: Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(24.0),
+                      child: Text(
+                        provider.error!,
+                        textAlign: TextAlign.center,
+                        style: TextStyle(color: Colors.grey.shade400, fontSize: 16),
+                      ),
+                    ),
+                  ),
                 ),
-              ),
+              ],
             );
           }
 
           if (!provider.isLoading && !hasAnyData && provider.error == null) {
-            return _buildEmptyState();
+            return Column(
+              children: [
+                _buildFairUseBanner(),
+                Expanded(child: _buildEmptyState()),
+              ],
+            );
           }
 
           return Column(
