@@ -8625,4 +8625,9 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get transcriptionPausedReconnecting => 'Nauhoittaa yhä — yhdistetään uudelleen puheentunnistukseen...';
+
+  @override
+  String fairUseBannerStatus(String status) {
+    return 'Reilu käyttö: $status';
+  }
 }

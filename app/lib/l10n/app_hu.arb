@@ -2890,5 +2890,13 @@
                 "type": "String"
             }
         }
+    },
+    "fairUseBannerStatus": "Méltányos használat: {status}",
+    "@fairUseBannerStatus": {
+        "placeholders": {
+            "status": {
+                "type": "String"
+            }
+        }
     }
 }

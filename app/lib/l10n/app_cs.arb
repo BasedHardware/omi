@@ -2763,5 +2763,13 @@
                 "type": "String"
             }
         }
+    },
+    "fairUseBannerStatus": "Spravedlivé užívání: {status}",
+    "@fairUseBannerStatus": {
+        "placeholders": {
+            "status": {
+                "type": "String"
+            }
+        }
     }
 }

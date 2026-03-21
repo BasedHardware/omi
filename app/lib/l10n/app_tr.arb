@@ -2829,5 +2829,13 @@
                 "type": "String"
             }
         }
+    },
+    "fairUseBannerStatus": "Adil Kullanım: {status}",
+    "@fairUseBannerStatus": {
+        "placeholders": {
+            "status": {
+                "type": "String"
+            }
+        }
     }
 }

@@ -8471,4 +8471,9 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get transcriptionPausedReconnecting => '仍在录音 — 正在重新连接转录...';
+
+  @override
+  String fairUseBannerStatus(String status) {
+    return '公平使用：$status';
+  }
 }

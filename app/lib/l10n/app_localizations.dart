@@ -16112,6 +16112,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Still recording — reconnecting to transcription...'**
   String get transcriptionPausedReconnecting;
+
+  /// No description provided for @fairUseBannerStatus.
+  ///
+  /// In en, this message translates to:
+  /// **'Fair Use: {status}'**
+  String fairUseBannerStatus(String status);
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

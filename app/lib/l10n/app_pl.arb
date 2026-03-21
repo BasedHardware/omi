@@ -2829,5 +2829,13 @@
                 "type": "String"
             }
         }
+    },
+    "fairUseBannerStatus": "Uczciwe użytkowanie: {status}",
+    "@fairUseBannerStatus": {
+        "placeholders": {
+            "status": {
+                "type": "String"
+            }
+        }
     }
 }

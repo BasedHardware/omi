@@ -8636,4 +8636,9 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get transcriptionPausedReconnecting => 'Masih merekam — menghubungkan ulang ke transkripsi...';
+
+  @override
+  String fairUseBannerStatus(String status) {
+    return 'Penggunaan Wajar: $status';
+  }
 }

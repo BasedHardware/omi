@@ -2795,5 +2795,13 @@
                 "type": "String"
             }
         }
+    },
+    "fairUseBannerStatus": "Uso justo: {status}",
+    "@fairUseBannerStatus": {
+        "placeholders": {
+            "status": {
+                "type": "String"
+            }
+        }
     }
 }

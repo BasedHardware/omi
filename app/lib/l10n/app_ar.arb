@@ -2761,5 +2761,13 @@
                 "type": "String"
             }
         }
+    },
+    "fairUseBannerStatus": "الاستخدام العادل: {status}",
+    "@fairUseBannerStatus": {
+        "placeholders": {
+            "status": {
+                "type": "String"
+            }
+        }
     }
 }

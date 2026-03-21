@@ -8690,4 +8690,9 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get transcriptionPausedReconnecting => 'Συνεχίζει η εγγραφή — επανασύνδεση με τη μεταγραφή...';
+
+  @override
+  String fairUseBannerStatus(String status) {
+    return 'Δίκαιη Χρήση: $status';
+  }
 }

@@ -8655,4 +8655,9 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get transcriptionPausedReconnecting => 'Запись продолжается — переподключение к транскрипции...';
+
+  @override
+  String fairUseBannerStatus(String status) {
+    return 'Добросовестное использование: $status';
+  }
 }

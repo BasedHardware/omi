@@ -10347,5 +10347,13 @@
         }
     },
     "transcriptionPaused": "Recording, reconnecting",
-    "transcriptionPausedReconnecting": "Still recording — reconnecting to transcription..."
+    "transcriptionPausedReconnecting": "Still recording — reconnecting to transcription...",
+    "fairUseBannerStatus": "Fair Use: {status}",
+    "@fairUseBannerStatus": {
+        "placeholders": {
+            "status": {
+                "type": "String"
+            }
+        }
+    }
 }
