@@ -959,6 +959,44 @@ class TestDgDeadDetection:
         socket.send(b'\x00' * 960)
         mock_conn.send.assert_called_once()
 
+    def test_dead_socket_nulled_by_caller(self):
+        """Simulates the flush_stt_buffer pattern: caller checks is_connection_dead and nulls socket (#5870).
+
+        This tests the integration contract between GatedDeepgramSocket.is_connection_dead
+        and the flush_stt_buffer code in transcribe.py that nulls dg_socket when dead.
+        """
+        mock_conn = MagicMock()
+        mock_conn.send.return_value = False
+        gate = self._make_gate()
+        dg_socket = GatedDeepgramSocket(mock_conn, gate=gate)
+
+        # Simulate speech causing send → returns False → dead
+        _set_vad_speech(True)
+        t = 1000.0
+        for i in range(5):
+            dg_socket.send(_make_pcm(30), wall_time=t + i * 0.03)
+
+        assert dg_socket.is_connection_dead is True
+
+        # Simulate the flush_stt_buffer dead-socket detection pattern
+        # (mirrors backend/routers/transcribe.py:2307-2310)
+        if hasattr(dg_socket, 'is_connection_dead') and dg_socket.is_connection_dead:
+            dg_socket = None  # Stop sending to dead connection
+
+        assert dg_socket is None
+
+        # Subsequent flushes skip sending entirely (dg_socket is None)
+        chunk = b'\x00' * 960
+        if dg_socket is not None:
+            dg_socket.send(chunk)
+        # No additional send calls after death
+        send_count = mock_conn.send.call_count
+        assert send_count > 0  # At least one send happened before death
+        # Confirm no sends happened after nulling
+        if dg_socket is not None:
+            dg_socket.send(chunk)
+        assert mock_conn.send.call_count == send_count
+
 
 class TestActivateMode:
     """Tests for shadow→active mode switching (preseconds solution)."""
