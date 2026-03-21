@@ -17,7 +17,11 @@ def update_hourly_usage(uid: str, date: datetime, updates: dict):
     has_increments = False
 
     for key, value in updates.items():
-        if key in ['transcription_seconds', 'words_transcribed', 'insights_gained', 'memories_created'] and value > 0:
+        if (
+            key
+            in ['transcription_seconds', 'words_transcribed', 'insights_gained', 'memories_created', 'speech_seconds']
+            and value > 0
+        ):
             update_doc[key] = firestore.Increment(value)
             has_increments = True
 
@@ -79,6 +83,7 @@ def _aggregate_stats(query) -> dict:
         'words_transcribed': 0,
         'insights_gained': 0,
         'memories_created': 0,
+        'speech_seconds': 0,
     }
     for doc in docs:
         data = doc.to_dict()
@@ -86,6 +91,7 @@ def _aggregate_stats(query) -> dict:
         stats['words_transcribed'] += data.get('words_transcribed', 0)
         stats['insights_gained'] += data.get('insights_gained', 0)
         stats['memories_created'] += data.get('memories_created', 0)
+        stats['speech_seconds'] += data.get('speech_seconds', 0)
     return stats
 
 

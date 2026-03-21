@@ -12,11 +12,7 @@ class PhotoViewerPage extends StatefulWidget {
   final List<ConversationPhoto> photos;
   final int initialIndex;
 
-  const PhotoViewerPage({
-    super.key,
-    required this.photos,
-    required this.initialIndex,
-  });
+  const PhotoViewerPage({super.key, required this.photos, required this.initialIndex});
 
   @override
   State<PhotoViewerPage> createState() => _PhotoViewerPageState();
@@ -71,9 +67,7 @@ class _PhotoViewerPageState extends State<PhotoViewerPage> {
                   );
                 },
                 scrollPhysics: const BouncingScrollPhysics(),
-                backgroundDecoration: const BoxDecoration(
-                  color: Colors.black,
-                ),
+                backgroundDecoration: const BoxDecoration(color: Colors.black),
               ),
             ),
             if (currentPhoto.discarded)
@@ -110,10 +104,7 @@ class _PhotoViewerPageState extends State<PhotoViewerPage> {
                 padding: const EdgeInsets.fromLTRB(24, 24, 24, 48),
                 child: Text(
                   currentPhoto.description!,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 16,
-                  ),
+                  style: const TextStyle(color: Colors.white, fontSize: 16),
                   textAlign: TextAlign.center,
                 ),
               ),

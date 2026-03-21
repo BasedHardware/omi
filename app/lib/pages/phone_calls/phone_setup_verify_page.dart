@@ -14,11 +14,7 @@ class PhoneSetupVerifyPage extends StatefulWidget {
   final String phoneNumber;
   final String? validationCode;
 
-  const PhoneSetupVerifyPage({
-    super.key,
-    required this.phoneNumber,
-    this.validationCode,
-  });
+  const PhoneSetupVerifyPage({super.key, required this.phoneNumber, this.validationCode});
 
   @override
   State<PhoneSetupVerifyPage> createState() => _PhoneSetupVerifyPageState();
@@ -34,13 +30,12 @@ class _PhoneSetupVerifyPageState extends State<PhoneSetupVerifyPage> with Single
   @override
   void initState() {
     super.initState();
-    _pulseController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 1500),
-    )..repeat(reverse: true);
-    _pulseAnimation = Tween<double>(begin: 0.6, end: 1.0).animate(
-      CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
-    );
+    _pulseController = AnimationController(vsync: this, duration: const Duration(milliseconds: 1500))
+      ..repeat(reverse: true);
+    _pulseAnimation = Tween<double>(
+      begin: 0.6,
+      end: 1.0,
+    ).animate(CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut));
     _startPolling();
   }
 
@@ -85,10 +80,9 @@ class _PhoneSetupVerifyPageState extends State<PhoneSetupVerifyPage> with Single
         HapticFeedback.mediumImpact();
         await Future.delayed(const Duration(milliseconds: 800));
         if (!mounted) return;
-        Navigator.of(context).pushAndRemoveUntil(
-          MaterialPageRoute(builder: (_) => const PhoneCallsPage()),
-          (route) => route.isFirst,
-        );
+        Navigator.of(
+          context,
+        ).pushAndRemoveUntil(MaterialPageRoute(builder: (_) => const PhoneCallsPage()), (route) => route.isFirst);
       }
     });
   }
@@ -159,10 +153,7 @@ class _PhoneSetupVerifyPageState extends State<PhoneSetupVerifyPage> with Single
                   child: Container(
                     width: double.infinity,
                     height: 56,
-                    decoration: BoxDecoration(
-                      color: Colors.deepPurple,
-                      borderRadius: BorderRadius.circular(28),
-                    ),
+                    decoration: BoxDecoration(color: Colors.deepPurple, borderRadius: BorderRadius.circular(28)),
                     alignment: Alignment.center,
                     child: Text(
                       context.l10n.phoneTryAgain,
@@ -231,8 +222,10 @@ class _PhoneSetupVerifyPageState extends State<PhoneSetupVerifyPage> with Single
           children: [
             const Icon(Icons.check, color: Colors.white, size: 16),
             const SizedBox(width: 6),
-            Text(context.l10n.statusVerifiedLabel,
-                style: const TextStyle(fontSize: 13, color: Colors.white, fontWeight: FontWeight.w500)),
+            Text(
+              context.l10n.statusVerifiedLabel,
+              style: const TextStyle(fontSize: 13, color: Colors.white, fontWeight: FontWeight.w500),
+            ),
           ],
         );
       case _VerifyStatus.missedCall:
@@ -253,10 +246,7 @@ class _PhoneSetupVerifyPageState extends State<PhoneSetupVerifyPage> with Single
     return AnimatedContainer(
       duration: const Duration(milliseconds: 300),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      decoration: BoxDecoration(
-        color: bgColor,
-        borderRadius: BorderRadius.circular(16),
-      ),
+      decoration: BoxDecoration(color: bgColor, borderRadius: BorderRadius.circular(16)),
       child: content,
     );
   }
@@ -265,10 +255,7 @@ class _PhoneSetupVerifyPageState extends State<PhoneSetupVerifyPage> with Single
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: const Color(0xFF1F1F25),
-        borderRadius: BorderRadius.circular(16),
-      ),
+      decoration: BoxDecoration(color: const Color(0xFF1F1F25), borderRadius: BorderRadius.circular(16)),
       child: Row(
         children: [
           Icon(icon, color: Colors.white, size: 22),
@@ -297,10 +284,7 @@ class _PhoneSetupVerifyPageState extends State<PhoneSetupVerifyPage> with Single
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: const Color(0xFF1F1F25),
-        borderRadius: BorderRadius.circular(16),
-      ),
+      decoration: BoxDecoration(color: const Color(0xFF1F1F25), borderRadius: BorderRadius.circular(16)),
       child: Row(
         children: [
           const Icon(Icons.dialpad, color: Colors.white, size: 22),

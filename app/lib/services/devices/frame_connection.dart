@@ -81,9 +81,7 @@ class FrameDeviceConnection extends DeviceConnection {
   }
 
   @override
-  Future<StreamSubscription<List<int>>?> performGetAccelListener({
-    void Function(int)? onAccelChange,
-  }) async {
+  Future<StreamSubscription<List<int>>?> performGetAccelListener({void Function(int)? onAccelChange}) async {
     return null;
   }
 
@@ -93,8 +91,9 @@ class FrameDeviceConnection extends DeviceConnection {
   }
 
   @override
-  Future<StreamSubscription?> performGetBleAudioBytesListener(
-      {required void Function(List<int>) onAudioBytesReceived}) async {
+  Future<StreamSubscription?> performGetBleAudioBytesListener({
+    required void Function(List<int>) onAudioBytesReceived,
+  }) async {
     try {
       final stream = transport.getCharacteristicStream('frame-audio-service', 'frame-audio-characteristic');
 
@@ -113,8 +112,9 @@ class FrameDeviceConnection extends DeviceConnection {
   }
 
   @override
-  Future<StreamSubscription<List<int>>?> performGetBleBatteryLevelListener(
-      {void Function(int)? onBatteryLevelChange}) async {
+  Future<StreamSubscription<List<int>>?> performGetBleBatteryLevelListener({
+    void Function(int)? onBatteryLevelChange,
+  }) async {
     try {
       final stream = transport.getCharacteristicStream('frame-battery-service', 'frame-battery-characteristic');
 
@@ -164,8 +164,9 @@ class FrameDeviceConnection extends DeviceConnection {
   }
 
   @override
-  Future<StreamSubscription?> performGetImageListener(
-      {required void Function(OrientedImage orientedImage) onImageReceived}) async {
+  Future<StreamSubscription?> performGetImageListener({
+    required void Function(OrientedImage orientedImage) onImageReceived,
+  }) async {
     try {
       final stream = transport.getCharacteristicStream('frame-image-service', 'frame-image-characteristic');
 
@@ -173,10 +174,7 @@ class FrameDeviceConnection extends DeviceConnection {
         if (value.isNotEmpty) {
           final header = base64.decode(_photoHeader);
           final combinedData = Uint8List.fromList([...header, ...value]);
-          onImageReceived(OrientedImage(
-            imageBytes: combinedData,
-            orientation: ImageOrientation.orientation0,
-          ));
+          onImageReceived(OrientedImage(imageBytes: combinedData, orientation: ImageOrientation.orientation0));
         }
       });
 
@@ -251,8 +249,10 @@ class FrameDeviceConnection extends DeviceConnection {
     try {
       // Read firmware version from Frame
       try {
-        final firmwareValue =
-            await transport.readCharacteristic(deviceInformationServiceUuid, firmwareRevisionCharacteristicUuid);
+        final firmwareValue = await transport.readCharacteristic(
+          deviceInformationServiceUuid,
+          firmwareRevisionCharacteristicUuid,
+        );
         if (firmwareValue.isNotEmpty) {
           deviceInfo['firmwareRevision'] = String.fromCharCodes(firmwareValue);
         }

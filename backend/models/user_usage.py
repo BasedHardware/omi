@@ -12,6 +12,7 @@ class UsageStats(BaseModel):
     words_transcribed: int = 0
     insights_gained: int = 0
     memories_created: int = 0
+    speech_seconds: int = 0
 
 
 class UsagePeriod(str, Enum):

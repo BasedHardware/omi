@@ -1,0 +1,142 @@
+# E2E Flow: Device Capture — record conversation via connected Omi BLE device
+# Tests: Automatic recording on device connect, live transcription, mute/unmute, process conversation
+# Core feature: hands-free conversation capture using the Omi wearable device
+# Requires: Physical Omi device connected and in range
+
+version: 2
+name: device-capture
+description: Device capture flow — Omi BLE device auto-starts recording on connect, view live transcription, mute/unmute device, process conversation via silence timeout or manual stop, verify conversation in list
+app: com.friend.ios.dev
+evidence:
+  video: true
+covers:
+  - app/lib/providers/capture_provider.dart
+  - app/lib/providers/device_provider.dart
+  - app/lib/pages/conversation_capturing/page.dart
+  - app/lib/pages/conversations/widgets/processing_capture.dart
+preconditions:
+  - auth_ready  # User signed in and onboarding completed. App shows home screen.
+  - omi_device_connected  # Omi BLE device paired and connected. Battery indicator shows device icon with percentage. "Listening" status visible on home screen. Recording auto-started on connect.
+
+steps:
+  - id: S1
+    name: Verify home screen — device connected and listening
+    do: "Verify the home screen shows: device icon with green dot + battery percentage (e.g., '35%') in top-left, 'Teach Omi your voice' banner, 'Listening' status with red recording indicator and mic icon on the right. The bottom nav has 4 tabs WITHOUT the central mic button (hidden when device is connected). The 'Listening' status means the Omi device is automatically streaming audio to the backend."
+    verify: true
+    expect:
+      - kind: text_visible
+        values: ["Listening"]
+      - kind: interactive_count
+        min: 4
+    evidence:
+      - screenshot: step-S1.webp
+    note: "Recording starts automatically via captureProvider.streamDeviceRecording(device) when the device connects (_onDeviceConnected). No manual action is needed to begin recording. The mic icon on the right of the Listening row is a mute/unmute toggle. RecordingState is deviceRecord."
+
+  - id: S2
+    name: Speak near the Omi device
+    do: "Speak clearly near the Omi wearable device for at least 15 seconds. The 'Listening' status row should update to show live transcript text (truncated) next to the status indicator. The 'Say something...' placeholder changes to 'In progress' once transcript segments arrive."
+    verify: true
+    expect:
+      - kind: interactive_count
+        min: 4
+    evidence:
+      - screenshot: step-S2.webp
+    note: "Audio streams from Omi device via BLE (PCM16 or opus codec) → phone app → WebSocket → backend → transcription → TranscriptSegmentEvent back to app. The processing_capture widget shows truncated transcript text in the status row. Tap the status card to navigate to ConversationCapturingPage."
+
+  - id: S3
+    name: Open capturing page — view live transcription
+    do: "Tap the 'Listening' status card on the home screen to navigate to the ConversationCapturingPage. Verify the page shows: back arrow (top-left), '🎙️ Listening' title in app bar, transcript segments with speaker labels (e.g., 'Speaker 1'), timestamps per segment, and 'Process Now' button (yellow) + mute button (grey circle) at the bottom."
+    verify: true
+    expect:
+      - kind: text_visible
+        values: ["Listening", "Process Now"]
+      - kind: interactive_count
+        min: 3
+    evidence:
+      - screenshot: step-S3.webp
+    note: "The ConversationCapturingPage is identical for device and phone mic recording. The difference is in the mute behavior: device mute calls pauseDeviceRecording() (cancels BLE audio stream but keeps connection), phone mute calls stopStreamRecording() (stops mic completely). The page has 2 tabs: Transcripts (tab 0) and Summary (tab 1)."
+
+  - id: S4
+    name: Test mute — pause device recording
+    do: "Tap the mute button (grey circle with mic_off icon, bottom-right). Verify the app bar changes to '🔇 Muted', the mute button turns red, and transcript segments stop arriving. The Omi device BLE connection remains active but audio streaming is paused."
+    verify: true
+    expect:
+      - kind: interactive_count
+        min: 2
+    evidence:
+      - screenshot: step-S4.webp
+    note: "Mute calls provider.pauseDeviceRecording() which cancels _bleBytesStream but keeps _recordingDevice set. RecordingState changes from deviceRecord to pause. The device LED may change color to indicate paused state. Battery consumption is reduced while paused."
+
+  - id: S5
+    name: Unmute — resume device recording
+    do: "Tap the mute button again (now red) to resume recording. Verify the app bar changes back to '🎙️ Listening', the mute button turns grey, and new transcript segments begin arriving again."
+    verify: true
+    expect:
+      - kind: text_visible
+        values: ["Listening"]
+      - kind: interactive_count
+        min: 2
+    evidence:
+      - screenshot: step-S5.webp
+    note: "Unmute calls provider.resumeDeviceRecording() which re-initiates BLE audio streaming via _initiateDeviceAudioStreaming(). RecordingState changes back to deviceRecord. New transcripts appear as speech is detected."
+
+  - id: S6
+    name: Continue recording — accumulate transcripts
+    do: "Continue speaking near the Omi device for 1-2 more minutes. Verify the transcript list grows with additional speaker-labeled segments. The page auto-scrolls to show new segments at the bottom."
+    verify: true
+    expect:
+      - kind: interactive_count
+        min: 3
+    evidence:
+      - screenshot: step-S6.webp
+    note: "Each transcript segment shows: speaker label (Speaker 0, Speaker 1, etc.), transcribed text in a blue bubble, and timestamp range (e.g., 00:01:30 - 00:02:15). Speaker names can be edited by tapping the speaker label, opening NameSpeakerBottomSheet."
+
+  - id: S7
+    name: Process conversation manually
+    do: "Tap the 'Process Now' button (yellow/amber, bottom-center with stop icon). A confirmation dialog appears: 'Finished Conversation?' with 'Are you sure you want to stop recording and summarize the conversation now?', a 'Don't ask me again' checkbox, and Cancel/Confirm buttons. Tap 'Confirm' to process."
+    verify: true
+    expect:
+      - kind: text_visible
+        values: ["Conversations"]
+      - kind: interactive_count
+        min: 4
+    evidence:
+      - screenshot: step-S7.webp
+    note: "Process Now calls _stopConversation → provider.forceProcessingCurrentConversation() which POSTs to /v1/conversations. The backend processes the audio (transcription finalization, diarization, summarization) and returns a ConversationEvent. The app navigates back to home. Alternatively, conversations auto-end after configurable silence timeout (default: 2 minutes of silence). Device double-tap also triggers processing."
+
+  - id: S8
+    name: Verify new conversation in list
+    do: "On the home screen, verify a new conversation card appeared at the top of the Conversations list. The card shows: auto-generated title from transcript content, timestamp, and duration. The 'Listening' status should still show (device continues listening for the next conversation after processing)."
+    verify: true
+    expect:
+      - kind: text_visible
+        values: ["Conversations", "Listening"]
+      - kind: interactive_count
+        min: 5
+    evidence:
+      - screenshot: step-S8.webp
+    note: "After processing one conversation, the device immediately begins a new recording session. This is the key difference from phone mic: device recording is continuous — conversations are segmented by silence gaps. The new conversation source is ConversationSource.omi. The device battery indicator continues showing in the top-left."
+
+  - id: S9
+    name: Open conversation detail
+    do: "Tap the newly created conversation card to view the detail page. Verify: back arrow, conversation title, Overview tab (AI summary with sections, action items), Transcript tab (speaker-labeled segments), and Moments tab. The transcript should match the speech recorded from the Omi device."
+    verify: true
+    expect:
+      - kind: interactive_count
+        min: 4
+    evidence:
+      - screenshot: step-S9.webp
+    note: "The conversation detail page is identical regardless of source (phone, device, desktop). It shows 3 tabs: Overview (summary + action items), Transcript (full diarized transcript), Moments (AI-extracted key moments). The conversation is tagged with the device source for analytics."
+
+  - id: S10
+    name: Return to home
+    do: "Press back to return to the home screen. Verify the device is still connected ('Listening' + battery indicator) and the conversations list shows the new conversation."
+    verify: true
+    expect:
+      - kind: text_visible
+        values: ["Conversations", "Listening"]
+      - kind: interactive_count
+        min: 4
+    evidence:
+      - screenshot: step-S10.webp
+    note: "The Omi device continues recording after returning to home. The next conversation will be auto-created when more speech is detected. This continuous capture is the core value proposition of the wearable — always listening, automatically segmenting conversations."

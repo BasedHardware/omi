@@ -108,15 +108,13 @@ class ActionItemsResponse {
   final List<ActionItemWithMetadata> actionItems;
   final bool hasMore;
 
-  ActionItemsResponse({
-    required this.actionItems,
-    required this.hasMore,
-  });
+  ActionItemsResponse({required this.actionItems, required this.hasMore});
 
   factory ActionItemsResponse.fromJson(Map<String, dynamic> json) {
     return ActionItemsResponse(
-      actionItems:
-          (json['action_items'] as List<dynamic>).map((item) => ActionItemWithMetadata.fromJson(item)).toList(),
+      actionItems: (json['action_items'] as List<dynamic>)
+          .map((item) => ActionItemWithMetadata.fromJson(item))
+          .toList(),
       hasMore: json['has_more'],
     );
   }

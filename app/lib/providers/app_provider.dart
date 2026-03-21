@@ -274,10 +274,7 @@ class AppProvider extends BaseProvider {
 
         // Track search if there was a query
         if (queryBeingSearched.isNotEmpty) {
-          MixpanelManager().appsSearched(
-            searchTerm: queryBeingSearched,
-            resultCount: result.apps.length,
-          );
+          MixpanelManager().appsSearched(searchTerm: queryBeingSearched, resultCount: result.apps.length);
         }
       }
     } catch (e) {
@@ -539,7 +536,8 @@ class AppProvider extends BaseProvider {
         updatePrefApps();
         final context = MyApp.navigatorKey.currentState?.context;
         AppSnackbar.showSnackbarSuccess(
-            context != null ? context.l10n.appDeletedSuccessfully : 'App deleted successfully');
+          context != null ? context.l10n.appDeletedSuccessfully : 'App deleted successfully',
+        );
         notifyListeners();
       } else {
         print("Warning: Tried to delete app $appId but it wasn't found in the 'apps' list.");
@@ -547,7 +545,8 @@ class AppProvider extends BaseProvider {
     } else {
       final context = MyApp.navigatorKey.currentState?.context;
       AppSnackbar.showSnackbarError(
-          context != null ? context.l10n.appDeleteFailed : 'Failed to delete app. Please try again later.');
+        context != null ? context.l10n.appDeleteFailed : 'Failed to delete app. Please try again later.',
+      );
     }
   }
 
@@ -563,9 +562,11 @@ class AppProvider extends BaseProvider {
         filteredApps[filteredIdx] = apps[appIndex];
       }
       final context = MyApp.navigatorKey.currentState?.context;
-      AppSnackbar.showSnackbarSuccess(context != null
-          ? context.l10n.appVisibilityChangedSuccessfully
-          : 'App visibility changed successfully. It may take a few minutes to reflect.');
+      AppSnackbar.showSnackbarSuccess(
+        context != null
+            ? context.l10n.appVisibilityChangedSuccessfully
+            : 'App visibility changed successfully. It may take a few minutes to reflect.',
+      );
       notifyListeners();
     }
     // Refresh apps after a delay to get server-confirmed state
@@ -802,16 +803,13 @@ class AppProvider extends BaseProvider {
     } catch (e) {
       print('Error toggling app $appId: $e');
       success = false;
-      errorMessage =
-          context != null ? context.l10n.errorUpdatingAppStatus : 'An error occurred while updating the app status.';
+      errorMessage = context != null
+          ? context.l10n.errorUpdatingAppStatus
+          : 'An error occurred while updating the app status.';
     }
 
     if (!success && errorMessage != null) {
-      AppDialog.show(
-        title: context != null ? context.l10n.error : 'Error',
-        content: errorMessage,
-        singleButton: true,
-      );
+      AppDialog.show(title: context != null ? context.l10n.error : 'Error', content: errorMessage, singleButton: true);
     }
 
     if (success) {

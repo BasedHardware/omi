@@ -54,11 +54,7 @@ class TodayTasksWidget extends StatelessWidget {
                   children: [
                     Text(
                       context.l10n.today,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 18,
-                        fontWeight: FontWeight.w600,
-                      ),
+                      style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
                     ),
                     GestureDetector(
                       onTap: () {
@@ -74,11 +70,7 @@ class TodayTasksWidget extends StatelessWidget {
                         ),
                         child: Text(
                           context.l10n.viewAll,
-                          style: TextStyle(
-                            color: Colors.grey[400],
-                            fontSize: 12,
-                            fontWeight: FontWeight.w500,
-                          ),
+                          style: TextStyle(color: Colors.grey[400], fontSize: 12, fontWeight: FontWeight.w500),
                         ),
                       ),
                     ),
@@ -91,27 +83,17 @@ class TodayTasksWidget extends StatelessWidget {
                   padding: const EdgeInsets.symmetric(vertical: 12),
                   child: Text(
                     context.l10n.noTasksForToday,
-                    style: TextStyle(
-                      color: Colors.white.withOpacity(0.4),
-                      fontSize: 14,
-                    ),
+                    style: TextStyle(color: Colors.white.withOpacity(0.4), fontSize: 14),
                   ),
                 )
               else
                 Transform.translate(
                   offset: const Offset(-8, 0),
                   child: Container(
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF1F1F25),
-                      borderRadius: BorderRadius.circular(24),
-                    ),
+                    decoration: BoxDecoration(color: const Color(0xFF1F1F25), borderRadius: BorderRadius.circular(24)),
                     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                     child: Column(
-                      children: displayTasks
-                          .map(
-                            (task) => _TaskItem(task: task, provider: provider),
-                          )
-                          .toList(),
+                      children: displayTasks.map((task) => _TaskItem(task: task, provider: provider)).toList(),
                     ),
                   ),
                 ),
@@ -132,46 +114,44 @@ class _TaskItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-        padding: const EdgeInsets.symmetric(vertical: 6),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Checkbox
-            GestureDetector(
-              onTap: () async {
-                HapticFeedback.lightImpact();
-                await provider.updateActionItemState(task, !task.completed);
-              },
-              child: Container(
-                width: 22,
-                height: 22,
-                margin: const EdgeInsets.only(top: 2, right: 12),
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  border: Border.all(
-                    color: task.completed ? Colors.amber : Colors.grey.shade600,
-                    width: 2,
-                  ),
-                  color: task.completed ? Colors.amber : Colors.transparent,
-                ),
-                child: task.completed ? const Icon(Icons.check, size: 14, color: Colors.black) : null,
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Checkbox
+          GestureDetector(
+            onTap: () async {
+              HapticFeedback.lightImpact();
+              await provider.updateActionItemState(task, !task.completed);
+            },
+            child: Container(
+              width: 22,
+              height: 22,
+              margin: const EdgeInsets.only(top: 2, right: 12),
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                border: Border.all(color: task.completed ? Colors.amber : Colors.grey.shade600, width: 2),
+                color: task.completed ? Colors.amber : Colors.transparent,
               ),
+              child: task.completed ? const Icon(Icons.check, size: 14, color: Colors.black) : null,
             ),
-            // Task text
-            Expanded(
-              child: Text(
-                task.description,
-                style: TextStyle(
-                  color: task.completed ? Colors.grey.shade600 : Colors.white,
-                  fontSize: 15,
-                  decoration: task.completed ? TextDecoration.lineThrough : null,
-                  height: 1.4,
-                ),
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
+          ),
+          // Task text
+          Expanded(
+            child: Text(
+              task.description,
+              style: TextStyle(
+                color: task.completed ? Colors.grey.shade600 : Colors.white,
+                fontSize: 15,
+                decoration: task.completed ? TextDecoration.lineThrough : null,
+                height: 1.4,
               ),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
             ),
-          ],
-        ));
+          ),
+        ],
+      ),
+    );
   }
 }

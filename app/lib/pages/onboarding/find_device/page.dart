@@ -20,8 +20,13 @@ class FindDevicesPage extends StatefulWidget {
   final VoidCallback? onSkip;
   final bool includeSkip;
 
-  const FindDevicesPage(
-      {super.key, required this.goNext, this.includeSkip = true, this.isFromOnboarding = false, this.onSkip});
+  const FindDevicesPage({
+    super.key,
+    required this.goNext,
+    this.includeSkip = true,
+    this.isFromOnboarding = false,
+    this.onSkip,
+  });
 
   @override
   State<FindDevicesPage> createState() => _FindDevicesPageState();
@@ -80,10 +85,7 @@ class _FindDevicesPageState extends State<FindDevicesPage> {
           mainAxisAlignment: MainAxisAlignment.center,
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            FoundDevices(
-              goNext: widget.goNext,
-              isFromOnboarding: widget.isFromOnboarding,
-            ),
+            FoundDevices(goNext: widget.goNext, isFromOnboarding: widget.isFromOnboarding),
             if (provider.deviceList.isEmpty && provider.enableInstructions) const SizedBox(height: 48),
             if (provider.deviceList.isEmpty && provider.enableInstructions)
               ElevatedButton(
@@ -119,11 +121,7 @@ class _FindDevicesPageState extends State<FindDevicesPage> {
                   alignment: Alignment.center,
                   child: Text(
                     context.l10n.connectLater,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.w400,
-                      fontSize: 16,
-                      color: Colors.white,
-                    ),
+                    style: const TextStyle(fontWeight: FontWeight.w400, fontSize: 16, color: Colors.white),
                   ),
                 ),
               ),

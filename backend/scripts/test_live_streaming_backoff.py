@@ -59,10 +59,12 @@ def load_audio_chunks(audio_path: str, chunk_duration_ms: int = 100, sample_rate
         raw = wf.readframes(n_frames)
 
     if file_sr != sample_rate:
-        raise ValueError(f"Audio sample rate {file_sr}Hz != expected {sample_rate}Hz. Re-encode with: ffmpeg -i input.wav -ar {sample_rate} -ac 1 output.wav")
+        raise ValueError(
+            f"Audio sample rate {file_sr}Hz != expected {sample_rate}Hz. Re-encode with: ffmpeg -i input.wav -ar {sample_rate} -ac 1 output.wav"
+        )
 
     for offset in range(0, len(raw), chunk_bytes):
-        chunk = raw[offset:offset + chunk_bytes]
+        chunk = raw[offset : offset + chunk_bytes]
         if len(chunk) == chunk_bytes:
             chunks.append(chunk)
 
@@ -170,7 +172,9 @@ async def stream_audio_test(host: str, port: int, chunks: list, label: str, uid_
 
             send_done.set()
             send_elapsed = time.time() - t_start
-            logger.info(f"  [{label}] Sent {chunks_sent}/{len(chunks)} chunks in {send_elapsed:.1f}s. Waiting 5s for final transcripts...")
+            logger.info(
+                f"  [{label}] Sent {chunks_sent}/{len(chunks)} chunks in {send_elapsed:.1f}s. Waiting 5s for final transcripts..."
+            )
 
             # Wait for trailing transcripts
             await asyncio.sleep(5)
@@ -186,7 +190,7 @@ async def stream_audio_test(host: str, port: int, chunks: list, label: str, uid_
             except asyncio.CancelledError:
                 pass
 
-            metrics['connection_held'] = (chunks_sent == len(chunks))
+            metrics['connection_held'] = chunks_sent == len(chunks)
             metrics['elapsed_s'] = time.time() - t_start
 
     except Exception as e:
@@ -226,7 +230,11 @@ async def test_podcast_streaming(host: str, port: int, audio_path: str):
     logger.info(f"RESULT [{duration_label}]: {status}")
     logger.info(f"  Duration: {metrics['duration_s']:.0f}s streamed in {metrics['elapsed_s']:.1f}s")
     logger.info(f"  Segments: {metrics['segments_received']}, Words: {metrics['transcript_words']}")
-    logger.info(f"  First segment latency: {metrics['first_segment_latency_s']:.1f}s" if metrics['first_segment_latency_s'] else "  First segment latency: N/A")
+    logger.info(
+        f"  First segment latency: {metrics['first_segment_latency_s']:.1f}s"
+        if metrics['first_segment_latency_s']
+        else "  First segment latency: N/A"
+    )
     logger.info(f"  Status messages: {metrics['status_messages']}")
     if reasons:
         for r in reasons:
@@ -307,12 +315,14 @@ async def test_concurrent_streaming(host: str, port: int, audio_path: str, num_c
     passed_count = sum(1 for m in results if m['connection_held'] and not m['errors'])
     total_segments = sum(m['segments_received'] for m in results)
 
-    passed = (passed_count == num_connections)
+    passed = passed_count == num_connections
     status = "PASSED" if passed else "FAILED"
     logger.info(f"RESULT [concurrent]: {status} — {passed_count}/{num_connections} connections held")
     logger.info(f"  Total segments across all connections: {total_segments}")
     for m in results:
-        logger.info(f"  {m['label']}: held={m['connection_held']} segs={m['segments_received']} errs={len(m['errors'])}")
+        logger.info(
+            f"  {m['label']}: held={m['connection_held']} segs={m['segments_received']} errs={len(m['errors'])}"
+        )
 
     return passed, results
 

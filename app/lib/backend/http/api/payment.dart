@@ -25,10 +25,7 @@ Future<Map<String, dynamic>?> createCheckoutSession({required String priceId}) a
     }
 
     // Otherwise, it's a checkout session
-    return {
-      'url': jsonResponse['url'] as String,
-      'session_id': jsonResponse['session_id'] as String,
-    };
+    return {'url': jsonResponse['url'] as String, 'session_id': jsonResponse['session_id'] as String};
   }
   return null;
 }
@@ -101,9 +98,7 @@ Future<Map<String, String>?> createCustomerPortalSession() async {
   if (response != null && response.statusCode == 200) {
     var jsonResponse = jsonDecode(response.body);
     Logger.debug('createCustomerPortalSession response: ${response.body}');
-    return {
-      'url': jsonResponse['url'] as String,
-    };
+    return {'url': jsonResponse['url'] as String};
   }
   return null;
 }

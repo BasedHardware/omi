@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Image from 'next/image';
+import Link from 'next/link';
 import {
   User,
   Bell,
@@ -49,6 +50,7 @@ import {
   ChevronRight,
   Zap,
   CreditCard,
+  Scale,
 } from 'lucide-react';
 import { useAuth } from '@/components/auth/AuthProvider';
 import { useToast } from '@/components/ui/Toast';
@@ -2519,6 +2521,25 @@ function AccountSection({
         />
       </div>
 
+      {/* Fair Use */}
+      <div id="fair-use" className="scroll-mt-4">
+        <Card>
+          <Link
+            href="/fair-use"
+            className="flex items-center justify-between py-2 text-text-primary hover:text-purple-400 transition-colors"
+          >
+            <div className="flex items-center gap-3">
+              <Scale className="w-5 h-5 text-text-tertiary" />
+              <div>
+                <span className="font-medium">Fair Use</span>
+                <p className="text-sm text-text-quaternary">View speech usage and policy status</p>
+              </div>
+            </div>
+            <ChevronRight className="w-4 h-4 text-text-quaternary" />
+          </Link>
+        </Card>
+      </div>
+
       {/* Account Actions */}
       <div id="actions" className="space-y-3 scroll-mt-4">
         <h3 className="text-sm font-medium text-text-tertiary uppercase tracking-wider">Account Actions</h3>
@@ -3007,6 +3028,7 @@ export function SettingsPage() {
       case 'account':
         return [
           { id: 'plan-usage', label: 'Plan & Usage' },
+          { id: 'fair-use', label: 'Fair Use' },
           { id: 'actions', label: 'Actions' },
           { id: 'support', label: 'Support' },
         ];

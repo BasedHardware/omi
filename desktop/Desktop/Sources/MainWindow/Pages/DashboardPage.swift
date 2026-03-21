@@ -158,6 +158,26 @@ class DashboardViewModel: ObservableObject {
         }
     }
 
+    func updateGoal(_ goal: Goal, title: String, currentValue: Double, targetValue: Double) async {
+        log("Goals: Updating goal '\(goal.title)' -> title='\(title)', current=\(currentValue), target=\(targetValue)")
+
+        do {
+            let updated = try await APIClient.shared.updateGoal(
+                goalId: goal.id,
+                title: title,
+                currentValue: currentValue,
+                targetValue: targetValue
+            )
+
+            _ = try? await GoalStorage.shared.syncServerGoal(updated)
+            goals = try await GoalStorage.shared.getLocalGoals()
+            log("Goals: Updated goal '\(updated.title)' confirmed by API")
+        } catch {
+            logError("Failed to update goal", error: error)
+            goals = (try? await GoalStorage.shared.getLocalGoals()) ?? goals
+        }
+    }
+
     func deleteGoal(_ goal: Goal) async {
         do {
             // Soft-delete locally first for instant UI update
@@ -227,6 +247,16 @@ struct DashboardPage: View {
                                     goalType: .numeric,
                                     targetValue: target,
                                     unit: nil
+                                )
+                            }
+                        },
+                        onUpdateGoal: { goal, title, current, target in
+                            Task {
+                                await viewModel.updateGoal(
+                                    goal,
+                                    title: title,
+                                    currentValue: current,
+                                    targetValue: target
                                 )
                             }
                         },

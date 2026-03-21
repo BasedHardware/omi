@@ -58,12 +58,7 @@ class OmiProfileAvatar extends AdaptiveWidget {
                 ),
               ]
             : null,
-        image: imageUrl != null
-            ? DecorationImage(
-                image: NetworkImage(imageUrl!),
-                fit: BoxFit.cover,
-              )
-            : null,
+        image: imageUrl != null ? DecorationImage(image: NetworkImage(imageUrl!), fit: BoxFit.cover) : null,
       ),
       child: imageUrl == null
           ? Center(

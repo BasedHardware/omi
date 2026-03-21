@@ -1,0 +1,70 @@
+{
+  "version": 1,
+  "flow": "settings",
+  "flowHash": "352827174b4f5ff0",
+  "device": {
+    "model": "unknown",
+    "resolution": "unknown"
+  },
+  "createdAt": "2026-03-20T07:19:36.168Z",
+  "runId": "FVLa1c8",
+  "totalDurationMs": 304000,
+  "verifySteps": [
+    "S1",
+    "S2",
+    "S3",
+    "S4",
+    "S5",
+    "S6",
+    "S7",
+    "S8",
+    "S9"
+  ],
+  "steps": {
+    "S1": {
+      "kind": "action",
+      "waitAfterMs": 200,
+      "durationMs": 47000
+    },
+    "S2": {
+      "kind": "action",
+      "waitAfterMs": 200,
+      "durationMs": 33000
+    },
+    "S3": {
+      "kind": "action",
+      "waitAfterMs": 200,
+      "durationMs": 26000
+    },
+    "S4": {
+      "kind": "action",
+      "waitAfterMs": 200,
+      "durationMs": 35000
+    },
+    "S5": {
+      "kind": "action",
+      "waitAfterMs": 200,
+      "durationMs": 44000
+    },
+    "S6": {
+      "kind": "action",
+      "waitAfterMs": 200,
+      "durationMs": 26000
+    },
+    "S7": {
+      "kind": "action",
+      "waitAfterMs": 200,
+      "durationMs": 28000
+    },
+    "S8": {
+      "kind": "action",
+      "waitAfterMs": 200,
+      "durationMs": 31000
+    },
+    "S9": {
+      "kind": "action",
+      "waitAfterMs": 500,
+      "durationMs": 34000
+    }
+  }
+}

@@ -1,0 +1,120 @@
+# E2E Flow: Speaker Identification (People) — manage speaker profiles for transcript diarization
+# Tests: Navigate to People page, add person, view speech samples, name speaker in transcript
+# Core feature: identifying who is speaking in conversations for better transcription
+
+version: 2
+name: speaker-identification
+description: Speaker identification flow — navigate to Settings > Profile > Identifying Others, view people list, add new person, name speaker from conversation transcript, view speech samples
+app: com.friend.ios.dev
+evidence:
+  video: true
+covers:
+  - app/lib/pages/settings/people.dart
+  - app/lib/pages/settings/profile.dart
+  - app/lib/pages/conversation_detail/widgets/name_speaker_sheet.dart
+  - app/lib/providers/people_provider.dart
+preconditions:
+  - auth_ready  # User signed in and onboarding completed. App shows home screen.
+  - has_conversations  # At least 1 conversation with multi-speaker transcript exists.
+
+steps:
+  - id: S1
+    name: Open settings
+    do: "Tap the settings icon (gear, top-right) on the home screen to open the Settings page."
+    verify: true
+    expect:
+      - kind: interactive_count
+        min: 4
+    evidence:
+      - screenshot: step-S1.webp
+    note: "Settings gear icon in home screen AppBar."
+
+  - id: S2
+    name: Navigate to Profile
+    do: "Tap 'Profile' in the settings menu to open the Profile page."
+    verify: true
+    expect:
+      - kind: interactive_count
+        min: 4
+    evidence:
+      - screenshot: step-S2.webp
+    note: "Profile page lists: Language, Custom Vocabulary, Speech Profile, Identifying Others, Data Privacy. 'Identifying Others' may require scrolling down on some devices."
+
+  - id: S3
+    name: Tap Identifying Others
+    do: "Scroll down if needed and tap 'Identifying Others' (users icon) in the Profile menu. The UserPeoplePage opens showing: 'People' title, help icon (?), add button (+), and list of known people (may be empty). If people exist, each entry shows name, tap to edit, delete button, and collapsible speech samples."
+    verify: true
+    expect:
+      - kind: interactive_count
+        min: 2
+    evidence:
+      - screenshot: step-S3.webp
+    note: "UserPeoplePage in people.dart. Header: 'People' with help (?) and add (+) icons. Help icon shows explanation of how People works. People sorted alphabetically. Each person shows: name (tappable), delete icon, expandable speech samples section. PeopleProvider.initialize() loads from API."
+
+  - id: S4
+    name: Add a new person
+    do: "Tap the '+' button in the top-right to add a new person. A dialog or input appears asking for the person's name. Enter 'Alice' and confirm. The new person appears in the People list."
+    verify: true
+    expect:
+      - kind: interactive_count
+        min: 2
+    evidence:
+      - screenshot: step-S4.webp
+    note: "createPersonProvider(name) calls POST /v1/users/people with {name: 'Alice'}. Name validation: min 2 chars, max 40 chars, no duplicates, auto-capitalizes first letter. Person gets a colorIdx for UI chip color assignment (8 predefined colors). Returns Person with server-generated personId."
+
+  - id: S5
+    name: Return to home and open conversation
+    do: "Press back three times to return to the home screen (People → Profile → Settings → Home). Tap the first conversation in the list to open its detail page."
+    verify: true
+    expect:
+      - kind: interactive_count
+        min: 4
+    evidence:
+      - screenshot: step-S5.webp
+    note: "Navigation back to home, then into conversation detail. The Transcript tab will show speaker-labeled segments."
+
+  - id: S6
+    name: Open Transcript tab
+    do: "Tap the 'Transcript' tab in the conversation detail page. Verify transcript segments appear with speaker labels (e.g., 'Speaker 0', 'Speaker 1'). Each segment shows: speaker name/label, transcribed text, and timestamp."
+    verify: true
+    expect:
+      - kind: interactive_count
+        min: 3
+    evidence:
+      - screenshot: step-S6.webp
+    note: "Transcript tab shows diarized segments. Speaker labels are tappable — tapping opens NameSpeakerBottomSheet. Segments have speakerId (numeric), personId (null if unassigned), isUser (boolean). Unassigned speakers show generic 'Speaker N' labels."
+
+  - id: S7
+    name: Tap speaker label to name speaker
+    do: "Tap on a speaker label (e.g., 'Speaker 0') in the transcript. The NameSpeakerBottomSheet opens showing: existing people as selectable chips (including 'You' for the user and 'Alice' we just created), a text field to create a new person, and 'Tag Other Segments From Speaker' option with checkboxes."
+    verify: true
+    expect:
+      - kind: interactive_count
+        min: 3
+    evidence:
+      - screenshot: step-S7.webp
+    note: "NameSpeakerBottomSheet in name_speaker_sheet.dart. Shows existing people sorted by frequency in transcript. Pre-selects suggested person if backend sent SpeakerLabelSuggestionEvent. Options: select existing person, create new person (type name), or select 'You'. 'Tag Other Segments' checkbox expands to show all segments from same speakerId."
+
+  - id: S8
+    name: Assign speaker name and save
+    do: "Select 'Alice' from the people chips (or type a new name). Tap 'Save'. The speaker label in the transcript updates from 'Speaker 0' to 'Alice'. Other segments from the same speaker may also update if 'Tag Other Segments' was checked."
+    verify: true
+    expect:
+      - kind: interactive_count
+        min: 3
+    evidence:
+      - screenshot: step-S8.webp
+    note: "Save calls assignBulkConversationTranscriptSegments() which PATCHes /v1/conversations/{id}/segments/assign-bulk with {segment_ids, assign_type: 'person_id', value: personId}. Bulk assignment updates all selected segments. Speaker colors are assigned based on person's colorIdx."
+
+  - id: S9
+    name: Return to home
+    do: "Press back to return to the home screen. Verify the conversations list is visible."
+    verify: true
+    expect:
+      - kind: text_visible
+        values: ["Conversations"]
+      - kind: interactive_count
+        min: 4
+    evidence:
+      - screenshot: step-S9.webp
+    note: "Speaker assignments persist on backend. Named speakers appear in future conversation transcripts if the backend's speech recognition model matches the voice profile."

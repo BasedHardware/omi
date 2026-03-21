@@ -45,9 +45,7 @@ class _SearchWidgetState extends State<SearchWidget> {
         return Container(
           height: 420,
           padding: const EdgeInsets.only(top: 6.0),
-          margin: EdgeInsets.only(
-            bottom: MediaQuery.of(context).viewInsets.bottom,
-          ),
+          margin: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
           color: const Color(0xFF1F1F25),
           child: SafeArea(
             top: false,
@@ -58,12 +56,7 @@ class _SearchWidgetState extends State<SearchWidget> {
                   padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
                   decoration: const BoxDecoration(
                     color: Color(0xFF1F1F25),
-                    border: Border(
-                      bottom: BorderSide(
-                        color: Color(0xFF35343B),
-                        width: 0.5,
-                      ),
-                    ),
+                    border: Border(bottom: BorderSide(color: Color(0xFF35343B), width: 0.5)),
                   ),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -82,10 +75,7 @@ class _SearchWidgetState extends State<SearchWidget> {
                         },
                         child: Text(
                           hasExistingFilter ? context.l10n.removeFilter : context.l10n.cancel,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 16,
-                          ),
+                          style: const TextStyle(color: Colors.white, fontSize: 16),
                         ),
                       ),
                       const Spacer(),

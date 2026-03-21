@@ -576,14 +576,14 @@ class AdviceTestRunnerWindow: NSWindow {
     static func show() {
         if let existingWindow = sharedWindow {
             existingWindow.makeKeyAndOrderFront(nil)
-            NSApp.activate(ignoringOtherApps: true)
+            NSApp.activate()
             return
         }
 
         let window = AdviceTestRunnerWindow()
         sharedWindow = window
         window.makeKeyAndOrderFront(nil)
-        NSApp.activate(ignoringOtherApps: true)
+        NSApp.activate()
     }
 
     static func close() {

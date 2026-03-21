@@ -31,16 +31,10 @@ class _DataPrivacyPageState extends State<DataPrivacyPage> {
   Widget _buildIntroSection(BuildContext context) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
-      decoration: BoxDecoration(
-        color: const Color(0xFF1A1A1A),
-        borderRadius: BorderRadius.circular(16),
-      ),
+      decoration: BoxDecoration(color: const Color(0xFF1A1A1A), borderRadius: BorderRadius.circular(16)),
       child: Column(
         children: [
-          const Text(
-            '🛡️',
-            style: TextStyle(fontSize: 64),
-          ),
+          const Text('🛡️', style: TextStyle(fontSize: 64)),
           const SizedBox(height: 16),
           Text(
             context.l10n.yourPrivacyYourControl,
@@ -55,9 +49,7 @@ class _DataPrivacyPageState extends State<DataPrivacyPage> {
               text: TextSpan(
                 style: TextStyle(fontSize: 16, color: Colors.grey.shade400, height: 1.5),
                 children: [
-                  TextSpan(
-                    text: '${context.l10n.privacyIntro} ',
-                  ),
+                  TextSpan(text: '${context.l10n.privacyIntro} '),
                   TextSpan(
                     text: context.l10n.learnMore,
                     style: TextStyle(
@@ -126,6 +118,7 @@ class _DataPrivacyPageState extends State<DataPrivacyPage> {
           backgroundColor: Theme.of(context).colorScheme.primary,
           appBar: AppBar(
             backgroundColor: Theme.of(context).colorScheme.primary,
+            automaticallyImplyLeading: true,
             title: Text(
               context.l10n.dataPrivacy,
               style: const TextStyle(fontWeight: FontWeight.w600),
@@ -145,10 +138,7 @@ class _DataPrivacyPageState extends State<DataPrivacyPage> {
                     style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 8),
-                  Text(
-                    context.l10n.dataProtectionDesc,
-                    style: TextStyle(color: Colors.grey.shade400, fontSize: 14),
-                  ),
+                  Text(context.l10n.dataProtectionDesc, style: TextStyle(color: Colors.grey.shade400, fontSize: 14)),
                   const SizedBox(height: 16),
                   const DataProtectionSection(),
                   const SizedBox(height: 24),
@@ -156,8 +146,9 @@ class _DataPrivacyPageState extends State<DataPrivacyPage> {
                   const SizedBox(height: 24),
                   Consumer<AppProvider>(
                     builder: (context, appProvider, child) {
-                      final appsWithDataAccess =
-                          appProvider.apps.where((app) => app.enabled && app.worksExternally()).toList();
+                      final appsWithDataAccess = appProvider.apps
+                          .where((app) => app.enabled && app.worksExternally())
+                          .toList();
 
                       return Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -167,10 +158,7 @@ class _DataPrivacyPageState extends State<DataPrivacyPage> {
                             style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
                           ),
                           const SizedBox(height: 8),
-                          Text(
-                            context.l10n.appAccessDesc,
-                            style: TextStyle(color: Colors.grey.shade400, fontSize: 14),
-                          ),
+                          Text(context.l10n.appAccessDesc, style: TextStyle(color: Colors.grey.shade400, fontSize: 14)),
                           const SizedBox(height: 16),
                           if (appsWithDataAccess.isEmpty)
                             Container(
@@ -208,9 +196,7 @@ class _DataPrivacyPageState extends State<DataPrivacyPage> {
                                   clipBehavior: Clip.antiAlias,
                                   child: ListTile(
                                     contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                                    leading: CircleAvatar(
-                                      backgroundImage: NetworkImage(app.getImageUrl()),
-                                    ),
+                                    leading: CircleAvatar(backgroundImage: NetworkImage(app.getImageUrl())),
                                     title: Text(app.getName()),
                                     subtitle: Text(
                                       _getAccessDescription(context, app),
@@ -234,9 +220,7 @@ class _DataPrivacyPageState extends State<DataPrivacyPage> {
               if (isLoading && !isMigrating)
                 Container(
                   color: Colors.black.withOpacity(0.5),
-                  child: const Center(
-                    child: CircularProgressIndicator(),
-                  ),
+                  child: const Center(child: CircularProgressIndicator()),
                 ),
             ],
           ),

@@ -72,10 +72,12 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
     // Phone filter: show WALs on phone that are NOT originally from SD card or flash page
     if (_storageFilter == WalStorage.disk || _storageFilter == WalStorage.mem) {
       return _allWals
-          .where((wal) =>
-              (wal.storage == WalStorage.disk || wal.storage == WalStorage.mem) &&
-              wal.originalStorage != WalStorage.sdcard &&
-              wal.originalStorage != WalStorage.flashPage)
+          .where(
+            (wal) =>
+                (wal.storage == WalStorage.disk || wal.storage == WalStorage.mem) &&
+                wal.originalStorage != WalStorage.sdcard &&
+                wal.originalStorage != WalStorage.flashPage,
+          )
           .toList();
     }
 
@@ -232,7 +234,8 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
 
       if (result != null && _hasConversationResults(result)) {
         Logger.debug(
-            'SyncProvider: $context returned ${result.newConversationIds.length} new, ${result.updatedConversationIds.length} updated conversations');
+          'SyncProvider: $context returned ${result.newConversationIds.length} new, ${result.updatedConversationIds.length} updated conversations',
+        );
         DebugLogManager.logInfo('SyncProvider: $context succeeded', {
           'newConversations': result.newConversationIds.length,
           'updatedConversations': result.updatedConversationIds.length,
@@ -354,10 +357,7 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
       wavFilePath = await _audioPlayerUtils.ensureAudioFileExists(wal);
     }
 
-    return await compute(_generateWaveformInBackground, {
-      'walId': walId,
-      'wavFilePath': wavFilePath,
-    });
+    return await compute(_generateWaveformInBackground, {'walId': walId, 'wavFilePath': wavFilePath});
   }
 
   static Future<List<double>?> _generateWaveformInBackground(Map<String, dynamic> params) async {

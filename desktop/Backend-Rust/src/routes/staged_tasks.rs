@@ -68,7 +68,7 @@ async fn get_staged_tasks(
     State(state): State<AppState>,
     user: AuthUser,
     Query(query): Query<GetStagedTasksQuery>,
-) -> Json<ActionItemsListResponse> {
+) -> Result<Json<ActionItemsListResponse>, (StatusCode, String)> {
     tracing::info!(
         "Getting staged tasks for user {} with limit={}, offset={}",
         user.uid,
@@ -88,14 +88,11 @@ async fn get_staged_tasks(
             if has_more {
                 items.truncate(query.limit);
             }
-            Json(ActionItemsListResponse { items, has_more })
+            Ok(Json(ActionItemsListResponse { items, has_more }))
         }
         Err(e) => {
             tracing::error!("Failed to get staged tasks: {}", e);
-            Json(ActionItemsListResponse {
-                items: vec![],
-                has_more: false,
-            })
+            Err((StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to get staged tasks: {}", e)))
         }
     }
 }

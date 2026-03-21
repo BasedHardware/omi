@@ -43,17 +43,18 @@ class OmiIconButton extends AdaptiveWidget {
     final bgColor = neutral
         ? ResponsiveHelper.backgroundTertiary.withOpacity(0.6)
         : filled
-            ? (solid ? baseColor : baseColor.withOpacity(0.15))
-            : Colors.transparent;
+        ? (solid ? baseColor : baseColor.withOpacity(0.15))
+        : Colors.transparent;
 
     final iconColor = neutral
         ? ResponsiveHelper.textSecondary
         : filled
-            ? (solid ? Colors.white : baseColor)
-            : baseColor;
+        ? (solid ? Colors.white : baseColor)
+        : baseColor;
 
-    final border =
-        style == OmiIconButtonStyle.outline ? Border.all(color: baseColor.withOpacity(borderOpacity), width: 1) : null;
+    final border = style == OmiIconButtonStyle.outline
+        ? Border.all(color: baseColor.withOpacity(borderOpacity), width: 1)
+        : null;
 
     return Material(
       color: Colors.transparent,
@@ -64,16 +65,8 @@ class OmiIconButton extends AdaptiveWidget {
           height: size,
           width: size,
           alignment: Alignment.center,
-          decoration: BoxDecoration(
-            color: bgColor,
-            borderRadius: BorderRadius.circular(borderRadius),
-            border: border,
-          ),
-          child: Icon(
-            icon,
-            color: iconColor,
-            size: iconSize,
-          ),
+          decoration: BoxDecoration(color: bgColor, borderRadius: BorderRadius.circular(borderRadius), border: border),
+          child: Icon(icon, color: iconColor, size: iconSize),
         ),
       ),
     );

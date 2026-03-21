@@ -152,8 +152,12 @@ class DebugLogManager {
     } catch (_) {}
   }
 
-  static Future<void> logError(Object error,
-      [StackTrace? stack, String? message, Map<String, Object?> extra = const {}]) async {
+  static Future<void> logError(
+    Object error, [
+    StackTrace? stack,
+    String? message,
+    Map<String, Object?> extra = const {},
+  ]) async {
     final payload = <String, Object?>{
       'ts': _timestamp(),
       'level': 'ERROR',
@@ -186,12 +190,7 @@ class DebugLogManager {
 
   /// Logs a structured diagnostic event (e.g., device/transcription connection changes)
   static Future<void> logEvent(String type, Map<String, Object?> fields) async {
-    final payload = <String, Object?>{
-      'timestamp': _timestamp(),
-      'level': 'EVENT',
-      'type': type,
-      ...fields,
-    };
+    final payload = <String, Object?>{'timestamp': _timestamp(), 'level': 'EVENT', 'type': type, ...fields};
     await _append(jsonEncode(payload));
   }
 }

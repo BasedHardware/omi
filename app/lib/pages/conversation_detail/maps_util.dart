@@ -72,17 +72,9 @@ class MapsUtil {
 
   static void launchMap(double lat, double lng) async {
     if (Platform.isIOS) {
-      await MapLauncher.showMarker(
-        mapType: MapType.apple,
-        coords: Coords(lat, lng),
-        title: '',
-      );
+      await MapLauncher.showMarker(mapType: MapType.apple, coords: Coords(lat, lng), title: '');
     } else {
-      await MapLauncher.showMarker(
-        mapType: MapType.google,
-        coords: Coords(lat, lng),
-        title: '',
-      );
+      await MapLauncher.showMarker(mapType: MapType.google, coords: Coords(lat, lng), title: '');
     }
   }
 }

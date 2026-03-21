@@ -176,10 +176,7 @@ class _AsanaSettingsPageState extends State<AsanaSettingsPage> {
                 Expanded(
                   child: Text(
                     context.l10n.connectedAsUser(_asanaService.currentUserGid!),
-                    style: const TextStyle(
-                      color: Colors.green,
-                      fontSize: 12,
-                    ),
+                    style: const TextStyle(color: Colors.green, fontSize: 12),
                   ),
                 ),
               ],
@@ -187,20 +184,10 @@ class _AsanaSettingsPageState extends State<AsanaSettingsPage> {
           ),
         Text(
           context.l10n.defaultWorkspace,
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 18,
-            fontWeight: FontWeight.w600,
-          ),
+          style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
         ),
         const SizedBox(height: 8),
-        Text(
-          context.l10n.tasksCreatedInWorkspace,
-          style: const TextStyle(
-            color: Color(0xFF8E8E93),
-            fontSize: 14,
-          ),
-        ),
+        Text(context.l10n.tasksCreatedInWorkspace, style: const TextStyle(color: Color(0xFF8E8E93), fontSize: 14)),
         const SizedBox(height: 16),
         ..._workspaces.map((workspace) {
           final workspaceGid = workspace['gid'] as String;
@@ -219,20 +206,9 @@ class _AsanaSettingsPageState extends State<AsanaSettingsPage> {
               child: Row(
                 children: [
                   Expanded(
-                    child: Text(
-                      workspaceName,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 16,
-                      ),
-                    ),
+                    child: Text(workspaceName, style: const TextStyle(color: Colors.white, fontSize: 16)),
                   ),
-                  if (isSelected)
-                    const Icon(
-                      Icons.check_circle,
-                      color: Colors.white,
-                      size: 24,
-                    ),
+                  if (isSelected) const Icon(Icons.check_circle, color: Colors.white, size: 24),
                 ],
               ),
             ),
@@ -245,52 +221,30 @@ class _AsanaSettingsPageState extends State<AsanaSettingsPage> {
             children: [
               Text(
                 context.l10n.defaultProjectOptional,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 18,
-                  fontWeight: FontWeight.w600,
-                ),
+                style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
               ),
               if (_selectedProjectGid != null)
                 TextButton(
                   onPressed: _clearProject,
-                  child: Text(
-                    context.l10n.clear,
-                    style: const TextStyle(color: Colors.red),
-                  ),
+                  child: Text(context.l10n.clear, style: const TextStyle(color: Colors.red)),
                 ),
             ],
           ),
           const SizedBox(height: 8),
-          Text(
-            context.l10n.leaveUnselectedTasks,
-            style: const TextStyle(
-              color: Color(0xFF8E8E93),
-              fontSize: 14,
-            ),
-          ),
+          Text(context.l10n.leaveUnselectedTasks, style: const TextStyle(color: Color(0xFF8E8E93), fontSize: 14)),
           const SizedBox(height: 16),
           if (_isLoadingProjects)
             const Center(
-              child: Padding(
-                padding: EdgeInsets.all(20),
-                child: CircularProgressIndicator(),
-              ),
+              child: Padding(padding: EdgeInsets.all(20), child: CircularProgressIndicator()),
             )
           else if (_projects.isEmpty)
             Container(
               padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: const Color(0xFF1C1C1E),
-                borderRadius: BorderRadius.circular(12),
-              ),
+              decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(12)),
               child: Center(
                 child: Text(
                   context.l10n.noProjectsInWorkspace,
-                  style: const TextStyle(
-                    color: Color(0xFF8E8E93),
-                    fontSize: 14,
-                  ),
+                  style: const TextStyle(color: Color(0xFF8E8E93), fontSize: 14),
                 ),
               ),
             )
@@ -312,20 +266,9 @@ class _AsanaSettingsPageState extends State<AsanaSettingsPage> {
                   child: Row(
                     children: [
                       Expanded(
-                        child: Text(
-                          projectName,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 16,
-                          ),
-                        ),
+                        child: Text(projectName, style: const TextStyle(color: Colors.white, fontSize: 16)),
                       ),
-                      if (isSelected)
-                        const Icon(
-                          Icons.check_circle,
-                          color: Colors.white,
-                          size: 24,
-                        ),
+                      if (isSelected) const Icon(Icons.check_circle, color: Colors.white, size: 24),
                     ],
                   ),
                 ),

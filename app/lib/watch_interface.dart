@@ -1,12 +1,14 @@
 import 'package:pigeon/pigeon.dart';
 
-@ConfigurePigeon(PigeonOptions(
-  dartOut: 'lib/gen/flutter_communicator.g.dart',
-  dartOptions: DartOptions(),
-  swiftOut: 'ios/Runner/FlutterCommunicator.g.swift',
-  swiftOptions: SwiftOptions(),
-  dartPackageName: 'watch',
-))
+@ConfigurePigeon(
+  PigeonOptions(
+    dartOut: 'lib/gen/flutter_communicator.g.dart',
+    dartOptions: DartOptions(),
+    swiftOut: 'ios/Runner/FlutterCommunicator.g.swift',
+    swiftOptions: SwiftOptions(),
+    dartPackageName: 'watch',
+  ),
+)
 @HostApi()
 abstract class WatchRecorderHostAPI {
   @SwiftFunction('startRecording()')

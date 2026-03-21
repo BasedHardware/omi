@@ -47,10 +47,7 @@ class _RecordingsStoragePermissionState extends State<RecordingsStoragePermissio
         elevation: 0,
       ),
       body: loading || _hasPermission == null
-          ? const Center(
-              child: CircularProgressIndicator(
-              color: Colors.white,
-            ))
+          ? const Center(child: CircularProgressIndicator(color: Colors.white))
           : SingleChildScrollView(
               child: Padding(
                 padding: const EdgeInsets.all(16.0),
@@ -89,9 +86,9 @@ class _RecordingsStoragePermissionState extends State<RecordingsStoragePermissio
                       padding: const EdgeInsets.all(12),
                       child: Text(
                         context.l10n.legalNotice,
-                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                              color: Theme.of(context).colorScheme.onSurfaceVariant,
-                            ),
+                        style: Theme.of(
+                          context,
+                        ).textTheme.bodyMedium?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
                       ),
                     ),
                     const SizedBox(height: 24),
@@ -100,10 +97,7 @@ class _RecordingsStoragePermissionState extends State<RecordingsStoragePermissio
                         onPressed: _hasPermission! ? null : _authorize,
                         child: Text(
                           _hasPermission! ? context.l10n.alreadyAuthorized : context.l10n.authorize,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            decoration: TextDecoration.underline,
-                          ),
+                          style: const TextStyle(color: Colors.white, decoration: TextDecoration.underline),
                         ),
                       ),
                     ),
@@ -111,10 +105,7 @@ class _RecordingsStoragePermissionState extends State<RecordingsStoragePermissio
                       Center(
                         child: TextButton(
                           onPressed: _revokeAuthorization,
-                          child: Text(
-                            context.l10n.revokeAuthorization,
-                            style: const TextStyle(color: Colors.white),
-                          ),
+                          child: Text(context.l10n.revokeAuthorization, style: const TextStyle(color: Colors.white)),
                         ),
                       ),
                   ],
@@ -186,9 +177,7 @@ class _RecordingsStoragePermissionState extends State<RecordingsStoragePermissio
         ),
       );
     } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(context.l10n.failedToRevoke)),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.l10n.failedToRevoke)));
     }
   }
 }

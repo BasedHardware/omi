@@ -106,17 +106,11 @@ class _TextInputInnerState extends State<_TextInputInner> {
         onChanged: widget.onChanged,
         keyboardType: widget.keyboardType,
         maxLength: widget.maxLength,
-        style: const TextStyle(
-          color: ResponsiveHelper.textPrimary,
-          fontSize: 14,
-        ),
+        style: const TextStyle(color: ResponsiveHelper.textPrimary, fontSize: 14),
         decoration: InputDecoration(
           counterText: '',
           hintText: widget.hint,
-          hintStyle: const TextStyle(
-            color: ResponsiveHelper.textTertiary,
-            fontSize: 14,
-          ),
+          hintStyle: const TextStyle(color: ResponsiveHelper.textTertiary, fontSize: 14),
           border: InputBorder.none,
           contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         ),

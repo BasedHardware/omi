@@ -44,12 +44,7 @@ class OmiPanelHeader extends StatelessWidget {
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
         color: ResponsiveHelper.backgroundSecondary.withOpacity(0.6),
-        border: Border(
-          bottom: BorderSide(
-            color: ResponsiveHelper.backgroundTertiary.withOpacity(0.3),
-            width: 1,
-          ),
-        ),
+        border: Border(bottom: BorderSide(color: ResponsiveHelper.backgroundTertiary.withOpacity(0.3), width: 1)),
       ),
       child: Row(
         children: [
@@ -67,11 +62,7 @@ class OmiPanelHeader extends StatelessWidget {
           // Title.
           Text(
             title,
-            style: const TextStyle(
-              color: ResponsiveHelper.textPrimary,
-              fontSize: 20,
-              fontWeight: FontWeight.w600,
-            ),
+            style: const TextStyle(color: ResponsiveHelper.textPrimary, fontSize: 20, fontWeight: FontWeight.w600),
           ),
 
           // Optional badge.
@@ -88,10 +79,7 @@ class OmiPanelHeader extends StatelessWidget {
 
           // Spacer + optional close button.
           const Spacer(),
-          if (action != null) ...[
-            action!,
-            SizedBox(width: spacing),
-          ],
+          if (action != null) ...[action!, SizedBox(width: spacing)],
           if (onClose != null)
             OmiIconButton(
               icon: FontAwesomeIcons.xmark,

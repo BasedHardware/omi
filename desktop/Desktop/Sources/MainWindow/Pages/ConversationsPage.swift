@@ -7,14 +7,14 @@ import Combine
 class SearchDebouncer: ObservableObject {
     /// The input query (set immediately when user types)
     @Published var inputQuery: String = ""
-    /// The debounced query (updated 500ms after user stops typing)
+    /// The debounced query (updated 250ms after user stops typing)
     @Published var debouncedQuery: String = ""
     private var cancellables = Set<AnyCancellable>()
 
     init() {
         // Observe input and debounce to output
         $inputQuery
-            .debounce(for: .milliseconds(500), scheduler: DispatchQueue.main)
+            .debounce(for: .milliseconds(250), scheduler: DispatchQueue.main)
             .removeDuplicates()
             .sink { [weak self] value in
                 self?.debouncedQuery = value
@@ -645,7 +645,7 @@ struct ConversationsPage: View {
         )) {
             Button("OK", role: .cancel) { }
         } message: {
-            Text(mergeError ?? "Unknown error")
+            Text(mergeError ?? "Failed to merge conversations. Please try again.")
         }
     }
 

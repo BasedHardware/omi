@@ -8,12 +8,7 @@ class OmiLoadMoreButton extends AdaptiveWidget {
   final int remaining;
   final VoidCallback onPressed;
   final bool loading;
-  const OmiLoadMoreButton({
-    super.key,
-    required this.remaining,
-    required this.onPressed,
-    this.loading = false,
-  });
+  const OmiLoadMoreButton({super.key, required this.remaining, required this.onPressed, this.loading = false});
 
   @override
   Widget buildDesktop(BuildContext context) => _base(context);
@@ -23,9 +18,7 @@ class OmiLoadMoreButton extends AdaptiveWidget {
 
   Widget _base(BuildContext context) {
     if (loading) {
-      return const CircularProgressIndicator(
-        valueColor: AlwaysStoppedAnimation<Color>(ResponsiveHelper.purplePrimary),
-      );
+      return const CircularProgressIndicator(valueColor: AlwaysStoppedAnimation<Color>(ResponsiveHelper.purplePrimary));
     }
 
     return ElevatedButton.icon(

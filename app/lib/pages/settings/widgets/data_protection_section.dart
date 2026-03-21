@@ -39,8 +39,10 @@ class _DataProtectionSectionState extends State<DataProtectionSection> {
           children: [
             const Icon(Icons.lock_person_outlined, color: Colors.white),
             const SizedBox(width: 10),
-            Text(context.l10n.maximumSecurityE2ee,
-                style: TextStyle(color: context.appColors.textPrimary, fontWeight: FontWeight.bold)),
+            Text(
+              context.l10n.maximumSecurityE2ee,
+              style: TextStyle(color: context.appColors.textPrimary, fontWeight: FontWeight.bold),
+            ),
           ],
         ),
         content: RichText(
@@ -64,8 +66,10 @@ class _DataProtectionSectionState extends State<DataProtectionSection> {
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(),
-            child: Text(context.l10n.ok,
-                style: TextStyle(color: context.appColors.textPrimary, fontWeight: FontWeight.bold)),
+            child: Text(
+              context.l10n.ok,
+              style: TextStyle(color: context.appColors.textPrimary, fontWeight: FontWeight.bold),
+            ),
           ),
         ],
       ),
@@ -99,10 +103,7 @@ class _DataProtectionSectionState extends State<DataProtectionSection> {
             _buildDefaultProtectionCard(context),
             _buildE2eeCard(context),
             const SizedBox(height: 12),
-            _buildInfoRow(
-              Icons.shield_outlined,
-              context.l10n.dataAlwaysEncrypted,
-            ),
+            _buildInfoRow(Icons.shield_outlined, context.l10n.dataAlwaysEncrypted),
           ],
         );
       },
@@ -150,7 +151,7 @@ class _DataProtectionSectionState extends State<DataProtectionSection> {
                 backgroundColor: Theme.of(context).colorScheme.secondary,
                 foregroundColor: Colors.white,
               ),
-            )
+            ),
           ],
         ),
       );
@@ -198,13 +199,12 @@ class _DataProtectionSectionState extends State<DataProtectionSection> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
+              Text(provider.migrationETA, style: const TextStyle(color: Colors.grey, fontSize: 12)),
               Text(
-                provider.migrationETA,
-                style: TextStyle(color: context.appColors.textQuaternary, fontSize: 12),
-              ),
-              Text(
-                context.l10n
-                    .objectsCount(provider.migrationProcessedCount.toString(), provider.migrationTotalCount.toString()),
+                context.l10n.objectsCount(
+                  provider.migrationProcessedCount.toString(),
+                  provider.migrationTotalCount.toString(),
+                ),
                 style: TextStyle(color: context.appColors.textQuaternary, fontSize: 12),
               ),
             ],
@@ -220,19 +220,12 @@ class _DataProtectionSectionState extends State<DataProtectionSection> {
       decoration: BoxDecoration(
         color: context.primaryColor.withOpacity(0.15),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: Theme.of(context).colorScheme.secondary,
-          width: 1.5,
-        ),
+        border: Border.all(color: Theme.of(context).colorScheme.secondary, width: 1.5),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(
-            Icons.verified_user_outlined,
-            color: Theme.of(context).colorScheme.secondary,
-            size: 28,
-          ),
+          Icon(Icons.verified_user_outlined, color: Theme.of(context).colorScheme.secondary, size: 28),
           const SizedBox(width: 16),
           Expanded(
             child: Column(

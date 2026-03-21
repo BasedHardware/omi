@@ -30,11 +30,7 @@ class AddAppPage extends StatefulWidget {
   final bool presetForConversationAnalysis;
   final bool presetExternalIntegration;
 
-  const AddAppPage({
-    super.key,
-    this.presetForConversationAnalysis = false,
-    this.presetExternalIntegration = false,
-  });
+  const AddAppPage({super.key, this.presetForConversationAnalysis = false, this.presetExternalIntegration = false});
 
   @override
   State<AddAppPage> createState() => _AddAppPageState();
@@ -57,552 +53,472 @@ class _AddAppPageState extends State<AddAppPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<AddAppProvider>(builder: (context, provider, child) {
-      return Scaffold(
-        backgroundColor: Theme.of(context).colorScheme.primary,
-        appBar: AppBar(
-          title: Text(context.l10n.submitApp),
+    return Consumer<AddAppProvider>(
+      builder: (context, provider, child) {
+        return Scaffold(
           backgroundColor: Theme.of(context).colorScheme.primary,
-          actions: [
-            Center(
-              child: Padding(
-                padding: const EdgeInsets.only(right: 16.0),
-                child: Material(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(20),
-                  child: InkWell(
-                    onTap: () {
-                      MixpanelManager().pageOpened('App Submission Help');
-                      launchUrl(Uri.parse('https://docs.omi.me/doc/developer/apps/Introduction'));
-                    },
+          appBar: AppBar(
+            title: Text(context.l10n.submitApp),
+            backgroundColor: Theme.of(context).colorScheme.primary,
+            actions: [
+              Center(
+                child: Padding(
+                  padding: const EdgeInsets.only(right: 16.0),
+                  child: Material(
+                    color: Colors.white,
                     borderRadius: BorderRadius.circular(20),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            context.l10n.docs,
-                            style: const TextStyle(
-                              color: Colors.black,
-                              fontWeight: FontWeight.w600,
-                              fontSize: 12,
+                    child: InkWell(
+                      onTap: () {
+                        MixpanelManager().pageOpened('App Submission Help');
+                        launchUrl(Uri.parse('https://docs.omi.me/doc/developer/apps/Introduction'));
+                      },
+                      borderRadius: BorderRadius.circular(20),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              context.l10n.docs,
+                              style: const TextStyle(color: Colors.black, fontWeight: FontWeight.w600, fontSize: 12),
                             ),
-                          ),
-                          const SizedBox(width: 4),
-                          const FaIcon(
-                            FontAwesomeIcons.arrowUpRightFromSquare,
-                            color: Colors.black,
-                            size: 10,
-                          ),
-                        ],
+                            const SizedBox(width: 4),
+                            const FaIcon(FontAwesomeIcons.arrowUpRightFromSquare, color: Colors.black, size: 10),
+                          ],
+                        ),
                       ),
                     ),
                   ),
                 ),
               ),
-            ),
-          ],
-        ),
-        extendBody: true,
-        body: provider.isLoading || provider.isSubmitting
-            ? Center(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    const CircularProgressIndicator(
-                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                    ),
-                    const SizedBox(
-                      height: 14,
-                    ),
-                    Text(
-                      provider.isSubmitting ? context.l10n.submittingYourApp : context.l10n.holdOnPreparingForm,
-                      style: const TextStyle(color: Colors.white),
-                    ),
-                  ],
-                ),
-              )
-            : GestureDetector(
-                onTap: () {
-                  FocusScope.of(context).unfocus();
-                },
-                child: SingleChildScrollView(
-                  child: Padding(
-                    padding: const EdgeInsets.all(16.0),
-                    child: Form(
-                      key: provider.formKey,
-                      onChanged: () {
-                        provider.checkValidity();
-                      },
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const AiAppGeneratorBanner(),
-                          const SizedBox(height: 4),
-                          AppMetadataWidget(
-                            pickImage: () async {
-                              await provider.pickImage();
-                            },
-                            generatingDescription: provider.isGenratingDescription,
-                            allowPaidApps: false,
-                            appPricing: null,
-                            appNameController: provider.appNameController,
-                            appDescriptionController: provider.appDescriptionController,
-                            categories: provider.categories,
-                            setAppCategory: provider.setAppCategory,
-                            imageFile: provider.imageFile,
-                            category: provider.mapCategoryIdToName(provider.appCategory),
-                          ),
-                          const SizedBox(height: 18),
-                          Container(
-                            decoration: BoxDecoration(
-                              color: const Color(0xFF1F1F25),
-                              borderRadius: BorderRadius.circular(18.0),
+            ],
+          ),
+          extendBody: true,
+          body: provider.isLoading || provider.isSubmitting
+              ? Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      const CircularProgressIndicator(valueColor: AlwaysStoppedAnimation<Color>(Colors.white)),
+                      const SizedBox(height: 14),
+                      Text(
+                        provider.isSubmitting ? context.l10n.submittingYourApp : context.l10n.holdOnPreparingForm,
+                        style: const TextStyle(color: Colors.white),
+                      ),
+                    ],
+                  ),
+                )
+              : GestureDetector(
+                  onTap: () {
+                    FocusScope.of(context).unfocus();
+                  },
+                  child: SingleChildScrollView(
+                    child: Padding(
+                      padding: const EdgeInsets.all(16.0),
+                      child: Form(
+                        key: provider.formKey,
+                        onChanged: () {
+                          provider.checkValidity();
+                        },
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const AiAppGeneratorBanner(),
+                            const SizedBox(height: 4),
+                            AppMetadataWidget(
+                              pickImage: () async {
+                                await provider.pickImage();
+                              },
+                              generatingDescription: provider.isGenratingDescription,
+                              allowPaidApps: false,
+                              appPricing: null,
+                              appNameController: provider.appNameController,
+                              appDescriptionController: provider.appDescriptionController,
+                              categories: provider.categories,
+                              setAppCategory: provider.setAppCategory,
+                              imageFile: provider.imageFile,
+                              category: provider.mapCategoryIdToName(provider.appCategory),
                             ),
-                            padding: const EdgeInsets.all(14.0),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
-                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                  crossAxisAlignment: CrossAxisAlignment.center,
-                                  children: [
-                                    Padding(
-                                      padding: EdgeInsets.fromLTRB(8, provider.thumbnailUrls.isNotEmpty ? 8 : 0, 0, 0),
-                                      child: Text(
-                                        context.l10n.previewScreenshots,
-                                        style: TextStyle(color: Colors.grey.shade300, fontSize: 16),
-                                      ),
-                                    ),
-                                    if (provider.thumbnailUrls.isEmpty)
-                                      GestureDetector(
-                                        onTap: provider.isUploadingThumbnail ? null : provider.pickThumbnail,
-                                        child: Container(
-                                          width: 36,
-                                          height: 36,
-                                          decoration: BoxDecoration(
-                                            color: Colors.grey.withOpacity(0.3),
-                                            shape: BoxShape.circle,
-                                          ),
-                                          child: Center(
-                                            child: provider.isUploadingThumbnail
-                                                ? const SizedBox(
-                                                    width: 16,
-                                                    height: 16,
-                                                    child: CircularProgressIndicator(
-                                                      strokeWidth: 2,
-                                                      color: Colors.white,
-                                                    ),
-                                                  )
-                                                : const FaIcon(FontAwesomeIcons.image, size: 16, color: Colors.white),
-                                          ),
+                            const SizedBox(height: 18),
+                            Container(
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF1F1F25),
+                                borderRadius: BorderRadius.circular(18.0),
+                              ),
+                              padding: const EdgeInsets.all(14.0),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    crossAxisAlignment: CrossAxisAlignment.center,
+                                    children: [
+                                      Padding(
+                                        padding: EdgeInsets.fromLTRB(
+                                          8,
+                                          provider.thumbnailUrls.isNotEmpty ? 8 : 0,
+                                          0,
+                                          0,
+                                        ),
+                                        child: Text(
+                                          context.l10n.previewScreenshots,
+                                          style: TextStyle(color: Colors.grey.shade300, fontSize: 16),
                                         ),
                                       ),
-                                  ],
-                                ),
-                                if (provider.thumbnailUrls.isNotEmpty)
-                                  SizedBox(
-                                    height: 180,
-                                    child: Padding(
-                                      padding: const EdgeInsets.fromLTRB(8, 16, 8, 8),
-                                      child: ListView.builder(
-                                        scrollDirection: Axis.horizontal,
-                                        itemCount: provider.thumbnailUrls.length + 1,
-                                        itemBuilder: (context, index) {
-                                          // Add button at the end
-                                          if (index == provider.thumbnailUrls.length) {
-                                            return GestureDetector(
-                                              onTap: provider.isUploadingThumbnail ? null : provider.pickThumbnail,
-                                              child: Container(
-                                                width: 120,
-                                                height: 180,
-                                                margin: const EdgeInsets.only(right: 8),
-                                                decoration: BoxDecoration(
-                                                  color: Color(0xFF35343B),
-                                                  borderRadius: BorderRadius.circular(8),
-                                                ),
-                                                child: provider.isUploadingThumbnail
-                                                    ? const Center(
-                                                        child: SizedBox(
-                                                          width: 16,
-                                                          height: 16,
-                                                          child: CircularProgressIndicator(
-                                                            strokeWidth: 2,
+                                      if (provider.thumbnailUrls.isEmpty)
+                                        GestureDetector(
+                                          onTap: provider.isUploadingThumbnail ? null : provider.pickThumbnail,
+                                          child: Container(
+                                            width: 36,
+                                            height: 36,
+                                            decoration: BoxDecoration(
+                                              color: Colors.grey.withOpacity(0.3),
+                                              shape: BoxShape.circle,
+                                            ),
+                                            child: Center(
+                                              child: provider.isUploadingThumbnail
+                                                  ? const SizedBox(
+                                                      width: 16,
+                                                      height: 16,
+                                                      child: CircularProgressIndicator(
+                                                        strokeWidth: 2,
+                                                        color: Colors.white,
+                                                      ),
+                                                    )
+                                                  : const FaIcon(FontAwesomeIcons.image, size: 16, color: Colors.white),
+                                            ),
+                                          ),
+                                        ),
+                                    ],
+                                  ),
+                                  if (provider.thumbnailUrls.isNotEmpty)
+                                    SizedBox(
+                                      height: 180,
+                                      child: Padding(
+                                        padding: const EdgeInsets.fromLTRB(8, 16, 8, 8),
+                                        child: ListView.builder(
+                                          scrollDirection: Axis.horizontal,
+                                          itemCount: provider.thumbnailUrls.length + 1,
+                                          itemBuilder: (context, index) {
+                                            // Add button at the end
+                                            if (index == provider.thumbnailUrls.length) {
+                                              return GestureDetector(
+                                                onTap: provider.isUploadingThumbnail ? null : provider.pickThumbnail,
+                                                child: Container(
+                                                  width: 120,
+                                                  height: 180,
+                                                  margin: const EdgeInsets.only(right: 8),
+                                                  decoration: BoxDecoration(
+                                                    color: Color(0xFF35343B),
+                                                    borderRadius: BorderRadius.circular(8),
+                                                  ),
+                                                  child: provider.isUploadingThumbnail
+                                                      ? const Center(
+                                                          child: SizedBox(
+                                                            width: 16,
+                                                            height: 16,
+                                                            child: CircularProgressIndicator(
+                                                              strokeWidth: 2,
+                                                              color: Colors.white,
+                                                            ),
+                                                          ),
+                                                        )
+                                                      : const Center(
+                                                          child: FaIcon(
+                                                            FontAwesomeIcons.image,
+                                                            size: 28,
                                                             color: Colors.white,
                                                           ),
                                                         ),
-                                                      )
-                                                    : const Center(
-                                                        child: FaIcon(FontAwesomeIcons.image,
-                                                            size: 28, color: Colors.white),
+                                                ),
+                                              );
+                                            }
+                                            return Stack(
+                                              children: [
+                                                GestureDetector(
+                                                  onTap: () {
+                                                    Navigator.push(
+                                                      context,
+                                                      MaterialPageRoute(
+                                                        builder: (context) => FullScreenImageViewer(
+                                                          imageUrl: provider.thumbnailUrls[index],
+                                                        ),
                                                       ),
-                                              ),
-                                            );
-                                          }
-                                          return Stack(
-                                            children: [
-                                              GestureDetector(
-                                                onTap: () {
-                                                  Navigator.push(
-                                                    context,
-                                                    MaterialPageRoute(
-                                                      builder: (context) => FullScreenImageViewer(
-                                                        imageUrl: provider.thumbnailUrls[index],
-                                                      ),
-                                                    ),
-                                                  );
-                                                },
-                                                child: CachedNetworkImage(
-                                                  imageUrl: provider.thumbnailUrls[index],
-                                                  imageBuilder: (context, imageProvider) => Container(
-                                                    width: 120,
-                                                    height: 180, // 2:3 ratio (120 * 1.5)
-                                                    margin: const EdgeInsets.only(right: 8),
-                                                    decoration: BoxDecoration(
-                                                      borderRadius: BorderRadius.circular(8),
-                                                      border: Border.all(
-                                                        color: const Color(0xFF424242),
-                                                        width: 1,
-                                                      ),
-                                                      image: DecorationImage(
-                                                        image: imageProvider,
-                                                        fit: BoxFit.cover,
+                                                    );
+                                                  },
+                                                  child: CachedNetworkImage(
+                                                    imageUrl: provider.thumbnailUrls[index],
+                                                    imageBuilder: (context, imageProvider) => Container(
+                                                      width: 120,
+                                                      height: 180, // 2:3 ratio (120 * 1.5)
+                                                      margin: const EdgeInsets.only(right: 8),
+                                                      decoration: BoxDecoration(
+                                                        borderRadius: BorderRadius.circular(8),
+                                                        border: Border.all(color: const Color(0xFF424242), width: 1),
+                                                        image: DecorationImage(image: imageProvider, fit: BoxFit.cover),
                                                       ),
                                                     ),
-                                                  ),
-                                                  placeholder: (context, url) => ShimmerWithTimeout(
-                                                    baseColor: Colors.grey[900]!,
-                                                    highlightColor: Colors.grey[800]!,
-                                                    child: Container(
+                                                    placeholder: (context, url) => ShimmerWithTimeout(
+                                                      baseColor: Colors.grey[900]!,
+                                                      highlightColor: Colors.grey[800]!,
+                                                      child: Container(
+                                                        width: 120,
+                                                        height: 180,
+                                                        margin: const EdgeInsets.only(right: 8),
+                                                        decoration: BoxDecoration(
+                                                          color: Colors.black,
+                                                          borderRadius: BorderRadius.circular(8),
+                                                        ),
+                                                      ),
+                                                    ),
+                                                    errorWidget: (context, url, error) => Container(
                                                       width: 120,
                                                       height: 180,
                                                       margin: const EdgeInsets.only(right: 8),
                                                       decoration: BoxDecoration(
-                                                        color: Colors.black,
+                                                        color: Colors.grey[900],
                                                         borderRadius: BorderRadius.circular(8),
+                                                      ),
+                                                      child: const FaIcon(FontAwesomeIcons.triangleExclamation),
+                                                    ),
+                                                  ),
+                                                ),
+                                                Positioned(
+                                                  top: 6,
+                                                  right: 14,
+                                                  child: GestureDetector(
+                                                    onTap: () => provider.removeThumbnail(index),
+                                                    child: Container(
+                                                      padding: const EdgeInsets.all(4),
+                                                      decoration: BoxDecoration(
+                                                        color: Colors.white,
+                                                        shape: BoxShape.circle,
+                                                      ),
+                                                      child: const Icon(
+                                                        FontAwesomeIcons.xmark,
+                                                        size: 10,
+                                                        color: Colors.black,
                                                       ),
                                                     ),
                                                   ),
-                                                  errorWidget: (context, url, error) => Container(
-                                                    width: 120,
-                                                    height: 180,
-                                                    margin: const EdgeInsets.only(right: 8),
-                                                    decoration: BoxDecoration(
-                                                      color: Colors.grey[900],
-                                                      borderRadius: BorderRadius.circular(8),
-                                                    ),
-                                                    child: const FaIcon(FontAwesomeIcons.triangleExclamation),
-                                                  ),
                                                 ),
-                                              ),
-                                              Positioned(
-                                                top: 6,
-                                                right: 14,
-                                                child: GestureDetector(
-                                                  onTap: () => provider.removeThumbnail(index),
-                                                  child: Container(
-                                                    padding: const EdgeInsets.all(4),
-                                                    decoration: BoxDecoration(
-                                                      color: Colors.white,
-                                                      shape: BoxShape.circle,
-                                                    ),
-                                                    child: const Icon(FontAwesomeIcons.xmark,
-                                                        size: 10, color: Colors.black),
-                                                  ),
-                                                ),
-                                              ),
-                                            ],
-                                          );
-                                        },
+                                              ],
+                                            );
+                                          },
+                                        ),
                                       ),
                                     ),
-                                  ),
-                              ],
+                                ],
+                              ),
                             ),
-                          ),
-                          const SizedBox(height: 18),
-                          Container(
-                            decoration: BoxDecoration(
-                              color: const Color(0xFF1F1F25),
-                              borderRadius: BorderRadius.circular(18.0),
-                            ),
-                            padding: const EdgeInsets.fromLTRB(14.0, 20.0, 14.0, 14.0),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Padding(
-                                  padding: const EdgeInsets.only(left: 8.0, right: 8.0),
-                                  child: Row(
-                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                    children: [
-                                      Text.rich(
-                                        TextSpan(
-                                          text: context.l10n.capabilities,
-                                          style: TextStyle(color: Colors.grey.shade300, fontSize: 16),
-                                          children: const [
-                                            TextSpan(
-                                              text: '*',
-                                              style: TextStyle(color: Colors.red),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                      GestureDetector(
-                                        onTap: () {
-                                          launchUrl(Uri.parse('https://docs.omi.me/doc/developer/apps/Introduction'));
-                                        },
-                                        child: FaIcon(
-                                          FontAwesomeIcons.solidCircleQuestion,
-                                          color: Colors.grey.shade500,
-                                          size: 18,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                const SizedBox(
-                                  height: 18,
-                                ),
-                                const CapabilitiesChipsWidget(),
-                                const SizedBox(
-                                  height: 6,
-                                ),
-                              ],
-                            ),
-                          ),
-                          if (provider.isCapabilitySelectedById('chat') ||
-                              provider.isCapabilitySelectedById('memories'))
-                            Column(
-                              children: [
-                                const SizedBox(
-                                  height: 12,
-                                ),
-                                GestureDetector(
-                                  onTap: () {
-                                    FocusScope.of(context).unfocus();
-                                  },
-                                  child: Form(
-                                    key: provider.promptKey,
-                                    onChanged: () {
-                                      provider.checkValidity();
-                                    },
-                                    child: Container(
-                                      decoration: BoxDecoration(
-                                        color: const Color(0xFF1F1F25),
-                                        borderRadius: BorderRadius.circular(18.0),
-                                      ),
-                                      padding: const EdgeInsets.all(14.0),
-                                      child: Column(
-                                        children: [
-                                          if (provider.isCapabilitySelectedById('chat'))
-                                            PromptTextField(
-                                              controller: provider.chatPromptController,
-                                              label: context.l10n.chatPrompt,
-                                              hint: context.l10n.chatPromptPlaceholder,
-                                            ),
-                                          if (provider.isCapabilitySelectedById('memories') &&
-                                              provider.isCapabilitySelectedById('chat'))
-                                            const SizedBox(
-                                              height: 20,
-                                            ),
-                                          if (provider.isCapabilitySelectedById('memories'))
-                                            PromptTextField(
-                                              controller: provider.conversationPromptController,
-                                              label: context.l10n.conversationPrompt,
-                                              hint: context.l10n.conversationPromptPlaceholder,
-                                            ),
-                                        ],
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          const ExternalTriggerFieldsWidget(),
-                          if (provider.isCapabilitySelectedById('proactive_notification'))
-                            Column(
-                              children: [
-                                const SizedBox(
-                                  height: 12,
-                                ),
-                                Container(
-                                  decoration: BoxDecoration(
-                                    color: const Color(0xFF1F1F25),
-                                    borderRadius: BorderRadius.circular(18.0),
-                                  ),
-                                  padding: const EdgeInsets.symmetric(horizontal: 14.0, vertical: 20.0),
-                                  width: double.infinity,
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Padding(
-                                        padding: const EdgeInsets.only(left: 8.0),
-                                        child: Text(
-                                          context.l10n.notificationScopes,
-                                          style: TextStyle(color: Colors.grey.shade300, fontSize: 16),
-                                        ),
-                                      ),
-                                      const SizedBox(
-                                        height: 16,
-                                      ),
-                                      const NotificationScopesChipsWidget(),
-                                    ],
-                                  ),
-                                ),
-                              ],
-                            ),
-                          if (provider.isCapabilitySelectedById('external_integration') ||
-                              provider.isCapabilitySelectedById('proactive_notification'))
-                            Column(
-                              children: [
-                                const SizedBox(height: 12),
-                                Container(
-                                  decoration: BoxDecoration(
-                                    color: const Color(0xFF1F1F25),
-                                    borderRadius: BorderRadius.circular(18.0),
-                                  ),
-                                  padding: const EdgeInsets.all(14.0),
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Padding(
-                                        padding: const EdgeInsets.only(left: 8.0),
-                                        child: Text.rich(
+                            const SizedBox(height: 18),
+                            Container(
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF1F1F25),
+                                borderRadius: BorderRadius.circular(18.0),
+                              ),
+                              padding: const EdgeInsets.fromLTRB(14.0, 20.0, 14.0, 14.0),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Padding(
+                                    padding: const EdgeInsets.only(left: 8.0, right: 8.0),
+                                    child: Row(
+                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                      children: [
+                                        Text.rich(
                                           TextSpan(
-                                            text: 'GitHub Repository URL',
+                                            text: context.l10n.capabilities,
                                             style: TextStyle(color: Colors.grey.shade300, fontSize: 16),
                                             children: const [
                                               TextSpan(
-                                                text: ' *',
+                                                text: '*',
                                                 style: TextStyle(color: Colors.red),
                                               ),
                                             ],
                                           ),
                                         ),
-                                      ),
-                                      const SizedBox(height: 4),
-                                      Padding(
-                                        padding: const EdgeInsets.only(left: 8.0),
-                                        child: Text(
-                                          'Link to your app\'s source code repository',
-                                          style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
+                                        GestureDetector(
+                                          onTap: () {
+                                            launchUrl(Uri.parse('https://docs.omi.me/doc/developer/apps/Introduction'));
+                                          },
+                                          child: FaIcon(
+                                            FontAwesomeIcons.solidCircleQuestion,
+                                            color: Colors.grey.shade500,
+                                            size: 18,
+                                          ),
                                         ),
-                                      ),
-                                      const SizedBox(height: 12),
-                                      TextFormField(
-                                        controller: provider.sourceCodeUrlController,
-                                        decoration: InputDecoration(
-                                          hintText: 'https://github.com/username/repo',
-                                          hintStyle: const TextStyle(color: Colors.grey),
-                                          border: OutlineInputBorder(
-                                            borderRadius: BorderRadius.circular(12),
-                                            borderSide: const BorderSide(color: Colors.grey),
-                                          ),
-                                          enabledBorder: OutlineInputBorder(
-                                            borderRadius: BorderRadius.circular(12),
-                                            borderSide: BorderSide(color: Colors.grey.shade800),
-                                          ),
-                                          focusedBorder: OutlineInputBorder(
-                                            borderRadius: BorderRadius.circular(12),
-                                            borderSide: const BorderSide(color: Colors.white),
-                                          ),
-                                          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                                        ),
-                                        style: const TextStyle(color: Colors.white),
-                                        keyboardType: TextInputType.url,
-                                        validator: (value) {
-                                          if (value == null || value.trim().isEmpty) {
-                                            return 'GitHub repository URL is required';
-                                          }
-                                          if (!Uri.tryParse(value.trim())!.isAbsolute) {
-                                            return 'Please enter a valid URL';
-                                          }
-                                          return null;
-                                        },
-                                      ),
-                                    ],
+                                      ],
+                                    ),
                                   ),
-                                ),
-                              ],
+                                  const SizedBox(height: 18),
+                                  const CapabilitiesChipsWidget(),
+                                  const SizedBox(height: 6),
+                                ],
+                              ),
                             ),
-                          const SizedBox(
-                            height: 22,
-                          ),
-                          // App Settings Card
-                          Container(
-                            padding: const EdgeInsets.all(20),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFF1F1F25),
-                              borderRadius: BorderRadius.circular(18),
-                            ),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                // Public toggle
-                                Row(
-                                  children: [
-                                    Container(
-                                      width: 40,
-                                      height: 40,
-                                      decoration: BoxDecoration(
-                                        color: const Color(0xFF2A2A2E),
-                                        borderRadius: BorderRadius.circular(10),
-                                      ),
-                                      child: Center(
-                                        child: FaIcon(
-                                          provider.makeAppPublic ? FontAwesomeIcons.globe : FontAwesomeIcons.lock,
-                                          color: Colors.grey.shade400,
-                                          size: 16,
-                                        ),
-                                      ),
-                                    ),
-                                    const SizedBox(width: 14),
-                                    Expanded(
-                                      child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          Text(
-                                            context.l10n.makePublic,
-                                            style: const TextStyle(
-                                              color: Colors.white,
-                                              fontSize: 16,
-                                              fontWeight: FontWeight.w500,
-                                            ),
-                                          ),
-                                          const SizedBox(height: 2),
-                                          Text(
-                                            provider.makeAppPublic
-                                                ? context.l10n.anyoneCanDiscover
-                                                : context.l10n.onlyYouCanUse,
-                                            style: TextStyle(
-                                              color: Colors.grey.shade500,
-                                              fontSize: 13,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                    Switch(
-                                      value: provider.makeAppPublic,
-                                      onChanged: (value) {
-                                        provider.setIsPrivate(value);
+                            if (provider.isCapabilitySelectedById('chat') ||
+                                provider.isCapabilitySelectedById('memories'))
+                              Column(
+                                children: [
+                                  const SizedBox(height: 12),
+                                  GestureDetector(
+                                    onTap: () {
+                                      FocusScope.of(context).unfocus();
+                                    },
+                                    child: Form(
+                                      key: provider.promptKey,
+                                      onChanged: () {
+                                        provider.checkValidity();
                                       },
-                                      activeColor: const Color(0xFF6366F1),
+                                      child: Container(
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xFF1F1F25),
+                                          borderRadius: BorderRadius.circular(18.0),
+                                        ),
+                                        padding: const EdgeInsets.all(14.0),
+                                        child: Column(
+                                          children: [
+                                            if (provider.isCapabilitySelectedById('chat'))
+                                              PromptTextField(
+                                                controller: provider.chatPromptController,
+                                                label: context.l10n.chatPrompt,
+                                                hint: context.l10n.chatPromptPlaceholder,
+                                              ),
+                                            if (provider.isCapabilitySelectedById('memories') &&
+                                                provider.isCapabilitySelectedById('chat'))
+                                              const SizedBox(height: 20),
+                                            if (provider.isCapabilitySelectedById('memories'))
+                                              PromptTextField(
+                                                controller: provider.conversationPromptController,
+                                                label: context.l10n.conversationPrompt,
+                                                hint: context.l10n.conversationPromptPlaceholder,
+                                              ),
+                                          ],
+                                        ),
+                                      ),
                                     ),
-                                  ],
-                                ),
-
-                                if (provider.allowPaidApps) ...[
-                                  Padding(
-                                    padding: const EdgeInsets.symmetric(vertical: 16),
-                                    child: Divider(color: Colors.grey.shade800, height: 1),
                                   ),
-
-                                  // Paid toggle
+                                ],
+                              ),
+                            const ExternalTriggerFieldsWidget(),
+                            if (provider.isCapabilitySelectedById('proactive_notification'))
+                              Column(
+                                children: [
+                                  const SizedBox(height: 12),
+                                  Container(
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFF1F1F25),
+                                      borderRadius: BorderRadius.circular(18.0),
+                                    ),
+                                    padding: const EdgeInsets.symmetric(horizontal: 14.0, vertical: 20.0),
+                                    width: double.infinity,
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Padding(
+                                          padding: const EdgeInsets.only(left: 8.0),
+                                          child: Text(
+                                            context.l10n.notificationScopes,
+                                            style: TextStyle(color: Colors.grey.shade300, fontSize: 16),
+                                          ),
+                                        ),
+                                        const SizedBox(height: 16),
+                                        const NotificationScopesChipsWidget(),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            if (provider.isCapabilitySelectedById('external_integration') ||
+                                provider.isCapabilitySelectedById('proactive_notification'))
+                              Column(
+                                children: [
+                                  const SizedBox(height: 12),
+                                  Container(
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFF1F1F25),
+                                      borderRadius: BorderRadius.circular(18.0),
+                                    ),
+                                    padding: const EdgeInsets.all(14.0),
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Padding(
+                                          padding: const EdgeInsets.only(left: 8.0),
+                                          child: Text.rich(
+                                            TextSpan(
+                                              text: 'GitHub Repository URL',
+                                              style: TextStyle(color: Colors.grey.shade300, fontSize: 16),
+                                              children: const [
+                                                TextSpan(
+                                                  text: ' *',
+                                                  style: TextStyle(color: Colors.red),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ),
+                                        const SizedBox(height: 4),
+                                        Padding(
+                                          padding: const EdgeInsets.only(left: 8.0),
+                                          child: Text(
+                                            'Link to your app\'s source code repository',
+                                            style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
+                                          ),
+                                        ),
+                                        const SizedBox(height: 12),
+                                        TextFormField(
+                                          controller: provider.sourceCodeUrlController,
+                                          decoration: InputDecoration(
+                                            hintText: 'https://github.com/username/repo',
+                                            hintStyle: const TextStyle(color: Colors.grey),
+                                            border: OutlineInputBorder(
+                                              borderRadius: BorderRadius.circular(12),
+                                              borderSide: const BorderSide(color: Colors.grey),
+                                            ),
+                                            enabledBorder: OutlineInputBorder(
+                                              borderRadius: BorderRadius.circular(12),
+                                              borderSide: BorderSide(color: Colors.grey.shade800),
+                                            ),
+                                            focusedBorder: OutlineInputBorder(
+                                              borderRadius: BorderRadius.circular(12),
+                                              borderSide: const BorderSide(color: Colors.white),
+                                            ),
+                                            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                                          ),
+                                          style: const TextStyle(color: Colors.white),
+                                          keyboardType: TextInputType.url,
+                                          validator: (value) {
+                                            if (value == null || value.trim().isEmpty) {
+                                              return 'GitHub repository URL is required';
+                                            }
+                                            if (!Uri.tryParse(value.trim())!.isAbsolute) {
+                                              return 'Please enter a valid URL';
+                                            }
+                                            return null;
+                                          },
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            const SizedBox(height: 22),
+                            // App Settings Card
+                            Container(
+                              padding: const EdgeInsets.all(20),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF1F1F25),
+                                borderRadius: BorderRadius.circular(18),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  // Public toggle
                                   Row(
                                     children: [
                                       Container(
@@ -614,7 +530,7 @@ class _AddAppPageState extends State<AddAppPage> {
                                         ),
                                         child: Center(
                                           child: FaIcon(
-                                            FontAwesomeIcons.dollarSign,
+                                            provider.makeAppPublic ? FontAwesomeIcons.globe : FontAwesomeIcons.lock,
                                             color: Colors.grey.shade400,
                                             size: 16,
                                           ),
@@ -626,7 +542,7 @@ class _AddAppPageState extends State<AddAppPage> {
                                           crossAxisAlignment: CrossAxisAlignment.start,
                                           children: [
                                             Text(
-                                              context.l10n.paidApp,
+                                              context.l10n.makePublic,
                                               style: const TextStyle(
                                                 color: Colors.white,
                                                 fontSize: 16,
@@ -635,286 +551,326 @@ class _AddAppPageState extends State<AddAppPage> {
                                             ),
                                             const SizedBox(height: 2),
                                             Text(
-                                              provider.isPaid
-                                                  ? context.l10n.usersPayToUse
-                                                  : context.l10n.freeForEveryone,
-                                              style: TextStyle(
-                                                color: Colors.grey.shade500,
-                                                fontSize: 13,
-                                              ),
+                                              provider.makeAppPublic
+                                                  ? context.l10n.anyoneCanDiscover
+                                                  : context.l10n.onlyYouCanUse,
+                                              style: TextStyle(color: Colors.grey.shade500, fontSize: 13),
                                             ),
                                           ],
                                         ),
                                       ),
                                       Switch(
-                                        value: provider.isPaid,
+                                        value: provider.makeAppPublic,
                                         onChanged: (value) {
-                                          provider.setIsPaid(value);
+                                          provider.setIsPrivate(value);
                                         },
-                                        activeColor: const Color(0xFF22C55E),
+                                        activeColor: const Color(0xFF6366F1),
                                       ),
                                     ],
                                   ),
 
-                                  // Price input
-                                  if (provider.isPaid) ...[
-                                    const SizedBox(height: 16),
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                                      decoration: BoxDecoration(
-                                        color: const Color(0xFF2A2A2E),
-                                        borderRadius: BorderRadius.circular(14),
-                                      ),
-                                      child: Row(
-                                        children: [
-                                          const Text(
-                                            '\$',
-                                            style: TextStyle(
-                                              color: Colors.white,
-                                              fontSize: 20,
-                                              fontWeight: FontWeight.w600,
+                                  if (provider.allowPaidApps) ...[
+                                    Padding(
+                                      padding: const EdgeInsets.symmetric(vertical: 16),
+                                      child: Divider(color: Colors.grey.shade800, height: 1),
+                                    ),
+
+                                    // Paid toggle
+                                    Row(
+                                      children: [
+                                        Container(
+                                          width: 40,
+                                          height: 40,
+                                          decoration: BoxDecoration(
+                                            color: const Color(0xFF2A2A2E),
+                                            borderRadius: BorderRadius.circular(10),
+                                          ),
+                                          child: Center(
+                                            child: FaIcon(
+                                              FontAwesomeIcons.dollarSign,
+                                              color: Colors.grey.shade400,
+                                              size: 16,
                                             ),
                                           ),
-                                          const SizedBox(width: 8),
-                                          Expanded(
-                                            child: TextField(
-                                              controller: provider.priceController,
-                                              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                                              style: const TextStyle(
+                                        ),
+                                        const SizedBox(width: 14),
+                                        Expanded(
+                                          child: Column(
+                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            children: [
+                                              Text(
+                                                context.l10n.paidApp,
+                                                style: const TextStyle(
+                                                  color: Colors.white,
+                                                  fontSize: 16,
+                                                  fontWeight: FontWeight.w500,
+                                                ),
+                                              ),
+                                              const SizedBox(height: 2),
+                                              Text(
+                                                provider.isPaid
+                                                    ? context.l10n.usersPayToUse
+                                                    : context.l10n.freeForEveryone,
+                                                style: TextStyle(color: Colors.grey.shade500, fontSize: 13),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                        Switch(
+                                          value: provider.isPaid,
+                                          onChanged: (value) {
+                                            provider.setIsPaid(value);
+                                          },
+                                          activeColor: const Color(0xFF22C55E),
+                                        ),
+                                      ],
+                                    ),
+
+                                    // Price input
+                                    if (provider.isPaid) ...[
+                                      const SizedBox(height: 16),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xFF2A2A2E),
+                                          borderRadius: BorderRadius.circular(14),
+                                        ),
+                                        child: Row(
+                                          children: [
+                                            const Text(
+                                              '\$',
+                                              style: TextStyle(
                                                 color: Colors.white,
                                                 fontSize: 20,
                                                 fontWeight: FontWeight.w600,
                                               ),
-                                              decoration: InputDecoration(
-                                                hintText: '0.00',
-                                                hintStyle: TextStyle(
-                                                  color: Colors.grey.shade600,
+                                            ),
+                                            const SizedBox(width: 8),
+                                            Expanded(
+                                              child: TextField(
+                                                controller: provider.priceController,
+                                                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                                                style: const TextStyle(
+                                                  color: Colors.white,
                                                   fontSize: 20,
+                                                  fontWeight: FontWeight.w600,
                                                 ),
-                                                border: InputBorder.none,
-                                                isDense: true,
-                                                contentPadding: EdgeInsets.zero,
+                                                decoration: InputDecoration(
+                                                  hintText: '0.00',
+                                                  hintStyle: TextStyle(color: Colors.grey.shade600, fontSize: 20),
+                                                  border: InputBorder.none,
+                                                  isDense: true,
+                                                  contentPadding: EdgeInsets.zero,
+                                                ),
                                               ),
                                             ),
-                                          ),
-                                          Text(
-                                            context.l10n.perMonth,
-                                            style: TextStyle(
-                                              color: Colors.grey.shade500,
-                                              fontSize: 14,
+                                            Text(
+                                              context.l10n.perMonth,
+                                              style: TextStyle(color: Colors.grey.shade500, fontSize: 14),
                                             ),
-                                          ),
-                                        ],
+                                          ],
+                                        ),
                                       ),
-                                    ),
+                                    ],
                                   ],
                                 ],
-                              ],
+                              ),
                             ),
-                          ),
-                          const SizedBox(
-                            height: 106,
-                          ),
-                        ],
+                            const SizedBox(height: 106),
+                          ],
+                        ),
                       ),
                     ),
                   ),
                 ),
-              ),
-        bottomNavigationBar: (provider.isLoading || provider.isSubmitting)
-            ? null
-            : Container(
-                padding: const EdgeInsets.only(left: 16.0, right: 16, bottom: 30, top: 10),
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(12.0),
-                  color: const Color(0xFF1F1F25),
-                  gradient: LinearGradient(
-                    colors: [Colors.black, Colors.black.withValues(alpha: 0)],
-                    begin: Alignment.bottomCenter,
-                    end: Alignment.topCenter,
+          bottomNavigationBar: (provider.isLoading || provider.isSubmitting)
+              ? null
+              : Container(
+                  padding: const EdgeInsets.only(left: 16.0, right: 16, bottom: 30, top: 10),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(12.0),
+                    color: const Color(0xFF1F1F25),
+                    gradient: LinearGradient(
+                      colors: [Colors.black, Colors.black.withValues(alpha: 0)],
+                      begin: Alignment.bottomCenter,
+                      end: Alignment.topCenter,
+                    ),
                   ),
-                ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    GestureDetector(
-                      onTap: !provider.isValid
-                          ? null
-                          : () {
-                              var isValid = provider.validateForm();
-                              if (isValid) {
-                                showDialog(
-                                  context: context,
-                                  builder: (ctx) {
-                                    return ConfirmationDialog(
-                                      title: context.l10n.submitAppQuestion,
-                                      description: provider.makeAppPublic
-                                          ? context.l10n.submitAppPublicDescription
-                                          : context.l10n.submitAppPrivateDescription,
-                                      checkboxText: context.l10n.dontShowAgain,
-                                      checkboxValue: !showSubmitAppConfirmation,
-                                      onCheckboxChanged: (value) {
-                                        setState(() {
-                                          showSubmitAppConfirmation = !value;
-                                        });
-                                      },
-                                      onConfirm: () async {
-                                        if (provider.makeAppPublic) {
-                                          MixpanelManager().publicAppSubmitted({
-                                            'app_name': provider.appNameController.text,
-                                            'app_category': provider.appCategory,
-                                            'app_capabilities': provider.capabilities.map((e) => e.id).toList(),
-                                            'is_paid': provider.isPaid,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      GestureDetector(
+                        onTap: !provider.isValid
+                            ? null
+                            : () {
+                                var isValid = provider.validateForm();
+                                if (isValid) {
+                                  showDialog(
+                                    context: context,
+                                    builder: (ctx) {
+                                      return ConfirmationDialog(
+                                        title: context.l10n.submitAppQuestion,
+                                        description: provider.makeAppPublic
+                                            ? context.l10n.submitAppPublicDescription
+                                            : context.l10n.submitAppPrivateDescription,
+                                        checkboxText: context.l10n.dontShowAgain,
+                                        checkboxValue: !showSubmitAppConfirmation,
+                                        onCheckboxChanged: (value) {
+                                          setState(() {
+                                            showSubmitAppConfirmation = !value;
                                           });
-                                        } else {
-                                          MixpanelManager().privateAppSubmitted({
-                                            'app_name': provider.appNameController.text,
-                                            'app_category': provider.appCategory,
-                                            'app_capabilities': provider.capabilities.map((e) => e.id).toList(),
-                                            'is_paid': provider.isPaid,
-                                          });
-                                        }
-                                        SharedPreferencesUtil().showSubmitAppConfirmation = showSubmitAppConfirmation;
-                                        Navigator.pop(context);
-                                        String? appId = await provider.submitApp();
-                                        App? app;
-                                        if (appId != null) {
-                                          app = await context.read<AppProvider>().getAppFromId(appId);
-                                        }
-                                        var paymentProvider = context.read<PaymentMethodProvider>();
-                                        paymentProvider.getPaymentMethodsStatus();
-
-                                        if (app != null && mounted && context.mounted) {
-                                          if (app.isPaid && paymentProvider.activeMethod == null) {
-                                            showCupertinoModalPopup(
-                                              context: context,
-                                              builder: (ctx) => Container(
-                                                padding: const EdgeInsets.all(20),
-                                                decoration: BoxDecoration(
-                                                  color: const Color(0xFF1F1F25),
-                                                  borderRadius: const BorderRadius.vertical(
-                                                    top: Radius.circular(20),
-                                                  ),
-                                                ),
-                                                child: Material(
-                                                  color: Colors.transparent,
-                                                  child: Column(
-                                                    mainAxisSize: MainAxisSize.min,
-                                                    children: [
-                                                      Container(
-                                                        width: 40,
-                                                        height: 4,
-                                                        margin: const EdgeInsets.only(bottom: 20),
-                                                        decoration: BoxDecoration(
-                                                          color: Colors.grey.shade700,
-                                                          borderRadius: BorderRadius.circular(2),
-                                                        ),
-                                                      ),
-                                                      const SizedBox(height: 20),
-                                                      Text(
-                                                        context.l10n.startEarning,
-                                                        style: const TextStyle(
-                                                          color: Colors.white,
-                                                          fontSize: 24,
-                                                          fontWeight: FontWeight.bold,
-                                                        ),
-                                                      ),
-                                                      const SizedBox(height: 12),
-                                                      Text(
-                                                        context.l10n.connectStripeOrPayPal,
-                                                        textAlign: TextAlign.center,
-                                                        style: const TextStyle(
-                                                          color: Colors.grey,
-                                                          fontSize: 16,
-                                                        ),
-                                                      ),
-                                                      const SizedBox(height: 32),
-                                                      CupertinoButton(
-                                                        color: Colors.white,
-                                                        borderRadius: BorderRadius.circular(12),
-                                                        onPressed: () {
-                                                          Navigator.pop(ctx);
-                                                          routeToPage(context, const PaymentsPage());
-                                                        },
-                                                        child: Text(
-                                                          context.l10n.connectNow,
-                                                          style: const TextStyle(
-                                                            color: Colors.black,
-                                                            fontWeight: FontWeight.w600,
-                                                          ),
-                                                        ),
-                                                      ),
-                                                      const SizedBox(height: 8),
-                                                      CupertinoButton(
-                                                        onPressed: () => Navigator.pop(ctx),
-                                                        child: Text(
-                                                          context.l10n.maybeLater,
-                                                          style: TextStyle(
-                                                            color: Colors.grey.shade400,
-                                                          ),
-                                                        ),
-                                                      ),
-                                                      SizedBox(height: MediaQuery.of(context).padding.bottom),
-                                                    ],
-                                                  ),
-                                                ),
-                                              ),
-                                            );
+                                        },
+                                        onConfirm: () async {
+                                          if (provider.makeAppPublic) {
+                                            MixpanelManager().publicAppSubmitted({
+                                              'app_name': provider.appNameController.text,
+                                              'app_category': provider.appCategory,
+                                              'app_capabilities': provider.capabilities.map((e) => e.id).toList(),
+                                              'is_paid': provider.isPaid,
+                                            });
                                           } else {
-                                            Navigator.pop(context);
-                                            routeToPage(context, AppDetailPage(app: app));
+                                            MixpanelManager().privateAppSubmitted({
+                                              'app_name': provider.appNameController.text,
+                                              'app_category': provider.appCategory,
+                                              'app_capabilities': provider.capabilities.map((e) => e.id).toList(),
+                                              'is_paid': provider.isPaid,
+                                            });
                                           }
-                                        }
-                                      },
-                                      onCancel: () {
-                                        Navigator.pop(context);
-                                      },
-                                    );
-                                  },
-                                );
-                              }
-                            },
-                      child: Container(
-                        padding: const EdgeInsets.all(12.0),
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(12.0),
-                          color: provider.isValid ? Colors.white : Colors.grey.shade700,
+                                          SharedPreferencesUtil().showSubmitAppConfirmation = showSubmitAppConfirmation;
+                                          Navigator.pop(context);
+                                          String? appId = await provider.submitApp();
+                                          App? app;
+                                          if (appId != null) {
+                                            app = await context.read<AppProvider>().getAppFromId(appId);
+                                          }
+                                          var paymentProvider = context.read<PaymentMethodProvider>();
+                                          paymentProvider.getPaymentMethodsStatus();
+
+                                          if (app != null && mounted && context.mounted) {
+                                            if (app.isPaid && paymentProvider.activeMethod == null) {
+                                              showCupertinoModalPopup(
+                                                context: context,
+                                                builder: (ctx) => Container(
+                                                  padding: const EdgeInsets.all(20),
+                                                  decoration: BoxDecoration(
+                                                    color: const Color(0xFF1F1F25),
+                                                    borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+                                                  ),
+                                                  child: Material(
+                                                    color: Colors.transparent,
+                                                    child: Column(
+                                                      mainAxisSize: MainAxisSize.min,
+                                                      children: [
+                                                        Container(
+                                                          width: 40,
+                                                          height: 4,
+                                                          margin: const EdgeInsets.only(bottom: 20),
+                                                          decoration: BoxDecoration(
+                                                            color: Colors.grey.shade700,
+                                                            borderRadius: BorderRadius.circular(2),
+                                                          ),
+                                                        ),
+                                                        const SizedBox(height: 20),
+                                                        Text(
+                                                          context.l10n.startEarning,
+                                                          style: const TextStyle(
+                                                            color: Colors.white,
+                                                            fontSize: 24,
+                                                            fontWeight: FontWeight.bold,
+                                                          ),
+                                                        ),
+                                                        const SizedBox(height: 12),
+                                                        Text(
+                                                          context.l10n.connectStripeOrPayPal,
+                                                          textAlign: TextAlign.center,
+                                                          style: const TextStyle(color: Colors.grey, fontSize: 16),
+                                                        ),
+                                                        const SizedBox(height: 32),
+                                                        CupertinoButton(
+                                                          color: Colors.white,
+                                                          borderRadius: BorderRadius.circular(12),
+                                                          onPressed: () {
+                                                            Navigator.pop(ctx);
+                                                            routeToPage(context, const PaymentsPage());
+                                                          },
+                                                          child: Text(
+                                                            context.l10n.connectNow,
+                                                            style: const TextStyle(
+                                                              color: Colors.black,
+                                                              fontWeight: FontWeight.w600,
+                                                            ),
+                                                          ),
+                                                        ),
+                                                        const SizedBox(height: 8),
+                                                        CupertinoButton(
+                                                          onPressed: () => Navigator.pop(ctx),
+                                                          child: Text(
+                                                            context.l10n.maybeLater,
+                                                            style: TextStyle(color: Colors.grey.shade400),
+                                                          ),
+                                                        ),
+                                                        SizedBox(height: MediaQuery.of(context).padding.bottom),
+                                                      ],
+                                                    ),
+                                                  ),
+                                                ),
+                                              );
+                                            } else {
+                                              Navigator.pop(context);
+                                              routeToPage(context, AppDetailPage(app: app));
+                                            }
+                                          }
+                                        },
+                                        onCancel: () {
+                                          Navigator.pop(context);
+                                        },
+                                      );
+                                    },
+                                  );
+                                }
+                              },
+                        child: Container(
+                          padding: const EdgeInsets.all(12.0),
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(12.0),
+                            color: provider.isValid ? Colors.white : Colors.grey.shade700,
+                          ),
+                          child: Text(
+                            context.l10n.submitApp,
+                            style: const TextStyle(color: Colors.black, fontSize: 16),
+                            textAlign: TextAlign.center,
+                          ),
                         ),
-                        child: Text(
-                          context.l10n.submitApp,
-                          style: const TextStyle(color: Colors.black, fontSize: 16),
+                      ),
+                      const SizedBox(height: 10),
+                      GestureDetector(
+                        onTap: () {
+                          launchUrl(Uri.parse('https://omi.me/pages/privacy'));
+                        },
+                        child: Text.rich(
+                          TextSpan(
+                            text: context.l10n.bySubmittingYouAgreeToOmi,
+                            style: TextStyle(color: Colors.grey.shade600, fontSize: 10),
+                            children: [
+                              TextSpan(
+                                text: context.l10n.termsAndPrivacyPolicy,
+                                style: TextStyle(
+                                  color: Colors.grey.shade500,
+                                  fontSize: 10,
+                                  decoration: TextDecoration.underline,
+                                ),
+                              ),
+                            ],
+                          ),
                           textAlign: TextAlign.center,
                         ),
                       ),
-                    ),
-                    const SizedBox(height: 10),
-                    GestureDetector(
-                      onTap: () {
-                        launchUrl(Uri.parse('https://omi.me/pages/privacy'));
-                      },
-                      child: Text.rich(
-                        TextSpan(
-                          text: context.l10n.bySubmittingYouAgreeToOmi,
-                          style: TextStyle(color: Colors.grey.shade600, fontSize: 10),
-                          children: [
-                            TextSpan(
-                              text: context.l10n.termsAndPrivacyPolicy,
-                              style: TextStyle(
-                                color: Colors.grey.shade500,
-                                fontSize: 10,
-                                decoration: TextDecoration.underline,
-                              ),
-                            ),
-                          ],
-                        ),
-                        textAlign: TextAlign.center,
-                      ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
-              ),
-      );
-    });
+        );
+      },
+    );
   }
 }

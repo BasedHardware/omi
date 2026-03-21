@@ -49,11 +49,7 @@ class HttpPoolManager {
     return future;
   }
 
-  Future<http.Response> _executeWithRetry(
-    http.Request Function() requestBuilder,
-    Duration timeout,
-    int retries,
-  ) async {
+  Future<http.Response> _executeWithRetry(http.Request Function() requestBuilder, Duration timeout, int retries) async {
     http.Response? lastResponse;
     Object? lastError;
 

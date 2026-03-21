@@ -32,10 +32,7 @@ class _DeviceAnimationWidgetState extends State<DeviceAnimationWidget> with Tick
 
   @override
   void initState() {
-    _controller = AnimationController(
-      duration: const Duration(milliseconds: 2000),
-      vsync: this,
-    )..repeat(reverse: true);
+    _controller = AnimationController(duration: const Duration(milliseconds: 2000), vsync: this)..repeat(reverse: true);
     _animation = Tween<double>(begin: 1, end: 0.8).animate(_controller);
     super.initState();
   }
@@ -59,24 +56,21 @@ class _DeviceAnimationWidgetState extends State<DeviceAnimationWidget> with Tick
                     child: AnimatedBuilder(
                       animation: _animation,
                       builder: (context, child) {
-                        return Transform.scale(
-                          scale: _animation.value,
-                          child: child,
-                        );
+                        return Transform.scale(scale: _animation.value, child: child);
                       },
                       child: Image.asset(
                         Assets.images.blob.path,
                         height: (MediaQuery.sizeOf(context).height <= 700 ? 360 : 390) * widget.sizeMultiplier,
                         width: (MediaQuery.sizeOf(context).height <= 700 ? 360 : 390) * widget.sizeMultiplier,
-                        cacheHeight:
-                            ((MediaQuery.sizeOf(context).height <= 700 ? 360 : 390) * widget.sizeMultiplier).round(),
-                        cacheWidth:
-                            ((MediaQuery.sizeOf(context).height <= 700 ? 360 : 390) * widget.sizeMultiplier).round(),
+                        cacheHeight: ((MediaQuery.sizeOf(context).height <= 700 ? 360 : 390) * widget.sizeMultiplier)
+                            .round(),
+                        cacheWidth: ((MediaQuery.sizeOf(context).height <= 700 ? 360 : 390) * widget.sizeMultiplier)
+                            .round(),
                       ),
                     ),
                   )
                 : const SizedBox.shrink(),
-            _buildDeviceImage()
+            _buildDeviceImage(),
           ],
         ),
       ),
@@ -111,13 +105,7 @@ class _DeviceAnimationWidgetState extends State<DeviceAnimationWidget> with Tick
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 color: Colors.blue.withOpacity(0.8),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.blue.withOpacity(0.5),
-                    blurRadius: 8,
-                    spreadRadius: 2,
-                  ),
-                ],
+                boxShadow: [BoxShadow(color: Colors.blue.withOpacity(0.5), blurRadius: 8, spreadRadius: 2)],
               ),
             ),
           ),

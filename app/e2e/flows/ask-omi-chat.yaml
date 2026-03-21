@@ -1,0 +1,113 @@
+# E2E Flow: Ask Omi Chat — core AI chat feature
+# Tests: Navigate to chat, send text message, receive AI response, view chat apps, multi-turn conversation
+# Top 1 core feature: the primary AI interaction without Omi hardware
+
+version: 2
+name: ask-omi-chat
+description: Ask Omi chat flow — send text messages, receive AI streaming responses, browse chat apps, multi-turn conversation
+app: com.friend.ios.dev
+evidence:
+  video: true
+covers:
+  - app/lib/pages/chat/page.dart
+  - app/lib/pages/chat/widgets/ai_message.dart
+  - app/lib/pages/chat/widgets/user_message.dart
+  - app/lib/pages/chat/widgets/voice_recorder_widget.dart
+  - app/lib/pages/chat/widgets/files_handler_widget.dart
+  - app/lib/pages/chat/widgets/message_action_menu.dart
+  - app/lib/providers/message_provider.dart
+  - app/lib/backend/http/api/messages.dart
+  - app/lib/pages/home/page.dart
+preconditions:
+  - auth_ready  # User signed in and onboarding completed. App shows home screen.
+
+steps:
+  - id: S1
+    name: Verify home screen
+    do: "Verify home screen is showing with conversations, Ask Omi button, and bottom navigation bar."
+    verify: true
+    expect:
+      - kind: interactive_count
+        min: 4
+      - kind: text_visible
+        values: ["Ask Omi"]
+    evidence:
+      - screenshot: step-S1.webp
+    note: "Home screen has 4 bottom nav tabs, Ask Omi button (purple pill), record button (center), conversations list."
+
+  - id: S2
+    name: Tap Ask Omi button
+    do: "Tap the 'Ask Omi' button on the home screen. It is a purple pill-shaped button overlaying the bottom-right of the conversations list. Use ADB coordinates — the button center is at approximately x=900, y=2004 on 1080x2400 device."
+    evidence:
+      - screenshot: step-S2.webp
+    note: "The Ask Omi button overlaps with conversation items. Precise coordinates needed to avoid opening a conversation instead."
+
+  - id: S3
+    name: Verify chat page loaded
+    do: "Verify the chat page is showing with Omi header, initial AI message with capabilities, text input field, plus button, and microphone button."
+    verify: true
+    expect:
+      - kind: text_visible
+        values: ["Omi"]
+      - kind: interactive_count
+        min: 5
+    evidence:
+      - screenshot: step-S3.webp
+    note: "Chat page shows: back button, 'Omi' header with avatar, extension icon (chat apps drawer), initial AI message listing capabilities, 'Ask anything' text field, (+) button for files, mic button."
+
+  - id: S4
+    name: Type and send a message
+    do: "Tap the 'Ask anything' text field via ADB (center of field). Type 'Hello' using ADB input text. Verify the send button (up arrow) appears. Tap the send button."
+    evidence:
+      - screenshot: step-S4.webp
+    note: "Use ADB input for text entry — Marionette fill may not work on this TextField. Send button appears only when text is present. Keyboard opens on field tap."
+
+  - id: S5
+    name: Verify user message appears
+    do: "Verify the user message 'Hello' appears as a right-aligned dark bubble in the chat."
+    verify: true
+    expect:
+      - kind: text_visible
+        values: ["Hello"]
+    evidence:
+      - screenshot: step-S5.webp
+
+  - id: S6
+    name: Verify AI response received
+    do: "Wait up to 10 seconds for the AI response to stream in. Verify an AI response appears below the user message with message action icons (copy, thumbs up, share, reply)."
+    verify: true
+    expect:
+      - kind: interactive_count
+        min: 6
+    evidence:
+      - screenshot: step-S6.webp
+    note: "AI response streams via SSE (Server-Sent Events). Response shows typing indicator during streaming. Message action icons appear below the completed response. Response is personalized (uses user's name)."
+
+  - id: S7
+    name: Open chat apps drawer
+    do: "Tap the extension icon (puzzle piece) at the top-right of the chat header to open the chat apps end drawer."
+    evidence:
+      - screenshot: step-S7.webp
+    note: "The drawer slides from the right side. Contains: Clear Chat, Enable Apps, and a list of available chat apps (Omi is selected by default)."
+
+  - id: S8
+    name: Verify chat apps drawer content
+    do: "Verify the chat apps drawer shows 'Chat Apps' header, 'Clear Chat' option, 'Enable Apps' option, and at least one app (Omi) selected."
+    verify: true
+    expect:
+      - kind: text_visible
+        values: ["Chat Apps"]
+    evidence:
+      - screenshot: step-S8.webp
+    note: "Available apps depend on user's enabled apps. Omi is always present as default. Each non-default app has a delete icon."
+
+  - id: S9
+    name: Close drawer and return to home
+    do: "Close the chat apps drawer by tapping X button or swiping. Then press Android back button to return to the home screen."
+    verify: true
+    expect:
+      - kind: interactive_count
+        min: 4
+    evidence:
+      - screenshot: step-S9.webp
+    note: "First back press closes the drawer if open. Second back press returns to home screen. Chat messages persist across re-entry."

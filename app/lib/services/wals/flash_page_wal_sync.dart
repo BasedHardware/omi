@@ -128,20 +128,22 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
       var pd = await _device!.getDeviceInfo(connection);
       String deviceModel = pd.modelNumber.isNotEmpty ? pd.modelNumber : "Limitless";
 
-      wals.add(Wal(
-        codec: BleAudioCodec.opus,
-        timerStart: timerStart,
-        status: WalStatus.miss,
-        storage: WalStorage.flashPage,
-        seconds: estimatedSeconds,
-        storageOffset: _oldestPage,
-        storageTotalBytes: _newestPage,
-        fileNum: _currentSession,
-        device: _device!.id,
-        deviceModel: deviceModel,
-        totalFrames: pageCount * framesPerFlashPage,
-        syncedFrameOffset: 0,
-      ));
+      wals.add(
+        Wal(
+          codec: BleAudioCodec.opus,
+          timerStart: timerStart,
+          status: WalStatus.miss,
+          storage: WalStorage.flashPage,
+          seconds: estimatedSeconds,
+          storageOffset: _oldestPage,
+          storageTotalBytes: _newestPage,
+          fileNum: _currentSession,
+          device: _device!.id,
+          deviceModel: deviceModel,
+          totalFrames: pageCount * framesPerFlashPage,
+          syncedFrameOffset: 0,
+        ),
+      );
     }
 
     return wals;
@@ -358,7 +360,8 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
           if (filePath != null) {
             filesSaved++;
             Logger.debug(
-                "FlashPageSync: Saved batch #$filesSaved to disk (${accumulatedFrames.length} frames, ts=$batchMinTimestamp)");
+              "FlashPageSync: Saved batch #$filesSaved to disk (${accumulatedFrames.length} frames, ts=$batchMinTimestamp)",
+            );
 
             if (lastProcessedIndex != null) {
               try {
@@ -414,7 +417,8 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
               final remainingPages = endPage - lastProcessedIndex;
               wal.seconds = (remainingPages * secondsPerFlashPage).round();
               Logger.debug(
-                  "FlashPageSync: Updated WAL - new start page: ${wal.storageOffset}, remaining: $remainingPages pages");
+                "FlashPageSync: Updated WAL - new start page: ${wal.storageOffset}, remaining: $remainingPages pages",
+              );
             } catch (e) {
               Logger.debug("FlashPageSync: Cancel ACK failed: $e");
             }

@@ -51,10 +51,7 @@ mixin FirmwareMixin<T extends StatefulWidget> on State<T> {
       await destinationDir.create();
 
       // Extract ZIP file
-      await ZipFile.extractToDirectory(
-        zipFile: firmwareFile,
-        destinationDir: destinationDir,
-      );
+      await ZipFile.extractToDirectory(zipFile: firmwareFile, destinationDir: destinationDir);
 
       // Read and parse manifest.json
       final manifestFile = File('${destinationDir.path}/manifest.json');
@@ -67,10 +64,7 @@ mixin FirmwareMixin<T extends StatefulWidget> on State<T> {
       for (final file in manifest.files) {
         final firmwareFile = File('${destinationDir.path}/${file.file}');
         final firmwareFileData = await firmwareFile.readAsBytes();
-        final image = mcumgr.Image(
-          image: file.image,
-          data: firmwareFileData,
-        );
+        final image = mcumgr.Image(image: file.image, data: firmwareFileData);
         firmwareImages.add(image);
       }
 
@@ -156,13 +150,10 @@ mixin FirmwareMixin<T extends StatefulWidget> on State<T> {
     updateManager.logger.logMessageStream
         .where((log) => log.level.rawValue > 1) // Filter debug messages
         .listen((log) {
-      Logger.debug('dfu log: ${log.message}');
-    });
+          Logger.debug('dfu log: ${log.message}');
+        });
 
-    await updateManager.update(
-      images,
-      configuration: configuration,
-    );
+    await updateManager.update(images, configuration: configuration);
   }
 
   Future<void> startLegacyDfu(BtDevice btDevice, {bool fileInAssets = false}) async {
@@ -184,10 +175,7 @@ mixin FirmwareMixin<T extends StatefulWidget> on State<T> {
         forceScanningForNewAddressInLegacyDfu: true,
         connectionTimeout: 60,
       ),
-      androidSpecialParameter: const AndroidSpecialParameter(
-        packetReceiptNotificationsEnabled: true,
-        rebootTime: 1000,
-      ),
+      androidSpecialParameter: const AndroidSpecialParameter(packetReceiptNotificationsEnabled: true, rebootTime: 1000),
       onProgressChanged: (deviceAddress, percent, speed, avgSpeed, currentPart, partsTotal) {
         Logger.debug('deviceAddress: $deviceAddress, percent: $percent');
         setState(() {
@@ -219,11 +207,12 @@ mixin FirmwareMixin<T extends StatefulWidget> on State<T> {
     );
   }
 
-  Future getLatestVersion(
-      {required String deviceModelNumber,
-      required String firmwareRevision,
-      required String hardwareRevision,
-      required String manufacturerName}) async {
+  Future getLatestVersion({
+    required String deviceModelNumber,
+    required String firmwareRevision,
+    required String hardwareRevision,
+    required String manufacturerName,
+  }) async {
     latestFirmwareDetails = await getLatestFirmwareVersion(
       deviceModelNumber: deviceModelNumber,
       firmwareRevision: firmwareRevision,
@@ -240,7 +229,9 @@ mixin FirmwareMixin<T extends StatefulWidget> on State<T> {
 
   Future<(String, bool, String)> shouldUpdateFirmware({required String currentFirmware}) async {
     return DeviceUtils.shouldUpdateFirmware(
-        currentFirmware: currentFirmware, latestFirmwareDetails: latestFirmwareDetails);
+      currentFirmware: currentFirmware,
+      latestFirmwareDetails: latestFirmwareDetails,
+    );
   }
 
   Future downloadFirmware() async {
@@ -272,44 +263,48 @@ mixin FirmwareMixin<T extends StatefulWidget> on State<T> {
       List<List<int>> chunks = [];
       int downloaded = 0;
 
-      r.stream.listen((List<int> chunk) {
-        chunks.add(chunk);
-        downloaded += chunk.length;
-        if (totalBytes != null && totalBytes > 0) {
-          Logger.debug('downloadPercentage: ${downloaded / totalBytes * 100}');
-          setState(() {
-            downloadProgress = (downloaded / totalBytes * 100).toInt();
-          });
-        }
-      }, onDone: () async {
-        try {
-          Logger.debug('downloadPercentage: 100');
-          File file = File('$dir/firmware.zip');
-          final Uint8List bytes = Uint8List(downloaded);
-          int offset = 0;
-          for (List<int> chunk in chunks) {
-            bytes.setRange(offset, offset + chunk.length, chunk);
-            offset += chunk.length;
+      r.stream.listen(
+        (List<int> chunk) {
+          chunks.add(chunk);
+          downloaded += chunk.length;
+          if (totalBytes != null && totalBytes > 0) {
+            Logger.debug('downloadPercentage: ${downloaded / totalBytes * 100}');
+            setState(() {
+              downloadProgress = (downloaded / totalBytes * 100).toInt();
+            });
           }
-          await file.writeAsBytes(bytes);
+        },
+        onDone: () async {
+          try {
+            Logger.debug('downloadPercentage: 100');
+            File file = File('$dir/firmware.zip');
+            final Uint8List bytes = Uint8List(downloaded);
+            int offset = 0;
+            for (List<int> chunk in chunks) {
+              bytes.setRange(offset, offset + chunk.length, chunk);
+              offset += chunk.length;
+            }
+            await file.writeAsBytes(bytes);
+            setState(() {
+              isDownloading = false;
+              isDownloaded = true;
+              downloadProgress = 100;
+            });
+            completer.complete();
+          } catch (e) {
+            completer.completeError(e);
+          }
+        },
+        onError: (error) {
+          Logger.debug('Download error: $error');
           setState(() {
             isDownloading = false;
-            isDownloaded = true;
-            downloadProgress = 100;
           });
-          completer.complete();
-        } catch (e) {
-          completer.completeError(e);
-        }
-      }, onError: (error) {
-        Logger.debug('Download error: $error');
-        setState(() {
-          isDownloading = false;
-        });
-        final deviceProvider = Provider.of<DeviceProvider>(context, listen: false);
-        deviceProvider.resetFirmwareUpdateState();
-        completer.completeError(error);
-      });
+          final deviceProvider = Provider.of<DeviceProvider>(context, listen: false);
+          deviceProvider.resetFirmwareUpdateState();
+          completer.completeError(error);
+        },
+      );
 
       await completer.future;
     } catch (e) {

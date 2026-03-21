@@ -3,12 +3,12 @@
   "flow": "login",
   "flowHash": "0fea9f5cd49e2e16",
   "device": {
-    "model": "emulator-5554",
+    "model": "unknown",
     "resolution": "unknown"
   },
-  "createdAt": "2026-03-16T02:29:09.455Z",
-  "runId": "tPFvQ54",
-  "totalDurationMs": 0,
+  "createdAt": "2026-03-16T06:32:24.140Z",
+  "runId": "LMNp_cs",
+  "totalDurationMs": 531593,
   "verifySteps": [
     "S1",
     "S2",
@@ -17,98 +17,60 @@
   "steps": {
     "S1": {
       "kind": "action",
-      "waitAfterMs": 500,
-      "durationMs": 0,
-      "command": "snapshot",
-      "ref": "e2",
-      "text": "Sign in with Google",
-      "type": "button",
-      "bounds": {
-        "x": 32,
-        "y": 789,
-        "width": 347,
-        "height": 56
-      },
-      "center": {
-        "x": 206,
-        "y": 817
-      }
+      "waitAfterMs": 6037,
+      "durationMs": 10467,
+      "ref": "screen",
+      "text": "Auth screen",
+      "type": "Screen"
     },
     "S2": {
       "kind": "action",
-      "waitAfterMs": 500,
-      "durationMs": 0,
-      "command": "press",
-      "ref": "e2",
+      "waitAfterMs": 200,
+      "durationMs": 58751,
+      "ref": "e3",
       "text": "Sign in with Google",
-      "type": "button",
+      "type": "ElevatedButton",
       "bounds": {
         "x": 32,
-        "y": 789,
-        "width": 347,
+        "y": 705,
+        "width": 338,
         "height": 56
       },
       "center": {
-        "x": 206,
-        "y": 817
+        "x": 201,
+        "y": 733
       }
     },
     "S3": {
       "kind": "action",
-      "waitAfterMs": 500,
-      "durationMs": 0,
-      "command": "press",
+      "waitAfterMs": 22367,
+      "durationMs": 12579,
       "ref": "e1",
       "text": "Continue with Google",
-      "type": "button",
+      "type": "ElevatedButton",
       "bounds": {
         "x": 24,
-        "y": 754,
-        "width": 363,
+        "y": 704,
+        "width": 354,
         "height": 50
       },
       "center": {
-        "x": 206,
-        "y": 779
+        "x": 201,
+        "y": 729
       }
     },
     "S4": {
       "kind": "action",
-      "waitAfterMs": 500,
-      "durationMs": 0,
-      "command": "auto",
-      "ref": "cached",
-      "text": "Cached Google account auto-selected",
-      "type": "system",
-      "bounds": {
-        "x": 0,
-        "y": 0,
-        "width": 0,
-        "height": 0
-      },
-      "center": {
-        "x": 0,
-        "y": 0
-      }
+      "waitAfterMs": 200,
+      "durationMs": 42448,
+      "ref": "firebase_auth",
+      "text": "signInWithCustomToken(R2IxlZVs8sRU20j9jLNTBiiFAoO2)",
+      "type": "VMService"
     },
     "S5": {
-      "kind": "action",
+      "kind": "verify",
       "waitAfterMs": 500,
-      "durationMs": 0,
-      "command": "snapshot",
-      "ref": "e3",
-      "text": "Continue",
-      "type": "button",
-      "bounds": {
-        "x": 32,
-        "y": 826,
-        "width": 347,
-        "height": 56
-      },
-      "center": {
-        "x": 206,
-        "y": 854
-      }
+      "durationMs": 378939
     }
   }
 }

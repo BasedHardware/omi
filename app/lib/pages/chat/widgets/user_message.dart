@@ -37,10 +37,7 @@ class HumanMessage extends StatelessWidget {
               child: Container(
                 constraints: const BoxConstraints(maxWidth: 300),
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                decoration: BoxDecoration(
-                  color: Colors.transparent,
-                  borderRadius: BorderRadius.circular(12),
-                ),
+                decoration: BoxDecoration(color: Colors.transparent, borderRadius: BorderRadius.circular(12)),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
@@ -49,10 +46,7 @@ class HumanMessage extends StatelessWidget {
                     Flexible(
                       child: Text(
                         contextText.length > 50 ? '${contextText.substring(0, 50)}...' : contextText,
-                        style: TextStyle(
-                          color: Colors.grey.shade500,
-                          fontSize: 13,
-                        ),
+                        style: TextStyle(color: Colors.grey.shade500, fontSize: 13),
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                       ),
@@ -65,10 +59,7 @@ class HumanMessage extends StatelessWidget {
             alignment: WrapAlignment.end,
             children: [
               Container(
-                decoration: BoxDecoration(
-                  color: const Color(0xFF1f1f25),
-                  borderRadius: BorderRadius.circular(20.0),
-                ),
+                decoration: BoxDecoration(color: const Color(0xFF1f1f25), borderRadius: BorderRadius.circular(20.0)),
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                 child: SelectableText(
                   messageText.trimRight(),

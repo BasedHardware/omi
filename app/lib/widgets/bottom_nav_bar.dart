@@ -32,11 +32,7 @@ class _TabBarConstants {
 }
 
 class BottomNavBar extends StatelessWidget {
-  const BottomNavBar({
-    super.key,
-    required this.onTabTap,
-    this.showCenterButton = true,
-  });
+  const BottomNavBar({super.key, required this.onTabTap, this.showCenterButton = true});
 
   final void Function(int index, bool isRepeat) onTabTap;
   final bool showCenterButton;
@@ -163,10 +159,7 @@ class BottomNavBar extends StatelessWidget {
                           ),
                         ),
                         child: isInitializing
-                            ? const CircularProgressIndicator(
-                                color: Colors.white,
-                                strokeWidth: 2,
-                              )
+                            ? const CircularProgressIndicator(color: Colors.white, strokeWidth: 2)
                             : Icon(
                                 isRecording ? FontAwesomeIcons.stop : FontAwesomeIcons.microphone,
                                 color: Colors.white,
@@ -225,9 +218,7 @@ class BottomNavBar extends StatelessWidget {
             : null;
         Navigator.push(
           context,
-          MaterialPageRoute(
-            builder: (context) => ConversationCapturingPage(topConversationId: topConvoId),
-          ),
+          MaterialPageRoute(builder: (context) => ConversationCapturingPage(topConversationId: topConvoId)),
         );
       }
     }

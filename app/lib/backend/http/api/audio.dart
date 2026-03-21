@@ -11,12 +11,7 @@ class AudioFileUrlInfo {
   final String? signedUrl;
   final double duration;
 
-  AudioFileUrlInfo({
-    required this.id,
-    required this.status,
-    this.signedUrl,
-    required this.duration,
-  });
+  AudioFileUrlInfo({required this.id, required this.status, this.signedUrl, required this.duration});
 
   factory AudioFileUrlInfo.fromJson(Map<String, dynamic> json) {
     return AudioFileUrlInfo(
@@ -30,11 +25,7 @@ class AudioFileUrlInfo {
   bool get isCached => status == 'cached' && signedUrl != null;
 }
 
-String getAudioStreamUrl({
-  required String conversationId,
-  required String audioFileId,
-  String format = 'wav',
-}) {
+String getAudioStreamUrl({required String conversationId, required String audioFileId, String format = 'wav'}) {
   return '${Env.apiBaseUrl}v1/sync/audio/$conversationId/$audioFileId?format=$format';
 }
 
@@ -44,11 +35,7 @@ List<String> getConversationAudioUrls({
   String format = 'wav',
 }) {
   return audioFileIds
-      .map((audioFileId) => getAudioStreamUrl(
-            conversationId: conversationId,
-            audioFileId: audioFileId,
-            format: format,
-          ))
+      .map((audioFileId) => getAudioStreamUrl(conversationId: conversationId, audioFileId: audioFileId, format: format))
       .toList();
 }
 

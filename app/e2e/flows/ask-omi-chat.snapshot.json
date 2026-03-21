@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "flow": "ask-omi-chat",
+  "flowHash": "a2a2a6554f8ce691",
+  "device": {
+    "model": "unknown",
+    "resolution": "unknown"
+  },
+  "createdAt": "2026-03-17T10:36:41.646Z",
+  "runId": "gdkT6-U",
+  "totalDurationMs": 0,
+  "verifySteps": [],
+  "steps": {}
+}

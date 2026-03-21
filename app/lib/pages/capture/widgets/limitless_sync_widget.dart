@@ -23,8 +23,9 @@ class LimitlessSyncCardWidget extends StatelessWidget {
         }
 
         // Check if there are pending flash pages
-        final pendingFlashPages =
-            syncProvider.allWals.where((w) => w.storage == WalStorage.flashPage && w.status == WalStatus.miss).toList();
+        final pendingFlashPages = syncProvider.allWals
+            .where((w) => w.storage == WalStorage.flashPage && w.status == WalStatus.miss)
+            .toList();
 
         if (pendingFlashPages.isEmpty && !syncProvider.isSyncing) {
           return const SizedBox();
@@ -45,19 +46,12 @@ class LimitlessSyncCardWidget extends StatelessWidget {
             children: [
               Row(
                 children: [
-                  const Icon(
-                    Icons.sync,
-                    color: Colors.white70,
-                    size: 22,
-                  ),
+                  const Icon(Icons.sync, color: Colors.white70, size: 22),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Text(
                       isSyncing ? context.l10n.syncingYourRecordings : context.l10n.syncYourRecordings,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 16,
-                      ),
+                      style: const TextStyle(color: Colors.white, fontSize: 16),
                     ),
                   ),
                   if (!isSyncing)
@@ -67,20 +61,14 @@ class LimitlessSyncCardWidget extends StatelessWidget {
                         backgroundColor: context.primaryColor,
                         foregroundColor: Colors.white,
                         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
-                        ),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                       ),
                       child: Text(context.l10n.syncNow),
                     )
                   else
                     Text(
                       '${(progress * 100).toInt()}%',
-                      style: const TextStyle(
-                        color: Colors.white70,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                      ),
+                      style: const TextStyle(color: Colors.white70, fontSize: 14, fontWeight: FontWeight.w600),
                     ),
                 ],
               ),

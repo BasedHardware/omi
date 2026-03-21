@@ -33,10 +33,7 @@ const List<String> folderIcons = folderIconStrings;
 class CreateFolderBottomSheet extends StatefulWidget {
   final Folder? folderToEdit;
 
-  const CreateFolderBottomSheet({
-    super.key,
-    this.folderToEdit,
-  });
+  const CreateFolderBottomSheet({super.key, this.folderToEdit});
 
   @override
   State<CreateFolderBottomSheet> createState() => _CreateFolderBottomSheetState();
@@ -73,12 +70,9 @@ class _CreateFolderBottomSheetState extends State<CreateFolderBottomSheet> {
   Future<void> _handleSubmit() async {
     final name = _nameController.text.trim();
     if (name.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(context.l10n.pleaseEnterFolderName),
-          backgroundColor: Colors.red,
-        ),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(context.l10n.pleaseEnterFolderName), backgroundColor: Colors.red));
       return;
     }
 
@@ -100,10 +94,7 @@ class _CreateFolderBottomSheetState extends State<CreateFolderBottomSheet> {
         success = result != null;
 
         if (success) {
-          MixpanelManager().folderUpdated(
-            folderId: widget.folderToEdit!.id,
-            folderName: name,
-          );
+          MixpanelManager().folderUpdated(folderId: widget.folderToEdit!.id, folderName: name);
         }
       } else {
         final result = await folderProvider.createFolder(
@@ -115,12 +106,7 @@ class _CreateFolderBottomSheetState extends State<CreateFolderBottomSheet> {
         success = result != null;
 
         if (result != null) {
-          MixpanelManager().folderCreated(
-            folderId: result.id,
-            folderName: name,
-            icon: _selectedIcon,
-            color: colorHex,
-          );
+          MixpanelManager().folderCreated(folderId: result.id, folderName: name, icon: _selectedIcon, color: colorHex);
         }
       }
 
@@ -144,9 +130,7 @@ class _CreateFolderBottomSheetState extends State<CreateFolderBottomSheet> {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: EdgeInsets.only(
-        bottom: MediaQuery.of(context).viewInsets.bottom,
-      ),
+      padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
       child: Container(
         decoration: const BoxDecoration(
           color: ResponsiveHelper.backgroundSecondary,
@@ -177,9 +161,7 @@ class _CreateFolderBottomSheetState extends State<CreateFolderBottomSheet> {
                           width: 16,
                           child: CircularProgressIndicator(
                             strokeWidth: 2,
-                            valueColor: AlwaysStoppedAnimation<Color>(
-                              ResponsiveHelper.purplePrimary,
-                            ),
+                            valueColor: AlwaysStoppedAnimation<Color>(ResponsiveHelper.purplePrimary),
                           ),
                         )
                       : Text(
@@ -205,20 +187,13 @@ class _CreateFolderBottomSheetState extends State<CreateFolderBottomSheet> {
               child: TextField(
                 controller: _nameController,
                 autofocus: true,
-                style: const TextStyle(
-                  color: ResponsiveHelper.textPrimary,
-                  fontSize: 16,
-                  height: 1.3,
-                ),
+                style: const TextStyle(color: ResponsiveHelper.textPrimary, fontSize: 16, height: 1.3),
                 decoration: InputDecoration(
                   border: InputBorder.none,
                   contentPadding: EdgeInsets.zero,
                   isDense: true,
                   hintText: context.l10n.folderName,
-                  hintStyle: const TextStyle(
-                    color: ResponsiveHelper.textTertiary,
-                    fontSize: 16,
-                  ),
+                  hintStyle: const TextStyle(color: ResponsiveHelper.textTertiary, fontSize: 16),
                 ),
                 textCapitalization: TextCapitalization.words,
                 maxLength: 30,
@@ -237,20 +212,13 @@ class _CreateFolderBottomSheetState extends State<CreateFolderBottomSheet> {
               ),
               child: TextField(
                 controller: _descriptionController,
-                style: const TextStyle(
-                  color: ResponsiveHelper.textSecondary,
-                  fontSize: 14,
-                  height: 1.4,
-                ),
+                style: const TextStyle(color: ResponsiveHelper.textSecondary, fontSize: 14, height: 1.4),
                 decoration: InputDecoration(
                   border: InputBorder.none,
                   contentPadding: EdgeInsets.zero,
                   isDense: true,
                   hintText: context.l10n.descriptionOptional,
-                  hintStyle: const TextStyle(
-                    color: ResponsiveHelper.textTertiary,
-                    fontSize: 14,
-                  ),
+                  hintStyle: const TextStyle(color: ResponsiveHelper.textTertiary, fontSize: 14),
                 ),
                 maxLines: 2,
                 maxLength: 100,
@@ -262,36 +230,24 @@ class _CreateFolderBottomSheetState extends State<CreateFolderBottomSheet> {
             // Icon selection
             Text(
               context.l10n.icon,
-              style: const TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w500,
-                color: ResponsiveHelper.textTertiary,
-              ),
+              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: ResponsiveHelper.textTertiary),
             ),
             const SizedBox(height: 8),
             SingleChildScrollView(
               scrollDirection: Axis.horizontal,
-              child: Row(
-                children: folderIcons.map((icon) => _buildIconOption(icon)).toList(),
-              ),
+              child: Row(children: folderIcons.map((icon) => _buildIconOption(icon)).toList()),
             ),
             const SizedBox(height: 16),
 
             // Color selection
             Text(
               context.l10n.color,
-              style: const TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w500,
-                color: ResponsiveHelper.textTertiary,
-              ),
+              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: ResponsiveHelper.textTertiary),
             ),
             const SizedBox(height: 8),
             SingleChildScrollView(
               scrollDirection: Axis.horizontal,
-              child: Row(
-                children: folderColors.map((color) => _buildColorOption(color)).toList(),
-              ),
+              child: Row(children: folderColors.map((color) => _buildColorOption(color)).toList()),
             ),
             const SizedBox(height: 16),
           ],
@@ -341,10 +297,7 @@ class _CreateFolderBottomSheetState extends State<CreateFolderBottomSheet> {
         decoration: BoxDecoration(
           color: color,
           shape: BoxShape.circle,
-          border: Border.all(
-            color: isSelected ? Colors.white : Colors.transparent,
-            width: 2,
-          ),
+          border: Border.all(color: isSelected ? Colors.white : Colors.transparent, width: 2),
         ),
         child: isSelected ? const Icon(Icons.check, color: Colors.white, size: 16) : null,
       ),

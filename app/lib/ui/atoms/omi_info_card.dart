@@ -33,22 +33,12 @@ class OmiInfoCard extends AdaptiveWidget {
       decoration: BoxDecoration(
         color: backgroundColor ?? ResponsiveHelper.backgroundSecondary.withValues(alpha: 0.8),
         borderRadius: BorderRadius.circular(borderRadius ?? 20),
-        border: Border.all(
-          color: borderColor ?? ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.5),
-          width: 1,
-        ),
-        boxShadow: shadows ??
-            [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.1),
-                blurRadius: 20,
-                offset: const Offset(0, 8),
-              ),
-            ],
+        border: Border.all(color: borderColor ?? ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.5), width: 1),
+        boxShadow:
+            shadows ??
+            [BoxShadow(color: Colors.black.withValues(alpha: 0.1), blurRadius: 20, offset: const Offset(0, 8))],
       ),
-      child: Column(
-        children: children,
-      ),
+      child: Column(children: children),
     );
   }
 }

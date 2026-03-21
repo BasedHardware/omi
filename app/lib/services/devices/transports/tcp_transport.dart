@@ -18,11 +18,8 @@ class TcpTransport extends DeviceTransport {
   StreamSubscription? _clientSubscription;
   DeviceTransportState _state = DeviceTransportState.disconnected;
 
-  TcpTransport(
-    this._deviceId, {
-    required this.port,
-    this.connectionTimeout = const Duration(seconds: 30),
-  }) : _connectionStateController = StreamController<DeviceTransportState>.broadcast();
+  TcpTransport(this._deviceId, {required this.port, this.connectionTimeout = const Duration(seconds: 30)})
+    : _connectionStateController = StreamController<DeviceTransportState>.broadcast();
 
   @override
   String get deviceId => _deviceId;

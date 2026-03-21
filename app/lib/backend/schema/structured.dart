@@ -26,12 +26,7 @@ class Structured {
   }
 
   static Structured fromJson(Map<String, dynamic> json) {
-    var structured = Structured(
-      json['title'],
-      json['overview'],
-      emoji: json['emoji'],
-      category: json['category'],
-    );
+    var structured = Structured(json['title'], json['overview'], emoji: json['emoji'], category: json['category']);
     var aItems = json['actionItems'] ?? json['action_items'];
     if (aItems != null) {
       for (dynamic item in aItems) {
@@ -47,15 +42,17 @@ class Structured {
     if (json['events'] != null) {
       for (dynamic event in json['events']) {
         if (event.isEmpty) continue;
-        structured.events.add(Event(
-          event['title'],
-          (event['startsAt'] ?? event['start']) is int
-              ? DateTime.fromMillisecondsSinceEpoch((event['startsAt'] ?? event['start']) * 1000).toLocal()
-              : DateTime.parse(event['startsAt'] ?? event['start']).toLocal(),
-          event['duration'],
-          description: event['description'] ?? '',
-          created: event['created'] ?? false,
-        ));
+        structured.events.add(
+          Event(
+            event['title'],
+            (event['startsAt'] ?? event['start']) is int
+                ? DateTime.fromMillisecondsSinceEpoch((event['startsAt'] ?? event['start']) * 1000).toLocal()
+                : DateTime.parse(event['startsAt'] ?? event['start']).toLocal(),
+            event['duration'],
+            description: event['description'] ?? '',
+            created: event['created'] ?? false,
+          ),
+        );
       }
     }
     return structured;

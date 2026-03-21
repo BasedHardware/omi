@@ -12,10 +12,7 @@ enum WifiSyncErrorCode {
   const WifiSyncErrorCode(this.code);
 
   static WifiSyncErrorCode fromCode(int code) {
-    return WifiSyncErrorCode.values.firstWhere(
-      (e) => e.code == code,
-      orElse: () => WifiSyncErrorCode.unknownCommand,
-    );
+    return WifiSyncErrorCode.values.firstWhere((e) => e.code == code, orElse: () => WifiSyncErrorCode.unknownCommand);
   }
 
   String get userMessage {
@@ -48,36 +45,22 @@ class WifiSyncSetupResult {
   final WifiSyncErrorCode? errorCode;
   final String? errorMessage;
 
-  const WifiSyncSetupResult._({
-    required this.success,
-    this.errorCode,
-    this.errorMessage,
-  });
+  const WifiSyncSetupResult._({required this.success, this.errorCode, this.errorMessage});
 
   factory WifiSyncSetupResult.success() {
     return const WifiSyncSetupResult._(success: true);
   }
 
   factory WifiSyncSetupResult.failure(WifiSyncErrorCode code, {String? customMessage}) {
-    return WifiSyncSetupResult._(
-      success: false,
-      errorCode: code,
-      errorMessage: customMessage ?? code.userMessage,
-    );
+    return WifiSyncSetupResult._(success: false, errorCode: code, errorMessage: customMessage ?? code.userMessage);
   }
 
   factory WifiSyncSetupResult.timeout() {
-    return const WifiSyncSetupResult._(
-      success: false,
-      errorMessage: 'Device did not respond - please try again',
-    );
+    return const WifiSyncSetupResult._(success: false, errorMessage: 'Device did not respond - please try again');
   }
 
   factory WifiSyncSetupResult.connectionFailed() {
-    return const WifiSyncSetupResult._(
-      success: false,
-      errorMessage: 'Failed to communicate with device',
-    );
+    return const WifiSyncSetupResult._(success: false, errorMessage: 'Failed to communicate with device');
   }
 }
 

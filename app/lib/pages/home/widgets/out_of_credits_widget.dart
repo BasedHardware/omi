@@ -28,10 +28,7 @@ class OutOfCreditsWidget extends StatelessWidget {
               Expanded(
                 child: Text(
                   context.l10n.monthlyLimitReached,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 14,
-                  ),
+                  style: const TextStyle(color: Colors.white, fontSize: 14),
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                 ),

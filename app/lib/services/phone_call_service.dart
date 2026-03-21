@@ -20,9 +20,7 @@ class PhoneCallService {
   /// Initialize the native Twilio SDK with an access token.
   Future<bool> initialize(String accessToken) async {
     try {
-      final result = await _methodChannel.invokeMethod<bool>('initialize', {
-        'accessToken': accessToken,
-      });
+      final result = await _methodChannel.invokeMethod<bool>('initialize', {'accessToken': accessToken});
       return result ?? false;
     } catch (e) {
       Logger.error('PhoneCallService: initialize error: $e');
@@ -31,11 +29,7 @@ class PhoneCallService {
   }
 
   /// Make an outbound call via Twilio Voice SDK.
-  Future<bool> makeCall({
-    required String phoneNumber,
-    required String callId,
-    String? contactName,
-  }) async {
+  Future<bool> makeCall({required String phoneNumber, required String callId, String? contactName}) async {
     try {
       final result = await _methodChannel.invokeMethod<bool>('makeCall', {
         'phoneNumber': phoneNumber,

@@ -45,14 +45,16 @@ void main() {
   group('Speaker label display', () {
     testWidgets('shows person name when personId is set and in cache', (tester) async {
       final now = DateTime.now();
-      await setupSharedPreferences(cachedPeople: [
-        {
-          'id': 'person-123',
-          'name': 'Alice',
-          'created_at': now.toUtc().toIso8601String(),
-          'updated_at': now.toUtc().toIso8601String(),
-        }
-      ]);
+      await setupSharedPreferences(
+        cachedPeople: [
+          {
+            'id': 'person-123',
+            'name': 'Alice',
+            'created_at': now.toUtc().toIso8601String(),
+            'updated_at': now.toUtc().toIso8601String(),
+          },
+        ],
+      );
 
       final segment = TranscriptSegment(
         id: 'seg1',
@@ -65,21 +67,18 @@ void main() {
         translations: [],
       );
 
-      await tester.pumpWidget(MaterialApp(
-        localizationsDelegates: const [
-          AppLocalizations.delegate,
-          GlobalMaterialLocalizations.delegate,
-          GlobalWidgetsLocalizations.delegate,
-          GlobalCupertinoLocalizations.delegate,
-        ],
-        supportedLocales: AppLocalizations.supportedLocales,
-        home: Scaffold(
-          body: TranscriptWidget(
-            segments: [segment],
-            isConversationDetail: false,
-          ),
+      await tester.pumpWidget(
+        MaterialApp(
+          localizationsDelegates: const [
+            AppLocalizations.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: Scaffold(body: TranscriptWidget(segments: [segment], isConversationDetail: false)),
         ),
-      ));
+      );
       await tester.pumpAndSettle();
 
       // Should show person name
@@ -90,21 +89,18 @@ void main() {
     testWidgets('shows Speaker X when no person is assigned', (tester) async {
       final segment = _segment('seg2', 0);
 
-      await tester.pumpWidget(MaterialApp(
-        localizationsDelegates: const [
-          AppLocalizations.delegate,
-          GlobalMaterialLocalizations.delegate,
-          GlobalWidgetsLocalizations.delegate,
-          GlobalCupertinoLocalizations.delegate,
-        ],
-        supportedLocales: AppLocalizations.supportedLocales,
-        home: Scaffold(
-          body: TranscriptWidget(
-            segments: [segment],
-            isConversationDetail: false,
-          ),
+      await tester.pumpWidget(
+        MaterialApp(
+          localizationsDelegates: const [
+            AppLocalizations.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: Scaffold(body: TranscriptWidget(segments: [segment], isConversationDetail: false)),
         ),
-      ));
+      );
       await tester.pumpAndSettle();
 
       // Should show Speaker X fallback
@@ -120,22 +116,20 @@ void main() {
         segmentId: 'seg3',
       );
 
-      await tester.pumpWidget(MaterialApp(
-        localizationsDelegates: const [
-          AppLocalizations.delegate,
-          GlobalMaterialLocalizations.delegate,
-          GlobalWidgetsLocalizations.delegate,
-          GlobalCupertinoLocalizations.delegate,
-        ],
-        supportedLocales: AppLocalizations.supportedLocales,
-        home: Scaffold(
-          body: TranscriptWidget(
-            segments: [segment],
-            isConversationDetail: true,
-            suggestions: {'seg3': suggestion},
+      await tester.pumpWidget(
+        MaterialApp(
+          localizationsDelegates: const [
+            AppLocalizations.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: Scaffold(
+            body: TranscriptWidget(segments: [segment], isConversationDetail: true, suggestions: {'seg3': suggestion}),
           ),
         ),
-      ));
+      );
       await tester.pumpAndSettle();
 
       // Tag button should no longer exist

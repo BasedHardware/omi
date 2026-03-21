@@ -87,7 +87,8 @@ class FieldyDeviceConnection extends CustomDeviceConnection {
               onAudioBytesReceived(frame);
             } else {
               Logger.debug(
-                  'Fieldy: Warning - Frame at offset $offset doesn\'t start with 0xb8: ${frame[0].toRadixString(16)}');
+                'Fieldy: Warning - Frame at offset $offset doesn\'t start with 0xb8: ${frame[0].toRadixString(16)}',
+              );
               onAudioBytesReceived(frame);
             }
 
@@ -116,8 +117,10 @@ class FieldyDeviceConnection extends CustomDeviceConnection {
 
     try {
       try {
-        final modelValue =
-            await transport.readCharacteristic(deviceInformationServiceUuid, modelNumberCharacteristicUuid);
+        final modelValue = await transport.readCharacteristic(
+          deviceInformationServiceUuid,
+          modelNumberCharacteristicUuid,
+        );
         if (modelValue.isNotEmpty) {
           deviceInfo['modelNumber'] = String.fromCharCodes(modelValue);
         }
@@ -126,8 +129,10 @@ class FieldyDeviceConnection extends CustomDeviceConnection {
       }
 
       try {
-        final firmwareValue =
-            await transport.readCharacteristic(deviceInformationServiceUuid, firmwareRevisionCharacteristicUuid);
+        final firmwareValue = await transport.readCharacteristic(
+          deviceInformationServiceUuid,
+          firmwareRevisionCharacteristicUuid,
+        );
         if (firmwareValue.isNotEmpty) {
           deviceInfo['firmwareRevision'] = String.fromCharCodes(firmwareValue);
         }
@@ -136,8 +141,10 @@ class FieldyDeviceConnection extends CustomDeviceConnection {
       }
 
       try {
-        final hardwareValue =
-            await transport.readCharacteristic(deviceInformationServiceUuid, hardwareRevisionCharacteristicUuid);
+        final hardwareValue = await transport.readCharacteristic(
+          deviceInformationServiceUuid,
+          hardwareRevisionCharacteristicUuid,
+        );
         if (hardwareValue.isNotEmpty) {
           deviceInfo['hardwareRevision'] = String.fromCharCodes(hardwareValue);
         }
@@ -146,8 +153,10 @@ class FieldyDeviceConnection extends CustomDeviceConnection {
       }
 
       try {
-        final manufacturerValue =
-            await transport.readCharacteristic(deviceInformationServiceUuid, manufacturerNameCharacteristicUuid);
+        final manufacturerValue = await transport.readCharacteristic(
+          deviceInformationServiceUuid,
+          manufacturerNameCharacteristicUuid,
+        );
         if (manufacturerValue.isNotEmpty) {
           deviceInfo['manufacturerName'] = String.fromCharCodes(manufacturerValue);
         }

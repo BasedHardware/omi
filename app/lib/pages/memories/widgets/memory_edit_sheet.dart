@@ -12,12 +12,7 @@ class MemoryEditSheet extends StatefulWidget {
   final MemoriesProvider provider;
   final Function(BuildContext, Memory, MemoriesProvider)? onDelete;
 
-  const MemoryEditSheet({
-    super.key,
-    required this.memory,
-    required this.provider,
-    this.onDelete,
-  });
+  const MemoryEditSheet({super.key, required this.memory, required this.provider, this.onDelete});
 
   @override
   State<MemoryEditSheet> createState() => _MemoryEditSheetState();
@@ -32,9 +27,7 @@ class _MemoryEditSheetState extends State<MemoryEditSheet> {
   void initState() {
     super.initState();
     contentController = TextEditingController(text: widget.memory.content.decodeString);
-    contentController.selection = TextSelection.fromPosition(
-      TextPosition(offset: contentController.text.length),
-    );
+    contentController.selection = TextSelection.fromPosition(TextPosition(offset: contentController.text.length));
   }
 
   @override
@@ -73,10 +66,7 @@ class _MemoryEditSheetState extends State<MemoryEditSheet> {
                       const SizedBox(width: 4),
                       Text(
                         widget.memory.category.toString().split('.').last,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 14,
-                        ),
+                        style: const TextStyle(color: Colors.white, fontSize: 14),
                       ),
                     ],
                   ),
@@ -98,11 +88,7 @@ class _MemoryEditSheetState extends State<MemoryEditSheet> {
                   minLines: 3,
                   textInputAction: TextInputAction.newline,
                   keyboardType: TextInputType.multiline,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 16,
-                    height: 1.4,
-                  ),
+                  style: const TextStyle(color: Colors.white, fontSize: 16, height: 1.4),
                   decoration: const InputDecoration(
                     border: InputBorder.none,
                     contentPadding: EdgeInsets.zero,
@@ -115,10 +101,7 @@ class _MemoryEditSheetState extends State<MemoryEditSheet> {
             if (_saveFailed) ...[
               const Text(
                 'Failed to save. Please check your connection.',
-                style: TextStyle(
-                  color: Colors.redAccent,
-                  fontSize: 13,
-                ),
+                style: TextStyle(color: Colors.redAccent, fontSize: 13),
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 8),
@@ -131,9 +114,7 @@ class _MemoryEditSheetState extends State<MemoryEditSheet> {
                   backgroundColor: _saveFailed ? Colors.orange : context.accentColor,
                   foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(vertical: 14),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   disabledBackgroundColor: context.accentColor.withOpacity(0.5),
                   disabledForegroundColor: Colors.white.withOpacity(0.7),
                 ),
@@ -148,10 +129,7 @@ class _MemoryEditSheetState extends State<MemoryEditSheet> {
                       )
                     : Text(
                         _saveFailed ? 'Retry' : 'Save Memory',
-                        style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                        ),
+                        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
                       ),
               ),
             ),
@@ -172,11 +150,7 @@ class _MemoryEditSheetState extends State<MemoryEditSheet> {
     bool success;
 
     try {
-      success = await widget.provider.editMemory(
-        widget.memory,
-        contentController.text,
-        widget.memory.category,
-      );
+      success = await widget.provider.editMemory(widget.memory, contentController.text, widget.memory.category);
     } catch (e) {
       success = false;
       Logger.debug('Error saving memory: $e');

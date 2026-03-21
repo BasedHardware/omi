@@ -88,10 +88,7 @@ class _UserReviewPageState extends State<UserReviewPage> {
           padding: EdgeInsets.fromLTRB(32, 8, 32, 4),
           decoration: const BoxDecoration(
             color: Colors.black,
-            borderRadius: BorderRadius.only(
-              topLeft: Radius.circular(40),
-              topRight: Radius.circular(40),
-            ),
+            borderRadius: BorderRadius.only(topLeft: Radius.circular(40), topRight: Radius.circular(40)),
           ),
           child: SafeArea(
             top: false,
@@ -118,12 +115,7 @@ class _UserReviewPageState extends State<UserReviewPage> {
                 // Subtitle
                 Text(
                   Platform.isIOS ? context.l10n.leaveReviewIos : context.l10n.leaveReviewAndroid,
-                  style: const TextStyle(
-                    color: Colors.grey,
-                    fontSize: 16,
-                    height: 1.4,
-                    fontFamily: 'Manrope',
-                  ),
+                  style: const TextStyle(color: Colors.grey, fontSize: 16, height: 1.4, fontFamily: 'Manrope'),
                   textAlign: TextAlign.center,
                 ),
 
@@ -138,19 +130,14 @@ class _UserReviewPageState extends State<UserReviewPage> {
                     style: ElevatedButton.styleFrom(
                       backgroundColor: context.primaryColor,
                       foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(28),
-                      ),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
                       disabledBackgroundColor: context.primaryColor.withOpacity(0.5),
                     ),
                     child: _isLoading
                         ? const SizedBox(
                             width: 20,
                             height: 20,
-                            child: CircularProgressIndicator(
-                              color: Colors.white,
-                              strokeWidth: 2,
-                            ),
+                            child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
                           )
                         : Row(
                             mainAxisAlignment: MainAxisAlignment.center,
@@ -162,10 +149,7 @@ class _UserReviewPageState extends State<UserReviewPage> {
                               const SizedBox(width: 12),
                               Text(
                                 Platform.isIOS ? context.l10n.rateOnAppStore : context.l10n.rateOnGooglePlay,
-                                style: const TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w600,
-                                ),
+                                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
                               ),
                             ],
                           ),
@@ -175,13 +159,7 @@ class _UserReviewPageState extends State<UserReviewPage> {
                 // Skip button
                 TextButton(
                   onPressed: _isLoading ? null : _skipReview,
-                  child: Text(
-                    context.l10n.maybeLater,
-                    style: const TextStyle(
-                      color: Colors.grey,
-                      fontSize: 16,
-                    ),
-                  ),
+                  child: Text(context.l10n.maybeLater, style: const TextStyle(color: Colors.grey, fontSize: 16)),
                 ),
               ],
             ),

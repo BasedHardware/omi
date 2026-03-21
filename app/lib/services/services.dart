@@ -27,9 +27,7 @@ class ServiceManager {
 
   static ServiceManager _create() {
     ServiceManager sm = ServiceManager();
-    sm._mic = MicRecorderBackgroundService(
-      runner: BackgroundService(),
-    );
+    sm._mic = MicRecorderBackgroundService(runner: BackgroundService());
     sm._device = DeviceService();
     sm._socket = SocketServicePool();
     sm._wal = WalService();
@@ -91,10 +89,7 @@ class ServiceManager {
   }
 }
 
-enum BackgroundServiceStatus {
-  initiated,
-  running,
-}
+enum BackgroundServiceStatus { initiated, running }
 
 @pragma('vm:entry-point')
 Future<bool> onIosBackground(ServiceInstance service) async {
@@ -109,15 +104,19 @@ Future onStart(ServiceInstance service) async {
   MicRecorderService? recorder;
   service.on('recorder.start').listen((event) async {
     recorder = MicRecorderService(isInBG: Platform.isAndroid ? true : false);
-    recorder?.start(onByteReceived: (bytes) {
-      Uint8List audioBytes = bytes;
-      List<dynamic> audioBytesList = audioBytes.toList();
-      service.invoke("recorder.ui.audioBytes", {"data": audioBytesList});
-    }, onStop: () {
-      service.invoke("recorder.ui.stateUpdate", {"state": 'stopped'});
-    }, onRecording: () {
-      service.invoke("recorder.ui.stateUpdate", {"state": 'recording'});
-    });
+    recorder?.start(
+      onByteReceived: (bytes) {
+        Uint8List audioBytes = bytes;
+        List<dynamic> audioBytesList = audioBytes.toList();
+        service.invoke("recorder.ui.audioBytes", {"data": audioBytesList});
+      },
+      onStop: () {
+        service.invoke("recorder.ui.stateUpdate", {"state": 'stopped'});
+      },
+      onRecording: () {
+        service.invoke("recorder.ui.stateUpdate", {"state": 'recording'});
+      },
+    );
   });
 
   service.on('recorder.stop').listen((event) async {
@@ -163,11 +162,7 @@ class BackgroundService {
     _status = BackgroundServiceStatus.initiated;
 
     await _service.configure(
-      iosConfiguration: IosConfiguration(
-        autoStart: false,
-        onForeground: onStart,
-        onBackground: onIosBackground,
-      ),
+      iosConfiguration: IosConfiguration(autoStart: false, onForeground: onStart, onBackground: onIosBackground),
       androidConfiguration: AndroidConfiguration(
         autoStart: false,
         onStart: onStart,
@@ -250,11 +245,7 @@ class BackgroundService {
   }
 }
 
-enum RecorderServiceStatus {
-  initialising,
-  recording,
-  stop,
-}
+enum RecorderServiceStatus { initialising, recording, stop }
 
 abstract class IMicRecorderService {
   Future<void> start({
@@ -504,7 +495,8 @@ class DesktopSystemAudioRecorderService implements ISystemAudioRecorderService {
           _onRecordingStartedFromNub!();
         } else {
           Logger.debug(
-              'DesktopSystemAudioRecorderService: WARNING - No callback registered for recordingStartedFromNub');
+            'DesktopSystemAudioRecorderService: WARNING - No callback registered for recordingStartedFromNub',
+          );
         }
         break;
       case 'recordingStoppedAutomatically':

@@ -7,18 +7,19 @@ name: setup-auth-ready
 description: Sign in with Google and complete onboarding — full real-user flow through Chrome OAuth
 
 steps:
-  # ── Flutter: Get Started overlay ──
+  # ── Flutter: Get Started overlay (animated — UIAutomator idle state fails) ──
+  # Use Marionette press (type: button) for Flutter screens, not text press (UIAutomator)
   - name: Verify Get Started screen
     assert:
       text_visible: ["Get Started"]
     screenshot: get-started
 
   - name: Tap Get Started
-    press: { text: "Get Started" }
+    press: { type: button, hint: "ElevatedButton — Get Started" }
     wait: 2
     screenshot: auth-page
 
-  # ── Flutter: Auth page ──
+  # ── Flutter: Auth page (static — both Marionette and UIAutomator work) ──
   - name: Verify auth page
     assert:
       text_visible: ["Sign in with Google"]

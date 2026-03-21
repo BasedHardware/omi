@@ -33,35 +33,21 @@ class OmiContextMenu {
   }) {
     return showMenu<String>(
       context: context,
-      position: RelativeRect.fromLTRB(
-        position.dx,
-        position.dy,
-        position.dx,
-        position.dy,
-      ),
+      position: RelativeRect.fromLTRB(position.dx, position.dy, position.dx, position.dy),
       color: ResponsiveHelper.backgroundSecondary,
       surfaceTintColor: Colors.transparent,
       shadowColor: Colors.black.withOpacity(0.3),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
-        side: BorderSide(
-          color: ResponsiveHelper.backgroundTertiary.withOpacity(0.4),
-          width: 1,
-        ),
+        side: BorderSide(color: ResponsiveHelper.backgroundTertiary.withOpacity(0.4), width: 1),
       ),
       elevation: 12,
-      constraints: const BoxConstraints(
-        minWidth: 220,
-        maxWidth: 280,
-      ),
+      constraints: const BoxConstraints(minWidth: 220, maxWidth: 280),
       items: _buildMenuItems(items, showDividerBeforeLast),
     );
   }
 
-  static List<PopupMenuEntry<String>> _buildMenuItems(
-    List<OmiContextMenuItem> items,
-    bool showDividerBeforeLast,
-  ) {
+  static List<PopupMenuEntry<String>> _buildMenuItems(List<OmiContextMenuItem> items, bool showDividerBeforeLast) {
     final List<PopupMenuEntry<String>> menuItems = [];
 
     for (int i = 0; i < items.length; i++) {
@@ -100,15 +86,8 @@ class OmiContextMenu {
               Container(
                 width: 32,
                 height: 32,
-                decoration: BoxDecoration(
-                  color: item.backgroundColor,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Icon(
-                  item.icon,
-                  size: 16,
-                  color: item.iconColor,
-                ),
+                decoration: BoxDecoration(color: item.backgroundColor, borderRadius: BorderRadius.circular(8)),
+                child: Icon(item.icon, size: 16, color: item.iconColor),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -125,13 +104,7 @@ class OmiContextMenu {
                       ),
                     ),
                     if (item.subtitle != null)
-                      Text(
-                        item.subtitle!,
-                        style: const TextStyle(
-                          fontSize: 12,
-                          color: ResponsiveHelper.textTertiary,
-                        ),
-                      ),
+                      Text(item.subtitle!, style: const TextStyle(fontSize: 12, color: ResponsiveHelper.textTertiary)),
                   ],
                 ),
               ),

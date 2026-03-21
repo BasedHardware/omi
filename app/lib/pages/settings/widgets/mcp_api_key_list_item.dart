@@ -20,10 +20,7 @@ class McpApiKeyListItem extends StatelessWidget {
         children: [
           Container(
             padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: const Color(0xFF2C2C2E),
-              borderRadius: BorderRadius.circular(10),
-            ),
+            decoration: BoxDecoration(color: const Color(0xFF2C2C2E), borderRadius: BorderRadius.circular(10)),
             child: const FaIcon(FontAwesomeIcons.key, color: Color(0xFF8E8E93), size: 16),
           ),
           const SizedBox(width: 14),
@@ -33,21 +30,13 @@ class McpApiKeyListItem extends StatelessWidget {
               children: [
                 Text(
                   apiKey.name,
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w500,
-                    color: Colors.white,
-                  ),
+                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: Colors.white),
                   overflow: TextOverflow.ellipsis,
                 ),
                 const SizedBox(height: 4),
                 Text(
                   apiKey.keyPrefix,
-                  style: TextStyle(
-                    color: Colors.grey.shade500,
-                    fontSize: 13,
-                    fontFamily: 'monospace',
-                  ),
+                  style: TextStyle(color: Colors.grey.shade500, fontSize: 13, fontFamily: 'monospace'),
                 ),
               ],
             ),
@@ -57,17 +46,10 @@ class McpApiKeyListItem extends StatelessWidget {
             onTap: () => _showDeleteConfirmation(context, apiKey),
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              decoration: BoxDecoration(
-                color: Colors.red.withOpacity(0.15),
-                borderRadius: BorderRadius.circular(8),
-              ),
+              decoration: BoxDecoration(color: Colors.red.withOpacity(0.15), borderRadius: BorderRadius.circular(8)),
               child: Text(
                 context.l10n.revoke,
-                style: const TextStyle(
-                  color: Colors.redAccent,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w500,
-                ),
+                style: const TextStyle(color: Colors.redAccent, fontSize: 13, fontWeight: FontWeight.w500),
               ),
             ),
           ),
@@ -87,17 +69,17 @@ class McpApiKeyListItem extends StatelessWidget {
             context.l10n.revokeKeyQuestion,
             style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
           ),
-          content: Text(
-            context.l10n.revokeKeyConfirmation(apiKey.name),
-            style: TextStyle(color: Colors.grey.shade400),
-          ),
+          content: Text(context.l10n.revokeKeyConfirmation(apiKey.name), style: TextStyle(color: Colors.grey.shade400)),
           actions: <Widget>[
             TextButton(
               child: Text(context.l10n.cancel, style: TextStyle(color: Colors.grey.shade400)),
               onPressed: () => Navigator.of(dialogContext).pop(),
             ),
             TextButton(
-              child: Text(context.l10n.revoke, style: const TextStyle(color: Colors.redAccent, fontWeight: FontWeight.w600)),
+              child: Text(
+                context.l10n.revoke,
+                style: const TextStyle(color: Colors.redAccent, fontWeight: FontWeight.w600),
+              ),
               onPressed: () {
                 Provider.of<McpProvider>(context, listen: false).deleteKey(apiKey.id);
                 Navigator.of(dialogContext).pop();

@@ -102,7 +102,9 @@ class TestGetPeopleDocIdInjection:
 
         mock_doc = self._make_mock_doc('person-doc-id', {'name': 'Charlie'})
         users_mod.db = MagicMock()
-        users_mod.db.collection.return_value.document.return_value.collection.return_value.document.return_value.get.return_value = mock_doc
+        users_mod.db.collection.return_value.document.return_value.collection.return_value.document.return_value.get.return_value = (
+            mock_doc
+        )
 
         result = users_mod.get_person('uid-123', 'person-doc-id')
         assert result['id'] == 'person-doc-id'
@@ -113,7 +115,9 @@ class TestGetPeopleDocIdInjection:
 
         mock_doc = self._make_mock_doc('nonexistent', {}, exists=False)
         users_mod.db = MagicMock()
-        users_mod.db.collection.return_value.document.return_value.collection.return_value.document.return_value.get.return_value = mock_doc
+        users_mod.db.collection.return_value.document.return_value.collection.return_value.document.return_value.get.return_value = (
+            mock_doc
+        )
 
         result = users_mod.get_person('uid-123', 'nonexistent')
         assert result is None
@@ -210,9 +214,9 @@ class TestConversationsListNoPhotos:
         # Check the 5 lines before the function def for @with_photos
         decorator_lines = lines[max(0, func_line_idx - 5) : func_line_idx]
         decorator_text = '\n'.join(decorator_lines)
-        assert '@with_photos' not in decorator_text, (
-            'get_conversations_without_photos must NOT have @with_photos decorator'
-        )
+        assert (
+            '@with_photos' not in decorator_text
+        ), 'get_conversations_without_photos must NOT have @with_photos decorator'
 
     def test_with_photos_present_on_get_conversations(self):
         """Verify the original get_conversations DOES have @with_photos (for individual use)."""
@@ -233,6 +237,6 @@ class TestConversationsListNoPhotos:
         # Check the 5 lines before for @with_photos
         decorator_lines = lines[max(0, func_line_idx - 5) : func_line_idx]
         decorator_text = '\n'.join(decorator_lines)
-        assert '@with_photos' in decorator_text, (
-            'get_conversations must have @with_photos for individual conversation use'
-        )
+        assert (
+            '@with_photos' in decorator_text
+        ), 'get_conversations must have @with_photos for individual conversation use'

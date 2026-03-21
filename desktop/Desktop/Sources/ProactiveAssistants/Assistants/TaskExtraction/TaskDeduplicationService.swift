@@ -17,12 +17,25 @@ actor TaskDeduplicationService {
     private let cooldownSeconds: TimeInterval = 1800    // 30-min cooldown
     private let minimumTaskCount = 3
 
+    private var geminiClientInitAttempted = false
+
     private init() {
+        // Don't eagerly init — API key may not be available yet (fetched by APIKeyService)
+    }
+
+    /// Lazy-initialize GeminiClient; retries if APIKeyService hasn't loaded yet.
+    private func getGeminiClient() -> GeminiClient? {
+        if let client = geminiClient { return client }
+        guard APIKeyService.keysAvailable || !geminiClientInitAttempted else { return nil }
+        geminiClientInitAttempted = true
         do {
-            self.geminiClient = try GeminiClient(model: "gemini-pro-latest")
+            let client = try GeminiClient(model: "gemini-pro-latest")
+            geminiClient = client
+            return client
         } catch {
+            if !APIKeyService.keysAvailable { geminiClientInitAttempted = false }
             log("TaskDedup: Failed to initialize GeminiClient: \(error)")
-            self.geminiClient = nil
+            return nil
         }
     }
 
@@ -67,7 +80,7 @@ actor TaskDeduplicationService {
     // MARK: - Deduplication Logic
 
     private func runDeduplication() async {
-        guard let client = geminiClient else {
+        guard let client = getGeminiClient() else {
             log("TaskDedup: Skipping - Gemini client not initialized")
             return
         }

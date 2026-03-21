@@ -20,9 +20,4 @@ abstract class DeviceTransport {
   Future<void> dispose();
 }
 
-enum DeviceTransportState {
-  disconnected,
-  connecting,
-  connected,
-  disconnecting,
-}
+enum DeviceTransportState { disconnected, connecting, connected, disconnecting }

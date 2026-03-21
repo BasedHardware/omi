@@ -32,9 +32,7 @@ class _ProgressBarWithPercentageState extends State<ProgressBarWithPercentage> {
                       left: (barWidth * progress),
                       child: FractionalTranslation(
                         translation: const Offset(-0.5, 0.0),
-                        child: ProgressBubble(
-                          content: '${(widget.progressValue * 100).toInt()}%',
-                        ),
+                        child: ProgressBubble(content: '${(widget.progressValue * 100).toInt()}%'),
                       ),
                     ),
                   ],
@@ -100,11 +98,7 @@ class ProgressBubble extends StatelessWidget {
   final String content;
   final double triangleHeight;
 
-  const ProgressBubble({
-    super.key,
-    required this.content,
-    this.triangleHeight = 10,
-  });
+  const ProgressBubble({super.key, required this.content, this.triangleHeight = 10});
 
   @override
   Widget build(BuildContext context) {
@@ -112,26 +106,14 @@ class ProgressBubble extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         Container(
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(12),
-          ),
+          decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12)),
           child: Padding(
             padding: const EdgeInsets.all(10),
-            child: Text(
-              content,
-              style: const TextStyle(
-                fontSize: 14,
-                color: Colors.black,
-              ),
-            ),
+            child: Text(content, style: const TextStyle(fontSize: 14, color: Colors.black)),
           ),
         ),
         CustomPaint(
-          painter: TrianglePainter(
-            color: Colors.white,
-            shadowColor: Colors.grey.withOpacity(0.5),
-          ),
+          painter: TrianglePainter(color: Colors.white, shadowColor: Colors.grey.withOpacity(0.5)),
           size: Size(10, triangleHeight),
         ),
       ],

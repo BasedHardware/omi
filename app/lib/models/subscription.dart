@@ -2,15 +2,9 @@ import 'package:json_annotation/json_annotation.dart';
 
 part 'subscription.g.dart';
 
-enum PlanType {
-  basic,
-  unlimited,
-}
+enum PlanType { basic, unlimited }
 
-enum SubscriptionStatus {
-  active,
-  inactive,
-}
+enum SubscriptionStatus { active, inactive }
 
 @JsonSerializable(fieldRename: FieldRename.snake)
 class Subscription {
@@ -45,12 +39,7 @@ class PricingOption {
   final String? description;
   final String priceString;
 
-  PricingOption({
-    required this.id,
-    required this.title,
-    this.description,
-    required this.priceString,
-  });
+  PricingOption({required this.id, required this.title, this.description, required this.priceString});
 
   factory PricingOption.fromJson(Map<String, dynamic> json) => _$PricingOptionFromJson(json);
   Map<String, dynamic> toJson() => _$PricingOptionToJson(this);
@@ -65,12 +54,7 @@ class SubscriptionPlan {
   @JsonKey(defaultValue: [])
   final List<PricingOption> prices;
 
-  SubscriptionPlan({
-    required this.id,
-    required this.title,
-    this.features = const [],
-    this.prices = const [],
-  });
+  SubscriptionPlan({required this.id, required this.title, this.features = const [], this.prices = const []});
 
   factory SubscriptionPlan.fromJson(Map<String, dynamic> json) => _$SubscriptionPlanFromJson(json);
   Map<String, dynamic> toJson() => _$SubscriptionPlanToJson(this);

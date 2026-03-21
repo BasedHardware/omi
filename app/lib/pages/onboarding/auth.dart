@@ -40,10 +40,7 @@ class _AuthComponentState extends State<AuthComponent> {
               padding: EdgeInsets.fromLTRB(32, 26, 32, MediaQuery.of(context).padding.bottom + 8),
               decoration: const BoxDecoration(
                 color: Colors.black,
-                borderRadius: BorderRadius.only(
-                  topLeft: Radius.circular(40),
-                  topRight: Radius.circular(40),
-                ),
+                borderRadius: BorderRadius.only(topLeft: Radius.circular(40), topRight: Radius.circular(40)),
               ),
               child: SafeArea(
                 top: false,
@@ -55,9 +52,7 @@ class _AuthComponentState extends State<AuthComponent> {
                       height: 20,
                       child: provider.loading
                           ? const Center(
-                              child: CircularProgressIndicator(
-                                valueColor: AlwaysStoppedAnimation(Colors.white),
-                              ),
+                              child: CircularProgressIndicator(valueColor: AlwaysStoppedAnimation(Colors.white)),
                             )
                           : null,
                     ),
@@ -106,9 +101,7 @@ class _AuthComponentState extends State<AuthComponent> {
                           style: ElevatedButton.styleFrom(
                             backgroundColor: Colors.white,
                             foregroundColor: Colors.black,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(28),
-                            ),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
                           ),
                           child: Row(
                             mainAxisAlignment: MainAxisAlignment.center,
@@ -158,9 +151,7 @@ class _AuthComponentState extends State<AuthComponent> {
                         style: ElevatedButton.styleFrom(
                           backgroundColor: Colors.white,
                           foregroundColor: Colors.black,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(28),
-                          ),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
                         ),
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.center,
@@ -169,11 +160,7 @@ class _AuthComponentState extends State<AuthComponent> {
                             const SizedBox(width: 8),
                             Text(
                               context.l10n.signInWithGoogle,
-                              style: const TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.w600,
-                                fontFamily: 'Manrope',
-                              ),
+                              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600, fontFamily: 'Manrope'),
                             ),
                           ],
                         ),
@@ -186,26 +173,18 @@ class _AuthComponentState extends State<AuthComponent> {
                     RichText(
                       textAlign: TextAlign.center,
                       text: TextSpan(
-                        style: TextStyle(
-                          color: Colors.white.withOpacity(0.6),
-                          fontSize: 11,
-                          fontFamily: 'Manrope',
-                        ),
+                        style: TextStyle(color: Colors.white.withOpacity(0.6), fontSize: 11, fontFamily: 'Manrope'),
                         children: [
                           TextSpan(text: context.l10n.byContinuingAgree),
                           TextSpan(
                             text: context.l10n.privacyPolicy,
-                            style: const TextStyle(
-                              decoration: TextDecoration.underline,
-                            ),
+                            style: const TextStyle(decoration: TextDecoration.underline),
                             recognizer: TapGestureRecognizer()..onTap = provider.openPrivacyPolicy,
                           ),
                           const TextSpan(text: ' & '),
                           TextSpan(
                             text: context.l10n.termsOfUse,
-                            style: const TextStyle(
-                              decoration: TextDecoration.underline,
-                            ),
+                            style: const TextStyle(decoration: TextDecoration.underline),
                             recognizer: TapGestureRecognizer()..onTap = provider.openTermsOfService,
                           ),
                           const TextSpan(text: '.'),

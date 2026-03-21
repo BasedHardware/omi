@@ -9,18 +9,10 @@ class MigrationRequest {
   final String type;
   final String targetLevel;
 
-  MigrationRequest({
-    required this.id,
-    required this.type,
-    required this.targetLevel,
-  });
+  MigrationRequest({required this.id, required this.type, required this.targetLevel});
 
   Map<String, dynamic> toJson() {
-    return {
-      'id': id,
-      'type': type,
-      'target_level': targetLevel,
-    };
+    return {'id': id, 'type': type, 'target_level': targetLevel};
   }
 }
 
@@ -80,11 +72,7 @@ class PrivacyApi {
         final body = jsonDecode(response.body);
         final List<dynamic> objects = body['needs_migration'];
         return objects
-            .map((obj) => MigrationRequest(
-                  id: obj['id'],
-                  type: obj['type'],
-                  targetLevel: targetLevel,
-                ))
+            .map((obj) => MigrationRequest(id: obj['id'], type: obj['type'], targetLevel: targetLevel))
             .toList();
       } else {
         Logger.error('Failed to check migration status: ${response?.statusCode} ${response?.body}');

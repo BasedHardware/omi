@@ -59,13 +59,7 @@ void main() {
       expect(repaintBoundary, findsOneWidget);
 
       // Shimmer should be a descendant of our RepaintBoundary
-      expect(
-        find.descendant(
-          of: repaintBoundary,
-          matching: find.byType(Shimmer),
-        ),
-        findsOneWidget,
-      );
+      expect(find.descendant(of: repaintBoundary, matching: find.byType(Shimmer)), findsOneWidget);
     });
   });
 
@@ -73,11 +67,7 @@ void main() {
     testWidgets('uses FadeTransition for blinking animation', (tester) async {
       await tester.pumpWidget(
         const MaterialApp(
-          home: Scaffold(
-            body: Center(
-              child: RecordingStatusIndicator(),
-            ),
-          ),
+          home: Scaffold(body: Center(child: RecordingStatusIndicator())),
         ),
       );
 
@@ -85,28 +75,18 @@ void main() {
       expect(indicator, findsOneWidget);
 
       // Should use FadeTransition within the indicator (efficient opacity animation)
-      final fadeTransitions = find.descendant(
-        of: indicator,
-        matching: find.byType(FadeTransition),
-      );
+      final fadeTransitions = find.descendant(of: indicator, matching: find.byType(FadeTransition));
       expect(fadeTransitions, findsOneWidget);
 
       // Should have red recording icon
-      final icon = find.descendant(
-        of: indicator,
-        matching: find.byIcon(Icons.fiber_manual_record),
-      );
+      final icon = find.descendant(of: indicator, matching: find.byIcon(Icons.fiber_manual_record));
       expect(icon, findsOneWidget);
     });
 
     testWidgets('animation cycles at 1000ms duration', (tester) async {
       await tester.pumpWidget(
         const MaterialApp(
-          home: Scaffold(
-            body: Center(
-              child: RecordingStatusIndicator(),
-            ),
-          ),
+          home: Scaffold(body: Center(child: RecordingStatusIndicator())),
         ),
       );
 
@@ -123,21 +103,11 @@ void main() {
     testWidgets('disposes animation controller on unmount', (tester) async {
       await tester.pumpWidget(
         const MaterialApp(
-          home: Scaffold(
-            body: Center(
-              child: RecordingStatusIndicator(),
-            ),
-          ),
+          home: Scaffold(body: Center(child: RecordingStatusIndicator())),
         ),
       );
 
-      await tester.pumpWidget(
-        const MaterialApp(
-          home: Scaffold(
-            body: SizedBox.shrink(),
-          ),
-        ),
-      );
+      await tester.pumpWidget(const MaterialApp(home: Scaffold(body: SizedBox.shrink())));
 
       // Should dispose without errors
       expect(find.byType(RecordingStatusIndicator), findsNothing);
@@ -146,19 +116,12 @@ void main() {
     testWidgets('displays red color for recording state', (tester) async {
       await tester.pumpWidget(
         const MaterialApp(
-          home: Scaffold(
-            body: Center(
-              child: RecordingStatusIndicator(),
-            ),
-          ),
+          home: Scaffold(body: Center(child: RecordingStatusIndicator())),
         ),
       );
 
       final indicator = find.byType(RecordingStatusIndicator);
-      final iconFinder = find.descendant(
-        of: indicator,
-        matching: find.byIcon(Icons.fiber_manual_record),
-      );
+      final iconFinder = find.descendant(of: indicator, matching: find.byIcon(Icons.fiber_manual_record));
       final iconWidget = tester.widget<Icon>(iconFinder);
       expect(iconWidget.color, Colors.red);
     });
@@ -168,11 +131,7 @@ void main() {
     testWidgets('uses FadeTransition for blinking animation', (tester) async {
       await tester.pumpWidget(
         const MaterialApp(
-          home: Scaffold(
-            body: Center(
-              child: PausedStatusIndicator(),
-            ),
-          ),
+          home: Scaffold(body: Center(child: PausedStatusIndicator())),
         ),
       );
 
@@ -180,36 +139,23 @@ void main() {
       expect(indicator, findsOneWidget);
 
       // Should use FadeTransition within the indicator
-      final fadeTransitions = find.descendant(
-        of: indicator,
-        matching: find.byType(FadeTransition),
-      );
+      final fadeTransitions = find.descendant(of: indicator, matching: find.byType(FadeTransition));
       expect(fadeTransitions, findsOneWidget);
 
       // Should have paused icon
-      final icon = find.descendant(
-        of: indicator,
-        matching: find.byIcon(Icons.fiber_manual_record),
-      );
+      final icon = find.descendant(of: indicator, matching: find.byIcon(Icons.fiber_manual_record));
       expect(icon, findsOneWidget);
     });
 
     testWidgets('displays orange color for paused state', (tester) async {
       await tester.pumpWidget(
         const MaterialApp(
-          home: Scaffold(
-            body: Center(
-              child: PausedStatusIndicator(),
-            ),
-          ),
+          home: Scaffold(body: Center(child: PausedStatusIndicator())),
         ),
       );
 
       final indicator = find.byType(PausedStatusIndicator);
-      final iconFinder = find.descendant(
-        of: indicator,
-        matching: find.byIcon(Icons.fiber_manual_record),
-      );
+      final iconFinder = find.descendant(of: indicator, matching: find.byIcon(Icons.fiber_manual_record));
       final iconWidget = tester.widget<Icon>(iconFinder);
       expect(iconWidget.color, Colors.orange);
     });

@@ -53,7 +53,6 @@ from database.cache_manager import InMemoryCacheManager
 
 import pytest
 
-
 # ═══════════════════════════════════════════════════════════════════════════════
 # Sub-task 2: Mentor notification frequency cache
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -254,8 +253,12 @@ class TestTesterAndAppSliceCache:
 
         # Populate caches
         cache.set("is_tester:user1", False, ttl=30)
-        cache.set("user_apps_slice:user1:0", {'private_data': [], 'public_unapproved_data': [], 'tester_apps': []}, ttl=30)
-        cache.set("user_apps_slice:user1:1", {'private_data': [], 'public_unapproved_data': [], 'tester_apps': []}, ttl=30)
+        cache.set(
+            "user_apps_slice:user1:0", {'private_data': [], 'public_unapproved_data': [], 'tester_apps': []}, ttl=30
+        )
+        cache.set(
+            "user_apps_slice:user1:1", {'private_data': [], 'public_unapproved_data': [], 'tester_apps': []}, ttl=30
+        )
 
         # Simulate _invalidate_tester_cache
         cache.delete("is_tester:user1")
@@ -310,7 +313,11 @@ class TestCreditCacheLogic:
         needs_refresh = (
             not remaining_seconds_cache_initialized
             or now - remaining_seconds_cache_ts >= CREDITS_REFRESH_SECONDS
-            or (remaining_seconds_cache is not None and remaining_seconds_cache <= 0 and now - remaining_seconds_cache_ts >= 60)
+            or (
+                remaining_seconds_cache is not None
+                and remaining_seconds_cache <= 0
+                and now - remaining_seconds_cache_ts >= 60
+            )
         )
 
         assert needs_refresh is True
@@ -326,7 +333,11 @@ class TestCreditCacheLogic:
         needs_refresh = (
             not remaining_seconds_cache_initialized
             or now - remaining_seconds_cache_ts >= CREDITS_REFRESH_SECONDS
-            or (remaining_seconds_cache is not None and remaining_seconds_cache <= 0 and now - remaining_seconds_cache_ts >= 60)
+            or (
+                remaining_seconds_cache is not None
+                and remaining_seconds_cache <= 0
+                and now - remaining_seconds_cache_ts >= 60
+            )
         )
 
         assert needs_refresh is False
@@ -342,7 +353,11 @@ class TestCreditCacheLogic:
         needs_refresh = (
             not remaining_seconds_cache_initialized
             or now - remaining_seconds_cache_ts >= CREDITS_REFRESH_SECONDS
-            or (remaining_seconds_cache is not None and remaining_seconds_cache <= 0 and now - remaining_seconds_cache_ts >= 60)
+            or (
+                remaining_seconds_cache is not None
+                and remaining_seconds_cache <= 0
+                and now - remaining_seconds_cache_ts >= 60
+            )
         )
 
         assert needs_refresh is True
@@ -388,7 +403,11 @@ class TestCreditCacheLogic:
         needs_refresh = (
             not remaining_seconds_cache_initialized
             or now - remaining_seconds_cache_ts >= CREDITS_REFRESH_SECONDS
-            or (remaining_seconds_cache is not None and remaining_seconds_cache <= 0 and now - remaining_seconds_cache_ts >= 60)
+            or (
+                remaining_seconds_cache is not None
+                and remaining_seconds_cache <= 0
+                and now - remaining_seconds_cache_ts >= 60
+            )
         )
 
         assert needs_refresh is True
@@ -404,7 +423,11 @@ class TestCreditCacheLogic:
         needs_refresh = (
             not remaining_seconds_cache_initialized
             or now - remaining_seconds_cache_ts >= CREDITS_REFRESH_SECONDS
-            or (remaining_seconds_cache is not None and remaining_seconds_cache <= 0 and now - remaining_seconds_cache_ts >= 60)
+            or (
+                remaining_seconds_cache is not None
+                and remaining_seconds_cache <= 0
+                and now - remaining_seconds_cache_ts >= 60
+            )
         )
 
         assert needs_refresh is False
@@ -422,7 +445,11 @@ class TestCreditCacheLogic:
             not remaining_seconds_cache_initialized
             or credits_invalidated
             or now - remaining_seconds_cache_ts >= CREDITS_REFRESH_SECONDS
-            or (remaining_seconds_cache is not None and remaining_seconds_cache <= 0 and now - remaining_seconds_cache_ts >= 60)
+            or (
+                remaining_seconds_cache is not None
+                and remaining_seconds_cache <= 0
+                and now - remaining_seconds_cache_ts >= 60
+            )
         )
 
         assert needs_refresh is True
@@ -440,7 +467,11 @@ class TestCreditCacheLogic:
             not remaining_seconds_cache_initialized
             or credits_invalidated
             or now - remaining_seconds_cache_ts >= CREDITS_REFRESH_SECONDS
-            or (remaining_seconds_cache is not None and remaining_seconds_cache <= 0 and now - remaining_seconds_cache_ts >= 60)
+            or (
+                remaining_seconds_cache is not None
+                and remaining_seconds_cache <= 0
+                and now - remaining_seconds_cache_ts >= 60
+            )
         )
 
         assert needs_refresh is False
@@ -600,7 +631,9 @@ class TestWebhookInvalidationCoverage:
         # The invalidation call should appear after _update_subscription_from_session
         idx_update = source.find('_update_subscription_from_session(uid, session)')
         idx_signal = source.find('set_credits_invalidation_signal(uid)', idx_update)
-        assert idx_signal > idx_update, "set_credits_invalidation_signal must be called after _update_subscription_from_session"
+        assert (
+            idx_signal > idx_update
+        ), "set_credits_invalidation_signal must be called after _update_subscription_from_session"
 
     def test_subscription_webhook_calls_invalidation(self):
         """customer.subscription.updated/deleted/created must call set_credits_invalidation_signal."""
@@ -610,7 +643,9 @@ class TestWebhookInvalidationCoverage:
         assert idx_update_sub > 0, "update_user_subscription call not found"
         # Signal should appear near the update call
         idx_signal = source.find('set_credits_invalidation_signal(uid)', idx_update_sub)
-        assert idx_signal > idx_update_sub, "set_credits_invalidation_signal must be called after update_user_subscription"
+        assert (
+            idx_signal > idx_update_sub
+        ), "set_credits_invalidation_signal must be called after update_user_subscription"
 
     def test_schedule_completed_calls_invalidation(self):
         """subscription_schedule.completed must call set_credits_invalidation_signal."""
@@ -618,7 +653,7 @@ class TestWebhookInvalidationCoverage:
         idx_scheduled = source.find("Scheduled upgrade completed for user")
         assert idx_scheduled > 0
         # Find the invalidation call before the log line (it's called right after update)
-        section = source[idx_scheduled - 200:idx_scheduled]
+        section = source[idx_scheduled - 200 : idx_scheduled]
         assert 'set_credits_invalidation_signal(uid)' in section
 
     def test_schedule_canceled_calls_invalidation(self):
@@ -626,7 +661,7 @@ class TestWebhookInvalidationCoverage:
         source = self._read_source(self.PAYMENT_SOURCE_FILE)
         idx_canceled = source.find("Subscription schedule canceled for user")
         assert idx_canceled > 0
-        section = source[idx_canceled - 200:idx_canceled]
+        section = source[idx_canceled - 200 : idx_canceled]
         assert 'set_credits_invalidation_signal(uid)' in section
 
     def test_transcribe_imports_invalidation_check(self):

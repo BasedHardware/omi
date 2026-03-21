@@ -31,14 +31,14 @@ async fn get_completed_goals(
     }
 }
 
-/// GET /v1/goals/all - Get all active goals (up to 3)
+/// GET /v1/goals/all - Get all active goals (up to 4)
 async fn get_all_goals(
     State(state): State<AppState>,
     user: AuthUser,
 ) -> Result<Json<GoalsListResponse>, StatusCode> {
     tracing::info!("Getting all goals for user {}", user.uid);
 
-    match state.firestore.get_user_goals(&user.uid, 3).await {
+    match state.firestore.get_user_goals(&user.uid, 4).await {
         Ok(goals) => Ok(Json(GoalsListResponse { goals })),
         Err(e) => {
             tracing::error!("Failed to get goals: {}", e);

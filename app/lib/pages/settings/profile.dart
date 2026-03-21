@@ -10,7 +10,6 @@ import 'package:omi/pages/settings/custom_vocabulary_page.dart';
 import 'package:omi/pages/settings/daily_summary_settings_page.dart';
 import 'package:omi/pages/settings/people.dart';
 import 'package:omi/pages/settings/data_privacy_page.dart';
-import 'package:omi/pages/settings/people.dart';
 import 'package:omi/pages/settings/privacy.dart';
 import 'package:omi/pages/persona/persona_profile.dart';
 import 'package:omi/pages/speech_profile/page.dart';
@@ -18,7 +17,6 @@ import 'package:omi/pages/speech_profile/page.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
-
 
 import 'package:omi/pages/settings/conversation_display_settings.dart';
 import 'package:omi/pages/settings/conversation_timeout_dialog.dart';
@@ -40,40 +38,30 @@ class _ProfilePageState extends State<ProfilePage> {
 
   Widget _buildSectionContainer({required List<Widget> children}) {
     return Container(
-      decoration: BoxDecoration(
-        color: const Color(0xFF1C1C1E),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Column(
-        children: children,
-      ),
+      decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(20)),
+      child: Column(children: children),
     );
   }
 
   Widget _buildProfileItem({
     required String title,
     String? subtitle,
+    String? chipValue,
     required Widget icon,
     required VoidCallback onTap,
     bool showSubtitle = true,
     bool showBetaTag = false,
+    bool showChevron = true,
   }) {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        decoration: BoxDecoration(
-          color: const Color(0xFF1C1C1E),
-          borderRadius: BorderRadius.circular(12),
-        ),
+        decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(20)),
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
           child: Row(
             children: [
-              SizedBox(
-                width: 24,
-                height: 24,
-                child: icon,
-              ),
+              SizedBox(width: 24, height: 24, child: icon),
               const SizedBox(width: 16),
               Expanded(
                 child: Column(
@@ -83,11 +71,7 @@ class _ProfilePageState extends State<ProfilePage> {
                       children: [
                         Text(
                           title,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 17,
-                            fontWeight: FontWeight.w400,
-                          ),
+                          style: const TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w400),
                         ),
                         if (showBetaTag) ...[
                           const SizedBox(width: 8),
@@ -114,21 +98,24 @@ class _ProfilePageState extends State<ProfilePage> {
                       const SizedBox(height: 2),
                       Text(
                         subtitle,
-                        style: const TextStyle(
-                          color: Color(0xFF8E8E93),
-                          fontSize: 12,
-                          fontWeight: FontWeight.w400,
-                        ),
+                        style: const TextStyle(color: Color(0xFF8E8E93), fontSize: 12, fontWeight: FontWeight.w400),
                       ),
                     ],
                   ],
                 ),
               ),
-              const Icon(
-                Icons.chevron_right,
-                color: Color(0xFF3C3C43),
-                size: 20,
-              ),
+              if (chipValue != null) ...[
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(color: const Color(0xFF2A2A2E), borderRadius: BorderRadius.circular(100)),
+                  child: Text(
+                    chipValue,
+                    style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w500),
+                  ),
+                ),
+                if (showChevron) const SizedBox(width: 8),
+              ],
+              if (showChevron) const Icon(Icons.chevron_right, color: Color(0xFF3C3C43), size: 20),
             ],
           ),
         ),
@@ -240,8 +227,10 @@ class _ProfilePageState extends State<ProfilePage> {
                 const Divider(height: 1, color: Color(0xFF3C3C43)),
                 _buildProfileItem(
                   title: context.l10n.email,
-                  subtitle:
-                      SharedPreferencesUtil().email.isEmpty ? context.l10n.notSet : SharedPreferencesUtil().email,
+                  chipValue: SharedPreferencesUtil().email.isEmpty
+                      ? context.l10n.notSet
+                      : SharedPreferencesUtil().email,
+                  showChevron: false,
                   icon: const FaIcon(FontAwesomeIcons.solidEnvelope, color: Color(0xFF8E8E93), size: 20),
                   onTap: () {},
                 ),
@@ -327,11 +316,7 @@ class _ProfilePageState extends State<ProfilePage> {
                   title: context.l10n.dataPrivacy,
                   icon: const FaIcon(FontAwesomeIcons.shield, color: Color(0xFF8E8E93), size: 20),
                   onTap: () {
-                    Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (context) => DataPrivacyPage(),
-                      ),
-                    );
+                    Navigator.of(context).push(MaterialPageRoute(builder: (context) => const DataPrivacyPage()));
                   },
                 ),
               ],
@@ -361,8 +346,9 @@ class _ProfilePageState extends State<ProfilePage> {
                 Builder(
                   builder: (context) {
                     final uid = SharedPreferencesUtil().uid;
-                    final truncatedUid =
-                        uid.length > 6 ? '${uid.substring(0, 3)}•••••${uid.substring(uid.length - 3)}' : uid;
+                    final truncatedUid = uid.length > 6
+                        ? '${uid.substring(0, 3)}•••••${uid.substring(uid.length - 3)}'
+                        : uid;
                     return _buildProfileItem(
                       title: context.l10n.userId,
                       subtitle: truncatedUid,

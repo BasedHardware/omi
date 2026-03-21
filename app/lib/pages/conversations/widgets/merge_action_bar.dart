@@ -22,17 +22,11 @@ class _MergeActionBarState extends State<MergeActionBar> with SingleTickerProvid
   @override
   void initState() {
     super.initState();
-    _animationController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 300),
-    );
+    _animationController = AnimationController(vsync: this, duration: const Duration(milliseconds: 300));
     _slideAnimation = Tween<Offset>(
       begin: const Offset(0, 1),
       end: Offset.zero,
-    ).animate(CurvedAnimation(
-      parent: _animationController,
-      curve: Curves.easeOutCubic,
-    ));
+    ).animate(CurvedAnimation(parent: _animationController, curve: Curves.easeOutCubic));
   }
 
   @override
@@ -64,11 +58,7 @@ class _MergeActionBarState extends State<MergeActionBar> with SingleTickerProvid
                 color: const Color(0xFF1A1A1C),
                 borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
                 boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.5),
-                    blurRadius: 20,
-                    offset: const Offset(0, -4),
-                  ),
+                  BoxShadow(color: Colors.black.withValues(alpha: 0.5), blurRadius: 20, offset: const Offset(0, -4)),
                 ],
               ),
               child: SafeArea(
@@ -87,11 +77,7 @@ class _MergeActionBarState extends State<MergeActionBar> with SingleTickerProvid
                           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                           child: Text(
                             context.l10n.cancel,
-                            style: const TextStyle(
-                              color: Color(0xFF8E8E93),
-                              fontSize: 17,
-                              fontWeight: FontWeight.w500,
-                            ),
+                            style: const TextStyle(color: Color(0xFF8E8E93), fontSize: 17, fontWeight: FontWeight.w500),
                           ),
                         ),
                       ),
@@ -104,11 +90,7 @@ class _MergeActionBarState extends State<MergeActionBar> with SingleTickerProvid
                         child: Text(
                           context.l10n.selectedCount(count, ''),
                           key: ValueKey(count),
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 17,
-                            fontWeight: FontWeight.w600,
-                          ),
+                          style: const TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w600),
                         ),
                       ),
 
@@ -158,10 +140,7 @@ class _MergeActionBarState extends State<MergeActionBar> with SingleTickerProvid
 
   Future<void> _handleMerge(BuildContext context, ConversationProvider provider) async {
     HapticFeedback.mediumImpact();
-    final confirmed = await MergeConfirmationDialog.show(
-      context,
-      provider.selectedConversations,
-    );
+    final confirmed = await MergeConfirmationDialog.show(context, provider.selectedConversations);
     if (confirmed && context.mounted) {
       final idsToMerge = provider.markSelectedAsMergingAndExit();
 
@@ -172,21 +151,13 @@ class _MergeActionBarState extends State<MergeActionBar> with SingleTickerProvid
           // Show a simple, non-blocking message
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text(
-                context.l10n.mergingInBackground,
-              ),
+              content: Text(context.l10n.mergingInBackground),
               backgroundColor: const Color(0xFF2C2C2E),
               behavior: SnackBarBehavior.floating,
               margin: const EdgeInsets.all(16),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10),
-              ),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
               duration: const Duration(seconds: 3),
-              action: SnackBarAction(
-                label: context.l10n.ok,
-                textColor: Colors.white70,
-                onPressed: () {},
-              ),
+              action: SnackBarAction(label: context.l10n.ok, textColor: Colors.white70, onPressed: () {}),
             ),
           );
         } else {
@@ -196,9 +167,7 @@ class _MergeActionBarState extends State<MergeActionBar> with SingleTickerProvid
               backgroundColor: Colors.red.shade700,
               behavior: SnackBarBehavior.floating,
               margin: const EdgeInsets.all(16),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10),
-              ),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
             ),
           );
         }

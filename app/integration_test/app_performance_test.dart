@@ -528,8 +528,9 @@ void _printScreenMetrics(String screenName, List<FrameTiming> timings) {
   final p99Build = buildTimes[(buildTimes.length * 0.99).toInt()];
 
   // Janky frames (>16ms total frame time)
-  final jankyFrames =
-      timings.where((t) => t.buildDuration.inMilliseconds + t.rasterDuration.inMilliseconds > 16).length;
+  final jankyFrames = timings
+      .where((t) => t.buildDuration.inMilliseconds + t.rasterDuration.inMilliseconds > 16)
+      .length;
   final jankyPercent = (jankyFrames / timings.length * 100);
 
   debugPrint('      ┌─────────────────────────────────────');
@@ -566,14 +567,16 @@ void _printFinalSummary(Map<String, List<FrameTiming>> allTimings) {
 
     final jankyPct = (janky / timings.length * 100).toStringAsFixed(1);
     debugPrint(
-        '║ ${name.padRight(15)} │ ${timings.length.toString().padLeft(5)} frames │ ${jankyPct.padLeft(5)}% janky      ║');
+      '║ ${name.padRight(15)} │ ${timings.length.toString().padLeft(5)} frames │ ${jankyPct.padLeft(5)}% janky      ║',
+    );
   }
 
   debugPrint('╠══════════════════════════════════════════════════════════════╣');
 
   final overallJankyPct = totalFrames > 0 ? (totalJanky / totalFrames * 100) : 0.0;
   debugPrint(
-      '║ TOTAL           │ ${totalFrames.toString().padLeft(5)} frames │ ${overallJankyPct.toStringAsFixed(1).padLeft(5)}% janky      ║');
+    '║ TOTAL           │ ${totalFrames.toString().padLeft(5)} frames │ ${overallJankyPct.toStringAsFixed(1).padLeft(5)}% janky      ║',
+  );
   debugPrint('╚══════════════════════════════════════════════════════════════╝');
   debugPrint('');
 

@@ -53,9 +53,7 @@ class WifiNetworkService {
   Future<bool> disconnectFromAp(String ssid) async {
     debugPrint('WifiNetworkService: Disconnecting from AP: $ssid');
     try {
-      final result = await _channel.invokeMethod<bool>('disconnectFromWifi', {
-        'ssid': ssid,
-      });
+      final result = await _channel.invokeMethod<bool>('disconnectFromWifi', {'ssid': ssid});
       return result ?? false;
     } catch (e) {
       debugPrint('WifiNetworkService: Error disconnecting from AP: $e');
@@ -65,9 +63,7 @@ class WifiNetworkService {
 
   Future<bool> isConnectedToAp(String ssid) async {
     try {
-      final result = await _channel.invokeMethod<bool>('isConnectedToWifi', {
-        'ssid': ssid,
-      });
+      final result = await _channel.invokeMethod<bool>('isConnectedToWifi', {'ssid': ssid});
       return result ?? false;
     } catch (e) {
       debugPrint('WifiNetworkService: Error checking connection: $e');
@@ -82,22 +78,14 @@ class WifiConnectionResult {
   final String? errorMessage;
   final WifiConnectionError? error;
 
-  WifiConnectionResult._({
-    required this.success,
-    this.errorMessage,
-    this.error,
-  });
+  WifiConnectionResult._({required this.success, this.errorMessage, this.error});
 
   factory WifiConnectionResult.success() {
     return WifiConnectionResult._(success: true);
   }
 
   factory WifiConnectionResult.failure(String? message, {WifiConnectionError? error}) {
-    return WifiConnectionResult._(
-      success: false,
-      errorMessage: message,
-      error: error,
-    );
+    return WifiConnectionResult._(success: false, errorMessage: message, error: error);
   }
 
   factory WifiConnectionResult.fromMap(Map<dynamic, dynamic> map) {

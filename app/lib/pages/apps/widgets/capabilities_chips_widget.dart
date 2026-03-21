@@ -17,10 +17,7 @@ class CapabilitiesChipsWidget extends StatelessWidget {
         decoration: BoxDecoration(
           color: isSelected ? Colors.white : Colors.transparent,
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: isSelected ? Colors.white : Colors.grey.withOpacity(0.3),
-            width: 1,
-          ),
+          border: Border.all(color: isSelected ? Colors.white : Colors.grey.withOpacity(0.3), width: 1),
         ),
         child: Center(
           child: Text(
@@ -38,41 +35,43 @@ class CapabilitiesChipsWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<AddAppProvider>(builder: (context, provider, child) {
-      if (provider.capabilities.isEmpty) {
-        return const SizedBox.shrink();
-      }
+    return Consumer<AddAppProvider>(
+      builder: (context, provider, child) {
+        if (provider.capabilities.isEmpty) {
+          return const SizedBox.shrink();
+        }
 
-      // Build 2x2 grid manually for precise control
-      final caps = provider.capabilities;
-      final rows = <Widget>[];
+        // Build 2x2 grid manually for precise control
+        final caps = provider.capabilities;
+        final rows = <Widget>[];
 
-      for (int i = 0; i < caps.length; i += 2) {
-        rows.add(
-          Padding(
-            padding: EdgeInsets.only(left: 8.0, bottom: i + 2 < caps.length ? 10 : 0),
-            child: Row(
-              children: [
-                Expanded(
-                  child: _buildCapabilityButton(context, caps[i], provider.isCapabilitySelected(caps[i]), () {
-                    provider.addOrRemoveCapability(caps[i]);
-                  }),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: i + 1 < caps.length
-                      ? _buildCapabilityButton(context, caps[i + 1], provider.isCapabilitySelected(caps[i + 1]), () {
-                          provider.addOrRemoveCapability(caps[i + 1]);
-                        })
-                      : const SizedBox.shrink(),
-                ),
-              ],
+        for (int i = 0; i < caps.length; i += 2) {
+          rows.add(
+            Padding(
+              padding: EdgeInsets.only(left: 8.0, bottom: i + 2 < caps.length ? 10 : 0),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: _buildCapabilityButton(context, caps[i], provider.isCapabilitySelected(caps[i]), () {
+                      provider.addOrRemoveCapability(caps[i]);
+                    }),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: i + 1 < caps.length
+                        ? _buildCapabilityButton(context, caps[i + 1], provider.isCapabilitySelected(caps[i + 1]), () {
+                            provider.addOrRemoveCapability(caps[i + 1]);
+                          })
+                        : const SizedBox.shrink(),
+                  ),
+                ],
+              ),
             ),
-          ),
-        );
-      }
+          );
+        }
 
-      return Column(children: rows);
-    });
+        return Column(children: rows);
+      },
+    );
   }
 }

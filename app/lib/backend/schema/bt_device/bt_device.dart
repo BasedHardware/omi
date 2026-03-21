@@ -225,17 +225,7 @@ Future<DeviceType?> getTypeOfBluetoothDevice(BluetoothDevice device) async {
   return deviceType;
 }
 
-enum DeviceType {
-  omi,
-  openglass,
-  frame,
-  appleWatch,
-  plaud,
-  bee,
-  fieldy,
-  friendPendant,
-  limitless,
-}
+enum DeviceType { omi, openglass, frame, appleWatch, plaud, bee, fieldy, friendPendant, limitless }
 
 Map<String, DeviceType> cachedDevicesMap = {};
 
@@ -252,17 +242,18 @@ class BtDevice {
   String? _manufacturerName;
   String? _serialNumber;
 
-  BtDevice(
-      {required this.name,
-      required this.id,
-      required this.type,
-      required this.rssi,
-      this.locator,
-      String? modelNumber,
-      String? firmwareRevision,
-      String? hardwareRevision,
-      String? manufacturerName,
-      String? serialNumber}) {
+  BtDevice({
+    required this.name,
+    required this.id,
+    required this.type,
+    required this.rssi,
+    this.locator,
+    String? modelNumber,
+    String? firmwareRevision,
+    String? hardwareRevision,
+    String? manufacturerName,
+    String? serialNumber,
+  }) {
     _modelNumber = modelNumber;
     _firmwareRevision = firmwareRevision;
     _hardwareRevision = hardwareRevision;
@@ -272,16 +263,16 @@ class BtDevice {
 
   // create an empty device
   BtDevice.empty()
-      : name = '',
-        id = '',
-        type = DeviceType.omi,
-        rssi = 0,
-        locator = null,
-        _modelNumber = '',
-        _firmwareRevision = '',
-        _hardwareRevision = '',
-        _manufacturerName = '',
-        _serialNumber = '';
+    : name = '',
+      id = '',
+      type = DeviceType.omi,
+      rssi = 0,
+      locator = null,
+      _modelNumber = '',
+      _firmwareRevision = '',
+      _hardwareRevision = '',
+      _manufacturerName = '',
+      _serialNumber = '';
 
   // getters
   String get modelNumber => _modelNumber ?? 'Unknown';
@@ -310,17 +301,18 @@ class BtDevice {
     }
   }
 
-  BtDevice copyWith(
-      {String? name,
-      String? id,
-      DeviceType? type,
-      int? rssi,
-      DeviceLocator? locator,
-      String? modelNumber,
-      String? firmwareRevision,
-      String? hardwareRevision,
-      String? manufacturerName,
-      String? serialNumber}) {
+  BtDevice copyWith({
+    String? name,
+    String? id,
+    DeviceType? type,
+    int? rssi,
+    DeviceLocator? locator,
+    String? modelNumber,
+    String? firmwareRevision,
+    String? hardwareRevision,
+    String? manufacturerName,
+    String? serialNumber,
+  }) {
     return BtDevice(
       name: name ?? this.name,
       id: id ?? this.id,
@@ -695,12 +687,7 @@ class BtDevice {
   // from BluetoothDevice
   Future fromBluetoothDevice(BluetoothDevice device) async {
     var rssi = await device.readRssi();
-    return BtDevice(
-      name: device.platformName,
-      id: device.remoteId.str,
-      type: DeviceType.omi,
-      rssi: rssi,
-    );
+    return BtDevice(name: device.platformName, id: device.remoteId.str, type: DeviceType.omi, rssi: rssi);
   }
 
   // Check if a scan result is from a supported device
@@ -733,7 +720,8 @@ class BtDevice {
 
       // Log the pattern to learn new devices
       Logger.debug(
-          '[PLAUD] Found manufacturer ID 93 with data: ${data.map((e) => e.toRadixString(16).padLeft(2, '0')).join()}');
+        '[PLAUD] Found manufacturer ID 93 with data: ${data.map((e) => e.toRadixString(16).padLeft(2, '0')).join()}',
+      );
 
       // Known pattern for NotePin: 0456cf00
       if (data.length >= 4 && data[0] == 0x04 && data[1] == 0x56 && data[2] == 0xcf && data[3] == 0x00) {
@@ -776,8 +764,9 @@ class BtDevice {
 
   static bool isFriendPendantDevice(ScanResult result) {
     return result.device.platformName.toLowerCase().startsWith('friend_') ||
-        result.advertisementData.serviceUuids
-            .any((uuid) => uuid.toString().toLowerCase() == friendPendantServiceUuid.toLowerCase());
+        result.advertisementData.serviceUuids.any(
+          (uuid) => uuid.toString().toLowerCase() == friendPendantServiceUuid.toLowerCase(),
+        );
   }
 
   static bool isFriendPendantDeviceFromDevice(BluetoothDevice device) {
@@ -789,8 +778,9 @@ class BtDevice {
     final name = result.device.platformName.toLowerCase();
     return name.contains('limitless') ||
         name.contains('pendant') ||
-        result.advertisementData.serviceUuids
-            .any((uuid) => uuid.toString().toLowerCase() == limitlessServiceUuid.toLowerCase());
+        result.advertisementData.serviceUuids.any(
+          (uuid) => uuid.toString().toLowerCase() == limitlessServiceUuid.toLowerCase(),
+        );
   }
 
   static bool isLimitlessDeviceFromDevice(BluetoothDevice device) {

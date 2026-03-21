@@ -56,10 +56,7 @@ class AppMetadataWidget extends StatelessWidget {
         child: Column(
           children: [
             Container(
-              decoration: BoxDecoration(
-                color: const Color(0xFF1F1F25),
-                borderRadius: BorderRadius.circular(18.0),
-              ),
+              decoration: BoxDecoration(color: const Color(0xFF1F1F25), borderRadius: BorderRadius.circular(18.0)),
               padding: const EdgeInsets.all(14.0),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -98,7 +95,8 @@ class AppMetadataWidget extends StatelessWidget {
                                   GestureDetector(
                                     onTap: () {
                                       Clipboard.setData(
-                                          ClipboardData(text: context.read<AddAppProvider>().updateAppId!));
+                                        ClipboardData(text: context.read<AddAppProvider>().updateAppId!),
+                                      );
                                       ScaffoldMessenger.of(context).showSnackBar(
                                         SnackBar(
                                           content: Text(context.l10n.appIdCopiedToClipboard),
@@ -108,14 +106,8 @@ class AppMetadataWidget extends StatelessWidget {
                                     },
                                     child: Container(
                                       padding: const EdgeInsets.all(6.0),
-                                      decoration: BoxDecoration(
-                                        borderRadius: BorderRadius.circular(8.0),
-                                      ),
-                                      child: FaIcon(
-                                        FontAwesomeIcons.copy,
-                                        color: Colors.white,
-                                        size: 16,
-                                      ),
+                                      decoration: BoxDecoration(borderRadius: BorderRadius.circular(8.0)),
+                                      child: FaIcon(FontAwesomeIcons.copy, color: Colors.white, size: 16),
                                     ),
                                   ),
                                 ],
@@ -144,13 +136,14 @@ class AppMetadataWidget extends StatelessWidget {
                               ),
                               child: imageFile != null || imageUrl != null
                                   ? (imageUrl == null
-                                      ? ClipRRect(
-                                          borderRadius: BorderRadius.circular(14.0),
-                                          child: Image.file(imageFile!, fit: BoxFit.cover))
-                                      : ClipRRect(
-                                          borderRadius: BorderRadius.circular(14.0),
-                                          child: CachedNetworkImage(imageUrl: imageUrl!, fit: BoxFit.cover),
-                                        ))
+                                        ? ClipRRect(
+                                            borderRadius: BorderRadius.circular(14.0),
+                                            child: Image.file(imageFile!, fit: BoxFit.cover),
+                                          )
+                                        : ClipRRect(
+                                            borderRadius: BorderRadius.circular(14.0),
+                                            child: CachedNetworkImage(imageUrl: imageUrl!, fit: BoxFit.cover),
+                                          ))
                                   : Column(
                                       mainAxisAlignment: MainAxisAlignment.center,
                                       children: [
@@ -172,15 +165,8 @@ class AppMetadataWidget extends StatelessWidget {
                                 onTap: pickImage,
                                 child: Container(
                                   padding: const EdgeInsets.all(6.0),
-                                  decoration: const BoxDecoration(
-                                    color: Color(0xFF35343B),
-                                    shape: BoxShape.circle,
-                                  ),
-                                  child: const FaIcon(
-                                    FontAwesomeIcons.pen,
-                                    color: Colors.white,
-                                    size: 12,
-                                  ),
+                                  decoration: const BoxDecoration(color: Color(0xFF35343B), shape: BoxShape.circle),
+                                  child: const FaIcon(FontAwesomeIcons.pen, color: Colors.white, size: 12),
                                 ),
                               ),
                             ),
@@ -235,68 +221,70 @@ class AppMetadataWidget extends StatelessWidget {
                                     borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
                                   ),
                                   builder: (context) {
-                                    return Consumer<AddAppProvider>(builder: (context, provider, child) {
-                                      return Container(
-                                        padding: const EdgeInsets.all(16.0),
-                                        height: MediaQuery.of(context).size.height * 0.6,
-                                        child: SingleChildScrollView(
-                                          child: Column(
-                                            mainAxisSize: MainAxisSize.min,
-                                            crossAxisAlignment: CrossAxisAlignment.start,
-                                            children: [
-                                              const SizedBox(height: 12),
-                                              Text(
-                                                context.l10n.appCategoryModalTitle,
-                                                style: const TextStyle(color: Colors.white, fontSize: 18),
-                                              ),
-                                              const SizedBox(height: 18),
-                                              ListView.separated(
-                                                separatorBuilder: (context, index) {
-                                                  return Divider(
-                                                    color: Colors.grey.shade600,
-                                                    height: 1,
-                                                  );
-                                                },
-                                                shrinkWrap: true,
-                                                itemCount: categories.length,
-                                                physics: const NeverScrollableScrollPhysics(),
-                                                itemBuilder: (context, index) {
-                                                  return InkWell(
-                                                    onTap: () {
-                                                      provider.setAppCategory(categories[index].id);
-                                                      Navigator.pop(context);
-                                                    },
-                                                    child: Container(
-                                                      padding: const EdgeInsets.symmetric(vertical: 10),
-                                                      child: Row(
-                                                        crossAxisAlignment: CrossAxisAlignment.center,
-                                                        children: [
-                                                          const SizedBox(width: 6),
-                                                          Text(
-                                                            categories[index].getLocalizedTitle(context),
-                                                            style: TextStyle(color: Colors.grey.shade300, fontSize: 16),
-                                                          ),
-                                                          const Spacer(),
-                                                          Checkbox(
-                                                            value: provider.appCategory == categories[index].id,
-                                                            onChanged: (value) {
-                                                              provider.setAppCategory(categories[index].id);
-                                                              Navigator.pop(context);
-                                                            },
-                                                            side: BorderSide(color: Colors.grey.shade300),
-                                                            shape: const CircleBorder(),
-                                                          ),
-                                                        ],
+                                    return Consumer<AddAppProvider>(
+                                      builder: (context, provider, child) {
+                                        return Container(
+                                          padding: const EdgeInsets.all(16.0),
+                                          height: MediaQuery.of(context).size.height * 0.6,
+                                          child: SingleChildScrollView(
+                                            child: Column(
+                                              mainAxisSize: MainAxisSize.min,
+                                              crossAxisAlignment: CrossAxisAlignment.start,
+                                              children: [
+                                                const SizedBox(height: 12),
+                                                Text(
+                                                  context.l10n.appCategoryModalTitle,
+                                                  style: const TextStyle(color: Colors.white, fontSize: 18),
+                                                ),
+                                                const SizedBox(height: 18),
+                                                ListView.separated(
+                                                  separatorBuilder: (context, index) {
+                                                    return Divider(color: Colors.grey.shade600, height: 1);
+                                                  },
+                                                  shrinkWrap: true,
+                                                  itemCount: categories.length,
+                                                  physics: const NeverScrollableScrollPhysics(),
+                                                  itemBuilder: (context, index) {
+                                                    return InkWell(
+                                                      onTap: () {
+                                                        provider.setAppCategory(categories[index].id);
+                                                        Navigator.pop(context);
+                                                      },
+                                                      child: Container(
+                                                        padding: const EdgeInsets.symmetric(vertical: 10),
+                                                        child: Row(
+                                                          crossAxisAlignment: CrossAxisAlignment.center,
+                                                          children: [
+                                                            const SizedBox(width: 6),
+                                                            Text(
+                                                              categories[index].getLocalizedTitle(context),
+                                                              style: TextStyle(
+                                                                color: Colors.grey.shade300,
+                                                                fontSize: 16,
+                                                              ),
+                                                            ),
+                                                            const Spacer(),
+                                                            Checkbox(
+                                                              value: provider.appCategory == categories[index].id,
+                                                              onChanged: (value) {
+                                                                provider.setAppCategory(categories[index].id);
+                                                                Navigator.pop(context);
+                                                              },
+                                                              side: BorderSide(color: Colors.grey.shade300),
+                                                              shape: const CircleBorder(),
+                                                            ),
+                                                          ],
+                                                        ),
                                                       ),
-                                                    ),
-                                                  );
-                                                },
-                                              ),
-                                            ],
+                                                    );
+                                                  },
+                                                ),
+                                              ],
+                                            ),
                                           ),
-                                        ),
-                                      );
-                                    });
+                                        );
+                                      },
+                                    );
                                   },
                                 );
                               },
@@ -315,15 +303,12 @@ class AppMetadataWidget extends StatelessWidget {
                                         (category?.isNotEmpty == true ? category : '${context.l10n.categoryLabel}*') ??
                                             '${context.l10n.categoryLabel}*',
                                         style: TextStyle(
-                                            color: category != null ? Colors.grey.shade100 : Colors.grey.shade400,
-                                            fontSize: 16),
+                                          color: category != null ? Colors.grey.shade100 : Colors.grey.shade400,
+                                          fontSize: 16,
+                                        ),
                                       ),
                                     ),
-                                    FaIcon(
-                                      FontAwesomeIcons.chevronRight,
-                                      color: Colors.grey.shade400,
-                                      size: 14,
-                                    ),
+                                    FaIcon(FontAwesomeIcons.chevronRight, color: Colors.grey.shade400, size: 14),
                                   ],
                                 ),
                               ),
@@ -344,9 +329,7 @@ class AppMetadataWidget extends StatelessWidget {
                                 borderRadius: BorderRadius.circular(12.0),
                                 border: Border.all(color: Colors.grey.withOpacity(0.3), width: 1),
                               ),
-                              constraints: BoxConstraints(
-                                minHeight: MediaQuery.sizeOf(context).height * 0.1,
-                              ),
+                              constraints: BoxConstraints(minHeight: MediaQuery.sizeOf(context).height * 0.1),
                               child: Skeletonizer.zone(
                                 enabled: generatingDescription,
                                 effect: ShimmerEffect(
@@ -400,10 +383,7 @@ class AppMetadataWidget extends StatelessWidget {
                             onTap: () async {
                               await context.read<AddAppProvider>().generateDescription();
                             },
-                            child: SvgPicture.asset(
-                              Assets.images.aiMagic,
-                              color: Colors.white,
-                            ),
+                            child: SvgPicture.asset(Assets.images.aiMagic, color: Colors.white),
                           ),
                         ),
                     ],
@@ -419,71 +399,71 @@ class AppMetadataWidget extends StatelessWidget {
                                 borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
                               ),
                               builder: (context) {
-                                return Consumer<AddAppProvider>(builder: (context, provider, child) {
-                                  return Container(
-                                    padding: const EdgeInsets.all(16.0),
-                                    height: MediaQuery.of(context).size.height * 0.36,
-                                    child: SingleChildScrollView(
-                                      child: Column(
-                                        mainAxisSize: MainAxisSize.min,
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          const SizedBox(
-                                            height: 12,
-                                          ),
-                                          Text(
-                                            context.l10n.appPricingLabel,
-                                            style: const TextStyle(color: Colors.white, fontSize: 18),
-                                          ),
-                                          const SizedBox(
-                                            height: 18,
-                                          ),
-                                          ListView(
-                                            shrinkWrap: true,
-                                            children: [
-                                              {'label': context.l10n.pricingFree, 'isPaid': false},
-                                              {'label': context.l10n.pricingPaid, 'isPaid': true},
-                                            ].map((option) {
-                                              final isPaid = option['isPaid'] as bool;
-                                              final label = option['label'] as String;
-                                              return InkWell(
-                                                onTap: () {
-                                                  provider.setIsPaid(isPaid);
-                                                  Navigator.pop(context);
-                                                },
-                                                child: Container(
-                                                  padding: const EdgeInsets.symmetric(vertical: 10),
-                                                  child: Row(
-                                                    crossAxisAlignment: CrossAxisAlignment.center,
-                                                    children: [
-                                                      const SizedBox(
-                                                        width: 6,
+                                return Consumer<AddAppProvider>(
+                                  builder: (context, provider, child) {
+                                    return Container(
+                                      padding: const EdgeInsets.all(16.0),
+                                      height: MediaQuery.of(context).size.height * 0.36,
+                                      child: SingleChildScrollView(
+                                        child: Column(
+                                          mainAxisSize: MainAxisSize.min,
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            const SizedBox(height: 12),
+                                            Text(
+                                              context.l10n.appPricingLabel,
+                                              style: const TextStyle(color: Colors.white, fontSize: 18),
+                                            ),
+                                            const SizedBox(height: 18),
+                                            ListView(
+                                              shrinkWrap: true,
+                                              children:
+                                                  [
+                                                    {'label': context.l10n.pricingFree, 'isPaid': false},
+                                                    {'label': context.l10n.pricingPaid, 'isPaid': true},
+                                                  ].map((option) {
+                                                    final isPaid = option['isPaid'] as bool;
+                                                    final label = option['label'] as String;
+                                                    return InkWell(
+                                                      onTap: () {
+                                                        provider.setIsPaid(isPaid);
+                                                        Navigator.pop(context);
+                                                      },
+                                                      child: Container(
+                                                        padding: const EdgeInsets.symmetric(vertical: 10),
+                                                        child: Row(
+                                                          crossAxisAlignment: CrossAxisAlignment.center,
+                                                          children: [
+                                                            const SizedBox(width: 6),
+                                                            Text(
+                                                              label,
+                                                              style: TextStyle(
+                                                                color: Colors.grey.shade300,
+                                                                fontSize: 16,
+                                                              ),
+                                                            ),
+                                                            const Spacer(),
+                                                            Checkbox(
+                                                              value: provider.isPaid == isPaid,
+                                                              onChanged: (value) {
+                                                                provider.setIsPaid(isPaid);
+                                                                Navigator.pop(context);
+                                                              },
+                                                              side: BorderSide(color: Colors.grey.shade300),
+                                                              shape: const CircleBorder(),
+                                                            ),
+                                                          ],
+                                                        ),
                                                       ),
-                                                      Text(
-                                                        label,
-                                                        style: TextStyle(color: Colors.grey.shade300, fontSize: 16),
-                                                      ),
-                                                      const Spacer(),
-                                                      Checkbox(
-                                                        value: provider.isPaid == isPaid,
-                                                        onChanged: (value) {
-                                                          provider.setIsPaid(isPaid);
-                                                          Navigator.pop(context);
-                                                        },
-                                                        side: BorderSide(color: Colors.grey.shade300),
-                                                        shape: const CircleBorder(),
-                                                      ),
-                                                    ],
-                                                  ),
-                                                ),
-                                              );
-                                            }).toList(),
-                                          ),
-                                        ],
+                                                    );
+                                                  }).toList(),
+                                            ),
+                                          ],
+                                        ),
                                       ),
-                                    ),
-                                  );
-                                });
+                                    );
+                                  },
+                                );
                               },
                             );
                           },
@@ -497,25 +477,18 @@ class AppMetadataWidget extends StatelessWidget {
                             width: double.infinity,
                             child: Row(
                               children: [
-                                const SizedBox(
-                                  width: 12,
-                                ),
+                                const SizedBox(width: 12),
                                 Text(
                                   (appPricing?.isNotEmpty == true ? appPricing : context.l10n.noneSelected) ??
                                       context.l10n.noneSelected,
                                   style: TextStyle(
-                                      color: appPricing != null ? Colors.grey.shade100 : Colors.grey.shade400,
-                                      fontSize: 16),
+                                    color: appPricing != null ? Colors.grey.shade100 : Colors.grey.shade400,
+                                    fontSize: 16,
+                                  ),
                                 ),
                                 const Spacer(),
-                                FaIcon(
-                                  FontAwesomeIcons.chevronRight,
-                                  color: Colors.grey.shade400,
-                                  size: 14,
-                                ),
-                                const SizedBox(
-                                  width: 12,
-                                ),
+                                FaIcon(FontAwesomeIcons.chevronRight, color: Colors.grey.shade400, size: 14),
+                                const SizedBox(width: 12),
                               ],
                             ),
                           ),

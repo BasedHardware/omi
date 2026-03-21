@@ -25,11 +25,7 @@ class WavBytes {
   WavBytes._(this._pcmData, this._sampleRate, this._numChannels);
 
   /// Create a WAV bytes object from PCM data
-  factory WavBytes.fromPcm(
-    Uint8List pcmData, {
-    required int sampleRate,
-    required int numChannels,
-  }) {
+  factory WavBytes.fromPcm(Uint8List pcmData, {required int sampleRate, required int numChannels}) {
     return WavBytes._(pcmData, sampleRate, numChannels);
   }
 
@@ -260,8 +256,9 @@ class WavBytesUtil {
     if (removeLastNSeconds > 0) {
       Logger.debug(' in this branch');
       removeFramesRange(
-          fromSecond: (frames.length ~/ framesPerSecond) - removeLastNSeconds,
-          toSecond: frames.length ~/ framesPerSecond);
+        fromSecond: (frames.length ~/ framesPerSecond) - removeLastNSeconds,
+        toSecond: frames.length ~/ framesPerSecond,
+      );
       framesCopy = List<List<int>>.from(frames); // after trimming, copy the frames
     } else {
       Logger.debug(' in other branch');
@@ -446,7 +443,7 @@ class ImageBytesUtil {
 class StorageBytesUtil extends WavBytesUtil {
   StorageBytesUtil({required super.codec, required super.framesPerSecond}) : super();
 
-// @override
+  // @override
   int count = 0;
   List<int> pending = [];
   List<int> currentStorageList = [];

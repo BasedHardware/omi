@@ -7,11 +7,7 @@ class ShortcutInfo {
   final int modifiers;
   final String displayString;
 
-  ShortcutInfo({
-    required this.keyCode,
-    required this.modifiers,
-    required this.displayString,
-  });
+  ShortcutInfo({required this.keyCode, required this.modifiers, required this.displayString});
 
   factory ShortcutInfo.fromMap(Map<String, dynamic> map) {
     return ShortcutInfo(
@@ -63,10 +59,7 @@ class ShortcutService {
   static Future<bool> setAskAIShortcut(int keyCode, int modifiers) async {
     if (!isSupported) return false;
     try {
-      final result = await _channel.invokeMethod('setAskAIShortcut', {
-        'keyCode': keyCode,
-        'modifiers': modifiers,
-      });
+      final result = await _channel.invokeMethod('setAskAIShortcut', {'keyCode': keyCode, 'modifiers': modifiers});
       return result == true;
     } catch (e) {
       return false;
@@ -109,10 +102,7 @@ class ShortcutService {
   static Future<bool> validateShortcut(int keyCode, int modifiers) async {
     if (!isSupported) return false;
     try {
-      final result = await _channel.invokeMethod('validateShortcut', {
-        'keyCode': keyCode,
-        'modifiers': modifiers,
-      });
+      final result = await _channel.invokeMethod('validateShortcut', {'keyCode': keyCode, 'modifiers': modifiers});
       return result == true;
     } catch (e) {
       return false;

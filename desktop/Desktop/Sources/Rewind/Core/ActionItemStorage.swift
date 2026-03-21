@@ -610,6 +610,12 @@ actor ActionItemStorage {
     /// This cleans up tasks that were moved to staged_tasks or deleted on the backend
     /// but still linger in local SQLite, preventing phantom entries in the task list.
     func markAbsentTasksAsStaged(apiIds: Set<String>) async throws {
+        // Safety guard: never wipe all tasks if the API set is empty (backend error)
+        guard !apiIds.isEmpty else {
+            log("ActionItemStorage: markAbsentTasksAsStaged skipped — empty API set")
+            return
+        }
+
         let db = try await ensureInitialized()
 
         let deleted = try await db.write { database -> Int in
@@ -640,6 +646,12 @@ actor ActionItemStorage {
     /// deleting locally-created tasks that haven't been pushed yet.
     /// Returns the number of records deleted.
     func hardDeleteAbsentTasks(apiIds: Set<String>) async throws -> Int {
+        // Safety guard: never wipe all tasks if the API set is empty (backend error)
+        guard !apiIds.isEmpty else {
+            log("ActionItemStorage: hardDeleteAbsentTasks skipped — empty API set")
+            return 0
+        }
+
         let db = try await ensureInitialized()
 
         let deleted = try await db.write { database -> Int in

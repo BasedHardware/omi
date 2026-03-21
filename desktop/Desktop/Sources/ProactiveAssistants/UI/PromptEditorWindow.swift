@@ -93,14 +93,14 @@ class PromptEditorWindow: NSWindow {
     static func show() {
         if let existingWindow = sharedWindow {
             existingWindow.makeKeyAndOrderFront(nil)
-            NSApp.activate(ignoringOtherApps: true)
+            NSApp.activate()
             return
         }
 
         let window = PromptEditorWindow()
         sharedWindow = window
         window.makeKeyAndOrderFront(nil)
-        NSApp.activate(ignoringOtherApps: true)
+        NSApp.activate()
     }
 
     /// Closes the prompt editor window

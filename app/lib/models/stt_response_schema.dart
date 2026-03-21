@@ -53,11 +53,7 @@ class SttResponseSchema {
     textPath: 'combinedRecognizedPhrases[0].display',
   );
 
-  static const simpleText = SttResponseSchema(
-    segmentsPath: null,
-    segmentsTextField: 'text',
-    textPath: 'text',
-  );
+  static const simpleText = SttResponseSchema(segmentsPath: null, segmentsTextField: 'text', textPath: 'text');
 
   static const falAI = SttResponseSchema(
     segmentsPath: 'chunks',
@@ -127,14 +123,14 @@ class SttResponseSchema {
   }
 
   Map<String, dynamic> toJson() => {
-        'segments_path': segmentsPath,
-        'segments_text_field': segmentsTextField,
-        'segments_start_field': segmentsStartField,
-        'segments_end_field': segmentsEndField,
-        'segments_speaker_field': segmentsSpeakerField,
-        'text_path': textPath,
-        'default_segment_duration': defaultSegmentDuration,
-      };
+    'segments_path': segmentsPath,
+    'segments_text_field': segmentsTextField,
+    'segments_start_field': segmentsStartField,
+    'segments_end_field': segmentsEndField,
+    'segments_speaker_field': segmentsSpeakerField,
+    'text_path': textPath,
+    'default_segment_duration': defaultSegmentDuration,
+  };
 }
 
 class JsonPathNavigator {

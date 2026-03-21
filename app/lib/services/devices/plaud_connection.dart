@@ -24,9 +24,7 @@ class PlaudDeviceConnection extends DeviceConnection {
   PlaudDeviceConnection(super.device, super.transport);
 
   @override
-  Future<void> connect({
-    Function(String deviceId, DeviceConnectionState state)? onConnectionStateChanged,
-  }) async {
+  Future<void> connect({Function(String deviceId, DeviceConnectionState state)? onConnectionStateChanged}) async {
     await super.connect(onConnectionStateChanged: onConnectionStateChanged);
     await Future.delayed(const Duration(seconds: 2));
 
@@ -95,10 +93,7 @@ class PlaudDeviceConnection extends DeviceConnection {
     final response = await _sendCommand(_cmdStartRecord, payload);
 
     if (response != null && response.length >= 10) {
-      return {
-        'sessionId': _toInt32(response.sublist(0, 4)),
-        'startTime': _toInt32(response.sublist(4, 8)),
-      };
+      return {'sessionId': _toInt32(response.sublist(0, 4)), 'startTime': _toInt32(response.sublist(4, 8))};
     }
     return null;
   }
@@ -115,8 +110,12 @@ class PlaudDeviceConnection extends DeviceConnection {
   }
 
   Future<void> _stopSync() async {
-    await transport.writeCharacteristic(
-        plaudServiceUuid, plaudWriteCharUuid, [1, _cmdStopSync & 0xFF, (_cmdStopSync >> 8) & 0xFF, 1]);
+    await transport.writeCharacteristic(plaudServiceUuid, plaudWriteCharUuid, [
+      1,
+      _cmdStopSync & 0xFF,
+      (_cmdStopSync >> 8) & 0xFF,
+      1,
+    ]);
   }
 
   @override
@@ -141,10 +140,7 @@ class PlaudDeviceConnection extends DeviceConnection {
     try {
       final response = await _sendCommand(_cmdGetBattery, []);
       if (response != null && response.length >= 2) {
-        return {
-          'isCharging': response[0] != 0,
-          'level': response[1],
-        };
+        return {'isCharging': response[0] != 0, 'level': response[1]};
       }
       return null;
     } catch (e) {
@@ -291,14 +287,10 @@ class PlaudDeviceConnection extends DeviceConnection {
   @override
   Future<StreamSubscription?> performGetImageListener({
     required void Function(OrientedImage orientedImage) onImageReceived,
-  }) async =>
-      null;
+  }) async => null;
 
   @override
-  Future<StreamSubscription<List<int>>?> performGetAccelListener({
-    void Function(int)? onAccelChange,
-  }) async =>
-      null;
+  Future<StreamSubscription<List<int>>?> performGetAccelListener({void Function(int)? onAccelChange}) async => null;
 
   @override
   Future<int> performGetFeatures() async => 0;
@@ -327,15 +319,15 @@ class PlaudDeviceConnection extends DeviceConnection {
   List<int> _toBytes32(int v) => [v & 0xFF, (v >> 8) & 0xFF, (v >> 16) & 0xFF, (v >> 24) & 0xFF];
 
   List<int> _toBytes64(int v) => [
-        v & 0xFF,
-        (v >> 8) & 0xFF,
-        (v >> 16) & 0xFF,
-        (v >> 24) & 0xFF,
-        (v >> 32) & 0xFF,
-        (v >> 40) & 0xFF,
-        (v >> 48) & 0xFF,
-        (v >> 56) & 0xFF,
-      ];
+    v & 0xFF,
+    (v >> 8) & 0xFF,
+    (v >> 16) & 0xFF,
+    (v >> 24) & 0xFF,
+    (v >> 32) & 0xFF,
+    (v >> 40) & 0xFF,
+    (v >> 48) & 0xFF,
+    (v >> 56) & 0xFF,
+  ];
 
   int _toInt32(List<int> b) => b[0] | (b[1] << 8) | (b[2] << 16) | (b[3] << 24);
 }

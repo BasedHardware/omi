@@ -99,8 +99,11 @@ Future<List<BluetoothService>> getBleServices(String deviceId) async {
   try {
     // Check if the device is connected before discovering services
     if (device.isDisconnected) {
-      Logger.handle(Exception('Device is not connected'), StackTrace.current,
-          message: 'Looks like the device is not connected. Please make sure the device is connected and try again.');
+      Logger.handle(
+        Exception('Device is not connected'),
+        StackTrace.current,
+        message: 'Looks like the device is not connected. Please make sure the device is connected and try again.',
+      );
       return [];
     } else {
       // TODO: need to be fixed for open glass

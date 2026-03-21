@@ -24,32 +24,20 @@ class ExternalIntegrationsSection extends StatelessWidget {
               style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),
-            Text(
-              context.l10n.externalAppAccessDescription,
-              style: const TextStyle(color: Colors.grey, fontSize: 14),
-            ),
+            Text(context.l10n.externalAppAccessDescription, style: const TextStyle(color: Colors.grey, fontSize: 14)),
             const SizedBox(height: 16),
             if (enabledExternalApps.isEmpty)
               Container(
                 width: double.infinity,
                 padding: const EdgeInsets.symmetric(vertical: 24.0),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF1A1A1A),
-                  borderRadius: BorderRadius.circular(12),
-                ),
+                decoration: BoxDecoration(color: const Color(0xFF1A1A1A), borderRadius: BorderRadius.circular(12)),
                 child: Center(
-                  child: Text(
-                    context.l10n.noExternalAppsHaveAccess,
-                    style: const TextStyle(color: Colors.grey),
-                  ),
+                  child: Text(context.l10n.noExternalAppsHaveAccess, style: const TextStyle(color: Colors.grey)),
                 ),
               )
             else
               Container(
-                decoration: BoxDecoration(
-                  color: const Color(0xFF1A1A1A),
-                  borderRadius: BorderRadius.circular(12),
-                ),
+                decoration: BoxDecoration(color: const Color(0xFF1A1A1A), borderRadius: BorderRadius.circular(12)),
                 child: ListView.separated(
                   shrinkWrap: true,
                   physics: const NeverScrollableScrollPhysics(),
@@ -57,9 +45,7 @@ class ExternalIntegrationsSection extends StatelessWidget {
                   itemBuilder: (context, index) {
                     final app = enabledExternalApps[index];
                     return ListTile(
-                      leading: CircleAvatar(
-                        backgroundImage: NetworkImage(app.getImageUrl()),
-                      ),
+                      leading: CircleAvatar(backgroundImage: NetworkImage(app.getImageUrl())),
                       title: Text(app.getName()),
                       trailing: const Icon(Icons.arrow_forward_ios, size: 16),
                       onTap: () {
@@ -67,10 +53,7 @@ class ExternalIntegrationsSection extends StatelessWidget {
                       },
                     );
                   },
-                  separatorBuilder: (context, index) => const Divider(
-                    height: 1,
-                    color: Colors.grey,
-                  ),
+                  separatorBuilder: (context, index) => const Divider(height: 1, color: Colors.grey),
                 ),
               ),
           ],

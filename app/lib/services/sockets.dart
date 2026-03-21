@@ -74,7 +74,8 @@ class SocketServicePool extends ISocketService {
       }
 
       Logger.debug(
-          "_connect force=$force state=${_socket?.state} configChanged=${_socket?.sttConfigId != sttConfigId}");
+        "_connect force=$force state=${_socket?.state} configChanged=${_socket?.sttConfigId != sttConfigId}",
+      );
 
       // new socket
       await _socket?.stop();
@@ -88,8 +89,13 @@ class SocketServicePool extends ISocketService {
           source: source,
         );
       } else {
-        _socket = TranscriptSocketServiceFactory.createDefault(sampleRate, codec, language,
-            source: source, sttConfigId: sttConfigId);
+        _socket = TranscriptSocketServiceFactory.createDefault(
+          sampleRate,
+          codec,
+          language,
+          source: source,
+          sttConfigId: sttConfigId,
+        );
       }
 
       await _socket?.start();
@@ -113,7 +119,8 @@ class SocketServicePool extends ISocketService {
     CustomSttConfig? customSttConfig,
   }) async {
     Logger.debug(
-        "socket conversation > $codec $sampleRate $force source: $source customStt: ${customSttConfig?.provider}");
+      "socket conversation > $codec $sampleRate $force source: $source customStt: ${customSttConfig?.provider}",
+    );
     return await socket(
       codec: codec,
       sampleRate: sampleRate,

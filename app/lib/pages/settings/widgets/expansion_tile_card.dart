@@ -109,8 +109,9 @@ class ExpansionTileCardState extends State<ExpansionTileCard> with SingleTickerP
     _headerColor = _controller.drive(_headerColorTween.chain(_colorTween));
     _materialColor = _controller.drive(_materialColorTween.chain(_colorTween));
     _iconColor = _controller.drive(_iconColorTween.chain(_colorTween));
-    _elevation =
-        _controller.drive(Tween<double>(begin: widget.initialElevation, end: widget.elevation).chain(_elevationTween));
+    _elevation = _controller.drive(
+      Tween<double>(begin: widget.initialElevation, end: widget.elevation).chain(_elevationTween),
+    );
     _padding = _controller.drive(_edgeInsetsTween.chain(_paddingTween));
     _isExpanded = PageStorage.of(context).readState(context) as bool? ?? widget.initiallyExpanded;
     if (_isExpanded) _controller.value = 1.0;
@@ -188,7 +189,8 @@ class ExpansionTileCardState extends State<ExpansionTileCard> with SingleTickerP
                       turns: widget.trailing == null || widget.animateTrailing
                           ? _iconTurns
                           : const AlwaysStoppedAnimation(0),
-                      child: widget.trailing ??
+                      child:
+                          widget.trailing ??
                           Icon(
                             Icons.expand_more,
                             color: _isExpanded ? widget.expandedTextStyle.color : widget.collapsedTextStyle.color,
@@ -199,10 +201,7 @@ class ExpansionTileCardState extends State<ExpansionTileCard> with SingleTickerP
               ),
             ),
             ClipRect(
-              child: Align(
-                heightFactor: _heightFactor.value,
-                child: child,
-              ),
+              child: Align(heightFactor: _heightFactor.value, child: child),
             ),
           ],
         ),

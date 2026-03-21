@@ -19,9 +19,7 @@ class IntegrationProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final responses = await Future.wait([
-        getIntegration('google_calendar'),
-      ]);
+      final responses = await Future.wait([getIntegration('google_calendar')]);
 
       _integrations['google_calendar'] = responses[0]?.connected ?? false;
       _integrations['gmail'] = false;

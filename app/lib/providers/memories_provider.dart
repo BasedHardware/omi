@@ -56,8 +56,7 @@ class MemoriesProvider extends ChangeNotifier {
       }
 
       return matchesSearch && categoryMatch;
-    }).toList()
-      ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    }).toList()..sort((a, b) => b.createdAt.compareTo(a.createdAt));
   }
 
   void setShowOnlyManual(bool showOnly) {
@@ -148,10 +147,7 @@ class MemoriesProvider extends ChangeNotifier {
       _selectedCategories = {MemoryCategory.system, MemoryCategory.interesting, MemoryCategory.manual};
     } else {
       _selectedCategories = filterList
-          .map((e) => MemoryCategory.values.firstWhere(
-                (c) => c.name == e,
-                orElse: () => MemoryCategory.system,
-              ))
+          .map((e) => MemoryCategory.values.firstWhere((c) => c.name == e, orElse: () => MemoryCategory.system))
           .toSet();
     }
     notifyListeners();
@@ -187,11 +183,7 @@ class MemoriesProvider extends ChangeNotifier {
 
     for (var memory in List.from(pendingMemories)) {
       try {
-        final serverMemory = await createMemoryServer(
-          memory.content,
-          memory.visibility.name,
-          memory.category.name,
-        );
+        final serverMemory = await createMemoryServer(memory.content, memory.visibility.name, memory.category.name);
 
         if (serverMemory != null) {
           SharedPreferencesUtil().removePendingMemory(memory.id);
@@ -294,8 +286,11 @@ class MemoriesProvider extends ChangeNotifier {
   }
 
   /// Create a memory - works offline by saving locally first, then syncing
-  Future<bool> createMemory(String content,
-      [MemoryVisibility visibility = MemoryVisibility.public, MemoryCategory category = MemoryCategory.manual]) async {
+  Future<bool> createMemory(
+    String content, [
+    MemoryVisibility visibility = MemoryVisibility.public,
+    MemoryCategory category = MemoryCategory.manual,
+  ]) async {
     // Create the memory object first
     final newMemory = Memory(
       id: const Uuid().v4(),
@@ -319,11 +314,7 @@ class MemoriesProvider extends ChangeNotifier {
     SharedPreferencesUtil().addPendingMemory(newMemory);
 
     // Try to sync to server immediately
-    final serverMemory = await createMemoryServer(
-      content,
-      visibility.name,
-      category.name,
-    );
+    final serverMemory = await createMemoryServer(content, visibility.name, category.name);
 
     if (serverMemory != null) {
       // Remove from pending and update local memory with server ID

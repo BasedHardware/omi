@@ -52,14 +52,8 @@ class SttFileUploadConfig {
   static SttFileUploadConfig falAI({required String apiKey}) {
     return SttFileUploadConfig(
       fileUploadUrl: 'https://rest.alpha.fal.ai/storage/upload/initiate',
-      fileUploadHeaders: {
-        'Authorization': 'Key $apiKey',
-        'Content-Type': 'application/json',
-      },
-      fileUploadBody: {
-        'content_type': 'audio/wav',
-        'file_name': 'audio.wav',
-      },
+      fileUploadHeaders: {'Authorization': 'Key $apiKey', 'Content-Type': 'application/json'},
+      fileUploadBody: {'content_type': 'audio/wav', 'file_name': 'audio.wav'},
       uploadUrlPath: 'upload_url',
       fileUrlPath: 'file_url',
       uploadContentType: 'audio/wav',
@@ -80,14 +74,14 @@ class SttFileUploadConfig {
   }
 
   Map<String, dynamic> toJson() => {
-        'file_upload_url': fileUploadUrl,
-        'file_upload_headers': fileUploadHeaders,
-        'file_upload_body': fileUploadBody,
-        'upload_url_path': uploadUrlPath,
-        'file_url_path': fileUrlPath,
-        'upload_content_type': uploadContentType,
-        'upload_method': uploadMethod,
-      };
+    'file_upload_url': fileUploadUrl,
+    'file_upload_headers': fileUploadHeaders,
+    'file_upload_body': fileUploadBody,
+    'upload_url_path': uploadUrlPath,
+    'file_url_path': fileUrlPath,
+    'upload_content_type': uploadContentType,
+    'upload_method': uploadMethod,
+  };
 }
 
 class SchemaBasedSttProvider implements ISttProvider {
@@ -111,14 +105,10 @@ class SchemaBasedSttProvider implements ISttProvider {
     String? requestType, // String version for unified config
     this.jsonBodyBuilder,
     this.fileUploadConfig,
-  })  : requestBodyType = requestBodyType ?? SttRequestBodyType.fromString(requestType),
-        _client = http.Client();
+  }) : requestBodyType = requestBodyType ?? SttRequestBodyType.fromString(requestType),
+       _client = http.Client();
 
-  factory SchemaBasedSttProvider.openAI({
-    required String apiKey,
-    String model = 'whisper-1',
-    String language = 'en',
-  }) {
+  factory SchemaBasedSttProvider.openAI({required String apiKey, String model = 'whisper-1', String language = 'en'}) {
     return SchemaBasedSttProvider(
       apiUrl: 'https://api.openai.com/v1/audio/transcriptions',
       schema: SttResponseSchema.openAI,
@@ -134,10 +124,7 @@ class SchemaBasedSttProvider implements ISttProvider {
   }
 
   factory SchemaBasedSttProvider.deepgram({required String apiKey, String? language}) {
-    final queryParams = <String, String>{
-      'model': 'nova-3',
-      'smart_format': 'true',
-    };
+    final queryParams = <String, String>{'model': 'nova-3', 'smart_format': 'true'};
     if (language != null) queryParams['language'] = language;
 
     final queryString = queryParams.entries.map((e) => '${e.key}=${e.value}').join('&');
@@ -145,10 +132,7 @@ class SchemaBasedSttProvider implements ISttProvider {
     return SchemaBasedSttProvider(
       apiUrl: 'https://api.deepgram.com/v1/listen?$queryString',
       schema: SttResponseSchema.deepgram,
-      defaultHeaders: {
-        'Authorization': 'Token $apiKey',
-        'Content-Type': 'audio/wav',
-      },
+      defaultHeaders: {'Authorization': 'Token $apiKey', 'Content-Type': 'audio/wav'},
       requestBodyType: SttRequestBodyType.rawBinary,
     );
   }
@@ -162,10 +146,7 @@ class SchemaBasedSttProvider implements ISttProvider {
     return SchemaBasedSttProvider(
       apiUrl: 'https://fal.run/fal-ai/wizper',
       schema: SttResponseSchema.falAI,
-      defaultHeaders: {
-        'Authorization': 'Key $apiKey',
-        'Content-Type': 'application/json',
-      },
+      defaultHeaders: {'Authorization': 'Key $apiKey', 'Content-Type': 'application/json'},
       requestBodyType: SttRequestBodyType.jsonBase64,
       fileUploadConfig: SttFileUploadConfig.falAI(apiKey: apiKey),
       jsonBodyBuilder: (audioUrl) => {
@@ -185,31 +166,24 @@ class SchemaBasedSttProvider implements ISttProvider {
     return SchemaBasedSttProvider(
       apiUrl: 'https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent?key=$apiKey',
       schema: SttResponseSchema.gemini,
-      defaultHeaders: {
-        'Content-Type': 'application/json',
-      },
+      defaultHeaders: {'Content-Type': 'application/json'},
       requestBodyType: SttRequestBodyType.jsonBase64,
       jsonBodyBuilder: (base64Audio) => {
         'contents': [
           {
             'parts': [
               {
-                'inline_data': {
-                  'mime_type': 'audio/wav',
-                  'data': base64Audio,
-                }
+                'inline_data': {'mime_type': 'audio/wav', 'data': base64Audio},
               },
               {
-                'text': 'Transcribe this audio to text in $language language. '
+                'text':
+                    'Transcribe this audio to text in $language language. '
                     'Return only the transcription text, no explanations or formatting.',
-              }
-            ]
-          }
+              },
+            ],
+          },
         ],
-        'generationConfig': {
-          'temperature': 0.1,
-          'maxOutputTokens': 8192,
-        }
+        'generationConfig': {'temperature': 0.1, 'maxOutputTokens': 8192},
       },
     );
   }
@@ -238,10 +212,7 @@ class SchemaBasedSttProvider implements ISttProvider {
 
   /// OpenAI GPT-4o Transcribe with speaker diarization
   /// ref: https://platform.openai.com/docs/models/gpt-4o-transcribe-diarize
-  factory SchemaBasedSttProvider.openAIDiarize({
-    required String apiKey,
-    String language = 'en',
-  }) {
+  factory SchemaBasedSttProvider.openAIDiarize({required String apiKey, String language = 'en'}) {
     return SchemaBasedSttProvider(
       apiUrl: 'https://api.openai.com/v1/audio/transcriptions',
       schema: SttResponseSchema.openAIDiarize,
@@ -284,10 +255,16 @@ class SchemaBasedSttProvider implements ISttProvider {
       }
 
       final uploadRequest = fileUploadConfig!.uploadMethod.toUpperCase() == 'PUT'
-          ? _client.put(Uri.parse(uploadUrl),
-              headers: {'Content-Type': fileUploadConfig!.uploadContentType}, body: audioBytes)
-          : _client.post(Uri.parse(uploadUrl),
-              headers: {'Content-Type': fileUploadConfig!.uploadContentType}, body: audioBytes);
+          ? _client.put(
+              Uri.parse(uploadUrl),
+              headers: {'Content-Type': fileUploadConfig!.uploadContentType},
+              body: audioBytes,
+            )
+          : _client.post(
+              Uri.parse(uploadUrl),
+              headers: {'Content-Type': fileUploadConfig!.uploadContentType},
+              body: audioBytes,
+            );
 
       final uploadResponse = await uploadRequest.timeout(const Duration(seconds: 60));
 
@@ -304,10 +281,7 @@ class SchemaBasedSttProvider implements ISttProvider {
   }
 
   @override
-  Future<SttTranscriptionResult?> transcribe(
-    dynamic audioData, {
-    double audioOffsetSeconds = 0,
-  }) async {
+  Future<SttTranscriptionResult?> transcribe(dynamic audioData, {double audioOffsetSeconds = 0}) async {
     final Uint8List audioBytes = audioData is Uint8List ? audioData : Uint8List.fromList(audioData);
     try {
       final uri = Uri.parse(apiUrl);
@@ -321,8 +295,9 @@ class SchemaBasedSttProvider implements ISttProvider {
 
       switch (requestBodyType) {
         case SttRequestBodyType.rawBinary:
-          response =
-              await _client.post(uri, headers: defaultHeaders, body: audioBytes).timeout(const Duration(seconds: 60));
+          response = await _client
+              .post(uri, headers: defaultHeaders, body: audioBytes)
+              .timeout(const Duration(seconds: 60));
           break;
 
         case SttRequestBodyType.jsonBase64:

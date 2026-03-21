@@ -1,11 +1,9 @@
 import 'dart:ui';
+
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-
-import 'package:cached_network_image/cached_network_image.dart';
-import 'package:collection/collection.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:just_audio/just_audio.dart';
@@ -22,7 +20,7 @@ import 'package:omi/utils/logger.dart';
 
 enum ConversationBottomBarMode {
   recording, // During active recording (no summary icon)
-  detail // For viewing completed conversations
+  detail, // For viewing completed conversations
 }
 
 enum ConversationTab { transcript, summary, actionItems }
@@ -184,9 +182,7 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
     final filePosition = _calculateFilePositionForTimestamp(segmentStartSeconds);
 
     // Ensure position is not negative
-    final targetPosition = Duration(
-      milliseconds: (filePosition * 1000).clamp(0, double.infinity).toInt(),
-    );
+    final targetPosition = Duration(milliseconds: (filePosition * 1000).clamp(0, double.infinity).toInt());
 
     // Track transcript segment tap
     final conversationId = widget.conversation?.id ?? '';
@@ -244,19 +240,12 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
         } else {
           // Fall back to API URL
           fallbackHeaders ??= await getAudioHeaders();
-          final apiUrl = getAudioStreamUrl(
-            conversationId: widget.conversation!.id,
-            audioFileId: fileId,
-            format: 'wav',
-          );
+          final apiUrl = getAudioStreamUrl(conversationId: widget.conversation!.id, audioFileId: fileId, format: 'wav');
           audioSources.add(AudioSource.uri(Uri.parse(apiUrl), headers: fallbackHeaders));
         }
       }
 
-      final playlist = ConcatenatingAudioSource(
-        useLazyPreparation: true,
-        children: audioSources,
-      );
+      final playlist = ConcatenatingAudioSource(useLazyPreparation: true, children: audioSources);
 
       await _audioPlayer!.setAudioSource(playlist, preload: true);
       _isAudioInitialized = true;
@@ -319,9 +308,7 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
       return const SizedBox();
     }
 
-    return Center(
-      child: _buildBottomBar(context),
-    );
+    return Center(child: _buildBottomBar(context));
   }
 
   Widget _buildBottomBar(BuildContext context) {
@@ -344,12 +331,7 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
           color: const Color(0xFF1C1C1E),
           borderRadius: BorderRadius.circular(28),
           boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.3),
-              spreadRadius: 1,
-              blurRadius: 5,
-              offset: const Offset(0, 2),
-            ),
+            BoxShadow(color: Colors.black.withOpacity(0.3), spreadRadius: 1, blurRadius: 5, offset: const Offset(0, 2)),
           ],
         ),
         child: Row(
@@ -389,9 +371,7 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
           width: (isTranscriptSelected && hasAudio) ? transcriptPillWidth : iconSize,
           height: iconSize,
           clipBehavior: Clip.hardEdge,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(28),
-          ),
+          decoration: BoxDecoration(borderRadius: BorderRadius.circular(28)),
           child: OverflowBox(
             maxWidth: transcriptPillWidth,
             alignment: Alignment.center,
@@ -413,9 +393,7 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
           width: isSummarySelected ? summaryPillWidth : iconSize,
           height: iconSize,
           clipBehavior: Clip.hardEdge,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(28),
-          ),
+          decoration: BoxDecoration(borderRadius: BorderRadius.circular(28)),
           child: OverflowBox(
             maxWidth: summaryPillWidth,
             alignment: Alignment.center,
@@ -449,12 +427,7 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
         color: const Color(0xFF3B82F6),
         borderRadius: BorderRadius.circular(28),
         boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.3),
-            spreadRadius: 1,
-            blurRadius: 5,
-            offset: const Offset(0, 2),
-          ),
+          BoxShadow(color: Colors.black.withOpacity(0.3), spreadRadius: 1, blurRadius: 5, offset: const Offset(0, 2)),
         ],
       ),
       child: Row(
@@ -471,11 +444,7 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
     );
   }
 
-  Widget _buildCircularButtonContent({
-    required IconData icon,
-    required bool isSelected,
-    required VoidCallback onTap,
-  }) {
+  Widget _buildCircularButtonContent({required IconData icon, required bool isSelected, required VoidCallback onTap}) {
     return Container(
       height: 56,
       width: 56,
@@ -483,12 +452,7 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
         color: isSelected ? const Color(0xFF3B82F6) : const Color(0xFF2C2C2E),
         shape: BoxShape.circle,
         boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.3),
-            spreadRadius: 1,
-            blurRadius: 5,
-            offset: const Offset(0, 2),
-          ),
+          BoxShadow(color: Colors.black.withOpacity(0.3), spreadRadius: 1, blurRadius: 5, offset: const Offset(0, 2)),
         ],
       ),
       child: Material(
@@ -500,13 +464,7 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
             HapticFeedback.mediumImpact();
             onTap();
           },
-          child: Center(
-            child: FaIcon(
-              icon,
-              color: isSelected ? Colors.white : Colors.grey.shade400,
-              size: 22,
-            ),
-          ),
+          child: Center(child: FaIcon(icon, color: isSelected ? Colors.white : Colors.grey.shade400, size: 22)),
         ),
       ),
     );
@@ -574,12 +532,7 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
         color: const Color(0xFF3B82F6),
         borderRadius: BorderRadius.circular(28),
         boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.3),
-            spreadRadius: 1,
-            blurRadius: 5,
-            offset: const Offset(0, 2),
-          ),
+          BoxShadow(color: Colors.black.withOpacity(0.3), spreadRadius: 1, blurRadius: 5, offset: const Offset(0, 2)),
         ],
       ),
       child: Material(
@@ -600,19 +553,11 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
                 child: Text(
                   displayName,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                  ),
+                  style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600),
                 ),
               ),
               // Dropdown arrow
-              const Icon(
-                Icons.keyboard_arrow_down,
-                color: Colors.white,
-                size: 18,
-              ),
+              const Icon(Icons.keyboard_arrow_down, color: Colors.white, size: 18),
             ],
           ),
         ),
@@ -626,10 +571,7 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
       return const SizedBox(
         width: 32,
         height: 32,
-        child: CircularProgressIndicator(
-          strokeWidth: 2,
-          valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-        ),
+        child: CircularProgressIndicator(strokeWidth: 2, valueColor: AlwaysStoppedAnimation<Color>(Colors.white)),
       );
     }
 
@@ -663,10 +605,7 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
           return const SizedBox(
             width: 32,
             height: 32,
-            child: CircularProgressIndicator(
-              strokeWidth: 2,
-              valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-            ),
+            child: CircularProgressIndicator(strokeWidth: 2, valueColor: AlwaysStoppedAnimation<Color>(Colors.white)),
           );
         }
 
@@ -704,17 +643,11 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
             child: Container(
               width: progressBarWidth,
               height: 4,
-              decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.3),
-                borderRadius: BorderRadius.circular(2),
-              ),
+              decoration: BoxDecoration(color: Colors.white.withOpacity(0.3), borderRadius: BorderRadius.circular(2)),
             ),
           ),
           const SizedBox(width: 8),
-          Text(
-            _formatDurationRemaining(Duration.zero),
-            style: const TextStyle(color: Colors.white, fontSize: 12),
-          ),
+          Text(_formatDurationRemaining(Duration.zero), style: const TextStyle(color: Colors.white, fontSize: 12)),
         ],
       );
     }
@@ -740,17 +673,13 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
                   onTapDown: (details) {
                     final tapPosition = details.localPosition.dx;
                     final seekProgress = (tapPosition / progressBarWidth).clamp(0.0, 1.0);
-                    final seekPosition = Duration(
-                      milliseconds: (seekProgress * _totalDuration.inMilliseconds).toInt(),
-                    );
+                    final seekPosition = Duration(milliseconds: (seekProgress * _totalDuration.inMilliseconds).toInt());
                     _seekToCombinedPosition(seekPosition);
                   },
                   onHorizontalDragUpdate: (details) {
                     final tapPosition = details.localPosition.dx;
                     final seekProgress = (tapPosition / progressBarWidth).clamp(0.0, 1.0);
-                    final seekPosition = Duration(
-                      milliseconds: (seekProgress * _totalDuration.inMilliseconds).toInt(),
-                    );
+                    final seekPosition = Duration(milliseconds: (seekProgress * _totalDuration.inMilliseconds).toInt());
                     _seekToCombinedPosition(seekPosition);
                   },
                   child: Container(
@@ -768,10 +697,7 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
                         alignment: Alignment.centerLeft,
                         widthFactor: progress,
                         child: Container(
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(2),
-                          ),
+                          decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(2)),
                         ),
                       ),
                     ),
@@ -816,10 +742,7 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
 
     // Track seek
     final conversationId = widget.conversation?.id ?? '';
-    MixpanelManager().audioPlaybackSeeked(
-      conversationId: conversationId,
-      toPositionSeconds: targetPosition.inSeconds,
-    );
+    MixpanelManager().audioPlaybackSeeked(conversationId: conversationId, toPositionSeconds: targetPosition.inSeconds);
 
     await _audioPlayer!.seek(positionInTrack, index: targetIndex);
   }
@@ -842,12 +765,7 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
           color: isSelected ? const Color(0xFF3B82F6) : const Color(0xFF2C2C2E),
           shape: BoxShape.circle,
           boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.3),
-              spreadRadius: 1,
-              blurRadius: 5,
-              offset: const Offset(0, 2),
-            ),
+            BoxShadow(color: Colors.black.withOpacity(0.3), spreadRadius: 1, blurRadius: 5, offset: const Offset(0, 2)),
           ],
         ),
         child: Material(
@@ -859,13 +777,7 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
               HapticFeedback.mediumImpact();
               onTap();
             },
-            child: Center(
-              child: FaIcon(
-                icon,
-                color: isSelected ? Colors.white : Colors.grey.shade400,
-                size: 22,
-              ),
-            ),
+            child: Center(child: FaIcon(icon, color: isSelected ? Colors.white : Colors.grey.shade400, size: 22)),
           ),
         ),
       ),
@@ -879,13 +791,7 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
       decoration: BoxDecoration(
         color: Colors.red,
         shape: BoxShape.circle,
-        boxShadow: [
-          BoxShadow(
-            color: Colors.red.withOpacity(0.4),
-            spreadRadius: 1,
-            blurRadius: 4,
-          ),
-        ],
+        boxShadow: [BoxShadow(color: Colors.red.withOpacity(0.4), spreadRadius: 1, blurRadius: 4)],
       ),
       child: Material(
         color: Colors.transparent,
@@ -893,11 +799,7 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
         child: InkWell(
           borderRadius: BorderRadius.circular(20),
           onTap: widget.onStopPressed,
-          child: const Icon(
-            Icons.stop_rounded,
-            color: Colors.white,
-            size: 24,
-          ),
+          child: const Icon(Icons.stop_rounded, color: Colors.white, size: 24),
         ),
       ),
     );
@@ -910,10 +812,7 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
       return const SizedBox(
         width: size,
         height: size,
-        child: CircularProgressIndicator(
-          strokeWidth: 2,
-          valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-        ),
+        child: CircularProgressIndicator(strokeWidth: 2, valueColor: AlwaysStoppedAnimation<Color>(Colors.white)),
       );
     }
 
@@ -934,10 +833,7 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
         height: size,
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(size / 2),
-          image: DecorationImage(
-            image: AssetImage(imageUrl),
-            fit: BoxFit.cover,
-          ),
+          image: DecorationImage(image: AssetImage(imageUrl), fit: BoxFit.cover),
         ),
       );
     }
@@ -950,10 +846,7 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
           height: size,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            image: DecorationImage(
-              image: imageProvider,
-              fit: BoxFit.cover,
-            ),
+            image: DecorationImage(image: imageProvider, fit: BoxFit.cover),
           ),
         );
       },
@@ -970,10 +863,7 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
       placeholder: (context, url) => const SizedBox(
         width: size,
         height: size,
-        child: CircularProgressIndicator(
-          strokeWidth: 2,
-          valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-        ),
+        child: CircularProgressIndicator(strokeWidth: 2, valueColor: AlwaysStoppedAnimation<Color>(Colors.white)),
       ),
     );
   }

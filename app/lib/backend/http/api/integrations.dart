@@ -9,10 +9,7 @@ class IntegrationResponse {
   final bool connected;
   final String appKey;
 
-  IntegrationResponse({
-    required this.connected,
-    required this.appKey,
-  });
+  IntegrationResponse({required this.connected, required this.appKey});
 
   factory IntegrationResponse.fromJson(Map<String, dynamic> json) {
     return IntegrationResponse(

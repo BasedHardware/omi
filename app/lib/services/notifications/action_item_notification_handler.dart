@@ -45,10 +45,7 @@ class ActionItemNotificationHandler {
           channelKey: channelKey,
           title: '⏰ ${ctx?.l10n.actionItemReminderTitle ?? '${Env.appName} Reminder'}',
           body: description,
-          payload: {
-            'action_item_id': actionItemId,
-            'navigate_to': '/action-items',
-          },
+          payload: {'action_item_id': actionItemId, 'navigate_to': '/action-items'},
           notificationLayout: NotificationLayout.Default,
           wakeUpScreen: true,
           category: NotificationCategory.Reminder,
@@ -71,10 +68,7 @@ class ActionItemNotificationHandler {
   }
 
   /// Handle action item reminder data message
-  static Future<void> handleReminderMessage(
-    Map<String, dynamic> data,
-    String channelKey,
-  ) async {
+  static Future<void> handleReminderMessage(Map<String, dynamic> data, String channelKey) async {
     final actionItemId = data['action_item_id'];
     final description = data['description'];
     final dueAt = data['due_at'];
@@ -93,10 +87,7 @@ class ActionItemNotificationHandler {
   }
 
   /// Handle action item update data message
-  static Future<void> handleUpdateMessage(
-    Map<String, dynamic> data,
-    String channelKey,
-  ) async {
+  static Future<void> handleUpdateMessage(Map<String, dynamic> data, String channelKey) async {
     final actionItemId = data['action_item_id'];
     final description = data['description'];
     final dueAt = data['due_at'];

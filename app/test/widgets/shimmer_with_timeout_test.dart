@@ -7,12 +7,7 @@ import 'package:omi/widgets/shimmer_with_timeout.dart';
 void main() {
   testWidgets('shows shimmer before timeout and hides after', (tester) async {
     await tester.pumpWidget(
-      const MaterialApp(
-        home: ShimmerWithTimeout(
-          timeoutSeconds: 1,
-          child: SizedBox(width: 10, height: 10),
-        ),
-      ),
+      const MaterialApp(home: ShimmerWithTimeout(timeoutSeconds: 1, child: SizedBox(width: 10, height: 10))),
     );
 
     expect(find.byType(Shimmer), findsOneWidget);
@@ -25,12 +20,7 @@ void main() {
 
   testWidgets('does not throw when disposed before timeout', (tester) async {
     await tester.pumpWidget(
-      const MaterialApp(
-        home: ShimmerWithTimeout(
-          timeoutSeconds: 2,
-          child: SizedBox(width: 10, height: 10),
-        ),
-      ),
+      const MaterialApp(home: ShimmerWithTimeout(timeoutSeconds: 2, child: SizedBox(width: 10, height: 10))),
     );
 
     await tester.pumpWidget(const MaterialApp(home: SizedBox.shrink()));

@@ -14,9 +14,7 @@ void showEditSegmentBottomSheet(
     context: context,
     isScrollControlled: true,
     backgroundColor: Colors.grey.shade900,
-    shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-    ),
+    shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
     builder: (context) => _EditSegmentSheet(segment: segment, speakerName: speakerName, onSave: onSave),
   ).whenComplete(() => onDismissed?.call());
 }
@@ -70,10 +68,7 @@ class _EditSegmentSheetState extends State<_EditSegmentSheet> {
                 child: Container(
                   width: 40,
                   height: 4,
-                  decoration: BoxDecoration(
-                    color: Colors.grey.shade600,
-                    borderRadius: BorderRadius.circular(2),
-                  ),
+                  decoration: BoxDecoration(color: Colors.grey.shade600, borderRadius: BorderRadius.circular(2)),
                 ),
               ),
               const SizedBox(height: 16),
@@ -102,10 +97,7 @@ class _EditSegmentSheetState extends State<_EditSegmentSheet> {
                 decoration: InputDecoration(
                   filled: true,
                   fillColor: Colors.grey.shade800,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide.none,
-                  ),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
                   contentPadding: const EdgeInsets.all(14),
                 ),
               ),

@@ -28,9 +28,9 @@ class CreateOptionsSheet extends StatelessWidget {
           Text(
             context.l10n.whatWouldYouLikeToCreate,
             style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                  fontWeight: FontWeight.w400,
-                  color: Theme.of(context).colorScheme.onSurface,
-                ),
+              fontWeight: FontWeight.w400,
+              color: Theme.of(context).colorScheme.onSurface,
+            ),
           ),
           const SizedBox(height: 24),
           Card(
@@ -41,10 +41,14 @@ class CreateOptionsSheet extends StatelessWidget {
               contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               titleAlignment: ListTileTitleAlignment.center,
               leading: const Icon(Icons.apps, color: Colors.white),
-              title: Text(context.l10n.createAnApp,
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(color: Colors.white)),
-              subtitle:
-                  Text(context.l10n.createAndShareYourApp, style: TextStyle(color: Colors.white.withOpacity(0.7))),
+              title: Text(
+                context.l10n.createAnApp,
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(color: Colors.white),
+              ),
+              subtitle: Text(
+                context.l10n.createAndShareYourApp,
+                style: TextStyle(color: Colors.white.withOpacity(0.7)),
+              ),
               onTap: () {
                 Navigator.pop(context);
                 MixpanelManager().pageOpened('Submit App');
@@ -61,10 +65,14 @@ class CreateOptionsSheet extends StatelessWidget {
               contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               leading: const Icon(Icons.person_outline, color: Colors.white),
               titleAlignment: ListTileTitleAlignment.center,
-              title: Text(context.l10n.createMyClone,
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(color: Colors.white)),
-              subtitle:
-                  Text(context.l10n.createYourDigitalClone, style: TextStyle(color: Colors.white.withOpacity(0.7))),
+              title: Text(
+                context.l10n.createMyClone,
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(color: Colors.white),
+              ),
+              subtitle: Text(
+                context.l10n.createYourDigitalClone,
+                style: TextStyle(color: Colors.white.withOpacity(0.7)),
+              ),
               onTap: () {
                 Navigator.pop(context);
                 MixpanelManager().pageOpened('Create Persona');
@@ -73,9 +81,7 @@ class CreateOptionsSheet extends StatelessWidget {
                 Navigator.of(context).push(
                   MaterialPageRoute(
                     builder: (context) => const PersonaProfilePage(),
-                    settings: const RouteSettings(
-                      arguments: 'from_settings',
-                    ),
+                    settings: const RouteSettings(arguments: 'from_settings'),
                   ),
                 );
               },
@@ -90,10 +96,14 @@ class CreateOptionsSheet extends StatelessWidget {
               contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               leading: const Icon(Icons.cable, color: Colors.white),
               titleAlignment: ListTileTitleAlignment.center,
-              title: Text(context.l10n.addMcpServer,
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(color: Colors.white)),
-              subtitle:
-                  Text(context.l10n.connectExternalAiTools, style: TextStyle(color: Colors.white.withOpacity(0.7))),
+              title: Text(
+                context.l10n.addMcpServer,
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(color: Colors.white),
+              ),
+              subtitle: Text(
+                context.l10n.connectExternalAiTools,
+                style: TextStyle(color: Colors.white.withOpacity(0.7)),
+              ),
               onTap: () {
                 Navigator.pop(context);
                 MixpanelManager().pageOpened('Add MCP Server');

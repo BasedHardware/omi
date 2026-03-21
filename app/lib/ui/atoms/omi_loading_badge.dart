@@ -37,33 +37,29 @@ class OmiLoadingBadge extends AdaptiveWidget {
   Widget buildMobile(BuildContext context) => _base();
 
   Widget _base() => Container(
-        padding: padding,
-        decoration: BoxDecoration(
-          color: ResponsiveHelper.backgroundSecondary.withOpacity(0.6),
-          borderRadius: BorderRadius.circular(borderRadius),
-          border: Border.all(color: color.withOpacity(0.3), width: 1),
+    padding: padding,
+    decoration: BoxDecoration(
+      color: ResponsiveHelper.backgroundSecondary.withOpacity(0.6),
+      borderRadius: BorderRadius.circular(borderRadius),
+      border: Border.all(color: color.withOpacity(0.3), width: 1),
+    ),
+    child: Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        SizedBox(
+          width: 12,
+          height: 12,
+          child: CircularProgressIndicator(
+            strokeWidth: strokeWidth,
+            valueColor: AlwaysStoppedAnimation<Color>(color.withOpacity(0.8)),
+          ),
         ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            SizedBox(
-              width: 12,
-              height: 12,
-              child: CircularProgressIndicator(
-                strokeWidth: strokeWidth,
-                valueColor: AlwaysStoppedAnimation<Color>(color.withOpacity(0.8)),
-              ),
-            ),
-            const SizedBox(width: 8),
-            Text(
-              label,
-              style: const TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w500,
-                color: ResponsiveHelper.textSecondary,
-              ),
-            ),
-          ],
+        const SizedBox(width: 8),
+        Text(
+          label,
+          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: ResponsiveHelper.textSecondary),
         ),
-      );
+      ],
+    ),
+  );
 }

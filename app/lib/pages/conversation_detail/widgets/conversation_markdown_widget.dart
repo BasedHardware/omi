@@ -224,8 +224,12 @@ class _ConversationMarkdownWidgetState extends State<ConversationMarkdownWidget>
   }
 
   // Custom markdown widget with search functionality
-  Widget _getMarkdownWidgetWithSearch(BuildContext context, String content,
-      {String searchQuery = '', int currentResultIndex = -1}) {
+  Widget _getMarkdownWidgetWithSearch(
+    BuildContext context,
+    String content, {
+    String searchQuery = '',
+    int currentResultIndex = -1,
+  }) {
     // Check for generative UI tags
     final hasGenerativeTags = XmlTagParser.containsGenerativeTags(content);
 
@@ -339,11 +343,7 @@ class _ConversationMarkdownWidgetState extends State<ConversationMarkdownWidget>
     // Reset counter logic if needed
   }
 
-  String _highlightSearchInMarkdown(
-    String content,
-    String searchQuery,
-    int currentResultIndex,
-  ) {
+  String _highlightSearchInMarkdown(String content, String searchQuery, int currentResultIndex) {
     if (searchQuery.isEmpty) return content;
 
     final pattern = RegExp.escape(searchQuery);

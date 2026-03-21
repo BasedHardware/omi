@@ -42,9 +42,7 @@ class _CustomBackendURLFormState extends State<CustomBackendURLForm> {
       print('Custom Backend URL: $backendURL');
 
       // Show a success message
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(context.l10n.backendUrlSavedSuccess)),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.l10n.backendUrlSavedSuccess)));
     }
   }
 
@@ -72,9 +70,7 @@ class _CustomBackendURLFormState extends State<CustomBackendURLForm> {
             padding: const EdgeInsets.symmetric(horizontal: 24.0),
             child: Card(
               elevation: 8.0,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16.0),
-              ),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16.0)),
               margin: const EdgeInsets.symmetric(vertical: 24.0),
               child: Padding(
                 padding: const EdgeInsets.all(24.0),
@@ -85,11 +81,7 @@ class _CustomBackendURLFormState extends State<CustomBackendURLForm> {
                     children: [
                       Text(
                         context.l10n.customBackendUrlTitle,
-                        style: TextStyle(
-                          fontSize: 28.0,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.blueAccent[700],
-                        ),
+                        style: TextStyle(fontSize: 28.0, fontWeight: FontWeight.bold, color: Colors.blueAccent[700]),
                       ),
                       const SizedBox(height: 20),
                       TextFormField(
@@ -97,9 +89,7 @@ class _CustomBackendURLFormState extends State<CustomBackendURLForm> {
                         decoration: InputDecoration(
                           labelText: context.l10n.backendUrlLabel,
                           prefixIcon: const Icon(Icons.link),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12.0),
-                          ),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12.0)),
                         ),
                         validator: (value) => _validateURL(value, context),
                         keyboardType: TextInputType.url,
@@ -111,15 +101,10 @@ class _CustomBackendURLFormState extends State<CustomBackendURLForm> {
                           onPressed: _submitForm,
                           style: ElevatedButton.styleFrom(
                             padding: const EdgeInsets.symmetric(vertical: 16.0),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12.0),
-                            ),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12.0)),
                             backgroundColor: Colors.blueAccent[700],
                           ),
-                          child: Text(
-                            context.l10n.saveUrlButton,
-                            style: const TextStyle(fontSize: 18.0),
-                          ),
+                          child: Text(context.l10n.saveUrlButton, style: const TextStyle(fontSize: 18.0)),
                         ),
                       ),
                     ],

@@ -54,15 +54,8 @@ class _ConnectDevicePageState extends State<ConnectDevicePage> {
             child: Container(
               width: 36,
               height: 36,
-              decoration: const BoxDecoration(
-                color: Color(0xFF1F1F25),
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(
-                FontAwesomeIcons.chevronLeft,
-                size: 16,
-                color: Colors.white70,
-              ),
+              decoration: const BoxDecoration(color: Color(0xFF1F1F25), shape: BoxShape.circle),
+              child: const Icon(FontAwesomeIcons.chevronLeft, size: 16, color: Colors.white70),
             ),
           ),
         ),
@@ -77,23 +70,12 @@ class _ConnectDevicePageState extends State<ConnectDevicePage> {
             child: Container(
               width: 36,
               height: 36,
-              decoration: const BoxDecoration(
-                color: Color(0xFF1F1F25),
-                shape: BoxShape.circle,
-              ),
+              decoration: const BoxDecoration(color: Color(0xFF1F1F25), shape: BoxShape.circle),
               child: IconButton(
                 padding: EdgeInsets.zero,
-                icon: const Icon(
-                  FontAwesomeIcons.gear,
-                  size: 16,
-                  color: Colors.white70,
-                ),
+                icon: const Icon(FontAwesomeIcons.gear, size: 16, color: Colors.white70),
                 onPressed: () {
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (context) => const DeviceSettings(),
-                    ),
-                  );
+                  Navigator.of(context).push(MaterialPageRoute(builder: (context) => const DeviceSettings()));
                 },
               ),
             ),
@@ -148,11 +130,7 @@ class _ConnectDevicePageState extends State<ConnectDevicePage> {
                   const SizedBox(width: 6),
                   Text(
                     context.l10n.connectionGuide,
-                    style: TextStyle(
-                      color: Colors.grey.shade400,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w400,
-                    ),
+                    style: TextStyle(color: Colors.grey.shade400, fontSize: 13, fontWeight: FontWeight.w400),
                   ),
                 ],
               ),

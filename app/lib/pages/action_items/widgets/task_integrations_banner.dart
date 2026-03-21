@@ -19,11 +19,7 @@ class TaskIntegrationsBanner extends StatelessWidget {
         // Track banner click
         MixpanelManager().exportTasksBannerClicked();
 
-        Navigator.of(context).push(
-          MaterialPageRoute(
-            builder: (context) => const TaskIntegrationsPage(),
-          ),
-        );
+        Navigator.of(context).push(MaterialPageRoute(builder: (context) => const TaskIntegrationsPage()));
       },
       child: Builder(
         builder: (context) => Container(
@@ -133,12 +129,7 @@ class TaskIntegrationsBanner extends StatelessWidget {
       height: size,
       child: ClipRRect(
         borderRadius: BorderRadius.circular(16),
-        child: Image.asset(
-          path,
-          width: size,
-          height: size,
-          fit: BoxFit.contain,
-        ),
+        child: Image.asset(path, width: size, height: size, fit: BoxFit.contain),
       ),
     );
   }

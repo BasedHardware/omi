@@ -48,10 +48,7 @@ class OmiSettingsTile extends AdaptiveWidget {
             decoration: BoxDecoration(
               color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.4),
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: ResponsiveHelper.backgroundQuaternary.withValues(alpha: 0.3),
-                width: 1,
-              ),
+              border: Border.all(color: ResponsiveHelper.backgroundQuaternary.withValues(alpha: 0.3), width: 1),
             ),
             child: Row(
               children: [
@@ -61,11 +58,7 @@ class OmiSettingsTile extends AdaptiveWidget {
                     color: (iconColor ?? ResponsiveHelper.purplePrimary).withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(10),
                   ),
-                  child: Icon(
-                    icon,
-                    size: 18,
-                    color: iconColor ?? ResponsiveHelper.purplePrimary,
-                  ),
+                  child: Icon(icon, size: 18, color: iconColor ?? ResponsiveHelper.purplePrimary),
                 ),
                 const SizedBox(width: 16),
                 Expanded(
@@ -82,13 +75,7 @@ class OmiSettingsTile extends AdaptiveWidget {
                       ),
                       if (subtitle != null) ...[
                         const SizedBox(height: 4),
-                        Text(
-                          subtitle!,
-                          style: const TextStyle(
-                            color: ResponsiveHelper.textTertiary,
-                            fontSize: 13,
-                          ),
-                        ),
+                        Text(subtitle!, style: const TextStyle(color: ResponsiveHelper.textTertiary, fontSize: 13)),
                       ],
                     ],
                   ),
@@ -99,10 +86,7 @@ class OmiSettingsTile extends AdaptiveWidget {
                     constraints: const BoxConstraints(maxWidth: 200),
                     child: Text(
                       value!,
-                      style: const TextStyle(
-                        color: ResponsiveHelper.textTertiary,
-                        fontSize: 14,
-                      ),
+                      style: const TextStyle(color: ResponsiveHelper.textTertiary, fontSize: 14),
                       overflow: TextOverflow.ellipsis,
                       maxLines: 1,
                       textAlign: TextAlign.end,
@@ -113,11 +97,7 @@ class OmiSettingsTile extends AdaptiveWidget {
                   trailing!,
                 ] else if (showArrow) ...[
                   if (value != null) const SizedBox(width: 16),
-                  const Icon(
-                    FontAwesomeIcons.chevronRight,
-                    size: 12,
-                    color: ResponsiveHelper.textTertiary,
-                  ),
+                  const Icon(FontAwesomeIcons.chevronRight, size: 12, color: ResponsiveHelper.textTertiary),
                 ],
               ],
             ),

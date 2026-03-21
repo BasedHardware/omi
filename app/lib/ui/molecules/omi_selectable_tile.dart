@@ -38,8 +38,9 @@ class OmiSelectableTile extends AdaptiveWidget {
               ? const EdgeInsets.symmetric(horizontal: 16, vertical: 10)
               : const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
           decoration: BoxDecoration(
-            color:
-                selected ? ResponsiveHelper.backgroundSecondary : ResponsiveHelper.backgroundTertiary.withOpacity(0.6),
+            color: selected
+                ? ResponsiveHelper.backgroundSecondary
+                : ResponsiveHelper.backgroundTertiary.withOpacity(0.6),
             borderRadius: BorderRadius.circular(12),
             border: Border.all(
               color: selected
@@ -52,7 +53,11 @@ class OmiSelectableTile extends AdaptiveWidget {
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               // Leading icon/flag/etc.
-              SizedBox(width: dense ? 20 : 24, height: dense ? 20 : 24, child: Center(child: leading)),
+              SizedBox(
+                width: dense ? 20 : 24,
+                height: dense ? 20 : 24,
+                child: Center(child: leading),
+              ),
               const SizedBox(width: 16),
               // Title + subtitle
               Expanded(
@@ -70,13 +75,7 @@ class OmiSelectableTile extends AdaptiveWidget {
                     ),
                     if (subtitle != null) ...[
                       const SizedBox(height: 2),
-                      Text(
-                        subtitle!,
-                        style: const TextStyle(
-                          color: ResponsiveHelper.textTertiary,
-                          fontSize: 13,
-                        ),
-                      ),
+                      Text(subtitle!, style: const TextStyle(color: ResponsiveHelper.textTertiary, fontSize: 13)),
                     ],
                   ],
                 ),
@@ -94,13 +93,7 @@ class OmiSelectableTile extends AdaptiveWidget {
                   ),
                   color: selected ? ResponsiveHelper.purplePrimary : Colors.transparent,
                 ),
-                child: selected
-                    ? const Icon(
-                        Icons.check,
-                        color: Colors.white,
-                        size: 12,
-                      )
-                    : null,
+                child: selected ? const Icon(Icons.check, color: Colors.white, size: 12) : null,
               ),
             ],
           ),

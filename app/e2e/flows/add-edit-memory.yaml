@@ -1,0 +1,98 @@
+# E2E Flow: Add/Edit Memory — manually create, edit, and delete memories
+# Tests: FAB on memories tab, create memory dialog, edit memory, delete with undo
+# Core feature: manual memory management for user-curated knowledge
+
+version: 2
+name: add-edit-memory
+description: Add/edit memory flow — navigate to Memories tab, create memory via FAB, edit memory content, delete memory with undo, verify memory management sheet
+app: com.friend.ios.dev
+evidence:
+  video: true
+covers:
+  - app/lib/pages/memories/page.dart
+  - app/lib/pages/memories/widgets/memory_dialog.dart
+  - app/lib/pages/memories/widgets/memory_edit_sheet.dart
+  - app/lib/pages/memories/widgets/memory_item.dart
+  - app/lib/providers/memories_provider.dart
+preconditions:
+  - auth_ready  # User signed in and onboarding completed. App shows home screen.
+
+steps:
+  - id: S1
+    name: Navigate to Memories tab
+    do: "Tap the Memories tab (brain icon, third tab) in the bottom navigation bar. Verify the Memories page loads showing: page title, search bar, filter options, memory list (may be empty or have existing memories), and a purple FAB (+) button in the bottom-right corner."
+    verify: true
+    expect:
+      - kind: interactive_count
+        min: 3
+    evidence:
+      - screenshot: step-S1.webp
+    note: "Memories tab is the third bottom nav item (brain icon). The FAB is positioned at right:20, bottom:100 with deepPurple color and Icons.add icon. Hero tag: 'memories_fab'. Analytics: memoriesPageCreateMemoryBtn on tap."
+
+  - id: S2
+    name: Tap FAB to open create memory dialog
+    do: "Tap the purple '+' FAB button in the bottom-right corner. The MemoryDialog opens as a bottom sheet with: 'New Memory' category badge (blue), close button (X), multi-line text input field with placeholder text, and 'Save Memory' button at the bottom."
+    verify: true
+    expect:
+      - kind: interactive_count
+        min: 2
+    evidence:
+      - screenshot: step-S2.webp
+    note: "MemoryDialog in memory_dialog.dart. Dark background (Color(0xFF1F1F25)) with top border radius. Text input: 3-12 lines, max 250px height, autofocused. New memories get category=manual and visibility=private. Placeholder uses l10n key memoryContentHint."
+
+  - id: S3
+    name: Type memory content and save
+    do: "Type a memory like 'I prefer dark roast coffee from Ethiopia' in the text input field. Tap the 'Save Memory' button. A loading spinner appears briefly, then the dialog closes. The new memory should appear at the top of the memories list with a 'Manual' category badge."
+    verify: true
+    expect:
+      - kind: interactive_count
+        min: 3
+    evidence:
+      - screenshot: step-S3.webp
+    note: "createMemory() creates locally with temp UUID, adds to _memories list (optimistic update), saves to SharedPreferences as pending, then syncs to backend via POST /v3/memories. On success: replaces UUID with server ID. On failure: shows 'Failed to Save' with retry button. Content must not be empty."
+
+  - id: S4
+    name: Tap memory to open edit sheet
+    do: "Tap the newly created memory item in the list. The MemoryEditSheet opens as a bottom sheet showing: category badge ('Manual'), delete button (trash icon, red), text field pre-populated with the memory content, cursor at end, and 'Save' button."
+    verify: true
+    expect:
+      - kind: interactive_count
+        min: 2
+    evidence:
+      - screenshot: step-S4.webp
+    note: "MemoryEditSheet in memory_edit_sheet.dart. Same dark styling as create dialog. Text field auto-populated with memory.content (decoded). Edit mode shows delete button instead of close button. Save calls editMemory(memory, newContent, category)."
+
+  - id: S5
+    name: Edit memory content and save
+    do: "Modify the memory text to 'I prefer dark roast Ethiopian coffee, especially Yirgacheffe'. Tap 'Save'. The sheet closes and the memory list shows the updated content."
+    verify: true
+    expect:
+      - kind: interactive_count
+        min: 3
+    evidence:
+      - screenshot: step-S5.webp
+    note: "editMemory() sets edited=true and updatedAt=DateTime.now(). API: PATCH /v3/memories/{id}?value={encodedContent}. Returns to memories list on success. Analytics: memoriesPageCreatedMemory event."
+
+  - id: S6
+    name: Delete memory with undo
+    do: "Tap the memory again to open the edit sheet. Tap the delete button (trash icon). A confirmation dialog appears: 'Delete Memory' with 'This action cannot be undone' message. Tap 'Delete' to confirm. The memory is removed from the list and a brief 'Memory deleted' notification with 'Undo' button appears at the bottom of the screen (4-second window)."
+    verify: true
+    expect:
+      - kind: interactive_count
+        min: 3
+    evidence:
+      - screenshot: step-S6.webp
+    note: "Delete confirmation is platform-aware: CupertinoAlertDialog on iOS, AlertDialog on Android. Soft delete with 4-second undo window. After 4 seconds, finalizes on server via DELETE /v3/memories/{id}. Undo restores the memory to the list. Also supports swipe-to-delete gesture (right to left) on memory items."
+
+  - id: S7
+    name: Return to home
+    do: "Tap the Home tab (first tab) in the bottom navigation bar to return to the home screen. Verify the conversations list is visible."
+    verify: true
+    expect:
+      - kind: text_visible
+        values: ["Conversations"]
+      - kind: interactive_count
+        min: 4
+    evidence:
+      - screenshot: step-S7.webp
+    note: "Bottom nav Home tab returns to conversations page. Memory operations are independent of conversation state."

@@ -18,10 +18,7 @@ class _TypingIndicatorState extends State<TypingIndicator> with SingleTickerProv
   @override
   void initState() {
     super.initState();
-    _controller = AnimationController(
-      duration: const Duration(milliseconds: 600),
-      vsync: this,
-    )..repeat(reverse: true);
+    _controller = AnimationController(duration: const Duration(milliseconds: 600), vsync: this)..repeat(reverse: true);
 
     _animation1 = Tween<Offset>(
       begin: const Offset(0, 0.2),
@@ -84,10 +81,7 @@ class _TypingIndicatorState extends State<TypingIndicator> with SingleTickerProv
               return Container(
                 width: size,
                 height: size,
-                decoration: BoxDecoration(
-                  color: _colorAnimation.value,
-                  shape: BoxShape.circle,
-                ),
+                decoration: BoxDecoration(color: _colorAnimation.value, shape: BoxShape.circle),
               );
             },
           ),

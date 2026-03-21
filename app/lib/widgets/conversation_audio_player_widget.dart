@@ -104,33 +104,29 @@ class _ConversationAudioPlayerWidgetState extends State<ConversationAudioPlayerW
       final playlist = ConcatenatingAudioSource(
         useLazyPreparation: true,
         children: urls.map((url) {
-          return AudioSource.uri(
-            Uri.parse(url),
-            headers: headers,
-          );
+          return AudioSource.uri(Uri.parse(url), headers: headers);
         }).toList(),
       );
 
       // Listen for playback errors
       _errorSubscription?.cancel();
-      _errorSubscription = _audioPlayer.playbackEventStream.handleError((error) {
-        Logger.debug('Playback error: $error');
-        if (mounted && _retryCount < _maxRetries) {
-          _retryCount++;
-          Future.delayed(const Duration(seconds: 1), () {
-            if (mounted) _setupAudioPlayer();
-          });
-        } else if (mounted) {
-          setState(() {
-            _errorMessage = 'Playback error: ${error.toString()}';
-          });
-        }
-      }).listen((_) {});
+      _errorSubscription = _audioPlayer.playbackEventStream
+          .handleError((error) {
+            Logger.debug('Playback error: $error');
+            if (mounted && _retryCount < _maxRetries) {
+              _retryCount++;
+              Future.delayed(const Duration(seconds: 1), () {
+                if (mounted) _setupAudioPlayer();
+              });
+            } else if (mounted) {
+              setState(() {
+                _errorMessage = 'Playback error: ${error.toString()}';
+              });
+            }
+          })
+          .listen((_) {});
 
-      await _audioPlayer.setAudioSource(
-        playlist,
-        preload: true,
-      );
+      await _audioPlayer.setAudioSource(playlist, preload: true);
 
       _retryCount = 0;
 
@@ -245,19 +241,13 @@ class _ConversationAudioPlayerWidgetState extends State<ConversationAudioPlayerW
       return Container(
         margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: const Color(0xFF1F1F25),
-          borderRadius: BorderRadius.circular(16),
-        ),
+        decoration: BoxDecoration(color: const Color(0xFF1F1F25), borderRadius: BorderRadius.circular(16)),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             const Icon(Icons.error_outline, color: Colors.red, size: 32),
             const SizedBox(height: 8),
-            const Text(
-              'Error loading audio',
-              style: TextStyle(color: Colors.red),
-            ),
+            const Text('Error loading audio', style: TextStyle(color: Colors.red)),
             const SizedBox(height: 4),
             Text(
               _errorMessage!,
@@ -281,10 +271,7 @@ class _ConversationAudioPlayerWidgetState extends State<ConversationAudioPlayerW
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: const Color(0xFF1F1F25),
-        borderRadius: BorderRadius.circular(16),
-      ),
+      decoration: BoxDecoration(color: const Color(0xFF1F1F25), borderRadius: BorderRadius.circular(16)),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -311,18 +298,14 @@ class _ConversationAudioPlayerWidgetState extends State<ConversationAudioPlayerW
                             return SliderTheme(
                               data: SliderTheme.of(context).copyWith(
                                 trackHeight: 4,
-                                thumbShape: const RoundSliderThumbShape(
-                                  enabledThumbRadius: 6,
-                                ),
-                                overlayShape: const RoundSliderOverlayShape(
-                                  overlayRadius: 14,
-                                ),
+                                thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
+                                overlayShape: const RoundSliderOverlayShape(overlayRadius: 14),
                               ),
                               child: Slider(
                                 value: combinedPosition.inMilliseconds.toDouble().clamp(
-                                      0,
-                                      _totalDuration.inMilliseconds.toDouble(),
-                                    ),
+                                  0,
+                                  _totalDuration.inMilliseconds.toDouble(),
+                                ),
                                 max: _totalDuration.inMilliseconds.toDouble().clamp(1.0, double.infinity),
                                 activeColor: context.accentColor,
                                 inactiveColor: Colors.grey.shade700,
@@ -354,17 +337,11 @@ class _ConversationAudioPlayerWidgetState extends State<ConversationAudioPlayerW
                                 children: [
                                   Text(
                                     _formatDuration(combinedPosition),
-                                    style: const TextStyle(
-                                      color: Colors.grey,
-                                      fontSize: 12,
-                                    ),
+                                    style: const TextStyle(color: Colors.grey, fontSize: 12),
                                   ),
                                   Text(
                                     _formatDuration(_totalDuration),
-                                    style: const TextStyle(
-                                      color: Colors.grey,
-                                      fontSize: 12,
-                                    ),
+                                    style: const TextStyle(color: Colors.grey, fontSize: 12),
                                   ),
                                 ],
                               );
@@ -423,10 +400,7 @@ class _ConversationAudioPlayerWidgetState extends State<ConversationAudioPlayerW
               child: SizedBox(
                 width: 24,
                 height: 24,
-                child: CircularProgressIndicator(
-                  color: Colors.white,
-                  strokeWidth: 2,
-                ),
+                child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
               ),
             ),
           );
@@ -434,11 +408,7 @@ class _ConversationAudioPlayerWidgetState extends State<ConversationAudioPlayerW
 
         return IconButton(
           onPressed: _togglePlayPause,
-          icon: Icon(
-            isPlaying ? Icons.pause : Icons.play_arrow,
-            color: Colors.white,
-            size: 32,
-          ),
+          icon: Icon(isPlaying ? Icons.pause : Icons.play_arrow, color: Colors.white, size: 32),
           style: IconButton.styleFrom(
             backgroundColor: context.accentColor,
             shape: const CircleBorder(),

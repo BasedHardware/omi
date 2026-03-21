@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Authentication Successful - OMI Computer</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            margin: 0;
+            background-color: #f7f7f7;
+            color: #333;
+        }
+
+        .card {
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            padding: 48px 32px;
+            text-align: center;
+            max-width: 400px;
+        }
+
+        .icon {
+            font-size: 48px;
+            margin-bottom: 16px;
+        }
+
+        h1 {
+            font-size: 24px;
+            font-weight: 600;
+            margin: 0 0 16px 0;
+        }
+
+        p {
+            font-size: 16px;
+            color: #555;
+            margin: 0;
+        }
+
+        .spinner {
+            display: inline-block;
+            width: 40px;
+            height: 40px;
+            margin-top: 24px;
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #333;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .error {
+            color: #d32f2f;
+            margin-top: 16px;
+            font-size: 14px;
+        }
+
+        .manual-link {
+            display: none;
+            margin-top: 24px;
+            padding: 12px 24px;
+            background-color: #333;
+            color: white;
+            text-decoration: none;
+            border-radius: 6px;
+            font-weight: 500;
+        }
+
+        .manual-link:hover {
+            background-color: #555;
+        }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <div class="icon">✓</div>
+        <h1>Authentication Successful</h1>
+        <p id="message">Redirecting you back to the app...</p>
+        <div class="spinner" id="spinner"></div>
+        <div class="error" id="error"></div>
+        <a href="#" id="manualLink" class="manual-link">Open App Manually</a>
+    </div>
+
+    <script>
+        // Get values from template variables (passed from backend)
+        const code = "{{ code }}";
+        const state = "{{ state }}";
+        const redirectUri = "{{ redirect_uri }}";
+        const error = "{{ error if error is defined else '' }}";
+
+        const errorElement = document.getElementById('error');
+        const messageElement = document.getElementById('message');
+        const spinnerElement = document.getElementById('spinner');
+        const manualLinkElement = document.getElementById('manualLink');
+
+        if (error) {
+            // Handle OAuth error
+            errorElement.textContent = 'Authentication failed: ' + error;
+            spinnerElement.style.display = 'none';
+            messageElement.textContent = 'Please close this window and try again.';
+        } else if (code && redirectUri) {
+            // Build the redirect URL using the dynamic redirect_uri from the auth request
+            let redirectUrl = redirectUri + '?code=' + encodeURIComponent(code);
+            if (state) {
+                redirectUrl += '&state=' + encodeURIComponent(state);
+            }
+
+            // Set up manual link
+            manualLinkElement.href = redirectUrl;
+
+            // Attempt automatic redirect
+            try {
+                console.log('Redirecting to:', redirectUrl);
+                window.location.href = redirectUrl;
+
+                // Show manual link after 3 seconds if automatic redirect doesn't work
+                setTimeout(() => {
+                    messageElement.textContent = 'If the app doesn\'t open automatically, click below:';
+                    spinnerElement.style.display = 'none';
+                    manualLinkElement.style.display = 'inline-block';
+                }, 3000);
+            } catch (e) {
+                console.error('Redirect error:', e);
+                errorElement.textContent = 'Could not automatically redirect to the app.';
+                messageElement.textContent = 'Please click below to continue:';
+                spinnerElement.style.display = 'none';
+                manualLinkElement.style.display = 'inline-block';
+            }
+        } else {
+            // No code or redirect_uri
+            errorElement.textContent = 'Invalid authentication response.';
+            spinnerElement.style.display = 'none';
+            messageElement.textContent = 'Please close this window and try again.';
+        }
+    </script>
+</body>
+</html>

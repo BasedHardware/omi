@@ -9,10 +9,7 @@ class TaskIntegrationsResponse {
   final Map<String, dynamic> integrations;
   final String? defaultApp;
 
-  TaskIntegrationsResponse({
-    required this.integrations,
-    this.defaultApp,
-  });
+  TaskIntegrationsResponse({required this.integrations, this.defaultApp});
 
   factory TaskIntegrationsResponse.fromJson(Map<String, dynamic> json) {
     return TaskIntegrationsResponse(
@@ -24,12 +21,7 @@ class TaskIntegrationsResponse {
 
 /// Get all task integrations for the current user
 Future<TaskIntegrationsResponse?> getTaskIntegrations() async {
-  var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/task-integrations',
-    headers: {},
-    method: 'GET',
-    body: '',
-  );
+  var response = await makeApiCall(url: '${Env.apiBaseUrl}v1/task-integrations', headers: {}, method: 'GET', body: '');
 
   if (response == null) return null;
 

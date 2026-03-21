@@ -28,15 +28,9 @@ class BluetoothAdapter {
   }
 
   /// Start scanning for devices
-  static Future<void> startScan({
-    Duration? timeout,
-    List<dynamic>? withServices,
-  }) async {
+  static Future<void> startScan({Duration? timeout, List<dynamic>? withServices}) async {
     final services = withServices?.cast<Guid>() ?? <Guid>[];
-    return FlutterBluePlus.startScan(
-      timeout: timeout,
-      withServices: services,
-    );
+    return FlutterBluePlus.startScan(timeout: timeout, withServices: services);
   }
 
   /// Stop scanning

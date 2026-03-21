@@ -42,61 +42,65 @@ class _ConversationCreatedWidgetState extends State<ConversationCreatedWidget> {
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 8),
-      child: Consumer<SpeechProfileProvider>(builder: (context, provider, child) {
-        return Column(
-          mainAxisAlignment: MainAxisAlignment.end,
-          children: [
-            provider.conversation == null
-                ? const SizedBox()
-                : Text(
-                    'Your first conversation is ready! 🎉',
-                    style: TextStyle(color: Colors.grey.shade300, fontSize: 18),
-                    textAlign: TextAlign.center,
-                  ),
-            const SizedBox(height: 24),
-            context.read<SpeechProfileProvider>().conversation == null
-                ? const SizedBox()
-                : ConversationListItem(
-                    conversation: context.read<SpeechProfileProvider>().conversation!,
-                    conversationIdx: 0,
-                    isFromOnboarding: true,
-                    date: DateTime(
-                      provider.conversation!.createdAt.year,
-                      provider.conversation!.createdAt.month,
-                      provider.conversation!.createdAt.day,
+      child: Consumer<SpeechProfileProvider>(
+        builder: (context, provider, child) {
+          return Column(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              provider.conversation == null
+                  ? const SizedBox()
+                  : Text(
+                      'Your first conversation is ready! 🎉',
+                      style: TextStyle(color: Colors.grey.shade300, fontSize: 18),
+                      textAlign: TextAlign.center,
                     ),
+              const SizedBox(height: 24),
+              context.read<SpeechProfileProvider>().conversation == null
+                  ? const SizedBox()
+                  : ConversationListItem(
+                      conversation: context.read<SpeechProfileProvider>().conversation!,
+                      conversationIdx: 0,
+                      isFromOnboarding: true,
+                      date: DateTime(
+                        provider.conversation!.createdAt.year,
+                        provider.conversation!.createdAt.month,
+                        provider.conversation!.createdAt.day,
+                      ),
+                    ),
+              const SizedBox(height: 24),
+              Container(
+                width: double.infinity,
+                decoration: BoxDecoration(
+                  border: const GradientBoxBorder(
+                    gradient: LinearGradient(
+                      colors: [
+                        Color.fromARGB(127, 208, 208, 208),
+                        Color.fromARGB(127, 188, 99, 121),
+                        Color.fromARGB(127, 86, 101, 182),
+                        Color.fromARGB(127, 126, 190, 236),
+                      ],
+                    ),
+                    width: 2,
                   ),
-            const SizedBox(height: 24),
-            Container(
-              width: double.infinity,
-              decoration: BoxDecoration(
-                border: const GradientBoxBorder(
-                  gradient: LinearGradient(colors: [
-                    Color.fromARGB(127, 208, 208, 208),
-                    Color.fromARGB(127, 188, 99, 121),
-                    Color.fromARGB(127, 86, 101, 182),
-                    Color.fromARGB(127, 126, 190, 236)
-                  ]),
-                  width: 2,
+                  borderRadius: BorderRadius.circular(12),
                 ),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: MaterialButton(
-                padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
-                onPressed: () {
-                  // updateMemoryDetailProvider(context, provider.memory!);
-                  MixpanelManager().conversationListItemClicked(provider.conversation!, 0);
-                  routeToPage(
-                      context, ConversationDetailPage(conversation: provider.conversation!, isFromOnboarding: true));
-                },
-                child: const Text(
-                  'Check it out',
+                child: MaterialButton(
+                  padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+                  onPressed: () {
+                    // updateMemoryDetailProvider(context, provider.memory!);
+                    MixpanelManager().conversationListItemClicked(provider.conversation!, 0);
+                    routeToPage(
+                      context,
+                      ConversationDetailPage(conversation: provider.conversation!, isFromOnboarding: true),
+                    );
+                  },
+                  child: const Text('Check it out'),
                 ),
               ),
-            ),
-          ],
-        );
-      }),
+            ],
+          );
+        },
+      ),
     );
   }
 }

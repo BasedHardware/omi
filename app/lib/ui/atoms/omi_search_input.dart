@@ -97,17 +97,11 @@ class _AdaptiveSearchInnerState extends State<_AdaptiveSearchInner> {
         controller: widget.controller,
         focusNode: widget.focusNode,
         onChanged: widget.onChanged,
-        style: const TextStyle(
-          color: ResponsiveHelper.textPrimary,
-          fontSize: 14,
-        ),
+        style: const TextStyle(color: ResponsiveHelper.textPrimary, fontSize: 14),
         decoration: InputDecoration(
           prefixIcon: const Icon(Icons.search_rounded, color: ResponsiveHelper.textQuaternary, size: 20),
           hintText: widget.hint,
-          hintStyle: const TextStyle(
-            color: ResponsiveHelper.textTertiary,
-            fontSize: 14,
-          ),
+          hintStyle: const TextStyle(color: ResponsiveHelper.textTertiary, fontSize: 14),
           border: InputBorder.none,
           contentPadding: const EdgeInsets.symmetric(horizontal: 0, vertical: 12),
           suffixIcon: hasText

@@ -161,8 +161,26 @@ actor CalendarReaderService {
                 onToolActivity: { @Sendable _, _, _, _ in }
             )
 
-            let responseText = result.text
+            var responseText = result.text
             log("CalendarReaderService: Synthesis raw response (\(responseText.count) chars): \(responseText.prefix(300))")
+
+            // Extract JSON from response — handle markdown code fences and leading text
+            if let jsonStart = responseText.range(of: "```json") {
+                responseText = String(responseText[jsonStart.upperBound...])
+                if let jsonEnd = responseText.range(of: "```") {
+                    responseText = String(responseText[..<jsonEnd.lowerBound])
+                }
+            } else if let jsonStart = responseText.range(of: "```") {
+                responseText = String(responseText[jsonStart.upperBound...])
+                if let jsonEnd = responseText.range(of: "```") {
+                    responseText = String(responseText[..<jsonEnd.lowerBound])
+                }
+            }
+            // Also try finding raw JSON object if there's leading text
+            if let braceStart = responseText.firstIndex(of: "{") {
+                responseText = String(responseText[braceStart...])
+            }
+            responseText = responseText.trimmingCharacters(in: .whitespacesAndNewlines)
 
             guard let jsonData = responseText.data(using: .utf8),
                 let parsed = try? JSONSerialization.jsonObject(with: jsonData) as? [String: Any]
@@ -226,22 +244,15 @@ actor CalendarReaderService {
 
     private func fetchCalendarViaCookies(daysBack: Int, daysForward: Int, maxResults: Int) throws -> [CalendarEvent] {
         // Build browser configs as JSON for Python
+        // Pass the ORIGINAL db path — Python opens it read-only to avoid WAL/journal corruption from file copy
         var browserConfigs: [[String: String]] = []
         for browser in CalBrowserConfig.allBrowsers() {
             guard FileManager.default.fileExists(atPath: browser.cookiePath) else { continue }
             guard let password = getKeychainPassword(service: browser.keychainService) else { continue }
 
-            let tmpPath = "/tmp/omi_cal_cookies_\(browser.name)_\(Int(Date().timeIntervalSince1970)).db"
-            do {
-                try FileManager.default.copyItem(atPath: browser.cookiePath, toPath: tmpPath)
-            } catch {
-                log("CalendarReaderService: Failed to copy \(browser.name) cookies: \(error)")
-                continue
-            }
-
             browserConfigs.append([
                 "name": browser.name,
-                "db_path": tmpPath,
+                "db_path": browser.cookiePath,
                 "password": password,
             ])
         }
@@ -258,16 +269,10 @@ actor CalendarReaderService {
             throw CalendarReaderError.networkError("Failed to serialize browser configs")
         }
 
-        defer {
-            for config in browserConfigs {
-                if let path = config["db_path"] {
-                    try? FileManager.default.removeItem(atPath: path)
-                }
-            }
-        }
+        // No temp file cleanup needed — we read the original DB directly in read-only mode
 
         let pythonScript = """
-import sys, json, sqlite3, hashlib, time, urllib.request, urllib.error
+import sys, json, os, sqlite3, hashlib, time, urllib.request, urllib.error
 from http.cookiejar import MozillaCookieJar, Cookie
 from datetime import datetime, timedelta, timezone
 
@@ -297,7 +302,7 @@ def decrypt_cookies(db_path, password):
     key = hashlib.pbkdf2_hmac('sha1', password.encode('utf-8'), b'saltysalt', 1003, dklen=16)
     iv = b' ' * 16
     try:
-        conn = sqlite3.connect(db_path)
+        conn = sqlite3.connect(f'file:{db_path}?mode=ro&immutable=1', uri=True, timeout=5)
         c = conn.cursor()
         c.execute('SELECT value FROM meta WHERE key="version"')
         row = c.fetchone()
@@ -394,7 +399,7 @@ def fetch_calendar_events(jar, cookies_list, days_back, days_forward, max_result
         f"https://clients6.google.com/calendar/v3/calendars/primary/events"
         f"?timeMin={time_min}&timeMax={time_max}"
         f"&singleEvents=true&orderBy=startTime&maxResults={max_results}"
-        f"&key=AIzaSyBNlYH01_9Hc5S1J9vuFmu2nUqBZJNAXxs"
+        f"&key={os.environ.get('GOOGLE_CALENDAR_API_KEY', '')}"
     )
 
     opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(jar))
@@ -457,10 +462,19 @@ for browser in browsers:
             'is_all_day': 'date' in start and 'dateTime' not in start,
         })
 
-    print(json.dumps({'ok': True, 'browser': browser['name'], 'events': result_events, 'count': len(result_events)}))
+    # Write to temp file to avoid pipe buffer truncation with large event lists
+    import tempfile
+    outfile = tempfile.mktemp(suffix='.json', prefix='omi_cal_')
+    with open(outfile, 'w') as f:
+        json.dump({'ok': True, 'browser': browser['name'], 'events': result_events, 'count': len(result_events)}, f)
+    print(outfile)
     sys.exit(0)
 
-print(json.dumps({'ok': False, 'error': 'No browser with valid Google session found'}))
+import tempfile
+outfile = tempfile.mktemp(suffix='.json', prefix='omi_cal_')
+with open(outfile, 'w') as f:
+    json.dump({'ok': False, 'error': 'No browser with valid Google session found'}, f)
+print(outfile)
 sys.exit(0)
 """
 
@@ -482,19 +496,59 @@ sys.exit(0)
         process.standardOutput = pipe
         process.standardError = errPipe
 
+        // Read pipe data asynchronously to avoid deadlock
+        // (waitUntilExit blocks if pipe buffers are full)
+        var outputData = Data()
+        var errData = Data()
+        let outputSem = DispatchSemaphore(value: 0)
+        let errSem = DispatchSemaphore(value: 0)
+        pipe.fileHandleForReading.readabilityHandler = { handle in
+            let d = handle.availableData
+            if d.isEmpty {
+                pipe.fileHandleForReading.readabilityHandler = nil
+                outputSem.signal()
+            } else {
+                outputData.append(d)
+            }
+        }
+        errPipe.fileHandleForReading.readabilityHandler = { handle in
+            let d = handle.availableData
+            if d.isEmpty {
+                errPipe.fileHandleForReading.readabilityHandler = nil
+                errSem.signal()
+            } else {
+                errData.append(d)
+            }
+        }
+
         do {
             try process.run()
+            // Timeout after 60 seconds
+            DispatchQueue.global().asyncAfter(deadline: .now() + .seconds(60)) {
+                if process.isRunning { process.terminate() }
+            }
             process.waitUntilExit()
         } catch {
             throw CalendarReaderError.networkError("Failed to run Python: \(error.localizedDescription)")
         }
 
-        let output = pipe.fileHandleForReading.readDataToEndOfFile()
-        let errOutput = String(data: errPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+        // Wait for pipe reads to finish (max 5s after process exit)
+        _ = outputSem.wait(timeout: .now() + .seconds(5))
+        _ = errSem.wait(timeout: .now() + .seconds(5))
+
+        let errOutput = String(data: errData, encoding: .utf8) ?? ""
         if !errOutput.isEmpty {
             log("CalendarReaderService: Python stderr: \(errOutput.prefix(500))")
         }
 
+        // Python writes JSON to a temp file and prints the path to stdout
+        let outputPath = String(data: outputData, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !outputPath.isEmpty, FileManager.default.fileExists(atPath: outputPath) else {
+            throw CalendarReaderError.networkError("Python did not produce output file (stdout: \(outputPath.prefix(200)))")
+        }
+        defer { try? FileManager.default.removeItem(atPath: outputPath) }
+
+        let output = try Data(contentsOf: URL(fileURLWithPath: outputPath))
         guard let json = try? JSONSerialization.jsonObject(with: output) as? [String: Any] else {
             let raw = String(data: output, encoding: .utf8) ?? "(empty)"
             throw CalendarReaderError.networkError("Python returned invalid JSON: \(raw.prefix(200))")

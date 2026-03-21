@@ -71,10 +71,7 @@ class _PaymentWebViewPageState extends State<PaymentWebViewPage> {
         backgroundColor: Theme.of(context).colorScheme.primary,
         centerTitle: true,
         elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.close),
-          onPressed: () => Navigator.of(context).pop(false),
-        ),
+        leading: IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.of(context).pop(false)),
       ),
       body: Stack(
         children: [

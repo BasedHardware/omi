@@ -26,14 +26,17 @@ class BluetoothDeviceDiscoverer extends DeviceDiscoverer {
     final List<ScanResult> bleResults = [];
     late final StreamSubscription sub;
 
-    sub = BluetoothAdapter.scanResults.listen((results) {
-      final list = results.cast<ScanResult>().where((r) => r.device.platformName.isNotEmpty).toList();
-      bleResults
-        ..clear()
-        ..addAll(list);
-    }, onError: (e) {
-      Logger.debug('BLE discovery error: $e');
-    });
+    sub = BluetoothAdapter.scanResults.listen(
+      (results) {
+        final list = results.cast<ScanResult>().where((r) => r.device.platformName.isNotEmpty).toList();
+        bleResults
+          ..clear()
+          ..addAll(list);
+      },
+      onError: (e) {
+        Logger.debug('BLE discovery error: $e');
+      },
+    );
 
     try {
       await BluetoothAdapter.adapterState.where((v) => v == BluetoothAdapterStateHelper.on).first;
@@ -43,9 +46,7 @@ class BluetoothDeviceDiscoverer extends DeviceDiscoverer {
         await Future.delayed(const Duration(seconds: 2));
       }
 
-      await BluetoothAdapter.startScan(
-        timeout: Duration(seconds: timeout),
-      );
+      await BluetoothAdapter.startScan(timeout: Duration(seconds: timeout));
 
       // Give listener time to receive scan results within timeout
       await Future.delayed(Duration(seconds: timeout));
@@ -56,12 +57,7 @@ class BluetoothDeviceDiscoverer extends DeviceDiscoverer {
           .map<BtDevice>((r) => BtDevice.fromScanResult(r))
           .toList();
 
-      return DeviceDiscoveryResult(
-        devices: devices,
-        metadata: {
-          'bleResults': bleResults,
-        },
-      );
+      return DeviceDiscoveryResult(devices: devices, metadata: {'bleResults': bleResults});
     } finally {
       await sub.cancel();
     }

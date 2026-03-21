@@ -57,11 +57,7 @@ abstract class IWalService {
   dynamic getSyncs();
 }
 
-enum WalServiceStatus {
-  init,
-  ready,
-  stop,
-}
+enum WalServiceStatus { init, ready, stop }
 
 // Forward declarations for sync types
 abstract class LocalWalSync implements IWalSync {

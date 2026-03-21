@@ -32,59 +32,57 @@ class BatteryInfoWidget extends StatelessWidget {
             if (connectedDevice != null) {
               return GestureDetector(
                 onTap: () {
-                  routeToPage(
-                    context,
-                    const ConnectedDevice(),
-                  );
+                  routeToPage(context, const ConnectedDevice());
                   MixpanelManager().batteryIndicatorClicked();
                 },
                 child: Container(
-                    height: AppStyles.touchTargetMinimum,
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF1F1F25),
-                      borderRadius: BorderRadius.circular(AppStyles.touchTargetMinimum / 2),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.center,
-                      children: [
-                        // Add device icon
-                        SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: Image.asset(
-                            DeviceUtils.getDeviceImagePath(
-                              deviceType: connectedDevice.type,
-                              modelNumber: connectedDevice.modelNumber,
-                              deviceName: connectedDevice.name,
-                            ),
-                            fit: BoxFit.contain,
+                  height: AppStyles.touchTargetMinimum,
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF1F1F25),
+                    borderRadius: BorderRadius.circular(AppStyles.touchTargetMinimum / 2),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      // Add device icon
+                      SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: Image.asset(
+                          DeviceUtils.getDeviceImagePath(
+                            deviceType: connectedDevice.type,
+                            modelNumber: connectedDevice.modelNumber,
+                            deviceName: connectedDevice.name,
+                          ),
+                          fit: BoxFit.contain,
+                        ),
+                      ),
+                      // Only show battery indicator and percentage when battery level is valid (> 0)
+                      if (batteryLevel > 0) ...[
+                        const SizedBox(width: 6.0),
+                        Container(
+                          width: 8,
+                          height: 8,
+                          decoration: BoxDecoration(
+                            color: batteryLevel > 75
+                                ? const Color.fromARGB(255, 0, 255, 8)
+                                : batteryLevel > 20
+                                    ? Colors.yellow.shade700
+                                    : Colors.red,
+                            shape: BoxShape.circle,
                           ),
                         ),
-                        // Only show battery indicator and percentage when battery level is valid (> 0)
-                        if (batteryLevel > 0) ...[
-                          const SizedBox(width: 6.0),
-                          Container(
-                            width: 8,
-                            height: 8,
-                            decoration: BoxDecoration(
-                              color: batteryLevel > 75
-                                  ? const Color.fromARGB(255, 0, 255, 8)
-                                  : batteryLevel > 20
-                                      ? Colors.yellow.shade700
-                                      : Colors.red,
-                              shape: BoxShape.circle,
-                            ),
-                          ),
-                          const SizedBox(width: 6.0),
-                          Text(
-                            '$batteryLevel%',
-                            style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold),
-                          ),
-                        ],
+                        const SizedBox(width: 6.0),
+                        Text(
+                          '$batteryLevel%',
+                          style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold),
+                        ),
                       ],
-                    )),
+                    ],
+                  ),
+                ),
               );
             } else if (SharedPreferencesUtil().btDevice.id.isNotEmpty) {
               // Device is paired but disconnected
@@ -114,11 +112,7 @@ class BatteryInfoWidget extends StatelessWidget {
                               fit: BoxFit.contain,
                             ),
                             // Slash line across the image
-                            Positioned.fill(
-                              child: CustomPaint(
-                                painter: SlashLinePainter(),
-                              ),
-                            ),
+                            Positioned.fill(child: CustomPaint(painter: SlashLinePainter())),
                           ],
                         ),
                       ),

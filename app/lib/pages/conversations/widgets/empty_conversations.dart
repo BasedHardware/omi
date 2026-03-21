@@ -7,10 +7,7 @@ import 'package:omi/utils/l10n_extensions.dart';
 class EmptyConversationsWidget extends StatelessWidget {
   final bool isStarredFilterActive;
 
-  const EmptyConversationsWidget({
-    super.key,
-    this.isStarredFilterActive = false,
-  });
+  const EmptyConversationsWidget({super.key, this.isStarredFilterActive = false});
 
   @override
   Widget build(BuildContext context) {

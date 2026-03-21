@@ -272,7 +272,8 @@ class ConversationProvider extends ChangeNotifier {
     final now = DateTime.now();
     if (_lastRefreshTime != null && now.difference(_lastRefreshTime!) < _refreshCooldown) {
       Logger.debug(
-          'Skipping conversations refresh - too soon since last refresh (${now.difference(_lastRefreshTime!).inSeconds}s ago)');
+        'Skipping conversations refresh - too soon since last refresh (${now.difference(_lastRefreshTime!).inSeconds}s ago)',
+      );
       return;
     }
 
@@ -302,9 +303,11 @@ class ConversationProvider extends ChangeNotifier {
 
     // processing convos
     upsertConvos = newConversations
-        .where((c) =>
-            c.status == ConversationStatus.processing &&
-            processingConversations.indexWhere((cc) => cc.id == c.id) == -1)
+        .where(
+          (c) =>
+              c.status == ConversationStatus.processing &&
+              processingConversations.indexWhere((cc) => cc.id == c.id) == -1,
+        )
         .toList();
     if (upsertConvos.isNotEmpty) {
       processingConversations.insertAll(0, upsertConvos);
@@ -494,10 +497,7 @@ class ConversationProvider extends ChangeNotifier {
   (DateTime?, DateTime?) _getDateFilterRange() {
     if (selectedDate == null) return (null, null);
     final date = selectedDate!;
-    return (
-      DateTime(date.year, date.month, date.day, 0, 0, 0),
-      DateTime(date.year, date.month, date.day, 23, 59, 59),
-    );
+    return (DateTime(date.year, date.month, date.day, 0, 0, 0), DateTime(date.year, date.month, date.day, 23, 59, 59));
   }
 
   Future _getConversationsFromServer() async {
@@ -586,8 +586,9 @@ class ConversationProvider extends ChangeNotifier {
     var memDate = DateTime(effectiveDate.year, effectiveDate.month, effectiveDate.day);
     if (groupedConversations.containsKey(memDate)) {
       var convoEffectiveDate = conversation.startedAt ?? conversation.createdAt;
-      idx = groupedConversations[memDate]!
-          .indexWhere((element) => (element.startedAt ?? element.createdAt).isBefore(convoEffectiveDate));
+      idx = groupedConversations[memDate]!.indexWhere(
+        (element) => (element.startedAt ?? element.createdAt).isBefore(convoEffectiveDate),
+      );
       if (idx == -1) {
         groupedConversations[memDate]!.insert(0, conversation);
         idx = 0;
@@ -596,8 +597,9 @@ class ConversationProvider extends ChangeNotifier {
       }
     } else {
       groupedConversations[memDate] = [conversation];
-      groupedConversations =
-          Map.fromEntries(groupedConversations.entries.toList()..sort((a, b) => b.key.compareTo(a.key)));
+      groupedConversations = Map.fromEntries(
+        groupedConversations.entries.toList()..sort((a, b) => b.key.compareTo(a.key)),
+      );
       idx = 0;
     }
     return (idx, memDate);
@@ -738,16 +740,18 @@ class ConversationProvider extends ChangeNotifier {
   }
 
   Future<void> updateGlobalActionItemState(
-      ServerConversation conversation, String actionItemDescription, bool newState) async {
+    ServerConversation conversation,
+    String actionItemDescription,
+    bool newState,
+  ) async {
     final convoId = conversation.id;
     bool conversationFoundAndUpdated = false;
 
     final originalConvoIndex = conversations.indexWhere((c) => c.id == convoId);
     if (originalConvoIndex != -1) {
-      final itemIndex = conversations[originalConvoIndex]
-          .structured
-          .actionItems
-          .indexWhere((item) => item.description == actionItemDescription);
+      final itemIndex = conversations[originalConvoIndex].structured.actionItems.indexWhere(
+        (item) => item.description == actionItemDescription,
+      );
       if (itemIndex != -1) {
         conversations[originalConvoIndex].structured.actionItems[itemIndex].completed = newState;
         conversationFoundAndUpdated = true;
@@ -759,10 +763,9 @@ class ConversationProvider extends ChangeNotifier {
     if (groupedConversations.containsKey(dateKey)) {
       final groupIndex = groupedConversations[dateKey]!.indexWhere((c) => c.id == convoId);
       if (groupIndex != -1) {
-        final itemIndex = groupedConversations[dateKey]![groupIndex]
-            .structured
-            .actionItems
-            .indexWhere((item) => item.description == actionItemDescription);
+        final itemIndex = groupedConversations[dateKey]![groupIndex].structured.actionItems.indexWhere(
+          (item) => item.description == actionItemDescription,
+        );
         if (itemIndex != -1) {
           groupedConversations[dateKey]![groupIndex].structured.actionItems[itemIndex].completed = newState;
         }
@@ -771,8 +774,9 @@ class ConversationProvider extends ChangeNotifier {
 
     if (conversationFoundAndUpdated) {
       // Find the item index for the server call
-      final itemIndex =
-          conversation.structured.actionItems.indexWhere((item) => item.description == actionItemDescription);
+      final itemIndex = conversation.structured.actionItems.indexWhere(
+        (item) => item.description == actionItemDescription,
+      );
       if (itemIndex != -1) {
         await setConversationActionItemState(convoId, [itemIndex], [newState]);
       }
@@ -872,10 +876,7 @@ class ConversationProvider extends ChangeNotifier {
       // Moving to older conversation (next in list)
       if (convoIndexInDay < currentDayList.length - 1) {
         // There's a next item in the same day
-        return (
-          conversation: currentDayList[convoIndexInDay + 1],
-          date: sortedDates[dateIndex],
-        );
+        return (conversation: currentDayList[convoIndexInDay + 1], date: sortedDates[dateIndex]);
       } else {
         // Need to move to the next older day (next date index since dates are sorted newest first)
         if (dateIndex < sortedDates.length - 1) {
@@ -890,10 +891,7 @@ class ConversationProvider extends ChangeNotifier {
       // Moving to newer conversation (previous in list)
       if (convoIndexInDay > 0) {
         // There's a previous item in the same day
-        return (
-          conversation: currentDayList[convoIndexInDay - 1],
-          date: sortedDates[dateIndex],
-        );
+        return (conversation: currentDayList[convoIndexInDay - 1], date: sortedDates[dateIndex]);
       } else {
         // Need to move to the next newer day (previous date index since dates are sorted newest first)
         if (dateIndex > 0) {

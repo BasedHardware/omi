@@ -30,19 +30,12 @@ class ActionFieldsWidget extends StatelessWidget {
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text(
-                        'Scopes',
-                        style: TextStyle(color: Colors.grey.shade300, fontSize: 16),
-                      ),
+                      Text('Scopes', style: TextStyle(color: Colors.grey.shade300, fontSize: 16)),
                       GestureDetector(
                         onTap: () {
                           launchUrl(Uri.parse('https://docs.omi.me/doc/developer/apps/Integrations'));
                         },
-                        child: FaIcon(
-                          FontAwesomeIcons.solidCircleQuestion,
-                          color: Colors.grey.shade500,
-                          size: 18,
-                        ),
+                        child: FaIcon(FontAwesomeIcons.solidCircleQuestion, color: Colors.grey.shade500, size: 18),
                       ),
                     ],
                   ),
@@ -81,10 +74,7 @@ class ActionFieldsWidget extends StatelessWidget {
                                 Expanded(
                                   child: Text(
                                     actionType.getLocalizedTitle(context),
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 16,
-                                    ),
+                                    style: const TextStyle(color: Colors.white, fontSize: 16),
                                   ),
                                 ),
                                 Switch(

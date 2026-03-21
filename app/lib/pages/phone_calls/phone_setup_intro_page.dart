@@ -29,10 +29,7 @@ class PhoneSetupIntroPage extends StatelessWidget {
               Container(
                 width: 80,
                 height: 80,
-                decoration: const BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: Color(0xFF1F1F25),
-                ),
+                decoration: const BoxDecoration(shape: BoxShape.circle, color: Color(0xFF1F1F25)),
                 child: const Icon(Icons.phone, color: Colors.white, size: 36),
               ),
               const SizedBox(height: 24),
@@ -71,17 +68,12 @@ class PhoneSetupIntroPage extends StatelessWidget {
               GestureDetector(
                 onTap: () {
                   HapticFeedback.mediumImpact();
-                  Navigator.of(context).push(
-                    MaterialPageRoute(builder: (_) => const PhoneSetupNumberPage()),
-                  );
+                  Navigator.of(context).push(MaterialPageRoute(builder: (_) => const PhoneSetupNumberPage()));
                 },
                 child: Container(
                   width: double.infinity,
                   height: 56,
-                  decoration: BoxDecoration(
-                    color: Colors.deepPurple,
-                    borderRadius: BorderRadius.circular(28),
-                  ),
+                  decoration: BoxDecoration(color: Colors.deepPurple, borderRadius: BorderRadius.circular(28)),
                   alignment: Alignment.center,
                   child: Text(
                     context.l10n.phoneGetStarted,
@@ -109,11 +101,7 @@ class _StepRow extends StatelessWidget {
   final String title;
   final String subtitle;
 
-  const _StepRow({
-    required this.icon,
-    required this.title,
-    required this.subtitle,
-  });
+  const _StepRow({required this.icon, required this.title, required this.subtitle});
 
   @override
   Widget build(BuildContext context) {
@@ -122,10 +110,7 @@ class _StepRow extends StatelessWidget {
         Container(
           width: 40,
           height: 40,
-          decoration: BoxDecoration(
-            color: const Color(0xFF1F1F25),
-            borderRadius: BorderRadius.circular(12),
-          ),
+          decoration: BoxDecoration(color: const Color(0xFF1F1F25), borderRadius: BorderRadius.circular(12)),
           child: Icon(icon, color: Colors.white, size: 20),
         ),
         const SizedBox(width: 16),
@@ -138,10 +123,7 @@ class _StepRow extends StatelessWidget {
                 style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w500, color: Colors.white),
               ),
               const SizedBox(height: 2),
-              Text(
-                subtitle,
-                style: TextStyle(fontSize: 13, color: Colors.grey[500]),
-              ),
+              Text(subtitle, style: TextStyle(fontSize: 13, color: Colors.grey[500])),
             ],
           ),
         ),

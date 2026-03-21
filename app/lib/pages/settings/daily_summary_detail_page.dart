@@ -17,11 +17,7 @@ class DailySummaryDetailPage extends StatefulWidget {
   final String summaryId;
   final DailySummary? summary; // Can pass directly if already loaded
 
-  const DailySummaryDetailPage({
-    super.key,
-    required this.summaryId,
-    this.summary,
-  });
+  const DailySummaryDetailPage({super.key, required this.summaryId, this.summary});
 
   @override
   State<DailySummaryDetailPage> createState() => _DailySummaryDetailPageState();
@@ -36,14 +32,8 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
   @override
   void initState() {
     super.initState();
-    _animationController = AnimationController(
-      duration: const Duration(milliseconds: 800),
-      vsync: this,
-    );
-    _fadeAnimation = CurvedAnimation(
-      parent: _animationController,
-      curve: Curves.easeOut,
-    );
+    _animationController = AnimationController(duration: const Duration(milliseconds: 800), vsync: this);
+    _fadeAnimation = CurvedAnimation(parent: _animationController, curve: Curves.easeOut);
     _loadSummary();
   }
 
@@ -94,8 +84,8 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
       body: _isLoading
           ? const Center(child: CircularProgressIndicator(color: Colors.white))
           : _summary == null
-              ? _buildNotFound()
-              : _buildContent(),
+          ? _buildNotFound()
+          : _buildContent(),
     );
   }
 
@@ -115,9 +105,7 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (context) => const Center(
-        child: CircularProgressIndicator(color: Colors.white),
-      ),
+      builder: (context) => const Center(child: CircularProgressIndicator(color: Colors.white)),
     );
 
     try {
@@ -128,9 +116,7 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
       if (conversation != null) {
         Navigator.push(
           context,
-          MaterialPageRoute(
-            builder: (context) => ConversationDetailPage(conversation: conversation),
-          ),
+          MaterialPageRoute(builder: (context) => ConversationDetailPage(conversation: conversation)),
         );
       }
     } catch (e) {
@@ -144,23 +130,11 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          const Text(
-            '📭',
-            style: TextStyle(fontSize: 64),
-          ),
+          const Text('📭', style: TextStyle(fontSize: 64)),
           const SizedBox(height: 16),
-          Text(
-            context.l10n.summaryNotFound,
-            style: TextStyle(
-              color: Colors.grey.shade400,
-              fontSize: 18,
-            ),
-          ),
+          Text(context.l10n.summaryNotFound, style: TextStyle(color: Colors.grey.shade400, fontSize: 18)),
           const SizedBox(height: 24),
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: Text(context.l10n.goBack),
-          ),
+          TextButton(onPressed: () => Navigator.pop(context), child: Text(context.l10n.goBack)),
         ],
       ),
     );
@@ -180,14 +154,8 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
                 _buildOverviewCard(summary),
                 const SizedBox(height: 24),
                 _buildStatsRow(summary),
-                if (summary.highlights.isNotEmpty) ...[
-                  const SizedBox(height: 32),
-                  _buildHighlightsSection(summary),
-                ],
-                if (summary.actionItems.isNotEmpty) ...[
-                  const SizedBox(height: 32),
-                  _buildActionItemsSection(summary),
-                ],
+                if (summary.highlights.isNotEmpty) ...[const SizedBox(height: 32), _buildHighlightsSection(summary)],
+                if (summary.actionItems.isNotEmpty) ...[const SizedBox(height: 32), _buildActionItemsSection(summary)],
                 if (summary.unresolvedQuestions.isNotEmpty) ...[
                   const SizedBox(height: 32),
                   _buildUnresolvedQuestionsSection(summary),
@@ -200,10 +168,7 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
                   const SizedBox(height: 32),
                   _buildKnowledgeNuggetsSection(summary),
                 ],
-                if (summary.locations.isNotEmpty) ...[
-                  const SizedBox(height: 32),
-                  _buildLocationsMap(summary),
-                ],
+                if (summary.locations.isNotEmpty) ...[const SizedBox(height: 32), _buildLocationsMap(summary)],
               ]),
             ),
           ),
@@ -220,10 +185,7 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
       leading: IconButton(
         icon: Container(
           padding: const EdgeInsets.all(8),
-          decoration: BoxDecoration(
-            color: Colors.black.withOpacity(0.3),
-            shape: BoxShape.circle,
-          ),
+          decoration: BoxDecoration(color: Colors.black.withOpacity(0.3), shape: BoxShape.circle),
           child: const Icon(Icons.chevron_left, color: Colors.white, size: 20),
         ),
         onPressed: () => Navigator.pop(context),
@@ -252,21 +214,14 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
                   // Date above emoji and title
                   Text(
                     summary.formattedDate,
-                    style: TextStyle(
-                      color: Colors.white.withOpacity(0.6),
-                      fontSize: 13,
-                      fontWeight: FontWeight.w500,
-                    ),
+                    style: TextStyle(color: Colors.white.withOpacity(0.6), fontSize: 13, fontWeight: FontWeight.w500),
                   ),
                   const SizedBox(height: 8),
                   // Emoji and title row
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        summary.dayEmoji,
-                        style: const TextStyle(fontSize: 32),
-                      ),
+                      Text(summary.dayEmoji, style: const TextStyle(fontSize: 32)),
                       const SizedBox(width: 12),
                       Expanded(
                         child: Text(
@@ -293,14 +248,7 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
   }
 
   Widget _buildOverviewCard(DailySummary summary) {
-    return Text(
-      summary.overview,
-      style: TextStyle(
-        color: Colors.grey.shade300,
-        fontSize: 15,
-        height: 1.5,
-      ),
-    );
+    return Text(summary.overview, style: TextStyle(color: Colors.grey.shade300, fontSize: 15, height: 1.5));
   }
 
   Widget _buildStatsRow(DailySummary summary) {
@@ -319,10 +267,7 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
     return Expanded(
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 12),
-        decoration: BoxDecoration(
-          color: const Color(0xFF1A1A1F),
-          borderRadius: BorderRadius.circular(16),
-        ),
+        decoration: BoxDecoration(color: const Color(0xFF1A1A1F), borderRadius: BorderRadius.circular(16)),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
@@ -330,11 +275,7 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
             const SizedBox(width: 8),
             Text(
               value,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 15,
-                fontWeight: FontWeight.w600,
-              ),
+              style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w600),
             ),
           ],
         ),
@@ -433,10 +374,7 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
 
     // Add padding to bounds (in degrees) to ensure pins aren't at the edge
     const padding = 0.01; // ~1km padding
-    final bounds = LatLngBounds(
-      LatLng(minLat - padding, minLng - padding),
-      LatLng(maxLat + padding, maxLng + padding),
-    );
+    final bounds = LatLngBounds(LatLng(minLat - padding, minLng - padding), LatLng(maxLat + padding, maxLng + padding));
 
     // For single location, use center + zoom; for multiple, use bounds
     final bool singleLocation = summary.locations.length == 1;
@@ -481,13 +419,8 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
                     // Use bounds fitting for multiple locations
                     initialCameraFit: singleLocation
                         ? null
-                        : CameraFit.bounds(
-                            bounds: bounds,
-                            padding: const EdgeInsets.all(50),
-                          ),
-                    interactionOptions: const InteractionOptions(
-                      flags: InteractiveFlag.none,
-                    ),
+                        : CameraFit.bounds(bounds: bounds, padding: const EdgeInsets.all(50)),
+                    interactionOptions: const InteractionOptions(flags: InteractiveFlag.none),
                   ),
                   children: [
                     TileLayer(
@@ -533,10 +466,7 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
             child: Container(
               margin: const EdgeInsets.only(bottom: 8),
               padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: const Color(0xFF1A1A1F),
-                borderRadius: BorderRadius.circular(16),
-              ),
+              decoration: BoxDecoration(color: const Color(0xFF1A1A1F), borderRadius: BorderRadius.circular(16)),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -548,20 +478,12 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
                       children: [
                         Text(
                           highlight.topic,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 15,
-                            fontWeight: FontWeight.w600,
-                          ),
+                          style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w600),
                         ),
                         const SizedBox(height: 2),
                         Text(
                           highlight.summary,
-                          style: TextStyle(
-                            color: Colors.grey.shade400,
-                            fontSize: 13,
-                            height: 1.3,
-                          ),
+                          style: TextStyle(color: Colors.grey.shade400, fontSize: 13, height: 1.3),
                         ),
                       ],
                     ),
@@ -592,10 +514,7 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
             if (completedItems.isNotEmpty)
               Text(
                 '${completedItems.length}/${summary.actionItems.length}',
-                style: TextStyle(
-                  color: Colors.grey.shade500,
-                  fontSize: 13,
-                ),
+                style: TextStyle(color: Colors.grey.shade500, fontSize: 13),
               ),
           ],
         ),
@@ -614,10 +533,7 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
       child: Container(
         margin: const EdgeInsets.only(bottom: 10),
         padding: const EdgeInsets.all(18),
-        decoration: BoxDecoration(
-          color: const Color(0xFF1A1A1F),
-          borderRadius: BorderRadius.circular(16),
-        ),
+        decoration: BoxDecoration(color: const Color(0xFF1A1A1F), borderRadius: BorderRadius.circular(16)),
         child: Row(
           children: [
             // Checkbox indicator
@@ -627,10 +543,7 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 color: item.completed ? Colors.green.withOpacity(0.2) : Colors.transparent,
-                border: Border.all(
-                  color: item.completed ? Colors.green : Colors.grey.shade600,
-                  width: 1.5,
-                ),
+                border: Border.all(color: item.completed ? Colors.green : Colors.grey.shade600, width: 1.5),
               ),
               child: item.completed ? const Icon(Icons.check, color: Colors.green, size: 14) : null,
             ),
@@ -676,21 +589,11 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
             child: Container(
               margin: const EdgeInsets.only(bottom: 10),
               padding: const EdgeInsets.all(18),
-              decoration: BoxDecoration(
-                color: const Color(0xFF1A1A1F),
-                borderRadius: BorderRadius.circular(16),
-              ),
+              decoration: BoxDecoration(color: const Color(0xFF1A1A1F), borderRadius: BorderRadius.circular(16)),
               child: Row(
                 children: [
                   Expanded(
-                    child: Text(
-                      q.question,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 15,
-                        height: 1.4,
-                      ),
-                    ),
+                    child: Text(q.question, style: const TextStyle(color: Colors.white, fontSize: 15, height: 1.4)),
                   ),
                   if (q.conversationId != null) Icon(Icons.chevron_right, color: Colors.grey.shade600, size: 20),
                 ],
@@ -714,21 +617,11 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
             child: Container(
               margin: const EdgeInsets.only(bottom: 10),
               padding: const EdgeInsets.all(18),
-              decoration: BoxDecoration(
-                color: const Color(0xFF1A1A1F),
-                borderRadius: BorderRadius.circular(16),
-              ),
+              decoration: BoxDecoration(color: const Color(0xFF1A1A1F), borderRadius: BorderRadius.circular(16)),
               child: Row(
                 children: [
                   Expanded(
-                    child: Text(
-                      d.decision,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 15,
-                        height: 1.4,
-                      ),
-                    ),
+                    child: Text(d.decision, style: const TextStyle(color: Colors.white, fontSize: 15, height: 1.4)),
                   ),
                   if (d.conversationId != null) Icon(Icons.chevron_right, color: Colors.grey.shade600, size: 20),
                 ],
@@ -752,21 +645,11 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
             child: Container(
               margin: const EdgeInsets.only(bottom: 10),
               padding: const EdgeInsets.all(18),
-              decoration: BoxDecoration(
-                color: const Color(0xFF1A1A1F),
-                borderRadius: BorderRadius.circular(16),
-              ),
+              decoration: BoxDecoration(color: const Color(0xFF1A1A1F), borderRadius: BorderRadius.circular(16)),
               child: Row(
                 children: [
                   Expanded(
-                    child: Text(
-                      k.insight,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 15,
-                        height: 1.4,
-                      ),
-                    ),
+                    child: Text(k.insight, style: const TextStyle(color: Colors.white, fontSize: 15, height: 1.4)),
                   ),
                   if (k.conversationId != null) Icon(Icons.chevron_right, color: Colors.grey.shade600, size: 20),
                 ],
@@ -781,11 +664,7 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
   Widget _buildSectionTitle(String title) {
     return Text(
       title,
-      style: const TextStyle(
-        color: Colors.white,
-        fontSize: 18,
-        fontWeight: FontWeight.w600,
-      ),
+      style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
     );
   }
 
@@ -794,8 +673,8 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
     final endFormatted = _formatTimeTo12Hour(location.endTime);
     final timeText = startFormatted.isNotEmpty
         ? (endFormatted.isNotEmpty && startFormatted != endFormatted
-            ? '$startFormatted - $endFormatted'
-            : startFormatted)
+              ? '$startFormatted - $endFormatted'
+              : startFormatted)
         : '';
 
     return GestureDetector(
@@ -847,10 +726,7 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
               child: Container(
                 margin: const EdgeInsets.only(bottom: 12),
                 padding: const EdgeInsets.fromLTRB(18, 14, 18, 14),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF1A1A1F),
-                  borderRadius: BorderRadius.circular(20),
-                ),
+                decoration: BoxDecoration(color: const Color(0xFF1A1A1F), borderRadius: BorderRadius.circular(20)),
                 child: Row(
                   children: [
                     Expanded(
@@ -871,21 +747,11 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
                             const SizedBox(height: 4),
                             Row(
                               children: [
-                                FaIcon(
-                                  FontAwesomeIcons.clock,
-                                  color: Colors.grey.shade500,
-                                  size: 12,
-                                ),
+                                FaIcon(FontAwesomeIcons.clock, color: Colors.grey.shade500, size: 12),
                                 const SizedBox(width: 4),
                                 Padding(
                                   padding: const EdgeInsets.only(top: 2),
-                                  child: Text(
-                                    timeText,
-                                    style: TextStyle(
-                                      color: Colors.grey.shade500,
-                                      fontSize: 13,
-                                    ),
-                                  ),
+                                  child: Text(timeText, style: TextStyle(color: Colors.grey.shade500, fontSize: 13)),
                                 ),
                               ],
                             ),

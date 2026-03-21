@@ -21,9 +21,7 @@ class DailyReflectionNotification {
   static const int notificationId = 9021; // 9 PM + 21 = 9021
 
   /// Schedule the daily reflection notification at 9 PM local time
-  static Future<void> scheduleDailyNotification({
-    required String channelKey,
-  }) async {
+  static Future<void> scheduleDailyNotification({required String channelKey}) async {
     try {
       final allowed = await _awesomeNotifications.isNotificationAllowed();
       if (!allowed) {
@@ -43,10 +41,7 @@ class DailyReflectionNotification {
           title: '🌙 ${ctx?.l10n.dailyReflectionNotificationTitle ?? 'Time for Daily Reflection'}',
           body: ctx?.l10n.dailyReflectionNotificationBody ?? 'Tell me about your day',
           badge: 0,
-          payload: {
-            'navigate_to': '/chat/omi',
-            'auto_message': 'daily_reflection',
-          },
+          payload: {'navigate_to': '/chat/omi', 'auto_message': 'daily_reflection'},
           notificationLayout: NotificationLayout.Default,
           wakeUpScreen: true,
           category: NotificationCategory.Reminder,

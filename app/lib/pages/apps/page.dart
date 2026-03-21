@@ -73,10 +73,7 @@ class AppsPageState extends State<AppsPage> with AutomaticKeepAliveClientMixin {
             //   ],
             // ),
             Expanded(
-              child: ExploreInstallPage(
-                key: _exploreInstallPageKey,
-                scrollController: _scrollController,
-              ),
+              child: ExploreInstallPage(key: _exploreInstallPageKey, scrollController: _scrollController),
             ),
             // const Expanded(
             //     child: TabBarView(
@@ -102,10 +99,8 @@ class EmptyAppsWidget extends StatelessWidget {
   Widget build(BuildContext context) {
     // Use Selector to only rebuild when apps list changes, not the entire provider
     return Selector<AppProvider, ({List<App> apps, bool isConnected})>(
-      selector: (context, provider) => (
-        apps: provider.apps,
-        isConnected: context.read<ConnectivityProvider>().isConnected,
-      ),
+      selector: (context, provider) =>
+          (apps: provider.apps, isConnected: context.read<ConnectivityProvider>().isConnected),
       builder: (context, state, child) {
         return state.apps.isEmpty
             ? SliverToBoxAdapter(

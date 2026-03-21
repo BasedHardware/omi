@@ -84,7 +84,6 @@ class _NameWidgetState extends State<NameWidget> {
                 //   ),
                 //   textAlign: TextAlign.center,
                 // ),
-
                 const SizedBox(height: 28),
 
                 // Name input field
@@ -115,10 +114,7 @@ class _NameWidgetState extends State<NameWidget> {
                         fontFamily: 'Manrope',
                       ),
                       border: InputBorder.none,
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 24,
-                        vertical: 20,
-                      ),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
                     ),
                     onChanged: (value) {
                       setState(() {}); // Trigger rebuild to update button state
@@ -145,18 +141,12 @@ class _NameWidgetState extends State<NameWidget> {
                       foregroundColor: nameController.text.trim().isEmpty ? Colors.grey[600] : Colors.black,
                       disabledBackgroundColor: Colors.grey[800],
                       disabledForegroundColor: Colors.grey[600],
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(28),
-                      ),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
                       elevation: 0,
                     ),
                     child: Text(
                       context.l10n.continueButton,
-                      style: const TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w600,
-                        fontFamily: 'Manrope',
-                      ),
+                      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600, fontFamily: 'Manrope'),
                     ),
                   ),
                 ),

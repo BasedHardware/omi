@@ -5,6 +5,7 @@ import SwiftUI
 struct GoalsWidget: View {
     let goals: [Goal]
     let onCreateGoal: (String, Double, Double) -> Void  // (title, currentValue, targetValue)
+    let onUpdateGoal: (Goal, String, Double, Double) -> Void
     let onUpdateProgress: (Goal, Double) -> Void
     let onDeleteGoal: (Goal) -> Void
 
@@ -32,14 +33,14 @@ struct GoalsWidget: View {
                 }
 
                 // AI goal generation button (when there are goals but room for more)
-                if goals.count > 0 && goals.count < 3 {
+                if goals.count > 0 && goals.count < 4 {
                     GoalHeaderButton(icon: "sparkles", tooltip: "Generate AI goal", color: OmiColors.purplePrimary.opacity(0.8), isLoading: isGeneratingGoal) {
                         triggerGoalGeneration()
                     }
                 }
 
                 // Add goal button (only if less than 3 goals)
-                if goals.count < 3 {
+                if goals.count < 4 {
                     GoalHeaderButton(icon: "plus", tooltip: "Add goal", color: OmiColors.textTertiary) {
                         showingCreateSheet = true
                     }
@@ -134,7 +135,7 @@ struct GoalsWidget: View {
             GoalEditSheet(
                 goal: goal,
                 onSave: { title, current, target in
-                    onUpdateProgress(goal, current)
+                    onUpdateGoal(goal, title, current, target)
                 },
                 onDelete: {
                     onDeleteGoal(goal)
@@ -963,6 +964,7 @@ private struct GoalHeaderButton: View {
     GoalsWidget(
         goals: [],
         onCreateGoal: { _, _, _ in },
+        onUpdateGoal: { _, _, _, _ in },
         onUpdateProgress: { _, _ in },
         onDeleteGoal: { _ in }
     )

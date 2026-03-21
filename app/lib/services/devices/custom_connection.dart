@@ -32,9 +32,7 @@ abstract class CustomDeviceConnection extends DeviceConnection {
   CustomDeviceConnection(super.device, super.transport);
 
   @override
-  Future<void> connect({
-    Function(String deviceId, DeviceConnectionState state)? onConnectionStateChanged,
-  }) async {
+  Future<void> connect({Function(String deviceId, DeviceConnectionState state)? onConnectionStateChanged}) async {
     await super.connect(onConnectionStateChanged: onConnectionStateChanged);
     await Future.delayed(const Duration(seconds: 1));
 
@@ -145,8 +143,7 @@ abstract class CustomDeviceConnection extends DeviceConnection {
   @override
   Future<StreamSubscription?> performGetBleStorageBytesListener({
     required void Function(List<int>) onStorageBytesReceived,
-  }) async =>
-      null;
+  }) async => null;
 
   @override
   Future performCameraStartPhotoController() async {}
@@ -160,14 +157,10 @@ abstract class CustomDeviceConnection extends DeviceConnection {
   @override
   Future<StreamSubscription?> performGetImageListener({
     required void Function(OrientedImage orientedImage) onImageReceived,
-  }) async =>
-      null;
+  }) async => null;
 
   @override
-  Future<StreamSubscription<List<int>>?> performGetAccelListener({
-    void Function(int)? onAccelChange,
-  }) async =>
-      null;
+  Future<StreamSubscription<List<int>>?> performGetAccelListener({void Function(int)? onAccelChange}) async => null;
 
   @override
   Future<int> performGetFeatures() async => 0;

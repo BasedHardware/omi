@@ -21,15 +21,10 @@ const String watchModelCharacteristicUuid = 'watch-model';
 const String watchFirmwareCharacteristicUuid = 'watch-firmware';
 
 class AppleWatchDeviceConnection extends DeviceConnection {
-  AppleWatchDeviceConnection(
-    super.device,
-    super.transport,
-  );
+  AppleWatchDeviceConnection(super.device, super.transport);
 
   @override
-  Future<void> connect({
-    Function(String deviceId, DeviceConnectionState state)? onConnectionStateChanged,
-  }) async {
+  Future<void> connect({Function(String deviceId, DeviceConnectionState state)? onConnectionStateChanged}) async {
     await super.connect(onConnectionStateChanged: onConnectionStateChanged);
 
     // Check for any recording that should be restarted
@@ -235,9 +230,7 @@ class AppleWatchDeviceConnection extends DeviceConnection {
   }
 
   @override
-  Future<StreamSubscription<List<int>>?> performGetAccelListener({
-    void Function(int p1)? onAccelChange,
-  }) async {
+  Future<StreamSubscription<List<int>>?> performGetAccelListener({void Function(int p1)? onAccelChange}) async {
     return null;
   }
 
@@ -277,8 +270,9 @@ class AppleWatchDeviceConnection extends DeviceConnection {
   }
 
   @override
-  Future<StreamSubscription?> performGetImageListener(
-      {required void Function(OrientedImage orientedImage) onImageReceived}) {
+  Future<StreamSubscription?> performGetImageListener({
+    required void Function(OrientedImage orientedImage) onImageReceived,
+  }) {
     throw UnimplementedError();
   }
 }

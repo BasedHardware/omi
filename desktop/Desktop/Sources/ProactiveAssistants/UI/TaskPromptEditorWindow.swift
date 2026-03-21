@@ -93,14 +93,14 @@ class TaskPromptEditorWindow: NSWindow {
     static func show() {
         if let existingWindow = sharedWindow {
             existingWindow.makeKeyAndOrderFront(nil)
-            NSApp.activate(ignoringOtherApps: true)
+            NSApp.activate()
             return
         }
 
         let window = TaskPromptEditorWindow()
         sharedWindow = window
         window.makeKeyAndOrderFront(nil)
-        NSApp.activate(ignoringOtherApps: true)
+        NSApp.activate()
     }
 
     /// Closes the task prompt editor window

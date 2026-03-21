@@ -31,11 +31,7 @@ class AppleRemindersService {
   /// Mark an action item as exported after successful Apple Reminders sync
   Future<void> _markActionItemExported(String actionItemId) async {
     try {
-      await updateActionItem(
-        actionItemId,
-        exported: true,
-        exportPlatform: 'apple_reminders',
-      );
+      await updateActionItem(actionItemId, exported: true, exportPlatform: 'apple_reminders');
     } catch (e) {
       Logger.debug('Error marking action item as exported: $e');
     }
@@ -60,12 +56,7 @@ class AppleRemindersService {
 
   /// Add a task to Apple Reminders
   /// Returns true if successful, false if failed or permission denied
-  Future<bool> addReminder({
-    required String title,
-    String? notes,
-    DateTime? dueDate,
-    String? listName,
-  }) async {
+  Future<bool> addReminder({required String title, String? notes, DateTime? dueDate, String? listName}) async {
     if (!isAvailable) {
       throw UnsupportedError('Apple Reminders is only available on iOS and macOS');
     }
@@ -119,9 +110,7 @@ class AppleRemindersService {
     if (!isAvailable) return [];
 
     try {
-      final result = await _channel.invokeMethod('getReminders', {
-        'listName': listName ?? 'Reminders',
-      });
+      final result = await _channel.invokeMethod('getReminders', {'listName': listName ?? 'Reminders'});
 
       if (result is List) {
         return result.cast<String>();
@@ -182,12 +171,7 @@ class AppleRemindersService {
   }
 }
 
-enum AppleRemindersResult {
-  success,
-  failed,
-  permissionDenied,
-  unsupported,
-}
+enum AppleRemindersResult { success, failed, permissionDenied, unsupported }
 
 extension AppleRemindersResultExtension on AppleRemindersResult {
   String get message {

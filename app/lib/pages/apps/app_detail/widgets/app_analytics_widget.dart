@@ -18,10 +18,7 @@ class AppAnalyticsWidget extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.all(16.0),
       margin: const EdgeInsets.only(left: 8.0, right: 8.0, top: 12, bottom: 6),
-      decoration: BoxDecoration(
-        color: const Color(0xFF1F1F25),
-        borderRadius: BorderRadius.circular(16.0),
-      ),
+      decoration: BoxDecoration(color: const Color(0xFF1F1F25), borderRadius: BorderRadius.circular(16.0)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -36,11 +33,7 @@ class AppAnalyticsWidget extends StatelessWidget {
                 child: Row(
                   children: [
                     Text(context.l10n.learnMoreLink, style: TextStyle(color: Colors.grey.shade400, fontSize: 14)),
-                    Icon(
-                      Icons.arrow_outward_rounded,
-                      size: 12,
-                      color: Colors.grey.shade400,
-                    )
+                    Icon(Icons.arrow_outward_rounded, size: 12, color: Colors.grey.shade400),
                   ],
                 ),
               ),
@@ -56,10 +49,7 @@ class AppAnalyticsWidget extends StatelessWidget {
                     children: [
                       Skeleton.shade(child: SvgPicture.asset(Assets.images.icChart, width: 20)),
                       const SizedBox(width: 8),
-                      Text(
-                        installs.toString(),
-                        style: const TextStyle(color: Colors.white, fontSize: 30),
-                      ),
+                      Text(installs.toString(), style: const TextStyle(color: Colors.white, fontSize: 30)),
                     ],
                   ),
                   const SizedBox(height: 6),
@@ -74,10 +64,7 @@ class AppAnalyticsWidget extends StatelessWidget {
                     children: [
                       Skeleton.shade(child: SvgPicture.asset(Assets.images.icDollar, width: 20)),
                       const SizedBox(width: 8),
-                      Text(
-                        "\$$moneyMade",
-                        style: const TextStyle(color: Colors.white, fontSize: 28),
-                      ),
+                      Text("\$$moneyMade", style: const TextStyle(color: Colors.white, fontSize: 28)),
                     ],
                   ),
                   const SizedBox(height: 6),

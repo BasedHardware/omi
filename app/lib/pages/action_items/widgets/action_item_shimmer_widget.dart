@@ -13,10 +13,7 @@ class ActionItemShimmerWidget extends StatelessWidget {
       child: Container(
         height: 60,
         width: double.infinity,
-        decoration: BoxDecoration(
-          color: Colors.grey[800],
-          borderRadius: BorderRadius.circular(16),
-        ),
+        decoration: BoxDecoration(color: Colors.grey[800], borderRadius: BorderRadius.circular(16)),
       ),
     );
   }
@@ -25,23 +22,17 @@ class ActionItemShimmerWidget extends StatelessWidget {
 class ActionItemsShimmerList extends StatelessWidget {
   final int itemCount;
 
-  const ActionItemsShimmerList({
-    super.key,
-    this.itemCount = 8,
-  });
+  const ActionItemsShimmerList({super.key, this.itemCount = 8});
 
   @override
   Widget build(BuildContext context) {
     return SliverList(
-      delegate: SliverChildBuilderDelegate(
-        (context, index) {
-          return const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-            child: ActionItemShimmerWidget(),
-          );
-        },
-        childCount: itemCount,
-      ),
+      delegate: SliverChildBuilderDelegate((context, index) {
+        return const Padding(
+          padding: EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+          child: ActionItemShimmerWidget(),
+        );
+      }, childCount: itemCount),
     );
   }
 }

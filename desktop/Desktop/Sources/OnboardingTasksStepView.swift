@@ -3,6 +3,7 @@ import SwiftUI
 /// Onboarding step explaining that omi auto-creates tasks.
 struct OnboardingTasksStepView: View {
     var onComplete: () -> Void
+    var onSkip: (() -> Void)? = nil
 
     @State private var pulseAnimation = false
     @State private var showTasks = false
@@ -82,16 +83,27 @@ struct OnboardingTasksStepView: View {
 
             Spacer()
 
-            Button(action: onComplete) {
-                Text("Take me to my tasks")
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundColor(.white)
-                    .frame(maxWidth: 280)
-                    .padding(.vertical, 12)
-                    .background(OmiColors.purplePrimary)
-                    .cornerRadius(12)
+            VStack(spacing: 12) {
+                Button(action: onComplete) {
+                    Text("Take me to my tasks")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundColor(.white)
+                        .frame(maxWidth: 280)
+                        .padding(.vertical, 12)
+                        .background(OmiColors.purplePrimary)
+                        .cornerRadius(12)
+                }
+                .buttonStyle(.plain)
+
+                if let onSkip = onSkip {
+                    Button(action: onSkip) {
+                        Text("Skip")
+                            .font(.system(size: 13))
+                            .foregroundColor(OmiColors.textTertiary)
+                    }
+                    .buttonStyle(.plain)
+                }
             }
-            .buttonStyle(.plain)
             .padding(.bottom, 32)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)

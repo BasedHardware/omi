@@ -95,9 +95,7 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
 
   void _copyToClipboard(String title, String text) {
     Clipboard.setData(ClipboardData(text: text));
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(context.l10n.copiedToClipboard(title))),
-    );
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.l10n.copiedToClipboard(title))));
   }
 
   Widget _buildProfileStyleItem({
@@ -128,11 +126,7 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
           Expanded(
             child: Text(
               title,
-              style: TextStyle(
-                color: titleColor ?? Colors.white,
-                fontSize: 17,
-                fontWeight: FontWeight.w400,
-              ),
+              style: TextStyle(color: titleColor ?? Colors.white, fontSize: 17, fontWeight: FontWeight.w400),
             ),
           ),
           if (chipValue != null) ...[
@@ -144,30 +138,18 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
               ),
               child: Text(
                 chipValue,
-                style: TextStyle(
-                  color: chipTextColor ?? Colors.white,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w500,
-                ),
+                style: TextStyle(color: chipTextColor ?? Colors.white, fontSize: 13, fontWeight: FontWeight.w500),
               ),
             ),
             if (showChevron) const SizedBox(width: 8),
           ],
-          if (showChevron)
-            const Icon(
-              Icons.chevron_right,
-              color: Color(0xFF3C3C43),
-              size: 20,
-            ),
+          if (showChevron) const Icon(Icons.chevron_right, color: Color(0xFF3C3C43), size: 20),
         ],
       ),
     );
 
     if (copyValue != null) {
-      return GestureDetector(
-        onTap: () => _copyToClipboard(title, copyValue),
-        child: content,
-      );
+      return GestureDetector(onTap: () => _copyToClipboard(title, copyValue), child: content);
     }
 
     if (onTap != null) {
@@ -178,10 +160,7 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
 
   Widget _buildBatterySection(DeviceProvider provider) {
     return Container(
-      decoration: BoxDecoration(
-        color: const Color(0xFF1C1C1E),
-        borderRadius: BorderRadius.circular(20),
-      ),
+      decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(20)),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
         child: Row(
@@ -202,26 +181,15 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
             Expanded(
               child: Text(
                 context.l10n.batteryLevel,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 17,
-                  fontWeight: FontWeight.w400,
-                ),
+                style: const TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w400),
               ),
             ),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              decoration: BoxDecoration(
-                color: const Color(0xFF2A2A2E),
-                borderRadius: BorderRadius.circular(100),
-              ),
+              decoration: BoxDecoration(color: const Color(0xFF2A2A2E), borderRadius: BorderRadius.circular(100)),
               child: Text(
                 '${provider.batteryLevel}%',
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w500,
-                ),
+                style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w500),
               ),
             ),
           ],
@@ -235,10 +203,7 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
     final pendingSeconds = syncProvider.missingWalsInSeconds;
 
     return Container(
-      decoration: BoxDecoration(
-        color: const Color(0xFF1C1C1E),
-        borderRadius: BorderRadius.circular(20),
-      ),
+      decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(20)),
       child: Column(
         children: [
           // Firmware Update
@@ -248,13 +213,14 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
             chipValue: provider.connectedDevice == null
                 ? context.l10n.offline
                 : provider.havingNewFirmware
-                    ? context.l10n.available
-                    : null,
+                ? context.l10n.available
+                : null,
             onTap: provider.connectedDevice != null
                 ? () {
                     // Route to OmiGlass OTA page for openglass devices
                     final deviceName = provider.connectedDevice?.name?.toLowerCase() ?? '';
-                    final isOpenGlass = provider.connectedDevice?.type == DeviceType.openglass ||
+                    final isOpenGlass =
+                        provider.connectedDevice?.type == DeviceType.openglass ||
                         deviceName.contains('openglass') ||
                         deviceName.contains('omiglass') ||
                         deviceName.contains('glass');
@@ -274,11 +240,9 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
                       );
                     } else {
                       debugPrint('ProductUpdate: Routing to FirmwareUpdate');
-                      Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (context) => FirmwareUpdate(device: provider.pairedDevice),
-                        ),
-                      );
+                      Navigator.of(
+                        context,
+                      ).push(MaterialPageRoute(builder: (context) => FirmwareUpdate(device: provider.pairedDevice)));
                     }
                   }
                 : null,
@@ -294,11 +258,7 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
               chipColor: pendingSeconds > 0 ? const Color(0xFF3D3520) : null,
               chipTextColor: pendingSeconds > 0 ? const Color(0xFFFFD060) : null,
               onTap: () {
-                Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (context) => const SyncPage(),
-                  ),
-                );
+                Navigator.of(context).push(MaterialPageRoute(builder: (context) => const SyncPage()));
               },
             ),
           ],
@@ -340,18 +300,10 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
                   Expanded(
                     child: Text(
                       context.l10n.chargingIssues,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 17,
-                        fontWeight: FontWeight.w400,
-                      ),
+                      style: const TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w400),
                     ),
                   ),
-                  const Icon(
-                    Icons.chevron_right,
-                    color: Color(0xFF3C3C43),
-                    size: 20,
-                  ),
+                  const Icon(Icons.chevron_right, color: Color(0xFF3C3C43), size: 20),
                 ],
               ),
             ),
@@ -388,11 +340,7 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
                   const SizedBox(width: 16),
                   Text(
                     provider.connectedDevice == null ? context.l10n.unpairDevice : context.l10n.disconnectDevice,
-                    style: const TextStyle(
-                      color: Colors.redAccent,
-                      fontSize: 17,
-                      fontWeight: FontWeight.w400,
-                    ),
+                    style: const TextStyle(color: Colors.redAccent, fontSize: 17, fontWeight: FontWeight.w400),
                   ),
                 ],
               ),
@@ -410,8 +358,9 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
                     () => Navigator.of(context).pop(),
                     () async {
                       Navigator.of(context).pop();
-                      await SharedPreferencesUtil()
-                          .btDeviceSet(BtDevice(id: '', name: '', type: DeviceType.omi, rssi: 0));
+                      await SharedPreferencesUtil().btDeviceSet(
+                        BtDevice(id: '', name: '', type: DeviceType.omi, rssi: 0),
+                      );
                       SharedPreferencesUtil().deviceName = '';
                       if (provider.connectedDevice != null) {
                         await _bleUnpairDevice(provider.connectedDevice!);
@@ -450,11 +399,7 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
                     const SizedBox(width: 16),
                     Text(
                       context.l10n.unpairAndForgetDevice,
-                      style: const TextStyle(
-                        color: Colors.orange,
-                        fontSize: 17,
-                        fontWeight: FontWeight.w400,
-                      ),
+                      style: const TextStyle(color: Colors.orange, fontSize: 17, fontWeight: FontWeight.w400),
                     ),
                   ],
                 ),
@@ -472,7 +417,8 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
     final manufacturer = provider.pairedDevice?.manufacturerName ?? context.l10n.unknown;
     final firmware = provider.pairedDevice?.firmwareRevision ?? context.l10n.unknown;
     final deviceId = provider.pairedDevice?.id ?? context.l10n.unknown;
-    final serialNumber = provider.pairedDevice?.serialNumber ??
+    final serialNumber =
+        provider.pairedDevice?.serialNumber ??
         provider.pairedDevice?.id.replaceAll(':', '').replaceAll('-', '').toUpperCase() ??
         context.l10n.unknown;
 
@@ -484,10 +430,7 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
     }
 
     return Container(
-      decoration: BoxDecoration(
-        color: const Color(0xFF1C1C1E),
-        borderRadius: BorderRadius.circular(20),
-      ),
+      decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(20)),
       child: Column(
         children: [
           _buildProfileStyleItem(
@@ -544,134 +487,118 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
 
   @override
   Widget build(BuildContext context) {
-    return Consumer2<DeviceProvider, CaptureProvider>(builder: (context, provider, captureProvider, child) {
-      return Scaffold(
-        backgroundColor: const Color(0xFF0D0D0D),
-        appBar: AppBar(
+    return Consumer2<DeviceProvider, CaptureProvider>(
+      builder: (context, provider, captureProvider, child) {
+        return Scaffold(
           backgroundColor: const Color(0xFF0D0D0D),
-          elevation: 0,
-          leading: IconButton(
-            icon: const FaIcon(FontAwesomeIcons.chevronLeft, size: 18),
-            onPressed: () => Navigator.of(context).pop(),
+          appBar: AppBar(
+            backgroundColor: const Color(0xFF0D0D0D),
+            elevation: 0,
+            leading: IconButton(
+              icon: const FaIcon(FontAwesomeIcons.chevronLeft, size: 18),
+              onPressed: () => Navigator.of(context).pop(),
+            ),
           ),
-        ),
-        body: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 20),
-          child: Column(
-            children: [
-              const SizedBox(height: 0),
-              // Device Title and Status
-              Column(
-                children: [
-                  Text(
-                    provider.pairedDevice?.name ?? context.l10n.unknownDevice,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 32,
-                      fontWeight: FontWeight.bold,
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 12),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: provider.connectedDevice != null
-                          ? Colors.green.withValues(alpha: 0.2)
-                          : Colors.grey.withValues(alpha: 0.2),
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Container(
-                          width: 6,
-                          height: 6,
-                          decoration: BoxDecoration(
-                            color: provider.connectedDevice != null ? Colors.green : Colors.grey,
-                            shape: BoxShape.circle,
-                          ),
-                        ),
-                        const SizedBox(width: 6),
-                        Text(
-                          provider.connectedDevice != null ? context.l10n.connected : context.l10n.offline,
-                          style: TextStyle(
-                            color: provider.connectedDevice != null ? Colors.green : Colors.grey,
-                            fontSize: 14,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 32),
-              DeviceAnimationWidget(
-                deviceType: provider.connectedDevice?.type,
-                modelNumber: provider.connectedDevice?.modelNumber,
-                isConnected: provider.connectedDevice != null,
-                deviceName: provider.connectedDevice?.name ?? provider.pairedDevice?.name,
-                animatedBackground: provider.connectedDevice != null,
-              ),
-
-              const SizedBox(height: 24),
-
-              // Battery Level Section
-              if (provider.connectedDevice != null && provider.batteryLevel > 0) ...[
-                _buildBatterySection(provider),
-                const SizedBox(height: 16),
-              ],
-
-              // Actions Section
-              _buildActionsSection(provider),
-              const SizedBox(height: 16),
-
-              // Device Info Section
-              _buildDeviceInfoSection(provider),
-
-              // Streaming Metrics Section - Bottom
-              if (provider.connectedDevice != null && captureProvider.havingRecordingDevice) ...[
-                const SizedBox(height: 32),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
+          body: SingleChildScrollView(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            child: Column(
+              children: [
+                const SizedBox(height: 0),
+                // Device Title and Status
+                Column(
                   children: [
-                    const FaIcon(
-                      FontAwesomeIcons.bluetooth,
-                      color: Colors.grey,
-                      size: 14,
-                    ),
-                    const SizedBox(width: 6),
                     Text(
-                      '${captureProvider.bleReceiveRateKbps.toStringAsFixed(1)} kbps',
-                      style: const TextStyle(
-                        color: Colors.grey,
-                        fontSize: 14,
+                      provider.pairedDevice?.name ?? context.l10n.unknownDevice,
+                      style: const TextStyle(color: Colors.white, fontSize: 32, fontWeight: FontWeight.bold),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 12),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: provider.connectedDevice != null
+                            ? Colors.green.withValues(alpha: 0.2)
+                            : Colors.grey.withValues(alpha: 0.2),
+                        borderRadius: BorderRadius.circular(20),
                       ),
-                    ),
-                    const SizedBox(width: 24),
-                    const FaIcon(
-                      FontAwesomeIcons.signal,
-                      color: Colors.grey,
-                      size: 14,
-                    ),
-                    const SizedBox(width: 6),
-                    Text(
-                      '${captureProvider.wsSendRateKbps.toStringAsFixed(1)} kbps',
-                      style: const TextStyle(
-                        color: Colors.grey,
-                        fontSize: 14,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Container(
+                            width: 6,
+                            height: 6,
+                            decoration: BoxDecoration(
+                              color: provider.connectedDevice != null ? Colors.green : Colors.grey,
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            provider.connectedDevice != null ? context.l10n.connected : context.l10n.offline,
+                            style: TextStyle(
+                              color: provider.connectedDevice != null ? Colors.green : Colors.grey,
+                              fontSize: 14,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ],
                 ),
-              ],
+                const SizedBox(height: 32),
+                DeviceAnimationWidget(
+                  deviceType: provider.connectedDevice?.type,
+                  modelNumber: provider.connectedDevice?.modelNumber,
+                  isConnected: provider.connectedDevice != null,
+                  deviceName: provider.connectedDevice?.name ?? provider.pairedDevice?.name,
+                  animatedBackground: provider.connectedDevice != null,
+                ),
 
-              const SizedBox(height: 48),
-            ],
+                const SizedBox(height: 24),
+
+                // Battery Level Section
+                if (provider.connectedDevice != null && provider.batteryLevel > 0) ...[
+                  _buildBatterySection(provider),
+                  const SizedBox(height: 16),
+                ],
+
+                // Actions Section
+                _buildActionsSection(provider),
+                const SizedBox(height: 16),
+
+                // Device Info Section
+                _buildDeviceInfoSection(provider),
+
+                // Streaming Metrics Section - Bottom
+                if (provider.connectedDevice != null && captureProvider.havingRecordingDevice) ...[
+                  const SizedBox(height: 32),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const FaIcon(FontAwesomeIcons.bluetooth, color: Colors.grey, size: 14),
+                      const SizedBox(width: 6),
+                      Text(
+                        '${captureProvider.bleReceiveRateKbps.toStringAsFixed(1)} kbps',
+                        style: const TextStyle(color: Colors.grey, fontSize: 14),
+                      ),
+                      const SizedBox(width: 24),
+                      const FaIcon(FontAwesomeIcons.signal, color: Colors.grey, size: 14),
+                      const SizedBox(width: 6),
+                      Text(
+                        '${captureProvider.wsSendRateKbps.toStringAsFixed(1)} kbps',
+                        style: const TextStyle(color: Colors.grey, fontSize: 14),
+                      ),
+                    ],
+                  ),
+                ],
+
+                const SizedBox(height: 48),
+              ],
+            ),
           ),
-        ),
-      );
-    });
+        );
+      },
+    );
   }
 }

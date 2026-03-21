@@ -36,7 +36,7 @@ class DeviceUtils {
           return (
             'The latest version of firmware is not compatible with this version of App (${packageInfo.version}+${packageInfo.buildNumber}). Please update the app from ${Platform.isAndroid ? 'Play Store' : 'App Store'}',
             false,
-            latestVersionStr
+            latestVersionStr,
           );
         } else {
           return ('A new version is available! Update your Omi now.', true, latestVersionStr);
@@ -49,11 +49,7 @@ class DeviceUtils {
 
   /// Get device image path by device type and model number (most accurate)
   /// Falls back to device name if type/model not available
-  static String getDeviceImagePath({
-    DeviceType? deviceType,
-    String? modelNumber,
-    String? deviceName,
-  }) {
+  static String getDeviceImagePath({DeviceType? deviceType, String? modelNumber, String? deviceName}) {
     // Check deviceType first
     if (deviceType != null) {
       switch (deviceType) {
@@ -182,11 +178,7 @@ class DeviceUtils {
 
   /// Convenience method when you have a BtDevice object
   static String getDeviceImageFromBtDevice(BtDevice device) {
-    return getDeviceImagePath(
-      deviceType: device.type,
-      modelNumber: device.modelNumber,
-      deviceName: device.name,
-    );
+    return getDeviceImagePath(deviceType: device.type, modelNumber: device.modelNumber, deviceName: device.name);
   }
 
   /// Get device image with connection state (for special cases like Omi)
@@ -206,11 +198,7 @@ class DeviceUtils {
       return Assets.images.friendPendant.path;
     }
 
-    return getDeviceImagePath(
-      deviceType: deviceType,
-      modelNumber: modelNumber,
-      deviceName: deviceName,
-    );
+    return getDeviceImagePath(deviceType: deviceType, modelNumber: modelNumber, deviceName: deviceName);
   }
 
   /// Legacy method - kept for backwards compatibility

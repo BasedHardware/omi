@@ -28,11 +28,7 @@ class DeveloperApiKeysSection extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
           child: Text(
             context.l10n.docs,
-            style: const TextStyle(
-              color: Colors.black,
-              fontWeight: FontWeight.w600,
-              fontSize: 12,
-            ),
+            style: const TextStyle(color: Colors.black, fontWeight: FontWeight.w600, fontSize: 12),
           ),
         ),
       ),

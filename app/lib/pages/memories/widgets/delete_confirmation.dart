@@ -20,10 +20,7 @@ class DeleteConfirmation {
                 CupertinoDialogAction(
                   isDefaultAction: true,
                   onPressed: () => Navigator.pop(context, false),
-                  child: Text(
-                    context.l10n.cancel,
-                    style: TextStyle(color: Colors.grey.shade400),
-                  ),
+                  child: Text(context.l10n.cancel, style: TextStyle(color: Colors.grey.shade400)),
                 ),
                 CupertinoDialogAction(
                   isDestructiveAction: true,
@@ -40,28 +37,16 @@ class DeleteConfirmation {
             builder: (context) => AlertDialog(
               backgroundColor: const Color(0xFF1F1F25),
               surfaceTintColor: Colors.transparent,
-              title: Text(
-                title!,
-                style: const TextStyle(color: Colors.white, fontSize: 18),
-              ),
-              content: Text(
-                content!,
-                style: const TextStyle(color: Colors.white70, fontSize: 14),
-              ),
+              title: Text(title!, style: const TextStyle(color: Colors.white, fontSize: 18)),
+              content: Text(content!, style: const TextStyle(color: Colors.white70, fontSize: 14)),
               actions: [
                 TextButton(
                   onPressed: () => Navigator.pop(context, false),
-                  child: Text(
-                    context.l10n.cancel,
-                    style: TextStyle(color: Colors.grey.shade400),
-                  ),
+                  child: Text(context.l10n.cancel, style: TextStyle(color: Colors.grey.shade400)),
                 ),
                 TextButton(
                   onPressed: () => Navigator.pop(context, true),
-                  child: Text(
-                    context.l10n.delete,
-                    style: const TextStyle(color: Colors.red),
-                  ),
+                  child: Text(context.l10n.delete, style: const TextStyle(color: Colors.red)),
                 ),
               ],
             ),

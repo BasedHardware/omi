@@ -13,80 +13,69 @@ import 'widgets/memory_item.dart';
 class CategoryMemoriesPage extends StatelessWidget {
   final MemoryCategory category;
 
-  const CategoryMemoriesPage({
-    super.key,
-    required this.category,
-  });
+  const CategoryMemoriesPage({super.key, required this.category});
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<MemoriesProvider>(builder: (context, provider, child) {
-      return Scaffold(
-        backgroundColor: Theme.of(context).colorScheme.primary,
-        appBar: AppBar(
+    return Consumer<MemoriesProvider>(
+      builder: (context, provider, child) {
+        return Scaffold(
           backgroundColor: Theme.of(context).colorScheme.primary,
-          title: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                category.toString().split('.').last[0].toUpperCase() + category.toString().split('.').last.substring(1),
-              ),
-              Text(
-                context.l10n.memoriesCount(provider.filteredMemories.length),
-                style: TextStyle(
-                  fontSize: 14,
-                  color: Colors.grey.shade400,
-                  fontWeight: FontWeight.normal,
+          appBar: AppBar(
+            backgroundColor: Theme.of(context).colorScheme.primary,
+            title: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  category.toString().split('.').last[0].toUpperCase() +
+                      category.toString().split('.').last.substring(1),
                 ),
+                Text(
+                  context.l10n.memoriesCount(provider.filteredMemories.length),
+                  style: TextStyle(fontSize: 14, color: Colors.grey.shade400, fontWeight: FontWeight.normal),
+                ),
+              ],
+            ),
+            actions: [
+              IconButton(
+                icon: const Icon(Icons.add),
+                onPressed: () {
+                  showMemoryDialog(context, provider);
+                  MixpanelManager().memoriesPageCreateMemoryBtn();
+                },
               ),
             ],
           ),
-          actions: [
-            IconButton(
-              icon: const Icon(Icons.add),
-              onPressed: () {
-                showMemoryDialog(context, provider);
-                MixpanelManager().memoriesPageCreateMemoryBtn();
-              },
-            ),
-          ],
-        ),
-        body: provider.filteredMemories.isEmpty
-            ? Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(Icons.note_add, size: 48, color: Colors.grey.shade600),
-                    const SizedBox(height: 16),
-                    Text(
-                      context.l10n.noMemoriesInCategory,
-                      style: TextStyle(
-                        color: Colors.grey.shade400,
-                        fontSize: 18,
+          body: provider.filteredMemories.isEmpty
+              ? Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.note_add, size: 48, color: Colors.grey.shade600),
+                      const SizedBox(height: 16),
+                      Text(
+                        context.l10n.noMemoriesInCategory,
+                        style: TextStyle(color: Colors.grey.shade400, fontSize: 18),
                       ),
-                    ),
-                    const SizedBox(height: 8),
-                    TextButton(
-                      onPressed: () => showMemoryDialog(context, provider),
-                      child: Text(context.l10n.addYourFirstMemory),
-                    ),
-                  ],
+                      const SizedBox(height: 8),
+                      TextButton(
+                        onPressed: () => showMemoryDialog(context, provider),
+                        child: Text(context.l10n.addYourFirstMemory),
+                      ),
+                    ],
+                  ),
+                )
+              : ListView.builder(
+                  padding: const EdgeInsets.all(16),
+                  itemCount: provider.filteredMemories.length,
+                  itemBuilder: (context, index) {
+                    final memory = provider.filteredMemories[index];
+                    return MemoryItem(memory: memory, provider: provider, onTap: _showQuickEditSheet);
+                  },
                 ),
-              )
-            : ListView.builder(
-                padding: const EdgeInsets.all(16),
-                itemCount: provider.filteredMemories.length,
-                itemBuilder: (context, index) {
-                  final memory = provider.filteredMemories[index];
-                  return MemoryItem(
-                    memory: memory,
-                    provider: provider,
-                    onTap: _showQuickEditSheet,
-                  );
-                },
-              ),
-      );
-    });
+        );
+      },
+    );
   }
 
   void _showQuickEditSheet(BuildContext context, Memory memory, MemoriesProvider provider) {
@@ -94,11 +83,7 @@ class CategoryMemoriesPage extends StatelessWidget {
       context: context,
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
-      builder: (context) => MemoryEditSheet(
-        memory: memory,
-        provider: provider,
-        onDelete: (_, __, ___) {},
-      ),
+      builder: (context) => MemoryEditSheet(memory: memory, provider: provider, onDelete: (_, __, ___) {}),
     );
   }
 }

@@ -218,6 +218,8 @@ class MemoriesViewModel: ObservableObject {
     private func refreshMemoriesIfNeeded() async {
         // Skip if user is signed out (tokens are cleared)
         guard AuthState.shared.isSignedIn else { return }
+        // Skip if in auth backoff period (recent 401 errors)
+        guard !AuthBackoffTracker.shared.shouldSkipRequest() else { return }
         // Skip if page is not visible
         guard isActive else { return }
 
@@ -244,7 +246,11 @@ class MemoriesViewModel: ObservableObject {
             memories = mergedMemories
             currentOffset = mergedMemories.count
             hasMoreMemories = mergedMemories.count >= reloadLimit
+            AuthBackoffTracker.shared.reportSuccess()
         } catch {
+            if case APIError.unauthorized = error {
+                AuthBackoffTracker.shared.reportAuthFailure()
+            }
             // Silently ignore errors during auto-refresh
             logError("MemoriesViewModel: Auto-refresh failed", error: error)
         }
@@ -1691,9 +1697,17 @@ private struct MemoryCardView: View {
     var body: some View {
         HStack(spacing: 8) {
             // Content
-            Text(memory.content)
+            Group {
+                if memory.content.hasPrefix("[Protected") || memory.content.hasPrefix("[Encrypted") {
+                    Text("Protected memory")
+                        .italic()
+                        .foregroundColor(OmiColors.textTertiary)
+                } else {
+                    Text(memory.content)
+                        .foregroundColor(OmiColors.textPrimary)
+                }
+            }
                 .scaledFont(size: 14)
-                .foregroundColor(OmiColors.textPrimary)
                 .lineLimit(nil)
                 .fixedSize(horizontal: false, vertical: true)
 
@@ -2022,6 +2036,12 @@ struct MemoryDetailSheet: View {
                             .disabled(editContentText.isEmpty)
                         }
                     }
+                } else if memory.content.hasPrefix("[Protected") || memory.content.hasPrefix("[Encrypted") {
+                    Text("Protected memory")
+                        .italic()
+                        .scaledFont(size: 15)
+                        .foregroundColor(OmiColors.textTertiary)
+                        .fixedSize(horizontal: false, vertical: true)
                 } else {
                     Text(memory.content)
                         .scaledFont(size: 15)

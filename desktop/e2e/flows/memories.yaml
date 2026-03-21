@@ -1,0 +1,80 @@
+# E2E Flow: Memories — browse, filter, search, and manage extracted memories
+# Tests: Memories list, tag filtering, search, visibility toggle, memory graph
+# Core feature: AI-extracted memories from conversations and screen activity
+
+version: 2
+name: memories
+description: Memories flow — navigate to Memories page, browse memory list, filter by tags (focus, tips, system, etc.), search memories, toggle visibility, open memory graph
+app: com.omi.computer-macos
+covers:
+  - desktop/Desktop/Sources/MainWindow/Pages/MemoriesPage.swift
+  - desktop/Desktop/Sources/MainWindow/Pages/MemoryGraph/MemoryGraphPage.swift
+preconditions:
+  - auth_ready  # User signed in and onboarding completed. App shows main window.
+
+steps:
+  - id: S1
+    name: Navigate to Memories page
+    do: "Click Memories in sidebar: agent-swift find key sidebar_memories click. Verify the Memories page opens showing a search bar at top, tag filter chips, and a list of memory items."
+    verify: true
+    expect:
+      - kind: interactive_count
+        min: 5
+    evidence:
+      - screenshot: step-S1.webp
+    note: "Memories is index 3 in sidebar (SidebarNavItem.memories). MemoriesPage has 12 filter tags: focus, focused, distracted, tips, system, interesting, manual, productivity, health, communication, learning, other."
+
+  - id: S2
+    name: Filter memories by tag
+    do: "Click the 'Tips' tag chip to filter memories. Verify the list updates to show only memories tagged as tips. The active tag chip should appear highlighted/selected."
+    verify: true
+    expect:
+      - kind: interactive_count
+        min: 3
+    evidence:
+      - screenshot: step-S2.webp
+    note: "Tag filtering uses MemoryTag enum matches() method. Tips tag shows advice-system generated tips. Click again to deselect filter."
+
+  - id: S3
+    name: Search memories
+    do: "Click the search bar and type a search term (e.g., 'meeting' or 'focus'). Verify the memory list filters to show matching results. Clear the search field."
+    verify: true
+    expect:
+      - kind: interactive_count
+        min: 3
+    evidence:
+      - screenshot: step-S3.webp
+    note: "Search bar is a textfield element at the top of MemoriesPage. Search filters client-side on memory content/title."
+
+  - id: S4
+    name: Toggle memory visibility
+    do: "Find a memory item in the list. Click the visibility toggle (public/private eye icon) to change its visibility. Verify the icon state changes."
+    verify: true
+    expect:
+      - kind: interactive_count
+        min: 3
+    evidence:
+      - screenshot: step-S4.webp
+    note: "Visibility toggle calls API to update memory. Silent try? on failure — may not show error to user if API call fails. This is a known friction pattern."
+
+  - id: S5
+    name: Open memory graph
+    do: "Click the graph button (node/network icon) near the top of the Memories page. Verify the Memory Graph page opens showing a force-directed graph visualization of connected memories."
+    verify: true
+    expect:
+      - kind: interactive_count
+        min: 2
+    evidence:
+      - screenshot: step-S5.webp
+    note: "MemoryGraphPage uses force-directed graph visualization. May take a moment to load and layout nodes. Graph shows memory connections and categories."
+
+  - id: S6
+    name: Return to memory list
+    do: "Navigate back from memory graph to the main Memories list. Click the back button or re-click Memories in sidebar. Verify the memory list is displayed."
+    verify: true
+    expect:
+      - kind: interactive_count
+        min: 5
+    evidence:
+      - screenshot: step-S6.webp
+    note: "Back navigation from MemoryGraphPage. Verify tag filters and search state persist."

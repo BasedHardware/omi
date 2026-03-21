@@ -13,10 +13,7 @@ import 'package:omi/utils/l10n_extensions.dart';
 class ApiKeysWidget extends StatefulWidget {
   final String appId;
 
-  const ApiKeysWidget({
-    Key? key,
-    required this.appId,
-  }) : super(key: key);
+  const ApiKeysWidget({Key? key, required this.appId}) : super(key: key);
 
   @override
   State<ApiKeysWidget> createState() => _ApiKeysWidgetState();
@@ -149,10 +146,7 @@ class _ApiKeysWidgetState extends State<ApiKeysWidget> {
               children: [
                 Row(
                   children: [
-                    Text(
-                      context.l10n.apiKeys,
-                      style: Theme.of(context).textTheme.titleMedium,
-                    ),
+                    Text(context.l10n.apiKeys, style: Theme.of(context).textTheme.titleMedium),
                     const SizedBox(width: 8),
                     IconButton(
                       icon: Icon(
@@ -168,9 +162,7 @@ class _ApiKeysWidgetState extends State<ApiKeysWidget> {
                           builder: (dialogContext) => AlertDialog(
                             backgroundColor: context.appColors.secondaryCardBackground,
                             title: Text(context.l10n.omiApiKeys),
-                            content: Text(
-                              context.l10n.apiKeysDescription,
-                            ),
+                            content: Text(context.l10n.apiKeysDescription),
                             actions: [
                               TextButton(
                                 onPressed: () => Navigator.of(dialogContext).pop(),
@@ -178,9 +170,7 @@ class _ApiKeysWidgetState extends State<ApiKeysWidget> {
                                   backgroundColor: Theme.of(dialogContext).colorScheme.secondary,
                                   foregroundColor: Colors.white,
                                 ),
-                                child: Text(
-                                  context.l10n.gotIt,
-                                ),
+                                child: Text(context.l10n.gotIt),
                               ),
                             ],
                           ),
@@ -196,10 +186,7 @@ class _ApiKeysWidgetState extends State<ApiKeysWidget> {
                       ? const SizedBox(
                           width: 16,
                           height: 16,
-                          child: CircularProgressIndicator(
-                            color: Colors.white,
-                            strokeWidth: 2,
-                          ),
+                          child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
                         )
                       : const Icon(Icons.add, size: 16),
                   label: Text(_isCreatingKey ? context.l10n.creating : context.l10n.createKey),
@@ -244,12 +231,7 @@ class _ApiKeysWidgetState extends State<ApiKeysWidget> {
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Center(
-          child: Text(
-            context.l10n.yourNewKey,
-            style: Theme.of(context).textTheme.labelLarge,
-          ),
-        ),
+        Center(child: Text(context.l10n.yourNewKey, style: Theme.of(context).textTheme.labelLarge)),
         const SizedBox(height: 16),
         Container(
           padding: const EdgeInsets.symmetric(vertical: 8),
@@ -264,13 +246,7 @@ class _ApiKeysWidgetState extends State<ApiKeysWidget> {
                   scrollDirection: Axis.horizontal,
                   child: Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 12),
-                    child: Text(
-                      _newKey!.secret!,
-                      style: const TextStyle(
-                        fontFamily: 'monospace',
-                        fontSize: 14,
-                      ),
-                    ),
+                    child: Text(_newKey!.secret!, style: const TextStyle(fontFamily: 'monospace', fontSize: 14)),
                   ),
                 ),
               ),
@@ -328,10 +304,7 @@ class _ApiKeysWidgetState extends State<ApiKeysWidget> {
           ),
           child: ListTile(
             contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
-            title: Text(
-              key.label,
-              style: const TextStyle(fontWeight: FontWeight.bold),
-            ),
+            title: Text(key.label, style: const TextStyle(fontWeight: FontWeight.bold)),
             subtitle: Text(
               '${DateFormat('MMM d, yyyy HH:mm', Localizations.localeOf(context).languageCode).format(key.createdAt)}',
               style: Theme.of(context).textTheme.labelMedium,
@@ -344,17 +317,11 @@ class _ApiKeysWidgetState extends State<ApiKeysWidget> {
                       child: SizedBox(
                         width: 20,
                         height: 20,
-                        child: CircularProgressIndicator(
-                          color: Colors.red,
-                          strokeWidth: 2,
-                        ),
+                        child: CircularProgressIndicator(color: Colors.red, strokeWidth: 2),
                       ),
                     )
                   : IconButton(
-                      icon: const Icon(
-                        Icons.delete_outline,
-                        color: Colors.red,
-                      ),
+                      icon: const Icon(Icons.delete_outline, color: Colors.red),
                       onPressed: () => _showDeleteConfirmation(key.id),
                       tooltip: context.l10n.revokeKey,
                     ),
@@ -371,9 +338,7 @@ class _ApiKeysWidgetState extends State<ApiKeysWidget> {
       builder: (dialogContext) => AlertDialog(
         backgroundColor: context.appColors.secondaryCardBackground,
         title: Text(context.l10n.revokeApiKeyQuestion),
-        content: Text(
-          context.l10n.revokeApiKeyWarning,
-        ),
+        content: Text(context.l10n.revokeApiKeyWarning),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(),

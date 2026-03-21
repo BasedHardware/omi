@@ -44,11 +44,8 @@ export default async function UnlimitedPage() {
           >
             Open in App
           </a>
-          <a
-            href={appStoreLink}
-            className="text-gray-400 underline hover:text-white"
-          >
-            Don't have the app? Download here
+          <a href={appStoreLink} className="text-gray-400 underline hover:text-white">
+            Don&apos;t have the app? Download here
           </a>
         </div>
       ) : (

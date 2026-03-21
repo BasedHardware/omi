@@ -68,10 +68,7 @@ class _UserSpeechSamplesState extends State<UserSpeechSamplesView> {
           ),
           backgroundColor: Theme.of(context).colorScheme.primary,
           body: provider.loading
-              ? const Center(
-                  child: CircularProgressIndicator(
-                  color: Colors.white,
-                ))
+              ? const Center(child: CircularProgressIndicator(color: Colors.white))
               : ListView.builder(
                   itemCount: provider.samplesUrl.length,
                   itemBuilder: (context, index) {
@@ -106,7 +103,11 @@ class _UserSpeechSamplesState extends State<UserSpeechSamplesView> {
                             ),
                             onPressed: () => provider.playPause(index),
                           ),
-                          title: Text(index == 0 ? context.l10n.speechProfile : context.l10n.additionalSampleIndex(index.toString())),
+                          title: Text(
+                            index == 0
+                                ? context.l10n.speechProfile
+                                : context.l10n.additionalSampleIndex(index.toString()),
+                          ),
                           // _getFileNameFromUrl(samplesUrl[index])
                           subtitle: FutureBuilder<Duration?>(
                             future: AudioPlayer().setUrl(provider.samplesUrl[index]),
@@ -127,21 +128,16 @@ class _UserSpeechSamplesState extends State<UserSpeechSamplesView> {
                                     var parts = name.split('_segment_');
                                     deleteProfileSample(parts[0], int.tryParse(parts[1])!);
                                     provider.samplesUrl.removeAt(index);
-                                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                                        content: Text(
-                                      context.l10n.additionalSpeechSampleRemoved,
-                                    )));
+                                    ScaffoldMessenger.of(
+                                      context,
+                                    ).showSnackBar(SnackBar(content: Text(context.l10n.additionalSpeechSampleRemoved)));
                                     setState(() {});
                                   },
                                   icon: const Icon(Icons.delete, size: 20),
                                 ),
                         ),
                         index == 0 ? const SizedBox(height: 8) : const SizedBox(),
-                        index == 0
-                            ? Divider(
-                                color: Colors.grey.shade600,
-                              )
-                            : const SizedBox(),
+                        index == 0 ? Divider(color: Colors.grey.shade600) : const SizedBox(),
                         index == 0 ? const SizedBox(height: 8) : const SizedBox(),
                       ],
                     );

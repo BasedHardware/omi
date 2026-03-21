@@ -29,9 +29,7 @@ class MessageActionMenu extends StatelessWidget {
     return Container(
       decoration: const BoxDecoration(
         color: Colors.black54,
-        borderRadius: BorderRadius.vertical(
-          top: Radius.circular(20),
-        ),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 22.0, horizontal: 22.0),
@@ -41,29 +39,16 @@ class MessageActionMenu extends StatelessWidget {
           children: [
             Container(
               padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.grey[900],
-                borderRadius: BorderRadius.circular(12),
+              decoration: BoxDecoration(color: Colors.grey[900], borderRadius: BorderRadius.circular(12)),
+              child: getMarkdownWidget(
+                context,
+                '${message.substring(0, message.length > 200 ? 200 : message.length)}...',
               ),
-              child:
-                  getMarkdownWidget(context, '${message.substring(0, message.length > 200 ? 200 : message.length)}...'),
             ),
             const SizedBox(height: 16),
-            _buildActionButton(
-              title: context.l10n.copy,
-              icon: Icons.copy,
-              onTap: onCopy,
-            ),
-            _buildActionButton(
-              title: context.l10n.selectText,
-              icon: Icons.description_outlined,
-              onTap: onSelectText,
-            ),
-            _buildActionButton(
-              title: context.l10n.share,
-              icon: FontAwesomeIcons.share,
-              onTap: onShare,
-            ),
+            _buildActionButton(title: context.l10n.copy, icon: Icons.copy, onTap: onCopy),
+            _buildActionButton(title: context.l10n.selectText, icon: Icons.description_outlined, onTap: onSelectText),
+            _buildActionButton(title: context.l10n.share, icon: FontAwesomeIcons.share, onTap: onShare),
             if (onThumbsDown != null) ...[
               _buildActionButton(
                 title: context.l10n.notHelpful,
@@ -96,19 +81,9 @@ class MessageActionMenu extends StatelessWidget {
         padding: const EdgeInsets.symmetric(vertical: 12.0),
         child: Row(
           children: [
-            Text(
-              title,
-              style: TextStyle(
-                fontSize: 16,
-                color: isDestructive ? Colors.red : Colors.white,
-              ),
-            ),
+            Text(title, style: TextStyle(fontSize: 16, color: isDestructive ? Colors.red : Colors.white)),
             const Spacer(),
-            Icon(
-              icon,
-              size: 20,
-              color: isDestructive ? Colors.red : Colors.white,
-            ),
+            Icon(icon, size: 20, color: isDestructive ? Colors.red : Colors.white),
           ],
         ),
       ),

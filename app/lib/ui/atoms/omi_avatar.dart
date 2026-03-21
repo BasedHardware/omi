@@ -7,12 +7,7 @@ class OmiAvatar extends AdaptiveWidget {
   final String? imageUrl;
   final double size;
   final Widget? fallback;
-  const OmiAvatar({
-    super.key,
-    this.imageUrl,
-    this.size = 32,
-    this.fallback,
-  });
+  const OmiAvatar({super.key, this.imageUrl, this.size = 32, this.fallback});
 
   @override
   Widget buildDesktop(BuildContext context) => _base();

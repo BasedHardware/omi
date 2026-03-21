@@ -1,68 +1,45 @@
-# E2E Flow: Language settings
-# Converted from flow2-language-settings.sh
+# E2E Flow: Language settings — transcription language mode switching
 # Tests: settings navigation, radio buttons, picker interaction, back navigation
 
+version: 2
 name: language
-description: Language mode switching in Settings > Transcription — radio buttons, picker, back nav
+description: Language mode switching in Settings > Transcription — radio buttons, language picker, and back navigation
+app: com.omi.computer-macos
 covers:
-  - Desktop/Sources/MainWindow/Pages/SettingsPage.swift
-  - Desktop/Sources/MainWindow/SettingsSidebar.swift
-  - Desktop/Sources/MainWindow/SidebarView.swift
-setup: normal
-bundle_id: com.omi.desktop-dev
+  - desktop/Desktop/Sources/MainWindow/Pages/SettingsPage.swift
+  - desktop/Desktop/Sources/MainWindow/SettingsSidebar.swift
+preconditions:
+  - auth_ready
 
 steps:
-  - name: Navigate to Settings
-    click: { type: image, label: "gearshape.fill" }
-    screenshot: settings-opened
+  - id: S1
+    name: Navigate to Settings
+    do: "Click the Settings sidebar icon (identifier: sidebar_settings) to open the Settings page. Verify settings sidebar shows section names."
+    expect:
+      text_visible:
+        - Settings
 
-  - name: Verify Settings sidebar
-    assert: { text: "Settings" }
+  - id: S2
+    name: Navigate to Transcription section
+    do: "Press the 'Transcription' button in the Settings sidebar to open transcription settings. Verify Language Mode card appears."
+    expect:
+      text_visible:
+        - Language Mode
 
-  - name: Navigate to Transcription section
-    press: { text: "Transcription" }
-    screenshot: transcription-section
+  - id: S3
+    name: Switch to Single Language mode
+    do: "Click the 'Single Language Better Accuracy' radio option. Verify a language picker dropdown appears when Single Language mode is active."
+    expect:
+      interactive_count: { min: 3 }
 
-  - name: Verify Language Mode card
-    assert: { text: "Language Mode" }
+  - id: S4
+    name: Switch back to Auto-Detect mode
+    do: "Click the 'Auto-Detect Multi-Language' radio option to restore auto-detect mode. Verify the language picker is hidden."
+    expect:
+      interactive_count: { min: 3 }
 
-  - name: Detect current language mode
-    get: { property: value, type: popupbutton }
-    save_as: current_mode
-    optional: true
-
-  - name: Switch to Single Language mode
-    click: { text_contains: "Single Language" }
-    screenshot: single-language-selected
-    assert:
-      type: popupbutton
-      min_count: 1
-    optional: true
-
-  - name: Read current language from picker
-    get: { property: value, type: popupbutton }
-    save_as: current_lang
-    optional: true
-
-  - name: Change language via picker
-    click: { type: popupbutton }
-    screenshot: picker-opened
-    click_menu_item:
-      try_labels:
-        - Spanish
-        - French
-        - Japanese
-        - German
-    screenshot: language-changed
-    optional: true
-
-  - name: Switch back to Auto-Detect mode
-    click: { text_contains: "Auto-Detect" }
-    screenshot: auto-detect-restored
-
-  - name: Navigate back from Settings
-    click:
-      text_contains: "Back"
-      fallback_label: "chevron.left"
-    assert: { type: image, label: "Home" }
-    screenshot: back-to-main
+  - id: S5
+    name: Return from Settings
+    do: "Click the Back button to return to the main view. Verify the sidebar navigation icons are visible again."
+    expect:
+      interactive_count: { min: 5 }

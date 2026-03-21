@@ -13,9 +13,7 @@ class OnDeviceAppleProvider implements ISttProvider {
   final String language;
   static const MethodChannel _channel = MethodChannel('com.omi.ios/speech');
 
-  OnDeviceAppleProvider({
-    this.language = 'en',
-  });
+  OnDeviceAppleProvider({this.language = 'en'});
 
   @override
   Future<SttTranscriptionResult?> transcribe(
@@ -47,17 +45,14 @@ class OnDeviceAppleProvider implements ISttProvider {
 
         // Calculate duration: 16kHz * 2 bytes/sample * 1 channel = 32000 bytes/sec
         final duration = audioData.lengthInBytes / 32000.0;
-        CustomSttLogService.instance.info('OnDeviceApple',
-            'Transcribed ${duration.toStringAsFixed(1)}s in ${sw.elapsedMilliseconds}ms. Text: $result');
+        CustomSttLogService.instance.info(
+          'OnDeviceApple',
+          'Transcribed ${duration.toStringAsFixed(1)}s in ${sw.elapsedMilliseconds}ms. Text: $result',
+        );
 
         return SttTranscriptionResult(
           segments: [
-            SttSegment(
-              text: result,
-              start: audioOffsetSeconds,
-              end: audioOffsetSeconds + duration,
-              speakerId: 0,
-            )
+            SttSegment(text: result, start: audioOffsetSeconds, end: audioOffsetSeconds + duration, speakerId: 0),
           ],
           rawText: result,
         );

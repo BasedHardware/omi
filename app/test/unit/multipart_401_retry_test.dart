@@ -19,11 +19,7 @@ class AuthRetryDeps {
   final Future<String> Function() refreshToken;
   final Future<void> Function() signOut;
 
-  AuthRetryDeps({
-    required this.sendRequest,
-    required this.refreshToken,
-    required this.signOut,
-  });
+  AuthRetryDeps({required this.sendRequest, required this.refreshToken, required this.signOut});
 }
 
 /// Builds a fresh MultipartRequest (mirrors _buildMultipartRequest in shared.dart).
@@ -43,12 +39,7 @@ Future<http.MultipartRequest> buildMultipartRequest({
   for (var file in files) {
     var stream = http.ByteStream(file.openRead());
     var length = await file.length();
-    var multipartFile = http.MultipartFile(
-      fileFieldName,
-      stream,
-      length,
-      filename: path.basename(file.path),
-    );
+    var multipartFile = http.MultipartFile(fileFieldName, stream, length, filename: path.basename(file.path));
     request.files.add(multipartFile);
   }
 
@@ -119,10 +110,7 @@ void main() {
   });
 
   http.StreamedResponse mockStreamedResponse(int statusCode, {String body = ''}) {
-    return http.StreamedResponse(
-      Stream.value(body.codeUnits),
-      statusCode,
-    );
+    return http.StreamedResponse(Stream.value(body.codeUnits), statusCode);
   }
 
   group('makeMultipartApiCall 401 retry logic', () {

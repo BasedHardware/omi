@@ -389,6 +389,7 @@ Only flows that have been executed, verified, and pushed through the v2 flow-wal
 | `flows/login.yaml` | 5 | signed_out | Auth screen → Google Sign-In → consent → OAuth → home | [normal](https://flow-walker.beastoin.workers.dev/runs/hao5vbBsBI.html), [replay](https://flow-walker.beastoin.workers.dev/runs/-aeMGlV88w.html) |
 | `flows/onboarding.yaml` | 9 | signed_out + auth | Name → Language → Found Omi → Permissions → Review → Speech → Knowledge → Complete → Home | [normal](https://flow-walker.beastoin.workers.dev/runs/UHqa8Fysj2.html), [replay](https://flow-walker.beastoin.workers.dev/runs/B9Py6uoJaO.html) |
 | `flows/logout.yaml` | 5 | auth_ready | Home → Settings → Sign Out → Confirm → Auth screen | [normal](https://flow-walker.beastoin.workers.dev/runs/SH4MXH9gkv.html), [replay](https://flow-walker.beastoin.workers.dev/runs/NcZlCUW0W7.html) |
+| `flows/ask-omi-chat.yaml` | 9 | auth_ready | Home → Ask Omi → Chat page → Type message → AI response → Chat apps drawer → Home | [normal](https://flow-walker.beastoin.workers.dev/runs/O5h8bR6izW.html) |
 
 When you modify a Dart file, check if any flow's `covers:` includes it. If so, that flow describes the user journey your change affects — use it to understand context and verify your work.
 
@@ -414,6 +415,31 @@ After making changes, verify them in the live app:
 | Hot restart breaks connection | Wait 3s → disconnect → connect |
 | Text labels null | Match by `type`, `flutterType`, or `bounds` — Marionette doesn't extract child text |
 | Non-English IME breaks text input | Set system locale to English: `adb shell "settings put system system_locales en-US"` |
+
+## iOS Simulator Known Limitations
+
+| Issue | Workaround |
+|-------|-----------|
+| ASWebAuthenticationSession blocks Google Sign-In (system dialog, not automatable) | Use `FirebaseAuth.instance.signInWithCustomToken(token)` via VM Service evaluate |
+| `agent-flutter scroll` fails (uses ADB/transport.swipe, Simulator window disconnected) | Scroll via VM Service Dart evaluation: `pos.jumpTo()` on Scrollable widgets |
+| Simulator.app window shows Home Screen (not app) when booted via SSH user | Use `simctl screenshot` for true device state; use Marionette/VM Service for interaction |
+| No `simctl` touch/swipe API | VM Service evaluate for Flutter-level interaction; cliclick only works if Simulator window is synced |
+| iOS keychain persists through app uninstall | `xcrun simctl erase <UDID>` for full reset |
+| iOS onboarding is shorter than Android (language only → home) | Mark skipped steps as pass with platform note |
+
+**VM Service scroll expression** (target app root library):
+```dart
+(() { var count = 0; void visit(Element el) { if (el.widget is Scrollable) { try { final s = (el as StatefulElement).state as ScrollableState; final p = s.position; if (p.maxScrollExtent > 0 && p.pixels < p.maxScrollExtent) { p.jumpTo((p.pixels + 500).clamp(0.0, p.maxScrollExtent)); count++; } } catch (_) {} } el.visitChildren(visit); } WidgetsBinding.instance.rootElement?.visitChildren(visit); return count; })()
+```
+
+**iOS simulator auth** (dev Firebase tokens rejected by prod API — needs local backend):
+```bash
+# .dev.env must point to a local/dev backend
+API_BASE_URL=http://<your-backend-host>:<port>/
+USE_WEB_AUTH=false
+USE_AUTH_CUSTOM_TOKEN=true
+# Regenerate envied after .dev.env change, rebuild app
+```
 
 ## Guard Conditions
 

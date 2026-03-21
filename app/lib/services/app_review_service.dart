@@ -7,11 +7,9 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/theme/brand_colors.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/logger.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
-
-import 'package:omi/utils/analytics/mixpanel.dart';
-import 'package:omi/utils/logger.dart';
 
 class AppReviewService {
   static final AppReviewService _instance = AppReviewService._internal();
@@ -151,11 +149,7 @@ class AppReviewService {
                 const SizedBox(height: 16),
                 Text(
                   'Help us reach more people by leaving a review in the ${Platform.isIOS ? 'App Store' : 'Google Play Store'}. Your feedback means the world to us!',
-                  style: const TextStyle(
-                    color: Colors.grey,
-                    fontSize: 16,
-                    height: 1.4,
-                  ),
+                  style: const TextStyle(color: Colors.grey, fontSize: 16, height: 1.4),
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 32),
@@ -180,24 +174,16 @@ class AppReviewService {
                         backgroundColor: BrandColors.getColorsForFlavor().primary,
                         foregroundColor: Colors.white,
                         minimumSize: const Size(double.infinity, 48),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(20),
-                        ),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
                       ),
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          FaIcon(
-                            Platform.isIOS ? FontAwesomeIcons.appStoreIos : FontAwesomeIcons.googlePlay,
-                            size: 20,
-                          ),
+                          FaIcon(Platform.isIOS ? FontAwesomeIcons.appStoreIos : FontAwesomeIcons.googlePlay, size: 20),
                           const SizedBox(width: 12),
                           Text(
                             'Rate on ${Platform.isIOS ? 'App Store' : 'Google Play'}',
-                            style: const TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w600,
-                            ),
+                            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
                           ),
                         ],
                       ),
@@ -209,13 +195,7 @@ class AppReviewService {
                         MixpanelManager().track('App Review Skipped');
                         Navigator.of(context).pop();
                       },
-                      child: const Text(
-                        'Maybe later',
-                        style: TextStyle(
-                          color: Colors.grey,
-                          fontSize: 16,
-                        ),
-                      ),
+                      child: const Text('Maybe later', style: TextStyle(color: Colors.grey, fontSize: 16)),
                     ),
                   ],
                 ),

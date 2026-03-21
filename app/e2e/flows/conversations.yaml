@@ -1,0 +1,127 @@
+# E2E Flow: Conversations — view conversation list, detail (summary/transcript/action items), filter by folder tab
+# Tests: Navigate conversations list, open detail, switch tabs, star conversation, three-dot menu, folder tab filtering
+# Core feature: reviewing past conversations captured by Omi
+
+version: 2
+name: conversations
+description: Conversations flow — browse conversation list, open detail page with summary/transcript/action items tabs, star conversations, use three-dot menu, filter by folder tabs
+app: com.friend.ios.dev
+evidence:
+  video: true
+covers:
+  - app/lib/pages/conversations/conversations_page.dart
+  - app/lib/pages/conversations/widgets/conversation_list_item.dart
+  - app/lib/pages/conversations/widgets/folder_tabs.dart
+  - app/lib/pages/conversation_detail/page.dart
+  - app/lib/pages/conversation_detail/widgets.dart
+  - app/lib/pages/conversation_detail/conversation_detail_provider.dart
+  - app/lib/providers/conversation_provider.dart
+  - app/lib/widgets/conversation_bottom_bar.dart
+preconditions:
+  - auth_ready  # User signed in and onboarding completed. App shows home screen.
+
+steps:
+  - id: S1
+    name: Verify home screen with conversations list
+    do: "Verify home screen shows the Conversations section with folder tabs (All, Starred, Work, Personal) and at least one conversation item with emoji icon, title, time, and duration."
+    verify: true
+    expect:
+      - kind: text_visible
+        values: ["Conversations"]
+      - kind: interactive_count
+        min: 4
+    evidence:
+      - screenshot: step-S1.webp
+    note: "Conversations section shows folder tabs as horizontal scrollable chips. Each conversation item displays: emoji icon (40x40), title, time, duration. Items grouped by date headers (e.g., Oct 26, Dec 06). Bottom nav bar has 4 tabs + center mic button."
+
+  - id: S2
+    name: Scroll down to see more conversations
+    do: "Scroll down the conversations list to reveal more conversation items grouped by date. Verify additional date groups and conversation items appear."
+    verify: true
+    expect:
+      - kind: interactive_count
+        min: 4
+    evidence:
+      - screenshot: step-S2.webp
+    note: "Conversations are grouped by date (most recent first). Each group has a date header. Scroll reveals older conversations. Use ADB swipe: input swipe 540 1800 540 600 300."
+
+  - id: S3
+    name: Open conversation detail
+    do: "Scroll back to top. Tap on a conversation item to open the conversation detail page. The detail page defaults to the Summary tab. Use ADB coordinates to tap the conversation item — Marionette press on GestureDetector may not trigger navigation inside ScrollView."
+    evidence:
+      - screenshot: step-S3.webp
+    note: "Known issue: conversations where startedAt differs from createdAt will throw 'Bad state: No valid conversation found'. Pick a conversation where these dates match (e.g., 'Mastering Vocal Communication'). ADB center tap on the list item works reliably."
+
+  - id: S4
+    name: Verify conversation detail — Summary tab
+    do: "Verify the conversation detail page shows: editable title at top, date/time/duration chips, folder chip ('No Folder'), privacy chip ('Private'), and structured summary content with numbered points. Header has back button, star, share, search, and three-dot menu icons."
+    verify: true
+    expect:
+      - kind: text_visible
+        values: ["Conversation"]
+      - kind: interactive_count
+        min: 8
+    evidence:
+      - screenshot: step-S4.webp
+    note: "Summary tab (default, index 1) shows: GetSummaryWidgets (title+emoji, overview, structured markdown), GetAppsWidgets (app responses with icon+name), GetGeolocationWidgets (map+address). Bottom bar has 3 tab pills: Transcript | Summary | Action Items."
+
+  - id: S5
+    name: Switch to Transcript tab
+    do: "Tap the Transcript tab (leftmost pill in bottom bar). Verify transcript shows speaker-attributed text segments with speaker labels (e.g., 'Speaker 1', 'Speaker 2'). Segments are displayed as colored chat bubbles."
+    verify: true
+    expect:
+      - kind: text_visible
+        values: ["Transcript"]
+    evidence:
+      - screenshot: step-S5.webp
+    note: "Transcript tab shows all transcriptSegments with speaker name labels. Each segment is a colored bubble (green/dark). Small icons on each segment allow editing speaker name and text. Tapping a segment can seek audio if audio files exist. Use ADB to tap Transcript tab at bottom-left pill."
+
+  - id: S6
+    name: Switch to Action Items tab
+    do: "Tap the Action Items tab (rightmost pill in bottom bar). Verify the page shows 'To-Do' header with count badge, a list of action items with checkboxes, and a 'Completed' section."
+    verify: true
+    expect:
+      - kind: text_visible
+        values: ["Action Items"]
+      - kind: interactive_count
+        min: 5
+    evidence:
+      - screenshot: step-S6.webp
+    note: "Action Items tab shows: 'To-Do (N)' with incomplete items (checkbox + description), 'Completed (N)' with completed items. Items can be checked/unchecked, swiped to delete, dragged to reorder. Empty state: 'No pending action items'."
+
+  - id: S7
+    name: Open three-dot menu
+    do: "Tap the three-dot menu button (rightmost icon in header bar). Verify the popup menu shows options: Copy Transcript, Copy Summary, Test Prompt, Reprocess Conversation, Delete Conversation."
+    verify: true
+    expect:
+      - kind: text_visible
+        values: ["Copy Transcript"]
+      - kind: interactive_count
+        min: 3
+    evidence:
+      - screenshot: step-S7.webp
+    note: "Three-dot menu is a CupertinoPopupMenu with 5 items. 'Delete Conversation' is red/destructive. 'Share Audio' appears only if conversation has audio files. 'Reprocess' only if not discarded. ADB coordinates for menu button: logical (377, 77) → ADB (990, 202)."
+
+  - id: S8
+    name: Dismiss menu and return to home
+    do: "Dismiss the popup menu (press Android back or tap outside). Then press the back button (chevron left in header) to return to the home screen conversations list."
+    verify: true
+    expect:
+      - kind: text_visible
+        values: ["Conversations"]
+      - kind: interactive_count
+        min: 4
+    evidence:
+      - screenshot: step-S8.webp
+    note: "Back button returns result to ConversationListItem (title changes, deletion status). Use KEYCODE_BACK to dismiss menu, then tap back button or KEYCODE_BACK again to return home."
+
+  - id: S9
+    name: Test Starred folder tab filter
+    do: "Tap the 'Starred' folder tab on the conversations section. Verify the view changes to show either starred conversations or the empty state message 'No starred conversations'. Then tap 'All' tab to return to the full list."
+    verify: true
+    expect:
+      - kind: interactive_count
+        min: 2
+    evidence:
+      - screenshot: step-S9.webp
+    note: "Starred tab filters server-side (refetches with filter). Empty state shows star icon and hint text. Other folder tabs (Work, Personal) work similarly. The '+' button at the end allows creating custom folders."

@@ -15,23 +15,10 @@ import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 
 /// State enum for the AI app generation process
-enum GenerationState {
-  idle,
-  generatingApp,
-  generatingIcon,
-  submitting,
-  completed,
-  error,
-}
+enum GenerationState { idle, generatingApp, generatingIcon, submitting, completed, error }
 
 /// Enum for generation steps (for UI progress)
-enum GenerationStep {
-  creatingPlan,
-  developingLogic,
-  designingApp,
-  generatingIcon,
-  finalTouches,
-}
+enum GenerationStep { creatingPlan, developingLogic, designingApp, generatingIcon, finalTouches }
 
 /// Provider for the AI App Generator feature
 class AiAppGeneratorProvider extends ChangeNotifier {
@@ -230,11 +217,7 @@ class AiAppGeneratorProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final iconBase64 = await generateAppIcon(
-        _generatedName!,
-        _generatedDescription!,
-        _generatedCategory ?? 'other',
-      );
+      final iconBase64 = await generateAppIcon(_generatedName!, _generatedDescription!, _generatedCategory ?? 'other');
 
       if (iconBase64 != null) {
         _generatedIconBytes = base64Decode(iconBase64);
@@ -314,8 +297,9 @@ class AiAppGeneratorProvider extends ChangeNotifier {
         return _createdAppId;
       } else {
         _state = GenerationState.error;
-        _errorMessage =
-            result.$2.isNotEmpty ? result.$2 : MyApp.navigatorKey.currentContext!.l10n.aiGenFailedToCreateApp;
+        _errorMessage = result.$2.isNotEmpty
+            ? result.$2
+            : MyApp.navigatorKey.currentContext!.l10n.aiGenFailedToCreateApp;
         notifyListeners();
         return null;
       }

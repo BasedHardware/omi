@@ -4,23 +4,14 @@ class Translation {
   String lang;
   String text;
 
-  Translation({
-    required this.lang,
-    required this.text,
-  });
+  Translation({required this.lang, required this.text});
 
   factory Translation.fromJson(Map<String, dynamic> json) {
-    return Translation(
-      lang: json['lang'] as String,
-      text: json['text'] as String,
-    );
+    return Translation(lang: json['lang'] as String, text: json['text'] as String);
   }
 
   Map<String, dynamic> toJson() {
-    return {
-      'lang': lang,
-      'text': text,
-    };
+    return {'lang': lang, 'text': text};
   }
 
   static List<Translation> fromJsonList(List<dynamic> jsonList) {
@@ -111,7 +102,9 @@ class TranscriptSegment {
   }
 
   static List<TranscriptSegment> updateSegments(
-      List<TranscriptSegment> segments, List<TranscriptSegment> updateSegments) {
+    List<TranscriptSegment> segments,
+    List<TranscriptSegment> updateSegments,
+  ) {
     if (updateSegments.isEmpty) return [];
 
     if (segments.isEmpty) return updateSegments;

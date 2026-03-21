@@ -1,0 +1,70 @@
+{
+  "version": 1,
+  "flow": "conversations",
+  "flowHash": "43896787287f07bf",
+  "device": {
+    "model": "unknown",
+    "resolution": "unknown"
+  },
+  "createdAt": "2026-03-17T10:37:51.980Z",
+  "runId": "tUFceVg",
+  "totalDurationMs": 0,
+  "verifySteps": [
+    "S1",
+    "S2",
+    "S3",
+    "S4",
+    "S5",
+    "S6",
+    "S7",
+    "S8",
+    "S9"
+  ],
+  "steps": {
+    "S1": {
+      "kind": "verify",
+      "waitAfterMs": 500,
+      "durationMs": 0
+    },
+    "S2": {
+      "kind": "verify",
+      "waitAfterMs": 500,
+      "durationMs": 0
+    },
+    "S3": {
+      "kind": "verify",
+      "waitAfterMs": 500,
+      "durationMs": 0
+    },
+    "S4": {
+      "kind": "verify",
+      "waitAfterMs": 500,
+      "durationMs": 0
+    },
+    "S5": {
+      "kind": "verify",
+      "waitAfterMs": 500,
+      "durationMs": 0
+    },
+    "S6": {
+      "kind": "verify",
+      "waitAfterMs": 500,
+      "durationMs": 0
+    },
+    "S7": {
+      "kind": "verify",
+      "waitAfterMs": 500,
+      "durationMs": 0
+    },
+    "S8": {
+      "kind": "verify",
+      "waitAfterMs": 500,
+      "durationMs": 0
+    },
+    "S9": {
+      "kind": "verify",
+      "waitAfterMs": 500,
+      "durationMs": 0
+    }
+  }
+}

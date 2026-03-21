@@ -67,10 +67,7 @@ class _FastTransferSettingsPageState extends State<FastTransferSettingsPage> {
             const SizedBox(height: 16),
             Container(
               padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.amber.withOpacity(0.15),
-                borderRadius: BorderRadius.circular(12),
-              ),
+              decoration: BoxDecoration(color: Colors.amber.withOpacity(0.15), borderRadius: BorderRadius.circular(12)),
               child: Row(
                 children: [
                   Icon(Icons.info_outline, color: Colors.amber.shade300, size: 18),
@@ -127,10 +124,7 @@ class _FastTransferSettingsPageState extends State<FastTransferSettingsPage> {
         decoration: BoxDecoration(
           color: const Color(0xFF1C1C1E),
           borderRadius: BorderRadius.circular(20),
-          border: Border.all(
-            color: isSelected ? iconColor.withOpacity(0.5) : Colors.transparent,
-            width: 2,
-          ),
+          border: Border.all(color: isSelected ? iconColor.withOpacity(0.5) : Colors.transparent, width: 2),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -140,10 +134,7 @@ class _FastTransferSettingsPageState extends State<FastTransferSettingsPage> {
                 Container(
                   width: 44,
                   height: 44,
-                  decoration: BoxDecoration(
-                    color: iconColor.withOpacity(0.2),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
+                  decoration: BoxDecoration(color: iconColor.withOpacity(0.2), borderRadius: BorderRadius.circular(12)),
                   child: Icon(icon, color: iconColor, size: 22),
                 ),
                 const SizedBox(width: 14),
@@ -155,11 +146,7 @@ class _FastTransferSettingsPageState extends State<FastTransferSettingsPage> {
                         children: [
                           Text(
                             title,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 18,
-                              fontWeight: FontWeight.w600,
-                            ),
+                            style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
                           ),
                           if (badge != null) ...[
                             const SizedBox(width: 8),
@@ -171,24 +158,14 @@ class _FastTransferSettingsPageState extends State<FastTransferSettingsPage> {
                               ),
                               child: Text(
                                 badge,
-                                style: TextStyle(
-                                  color: iconColor,
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.w600,
-                                ),
+                                style: TextStyle(color: iconColor, fontSize: 10, fontWeight: FontWeight.w600),
                               ),
                             ),
                           ],
                         ],
                       ),
                       const SizedBox(height: 4),
-                      Text(
-                        speed,
-                        style: TextStyle(
-                          color: Colors.grey.shade500,
-                          fontSize: 14,
-                        ),
-                      ),
+                      Text(speed, style: TextStyle(color: Colors.grey.shade500, fontSize: 14)),
                     ],
                   ),
                 ),
@@ -211,14 +188,7 @@ class _FastTransferSettingsPageState extends State<FastTransferSettingsPage> {
             ),
             if (description != null) ...[
               const SizedBox(height: 16),
-              Text(
-                description,
-                style: TextStyle(
-                  color: Colors.grey.shade500,
-                  fontSize: 13,
-                  height: 1.5,
-                ),
-              ),
+              Text(description, style: TextStyle(color: Colors.grey.shade500, fontSize: 13, height: 1.5)),
             ],
           ],
         ),

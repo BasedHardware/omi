@@ -12,11 +12,10 @@ struct OnboardingView: View {
   @AppStorage("onboardingVoiceShortcutStepMigrationDone") private var hasInsertedVoiceShortcutStep =
     false
   @AppStorage("onboardingVoiceInputMergeMigrationDone") private var hasMergedVoiceInputStep = false
+  @AppStorage("onboardingNotificationStepRemoved") private var hasRemovedNotificationStep = false
   @StateObject private var graphViewModel = MemoryGraphViewModel()
   @State private var graphHasData = false
   @State private var showTrustPreview = true
-  @State private var showGraphHints = false
-  @State private var hintsHovered = false
 
   let steps = OnboardingFlow.steps
 
@@ -53,11 +52,13 @@ struct OnboardingView: View {
         currentStep: currentStep,
         hasMigratedVideoStep: hasMigratedOnboardingSteps,
         hasInsertedVoiceShortcutStep: hasInsertedVoiceShortcutStep,
-        hasMergedVoiceInputStep: hasMergedVoiceInputStep
+        hasMergedVoiceInputStep: hasMergedVoiceInputStep,
+        hasRemovedNotificationStep: hasRemovedNotificationStep
       )
       hasMigratedOnboardingSteps = true
       hasInsertedVoiceShortcutStep = true
       hasMergedVoiceInputStep = true
+      hasRemovedNotificationStep = true
     }
     .task {
       // Pre-warm the ACP bridge before the chat step starts.
@@ -134,13 +135,9 @@ struct OnboardingView: View {
                 endPoint: .bottom
               )
             )
-            .onHover { hovering in
-              hintsHovered = hovering
-            }
-            .opacity(graphHasData && (showGraphHints || hintsHovered) ? 1 : 0)
-            .animation(.easeInOut(duration: 0.3), value: showGraphHints)
-            .animation(.easeInOut(duration: 0.3), value: hintsHovered)
+            .opacity(graphHasData && !showTrustPreview ? 1 : 0)
             .animation(.easeInOut(duration: 0.3), value: graphHasData)
+            .animation(.easeInOut(duration: 0.3), value: showTrustPreview)
           }
           .onAppear {
             showTrustPreview = true
@@ -156,55 +153,44 @@ struct OnboardingView: View {
           }
         }
       } else if currentStep == 1 {
-        // Step 1: Smart Notifications Demo
-        OnboardingNotificationStepView(
-          appState: appState,
-          chatProvider: chatProvider,
-          onContinue: {
-            AnalyticsManager.shared.onboardingStepCompleted(step: 1, stepName: "Notifications")
-            currentStep = 2
-          },
-          onSkip: {
-            AnalyticsManager.shared.onboardingStepCompleted(
-              step: 1, stepName: "Notifications_Skipped")
-            currentStep = 2
-          }
-        )
-      } else if currentStep == 2 {
-        // Step 2: Floating Bar Demo
+        // Step 1: Floating Bar Demo
         OnboardingFloatingBarDemoView(
           appState: appState,
           chatProvider: chatProvider,
           onComplete: {
-            AnalyticsManager.shared.onboardingStepCompleted(step: 2, stepName: "FloatingBar")
-            currentStep = 3
+            AnalyticsManager.shared.onboardingStepCompleted(step: 1, stepName: "FloatingBar")
+            currentStep = 2
           },
           onSkip: {
             AnalyticsManager.shared.onboardingStepCompleted(
-              step: 2, stepName: "FloatingBar_Skipped")
-            currentStep = 3
+              step: 1, stepName: "FloatingBar_Skipped")
+            currentStep = 2
           }
         )
-      } else if currentStep == 3 {
-        // Step 3: Verify Push-to-Talk Shortcut + Voice Input
+      } else if currentStep == 2 {
+        // Step 2: Verify Push-to-Talk Shortcut + Voice Input
         OnboardingVoiceShortcutStepView(
           appState: appState,
           chatProvider: chatProvider,
           onComplete: {
-            AnalyticsManager.shared.onboardingStepCompleted(step: 3, stepName: "VoiceShortcut")
-            currentStep = 4
+            AnalyticsManager.shared.onboardingStepCompleted(step: 2, stepName: "VoiceShortcut")
+            currentStep = 3
           },
           onSkip: {
             AnalyticsManager.shared.onboardingStepCompleted(
-              step: 3, stepName: "VoiceShortcut_Skipped")
-            currentStep = 4
+              step: 2, stepName: "VoiceShortcut_Skipped")
+            currentStep = 3
           }
         )
       } else {
-        // Step 4: Tasks
+        // Step 3: Tasks
         OnboardingTasksStepView(
           onComplete: {
-            AnalyticsManager.shared.onboardingStepCompleted(step: 4, stepName: "Tasks")
+            AnalyticsManager.shared.onboardingStepCompleted(step: 3, stepName: "Tasks")
+            handleOnboardingComplete()
+          },
+          onSkip: {
+            AnalyticsManager.shared.onboardingStepCompleted(step: 4, stepName: "Tasks_Skipped")
             handleOnboardingComplete()
           }
         )
@@ -222,13 +208,6 @@ struct OnboardingView: View {
     .foregroundColor(.white.opacity(0.5))
   }
 
-  private func flashGraphHints() {
-    showGraphHints = true
-    DispatchQueue.main.asyncAfter(deadline: .now() + 5) {
-      showGraphHints = false
-    }
-  }
-
   private func handleGraphDataArrival() {
     withAnimation(.easeIn(duration: 0.35)) {
       graphHasData = true
@@ -239,7 +218,6 @@ struct OnboardingView: View {
       withAnimation(.easeInOut(duration: 0.45)) {
         showTrustPreview = false
       }
-      flashGraphHints()
     }
   }
 
@@ -255,7 +233,21 @@ struct OnboardingView: View {
     UserDefaults.standard.set(true, forKey: "onboardingJustCompleted")
     UserDefaults.standard.set(true, forKey: "hasCompletedFileIndexing")
 
-    // Start essential services
+    // Clean up onboarding state and persisted chat data
+    chatProvider.isOnboarding = false
+    OnboardingChatPersistence.clear()
+
+    if let onComplete = onComplete {
+      onComplete()
+    }
+
+    // Transition UI FIRST — service failures must never block the UI.
+    // Setting this synchronously crashes in Button.body.getter, so defer it.
+    DispatchQueue.main.async {
+      appState.hasCompletedOnboarding = true
+    }
+
+    // Start services AFTER UI transition is queued — failures are non-blocking.
     Task {
       await AgentVMService.shared.startPipeline()
       await GoalGenerationService.shared.generateNow()
@@ -278,21 +270,6 @@ struct OnboardingView: View {
           priority: "low"
         )
       }
-    }
-
-    // Clean up onboarding state and persisted chat data
-    chatProvider.isOnboarding = false
-    OnboardingChatPersistence.clear()
-
-    if let onComplete = onComplete {
-      onComplete()
-    }
-
-    // Defer the view hierarchy change so SwiftUI finishes rendering the
-    // current button before the OnboardingView is removed from the tree.
-    // Setting this synchronously crashes in Button.body.getter.
-    DispatchQueue.main.async {
-      appState.hasCompletedOnboarding = true
     }
   }
 }

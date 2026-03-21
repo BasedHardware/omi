@@ -100,10 +100,7 @@ class _Wrapped2025PageState extends State<Wrapped2025Page> {
       'Summary Collage',
     ];
     if (page >= 0 && page < cardNames.length) {
-      MixpanelManager().wrappedCardViewed(
-        cardName: cardNames[page],
-        cardIndex: page,
-      );
+      MixpanelManager().wrappedCardViewed(cardName: cardNames[page], cardIndex: page);
     }
   }
 
@@ -213,10 +210,7 @@ class _Wrapped2025PageState extends State<Wrapped2025Page> {
     final cardName = cardInfo?['name'] ?? filename;
     final cardIndex = cardInfo?['index'] ?? -1;
 
-    MixpanelManager().wrappedShareButtonClicked(
-      cardName: cardName,
-      cardIndex: cardIndex,
-    );
+    MixpanelManager().wrappedShareButtonClicked(cardName: cardName, cardIndex: cardIndex);
 
     try {
       HapticFeedback.mediumImpact();
@@ -232,11 +226,7 @@ class _Wrapped2025PageState extends State<Wrapped2025Page> {
       final boundary = _shareTemplateKey.currentContext?.findRenderObject() as RenderRepaintBoundary?;
       if (boundary == null) {
         Logger.debug('Share template boundary is null for $filename');
-        MixpanelManager().wrappedShareFailed(
-          cardName: cardName,
-          cardIndex: cardIndex,
-          error: 'Boundary is null',
-        );
+        MixpanelManager().wrappedShareFailed(cardName: cardName, cardIndex: cardIndex, error: 'Boundary is null');
         return;
       }
 
@@ -245,11 +235,7 @@ class _Wrapped2025PageState extends State<Wrapped2025Page> {
       final image = await boundary.toImage(pixelRatio: 1.5);
       final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
       if (byteData == null) {
-        MixpanelManager().wrappedShareFailed(
-          cardName: cardName,
-          cardIndex: cardIndex,
-          error: 'Byte data is null',
-        );
+        MixpanelManager().wrappedShareFailed(cardName: cardName, cardIndex: cardIndex, error: 'Byte data is null');
         return;
       }
 
@@ -282,18 +268,12 @@ class _Wrapped2025PageState extends State<Wrapped2025Page> {
       }
     } catch (e) {
       Logger.debug('Error sharing $filename: $e');
-      MixpanelManager().wrappedShareFailed(
-        cardName: cardName,
-        cardIndex: cardIndex,
-        error: e.toString(),
-      );
+      MixpanelManager().wrappedShareFailed(cardName: cardName, cardIndex: cardIndex, error: e.toString());
       if (mounted) {
         setState(() {
           _currentShareTemplate = null;
         });
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(context.l10n.wrappedFailedToShare)),
-        );
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.l10n.wrappedFailedToShare)));
       }
     }
   }
@@ -345,17 +325,10 @@ class _Wrapped2025PageState extends State<Wrapped2025Page> {
       final cat = topCategories[i] as String;
       final count = categoryBreakdown[cat] ?? 0;
       final pct = total > 0 ? (count / total * 100).round() : 0;
-      categories.add({
-        'name': _formatCategory(cat),
-        'percentage': pct,
-        'color': colors[i % colors.length],
-      });
+      categories.add({'name': _formatCategory(cat), 'percentage': pct, 'color': colors[i % colors.length]});
     }
 
-    _shareTemplate(
-      templates.TopCategoryShareTemplate(categories: categories),
-      'omi_wrapped_categories',
-    );
+    _shareTemplate(templates.TopCategoryShareTemplate(categories: categories), 'omi_wrapped_categories');
   }
 
   void _shareActions() {
@@ -364,11 +337,7 @@ class _Wrapped2025PageState extends State<Wrapped2025Page> {
     final rate = ((_result?['action_items_completion_rate'] ?? 0.0) * 100).toInt();
 
     _shareTemplate(
-      templates.ActionsShareTemplate(
-        totalTasks: total,
-        completedTasks: completed,
-        completionRate: rate,
-      ),
+      templates.ActionsShareTemplate(totalTasks: total, completedTasks: completed, completionRate: rate),
       'omi_wrapped_actions',
     );
   }
@@ -408,10 +377,7 @@ class _Wrapped2025PageState extends State<Wrapped2025Page> {
       });
     }
 
-    _shareTemplate(
-      templates.MemorableDaysShareTemplate(days: memorableDays),
-      'omi_wrapped_days',
-    );
+    _shareTemplate(templates.MemorableDaysShareTemplate(days: memorableDays), 'omi_wrapped_days');
   }
 
   void _shareBestMoments() {
@@ -435,10 +401,7 @@ class _Wrapped2025PageState extends State<Wrapped2025Page> {
       },
     ];
 
-    _shareTemplate(
-      templates.BestMomentsShareTemplate(moments: moments),
-      'omi_wrapped_moments',
-    );
+    _shareTemplate(templates.BestMomentsShareTemplate(moments: moments), 'omi_wrapped_moments');
   }
 
   void _shareMyBuddies() {
@@ -453,10 +416,7 @@ class _Wrapped2025PageState extends State<Wrapped2025Page> {
       };
     }).toList();
 
-    _shareTemplate(
-      templates.MyBuddiesShareTemplate(buddies: buddyList),
-      'omi_wrapped_buddies',
-    );
+    _shareTemplate(templates.MyBuddiesShareTemplate(buddies: buddyList), 'omi_wrapped_buddies');
   }
 
   void _shareObsessions() {
@@ -477,9 +437,7 @@ class _Wrapped2025PageState extends State<Wrapped2025Page> {
   void _shareMovieRecs() {
     final movies = (_result?['movie_recommendations'] as List?)?.cast<String>() ?? [];
     _shareTemplate(
-      templates.MovieRecsShareTemplate(
-        movies: movies.map((m) => _capitalizeWords(m)).toList(),
-      ),
+      templates.MovieRecsShareTemplate(movies: movies.map((m) => _capitalizeWords(m)).toList()),
       'omi_wrapped_movies',
     );
   }
@@ -487,9 +445,7 @@ class _Wrapped2025PageState extends State<Wrapped2025Page> {
   void _shareStruggle() {
     final struggle = _result?['struggle'] as Map<String, dynamic>?;
     _shareTemplate(
-      templates.StruggleShareTemplate(
-        title: struggle?['title'] ?? context.l10n.wrappedTheHardPart,
-      ),
+      templates.StruggleShareTemplate(title: struggle?['title'] ?? context.l10n.wrappedTheHardPart),
       'omi_wrapped_struggle',
     );
   }
@@ -497,9 +453,7 @@ class _Wrapped2025PageState extends State<Wrapped2025Page> {
   void _sharePersonalWin() {
     final win = _result?['personal_win'] as Map<String, dynamic>?;
     _shareTemplate(
-      templates.BiggestWinShareTemplate(
-        title: win?['title'] ?? context.l10n.wrappedPersonalGrowth,
-      ),
+      templates.BiggestWinShareTemplate(title: win?['title'] ?? context.l10n.wrappedPersonalGrowth),
       'omi_wrapped_win',
     );
   }
@@ -511,10 +465,7 @@ class _Wrapped2025PageState extends State<Wrapped2025Page> {
       return phrase.toString();
     }).toList();
 
-    _shareTemplate(
-      templates.TopPhrasesShareTemplate(phrases: phraseList),
-      'omi_wrapped_phrases',
-    );
+    _shareTemplate(templates.TopPhrasesShareTemplate(phrases: phraseList), 'omi_wrapped_phrases');
   }
 
   void _shareFinalCollage() {
@@ -539,11 +490,7 @@ class _Wrapped2025PageState extends State<Wrapped2025Page> {
     for (int i = 0; i < topCategoriesRaw.length && i < 3; i++) {
       final cat = topCategoriesRaw[i] as String;
       final pct = total > 0 ? (categoryBreakdown[cat] ?? 0) / total * 100 : 0;
-      topCategories.add({
-        'name': _formatCategory(cat),
-        'percentage': pct.round(),
-        'color': colors[i],
-      });
+      topCategories.add({'name': _formatCategory(cat), 'percentage': pct.round(), 'color': colors[i]});
     }
 
     // Top Days
@@ -593,7 +540,8 @@ class _Wrapped2025PageState extends State<Wrapped2025Page> {
 
     // Struggle + Win
     final struggle = (_result?['struggle'] as Map<String, dynamic>?)?['title'] ?? context.l10n.wrappedTheHardPart;
-    final biggestWin = (_result?['personal_win'] as Map<String, dynamic>?)?['title'] ?? context.l10n.wrappedPersonalGrowth;
+    final biggestWin =
+        (_result?['personal_win'] as Map<String, dynamic>?)?['title'] ?? context.l10n.wrappedPersonalGrowth;
 
     _shareTemplate(
       templates.FinalCollageShareTemplate(
@@ -629,10 +577,7 @@ class _Wrapped2025PageState extends State<Wrapped2025Page> {
             Positioned(
               left: -10000,
               top: -10000,
-              child: RepaintBoundary(
-                key: _shareTemplateKey,
-                child: _currentShareTemplate!,
-              ),
+              child: RepaintBoundary(key: _shareTemplateKey, child: _currentShareTemplate!),
             ),
         ],
       ),
@@ -663,23 +608,14 @@ class _Wrapped2025PageState extends State<Wrapped2025Page> {
               const Spacer(),
               Text(
                 context.l10n.wrappedLetsHitRewind,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 24,
-                  fontWeight: FontWeight.w400,
-                ),
+                style: const TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.w400),
               ),
               const SizedBox(height: 16),
               const FittedBox(
                 fit: BoxFit.scaleDown,
                 child: Text(
                   '2025',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 120,
-                    fontWeight: FontWeight.w900,
-                    height: 0.9,
-                  ),
+                  style: TextStyle(color: Colors.white, fontSize: 120, fontWeight: FontWeight.w900, height: 0.9),
                 ),
               ),
               const Spacer(),
@@ -688,18 +624,11 @@ class _Wrapped2025PageState extends State<Wrapped2025Page> {
                 child: Container(
                   width: double.infinity,
                   padding: const EdgeInsets.symmetric(vertical: 20),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(40),
-                  ),
+                  decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(40)),
                   child: Text(
                     context.l10n.wrappedGenerateMyWrapped,
                     textAlign: TextAlign.center,
-                    style: const TextStyle(
-                      color: WrappedColors.blue,
-                      fontSize: 20,
-                      fontWeight: FontWeight.w700,
-                    ),
+                    style: const TextStyle(color: WrappedColors.blue, fontSize: 20, fontWeight: FontWeight.w700),
                   ),
                 ),
               ),
@@ -723,29 +652,18 @@ class _Wrapped2025PageState extends State<Wrapped2025Page> {
           child: Column(
             children: [
               const Spacer(),
-              const Text(
-                '✨',
-                style: TextStyle(fontSize: 80),
-              ),
+              const Text('✨', style: TextStyle(fontSize: 80)),
               const SizedBox(height: 32),
               Text(
                 context.l10n.wrappedCreatingYourStory,
                 textAlign: TextAlign.center,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 36,
-                  fontWeight: FontWeight.w700,
-                  height: 1.2,
-                ),
+                style: const TextStyle(color: Colors.white, fontSize: 36, fontWeight: FontWeight.w700, height: 1.2),
               ),
               const SizedBox(height: 24),
               Text(
                 step,
                 textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: Colors.white.withOpacity(0.8),
-                  fontSize: 18,
-                ),
+                style: TextStyle(color: Colors.white.withOpacity(0.8), fontSize: 18),
               ),
               const SizedBox(height: 40),
               if (pct > 0)
@@ -763,11 +681,7 @@ class _Wrapped2025PageState extends State<Wrapped2025Page> {
                     const SizedBox(height: 16),
                     Text(
                       '${(pct * 100).toInt()}%',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 24,
-                        fontWeight: FontWeight.w700,
-                      ),
+                      style: const TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.w700),
                     ),
                   ],
                 ),
@@ -788,29 +702,18 @@ class _Wrapped2025PageState extends State<Wrapped2025Page> {
           child: Column(
             children: [
               const Spacer(),
-              const Text(
-                '😕',
-                style: TextStyle(fontSize: 80),
-              ),
+              const Text('😕', style: TextStyle(fontSize: 80)),
               const SizedBox(height: 32),
               Text(
                 context.l10n.wrappedSomethingWentWrong,
                 textAlign: TextAlign.center,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 36,
-                  fontWeight: FontWeight.w700,
-                  height: 1.2,
-                ),
+                style: const TextStyle(color: Colors.white, fontSize: 36, fontWeight: FontWeight.w700, height: 1.2),
               ),
               const SizedBox(height: 16),
               Text(
                 _error ?? context.l10n.wrappedAnErrorOccurred,
                 textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: Colors.white.withOpacity(0.8),
-                  fontSize: 16,
-                ),
+                style: TextStyle(color: Colors.white.withOpacity(0.8), fontSize: 16),
               ),
               const Spacer(),
               GestureDetector(
@@ -818,18 +721,11 @@ class _Wrapped2025PageState extends State<Wrapped2025Page> {
                 child: Container(
                   width: double.infinity,
                   padding: const EdgeInsets.symmetric(vertical: 20),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(40),
-                  ),
+                  decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(40)),
                   child: Text(
                     context.l10n.wrappedTryAgain,
                     textAlign: TextAlign.center,
-                    style: const TextStyle(
-                      color: WrappedColors.coral,
-                      fontSize: 20,
-                      fontWeight: FontWeight.w700,
-                    ),
+                    style: const TextStyle(color: WrappedColors.coral, fontSize: 20, fontWeight: FontWeight.w700),
                   ),
                 ),
               ),
@@ -869,12 +765,7 @@ class _Wrapped2025PageState extends State<Wrapped2025Page> {
             right: 12,
             top: 0,
             bottom: 0,
-            child: SafeArea(
-              child: _buildProgressDots(
-                Colors.white,
-                Colors.white.withOpacity(0.3),
-              ),
-            ),
+            child: SafeArea(child: _buildProgressDots(Colors.white, Colors.white.withOpacity(0.3))),
           ),
       ],
     );
@@ -894,13 +785,7 @@ class _Wrapped2025PageState extends State<Wrapped2025Page> {
           decoration: BoxDecoration(
             color: isActive ? activeColor : (isPast ? activeColor.withOpacity(0.7) : inactiveColor),
             shape: BoxShape.circle,
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.3),
-                blurRadius: 4,
-                offset: const Offset(0, 1),
-              ),
-            ],
+            boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.3), blurRadius: 4, offset: const Offset(0, 1))],
           ),
         );
       }),
@@ -974,11 +859,7 @@ class _Wrapped2025PageState extends State<Wrapped2025Page> {
             padding: const EdgeInsets.fromLTRB(8, 0, 0, 0),
             child: Text(
               context.l10n.wrappedOmiLifeRecap,
-              style: TextStyle(
-                color: Colors.white.withOpacity(0.8),
-                fontSize: 24,
-                fontWeight: FontWeight.w500,
-              ),
+              style: TextStyle(color: Colors.white.withOpacity(0.8), fontSize: 24, fontWeight: FontWeight.w500),
             ),
           ),
           const Spacer(),
@@ -988,18 +869,11 @@ class _Wrapped2025PageState extends State<Wrapped2025Page> {
                 padding: const EdgeInsets.fromLTRB(8, 0, 0, 0),
                 child: Text(
                   context.l10n.wrappedSwipeUpToBegin,
-                  style: TextStyle(
-                    color: Colors.white.withOpacity(0.7),
-                    fontSize: 16,
-                  ),
+                  style: TextStyle(color: Colors.white.withOpacity(0.7), fontSize: 16),
                 ),
               ),
               const SizedBox(width: 8),
-              Icon(
-                Icons.keyboard_arrow_up,
-                color: Colors.white.withOpacity(0.7),
-                size: 24,
-              ),
+              Icon(Icons.keyboard_arrow_up, color: Colors.white.withOpacity(0.7), size: 24),
             ],
           ),
           const SizedBox(height: 32),
@@ -1074,32 +948,26 @@ class _Wrapped2025PageState extends State<Wrapped2025Page> {
       final cat = topCategories[i] as String;
       final count = categoryBreakdown[cat] ?? 0;
       final pct = total > 0 ? (count / total * 100).round() : 0;
-      categories.add(_CategoryData(
-        name: _formatCategory(cat),
-        percentage: pct,
-        color: colors[i % colors.length],
-      ));
+      categories.add(_CategoryData(name: _formatCategory(cat), percentage: pct, color: colors[i % colors.length]));
     }
 
     // If we don't have breakdown data, create mock percentages
     if (categories.isEmpty && topCategories.isNotEmpty) {
       final mockPcts = [40, 25, 15, 12, 8];
       for (int i = 0; i < topCategories.length && i < 5; i++) {
-        categories.add(_CategoryData(
-          name: _formatCategory(topCategories[i] as String),
-          percentage: mockPcts[i],
-          color: colors[i % colors.length],
-        ));
+        categories.add(
+          _CategoryData(
+            name: _formatCategory(topCategories[i] as String),
+            percentage: mockPcts[i],
+            color: colors[i % colors.length],
+          ),
+        );
       }
     }
 
     return _buildCardBase(
       backgroundColor: WrappedColors.mint,
-      child: _CategoryChartAnimated(
-        categories: categories,
-        isActive: _currentPage == 2,
-        onShare: _shareCategoryChart,
-      ),
+      child: _CategoryChartAnimated(categories: categories, isActive: _currentPage == 2, onShare: _shareCategoryChart),
     );
   }
 
@@ -1142,42 +1010,44 @@ class _Wrapped2025PageState extends State<Wrapped2025Page> {
     final memorableDays = <_MemorableDayData>[];
 
     if (funDay != null) {
-      memorableDays.add(_MemorableDayData(
-        emoji: funDay['emoji'] ?? '🎉',
-        label: context.l10n.wrappedMostFunDay,
-        title: funDay['title'] ?? context.l10n.wrappedAGreatDay,
-        description: funDay['description'] ?? '',
-        dateStr: funDay['date'] ?? 'January 1',
-      ));
+      memorableDays.add(
+        _MemorableDayData(
+          emoji: funDay['emoji'] ?? '🎉',
+          label: context.l10n.wrappedMostFunDay,
+          title: funDay['title'] ?? context.l10n.wrappedAGreatDay,
+          description: funDay['description'] ?? '',
+          dateStr: funDay['date'] ?? 'January 1',
+        ),
+      );
     }
 
     if (productiveDay != null) {
-      memorableDays.add(_MemorableDayData(
-        emoji: productiveDay['emoji'] ?? '💪',
-        label: context.l10n.wrappedMostProductiveDay,
-        title: productiveDay['title'] ?? context.l10n.wrappedGettingItDone,
-        description: productiveDay['description'] ?? '',
-        dateStr: productiveDay['date'] ?? 'June 15',
-      ));
+      memorableDays.add(
+        _MemorableDayData(
+          emoji: productiveDay['emoji'] ?? '💪',
+          label: context.l10n.wrappedMostProductiveDay,
+          title: productiveDay['title'] ?? context.l10n.wrappedGettingItDone,
+          description: productiveDay['description'] ?? '',
+          dateStr: productiveDay['date'] ?? 'June 15',
+        ),
+      );
     }
 
     if (stressfulDay != null) {
-      memorableDays.add(_MemorableDayData(
-        emoji: stressfulDay['emoji'] ?? '😤',
-        label: context.l10n.wrappedMostIntenseDay,
-        title: stressfulDay['title'] ?? context.l10n.wrappedAChallenge,
-        description: stressfulDay['description'] ?? '',
-        dateStr: stressfulDay['date'] ?? 'December 1',
-      ));
+      memorableDays.add(
+        _MemorableDayData(
+          emoji: stressfulDay['emoji'] ?? '😤',
+          label: context.l10n.wrappedMostIntenseDay,
+          title: stressfulDay['title'] ?? context.l10n.wrappedAChallenge,
+          description: stressfulDay['description'] ?? '',
+          dateStr: stressfulDay['date'] ?? 'December 1',
+        ),
+      );
     }
 
     return _buildCardBase(
       backgroundColor: WrappedColors.teal,
-      child: _MemorableDaysAnimated(
-        days: memorableDays,
-        isActive: _currentPage == 4,
-        onShare: _shareMemorableDays,
-      ),
+      child: _MemorableDaysAnimated(days: memorableDays, isActive: _currentPage == 4, onShare: _shareMemorableDays),
     );
   }
 
@@ -1285,11 +1155,7 @@ class _Wrapped2025PageState extends State<Wrapped2025Page> {
         isActive: _currentPage == 8,
         showProgressRing: false,
         items: movies.asMap().entries.map((entry) {
-          return _TypewriterItem(
-            label: '#${entry.key + 1}',
-            value: _capitalizeWords(entry.value),
-            emoji: '🎬',
-          );
+          return _TypewriterItem(label: '#${entry.key + 1}', value: _capitalizeWords(entry.value), emoji: '🎬');
         }).toList(),
         onShare: _shareMovieRecs,
       ),
@@ -1371,19 +1237,11 @@ class _Wrapped2025PageState extends State<Wrapped2025Page> {
       children: [
         Text(
           value,
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 32,
-            fontWeight: FontWeight.w900,
-          ),
+          style: const TextStyle(color: Colors.white, fontSize: 32, fontWeight: FontWeight.w900),
         ),
         Text(
           label,
-          style: TextStyle(
-            color: Colors.white.withOpacity(0.7),
-            fontSize: 14,
-            fontWeight: FontWeight.w500,
-          ),
+          style: TextStyle(color: Colors.white.withOpacity(0.7), fontSize: 14, fontWeight: FontWeight.w500),
         ),
       ],
     );
@@ -1431,10 +1289,7 @@ class _Wrapped2025PageState extends State<Wrapped2025Page> {
             const Spacer(),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 20),
-              decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.2),
-                borderRadius: BorderRadius.circular(40),
-              ),
+              decoration: BoxDecoration(color: Colors.white.withOpacity(0.2), borderRadius: BorderRadius.circular(40)),
               child: const Text(
                 'omi.me/wrapped',
                 style: TextStyle(
@@ -1527,54 +1382,24 @@ class _YearInNumbersAnimatedState extends State<_YearInNumbersAnimated> with Tic
     super.initState();
 
     // Minutes count-up animation
-    _minutesController = AnimationController(
-      duration: const Duration(milliseconds: 1200),
-      vsync: this,
-    );
-    _minutesAnimation = CurvedAnimation(
-      parent: _minutesController,
-      curve: Curves.easeOutCubic,
-    );
+    _minutesController = AnimationController(duration: const Duration(milliseconds: 1200), vsync: this);
+    _minutesAnimation = CurvedAnimation(parent: _minutesController, curve: Curves.easeOutCubic);
 
     // Conversations count-up animation
-    _convosController = AnimationController(
-      duration: const Duration(milliseconds: 1000),
-      vsync: this,
-    );
-    _convosAnimation = CurvedAnimation(
-      parent: _convosController,
-      curve: Curves.easeOutCubic,
-    );
+    _convosController = AnimationController(duration: const Duration(milliseconds: 1000), vsync: this);
+    _convosAnimation = CurvedAnimation(parent: _convosController, curve: Curves.easeOutCubic);
 
     // Days active count-up animation
-    _daysController = AnimationController(
-      duration: const Duration(milliseconds: 800),
-      vsync: this,
-    );
-    _daysAnimation = CurvedAnimation(
-      parent: _daysController,
-      curve: Curves.easeOutCubic,
-    );
+    _daysController = AnimationController(duration: const Duration(milliseconds: 800), vsync: this);
+    _daysAnimation = CurvedAnimation(parent: _daysController, curve: Curves.easeOutCubic);
 
     // Badge stamp animation
-    _badgeController = AnimationController(
-      duration: const Duration(milliseconds: 400),
-      vsync: this,
-    );
-    _badgeAnimation = CurvedAnimation(
-      parent: _badgeController,
-      curve: Curves.elasticOut,
-    );
+    _badgeController = AnimationController(duration: const Duration(milliseconds: 400), vsync: this);
+    _badgeAnimation = CurvedAnimation(parent: _badgeController, curve: Curves.elasticOut);
 
     // Share button pop animation
-    _shareButtonController = AnimationController(
-      duration: const Duration(milliseconds: 400),
-      vsync: this,
-    );
-    _shareButtonAnimation = CurvedAnimation(
-      parent: _shareButtonController,
-      curve: Curves.elasticOut,
-    );
+    _shareButtonController = AnimationController(duration: const Duration(milliseconds: 400), vsync: this);
+    _shareButtonAnimation = CurvedAnimation(parent: _shareButtonController, curve: Curves.elasticOut);
 
     // Chain animations with sound effects
     _minutesController.addListener(_onMinutesTick);
@@ -1734,17 +1559,10 @@ class _YearInNumbersAnimatedState extends State<_YearInNumbersAnimated> with Tic
                 alignment: Alignment.centerLeft,
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(20),
-                  ),
+                  decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20)),
                   child: Text(
                     context.l10n.wrappedTopPercentUser(widget.percentile.toString()),
-                    style: const TextStyle(
-                      color: WrappedColors.mint,
-                      fontSize: 16,
-                      fontWeight: FontWeight.w700,
-                    ),
+                    style: const TextStyle(color: WrappedColors.mint, fontSize: 16, fontWeight: FontWeight.w700),
                   ),
                 ),
               ),
@@ -1753,22 +1571,13 @@ class _YearInNumbersAnimatedState extends State<_YearInNumbersAnimated> with Tic
             // Minutes - counts up first
             Text(
               _numberFormat.format(animatedMinutes),
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 80,
-                fontWeight: FontWeight.w900,
-                height: 0.9,
-              ),
+              style: const TextStyle(color: Colors.white, fontSize: 80, fontWeight: FontWeight.w900, height: 0.9),
             ),
             Opacity(
               opacity: _minutesAnimation.value > 0.3 ? 1.0 : _minutesAnimation.value / 0.3,
               child: Text(
                 context.l10n.wrappedMinutes,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 28,
-                  fontWeight: FontWeight.w600,
-                ),
+                style: const TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.w600),
               ),
             ),
             const SizedBox(height: 36),
@@ -1780,22 +1589,13 @@ class _YearInNumbersAnimatedState extends State<_YearInNumbersAnimated> with Tic
                 children: [
                   Text(
                     _numberFormat.format(animatedConvos),
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 80,
-                      fontWeight: FontWeight.w900,
-                      height: 0.9,
-                    ),
+                    style: const TextStyle(color: Colors.white, fontSize: 80, fontWeight: FontWeight.w900, height: 0.9),
                   ),
                   Opacity(
                     opacity: _convosAnimation.value > 0.3 ? 1.0 : _convosAnimation.value / 0.3,
                     child: Text(
                       context.l10n.wrappedConversations,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 28,
-                        fontWeight: FontWeight.w600,
-                      ),
+                      style: const TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.w600),
                     ),
                   ),
                 ],
@@ -1810,22 +1610,13 @@ class _YearInNumbersAnimatedState extends State<_YearInNumbersAnimated> with Tic
                 children: [
                   Text(
                     _numberFormat.format(animatedDays),
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 80,
-                      fontWeight: FontWeight.w900,
-                      height: 0.9,
-                    ),
+                    style: const TextStyle(color: Colors.white, fontSize: 80, fontWeight: FontWeight.w900, height: 0.9),
                   ),
                   Opacity(
                     opacity: _daysAnimation.value > 0.3 ? 1.0 : _daysAnimation.value / 0.3,
                     child: Text(
                       context.l10n.wrappedDaysActive,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 28,
-                        fontWeight: FontWeight.w600,
-                      ),
+                      style: const TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.w600),
                     ),
                   ),
                 ],
@@ -1846,18 +1637,11 @@ class _YearInNumbersAnimatedState extends State<_YearInNumbersAnimated> with Tic
                         },
                         child: Container(
                           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(20),
-                          ),
+                          decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20)),
                           child: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              const Icon(
-                                Icons.ios_share,
-                                color: WrappedColors.mint,
-                                size: 18,
-                              ),
+                              const Icon(Icons.ios_share, color: WrappedColors.mint, size: 18),
                               const SizedBox(width: 6),
                               Text(
                                 context.l10n.wrappedShare,
@@ -1899,11 +1683,7 @@ class _AnimatedShareButton extends StatefulWidget {
   final VoidCallback? onShare;
   final Color buttonColor;
 
-  const _AnimatedShareButton({
-    required this.progress,
-    this.onShare,
-    this.buttonColor = WrappedColors.mint,
-  });
+  const _AnimatedShareButton({required this.progress, this.onShare, this.buttonColor = WrappedColors.mint});
 
   @override
   State<_AnimatedShareButton> createState() => _AnimatedShareButtonState();
@@ -1917,14 +1697,8 @@ class _AnimatedShareButtonState extends State<_AnimatedShareButton> with SingleT
   @override
   void initState() {
     super.initState();
-    _controller = AnimationController(
-      duration: const Duration(milliseconds: 400),
-      vsync: this,
-    );
-    _animation = CurvedAnimation(
-      parent: _controller,
-      curve: Curves.elasticOut,
-    );
+    _controller = AnimationController(duration: const Duration(milliseconds: 400), vsync: this);
+    _animation = CurvedAnimation(parent: _controller, curve: Curves.elasticOut);
   }
 
   @override
@@ -1965,26 +1739,15 @@ class _AnimatedShareButtonState extends State<_AnimatedShareButton> with SingleT
                 },
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(20),
-                  ),
+                  decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20)),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(
-                        Icons.ios_share,
-                        color: widget.buttonColor,
-                        size: 18,
-                      ),
+                      Icon(Icons.ios_share, color: widget.buttonColor, size: 18),
                       const SizedBox(width: 6),
                       Text(
                         context.l10n.wrappedShare,
-                        style: TextStyle(
-                          color: widget.buttonColor,
-                          fontSize: 16,
-                          fontWeight: FontWeight.w700,
-                        ),
+                        style: TextStyle(color: widget.buttonColor, fontSize: 16, fontWeight: FontWeight.w700),
                       ),
                     ],
                   ),
@@ -2066,11 +1829,7 @@ class _CategoryChartAnimated extends StatefulWidget {
   final bool isActive;
   final VoidCallback? onShare;
 
-  const _CategoryChartAnimated({
-    required this.categories,
-    required this.isActive,
-    this.onShare,
-  });
+  const _CategoryChartAnimated({required this.categories, required this.isActive, this.onShare});
 
   @override
   State<_CategoryChartAnimated> createState() => _CategoryChartAnimatedState();
@@ -2091,10 +1850,7 @@ class _CategoryChartAnimatedState extends State<_CategoryChartAnimated> with Tic
     final numSlices = widget.categories.length;
     _sliceControllers = List.generate(
       numSlices,
-      (i) => AnimationController(
-        duration: const Duration(milliseconds: 400),
-        vsync: this,
-      ),
+      (i) => AnimationController(duration: const Duration(milliseconds: 400), vsync: this),
     );
 
     _sliceAnimations = _sliceControllers.map((controller) {
@@ -2102,14 +1858,8 @@ class _CategoryChartAnimatedState extends State<_CategoryChartAnimated> with Tic
     }).toList();
 
     // Trophy slap animation
-    _trophyController = AnimationController(
-      duration: const Duration(milliseconds: 500),
-      vsync: this,
-    );
-    _trophyAnimation = CurvedAnimation(
-      parent: _trophyController,
-      curve: Curves.elasticOut,
-    );
+    _trophyController = AnimationController(duration: const Duration(milliseconds: 500), vsync: this);
+    _trophyAnimation = CurvedAnimation(parent: _trophyController, curve: Curves.elasticOut);
 
     // Chain animations - each slice triggers next
     for (int i = 0; i < _sliceControllers.length - 1; i++) {
@@ -2174,10 +1924,7 @@ class _CategoryChartAnimatedState extends State<_CategoryChartAnimated> with Tic
   @override
   Widget build(BuildContext context) {
     return AnimatedBuilder(
-      animation: Listenable.merge([
-        ..._sliceAnimations,
-        _trophyAnimation,
-      ]),
+      animation: Listenable.merge([..._sliceAnimations, _trophyAnimation]),
       builder: (context, child) {
         // Calculate how many slices are fully visible + current slice progress
         int fullyVisibleSlices = 0;
@@ -2210,17 +1957,10 @@ class _CategoryChartAnimatedState extends State<_CategoryChartAnimated> with Tic
                 alignment: Alignment.centerLeft,
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(20),
-                  ),
+                  decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20)),
                   child: Text(
                     context.l10n.wrappedYouTalkedAbout,
-                    style: const TextStyle(
-                      color: Color(0xFF2A9D8F),
-                      fontSize: 16,
-                      fontWeight: FontWeight.w700,
-                    ),
+                    style: const TextStyle(color: Color(0xFF2A9D8F), fontSize: 16, fontWeight: FontWeight.w700),
                   ),
                 ),
               ),
@@ -2248,8 +1988,9 @@ class _CategoryChartAnimatedState extends State<_CategoryChartAnimated> with Tic
               final isFirst = index == 0;
 
               // Label appears when its slice starts animating
-              final labelOpacity =
-                  index < _sliceAnimations.length ? _sliceAnimations[index].value.clamp(0.0, 1.0) : 0.0;
+              final labelOpacity = index < _sliceAnimations.length
+                  ? _sliceAnimations[index].value.clamp(0.0, 1.0)
+                  : 0.0;
 
               return Opacity(
                 opacity: labelOpacity,
@@ -2262,10 +2003,7 @@ class _CategoryChartAnimatedState extends State<_CategoryChartAnimated> with Tic
                         Container(
                           width: isFirst ? 24 : 20,
                           height: isFirst ? 24 : 20,
-                          decoration: BoxDecoration(
-                            color: cat.color,
-                            borderRadius: BorderRadius.circular(4),
-                          ),
+                          decoration: BoxDecoration(color: cat.color, borderRadius: BorderRadius.circular(4)),
                         ),
                         const SizedBox(width: 14),
                         Expanded(
@@ -2341,54 +2079,24 @@ class _ActionsAnimatedState extends State<_ActionsAnimated> with TickerProviderS
     super.initState();
 
     // Total tasks count-up animation
-    _totalController = AnimationController(
-      duration: const Duration(milliseconds: 1000),
-      vsync: this,
-    );
-    _totalAnimation = CurvedAnimation(
-      parent: _totalController,
-      curve: Curves.easeOutCubic,
-    );
+    _totalController = AnimationController(duration: const Duration(milliseconds: 1000), vsync: this);
+    _totalAnimation = CurvedAnimation(parent: _totalController, curve: Curves.easeOutCubic);
 
     // Completed tasks count-up animation
-    _completedController = AnimationController(
-      duration: const Duration(milliseconds: 800),
-      vsync: this,
-    );
-    _completedAnimation = CurvedAnimation(
-      parent: _completedController,
-      curve: Curves.easeOutCubic,
-    );
+    _completedController = AnimationController(duration: const Duration(milliseconds: 800), vsync: this);
+    _completedAnimation = CurvedAnimation(parent: _completedController, curve: Curves.easeOutCubic);
 
     // Checkmark slap animation
-    _checkmarkController = AnimationController(
-      duration: const Duration(milliseconds: 500),
-      vsync: this,
-    );
-    _checkmarkAnimation = CurvedAnimation(
-      parent: _checkmarkController,
-      curve: Curves.elasticOut,
-    );
+    _checkmarkController = AnimationController(duration: const Duration(milliseconds: 500), vsync: this);
+    _checkmarkAnimation = CurvedAnimation(parent: _checkmarkController, curve: Curves.elasticOut);
 
     // Chip slap animation (at top)
-    _chipController = AnimationController(
-      duration: const Duration(milliseconds: 400),
-      vsync: this,
-    );
-    _chipAnimation = CurvedAnimation(
-      parent: _chipController,
-      curve: Curves.elasticOut,
-    );
+    _chipController = AnimationController(duration: const Duration(milliseconds: 400), vsync: this);
+    _chipAnimation = CurvedAnimation(parent: _chipController, curve: Curves.elasticOut);
 
     // Strikethrough animation
-    _strikethroughController = AnimationController(
-      duration: const Duration(milliseconds: 300),
-      vsync: this,
-    );
-    _strikethroughAnimation = CurvedAnimation(
-      parent: _strikethroughController,
-      curve: Curves.easeOut,
-    );
+    _strikethroughController = AnimationController(duration: const Duration(milliseconds: 300), vsync: this);
+    _strikethroughAnimation = CurvedAnimation(parent: _strikethroughController, curve: Curves.easeOut);
 
     // Chain animations
     _totalController.addListener(_onTotalTick);
@@ -2522,20 +2230,13 @@ class _ActionsAnimatedState extends State<_ActionsAnimated> with TickerProviderS
                 alignment: Alignment.centerLeft,
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(20),
-                  ),
+                  decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20)),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Text(
                         '${widget.completionRate}% ',
-                        style: const TextStyle(
-                          color: WrappedColors.indigo,
-                          fontSize: 16,
-                          fontWeight: FontWeight.w700,
-                        ),
+                        style: const TextStyle(color: WrappedColors.indigo, fontSize: 16, fontWeight: FontWeight.w700),
                       ),
                       // "Completed" with strikethrough animation
                       Stack(
@@ -2546,8 +2247,9 @@ class _ActionsAnimatedState extends State<_ActionsAnimated> with TickerProviderS
                               color: WrappedColors.indigo,
                               fontSize: 16,
                               fontWeight: FontWeight.w700,
-                              decoration:
-                                  strikethroughProgress > 0.9 ? TextDecoration.lineThrough : TextDecoration.none,
+                              decoration: strikethroughProgress > 0.9
+                                  ? TextDecoration.lineThrough
+                                  : TextDecoration.none,
                               decorationColor: WrappedColors.indigo,
                               decorationThickness: 2,
                             ),
@@ -2577,22 +2279,13 @@ class _ActionsAnimatedState extends State<_ActionsAnimated> with TickerProviderS
             // Tasks generated - counts up first
             Text(
               _numberFormat.format(animatedTotal),
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 80,
-                fontWeight: FontWeight.w900,
-                height: 0.9,
-              ),
+              style: const TextStyle(color: Colors.white, fontSize: 80, fontWeight: FontWeight.w900, height: 0.9),
             ),
             Opacity(
               opacity: _totalAnimation.value > 0.3 ? 1.0 : _totalAnimation.value / 0.3,
               child: Text(
                 context.l10n.wrappedTasksGenerated,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 28,
-                  fontWeight: FontWeight.w600,
-                ),
+                style: const TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.w600),
               ),
             ),
             const SizedBox(height: 36),
@@ -2604,12 +2297,7 @@ class _ActionsAnimatedState extends State<_ActionsAnimated> with TickerProviderS
                 children: [
                   Text(
                     _numberFormat.format(animatedCompleted),
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 80,
-                      fontWeight: FontWeight.w900,
-                      height: 0.9,
-                    ),
+                    style: const TextStyle(color: Colors.white, fontSize: 80, fontWeight: FontWeight.w900, height: 0.9),
                   ),
                   Row(
                     children: [
@@ -2617,11 +2305,7 @@ class _ActionsAnimatedState extends State<_ActionsAnimated> with TickerProviderS
                         opacity: _completedAnimation.value > 0.3 ? 1.0 : _completedAnimation.value / 0.3,
                         child: Text(
                           context.l10n.wrappedTasksCompleted,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 28,
-                            fontWeight: FontWeight.w600,
-                          ),
+                          style: const TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.w600),
                         ),
                       ),
                       const SizedBox(width: 12),
@@ -2632,15 +2316,8 @@ class _ActionsAnimatedState extends State<_ActionsAnimated> with TickerProviderS
                           child: Container(
                             width: 32,
                             height: 32,
-                            decoration: const BoxDecoration(
-                              color: Color(0xFF4CAF50),
-                              shape: BoxShape.circle,
-                            ),
-                            child: const Icon(
-                              Icons.check,
-                              color: Colors.white,
-                              size: 20,
-                            ),
+                            decoration: const BoxDecoration(color: Color(0xFF4CAF50), shape: BoxShape.circle),
+                            child: const Icon(Icons.check, color: Colors.white, size: 20),
                           ),
                         ),
                     ],
@@ -2669,11 +2346,7 @@ class _CategoryData {
   final int percentage;
   final Color color;
 
-  _CategoryData({
-    required this.name,
-    required this.percentage,
-    required this.color,
-  });
+  _CategoryData({required this.name, required this.percentage, required this.color});
 }
 
 // Pie chart painter (filled) with animation support
@@ -2739,17 +2412,12 @@ class _PieChartPainter extends CustomPainter {
       final textPainter = TextPainter(
         text: TextSpan(
           text: '🏆',
-          style: TextStyle(
-            fontSize: 36 * trophyScale,
-          ),
+          style: TextStyle(fontSize: 36 * trophyScale),
         ),
         textDirection: ui.TextDirection.ltr,
       );
       textPainter.layout();
-      textPainter.paint(
-        canvas,
-        Offset(labelX - textPainter.width / 2, labelY - textPainter.height / 2),
-      );
+      textPainter.paint(canvas, Offset(labelX - textPainter.width / 2, labelY - textPainter.height / 2));
     }
   }
 
@@ -2778,8 +2446,8 @@ class _MemorableDayData {
     required this.title,
     required this.description,
     required this.dateStr,
-  })  : month = _parseMonth(dateStr),
-        day = _parseDay(dateStr);
+  }) : month = _parseMonth(dateStr),
+       day = _parseDay(dateStr);
 
   static int _parseMonth(String dateStr) {
     final months = {
@@ -2873,7 +2541,7 @@ class _MemorableDaysAnimatedState extends State<_MemorableDaysAnimated> with Tic
     'September',
     'October',
     'November',
-    'December'
+    'December',
   ];
 
   @override
@@ -2884,36 +2552,18 @@ class _MemorableDaysAnimatedState extends State<_MemorableDaysAnimated> with Tic
     _calendarScrollController = ScrollController();
 
     // Intro animation - title appears
-    _introController = AnimationController(
-      duration: const Duration(milliseconds: 800),
-      vsync: this,
-    );
-    _introAnimation = CurvedAnimation(
-      parent: _introController,
-      curve: Curves.easeOutCubic,
-    );
+    _introController = AnimationController(duration: const Duration(milliseconds: 800), vsync: this);
+    _introAnimation = CurvedAnimation(parent: _introController, curve: Curves.easeOutCubic);
 
     // Calendar scroll animation
-    _calendarController = AnimationController(
-      duration: const Duration(milliseconds: 600),
-      vsync: this,
-    );
+    _calendarController = AnimationController(duration: const Duration(milliseconds: 600), vsync: this);
 
     // Day transition controller
-    _dayTransitionController = AnimationController(
-      duration: const Duration(milliseconds: 400),
-      vsync: this,
-    );
+    _dayTransitionController = AnimationController(duration: const Duration(milliseconds: 400), vsync: this);
 
     // Summary view animation
-    _summaryController = AnimationController(
-      duration: const Duration(milliseconds: 800),
-      vsync: this,
-    );
-    _summaryAnimation = CurvedAnimation(
-      parent: _summaryController,
-      curve: Curves.easeOutCubic,
-    );
+    _summaryController = AnimationController(duration: const Duration(milliseconds: 800), vsync: this);
+    _summaryAnimation = CurvedAnimation(parent: _summaryController, curve: Curves.easeOutCubic);
 
     _introController.addStatusListener((status) {
       if (status == AnimationStatus.completed && mounted) {
@@ -3072,17 +2722,15 @@ class _MemorableDaysAnimatedState extends State<_MemorableDaysAnimated> with Tic
   Widget build(BuildContext context) {
     // Show summary view after calendar animation completes
     if (_showSummary) {
-      return AnimatedBuilder(
-        animation: _summaryAnimation,
-        builder: (context, child) => _buildSummaryView(),
-      );
+      return AnimatedBuilder(animation: _summaryAnimation, builder: (context, child) => _buildSummaryView());
     }
 
     return AnimatedBuilder(
       animation: _introAnimation,
       builder: (context, child) {
-        final currentDay =
-            widget.days.isNotEmpty && _currentDayIndex < widget.days.length ? widget.days[_currentDayIndex] : null;
+        final currentDay = widget.days.isNotEmpty && _currentDayIndex < widget.days.length
+            ? widget.days[_currentDayIndex]
+            : null;
 
         return Column(
           children: [
@@ -3096,19 +2744,11 @@ class _MemorableDaysAnimatedState extends State<_MemorableDaysAnimated> with Tic
                   children: [
                     Text(
                       widget.headerLine1,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 20,
-                        fontWeight: FontWeight.w500,
-                      ),
+                      style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w500),
                     ),
                     Text(
                       widget.headerLine2,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 36,
-                        fontWeight: FontWeight.w900,
-                      ),
+                      style: const TextStyle(color: Colors.white, fontSize: 36, fontWeight: FontWeight.w900),
                     ),
                   ],
                 ),
@@ -3117,10 +2757,7 @@ class _MemorableDaysAnimatedState extends State<_MemorableDaysAnimated> with Tic
             const SizedBox(height: 24),
             // Calendar view
             if (_introAnimation.value > 0.5)
-              Opacity(
-                opacity: ((_introAnimation.value - 0.5) * 2).clamp(0.0, 1.0),
-                child: _buildCalendar(currentDay),
-              ),
+              Opacity(opacity: ((_introAnimation.value - 0.5) * 2).clamp(0.0, 1.0), child: _buildCalendar(currentDay)),
             const SizedBox(height: 20),
             // Day details card
             if (currentDay != null && _detailsOpacity > 0)
@@ -3134,10 +2771,7 @@ class _MemorableDaysAnimatedState extends State<_MemorableDaysAnimated> with Tic
             const Spacer(),
             // Day indicators
             if (_introAnimation.value > 0.8)
-              Opacity(
-                opacity: ((_introAnimation.value - 0.8) * 5).clamp(0.0, 1.0),
-                child: _buildDayIndicators(),
-              ),
+              Opacity(opacity: ((_introAnimation.value - 0.8) * 5).clamp(0.0, 1.0), child: _buildDayIndicators()),
             const SizedBox(height: 20),
           ],
         );
@@ -3159,27 +2793,17 @@ class _MemorableDaysAnimatedState extends State<_MemorableDaysAnimated> with Tic
             alignment: Alignment.centerLeft,
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(20),
-              ),
+              decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20)),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   if (widget.badgeEmoji != null) ...[
-                    Text(
-                      widget.badgeEmoji!,
-                      style: const TextStyle(fontSize: 18),
-                    ),
+                    Text(widget.badgeEmoji!, style: const TextStyle(fontSize: 18)),
                     const SizedBox(width: 6),
                   ],
                   Text(
                     widget.summaryBadgeText,
-                    style: TextStyle(
-                      color: widget.badgeColor,
-                      fontSize: 16,
-                      fontWeight: FontWeight.w700,
-                    ),
+                    style: TextStyle(color: widget.badgeColor, fontSize: 16, fontWeight: FontWeight.w700),
                   ),
                 ],
               ),
@@ -3228,27 +2852,17 @@ class _MemorableDaysAnimatedState extends State<_MemorableDaysAnimated> with Tic
           // Just date for single moments (emoji is in the badge)
           Text(
             day.dateStr,
-            style: TextStyle(
-              color: Colors.white.withOpacity(0.6),
-              fontSize: 14,
-              fontWeight: FontWeight.w500,
-            ),
+            style: TextStyle(color: Colors.white.withOpacity(0.6), fontSize: 14, fontWeight: FontWeight.w500),
           ),
           const SizedBox(height: 12),
         ] else ...[
           // Label with emoji and date in same row for multi-day
           Row(
             children: [
-              Text(
-                day.emoji,
-                style: const TextStyle(fontSize: 20),
-              ),
+              Text(day.emoji, style: const TextStyle(fontSize: 20)),
               const SizedBox(width: 10),
               Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 8,
-                  vertical: 4,
-                ),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
                   color: Colors.white.withOpacity(0.2),
                   borderRadius: BorderRadius.circular(10),
@@ -3266,20 +2880,12 @@ class _MemorableDaysAnimatedState extends State<_MemorableDaysAnimated> with Tic
               const SizedBox(width: 8),
               Text(
                 '·',
-                style: TextStyle(
-                  color: Colors.white.withOpacity(0.5),
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                ),
+                style: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 12, fontWeight: FontWeight.w700),
               ),
               const SizedBox(width: 8),
               Text(
                 day.dateStr,
-                style: TextStyle(
-                  color: Colors.white.withOpacity(0.6),
-                  fontSize: 10,
-                  fontWeight: FontWeight.w500,
-                ),
+                style: TextStyle(color: Colors.white.withOpacity(0.6), fontSize: 10, fontWeight: FontWeight.w500),
               ),
             ],
           ),
@@ -3288,12 +2894,7 @@ class _MemorableDaysAnimatedState extends State<_MemorableDaysAnimated> with Tic
         // Title as text
         Text(
           day.title,
-          style: TextStyle(
-            color: Colors.white,
-            fontSize: isSingle ? 32 : 20,
-            fontWeight: FontWeight.w700,
-            height: 1.3,
-          ),
+          style: TextStyle(color: Colors.white, fontSize: isSingle ? 32 : 20, fontWeight: FontWeight.w700, height: 1.3),
         ),
         // Description if available
         if (day.description.isNotEmpty) ...[
@@ -3351,25 +2952,25 @@ class _MemorableDaysAnimatedState extends State<_MemorableDaysAnimated> with Tic
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceAround,
                   children: ['S', 'M', 'T', 'W', 'T', 'F', 'S']
-                      .map((d) => SizedBox(
-                            width: 28,
-                            child: Text(
-                              d,
-                              textAlign: TextAlign.center,
-                              style: TextStyle(
-                                color: Colors.white.withOpacity(0.5),
-                                fontSize: 10,
-                                fontWeight: FontWeight.w600,
-                              ),
+                      .map(
+                        (d) => SizedBox(
+                          width: 28,
+                          child: Text(
+                            d,
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              color: Colors.white.withOpacity(0.5),
+                              fontSize: 10,
+                              fontWeight: FontWeight.w600,
                             ),
-                          ))
+                          ),
+                        ),
+                      )
                       .toList(),
                 ),
                 const SizedBox(height: 4),
                 // Calendar grid
-                Expanded(
-                  child: _buildMonthGrid(month, daysInMonth, firstDayOfWeek, currentDay),
-                ),
+                Expanded(child: _buildMonthGrid(month, daysInMonth, firstDayOfWeek, currentDay)),
               ],
             ),
           );
@@ -3409,10 +3010,7 @@ class _MemorableDaysAnimatedState extends State<_MemorableDaysAnimated> with Tic
                     height: 24,
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
-                      border: Border.all(
-                        color: Colors.white,
-                        width: 2,
-                      ),
+                      border: Border.all(color: Colors.white, width: 2),
                       color: Colors.white.withOpacity(0.3),
                     ),
                   ),
@@ -3432,12 +3030,7 @@ class _MemorableDaysAnimatedState extends State<_MemorableDaysAnimated> with Tic
 
       // Start new row after Saturday
       if ((firstDayOfWeek + day) % 7 == 0) {
-        rows.add(
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
-            children: currentRow,
-          ),
-        );
+        rows.add(Row(mainAxisAlignment: MainAxisAlignment.spaceAround, children: currentRow));
         currentRow = [];
       }
     }
@@ -3447,28 +3040,17 @@ class _MemorableDaysAnimatedState extends State<_MemorableDaysAnimated> with Tic
       while (currentRow.length < 7) {
         currentRow.add(const SizedBox(width: 28, height: 24));
       }
-      rows.add(
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceAround,
-          children: currentRow,
-        ),
-      );
+      rows.add(Row(mainAxisAlignment: MainAxisAlignment.spaceAround, children: currentRow));
     }
 
-    return Column(
-      mainAxisAlignment: MainAxisAlignment.start,
-      children: rows,
-    );
+    return Column(mainAxisAlignment: MainAxisAlignment.start, children: rows);
   }
 
   Widget _buildDayDetails(_MemorableDayData day) {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 8),
       padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.2),
-        borderRadius: BorderRadius.circular(20),
-      ),
+      decoration: BoxDecoration(color: Colors.white.withOpacity(0.2), borderRadius: BorderRadius.circular(20)),
       child: Row(
         children: [
           Text(day.emoji, style: const TextStyle(fontSize: 36)),
@@ -3489,20 +3071,13 @@ class _MemorableDaysAnimatedState extends State<_MemorableDaysAnimated> with Tic
                 const SizedBox(height: 4),
                 Text(
                   day.title,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 18,
-                    fontWeight: FontWeight.w800,
-                  ),
+                  style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w800),
                 ),
                 if (day.description.isNotEmpty) ...[
                   const SizedBox(height: 4),
                   Text(
                     day.description,
-                    style: TextStyle(
-                      color: Colors.white.withOpacity(0.8),
-                      fontSize: 13,
-                    ),
+                    style: TextStyle(color: Colors.white.withOpacity(0.8), fontSize: 13),
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -3549,11 +3124,7 @@ class _TypewriterItem {
   final String value;
   final String? emoji;
 
-  const _TypewriterItem({
-    required this.label,
-    required this.value,
-    this.emoji,
-  });
+  const _TypewriterItem({required this.label, required this.value, this.emoji});
 }
 
 // Animated end-page widget with typewriter effect (like Top Days summary)
@@ -3590,22 +3161,13 @@ class _TypewriterEndPageAnimatedState extends State<_TypewriterEndPageAnimated> 
   void initState() {
     super.initState();
 
-    _mainController = AnimationController(
-      duration: const Duration(milliseconds: 800),
-      vsync: this,
-    );
-    _mainAnimation = CurvedAnimation(
-      parent: _mainController,
-      curve: Curves.easeOutCubic,
-    );
+    _mainController = AnimationController(duration: const Duration(milliseconds: 800), vsync: this);
+    _mainAnimation = CurvedAnimation(parent: _mainController, curve: Curves.easeOutCubic);
 
     // Create controllers for each item
     _itemControllers = List.generate(
       widget.items.length,
-      (index) => AnimationController(
-        duration: const Duration(milliseconds: 500),
-        vsync: this,
-      ),
+      (index) => AnimationController(duration: const Duration(milliseconds: 500), vsync: this),
     );
     _itemAnimations = _itemControllers.map((c) => CurvedAnimation(parent: c, curve: Curves.easeOutBack)).toList();
 
@@ -3669,17 +3231,10 @@ class _TypewriterEndPageAnimatedState extends State<_TypewriterEndPageAnimated> 
                 alignment: Alignment.centerLeft,
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(20),
-                  ),
+                  decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20)),
                   child: Text(
                     widget.badgeText,
-                    style: TextStyle(
-                      color: widget.badgeColor,
-                      fontSize: 16,
-                      fontWeight: FontWeight.w700,
-                    ),
+                    style: TextStyle(color: widget.badgeColor, fontSize: 16, fontWeight: FontWeight.w700),
                   ),
                 ),
               ),
@@ -3709,10 +3264,7 @@ class _TypewriterEndPageAnimatedState extends State<_TypewriterEndPageAnimated> 
                             Container(
                               width: 28,
                               height: 28,
-                              decoration: BoxDecoration(
-                                color: Colors.white.withOpacity(0.2),
-                                shape: BoxShape.circle,
-                              ),
+                              decoration: BoxDecoration(color: Colors.white.withOpacity(0.2), shape: BoxShape.circle),
                               child: Center(
                                 child: Text(
                                   '${index + 1}',
@@ -3726,10 +3278,7 @@ class _TypewriterEndPageAnimatedState extends State<_TypewriterEndPageAnimated> 
                             ),
                             const SizedBox(width: 12),
                             // Emoji
-                            Text(
-                              item.emoji ?? '',
-                              style: const TextStyle(fontSize: 28),
-                            ),
+                            Text(item.emoji ?? '', style: const TextStyle(fontSize: 28)),
                             const SizedBox(width: 12),
                             // Content
                             Expanded(
@@ -3768,11 +3317,7 @@ class _TypewriterEndPageAnimatedState extends State<_TypewriterEndPageAnimated> 
             }),
             const Spacer(),
             // Share button
-            _AnimatedShareButton(
-              progress: mainOpacity,
-              onShare: widget.onShare,
-              buttonColor: widget.badgeColor,
-            ),
+            _AnimatedShareButton(progress: mainOpacity, onShare: widget.onShare, buttonColor: widget.badgeColor),
             const SizedBox(height: 20),
           ],
         );
@@ -3787,11 +3332,7 @@ class _TopPhrasesAnimated extends StatefulWidget {
   final bool isActive;
   final VoidCallback? onShare;
 
-  const _TopPhrasesAnimated({
-    required this.phrases,
-    required this.isActive,
-    this.onShare,
-  });
+  const _TopPhrasesAnimated({required this.phrases, required this.isActive, this.onShare});
 
   @override
   State<_TopPhrasesAnimated> createState() => _TopPhrasesAnimatedState();
@@ -3809,21 +3350,12 @@ class _TopPhrasesAnimatedState extends State<_TopPhrasesAnimated> with TickerPro
   void initState() {
     super.initState();
 
-    _mainController = AnimationController(
-      duration: const Duration(milliseconds: 800),
-      vsync: this,
-    );
-    _mainAnimation = CurvedAnimation(
-      parent: _mainController,
-      curve: Curves.easeOutCubic,
-    );
+    _mainController = AnimationController(duration: const Duration(milliseconds: 800), vsync: this);
+    _mainAnimation = CurvedAnimation(parent: _mainController, curve: Curves.easeOutCubic);
 
     _phraseControllers = List.generate(
       widget.phrases.length,
-      (index) => AnimationController(
-        duration: const Duration(milliseconds: 600),
-        vsync: this,
-      ),
+      (index) => AnimationController(duration: const Duration(milliseconds: 600), vsync: this),
     );
     _phraseAnimations = _phraseControllers.map((c) => CurvedAnimation(parent: c, curve: Curves.easeOutBack)).toList();
 
@@ -3891,17 +3423,10 @@ class _TopPhrasesAnimatedState extends State<_TopPhrasesAnimated> with TickerPro
                     alignment: Alignment.centerLeft,
                     child: Container(
                       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(20),
-                      ),
+                      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20)),
                       child: Text(
                         context.l10n.wrappedTopFivePhrases,
-                        style: const TextStyle(
-                          color: WrappedColors.orange,
-                          fontSize: 16,
-                          fontWeight: FontWeight.w700,
-                        ),
+                        style: const TextStyle(color: WrappedColors.orange, fontSize: 16, fontWeight: FontWeight.w700),
                       ),
                     ),
                   ),
@@ -3931,10 +3456,7 @@ class _TopPhrasesAnimatedState extends State<_TopPhrasesAnimated> with TickerPro
                               Container(
                                 width: 32,
                                 height: 32,
-                                decoration: BoxDecoration(
-                                  color: Colors.white.withOpacity(0.2),
-                                  shape: BoxShape.circle,
-                                ),
+                                decoration: BoxDecoration(color: Colors.white.withOpacity(0.2), shape: BoxShape.circle),
                                 child: Center(
                                   child: Text(
                                     '${index + 1}',
@@ -3993,12 +3515,7 @@ class _BuddyData {
   final String context;
   final String emoji;
 
-  const _BuddyData({
-    required this.name,
-    required this.relationship,
-    required this.context,
-    required this.emoji,
-  });
+  const _BuddyData({required this.name, required this.relationship, required this.context, required this.emoji});
 }
 
 // Animated My Buddies widget - shows top 5 people
@@ -4007,11 +3524,7 @@ class _MyBuddiesAnimated extends StatefulWidget {
   final bool isActive;
   final VoidCallback? onShare;
 
-  const _MyBuddiesAnimated({
-    required this.buddies,
-    required this.isActive,
-    this.onShare,
-  });
+  const _MyBuddiesAnimated({required this.buddies, required this.isActive, this.onShare});
 
   @override
   State<_MyBuddiesAnimated> createState() => _MyBuddiesAnimatedState();
@@ -4029,21 +3542,12 @@ class _MyBuddiesAnimatedState extends State<_MyBuddiesAnimated> with TickerProvi
   void initState() {
     super.initState();
 
-    _mainController = AnimationController(
-      duration: const Duration(milliseconds: 800),
-      vsync: this,
-    );
-    _mainAnimation = CurvedAnimation(
-      parent: _mainController,
-      curve: Curves.easeOutCubic,
-    );
+    _mainController = AnimationController(duration: const Duration(milliseconds: 800), vsync: this);
+    _mainAnimation = CurvedAnimation(parent: _mainController, curve: Curves.easeOutCubic);
 
     _buddyControllers = List.generate(
       widget.buddies.length,
-      (index) => AnimationController(
-        duration: const Duration(milliseconds: 500),
-        vsync: this,
-      ),
+      (index) => AnimationController(duration: const Duration(milliseconds: 500), vsync: this),
     );
     _buddyAnimations = _buddyControllers.map((c) => CurvedAnimation(parent: c, curve: Curves.easeOutBack)).toList();
 
@@ -4107,10 +3611,7 @@ class _MyBuddiesAnimatedState extends State<_MyBuddiesAnimated> with TickerProvi
                 alignment: Alignment.centerLeft,
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(20),
-                  ),
+                  decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20)),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
@@ -4118,11 +3619,7 @@ class _MyBuddiesAnimatedState extends State<_MyBuddiesAnimated> with TickerProvi
                       const SizedBox(width: 6),
                       Text(
                         context.l10n.wrappedMyBuddiesCard,
-                        style: const TextStyle(
-                          color: Color(0xFF6B5B95),
-                          fontSize: 16,
-                          fontWeight: FontWeight.w700,
-                        ),
+                        style: const TextStyle(color: Color(0xFF6B5B95), fontSize: 16, fontWeight: FontWeight.w700),
                       ),
                     ],
                   ),
@@ -4154,10 +3651,7 @@ class _MyBuddiesAnimatedState extends State<_MyBuddiesAnimated> with TickerProvi
                             Container(
                               width: 28,
                               height: 28,
-                              decoration: BoxDecoration(
-                                color: Colors.white.withOpacity(0.2),
-                                shape: BoxShape.circle,
-                              ),
+                              decoration: BoxDecoration(color: Colors.white.withOpacity(0.2), shape: BoxShape.circle),
                               child: Center(
                                 child: Text(
                                   '${index + 1}',
@@ -4171,10 +3665,7 @@ class _MyBuddiesAnimatedState extends State<_MyBuddiesAnimated> with TickerProvi
                             ),
                             const SizedBox(width: 12),
                             // Emoji
-                            Text(
-                              buddy.emoji,
-                              style: const TextStyle(fontSize: 28),
-                            ),
+                            Text(buddy.emoji, style: const TextStyle(fontSize: 28)),
                             const SizedBox(width: 12),
                             // Info
                             Expanded(
@@ -4220,11 +3711,7 @@ class _MyBuddiesAnimatedState extends State<_MyBuddiesAnimated> with TickerProvi
             }),
             const Spacer(),
             // Share button
-            _AnimatedShareButton(
-              progress: mainOpacity,
-              onShare: widget.onShare,
-              buttonColor: const Color(0xFF6B5B95),
-            ),
+            _AnimatedShareButton(progress: mainOpacity, onShare: widget.onShare, buttonColor: const Color(0xFF6B5B95)),
             const SizedBox(height: 20),
           ],
         );
@@ -4273,32 +3760,14 @@ class _BigMomentAnimatedState extends State<_BigMomentAnimated> with TickerProvi
   void initState() {
     super.initState();
 
-    _mainController = AnimationController(
-      duration: const Duration(milliseconds: 800),
-      vsync: this,
-    );
-    _mainAnimation = CurvedAnimation(
-      parent: _mainController,
-      curve: Curves.easeOutCubic,
-    );
+    _mainController = AnimationController(duration: const Duration(milliseconds: 800), vsync: this);
+    _mainAnimation = CurvedAnimation(parent: _mainController, curve: Curves.easeOutCubic);
 
-    _titleController = AnimationController(
-      duration: const Duration(milliseconds: 600),
-      vsync: this,
-    );
-    _titleAnimation = CurvedAnimation(
-      parent: _titleController,
-      curve: Curves.easeOutBack,
-    );
+    _titleController = AnimationController(duration: const Duration(milliseconds: 600), vsync: this);
+    _titleAnimation = CurvedAnimation(parent: _titleController, curve: Curves.easeOutBack);
 
-    _contentController = AnimationController(
-      duration: const Duration(milliseconds: 700),
-      vsync: this,
-    );
-    _contentAnimation = CurvedAnimation(
-      parent: _contentController,
-      curve: Curves.easeOutCubic,
-    );
+    _contentController = AnimationController(duration: const Duration(milliseconds: 700), vsync: this);
+    _contentAnimation = CurvedAnimation(parent: _contentController, curve: Curves.easeOutCubic);
 
     if (widget.isActive) {
       _startAnimation();
@@ -4360,10 +3829,7 @@ class _BigMomentAnimatedState extends State<_BigMomentAnimated> with TickerProvi
               child: Transform.scale(
                 scale: 0.3 + mainOpacity * 0.7,
                 alignment: Alignment.centerLeft,
-                child: Text(
-                  widget.emoji,
-                  style: const TextStyle(fontSize: 72),
-                ),
+                child: Text(widget.emoji, style: const TextStyle(fontSize: 72)),
               ),
             ),
             const SizedBox(height: 24),
@@ -4377,11 +3843,7 @@ class _BigMomentAnimatedState extends State<_BigMomentAnimated> with TickerProvi
                   children: [
                     Text(
                       widget.headerLine1,
-                      style: TextStyle(
-                        color: Colors.white.withOpacity(0.8),
-                        fontSize: 24,
-                        fontWeight: FontWeight.w500,
-                      ),
+                      style: TextStyle(color: Colors.white.withOpacity(0.8), fontSize: 24, fontWeight: FontWeight.w500),
                     ),
                     Text(
                       widget.headerLine2,
@@ -4420,11 +3882,7 @@ class _BigMomentAnimatedState extends State<_BigMomentAnimated> with TickerProvi
               opacity: contentOpacity,
               child: Text(
                 widget.subtitle,
-                style: TextStyle(
-                  color: Colors.white.withOpacity(0.7),
-                  fontSize: 18,
-                  fontWeight: FontWeight.w500,
-                ),
+                style: TextStyle(color: Colors.white.withOpacity(0.7), fontSize: 18, fontWeight: FontWeight.w500),
               ),
             ),
             const Spacer(),
@@ -4476,23 +3934,11 @@ class _SummaryCollageAnimatedState extends State<_SummaryCollageAnimated> with T
   void initState() {
     super.initState();
 
-    _mainController = AnimationController(
-      duration: const Duration(milliseconds: 800),
-      vsync: this,
-    );
-    _mainAnimation = CurvedAnimation(
-      parent: _mainController,
-      curve: Curves.easeOutCubic,
-    );
+    _mainController = AnimationController(duration: const Duration(milliseconds: 800), vsync: this);
+    _mainAnimation = CurvedAnimation(parent: _mainController, curve: Curves.easeOutCubic);
 
-    _tilesController = AnimationController(
-      duration: const Duration(milliseconds: 1200),
-      vsync: this,
-    );
-    _tilesAnimation = CurvedAnimation(
-      parent: _tilesController,
-      curve: Curves.easeOutCubic,
-    );
+    _tilesController = AnimationController(duration: const Duration(milliseconds: 1200), vsync: this);
+    _tilesAnimation = CurvedAnimation(parent: _tilesController, curve: Curves.easeOutCubic);
 
     _mainController.addStatusListener((status) {
       if (status == AnimationStatus.completed && mounted) {
@@ -4567,7 +4013,8 @@ class _SummaryCollageAnimatedState extends State<_SummaryCollageAnimated> with T
 
     // Struggle + Win
     final struggle = (widget.result['struggle'] as Map<String, dynamic>?)?['title'] ?? context.l10n.wrappedTheHardPart;
-    final biggestWin = (widget.result['personal_win'] as Map<String, dynamic>?)?['title'] ?? context.l10n.wrappedPersonalGrowth;
+    final biggestWin =
+        (widget.result['personal_win'] as Map<String, dynamic>?)?['title'] ?? context.l10n.wrappedPersonalGrowth;
 
     return AnimatedBuilder(
       animation: Listenable.merge([_mainAnimation, _tilesAnimation]),
@@ -4587,32 +4034,20 @@ class _SummaryCollageAnimatedState extends State<_SummaryCollageAnimated> with T
                 child: Row(
                   children: [
                     ShaderMask(
-                      shaderCallback: (bounds) => const LinearGradient(
-                        colors: [Color(0xFF4ECDC4), Color(0xFF44A08D)],
-                      ).createShader(bounds),
+                      shaderCallback: (bounds) =>
+                          const LinearGradient(colors: [Color(0xFF4ECDC4), Color(0xFF44A08D)]).createShader(bounds),
                       child: const Text(
                         '2025',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 48,
-                          fontWeight: FontWeight.w900,
-                        ),
+                        style: TextStyle(color: Colors.white, fontSize: 48, fontWeight: FontWeight.w900),
                       ),
                     ),
                     const Spacer(),
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(20),
-                      ),
+                      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20)),
                       child: Text(
                         context.l10n.wrappedTopPercentUser(percentile.toString()),
-                        style: const TextStyle(
-                          color: WrappedColors.mint,
-                          fontSize: 14,
-                          fontWeight: FontWeight.w800,
-                        ),
+                        style: const TextStyle(color: WrappedColors.mint, fontSize: 14, fontWeight: FontWeight.w800),
                       ),
                     ),
                   ],
@@ -4627,10 +4062,7 @@ class _SummaryCollageAnimatedState extends State<_SummaryCollageAnimated> with T
               progress: tilesProgress,
               child: Container(
                 padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: WrappedColors.mint,
-                  borderRadius: BorderRadius.circular(16),
-                ),
+                decoration: BoxDecoration(color: WrappedColors.mint, borderRadius: BorderRadius.circular(16)),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceAround,
                   children: [
@@ -4669,7 +4101,10 @@ class _SummaryCollageAnimatedState extends State<_SummaryCollageAnimated> with T
                                     child: Text(
                                       buddy['name'] ?? '',
                                       style: const TextStyle(
-                                          color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600),
+                                        color: Colors.white,
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w600,
+                                      ),
                                       overflow: TextOverflow.ellipsis,
                                     ),
                                   ),
@@ -4728,8 +4163,14 @@ class _SummaryCollageAnimatedState extends State<_SummaryCollageAnimated> with T
                               children: [
                                 const Text('😤', style: TextStyle(fontSize: 18)),
                                 const SizedBox(width: 6),
-                                Text(context.l10n.wrappedStruggleLabelUpper,
-                                    style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w800)),
+                                Text(
+                                  context.l10n.wrappedStruggleLabelUpper,
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                                ),
                               ],
                             ),
                             const SizedBox(height: 8),
@@ -4751,10 +4192,7 @@ class _SummaryCollageAnimatedState extends State<_SummaryCollageAnimated> with T
                       progress: tilesProgress,
                       child: Container(
                         padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: WrappedColors.mint,
-                          borderRadius: BorderRadius.circular(16),
-                        ),
+                        decoration: BoxDecoration(color: WrappedColors.mint, borderRadius: BorderRadius.circular(16)),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
@@ -4762,8 +4200,14 @@ class _SummaryCollageAnimatedState extends State<_SummaryCollageAnimated> with T
                               children: [
                                 const Text('🏆', style: TextStyle(fontSize: 18)),
                                 const SizedBox(width: 6),
-                                Text(context.l10n.wrappedWinLabelUpper,
-                                    style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w800)),
+                                Text(
+                                  context.l10n.wrappedWinLabelUpper,
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                                ),
                               ],
                             ),
                             const SizedBox(height: 8),
@@ -4818,21 +4262,13 @@ class _SummaryCollageAnimatedState extends State<_SummaryCollageAnimated> with T
             // Share button row with omi branding
             Row(
               children: [
-                _AnimatedShareButton(
-                  progress: tilesProgress,
-                  onShare: widget.onShare,
-                  buttonColor: WrappedColors.mint,
-                ),
+                _AnimatedShareButton(progress: tilesProgress, onShare: widget.onShare, buttonColor: WrappedColors.mint),
                 const Spacer(),
                 Opacity(
                   opacity: tilesProgress.clamp(0.0, 1.0),
                   child: const Text(
                     'omi',
-                    style: TextStyle(
-                      color: Colors.white54,
-                      fontSize: 18,
-                      fontWeight: FontWeight.w800,
-                    ),
+                    style: TextStyle(color: Colors.white54, fontSize: 18, fontWeight: FontWeight.w800),
                   ),
                 ),
               ],
@@ -4848,10 +4284,7 @@ class _SummaryCollageAnimatedState extends State<_SummaryCollageAnimated> with T
     final adjustedProgress = ((progress - delay) / (1 - delay)).clamp(0.0, 1.0);
     return Opacity(
       opacity: adjustedProgress,
-      child: Transform.translate(
-        offset: Offset(0, 15 * (1 - adjustedProgress)),
-        child: child,
-      ),
+      child: Transform.translate(offset: Offset(0, 15 * (1 - adjustedProgress)), child: child),
     );
   }
 
@@ -4860,19 +4293,11 @@ class _SummaryCollageAnimatedState extends State<_SummaryCollageAnimated> with T
       children: [
         Text(
           value,
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 26,
-            fontWeight: FontWeight.w900,
-          ),
+          style: const TextStyle(color: Colors.white, fontSize: 26, fontWeight: FontWeight.w900),
         ),
         Text(
           label,
-          style: TextStyle(
-            color: Colors.white.withOpacity(0.7),
-            fontSize: 12,
-            fontWeight: FontWeight.w500,
-          ),
+          style: TextStyle(color: Colors.white.withOpacity(0.7), fontSize: 12, fontWeight: FontWeight.w500),
         ),
       ],
     );
@@ -4881,20 +4306,13 @@ class _SummaryCollageAnimatedState extends State<_SummaryCollageAnimated> with T
   Widget _buildMiniTile(String title, Color color, Widget content) {
     return Container(
       padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: color,
-        borderRadius: BorderRadius.circular(16),
-      ),
+      decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(16)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
             title,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 12,
-              fontWeight: FontWeight.w800,
-            ),
+            style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w800),
           ),
           const SizedBox(height: 10),
           content,
@@ -4969,32 +4387,14 @@ class _ThatsAWrapAnimatedState extends State<_ThatsAWrapAnimated> with TickerPro
   void initState() {
     super.initState();
 
-    _mainController = AnimationController(
-      duration: const Duration(milliseconds: 1000),
-      vsync: this,
-    );
-    _mainAnimation = CurvedAnimation(
-      parent: _mainController,
-      curve: Curves.easeOutCubic,
-    );
+    _mainController = AnimationController(duration: const Duration(milliseconds: 1000), vsync: this);
+    _mainAnimation = CurvedAnimation(parent: _mainController, curve: Curves.easeOutCubic);
 
-    _statsController = AnimationController(
-      duration: const Duration(milliseconds: 800),
-      vsync: this,
-    );
-    _statsAnimation = CurvedAnimation(
-      parent: _statsController,
-      curve: Curves.easeOutBack,
-    );
+    _statsController = AnimationController(duration: const Duration(milliseconds: 800), vsync: this);
+    _statsAnimation = CurvedAnimation(parent: _statsController, curve: Curves.easeOutBack);
 
-    _buttonController = AnimationController(
-      duration: const Duration(milliseconds: 600),
-      vsync: this,
-    );
-    _buttonAnimation = CurvedAnimation(
-      parent: _buttonController,
-      curve: Curves.elasticOut,
-    );
+    _buttonController = AnimationController(duration: const Duration(milliseconds: 600), vsync: this);
+    _buttonAnimation = CurvedAnimation(parent: _buttonController, curve: Curves.elasticOut);
 
     if (widget.isActive) {
       _startAnimation();
@@ -5074,11 +4474,7 @@ class _ThatsAWrapAnimatedState extends State<_ThatsAWrapAnimated> with TickerPro
                     alignment: Alignment.centerLeft,
                     child: ShaderMask(
                       shaderCallback: (bounds) => const LinearGradient(
-                        colors: [
-                          Color(0xFF667eea),
-                          Color(0xFF764ba2),
-                          Color(0xFFf953c6),
-                        ],
+                        colors: [Color(0xFF667eea), Color(0xFF764ba2), Color(0xFFf953c6)],
                         begin: Alignment.topLeft,
                         end: Alignment.bottomRight,
                       ).createShader(bounds),
@@ -5102,11 +4498,7 @@ class _ThatsAWrapAnimatedState extends State<_ThatsAWrapAnimated> with TickerPro
                     offset: Offset(-20 * (1 - mainOpacity), 0),
                     child: const Text(
                       "That's a wrap!",
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 32,
-                        fontWeight: FontWeight.w700,
-                      ),
+                      style: TextStyle(color: Colors.white, fontSize: 32, fontWeight: FontWeight.w700),
                     ),
                   ),
                 ),
@@ -5120,18 +4512,12 @@ class _ThatsAWrapAnimatedState extends State<_ThatsAWrapAnimated> with TickerPro
                       padding: const EdgeInsets.all(24),
                       decoration: BoxDecoration(
                         gradient: LinearGradient(
-                          colors: [
-                            Colors.white.withOpacity(0.15),
-                            Colors.white.withOpacity(0.05),
-                          ],
+                          colors: [Colors.white.withOpacity(0.15), Colors.white.withOpacity(0.05)],
                           begin: Alignment.topLeft,
                           end: Alignment.bottomRight,
                         ),
                         borderRadius: BorderRadius.circular(24),
-                        border: Border.all(
-                          color: Colors.white.withOpacity(0.2),
-                          width: 1,
-                        ),
+                        border: Border.all(color: Colors.white.withOpacity(0.2), width: 1),
                       ),
                       child: Column(
                         children: [
@@ -5154,9 +4540,7 @@ class _ThatsAWrapAnimatedState extends State<_ThatsAWrapAnimated> with TickerPro
                               Container(
                                 padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                                 decoration: BoxDecoration(
-                                  gradient: const LinearGradient(
-                                    colors: [Color(0xFF667eea), Color(0xFF764ba2)],
-                                  ),
+                                  gradient: const LinearGradient(colors: [Color(0xFF667eea), Color(0xFF764ba2)]),
                                   borderRadius: BorderRadius.circular(20),
                                 ),
                                 child: Text(
@@ -5171,10 +4555,7 @@ class _ThatsAWrapAnimatedState extends State<_ThatsAWrapAnimated> with TickerPro
                               const SizedBox(width: 12),
                               Text(
                                 '${widget.completionRate}% done',
-                                style: TextStyle(
-                                  color: Colors.white.withOpacity(0.7),
-                                  fontSize: 16,
-                                ),
+                                style: TextStyle(color: Colors.white.withOpacity(0.7), fontSize: 16),
                               ),
                             ],
                           ),
@@ -5234,11 +4615,7 @@ class _ThatsAWrapAnimatedState extends State<_ThatsAWrapAnimated> with TickerPro
                             SizedBox(width: 12),
                             Text(
                               'Share Your Wrapped',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 20,
-                                fontWeight: FontWeight.w700,
-                              ),
+                              style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w700),
                             ),
                           ],
                         ),
@@ -5253,11 +4630,7 @@ class _ThatsAWrapAnimatedState extends State<_ThatsAWrapAnimated> with TickerPro
                   child: Center(
                     child: Text(
                       'omi.me/wrapped',
-                      style: TextStyle(
-                        color: Colors.white.withOpacity(0.5),
-                        fontSize: 14,
-                        fontWeight: FontWeight.w500,
-                      ),
+                      style: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 14, fontWeight: FontWeight.w500),
                     ),
                   ),
                 ),
@@ -5277,19 +4650,11 @@ class _ThatsAWrapAnimatedState extends State<_ThatsAWrapAnimated> with TickerPro
         const SizedBox(height: 8),
         Text(
           value,
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 28,
-            fontWeight: FontWeight.w900,
-          ),
+          style: const TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.w900),
         ),
         Text(
           label,
-          style: TextStyle(
-            color: Colors.white.withOpacity(0.6),
-            fontSize: 13,
-            fontWeight: FontWeight.w500,
-          ),
+          style: TextStyle(color: Colors.white.withOpacity(0.6), fontSize: 13, fontWeight: FontWeight.w500),
         ),
       ],
     );

@@ -5,12 +5,7 @@ import 'package:omi/env/env.dart';
 import 'package:omi/utils/logger.dart';
 
 /// Wrapped status enum
-enum WrappedStatus {
-  notGenerated,
-  processing,
-  done,
-  error,
-}
+enum WrappedStatus { notGenerated, processing, done, error }
 
 /// Wrapped 2025 response model
 class Wrapped2025Response {
@@ -20,13 +15,7 @@ class Wrapped2025Response {
   final String? error;
   final Map<String, dynamic>? progress;
 
-  Wrapped2025Response({
-    required this.status,
-    this.year = 2025,
-    this.result,
-    this.error,
-    this.progress,
-  });
+  Wrapped2025Response({required this.status, this.year = 2025, this.result, this.error, this.progress});
 
   factory Wrapped2025Response.fromJson(Map<String, dynamic> json) {
     WrappedStatus status;
@@ -56,12 +45,7 @@ class Wrapped2025Response {
 
 /// Get wrapped 2025 status and result
 Future<Wrapped2025Response?> getWrapped2025() async {
-  var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/wrapped/2025',
-    headers: {},
-    method: 'GET',
-    body: '',
-  );
+  var response = await makeApiCall(url: '${Env.apiBaseUrl}v1/wrapped/2025', headers: {}, method: 'GET', body: '');
 
   if (response == null) return null;
   Logger.debug('getWrapped2025 response: ${response.body}');
@@ -91,10 +75,10 @@ Future<Wrapped2025Response?> generateWrapped2025() async {
       status: json['status'] == 'done'
           ? WrappedStatus.done
           : json['status'] == 'processing'
-              ? WrappedStatus.processing
-              : json['status'] == 'error'
-                  ? WrappedStatus.error
-                  : WrappedStatus.notGenerated,
+          ? WrappedStatus.processing
+          : json['status'] == 'error'
+          ? WrappedStatus.error
+          : WrappedStatus.notGenerated,
     );
   }
   return null;

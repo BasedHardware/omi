@@ -36,10 +36,7 @@ class ChartMessageWidget extends StatelessWidget {
             style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w600),
           ),
           const SizedBox(height: 20),
-          SizedBox(
-            height: 200,
-            child: chartData.chartType == 'bar' ? _buildBarChart() : _buildLineChart(),
-          ),
+          SizedBox(height: 200, child: chartData.chartType == 'bar' ? _buildBarChart() : _buildLineChart()),
         ],
       ),
     );
@@ -94,10 +91,7 @@ class ChartMessageWidget extends StatelessWidget {
           show: true,
           drawVerticalLine: false,
           horizontalInterval: _niceInterval(minY, maxY),
-          getDrawingHorizontalLine: (value) => FlLine(
-            color: Colors.white.withOpacity(0.06),
-            strokeWidth: 1,
-          ),
+          getDrawingHorizontalLine: (value) => FlLine(color: Colors.white.withOpacity(0.06), strokeWidth: 1),
         ),
         titlesData: FlTitlesData(
           topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
@@ -121,10 +115,7 @@ class ChartMessageWidget extends StatelessWidget {
               interval: _niceInterval(minY, maxY),
               getTitlesWidget: (value, meta) {
                 if (value == meta.max || value == meta.min) return const SizedBox.shrink();
-                return Text(
-                  _formatValue(value),
-                  style: TextStyle(color: Colors.grey.shade500, fontSize: 11),
-                );
+                return Text(_formatValue(value), style: TextStyle(color: Colors.grey.shade500, fontSize: 11));
               },
             ),
           ),
@@ -156,11 +147,8 @@ class ChartMessageWidget extends StatelessWidget {
             isStrokeCapRound: true,
             dotData: FlDotData(
               show: points.length <= 14,
-              getDotPainter: (spot, percent, barData, index) => FlDotCirclePainter(
-                radius: 3,
-                color: color,
-                strokeWidth: 0,
-              ),
+              getDotPainter: (spot, percent, barData, index) =>
+                  FlDotCirclePainter(radius: 3, color: color, strokeWidth: 0),
             ),
             belowBarData: BarAreaData(
               show: true,
@@ -193,10 +181,7 @@ class ChartMessageWidget extends StatelessWidget {
           show: true,
           drawVerticalLine: false,
           horizontalInterval: _niceInterval(0, maxY),
-          getDrawingHorizontalLine: (value) => FlLine(
-            color: Colors.white.withOpacity(0.06),
-            strokeWidth: 1,
-          ),
+          getDrawingHorizontalLine: (value) => FlLine(color: Colors.white.withOpacity(0.06), strokeWidth: 1),
         ),
         titlesData: FlTitlesData(
           topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
@@ -219,10 +204,7 @@ class ChartMessageWidget extends StatelessWidget {
               interval: _niceInterval(0, maxY),
               getTitlesWidget: (value, meta) {
                 if (value == meta.max || value == meta.min) return const SizedBox.shrink();
-                return Text(
-                  _formatValue(value),
-                  style: TextStyle(color: Colors.grey.shade500, fontSize: 11),
-                );
+                return Text(_formatValue(value), style: TextStyle(color: Colors.grey.shade500, fontSize: 11));
               },
             ),
           ),

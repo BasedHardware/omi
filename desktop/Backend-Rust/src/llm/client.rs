@@ -513,7 +513,7 @@ impl LlmClient {
             "required": ["memories"]
         });
 
-        let response = self.call_with_schema(&prompt, Some(0.5), Some(500), Some(schema)).await?;
+        let response = self.call_with_schema(&prompt, Some(0.5), Some(1000), Some(schema)).await?;
 
         #[derive(Deserialize)]
         struct MemoriesResponse {
@@ -526,7 +526,12 @@ impl LlmClient {
             category: String,
         }
 
+        // Attempt to repair truncated JSON (Gemini sometimes omits trailing braces)
         let result: MemoriesResponse = serde_json::from_str(&response)
+            .or_else(|_| {
+                let repaired = format!("{}}}", response.trim_end());
+                serde_json::from_str(&repaired)
+            })
             .map_err(|e| format!("Failed to parse memories response: {} - {}", e, response))?;
 
         // Validate categories and enforce limits: max 2 interesting + max 2 system
@@ -660,8 +665,14 @@ impl LlmClient {
             calendar_context,
         ).await?;
 
-        // Step 3: Extract memories
-        let memories = self.extract_memories(&transcript, user_name, existing_memories).await?;
+        // Step 3: Extract memories (non-fatal — conversation still saved if this fails)
+        let memories = match self.extract_memories(&transcript, user_name, existing_memories).await {
+            Ok(m) => m,
+            Err(e) => {
+                tracing::warn!("Memories extraction failed (non-fatal): {}", e);
+                vec![]
+            }
+        };
 
         Ok(ProcessedConversation {
             discarded: false,

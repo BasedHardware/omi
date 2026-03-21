@@ -177,6 +177,8 @@ class TasksStore: ObservableObject {
     private func refreshTasksIfNeeded() async {
         // Skip if not signed in
         guard AuthService.shared.isSignedIn else { return }
+        // Skip if in auth backoff period (recent 401 errors)
+        guard !AuthBackoffTracker.shared.shouldSkipRequest() else { return }
 
         // Skip if page is not visible
         guard isActive else { return }
@@ -201,7 +203,8 @@ class TasksStore: ObservableObject {
 
             // Reconcile: if we got the full set, hard-delete local tasks absent from API
             // (completed/deleted on mobile). Safe: only deletes synced records.
-            if response.items.count < reloadLimit {
+            // Safety guard: skip if API returned zero tasks (possible backend error / empty 200).
+            if response.items.count < reloadLimit, !response.items.isEmpty {
                 let apiIds = Set(response.items.map { $0.id })
                 let reconciled = try await ActionItemStorage.shared.hardDeleteAbsentTasks(apiIds: apiIds)
                 if reconciled > 0 {
@@ -241,7 +244,11 @@ class TasksStore: ObservableObject {
             let newHasMore = mergedTasks.count >= reloadLimit
             if hasMoreIncompleteTasks != newHasMore { hasMoreIncompleteTasks = newHasMore }
             await loadDashboardTasks()
+            AuthBackoffTracker.shared.reportSuccess()
         } catch {
+            if case APIError.unauthorized = error {
+                AuthBackoffTracker.shared.reportAuthFailure()
+            }
             // Silently ignore errors during auto-refresh
             logError("TasksStore: Auto-refresh failed", error: error)
         }
@@ -333,6 +340,12 @@ class TasksStore: ObservableObject {
                 allApiIds.formUnion(response.items.map { $0.id })
                 offset += response.items.count
                 if response.items.count < batchSize { break }
+            }
+
+            // Safety guard: skip if API returned zero tasks (possible backend error / empty 200).
+            if allApiIds.isEmpty {
+                log("TasksStore: Periodic reconciliation skipped — API returned zero task IDs (possible backend error)")
+                return
             }
 
             let deleted = try await ActionItemStorage.shared.hardDeleteAbsentTasks(apiIds: allApiIds)
@@ -557,6 +570,13 @@ class TasksStore: ObservableObject {
                 allApiIds.formUnion(response.items.map { $0.id })
                 offset += response.items.count
                 if response.items.count < batchSize { break }
+            }
+
+            // Safety guard: if the API returned zero tasks, skip reconciliation.
+            // This prevents a backend error (200 with empty list) from wiping all local tasks.
+            if allApiIds.isEmpty {
+                log("TasksStore: Reconciliation skipped — API returned zero task IDs (possible backend error)")
+                return
             }
 
             let deleted = try await ActionItemStorage.shared.hardDeleteAbsentTasks(apiIds: allApiIds)

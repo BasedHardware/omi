@@ -37,10 +37,7 @@ class GoogleTasksService {
         return false;
       }
 
-      await launchUrl(
-        authUri,
-        mode: LaunchMode.externalApplication,
-      );
+      await launchUrl(authUri, mode: LaunchMode.externalApplication);
 
       return true;
     } catch (e) {
@@ -57,18 +54,9 @@ class GoogleTasksService {
   }
 
   /// Create a task in Google Tasks (via backend API)
-  Future<bool> createTask({
-    required String title,
-    String? notes,
-    DateTime? dueDate,
-  }) async {
+  Future<bool> createTask({required String title, String? notes, DateTime? dueDate}) async {
     try {
-      final result = await createTaskViaIntegration(
-        'google_tasks',
-        title: title,
-        description: notes,
-        dueDate: dueDate,
-      );
+      final result = await createTaskViaIntegration('google_tasks', title: title, description: notes, dueDate: dueDate);
 
       if (result != null && result['success'] == true) {
         Logger.debug('Task created successfully in Google Tasks');

@@ -20,10 +20,7 @@ class SelectAppNotification extends Notification {
 class PopularAppsSection extends StatelessWidget {
   final List<App> apps;
 
-  const PopularAppsSection({
-    super.key,
-    required this.apps,
-  });
+  const PopularAppsSection({super.key, required this.apps});
 
   @override
   Widget build(BuildContext context) {
@@ -44,11 +41,7 @@ class PopularAppsSection extends StatelessWidget {
             children: [
               Text(
                 context.l10n.popularApps,
-                style: const TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.white,
-                ),
+                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: Colors.white),
               ),
               const Spacer(),
               Row(
@@ -56,25 +49,14 @@ class PopularAppsSection extends StatelessWidget {
                 children: [
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: Colors.grey.shade700,
-                      borderRadius: BorderRadius.circular(8),
-                    ),
+                    decoration: BoxDecoration(color: Colors.grey.shade700, borderRadius: BorderRadius.circular(8)),
                     child: Text(
                       '${apps.length}',
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: Colors.grey.shade300,
-                        fontWeight: FontWeight.w600,
-                      ),
+                      style: TextStyle(fontSize: 11, color: Colors.grey.shade300, fontWeight: FontWeight.w600),
                     ),
                   ),
                   const SizedBox(width: 8),
-                  Icon(
-                    Icons.chevron_right,
-                    color: Colors.grey.shade400,
-                    size: 16,
-                  ),
+                  Icon(Icons.chevron_right, color: Colors.grey.shade400, size: 16),
                 ],
               ),
             ],
@@ -126,10 +108,7 @@ class PopularAppsSection extends StatelessWidget {
                       child: Container(
                         width: 60,
                         height: 60,
-                        decoration: BoxDecoration(
-                          color: Color(0xFF35343B),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
+                        decoration: BoxDecoration(color: Color(0xFF35343B), borderRadius: BorderRadius.circular(12)),
                         child: CachedNetworkImage(
                           imageUrl: app.getImageUrl(),
                           httpHeaders: const {
@@ -149,11 +128,7 @@ class PopularAppsSection extends StatelessWidget {
                               ),
                             ),
                           ),
-                          errorWidget: (context, url, error) => Icon(
-                            Icons.apps,
-                            size: 30,
-                            color: Colors.grey.shade600,
-                          ),
+                          errorWidget: (context, url, error) => Icon(Icons.apps, size: 30, color: Colors.grey.shade600),
                         ),
                       ),
                     ),
@@ -167,21 +142,14 @@ class PopularAppsSection extends StatelessWidget {
                         children: [
                           Text(
                             app.name,
-                            style: const TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w500,
-                              color: Colors.white,
-                            ),
+                            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: Colors.white),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                           ),
                           const SizedBox(height: 2),
                           Text(
                             app.description.length > 50 ? '${app.description.substring(0, 50)}...' : app.description,
-                            style: TextStyle(
-                              fontSize: 13,
-                              color: Colors.grey.shade400,
-                            ),
+                            style: TextStyle(fontSize: 13, color: Colors.grey.shade400),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                           ),
@@ -206,10 +174,7 @@ class PopularAppsSection extends StatelessWidget {
                                 const SizedBox(width: 4),
                                 Text(
                                   '(${app.ratingCount})',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    color: Colors.grey.shade500,
-                                  ),
+                                  style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
                                 ),
                               ],
                             ),
@@ -231,11 +196,7 @@ class PopularAppsSection extends StatelessWidget {
                       child: Center(
                         child: Text(
                           app.enabled ? context.l10n.open : context.l10n.getButton,
-                          style: const TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
-                            color: Colors.white,
-                          ),
+                          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.white),
                         ),
                       ),
                     ),

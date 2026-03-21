@@ -15,11 +15,7 @@ class MoveToFolderSheet extends StatelessWidget {
   final String conversationId;
   final String? currentFolderId;
 
-  const MoveToFolderSheet({
-    super.key,
-    required this.conversationId,
-    this.currentFolderId,
-  });
+  const MoveToFolderSheet({super.key, required this.conversationId, this.currentFolderId});
 
   @override
   Widget build(BuildContext context) {
@@ -61,11 +57,7 @@ class MoveToFolderSheet extends StatelessWidget {
                     ),
                     GestureDetector(
                       onTap: () => Navigator.pop(context, false),
-                      child: const Icon(
-                        Icons.close,
-                        color: ResponsiveHelper.textTertiary,
-                        size: 24,
-                      ),
+                      child: const Icon(Icons.close, color: ResponsiveHelper.textTertiary, size: 24),
                     ),
                   ],
                 ),
@@ -84,9 +76,7 @@ class MoveToFolderSheet extends StatelessWidget {
                 )
               else
                 ConstrainedBox(
-                  constraints: BoxConstraints(
-                    maxHeight: MediaQuery.of(context).size.height * 0.5,
-                  ),
+                  constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.5),
                   child: ListView.builder(
                     shrinkWrap: true,
                     padding: const EdgeInsets.only(bottom: 20),
@@ -110,11 +100,7 @@ class MoveToFolderSheet extends StatelessWidget {
     );
   }
 
-  void _moveToFolder(
-    BuildContext context,
-    FolderProvider provider,
-    String folderId,
-  ) {
+  void _moveToFolder(BuildContext context, FolderProvider provider, String folderId) {
     HapticFeedback.selectionClick();
     Navigator.of(context).pop(folderId);
     provider.moveConversation(conversationId, folderId);
@@ -126,11 +112,7 @@ class _FolderListItem extends StatelessWidget {
   final bool isCurrentFolder;
   final VoidCallback? onTap;
 
-  const _FolderListItem({
-    required this.folder,
-    required this.isCurrentFolder,
-    this.onTap,
-  });
+  const _FolderListItem({required this.folder, required this.isCurrentFolder, this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -160,13 +142,7 @@ class _FolderListItem extends StatelessWidget {
                     color: folder.colorValue.withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(10),
                   ),
-                  child: Center(
-                    child: FaIcon(
-                      folderIconToFa(folder.icon),
-                      size: 18,
-                      color: folder.colorValue,
-                    ),
-                  ),
+                  child: Center(child: FaIcon(folderIconToFa(folder.icon), size: 18, color: folder.colorValue)),
                 ),
                 const SizedBox(width: 14),
 
@@ -190,10 +166,7 @@ class _FolderListItem extends StatelessWidget {
                             folder.description!,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              fontSize: 12,
-                              color: ResponsiveHelper.textTertiary,
-                            ),
+                            style: const TextStyle(fontSize: 12, color: ResponsiveHelper.textTertiary),
                           ),
                         ),
                     ],
@@ -222,10 +195,7 @@ Future<String?> showMoveToFolderSheet(
     context: context,
     backgroundColor: Colors.transparent,
     isScrollControlled: true,
-    builder: (context) => MoveToFolderSheet(
-      conversationId: conversationId,
-      currentFolderId: currentFolderId,
-    ),
+    builder: (context) => MoveToFolderSheet(conversationId: conversationId, currentFolderId: currentFolderId),
   );
   return result;
 }

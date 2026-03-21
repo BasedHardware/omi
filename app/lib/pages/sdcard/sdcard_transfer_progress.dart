@@ -29,10 +29,7 @@ class _SdCardTransferProgressState extends State<SdCardTransferProgress> with Ti
   void initState() {
     super.initState();
 
-    _particleController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 1000),
-    );
+    _particleController = AnimationController(vsync: this, duration: const Duration(milliseconds: 1000));
   }
 
   @override
@@ -75,10 +72,7 @@ class _SdCardTransferProgressState extends State<SdCardTransferProgress> with Ti
               ),
             ),
             TweenAnimationBuilder(
-              tween: Tween<double>(
-                begin: 0.0,
-                end: widget.progress > 0.0 ? 1.0 : 0.0,
-              ),
+              tween: Tween<double>(begin: 0.0, end: widget.progress > 0.0 ? 1.0 : 0.0),
               duration: const Duration(milliseconds: 800),
               builder: (context, double value, child) {
                 final angle = value * pi; // Rotate from 0 to 180 degrees
@@ -86,30 +80,19 @@ class _SdCardTransferProgressState extends State<SdCardTransferProgress> with Ti
                   alignment: Alignment.center,
                   transform: Matrix4.rotationY(angle),
                   child: value < 0.5
-                      ? const Icon(
-                          Icons.sd_card,
-                          size: 68,
-                          color: Colors.white,
-                        )
+                      ? const Icon(Icons.sd_card, size: 68, color: Colors.white)
                       : Transform.flip(
                           flipX: true,
                           child: Column(
                             children: [
                               Text(
                                 '${widget.displayPercentage}%',
-                                style: const TextStyle(
-                                  fontSize: 32,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.white,
-                                ),
+                                style: const TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: Colors.white),
                               ),
                               const SizedBox(height: 4),
                               Text(
                                 secondsToHumanReadable(widget.secondsRemaining),
-                                style: const TextStyle(
-                                  fontSize: 16,
-                                  color: Colors.white,
-                                ),
+                                style: const TextStyle(fontSize: 16, color: Colors.white),
                               ),
                               Text(context.l10n.remaining, style: const TextStyle(fontSize: 16, color: Colors.white)),
                             ],
@@ -155,10 +138,7 @@ class _SdCardTransferProgressState extends State<SdCardTransferProgress> with Ti
                 child: Container(
                   width: size,
                   height: size,
-                  decoration: const BoxDecoration(
-                    color: Colors.white,
-                    shape: BoxShape.circle,
-                  ),
+                  decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
                 ),
               ),
             ),

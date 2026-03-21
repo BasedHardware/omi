@@ -65,9 +65,7 @@ class _FoundOmiWidgetState extends State<FoundOmiWidget> {
     return Column(
       children: [
         // Background area - takes remaining space for background image
-        Expanded(
-          child: Container(),
-        ),
+        Expanded(child: Container()),
 
         // Bottom drawer card
         Container(
@@ -75,10 +73,7 @@ class _FoundOmiWidgetState extends State<FoundOmiWidget> {
           padding: const EdgeInsets.fromLTRB(32, 20, 32, 0),
           decoration: const BoxDecoration(
             color: Colors.black,
-            borderRadius: BorderRadius.only(
-              topLeft: Radius.circular(40),
-              topRight: Radius.circular(40),
-            ),
+            borderRadius: BorderRadius.only(topLeft: Radius.circular(40), topRight: Radius.circular(40)),
           ),
           child: SafeArea(
             top: false,
@@ -122,18 +117,11 @@ class _FoundOmiWidgetState extends State<FoundOmiWidget> {
                           decoration: BoxDecoration(
                             color: isSelected ? Colors.white : Colors.grey[900],
                             borderRadius: BorderRadius.circular(40),
-                            border: Border.all(
-                              color: isSelected ? Colors.white : Colors.grey[700]!,
-                              width: 1,
-                            ),
+                            border: Border.all(color: isSelected ? Colors.white : Colors.grey[700]!, width: 1),
                           ),
                           child: Row(
                             children: [
-                              FaIcon(
-                                source.icon,
-                                size: 18,
-                                color: isSelected ? Colors.black : Colors.white,
-                              ),
+                              FaIcon(source.icon, size: 18, color: isSelected ? Colors.black : Colors.white),
                               const SizedBox(width: 14),
                               Text(
                                 source.label,
@@ -161,19 +149,11 @@ class _FoundOmiWidgetState extends State<FoundOmiWidget> {
                     ),
                     child: TextField(
                       controller: _otherController,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 16,
-                        fontFamily: 'Manrope',
-                      ),
+                      style: const TextStyle(color: Colors.white, fontSize: 16, fontFamily: 'Manrope'),
                       textAlign: TextAlign.center,
                       decoration: InputDecoration(
                         hintText: context.l10n.pleaseSpecify,
-                        hintStyle: TextStyle(
-                          color: Colors.grey[500],
-                          fontSize: 16,
-                          fontFamily: 'Manrope',
-                        ),
+                        hintStyle: TextStyle(color: Colors.grey[500], fontSize: 16, fontFamily: 'Manrope'),
                         border: InputBorder.none,
                         contentPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
                       ),
@@ -203,18 +183,12 @@ class _FoundOmiWidgetState extends State<FoundOmiWidget> {
                       foregroundColor: _canContinue ? Colors.black : Colors.grey[600],
                       disabledBackgroundColor: Colors.grey[800],
                       disabledForegroundColor: Colors.grey[600],
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(28),
-                      ),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
                       elevation: 0,
                     ),
                     child: Text(
                       context.l10n.continueButton,
-                      style: const TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w600,
-                        fontFamily: 'Manrope',
-                      ),
+                      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600, fontFamily: 'Manrope'),
                     ),
                   ),
                 ),

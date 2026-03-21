@@ -330,7 +330,8 @@ struct SessionRow: View {
                             .lineLimit(1)
                     }
 
-                    if let preview = session.preview, !preview.isEmpty, !isEditing {
+                    if let preview = session.preview, !preview.isEmpty, !isEditing,
+                       !preview.hasPrefix("[Protected"), !preview.hasPrefix("[Encrypted") {
                         Text(preview)
                             .scaledFont(size: 11)
                             .foregroundColor(OmiColors.textTertiary)

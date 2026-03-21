@@ -105,9 +105,6 @@ class PushToTalkManager: ObservableObject {
   // MARK: - Option Key Handling
 
   private func handleFlagsChanged(_ event: NSEvent) {
-    // Don't process PTT when the floating bar is hidden
-    guard FloatingControlBarManager.shared.isVisible else { return }
-
     let settings = ShortcutSettings.shared
 
     let pttActive: Bool
@@ -125,6 +122,15 @@ class PushToTalkManager: ObservableObject {
     case .fn:
       pttActive = event.modifierFlags.contains(.function)
     }
+
+    // Let the first shortcut press reveal the compact bar instead of requiring it
+    // to already be visible. This keeps onboarding step 3 quiet on entry while
+    // still allowing the user to trigger the bar by pressing the key.
+    if pttActive, !FloatingControlBarManager.shared.isVisible {
+      FloatingControlBarManager.shared.show()
+    }
+
+    guard FloatingControlBarManager.shared.isVisible else { return }
 
     if pttActive {
       handleOptionDown()

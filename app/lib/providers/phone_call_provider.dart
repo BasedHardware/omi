@@ -329,8 +329,9 @@ class PhoneCallProvider extends ChangeNotifier {
     _wsReconnectTimer?.cancel();
     _wsReconnectTimer = null;
 
-    var language =
-        SharedPreferencesUtil().hasSetPrimaryLanguage ? SharedPreferencesUtil().userPrimaryLanguage : 'multi';
+    var language = SharedPreferencesUtil().hasSetPrimaryLanguage
+        ? SharedPreferencesUtil().userPrimaryLanguage
+        : 'multi';
 
     var wsUrl = api.buildPhoneCallWebSocketUrl(
       callId: _currentCallId!,

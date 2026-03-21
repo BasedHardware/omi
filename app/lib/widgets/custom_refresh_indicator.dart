@@ -34,13 +34,11 @@ class _CustomRefreshIndicatorState extends State<CustomRefreshIndicator> with Ti
   @override
   void initState() {
     super.initState();
-    _controller = AnimationController(
-      duration: const Duration(milliseconds: 1200),
-      vsync: this,
-    );
-    _animation = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.linear),
-    );
+    _controller = AnimationController(duration: const Duration(milliseconds: 1200), vsync: this);
+    _animation = Tween<double>(
+      begin: 0.0,
+      end: 1.0,
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.linear));
   }
 
   @override
@@ -59,7 +57,9 @@ class _CustomRefreshIndicatorState extends State<CustomRefreshIndicator> with Ti
       if (metrics.pixels <= 0 && notification.scrollDelta! < 0) {
         setState(() {
           _totalDragDistance = math.min(
-              widget.triggerDistance + widget.minDragStartThreshold, _totalDragDistance + (-notification.scrollDelta!));
+            widget.triggerDistance + widget.minDragStartThreshold,
+            _totalDragDistance + (-notification.scrollDelta!),
+          );
 
           // Only show visual feedback after minimum threshold is exceeded
           if (_totalDragDistance > widget.minDragStartThreshold) {
@@ -88,8 +88,10 @@ class _CustomRefreshIndicatorState extends State<CustomRefreshIndicator> with Ti
       if (notification.overscroll < 0 && notification.metrics.pixels <= 0) {
         setState(() {
           final overscrollAmount = -notification.overscroll;
-          _totalDragDistance =
-              math.min(widget.triggerDistance + widget.minDragStartThreshold, _totalDragDistance + overscrollAmount);
+          _totalDragDistance = math.min(
+            widget.triggerDistance + widget.minDragStartThreshold,
+            _totalDragDistance + overscrollAmount,
+          );
 
           if (_totalDragDistance > widget.minDragStartThreshold) {
             _dragOffset = _totalDragDistance - widget.minDragStartThreshold;
@@ -180,10 +182,7 @@ class _CustomRefreshIndicatorState extends State<CustomRefreshIndicator> with Ti
                   gradient: LinearGradient(
                     begin: Alignment.topCenter,
                     end: Alignment.bottomCenter,
-                    colors: [
-                      Colors.black.withOpacity(0.3),
-                      Colors.transparent,
-                    ],
+                    colors: [Colors.black.withOpacity(0.3), Colors.transparent],
                   ),
                 ),
                 child: Padding(
@@ -210,11 +209,8 @@ class CircularDotsIndicator extends CustomPainter {
   final bool isRefreshing;
   final Animation<double> animation;
 
-  CircularDotsIndicator({
-    required this.progress,
-    required this.isRefreshing,
-    required this.animation,
-  }) : super(repaint: animation);
+  CircularDotsIndicator({required this.progress, required this.isRefreshing, required this.animation})
+    : super(repaint: animation);
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -236,10 +232,7 @@ class CircularDotsIndicator extends CustomPainter {
 
     for (int i = 0; i < totalDots; i++) {
       final angle = (i * 2 * math.pi / totalDots) - math.pi / 2;
-      final dotCenter = Offset(
-        center.dx + radius * math.cos(angle),
-        center.dy + radius * math.sin(angle),
-      );
+      final dotCenter = Offset(center.dx + radius * math.cos(angle), center.dy + radius * math.sin(angle));
 
       final isFilled = i < filledDots;
 

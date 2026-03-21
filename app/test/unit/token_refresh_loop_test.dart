@@ -101,11 +101,7 @@ void main() {
   group('Bug 1: getIdToken returns null (not cached token) on failure', () {
     test('fixed: returns null when currentUser is null', () async {
       final cache = MockTokenCache()..authToken = 'expired-token-abc';
-      final result = await getIdTokenFixed(
-        hasCurrentUser: false,
-        refreshToken: () async => 'new-token',
-        cache: cache,
-      );
+      final result = await getIdTokenFixed(hasCurrentUser: false, refreshToken: () async => 'new-token', cache: cache);
       expect(result, isNull);
       expect(cache.authToken, isEmpty, reason: 'cache must be cleared');
     });
@@ -134,11 +130,7 @@ void main() {
 
     test('old behavior: returns cached expired token when currentUser is null (BUG)', () async {
       final cache = MockTokenCache()..authToken = 'expired-token-abc';
-      final result = await getIdTokenOld(
-        hasCurrentUser: false,
-        refreshToken: () async => 'new-token',
-        cache: cache,
-      );
+      final result = await getIdTokenOld(hasCurrentUser: false, refreshToken: () async => 'new-token', cache: cache);
       expect(result, equals('expired-token-abc'), reason: 'OLD code returns cached expired token — this is the bug');
     });
 
@@ -253,11 +245,7 @@ void main() {
       expect(cache.authToken, isEmpty);
 
       // Second call succeeds — restores cache with fresh token
-      final r2 = await getIdTokenFixed(
-        hasCurrentUser: true,
-        refreshToken: () async => 'fresh-token',
-        cache: cache,
-      );
+      final r2 = await getIdTokenFixed(hasCurrentUser: true, refreshToken: () async => 'fresh-token', cache: cache);
       expect(r2, equals('fresh-token'));
       expect(cache.authToken, equals('fresh-token'));
       expect(cache.tokenExpirationTime, greaterThan(0));
@@ -290,45 +278,43 @@ void main() {
 
     test('getIdToken with null refresh result (not exception) returns null', () async {
       final cache = MockTokenCache()..authToken = 'stale';
-      final result = await getIdTokenFixed(
-        hasCurrentUser: true,
-        refreshToken: () async => null,
-        cache: cache,
-      );
+      final result = await getIdTokenFixed(hasCurrentUser: true, refreshToken: () async => null, cache: cache);
       expect(result, isNull, reason: 'null from refresh should propagate as null, not cached token');
     });
   });
 
   group('Full loop: token expiry no longer causes infinite retry', () {
-    test('fixed: expired token -> getIdToken null -> signOut clears cache -> isSignedIn false -> no reconnect',
-        () async {
-      final cache = MockTokenCache()
-        ..authToken = 'expired-token'
-        ..tokenExpirationTime = DateTime.now().subtract(const Duration(hours: 1)).millisecondsSinceEpoch;
+    test(
+      'fixed: expired token -> getIdToken null -> signOut clears cache -> isSignedIn false -> no reconnect',
+      () async {
+        final cache = MockTokenCache()
+          ..authToken = 'expired-token'
+          ..tokenExpirationTime = DateTime.now().subtract(const Duration(hours: 1)).millisecondsSinceEpoch;
 
-      // Step 1: API call gets 401, tries to refresh token
-      // currentUser is null (token expired, Firebase session ended)
-      final refreshedToken = await getIdTokenFixed(
-        hasCurrentUser: false,
-        refreshToken: () async => throw Exception('no user'),
-        cache: cache,
-      );
-      expect(refreshedToken, isNull);
-      expect(cache.authToken, isEmpty);
+        // Step 1: API call gets 401, tries to refresh token
+        // currentUser is null (token expired, Firebase session ended)
+        final refreshedToken = await getIdTokenFixed(
+          hasCurrentUser: false,
+          refreshToken: () async => throw Exception('no user'),
+          cache: cache,
+        );
+        expect(refreshedToken, isNull);
+        expect(cache.authToken, isEmpty);
 
-      // Step 2: signOut is called (clears cache)
-      await signOutFixed(cache);
-      expect(cache.authToken, isEmpty);
-      expect(cache.tokenExpirationTime, equals(0));
+        // Step 2: signOut is called (clears cache)
+        await signOutFixed(cache);
+        expect(cache.authToken, isEmpty);
+        expect(cache.tokenExpirationTime, equals(0));
 
-      // Step 3: isSignedIn returns false (no Firebase user, no cached fallback)
-      final signedIn = isSignedInFixed(hasFirebaseUser: false);
-      expect(signedIn, isFalse);
+        // Step 3: isSignedIn returns false (no Firebase user, no cached fallback)
+        final signedIn = isSignedInFixed(hasFirebaseUser: false);
+        expect(signedIn, isFalse);
 
-      // Step 4: keepAlive timer checks auth — does NOT reconnect
-      final shouldReconnect = shouldReconnectFixed(isSignedIn: signedIn, socketDisconnected: true);
-      expect(shouldReconnect, isFalse, reason: 'Loop is broken — no more reconnect attempts');
-    });
+        // Step 4: keepAlive timer checks auth — does NOT reconnect
+        final shouldReconnect = shouldReconnectFixed(isSignedIn: signedIn, socketDisconnected: true);
+        expect(shouldReconnect, isFalse, reason: 'Loop is broken — no more reconnect attempts');
+      },
+    );
 
     test('old behavior: expired token causes infinite loop', () async {
       final cache = MockTokenCache()

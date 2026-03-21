@@ -96,11 +96,7 @@ class PaymentMethodCard extends StatelessWidget {
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             if (isActive) ...[
-                              const Icon(
-                                Icons.check_circle,
-                                color: Colors.green,
-                                size: 16,
-                              ),
+                              const Icon(Icons.check_circle, color: Colors.green, size: 16),
                               const SizedBox(width: 4),
                             ] else if (isConnected && !isActive) ...[
                               Icon(
@@ -137,14 +133,9 @@ class PaymentMethodCard extends StatelessWidget {
                       backgroundColor: Colors.white,
                       foregroundColor: Colors.black,
                       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                     ),
-                    child: Text(
-                      context.l10n.update,
-                      style: const TextStyle(fontWeight: FontWeight.w500),
-                    ),
+                    child: Text(context.l10n.update, style: const TextStyle(fontWeight: FontWeight.w500)),
                   ),
                   const SizedBox(width: 16),
                 ],
@@ -162,15 +153,9 @@ class PaymentMethodCard extends StatelessWidget {
                       }
                     },
                     itemBuilder: (context) => [
-                      PopupMenuItem(
-                        value: 'update',
-                        child: Text(context.l10n.update),
-                      ),
+                      PopupMenuItem(value: 'update', child: Text(context.l10n.update)),
                       if (onSetActiveTap != null)
-                        PopupMenuItem(
-                          value: 'setActive',
-                          child: Text(context.l10n.setActive),
-                        ),
+                        PopupMenuItem(value: 'setActive', child: Text(context.l10n.setActive)),
                     ],
                   ),
                 ],
@@ -181,14 +166,9 @@ class PaymentMethodCard extends StatelessWidget {
                       backgroundColor: Colors.white,
                       foregroundColor: Colors.black,
                       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                     ),
-                    child: Text(
-                      context.l10n.connect,
-                      style: const TextStyle(fontWeight: FontWeight.w500),
-                    ),
+                    child: Text(context.l10n.connect, style: const TextStyle(fontWeight: FontWeight.w500)),
                   ),
                 ],
               ],

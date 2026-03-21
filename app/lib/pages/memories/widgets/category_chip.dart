@@ -77,11 +77,7 @@ class CategoryChip extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           if (showIcon) ...[
-            Icon(
-              categoryIcon,
-              size: 14,
-              color: isSelected && onTap != null ? Colors.white : categoryColor,
-            ),
+            Icon(categoryIcon, size: 14, color: isSelected && onTap != null ? Colors.white : categoryColor),
             const SizedBox(width: 4),
           ],
           if (showCheckmark && isSelected) ...[
@@ -101,15 +97,9 @@ class CategoryChip extends StatelessWidget {
     );
 
     if (onTap != null) {
-      return GestureDetector(
-        onTap: onTap,
-        child: chip,
-      );
+      return GestureDetector(onTap: onTap, child: chip);
     }
 
-    return Align(
-      alignment: Alignment.centerLeft,
-      child: chip,
-    );
+    return Align(alignment: Alignment.centerLeft, child: chip);
   }
 }

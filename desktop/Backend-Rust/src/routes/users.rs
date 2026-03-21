@@ -835,7 +835,10 @@ async fn delete_account(
         .config
         .firebase_project_id
         .clone()
-        .unwrap_or_else(|| "based-hardware".to_string());
+        .ok_or_else(|| {
+            tracing::error!("FIREBASE_PROJECT_ID not set — cannot delete Firebase Auth account");
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
     state
         .firestore
         .delete_firebase_auth_user(&project_id, &user.uid)

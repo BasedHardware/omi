@@ -19,15 +19,8 @@ class OmiTextSelectionToolbar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return CupertinoTheme(
-      data: const CupertinoThemeData(
-        brightness: Brightness.dark,
-        primaryColor: Colors.blue,
-      ),
-      child: CupertinoTextSelectionToolbar(
-        anchorAbove: anchorAbove,
-        anchorBelow: anchorBelow,
-        children: children,
-      ),
+      data: const CupertinoThemeData(brightness: Brightness.dark, primaryColor: Colors.blue),
+      child: CupertinoTextSelectionToolbar(anchorAbove: anchorAbove, anchorBelow: anchorBelow, children: children),
     );
   }
 }
@@ -36,18 +29,11 @@ class OmiToolbarAction extends StatelessWidget {
   final String label;
   final VoidCallback onPressed;
 
-  const OmiToolbarAction({
-    super.key,
-    required this.label,
-    required this.onPressed,
-  });
+  const OmiToolbarAction({super.key, required this.label, required this.onPressed});
 
   @override
   Widget build(BuildContext context) {
-    return CupertinoTextSelectionToolbarButton.text(
-      onPressed: onPressed,
-      text: label,
-    );
+    return CupertinoTextSelectionToolbarButton.text(onPressed: onPressed, text: label);
   }
 }
 
@@ -79,44 +65,47 @@ Widget omiSelectionMenuBuilder(
 
   // Ask Omi
   if (text.trim().isNotEmpty) {
-    toolbarItems.add(OmiToolbarAction(
-      label: context.l10n.askOmi,
-      onPressed: () {
-        onAskOmi(text);
-        delegate.hideToolbar();
-      },
-    ));
+    toolbarItems.add(
+      OmiToolbarAction(
+        label: context.l10n.askOmi,
+        onPressed: () {
+          onAskOmi(text);
+          delegate.hideToolbar();
+        },
+      ),
+    );
   }
 
   if (text.isNotEmpty) {
     if (toolbarItems.isNotEmpty) {
       toolbarItems.add(const OmiToolbarDivider());
     }
-    toolbarItems.add(OmiToolbarAction(
-      label: context.l10n.copy,
-      onPressed: () {
-        delegate.copySelection(SelectionChangedCause.toolbar);
-        delegate.hideToolbar();
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(context.l10n.messageCopied),
-            duration: const Duration(seconds: 2),
-          ),
-        );
-      },
-    ));
+    toolbarItems.add(
+      OmiToolbarAction(
+        label: context.l10n.copy,
+        onPressed: () {
+          delegate.copySelection(SelectionChangedCause.toolbar);
+          delegate.hideToolbar();
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text(context.l10n.messageCopied), duration: const Duration(seconds: 2)));
+        },
+      ),
+    );
   }
 
   // Select All
   if (toolbarItems.isNotEmpty) {
     toolbarItems.add(const OmiToolbarDivider());
   }
-  toolbarItems.add(OmiToolbarAction(
-    label: context.l10n.selectAll,
-    onPressed: () {
-      delegate.selectAll(SelectionChangedCause.toolbar);
-    },
-  ));
+  toolbarItems.add(
+    OmiToolbarAction(
+      label: context.l10n.selectAll,
+      onPressed: () {
+        delegate.selectAll(SelectionChangedCause.toolbar);
+      },
+    ),
+  );
 
   if (toolbarItems.isEmpty) {
     return const SizedBox.shrink();

@@ -71,6 +71,7 @@ from models.conversation import Conversation
 from models.other import Person
 from utils import stripe
 from utils.llm.persona import condense_conversations, condense_memories, generate_persona_description, condense_tweets
+from utils.llm.usage_tracker import track_usage, Features
 from utils.social import get_twitter_timeline, TwitterProfile, get_twitter_profile
 import logging
 
@@ -627,7 +628,8 @@ async def generate_persona_prompt(uid: str, persona: dict):
     # Get and condense recent conversations
     conversations = get_conversations(uid, limit=10)
     conversation_history = Conversation.conversations_to_string(conversations)
-    conversation_history = condense_conversations([conversation_history])
+    with track_usage(uid, Features.PERSONA):
+        conversation_history = condense_conversations([conversation_history])
 
     tweets = None
     if "twitter" in persona['connected_accounts']:
@@ -637,7 +639,8 @@ async def generate_persona_prompt(uid: str, persona: dict):
         tweets = [{'tweet': tweet.text, 'posted_at': tweet.created_at} for tweet in timeline.timeline]
 
     # Condense memories
-    memories_text = condense_memories([memory['content'] for memory in memories], user_name)
+    with track_usage(uid, Features.PERSONA):
+        memories_text = condense_memories([memory['content'] for memory in memories], user_name)
 
     # Generate updated chat prompt
     persona_prompt = f"""
@@ -702,7 +705,8 @@ def generate_persona_desc(uid: str, persona_name: str):
     """Generate a persona description based on user memories."""
     memories = get_memories(uid, limit=250)
 
-    persona_description = generate_persona_description(memories, persona_name)
+    with track_usage(uid, Features.PERSONA):
+        persona_description = generate_persona_description(memories, persona_name)
     return persona_description
 
 
@@ -751,7 +755,9 @@ async def update_persona_prompt(persona: dict):
     # Get and condense recent conversations
     conversations = get_conversations(persona['uid'], limit=10)
     conversation_history = Conversation.conversations_to_string(conversations)
-    conversation_history = condense_conversations([conversation_history])
+    uid = persona['uid']
+    with track_usage(uid, Features.PERSONA):
+        conversation_history = condense_conversations([conversation_history])
 
     condensed_tweets = None
     # Condense tweets
@@ -759,10 +765,12 @@ async def update_persona_prompt(persona: dict):
         # Get latest tweets
         timeline = await get_twitter_timeline(persona['twitter']['username'])
         tweets = [tweet.text for tweet in timeline.timeline]
-        condensed_tweets = condense_tweets(tweets, persona['name'])
+        with track_usage(uid, Features.PERSONA):
+            condensed_tweets = condense_tweets(tweets, persona['name'])
 
     # Condense memories
-    memories_text = condense_memories([memory['content'] for memory in memories], user_name)
+    with track_usage(uid, Features.PERSONA):
+        memories_text = condense_memories([memory['content'] for memory in memories], user_name)
 
     # Generate updated chat prompt
     persona_prompt = f"""

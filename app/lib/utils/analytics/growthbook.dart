@@ -21,10 +21,7 @@ class GrowthbookUtil {
   static Future<void> init() async {
     if (Env.growthbookApiKey == null) return;
     print('GrowthbookUtil init');
-    var attr = {
-      'id': SharedPreferencesUtil().uid,
-      'device': Platform.isAndroid ? 'android' : 'ios',
-    };
+    var attr = {'id': SharedPreferencesUtil().uid, 'device': Platform.isAndroid ? 'android' : 'ios'};
     _gb = await GBSDKBuilderApp(
       apiKey: Env.growthbookApiKey!,
       backgroundSync: true,

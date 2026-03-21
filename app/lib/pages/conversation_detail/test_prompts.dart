@@ -31,10 +31,7 @@ class _TestPromptsPageState extends State<TestPromptsPage> {
                 ? const SizedBox(
                     width: 16,
                     height: 16,
-                    child: CircularProgressIndicator(
-                      color: Colors.white,
-                      strokeWidth: 2.0,
-                    ),
+                    child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.0),
                   )
                 : const Icon(Icons.send),
           ),
@@ -58,24 +55,16 @@ class _TestPromptsPageState extends State<TestPromptsPage> {
               autofocus: true,
             ),
           ),
-          const SizedBox(
-            height: 16,
-          ),
+          const SizedBox(height: 16),
           result == ''
               ? const SizedBox.shrink()
               : Padding(
                   padding: const EdgeInsets.all(16),
-                  child: Text(
-                    context.l10n.result,
-                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
-                  ),
+                  child: Text(context.l10n.result, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500)),
                 ),
           result == ''
               ? const SizedBox.shrink()
-              : Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Text(result.replaceAll('**', '')),
-                ),
+              : Padding(padding: const EdgeInsets.all(16), child: Text(result.replaceAll('**', ''))),
           const SizedBox(height: 32),
         ],
       ),
@@ -90,10 +79,7 @@ class _TestPromptsPageState extends State<TestPromptsPage> {
       loading = true;
     });
 
-    var response = await testConversationPrompt(
-      controller.text,
-      widget.conversation.id,
-    );
+    var response = await testConversationPrompt(controller.text, widget.conversation.id);
     print('response: $response');
     result = response.toString();
     setState(() {

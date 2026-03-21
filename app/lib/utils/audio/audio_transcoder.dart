@@ -51,19 +51,11 @@ class PcmToWavTranscoder implements IAudioTranscoder {
   final int bitsPerSample;
   final int channels;
 
-  PcmToWavTranscoder({
-    this.sampleRate = 16000,
-    this.bitsPerSample = 16,
-    this.channels = 1,
-  });
+  PcmToWavTranscoder({this.sampleRate = 16000, this.bitsPerSample = 16, this.channels = 1});
 
   @override
   Uint8List transcode(Uint8List pcmData) {
-    return WavBytes.fromPcm(
-      pcmData,
-      sampleRate: sampleRate,
-      numChannels: channels,
-    ).asBytes();
+    return WavBytes.fromPcm(pcmData, sampleRate: sampleRate, numChannels: channels).asBytes();
   }
 
   @override
@@ -93,10 +85,8 @@ class OpusToWavTranscoder implements IAudioTranscoder {
   final int channels;
   final SimpleOpusDecoder _decoder;
 
-  OpusToWavTranscoder({
-    this.sampleRate = 16000,
-    this.channels = 1,
-  }) : _decoder = SimpleOpusDecoder(sampleRate: sampleRate, channels: channels);
+  OpusToWavTranscoder({this.sampleRate = 16000, this.channels = 1})
+    : _decoder = SimpleOpusDecoder(sampleRate: sampleRate, channels: channels);
 
   @override
   Uint8List transcode(Uint8List opusData) {
@@ -134,10 +124,7 @@ class RawPcmTranscoder implements IAudioTranscoder {
   final int sampleRate;
   final int channels;
 
-  RawPcmTranscoder({
-    this.sampleRate = 16000,
-    this.channels = 1,
-  });
+  RawPcmTranscoder({this.sampleRate = 16000, this.channels = 1});
 
   @override
   Uint8List transcode(Uint8List pcmData) => pcmData;
@@ -171,10 +158,8 @@ class OpusToRawPcmTranscoder implements IAudioTranscoder {
   final int channels;
   final SimpleOpusDecoder _decoder;
 
-  OpusToRawPcmTranscoder({
-    this.sampleRate = 16000,
-    this.channels = 1,
-  }) : _decoder = SimpleOpusDecoder(sampleRate: sampleRate, channels: channels);
+  OpusToRawPcmTranscoder({this.sampleRate = 16000, this.channels = 1})
+    : _decoder = SimpleOpusDecoder(sampleRate: sampleRate, channels: channels);
 
   @override
   Uint8List transcode(Uint8List opusData) {
@@ -224,11 +209,8 @@ class OpusFramesToWavTranscoder implements IAudioTranscoder {
   final int frameSizeBytes;
   final SimpleOpusDecoder _decoder;
 
-  OpusFramesToWavTranscoder({
-    this.sampleRate = 16000,
-    this.channels = 1,
-    this.frameSizeBytes = 80,
-  }) : _decoder = SimpleOpusDecoder(sampleRate: sampleRate, channels: channels);
+  OpusFramesToWavTranscoder({this.sampleRate = 16000, this.channels = 1, this.frameSizeBytes = 80})
+    : _decoder = SimpleOpusDecoder(sampleRate: sampleRate, channels: channels);
 
   @override
   Uint8List transcode(Uint8List opusFramesData) {
@@ -284,11 +266,7 @@ class OpusFramesToWavTranscoder implements IAudioTranscoder {
 }
 
 class AudioTranscoderFactory {
-  static IAudioTranscoder createToWav({
-    required BleAudioCodec sourceCodec,
-    required int sampleRate,
-    int channels = 1,
-  }) {
+  static IAudioTranscoder createToWav({required BleAudioCodec sourceCodec, required int sampleRate, int channels = 1}) {
     switch (sourceCodec) {
       case BleAudioCodec.pcm8:
         return PcmToWavTranscoder(sampleRate: 8000, channels: channels);

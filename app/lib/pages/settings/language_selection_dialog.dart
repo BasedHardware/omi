@@ -9,8 +9,12 @@ import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
 class LanguageSelectionDialog {
-  static Future<void> show(BuildContext context,
-      {bool isRequired = false, bool forceShow = false, bool showSingleLanguageWarning = false}) async {
+  static Future<void> show(
+    BuildContext context, {
+    bool isRequired = false,
+    bool forceShow = false,
+    bool showSingleLanguageWarning = false,
+  }) async {
     final homeProvider = Provider.of<HomeProvider>(context, listen: false);
 
     // If the user has already set a primary language and it's not required or forced, don't show the dialog
@@ -84,11 +88,7 @@ class LanguageSelectionDialog {
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
               title: Text(
                 context.l10n.tellUsPrimaryLanguage,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                ),
+                style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
               ),
               content: SizedBox(
                 width: double.maxFinite,
@@ -99,10 +99,7 @@ class LanguageSelectionDialog {
                   children: [
                     Text(
                       context.l10n.languageForTranscription,
-                      style: const TextStyle(
-                        color: Colors.grey,
-                        fontSize: 14,
-                      ),
+                      style: const TextStyle(color: Colors.grey, fontSize: 14),
                     ),
                     if (showSingleLanguageWarning) ...[
                       const SizedBox(height: 8),
@@ -155,10 +152,7 @@ class LanguageSelectionDialog {
                     Expanded(
                       child: filteredLanguages.isEmpty
                           ? Center(
-                              child: Text(
-                                context.l10n.noLanguagesFound,
-                                style: const TextStyle(color: Colors.grey),
-                              ),
+                              child: Text(context.l10n.noLanguagesFound, style: const TextStyle(color: Colors.grey)),
                             )
                           : ListView.builder(
                               controller: _scrollController,
@@ -168,17 +162,13 @@ class LanguageSelectionDialog {
                                 final isSelected = selectedLanguage == language.value;
 
                                 return ListTile(
-                                  title: Text(
-                                    language.key,
-                                    style: const TextStyle(color: Colors.white),
-                                  ),
-                                  trailing:
-                                      isSelected ? const Icon(Icons.check_circle, color: Colors.deepPurple) : null,
+                                  title: Text(language.key, style: const TextStyle(color: Colors.white)),
+                                  trailing: isSelected
+                                      ? const Icon(Icons.check_circle, color: Colors.deepPurple)
+                                      : null,
                                   selected: isSelected,
                                   selectedTileColor: Colors.deepPurple.withOpacity(0.2),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                                   onTap: () {
                                     setState(() {
                                       // Toggle selection - if already selected, unselect it
@@ -197,19 +187,23 @@ class LanguageSelectionDialog {
                     ),
                     // Auto-scroll to selected language when selection changes
                     if (selectedLanguage != null)
-                      Builder(builder: (context) {
-                        WidgetsBinding.instance.addPostFrameCallback((_) {
-                          final selectedIndex = filteredLanguages.indexWhere((lang) => lang.value == selectedLanguage);
-                          if (selectedIndex != -1 && _scrollController.hasClients) {
-                            _scrollController.animateTo(
-                              selectedIndex * 56.0, // Approximate height of each list item
-                              duration: const Duration(milliseconds: 300),
-                              curve: Curves.easeInOut,
+                      Builder(
+                        builder: (context) {
+                          WidgetsBinding.instance.addPostFrameCallback((_) {
+                            final selectedIndex = filteredLanguages.indexWhere(
+                              (lang) => lang.value == selectedLanguage,
                             );
-                          }
-                        });
-                        return const SizedBox.shrink();
-                      }),
+                            if (selectedIndex != -1 && _scrollController.hasClients) {
+                              _scrollController.animateTo(
+                                selectedIndex * 56.0, // Approximate height of each list item
+                                duration: const Duration(milliseconds: 300),
+                                curve: Curves.easeInOut,
+                              );
+                            }
+                          });
+                          return const SizedBox.shrink();
+                        },
+                      ),
                   ],
                 ),
               ),
@@ -219,9 +213,7 @@ class LanguageSelectionDialog {
                     onPressed: () {
                       Navigator.of(context).pop();
                     },
-                    style: TextButton.styleFrom(
-                      foregroundColor: Colors.grey,
-                    ),
+                    style: TextButton.styleFrom(foregroundColor: Colors.grey),
                     child: Text(context.l10n.skip),
                   ),
                 ElevatedButton(
@@ -229,8 +221,10 @@ class LanguageSelectionDialog {
                       ? null
                       : () async {
                           final userProvider = Provider.of<UserProvider>(context, listen: false);
-                          final success = await homeProvider.updateUserPrimaryLanguage(selectedLanguage!,
-                              userProvider: userProvider);
+                          final success = await homeProvider.updateUserPrimaryLanguage(
+                            selectedLanguage!,
+                            userProvider: userProvider,
+                          );
                           if (success && context.mounted) {
                             Provider.of<CaptureProvider>(context, listen: false).onRecordProfileSettingChanged();
                             Navigator.of(context).pop();

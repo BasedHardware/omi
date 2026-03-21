@@ -12,12 +12,7 @@ class FirmwareUpdateStep {
   final IconData icon;
   final bool isLastStep;
 
-  FirmwareUpdateStep({
-    required this.title,
-    required this.description,
-    required this.icon,
-    this.isLastStep = false,
-  });
+  FirmwareUpdateStep({required this.title, required this.description, required this.icon, this.isLastStep = false});
 }
 
 /// Shows the firmware update bottom sheet
@@ -30,10 +25,7 @@ void showFirmwareUpdateSheet({
     context: context,
     backgroundColor: Colors.transparent,
     isScrollControlled: true,
-    builder: (context) => FirmwareUpdateSheet(
-      steps: steps,
-      onUpdateStart: onUpdateStart,
-    ),
+    builder: (context) => FirmwareUpdateSheet(steps: steps, onUpdateStart: onUpdateStart),
   );
 }
 
@@ -41,11 +33,7 @@ class FirmwareUpdateSheet extends StatefulWidget {
   final Function() onUpdateStart;
   final List<String> steps;
 
-  const FirmwareUpdateSheet({
-    super.key,
-    required this.onUpdateStart,
-    required this.steps,
-  });
+  const FirmwareUpdateSheet({super.key, required this.onUpdateStart, required this.steps});
 
   @override
   State<FirmwareUpdateSheet> createState() => _FirmwareUpdateSheetState();
@@ -88,10 +76,7 @@ class _FirmwareUpdateSheetState extends State<FirmwareUpdateSheet> {
       widget.onUpdateStart();
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(context.l10n.failedToStartUpdate(e.toString())),
-          backgroundColor: Colors.red,
-        ),
+        SnackBar(content: Text(context.l10n.failedToStartUpdate(e.toString())), backgroundColor: Colors.red),
       );
     }
   }
@@ -125,11 +110,7 @@ class _FirmwareUpdateSheetState extends State<FirmwareUpdateSheet> {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const FaIcon(
-                    FontAwesomeIcons.circleExclamation,
-                    color: Color(0xFFFFB800),
-                    size: 20,
-                  ),
+                  const FaIcon(FontAwesomeIcons.circleExclamation, color: Color(0xFFFFB800), size: 20),
                   const SizedBox(width: 10),
                   Text(
                     context.l10n.beforeUpdateMakeSure,
@@ -148,17 +129,13 @@ class _FirmwareUpdateSheetState extends State<FirmwareUpdateSheet> {
             // Steps list
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 24),
-              child: Column(
-                children: stepKeys.map((key) => _buildStepItem(_getStepMap(context)[key]!)).toList(),
-              ),
+              child: Column(children: stepKeys.map((key) => _buildStepItem(_getStepMap(context)[key]!)).toList()),
             ),
 
             // Footer with swipe to confirm
             Padding(
               padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
-              child: SwipeToConfirm(
-                onConfirmed: _onConfirmed,
-              ),
+              child: SwipeToConfirm(onConfirmed: _onConfirmed),
             ),
           ],
         ),
@@ -227,10 +204,7 @@ class _FirmwareUpdateSheetState extends State<FirmwareUpdateSheet> {
 class SwipeToConfirm extends StatefulWidget {
   final VoidCallback onConfirmed;
 
-  const SwipeToConfirm({
-    super.key,
-    required this.onConfirmed,
-  });
+  const SwipeToConfirm({super.key, required this.onConfirmed});
 
   @override
   State<SwipeToConfirm> createState() => _SwipeToConfirmState();
@@ -250,13 +224,11 @@ class _SwipeToConfirmState extends State<SwipeToConfirm> with SingleTickerProvid
   @override
   void initState() {
     super.initState();
-    _animationController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 300),
-    );
-    _animation = Tween<double>(begin: 0, end: 0).animate(
-      CurvedAnimation(parent: _animationController, curve: Curves.easeOut),
-    );
+    _animationController = AnimationController(vsync: this, duration: const Duration(milliseconds: 300));
+    _animation = Tween<double>(
+      begin: 0,
+      end: 0,
+    ).animate(CurvedAnimation(parent: _animationController, curve: Curves.easeOut));
     _animationController.addListener(() {
       setState(() {
         _dragPosition = _animation.value;
@@ -314,11 +286,7 @@ class _SwipeToConfirmState extends State<SwipeToConfirm> with SingleTickerProvid
                           children: [
                             Text(
                               context.l10n.confirmed,
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 16,
-                                fontWeight: FontWeight.w600,
-                              ),
+                              style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
                             ),
                             const SizedBox(width: 8),
                             Container(
@@ -328,11 +296,7 @@ class _SwipeToConfirmState extends State<SwipeToConfirm> with SingleTickerProvid
                                 color: context.appColors.textPrimary.withOpacity(0.2),
                                 borderRadius: BorderRadius.circular(12),
                               ),
-                              child: const Icon(
-                                Icons.check,
-                                color: Colors.white,
-                                size: 16,
-                              ),
+                              child: const Icon(Icons.check, color: Colors.white, size: 16),
                             ),
                           ],
                         )
@@ -389,9 +353,10 @@ class _SwipeToConfirmState extends State<SwipeToConfirm> with SingleTickerProvid
                           widget.onConfirmed();
                         });
                       } else {
-                        _animation = Tween<double>(begin: _dragPosition, end: 0).animate(
-                          CurvedAnimation(parent: _animationController, curve: Curves.easeOut),
-                        );
+                        _animation = Tween<double>(
+                          begin: _dragPosition,
+                          end: 0,
+                        ).animate(CurvedAnimation(parent: _animationController, curve: Curves.easeOut));
                         _animationController.forward(from: 0);
                       }
 
@@ -406,19 +371,11 @@ class _SwipeToConfirmState extends State<SwipeToConfirm> with SingleTickerProvid
                         color: Colors.white,
                         borderRadius: BorderRadius.circular(_buttonSize / 2),
                         boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withOpacity(0.2),
-                            blurRadius: 8,
-                            offset: const Offset(0, 2),
-                          ),
+                          BoxShadow(color: Colors.black.withOpacity(0.2), blurRadius: 8, offset: const Offset(0, 2)),
                         ],
                       ),
                       child: const Center(
-                        child: FaIcon(
-                          FontAwesomeIcons.chevronRight,
-                          color: Color(0xFF2A2A2E),
-                          size: 18,
-                        ),
+                        child: FaIcon(FontAwesomeIcons.chevronRight, color: Color(0xFF2A2A2E), size: 18),
                       ),
                     ),
                   ),
