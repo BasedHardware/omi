@@ -84,7 +84,7 @@ class FairUseBannerHarness extends StatelessWidget {
             ),
             const SizedBox(width: 10),
             Text(
-              '${l10n.fairUsePolicy}: $stageLabel',
+              l10n.fairUseBannerStatus(stageLabel),
               style: TextStyle(color: dotColor, fontSize: 13, fontWeight: FontWeight.w500),
             ),
             const Spacer(),
