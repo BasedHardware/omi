@@ -8630,4 +8630,14 @@ class AppLocalizationsFi extends AppLocalizations {
   String fairUseBannerStatus(String status) {
     return 'Reilu käyttö: $status';
   }
+
+  @override
+  String get improveConnectionTitle => 'Paranna yhteyttä';
+
+  @override
+  String get improveConnectionContent =>
+      'Olemme parantaneet Omin yhteydenpitoa laitteeseesi. Aktivoidaksesi tämän, siirry Laitteen tiedot -sivulle, napauta \"Katkaise laitteen yhteys\" ja yhdistä laitteesi uudelleen.';
+
+  @override
+  String get improveConnectionAction => 'Selvä';
 }

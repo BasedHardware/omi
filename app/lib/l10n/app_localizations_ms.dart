@@ -8655,4 +8655,14 @@ class AppLocalizationsMs extends AppLocalizations {
   String fairUseBannerStatus(String status) {
     return 'Penggunaan Saksama: $status';
   }
+
+  @override
+  String get improveConnectionTitle => 'Tingkatkan Sambungan';
+
+  @override
+  String get improveConnectionContent =>
+      'Kami telah meningkatkan cara Omi kekal bersambung dengan peranti anda. Untuk mengaktifkan ini, pergi ke halaman Maklumat Peranti, ketik \"Putuskan Peranti\", dan gandingkan semula peranti anda.';
+
+  @override
+  String get improveConnectionAction => 'Faham';
 }

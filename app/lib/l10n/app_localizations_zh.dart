@@ -8476,4 +8476,13 @@ class AppLocalizationsZh extends AppLocalizations {
   String fairUseBannerStatus(String status) {
     return '公平使用：$status';
   }
+
+  @override
+  String get improveConnectionTitle => '改善连接';
+
+  @override
+  String get improveConnectionContent => '我们改进了 Omi 与您设备保持连接的方式。要激活此功能，请前往设备信息页面，点击\"断开设备\"，然后重新配对您的设备。';
+
+  @override
+  String get improveConnectionAction => '知道了';
 }

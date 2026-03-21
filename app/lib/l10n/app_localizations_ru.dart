@@ -8660,4 +8660,14 @@ class AppLocalizationsRu extends AppLocalizations {
   String fairUseBannerStatus(String status) {
     return 'Добросовестное использование: $status';
   }
+
+  @override
+  String get improveConnectionTitle => 'Улучшить соединение';
+
+  @override
+  String get improveConnectionContent =>
+      'Мы улучшили способ подключения Omi к вашему устройству. Чтобы активировать это, перейдите на страницу информации об устройстве, нажмите \"Отключить устройство\" и снова подключите ваше устройство.';
+
+  @override
+  String get improveConnectionAction => 'Понятно';
 }

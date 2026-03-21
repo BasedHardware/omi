@@ -2770,5 +2770,8 @@
                 "type": "String"
             }
         }
-    }
+    },
+    "improveConnectionTitle": "Verbindung verbessern",
+    "improveConnectionContent": "Wir haben verbessert, wie Omi mit deinem Gerät verbunden bleibt. Um dies zu aktivieren, gehe zur Geräteinfo-Seite, tippe auf \"Gerät trennen\" und verbinde dein Gerät erneut.",
+    "improveConnectionAction": "Verstanden"
 }

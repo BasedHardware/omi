@@ -8683,4 +8683,14 @@ class AppLocalizationsCa extends AppLocalizations {
   String fairUseBannerStatus(String status) {
     return 'Ús raonable: $status';
   }
+
+  @override
+  String get improveConnectionTitle => 'Millorar la connexió';
+
+  @override
+  String get improveConnectionContent =>
+      'Hem millorat com Omi es manté connectat al teu dispositiu. Per activar-ho, ves a la pàgina d\'informació del dispositiu, toca \"Desconnectar dispositiu\" i torna a vincular el teu dispositiu.';
+
+  @override
+  String get improveConnectionAction => 'Entesos';
 }

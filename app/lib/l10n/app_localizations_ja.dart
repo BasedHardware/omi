@@ -8487,4 +8487,14 @@ class AppLocalizationsJa extends AppLocalizations {
   String fairUseBannerStatus(String status) {
     return '公正使用：$status';
   }
+
+  @override
+  String get improveConnectionTitle => '接続を改善';
+
+  @override
+  String get improveConnectionContent =>
+      'Omiがデバイスとの接続を維持する方法を改善しました。これを有効にするには、デバイス情報ページに移動し、「デバイスを切断」をタップしてから、デバイスを再度ペアリングしてください。';
+
+  @override
+  String get improveConnectionAction => '了解';
 }

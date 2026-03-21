@@ -2802,5 +2802,8 @@
                 "type": "String"
             }
         }
-    }
+    },
+    "improveConnectionTitle": "Ühenduse parandamine",
+    "improveConnectionContent": "Oleme parandanud, kuidas Omi jääb teie seadmega ühendusse. Selle aktiveerimiseks minge seadme teabe lehele, puudutage \"Katkesta seadme ühendus\" ja ühendage seade uuesti.",
+    "improveConnectionAction": "Selge"
 }

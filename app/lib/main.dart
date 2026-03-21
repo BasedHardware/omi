@@ -14,6 +14,8 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart' as ble;
+import 'package:omi/gen/pigeon_communicator.g.dart';
+import 'package:omi/services/bridges/ble_bridge.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:opus_dart/opus_dart.dart';
@@ -72,7 +74,6 @@ import 'package:omi/services/services.dart';
 import 'package:omi/utils/analytics/growthbook.dart';
 import 'package:omi/utils/debug_log_manager.dart';
 import 'package:omi/utils/debugging/crashlytics_manager.dart';
-import 'package:omi/utils/enums.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/environment_detector.dart';
 import 'package:omi/pages/settings/developer.dart';
@@ -187,9 +188,18 @@ Future _init() async {
   if (PlatformService.isMobile) initOpus(await opus_flutter.load());
 
   await GrowthbookUtil.init();
-  if (!PlatformService.isWindows) {
+  if (!PlatformService.isWindows && !PlatformService.isMobile) {
     ble.FlutterBluePlus.setOptions(restoreState: true);
     ble.FlutterBluePlus.setLogLevel(ble.LogLevel.info, color: true);
+  }
+
+  // Register native BLE bridge
+  if (PlatformService.isMobile) {
+    BleFlutterApi.setUp(BleBridge.instance);
+
+    BleBridge.instance.stateRestoredCallback = (List<String> peripheralUuids) {
+      Logger.debug('main: restored ${peripheralUuids.length} BLE peripherals');
+    };
   }
 
   await CrashlyticsManager.init();

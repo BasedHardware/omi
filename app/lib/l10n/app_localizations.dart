@@ -16118,6 +16118,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Fair Use: {status}'**
   String fairUseBannerStatus(String status);
+
+  /// No description provided for @improveConnectionTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Improve Connection'**
+  String get improveConnectionTitle;
+
+  /// No description provided for @improveConnectionContent.
+  ///
+  /// In en, this message translates to:
+  /// **'We\'ve improved how Omi stays connected to your device. To activate this, please go to the Device Info page, tap \"Disconnect Device\", and then pair your device again.'**
+  String get improveConnectionContent;
+
+  /// No description provided for @improveConnectionAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Got it'**
+  String get improveConnectionAction;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

@@ -8615,4 +8615,14 @@ class AppLocalizationsDa extends AppLocalizations {
   String fairUseBannerStatus(String status) {
     return 'Fair brug: $status';
   }
+
+  @override
+  String get improveConnectionTitle => 'Forbedre forbindelsen';
+
+  @override
+  String get improveConnectionContent =>
+      'Vi har forbedret, hvordan Omi forbliver forbundet til din enhed. For at aktivere dette, gå til enhedsinfosiden, tryk på \"Afbryd enhed\", og tilslut din enhed igen.';
+
+  @override
+  String get improveConnectionAction => 'Forstået';
 }

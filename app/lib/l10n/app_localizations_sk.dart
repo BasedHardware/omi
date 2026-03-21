@@ -8621,4 +8621,14 @@ class AppLocalizationsSk extends AppLocalizations {
   String fairUseBannerStatus(String status) {
     return 'Spravodlivé používanie: $status';
   }
+
+  @override
+  String get improveConnectionTitle => 'Zlepšiť pripojenie';
+
+  @override
+  String get improveConnectionContent =>
+      'Vylepšili sme spôsob, akým Omi zostáva pripojené k vášmu zariadeniu. Pre aktiváciu prejdite na stránku Informácie o zariadení, klepnite na \"Odpojiť zariadenie\" a znova spárujte zariadenie.';
+
+  @override
+  String get improveConnectionAction => 'Rozumiem';
 }

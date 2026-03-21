@@ -2802,5 +2802,8 @@
                 "type": "String"
             }
         }
-    }
+    },
+    "improveConnectionTitle": "Förbättra anslutning",
+    "improveConnectionContent": "Vi har förbättrat hur Omi förblir ansluten till din enhet. För att aktivera detta, gå till sidan Enhetsinformation, tryck på \"Koppla från enhet\" och para ihop din enhet igen.",
+    "improveConnectionAction": "Förstått"
 }

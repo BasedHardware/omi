@@ -619,6 +619,10 @@ class SharedPreferencesUtil {
 
   bool get locationPermissionRequested => getBool('locationPermissionRequested');
 
+  set companionAssociationPrompted(bool value) => saveBool('companionAssociationPrompted', value);
+
+  bool get companionAssociationPrompted => getBool('companionAssociationPrompted');
+
   //------------------------ TestFlight API Environment ----------------------//
 
   /// Which API environment the TestFlight user prefers: 'staging' or 'production'.

@@ -628,7 +628,9 @@ def _reprocess_conversation_after_update(uid: str, conversation_id: str, languag
     logger.info(f'Successfully reprocessed conversation {conversation_id}')
 
 
-def process_segment(path: str, uid: str, response: dict, source: ConversationSource = ConversationSource.omi, is_locked: bool = False):
+def process_segment(
+    path: str, uid: str, response: dict, source: ConversationSource = ConversationSource.omi, is_locked: bool = False
+):
     url = get_syncing_file_temporal_signed_url(path)
 
     def delete_file():
@@ -767,11 +769,11 @@ async def sync_local_files(files: List[UploadFile] = File(...), uid: str = Depen
 
         # Fair-use speech tracking from raw VAD segments (#5854)
         # Compute duration from raw segments BEFORE merging (silence gaps not counted)
-        total_speech_seconds = sum(
-            get_wav_duration(p) for p in segmented_paths
-        )
+        total_speech_seconds = sum(get_wav_duration(p) for p in segmented_paths)
         total_speech_ms = int(total_speech_seconds * 1000)
-        logger.info(f'sync_local_files len(segmented_paths) {len(segmented_paths)} speech_seconds={int(total_speech_seconds)}')
+        logger.info(
+            f'sync_local_files len(segmented_paths) {len(segmented_paths)} speech_seconds={int(total_speech_seconds)}'
+        )
 
         if FAIR_USE_ENABLED and total_speech_ms > 0:
             record_speech_ms(uid, total_speech_ms, source='sync')

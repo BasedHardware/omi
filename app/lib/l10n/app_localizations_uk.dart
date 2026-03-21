@@ -8645,4 +8645,14 @@ class AppLocalizationsUk extends AppLocalizations {
   String fairUseBannerStatus(String status) {
     return 'Справедливе використання: $status';
   }
+
+  @override
+  String get improveConnectionTitle => 'Покращити з\'єднання';
+
+  @override
+  String get improveConnectionContent =>
+      'Ми покращили спосіб підключення Omi до вашого пристрою. Щоб активувати це, перейдіть на сторінку інформації про пристрій, натисніть \"Від\'єднати пристрій\" і знову підключіть ваш пристрій.';
+
+  @override
+  String get improveConnectionAction => 'Зрозуміло';
 }

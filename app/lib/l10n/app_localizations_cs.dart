@@ -8628,4 +8628,14 @@ class AppLocalizationsCs extends AppLocalizations {
   String fairUseBannerStatus(String status) {
     return 'Spravedlivé užívání: $status';
   }
+
+  @override
+  String get improveConnectionTitle => 'Zlepšit připojení';
+
+  @override
+  String get improveConnectionContent =>
+      'Vylepšili jsme způsob, jakým Omi zůstává připojeno k vašemu zařízení. Pro aktivaci přejděte na stránku Informace o zařízení, klepněte na \"Odpojit zařízení\" a poté zařízení znovu spárujte.';
+
+  @override
+  String get improveConnectionAction => 'Rozumím';
 }

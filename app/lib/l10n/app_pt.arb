@@ -2838,5 +2838,8 @@
                 "type": "String"
             }
         }
-    }
+    },
+    "improveConnectionTitle": "Melhorar conexão",
+    "improveConnectionContent": "Melhorámos a forma como o Omi se mantém ligado ao seu dispositivo. Para ativar isto, vá à página de Informações do dispositivo, toque em \"Desligar dispositivo\" e emparelhe o seu dispositivo novamente.",
+    "improveConnectionAction": "Entendi"
 }

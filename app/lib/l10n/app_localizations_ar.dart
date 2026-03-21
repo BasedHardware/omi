@@ -8573,4 +8573,14 @@ class AppLocalizationsAr extends AppLocalizations {
   String fairUseBannerStatus(String status) {
     return 'الاستخدام العادل: $status';
   }
+
+  @override
+  String get improveConnectionTitle => 'تحسين الاتصال';
+
+  @override
+  String get improveConnectionContent =>
+      'لقد حسّنا طريقة بقاء Omi متصلاً بجهازك. لتفعيل ذلك، يرجى الانتقال إلى صفحة معلومات الجهاز، والضغط على \"فصل الجهاز\"، ثم إعادة إقران جهازك.';
+
+  @override
+  String get improveConnectionAction => 'فهمت';
 }

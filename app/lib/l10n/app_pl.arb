@@ -2837,5 +2837,8 @@
                 "type": "String"
             }
         }
-    }
+    },
+    "improveConnectionTitle": "Popraw połączenie",
+    "improveConnectionContent": "Poprawiliśmy sposób, w jaki Omi utrzymuje połączenie z Twoim urządzeniem. Aby to aktywować, przejdź na stronę Informacje o urządzeniu, dotknij \"Odłącz urządzenie\" i ponownie sparuj urządzenie.",
+    "improveConnectionAction": "Rozumiem"
 }

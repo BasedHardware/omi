@@ -8659,4 +8659,14 @@ class AppLocalizationsNl extends AppLocalizations {
   String fairUseBannerStatus(String status) {
     return 'Eerlijk gebruik: $status';
   }
+
+  @override
+  String get improveConnectionTitle => 'Verbinding verbeteren';
+
+  @override
+  String get improveConnectionContent =>
+      'We hebben verbeterd hoe Omi verbonden blijft met je apparaat. Om dit te activeren, ga naar de Apparaatinfo-pagina, tik op \"Apparaat loskoppelen\" en koppel je apparaat opnieuw.';
+
+  @override
+  String get improveConnectionAction => 'Begrepen';
 }

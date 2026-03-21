@@ -2802,5 +2802,8 @@
                 "type": "String"
             }
         }
-    }
+    },
+    "improveConnectionTitle": "Paranna yhteyttä",
+    "improveConnectionContent": "Olemme parantaneet Omin yhteydenpitoa laitteeseesi. Aktivoidaksesi tämän, siirry Laitteen tiedot -sivulle, napauta \"Katkaise laitteen yhteys\" ja yhdistä laitteesi uudelleen.",
+    "improveConnectionAction": "Selvä"
 }

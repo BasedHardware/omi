@@ -2807,5 +2807,8 @@
                 "type": "String"
             }
         }
-    }
+    },
+    "improveConnectionTitle": "Zlepšiť pripojenie",
+    "improveConnectionContent": "Vylepšili sme spôsob, akým Omi zostáva pripojené k vášmu zariadeniu. Pre aktiváciu prejdite na stránku Informácie o zariadení, klepnite na \"Odpojiť zariadenie\" a znova spárujte zariadenie.",
+    "improveConnectionAction": "Rozumiem"
 }

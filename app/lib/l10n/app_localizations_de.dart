@@ -8705,4 +8705,14 @@ class AppLocalizationsDe extends AppLocalizations {
   String fairUseBannerStatus(String status) {
     return 'Faire Nutzung: $status';
   }
+
+  @override
+  String get improveConnectionTitle => 'Verbindung verbessern';
+
+  @override
+  String get improveConnectionContent =>
+      'Wir haben verbessert, wie Omi mit deinem Gerät verbunden bleibt. Um dies zu aktivieren, gehe zur Geräteinfo-Seite, tippe auf \"Gerät trennen\" und verbinde dein Gerät erneut.';
+
+  @override
+  String get improveConnectionAction => 'Verstanden';
 }

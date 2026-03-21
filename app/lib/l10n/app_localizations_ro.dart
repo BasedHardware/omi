@@ -8674,4 +8674,14 @@ class AppLocalizationsRo extends AppLocalizations {
   String fairUseBannerStatus(String status) {
     return 'Utilizare echitabilă: $status';
   }
+
+  @override
+  String get improveConnectionTitle => 'Îmbunătățire conexiune';
+
+  @override
+  String get improveConnectionContent =>
+      'Am îmbunătățit modul în care Omi rămâne conectat la dispozitivul tău. Pentru a activa acest lucru, mergi la pagina Informații dispozitiv, apasă \"Deconectare dispozitiv\" și împerechează din nou dispozitivul.';
+
+  @override
+  String get improveConnectionAction => 'Am înțeles';
 }

@@ -1,9 +1,11 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import 'package:omi/backend/http/api/device.dart';
+import 'package:omi/gen/pigeon_communicator.g.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
@@ -201,9 +203,8 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     // Throttle notifyListeners to reduce battery drain from excessive UI rebuilds
     // Only notify when: first reading, >=5% change, 15min elapsed, or crosses 20% threshold
     final delta = (_lastNotifiedBatteryLevel - value).abs();
-    final elapsed = _lastBatteryNotifyTime == null
-        ? const Duration(minutes: 999)
-        : currentTime.difference(_lastBatteryNotifyTime!);
+    final elapsed =
+        _lastBatteryNotifyTime == null ? const Duration(minutes: 999) : currentTime.difference(_lastBatteryNotifyTime!);
     final crossedLowBatteryThreshold =
         (value < 20 && _lastNotifiedBatteryLevel >= 20) || (value >= 20 && _lastNotifiedBatteryLevel < 20);
     final shouldNotify =
@@ -225,6 +226,31 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   }
 
   Future periodicConnect(String printer, {bool boundDeviceOnly = false}) async {
+    _reconnectionTimer?.cancel();
+
+    final pairedDeviceId = SharedPreferencesUtil().btDevice.id;
+
+    // Already connected — nothing to do
+    if (isConnected || connectedDevice != null) return;
+
+    // Known device — use ensureConnection which creates the NativeBleTransport first,
+    // then connects natively. If native is already connected, it just re-notifies Dart.
+    if (pairedDeviceId.isNotEmpty) {
+      try {
+        await ServiceManager.instance().device.ensureConnection(pairedDeviceId, force: false);
+        return;
+      } catch (e) {
+        Logger.debug('periodicConnect (native): ensureConnection failed: $e, falling back to scan');
+      }
+    }
+
+    // No paired device (onboarding) — fall through to active scanning
+    if (pairedDeviceId.isEmpty && boundDeviceOnly) return;
+
+    _startPollingReconnect(boundDeviceOnly: boundDeviceOnly);
+  }
+
+  void _startPollingReconnect({bool boundDeviceOnly = false}) {
     _reconnectionTimer?.cancel();
     scan(t) async {
       debugPrint("Period connect seconds: $_connectionCheckSeconds, triggered timer at ${DateTime.now()}");
@@ -453,7 +479,36 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     // Check firmware updates
     _checkFirmwareUpdates();
 
+    if (Platform.isAndroid) {
+      _ensureCompanionAssociation(device);
+    }
+
     onDeviceConnected?.call(device);
+  }
+
+  Future<void> _ensureCompanionAssociation(BtDevice device) async {
+    try {
+      if (SharedPreferencesUtil().companionAssociationPrompted) return;
+      if (await BleHostApi().hasCompanionDeviceAssociation()) return;
+      final ctx = MyApp.navigatorKey.currentContext;
+      if (ctx == null || !ctx.mounted) return;
+      SharedPreferencesUtil().companionAssociationPrompted = true;
+      await showDialog(
+        context: ctx,
+        builder: (context) => AlertDialog(
+          title: Text(context.l10n.improveConnectionTitle),
+          content: Text(context.l10n.improveConnectionContent),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: Text(context.l10n.improveConnectionAction, style: const TextStyle(color: Colors.white)),
+            ),
+          ],
+        ),
+      );
+    } catch (e) {
+      Logger.debug('CompanionDevice association check failed: $e');
+    }
   }
 
   void _handleDeviceConnected(String deviceId) async {
