@@ -2290,7 +2290,7 @@ async def _stream_handler(
         stt_buffer_flush_size = int(sample_rate * 2 * 0.03)  # 30ms at 16-bit mono (e.g., 6400 bytes at 16kHz)
 
         async def flush_stt_buffer(force: bool = False):
-            nonlocal stt_audio_buffer, soniox_profile_socket, deepgram_profile_socket, dg_usage_ms_pending
+            nonlocal stt_audio_buffer, soniox_profile_socket, deepgram_profile_socket, dg_usage_ms_pending, dg_socket
 
             if not stt_audio_buffer:
                 return
