@@ -20,7 +20,6 @@ for mod_name in [
     'database.users',
     'utils.other.storage',
     'utils.stt.soniox_util',
-    'utils.stt.vad_gate',
     'deepgram',
     'deepgram.clients',
     'deepgram.clients.live',
@@ -37,7 +36,6 @@ sys.modules['deepgram'].DeepgramClient = MagicMock
 sys.modules['deepgram'].DeepgramClientOptions = MagicMock
 sys.modules['deepgram'].LiveTranscriptionEvents = MagicMock()
 sys.modules['deepgram.clients.live.v1'].LiveOptions = MagicMock
-sys.modules['utils.stt.vad_gate'].GatedDeepgramSocket = MagicMock
 
 from utils.stt.streaming import connect_to_deepgram_with_backoff, process_audio_dg  # noqa: E402
 from utils.stt.streaming import deepgram_options, deepgram_cloud_options  # noqa: E402
