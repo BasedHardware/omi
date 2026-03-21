@@ -8702,6 +8702,11 @@ class AppLocalizationsDe extends AppLocalizations {
       'Nimmt weiterhin auf — Verbindung zur Transkription wird wiederhergestellt...';
 
   @override
+  String fairUseBannerStatus(String status) {
+    return 'Faire Nutzung: $status';
+  }
+
+  @override
   String get improveConnectionTitle => 'Verbindung verbessern';
 
   @override

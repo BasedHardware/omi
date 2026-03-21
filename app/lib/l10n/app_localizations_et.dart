@@ -8626,6 +8626,11 @@ class AppLocalizationsEt extends AppLocalizations {
   String get transcriptionPausedReconnecting => 'Salvestamine jätkub — ühenduse taastamine transkriptsiooniga...';
 
   @override
+  String fairUseBannerStatus(String status) {
+    return 'Õiglane kasutus: $status';
+  }
+
+  @override
   String get improveConnectionTitle => 'Ühenduse parandamine';
 
   @override

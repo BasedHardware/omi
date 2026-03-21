@@ -2795,6 +2795,14 @@
             }
         }
     },
+    "fairUseBannerStatus": "Δίκαιη Χρήση: {status}",
+    "@fairUseBannerStatus": {
+        "placeholders": {
+            "status": {
+                "type": "String"
+            }
+        }
+    },
     "improveConnectionTitle": "Βελτίωση σύνδεσης",
     "improveConnectionContent": "Βελτιώσαμε τον τρόπο που το Omi παραμένει συνδεδεμένο με τη συσκευή σας. Για να το ενεργοποιήσετε, μεταβείτε στη σελίδα Πληροφορίες συσκευής, πατήστε \"Αποσύνδεση συσκευής\" και συνδέστε ξανά τη συσκευή σας.",
     "improveConnectionAction": "Κατάλαβα"

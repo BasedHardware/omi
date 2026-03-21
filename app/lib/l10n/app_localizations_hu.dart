@@ -8666,6 +8666,11 @@ class AppLocalizationsHu extends AppLocalizations {
   String get transcriptionPausedReconnecting => 'A felvétel folytatódik — újrakapcsolódás az átíráshoz...';
 
   @override
+  String fairUseBannerStatus(String status) {
+    return 'Méltányos használat: $status';
+  }
+
+  @override
   String get improveConnectionTitle => 'Kapcsolat javítása';
 
   @override

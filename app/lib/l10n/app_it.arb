@@ -2795,6 +2795,14 @@
             }
         }
     },
+    "fairUseBannerStatus": "Uso corretto: {status}",
+    "@fairUseBannerStatus": {
+        "placeholders": {
+            "status": {
+                "type": "String"
+            }
+        }
+    },
     "improveConnectionTitle": "Migliora connessione",
     "improveConnectionContent": "Abbiamo migliorato il modo in cui Omi rimane connesso al tuo dispositivo. Per attivarlo, vai alla pagina Info dispositivo, tocca \"Disconnetti dispositivo\" e associa nuovamente il tuo dispositivo.",
     "improveConnectionAction": "Capito"

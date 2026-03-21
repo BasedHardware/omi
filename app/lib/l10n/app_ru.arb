@@ -2830,6 +2830,14 @@
             }
         }
     },
+    "fairUseBannerStatus": "Добросовестное использование: {status}",
+    "@fairUseBannerStatus": {
+        "placeholders": {
+            "status": {
+                "type": "String"
+            }
+        }
+    },
     "improveConnectionTitle": "Улучшить соединение",
     "improveConnectionContent": "Мы улучшили способ подключения Omi к вашему устройству. Чтобы активировать это, перейдите на страницу информации об устройстве, нажмите \"Отключить устройство\" и снова подключите ваше устройство.",
     "improveConnectionAction": "Понятно"

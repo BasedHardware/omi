@@ -8623,6 +8623,11 @@ class AppLocalizationsNo extends AppLocalizations {
   String get transcriptionPausedReconnecting => 'Tar fortsatt opp — kobler til transkripsjon på nytt...';
 
   @override
+  String fairUseBannerStatus(String status) {
+    return 'Rettferdig bruk: $status';
+  }
+
+  @override
   String get improveConnectionTitle => 'Forbedre tilkobling';
 
   @override

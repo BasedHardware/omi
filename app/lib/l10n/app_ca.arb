@@ -2764,6 +2764,14 @@
             }
         }
     },
+    "fairUseBannerStatus": "Ús raonable: {status}",
+    "@fairUseBannerStatus": {
+        "placeholders": {
+            "status": {
+                "type": "String"
+            }
+        }
+    },
     "improveConnectionTitle": "Millorar la connexió",
     "improveConnectionContent": "Hem millorat com Omi es manté connectat al teu dispositiu. Per activar-ho, ves a la pàgina d'informació del dispositiu, toca \"Desconnectar dispositiu\" i torna a vincular el teu dispositiu.",
     "improveConnectionAction": "Entesos"

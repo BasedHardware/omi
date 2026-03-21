@@ -8671,6 +8671,11 @@ class AppLocalizationsRo extends AppLocalizations {
   String get transcriptionPausedReconnecting => 'Încă înregistrează — reconectare la transcriere...';
 
   @override
+  String fairUseBannerStatus(String status) {
+    return 'Utilizare echitabilă: $status';
+  }
+
+  @override
   String get improveConnectionTitle => 'Îmbunătățire conexiune';
 
   @override

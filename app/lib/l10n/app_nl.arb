@@ -2795,6 +2795,14 @@
             }
         }
     },
+    "fairUseBannerStatus": "Eerlijk gebruik: {status}",
+    "@fairUseBannerStatus": {
+        "placeholders": {
+            "status": {
+                "type": "String"
+            }
+        }
+    },
     "improveConnectionTitle": "Verbinding verbeteren",
     "improveConnectionContent": "We hebben verbeterd hoe Omi verbonden blijft met je apparaat. Om dit te activeren, ga naar de Apparaatinfo-pagina, tik op \"Apparaat loskoppelen\" en koppel je apparaat opnieuw.",
     "improveConnectionAction": "Begrepen"

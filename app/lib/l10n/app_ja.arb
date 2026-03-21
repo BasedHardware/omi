@@ -2796,6 +2796,14 @@
             }
         }
     },
+    "fairUseBannerStatus": "公正使用：{status}",
+    "@fairUseBannerStatus": {
+        "placeholders": {
+            "status": {
+                "type": "String"
+            }
+        }
+    },
     "improveConnectionTitle": "接続を改善",
     "improveConnectionContent": "Omiがデバイスとの接続を維持する方法を改善しました。これを有効にするには、デバイス情報ページに移動し、「デバイスを切断」をタップしてから、デバイスを再度ペアリングしてください。",
     "improveConnectionAction": "了解"

@@ -8632,6 +8632,11 @@ class AppLocalizationsSv extends AppLocalizations {
   String get transcriptionPausedReconnecting => 'Spelar fortfarande in — återansluter till transkription...';
 
   @override
+  String fairUseBannerStatus(String status) {
+    return 'Rättvis användning: $status';
+  }
+
+  @override
   String get improveConnectionTitle => 'Förbättra anslutning';
 
   @override

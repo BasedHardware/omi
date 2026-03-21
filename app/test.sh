@@ -54,3 +54,4 @@ flutter test test/unit/env_test.dart
 flutter test test/unit/testflight_preferences_test.dart
 flutter test test/unit/multipart_401_retry_test.dart
 flutter test test/unit/token_refresh_loop_test.dart
+flutter test test/widgets/usage_page_fair_use_banner_test.dart

@@ -8642,6 +8642,11 @@ class AppLocalizationsUk extends AppLocalizations {
   String get transcriptionPausedReconnecting => 'Запис продовжується — повторне підключення до транскрипції...';
 
   @override
+  String fairUseBannerStatus(String status) {
+    return 'Справедливе використання: $status';
+  }
+
+  @override
   String get improveConnectionTitle => 'Покращити з\'єднання';
 
   @override

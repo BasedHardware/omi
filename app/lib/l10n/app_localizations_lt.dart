@@ -8636,6 +8636,11 @@ class AppLocalizationsLt extends AppLocalizations {
   String get transcriptionPausedReconnecting => 'Vis dar įrašoma — jungiamasi prie transkripcijos...';
 
   @override
+  String fairUseBannerStatus(String status) {
+    return 'Sąžiningas naudojimas: $status';
+  }
+
+  @override
   String get improveConnectionTitle => 'Pagerinti ryšį';
 
   @override

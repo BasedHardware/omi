@@ -8707,6 +8707,11 @@ class AppLocalizationsFr extends AppLocalizations {
   String get transcriptionPausedReconnecting => 'Enregistrement en cours — reconnexion à la transcription...';
 
   @override
+  String fairUseBannerStatus(String status) {
+    return 'Utilisation équitable : $status';
+  }
+
+  @override
   String get improveConnectionTitle => 'Améliorer la connexion';
 
   @override

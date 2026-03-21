@@ -8486,6 +8486,11 @@ class AppLocalizationsKo extends AppLocalizations {
   String get transcriptionPausedReconnecting => '계속 녹음 중 — 음성 인식에 재연결하는 중...';
 
   @override
+  String fairUseBannerStatus(String status) {
+    return '공정 사용: $status';
+  }
+
+  @override
   String get improveConnectionTitle => '연결 개선';
 
   @override

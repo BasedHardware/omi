@@ -2764,6 +2764,14 @@
             }
         }
     },
+    "fairUseBannerStatus": "Spravedlivé užívání: {status}",
+    "@fairUseBannerStatus": {
+        "placeholders": {
+            "status": {
+                "type": "String"
+            }
+        }
+    },
     "improveConnectionTitle": "Zlepšit připojení",
     "improveConnectionContent": "Vylepšili jsme způsob, jakým Omi zůstává připojeno k vašemu zařízení. Pro aktivaci přejděte na stránku Informace o zařízení, klepněte na \"Odpojit zařízení\" a poté zařízení znovu spárujte.",
     "improveConnectionAction": "Rozumím"

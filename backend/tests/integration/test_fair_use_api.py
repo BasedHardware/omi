@@ -406,12 +406,19 @@ class TestTranscribePathFairUseImports:
         ), f'Expected >=5 conditional uses of fair_use_dg_budget_exhausted, found {len(conditional_uses)}'
 
     def test_budget_accounting_across_providers(self):
-        """record_dg_usage_ms must be called for main STT providers (DG, Soniox, Speechmatics, multi-channel)."""
+        """DG usage must be tracked for main STT providers (DG, Soniox, Speechmatics, multi-channel).
+
+        Since #5854, per-chunk calls are batched via dg_usage_ms_pending accumulator.
+        record_dg_usage_ms is called only at periodic flush + session-end flush.
+        The accumulation points (dg_usage_ms_pending +=) cover all 4 providers.
+        """
         source = self._read_transcribe_source()
-        # Count occurrences of record_dg_usage_ms (excluding imports/comments)
         import re
 
-        calls = re.findall(r'^\s+record_dg_usage_ms\(', source, re.MULTILINE)
-        # Expect at least 4: DG main, Soniox main, Speechmatics main, multi-channel
-        # (speech-profile sends excluded — small audio chunks, not budget-tracked)
-        assert len(calls) >= 4, f'Expected >=4 record_dg_usage_ms calls, found {len(calls)}'
+        # Verify accumulation points cover all 4 providers (#5854 batching)
+        accum_calls = re.findall(r'^\s+dg_usage_ms_pending\s*\+=', source, re.MULTILINE)
+        assert len(accum_calls) >= 4, f'Expected >=4 dg_usage_ms_pending accumulation points, found {len(accum_calls)}'
+
+        # Verify flush calls exist (periodic + session-end)
+        flush_calls = re.findall(r'^\s+record_dg_usage_ms\(', source, re.MULTILINE)
+        assert len(flush_calls) >= 2, f'Expected >=2 record_dg_usage_ms flush calls, found {len(flush_calls)}'

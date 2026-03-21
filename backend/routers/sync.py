@@ -1,3 +1,4 @@
+import asyncio
 import io
 import os
 import re
@@ -34,6 +35,15 @@ AUDIO_SAMPLE_RATE = 16000
 from utils import encryption
 from utils.stt.pre_recorded import deepgram_prerecorded, postprocess_words
 from utils.stt.vad import vad_is_empty
+from utils.fair_use import (
+    record_speech_ms,
+    get_rolling_speech_ms,
+    check_soft_caps,
+    is_hard_restricted,
+    trigger_classifier_if_needed,
+    FAIR_USE_ENABLED,
+)
+from utils.subscription import has_transcription_credits
 
 router = APIRouter()
 
@@ -618,7 +628,9 @@ def _reprocess_conversation_after_update(uid: str, conversation_id: str, languag
     logger.info(f'Successfully reprocessed conversation {conversation_id}')
 
 
-def process_segment(path: str, uid: str, response: dict, source: ConversationSource = ConversationSource.omi):
+def process_segment(
+    path: str, uid: str, response: dict, source: ConversationSource = ConversationSource.omi, is_locked: bool = False
+):
     url = get_syncing_file_temporal_signed_url(path)
 
     def delete_file():
@@ -645,6 +657,7 @@ def process_segment(path: str, uid: str, response: dict, source: ConversationSou
             finished_at=finished_at,
             transcript_segments=transcript_segments,
             source=source,
+            is_locked=is_locked,
         )
         created = process_conversation(uid, language, create_memory)
         response['new_memories'].add(created.id)
@@ -686,6 +699,10 @@ def process_segment(path: str, uid: str, response: dict, source: ConversationSou
         response['updated_memories'].add(closest_memory['id'])
         update_conversation_segments(uid, closest_memory['id'], segments, finished_at=new_finished_at)
 
+        # Lock existing conversation if credits exhausted
+        if is_locked:
+            conversations_db.update_conversation(uid, closest_memory['id'], {'is_locked': True})
+
         # If the conversation was previously discarded, reprocess it with the new segments
         if closest_memory.get('discarded', False):
             logger.info(f'Conversation {closest_memory["id"]} was discarded, checking if it should be reprocessed')
@@ -704,7 +721,13 @@ def _cleanup_files(file_paths):
 
 @router.post("/v1/sync-local-files")
 async def sync_local_files(files: List[UploadFile] = File(...), uid: str = Depends(auth.get_current_user_uid)):
-    # Improve a version without timestamp, to consider uploads from the stored in v2 device bytes.
+    # Pre-check gates (#5854)
+    if is_hard_restricted(uid):
+        raise HTTPException(status_code=429, detail="Account temporarily restricted due to fair-use policy")
+
+    # Check credits: if exhausted, still process but lock the conversation so user can pay to unlock
+    should_lock = not has_transcription_credits(uid)
+
     # Detect source from filenames
     source = ConversationSource.omi
     for f in files:
@@ -744,7 +767,24 @@ async def sync_local_files(files: List[UploadFile] = File(...), uid: str = Depen
                 error_detail += f" (and {len(vad_errors) - 3} more)"
             raise HTTPException(status_code=500, detail=error_detail)
 
-        logger.info(f'sync_local_files len(segmented_paths) {len(segmented_paths)}')
+        # Fair-use speech tracking from raw VAD segments (#5854)
+        # Compute duration from raw segments BEFORE merging (silence gaps not counted)
+        total_speech_seconds = sum(get_wav_duration(p) for p in segmented_paths)
+        total_speech_ms = int(total_speech_seconds * 1000)
+        logger.info(
+            f'sync_local_files len(segmented_paths) {len(segmented_paths)} speech_seconds={int(total_speech_seconds)}'
+        )
+
+        if FAIR_USE_ENABLED and total_speech_ms > 0:
+            record_speech_ms(uid, total_speech_ms, source='sync')
+            speech_totals = get_rolling_speech_ms(uid)
+            triggered_caps = check_soft_caps(uid, speech_totals=speech_totals)
+            if triggered_caps:
+                should_lock = True
+                logger.info(f'sync: soft caps triggered for {uid}: {triggered_caps}')
+                asyncio.create_task(trigger_classifier_if_needed(uid, triggered_caps))
+
+        is_locked = should_lock
 
         response = {'updated_memories': set(), 'new_memories': set()}
         threads = [
@@ -755,13 +795,13 @@ async def sync_local_files(files: List[UploadFile] = File(...), uid: str = Depen
                     uid,
                     response,
                     source,
+                    is_locked,
                 ),
             )
             for path in segmented_paths
         ]
         chunk_threads(threads)
 
-        # notify through FCM too ?
         return response
     finally:
         # Clean up any remaining temporary files

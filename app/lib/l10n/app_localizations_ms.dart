@@ -8652,6 +8652,11 @@ class AppLocalizationsMs extends AppLocalizations {
   String get transcriptionPausedReconnecting => 'Masih merakam — menyambung semula ke transkripsi...';
 
   @override
+  String fairUseBannerStatus(String status) {
+    return 'Penggunaan Saksama: $status';
+  }
+
+  @override
   String get improveConnectionTitle => 'Tingkatkan Sambungan';
 
   @override

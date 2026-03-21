@@ -8627,6 +8627,11 @@ class AppLocalizationsFi extends AppLocalizations {
   String get transcriptionPausedReconnecting => 'Nauhoittaa yhä — yhdistetään uudelleen puheentunnistukseen...';
 
   @override
+  String fairUseBannerStatus(String status) {
+    return 'Reilu käyttö: $status';
+  }
+
+  @override
   String get improveConnectionTitle => 'Paranna yhteyttä';
 
   @override

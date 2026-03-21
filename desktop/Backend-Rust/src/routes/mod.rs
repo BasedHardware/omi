@@ -26,6 +26,7 @@ pub mod staged_tasks;
 pub mod stats;
 pub mod users;
 pub mod webhooks;
+pub mod proxy;
 pub mod screen_activity;
 
 pub use action_items::action_items_routes;
@@ -54,4 +55,5 @@ pub use stats::stats_routes;
 pub use updates::updates_routes;
 pub use users::users_routes;
 pub use webhooks::webhook_routes;
+pub use proxy::proxy_routes;
 pub use screen_activity::screen_activity_routes;

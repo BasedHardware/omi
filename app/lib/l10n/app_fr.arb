@@ -2830,6 +2830,14 @@
             }
         }
     },
+    "fairUseBannerStatus": "Utilisation équitable : {status}",
+    "@fairUseBannerStatus": {
+        "placeholders": {
+            "status": {
+                "type": "String"
+            }
+        }
+    },
     "improveConnectionTitle": "Améliorer la connexion",
     "improveConnectionContent": "Nous avons amélioré la façon dont Omi reste connecté à votre appareil. Pour activer cela, allez sur la page Infos de l'appareil, appuyez sur \"Déconnecter l'appareil\", puis reconnectez votre appareil.",
     "improveConnectionAction": "Compris"

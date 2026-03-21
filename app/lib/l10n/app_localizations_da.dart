@@ -8612,6 +8612,11 @@ class AppLocalizationsDa extends AppLocalizations {
   String get transcriptionPausedReconnecting => 'Optager stadig — genopretter forbindelse til transskription...';
 
   @override
+  String fairUseBannerStatus(String status) {
+    return 'Fair brug: $status';
+  }
+
+  @override
   String get improveConnectionTitle => 'Forbedre forbindelsen';
 
   @override

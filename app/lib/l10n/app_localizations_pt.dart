@@ -8631,6 +8631,11 @@ class AppLocalizationsPt extends AppLocalizations {
   String get transcriptionPausedReconnecting => 'Ainda gravando — reconectando à transcrição...';
 
   @override
+  String fairUseBannerStatus(String status) {
+    return 'Uso justo: $status';
+  }
+
+  @override
   String get improveConnectionTitle => 'Melhorar conexão';
 
   @override

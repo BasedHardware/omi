@@ -8680,6 +8680,11 @@ class AppLocalizationsIt extends AppLocalizations {
   String get transcriptionPausedReconnecting => 'Registrazione in corso — riconnessione alla trascrizione...';
 
   @override
+  String fairUseBannerStatus(String status) {
+    return 'Uso corretto: $status';
+  }
+
+  @override
   String get improveConnectionTitle => 'Migliora connessione';
 
   @override

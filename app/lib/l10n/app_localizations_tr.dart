@@ -8641,6 +8641,11 @@ class AppLocalizationsTr extends AppLocalizations {
   String get transcriptionPausedReconnecting => 'Hâlâ kaydediyor — transkripsiyona yeniden bağlanıyor...';
 
   @override
+  String fairUseBannerStatus(String status) {
+    return 'Adil Kullanım: $status';
+  }
+
+  @override
   String get improveConnectionTitle => 'Bağlantıyı İyileştir';
 
   @override

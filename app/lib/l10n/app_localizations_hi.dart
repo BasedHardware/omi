@@ -8608,6 +8608,11 @@ class AppLocalizationsHi extends AppLocalizations {
   String get transcriptionPausedReconnecting => 'अभी भी रिकॉर्ड हो रहा है — ट्रांसक्रिप्शन से पुनः कनेक्ट हो रहा है...';
 
   @override
+  String fairUseBannerStatus(String status) {
+    return 'उचित उपयोग: $status';
+  }
+
+  @override
   String get improveConnectionTitle => 'कनेक्शन सुधारें';
 
   @override

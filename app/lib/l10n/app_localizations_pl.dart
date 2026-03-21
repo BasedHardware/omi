@@ -8647,6 +8647,11 @@ class AppLocalizationsPl extends AppLocalizations {
   String get transcriptionPausedReconnecting => 'Nadal nagrywa — ponowne łączenie z transkrypcją...';
 
   @override
+  String fairUseBannerStatus(String status) {
+    return 'Uczciwe użytkowanie: $status';
+  }
+
+  @override
   String get improveConnectionTitle => 'Popraw połączenie';
 
   @override

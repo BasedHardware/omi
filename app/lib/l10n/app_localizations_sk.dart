@@ -8618,6 +8618,11 @@ class AppLocalizationsSk extends AppLocalizations {
   String get transcriptionPausedReconnecting => 'Stále nahráva — opätovné pripojenie k prepisu...';
 
   @override
+  String fairUseBannerStatus(String status) {
+    return 'Spravodlivé používanie: $status';
+  }
+
+  @override
   String get improveConnectionTitle => 'Zlepšiť pripojenie';
 
   @override
