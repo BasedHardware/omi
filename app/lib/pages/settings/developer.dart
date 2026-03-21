@@ -1937,8 +1937,8 @@ class _ManualFirmwareFlashPageState extends State<_ManualFirmwareFlashPage> with
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.black,
-      appBar: AppBar( 
-        backgroundColor: Colors.black,
+      appBar: AppBar(
+        backgroundColor: Colors.black, 
         title: const Text('Flash Firmware', style: TextStyle(color: Colors.white)),
         iconTheme: const IconThemeData(color: Colors.white),
         elevation: 0,
