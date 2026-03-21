@@ -43,8 +43,7 @@ class FairUseBannerHarness extends StatelessWidget {
 
   Widget _buildFairUseBanner(BuildContext context, AppLocalizations l10n) {
     if (fairUseStatus == null) return const SizedBox.shrink();
-    final rawStage = fairUseStatus!['stage'];
-    final stage = rawStage is String ? rawStage : 'none';
+    final stage = fairUseStatus!['stage'] as String? ?? 'none';
     if (stage == 'none') return const SizedBox.shrink();
 
     Color dotColor;

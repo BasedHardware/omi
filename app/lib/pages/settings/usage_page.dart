@@ -502,8 +502,7 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
 
   Widget _buildFairUseBanner() {
     if (_fairUseStatus == null) return const SizedBox.shrink();
-    final rawStage = _fairUseStatus!['stage'];
-    final stage = rawStage is String ? rawStage : 'none';
+    final stage = _fairUseStatus!['stage'] as String? ?? 'none';
     if (stage == 'none') return const SizedBox.shrink();
 
     Color dotColor;
@@ -582,7 +581,8 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
     UsageProvider provider,
   ) {
     Future<void> onRefresh() async {
-      await Future.wait([provider.fetchUsageStats(period: period), provider.fetchSubscription(), _loadFairUseStatus()]);
+      // Using Future.wait to run both fetches concurrently
+      await Future.wait([provider.fetchUsageStats(period: period), provider.fetchSubscription()]);
     }
 
     if (stats == null) {
