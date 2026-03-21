@@ -2304,7 +2304,11 @@ async def _stream_handler(
             profile_complete = speech_profile_complete.is_set()
 
             if dg_socket is not None:
-                if profile_complete or not deepgram_profile_socket:
+                # Check if DG connection died (keepalive or send failure)
+                if hasattr(dg_socket, 'is_connection_dead') and dg_socket.is_connection_dead:
+                    logger.error('DG connection died mid-session uid=%s session=%s', uid, session_id)
+                    dg_socket = None  # Stop sending to dead connection
+                elif profile_complete or not deepgram_profile_socket:
                     # DG budget gate: skip sending if restricted user's daily budget is exhausted (#5746)
                     if fair_use_dg_budget_exhausted:
                         pass  # Audio not forwarded to DG — budget exhausted
