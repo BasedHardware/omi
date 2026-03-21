@@ -135,6 +135,11 @@ abstract class BleHostApi {
   @SwiftFunction('isPeripheralConnected(uuid:)')
   bool isPeripheralConnected(String uuid);
 
+  /// (Android only) Check if any CompanionDeviceManager association exists.
+  /// Returns true on iOS (state restoration handles background reconnection).
+  @SwiftFunction('hasCompanionDeviceAssociation()')
+  bool hasCompanionDeviceAssociation();
+
   /// (Android only) Initiate CompanionDeviceManager association for a device.
   /// Shows the system chooser dialog filtered to this device's address.
   /// Returns the associated device address on success, empty string on failure/cancel.
