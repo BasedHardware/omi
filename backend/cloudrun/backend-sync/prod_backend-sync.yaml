@@ -1,0 +1,227 @@
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  annotations:
+    run.googleapis.com/ingress: all
+    run.googleapis.com/invoker-iam-disabled: 'true'
+    run.googleapis.com/minScale: '1'
+    runapps.googleapis.com/integrations: router/custom-domains
+    runapps.googleapis.com/integrations.router.custom-domains: '2025-01-07T19:25:13.183594Z'
+  labels: {}
+  name: backend-sync
+spec:
+  template:
+    metadata:
+      annotations:
+        autoscaling.knative.dev/maxScale: '25'
+        autoscaling.knative.dev/minScale: '1'
+        run.googleapis.com/cpu-throttling: 'false'
+        run.googleapis.com/network-interfaces: '[{"network":"omi-prod-vpc-1","subnetwork":"omi-us-central1-prod-vpc-1-subnet-1"}]'
+        run.googleapis.com/startup-cpu-boost: 'true'
+        run.googleapis.com/vpc-access-egress: private-ranges-only
+      labels:
+        run.googleapis.com/startupProbeType: Default
+    spec:
+      containerConcurrency: 8
+      containers:
+      - env:
+        - name: BUCKET_PLUGINS_LOGOS
+          value: omi_plugins
+        - name: BUCKET_PRIVATE_CLOUD_SYNC
+          value: omi-private-cloud-sync
+        - name: BUCKET_SPEECH_PROFILES
+          value: speech-profiles
+        - name: BUCKET_TEMPORAL_SYNC_LOCAL
+          value: syncing-local
+        - name: DEEPGRAM_SELF_HOSTED_ENABLED
+          value: 'false'
+        - name: FAIR_USE_3DAY_SPEECH_MS
+          value: '28800000'
+        - name: FAIR_USE_BUCKET_SECONDS
+          value: '60'
+        - name: FAIR_USE_CHECK_INTERVAL_SECONDS
+          value: '300'
+        - name: FAIR_USE_CLASSIFIER_ABUSE_SCORE_THRESHOLD
+          value: '0.7'
+        - name: FAIR_USE_CLASSIFIER_COOLDOWN_SECONDS
+          value: '43200'
+        - name: FAIR_USE_CLASSIFIER_LOOKBACK_DAYS
+          value: '7'
+        - name: FAIR_USE_CLASSIFIER_MODEL
+          value: gpt-5.1
+        - name: FAIR_USE_DAILY_SPEECH_MS
+          value: '7200000'
+        - name: FAIR_USE_ENABLED
+          value: 'false'
+        - name: FAIR_USE_EXEMPT_UIDS
+          value: ''
+        - name: FAIR_USE_KILL_SWITCH
+          value: 'false'
+        - name: FAIR_USE_REDIS_RETENTION_SECONDS
+          value: '691200'
+        - name: FAIR_USE_RESTRICT_DAILY_DG_MS
+          value: '1800000'
+        - name: FAIR_USE_WEEKLY_SPEECH_MS
+          value: '36000000'
+        - name: GOOGLE_CLOUD_PROJECT
+          value: based-hardware
+        - name: HOSTED_PUSHER_API_URL
+          value: http://internal-alb.pusher-ep-prod.il7.us-central1.lb.based-hardware.internal
+        - name: HOSTED_SPEECH_PROFILE_API_URL
+          value: http://vad.omi.me:80/v1/speaker-identification
+        - name: HOSTED_VAD_API_URL
+          value: http://vad.omi.me:80/v1/vad
+        - name: LANGCHAIN_ENDPOINT
+          value: https://api.smith.langchain.com
+        - name: LANGCHAIN_PROJECT
+          value: production
+        - name: LANGCHAIN_TRACING_V2
+          value: 'false'
+        - name: NO_SOCKET_TIMEOUT
+          value: 'true'
+        - name: PINECONE_INDEX_NAME
+          value: memories-backend
+        - name: REDIS_DB_PORT
+          value: '13151'
+        - name: TYPESENSE_HOST_PORT
+          value: '443'
+        - name: ADMIN_KEY
+          valueFrom:
+            secretKeyRef:
+              key: latest
+              name: ADMIN_KEY
+        - name: CONVERSATION_SUMMARIZED_APP_IDS
+          valueFrom:
+            secretKeyRef:
+              key: latest
+              name: CONVERSATION_SUMMARIZED_APP_IDS
+        - name: DEEPGRAM_API_KEY
+          valueFrom:
+            secretKeyRef:
+              key: latest
+              name: DEEPGRAM_API_KEY
+        - name: ENCRYPTION_SECRET
+          valueFrom:
+            secretKeyRef:
+              key: latest
+              name: ENCRYPTION_SECRET
+        - name: FAL_KEY
+          valueFrom:
+            secretKeyRef:
+              key: latest
+              name: FAL_KEY
+        - name: GITHUB_TOKEN
+          valueFrom:
+            secretKeyRef:
+              key: latest
+              name: GITHUB_TOKEN
+        - name: GOOGLE_APPLICATION_CREDENTIALS
+          valueFrom:
+            secretKeyRef:
+              key: latest
+              name: GOOGLE_APPLICATION_CREDENTIALS
+        - name: GOOGLE_MAPS_API_KEY
+          valueFrom:
+            secretKeyRef:
+              key: latest
+              name: GOOGLE_MAPS_API_KEY
+        - name: GROQ_API_KEY
+          valueFrom:
+            secretKeyRef:
+              key: latest
+              name: GROQ_API_KEY
+        - name: LANGCHAIN_API_KEY
+          valueFrom:
+            secretKeyRef:
+              key: latest
+              name: LANGCHAIN_API_KEY
+        - name: MARKETPLACE_APP_REVIEWERS
+          valueFrom:
+            secretKeyRef:
+              key: latest
+              name: MARKETPLACE_APP_REVIEWERS
+        - name: OPENAI_API_KEY
+          valueFrom:
+            secretKeyRef:
+              key: latest
+              name: OPENAI_API_KEY_BACKEND_SYNC
+        - name: OPENROUTER_API_KEY
+          valueFrom:
+            secretKeyRef:
+              key: latest
+              name: OPENROUTER_API_KEY_BACKEND_SYNC
+        - name: PINECONE_API_KEY
+          valueFrom:
+            secretKeyRef:
+              key: latest
+              name: PINECONE_API_KEY
+        - name: RAPID_API_HOST
+          valueFrom:
+            secretKeyRef:
+              key: latest
+              name: RAPID_API_HOST
+        - name: RAPID_API_KEY
+          valueFrom:
+            secretKeyRef:
+              key: latest
+              name: RAPID_API_KEY
+        - name: REDIS_DB_HOST
+          valueFrom:
+            secretKeyRef:
+              key: latest
+              name: REDIS_DB_HOST
+        - name: REDIS_DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              key: latest
+              name: REDIS_DB_PASSWORD
+        - name: SONIOX_API_KEY
+          valueFrom:
+            secretKeyRef:
+              key: latest
+              name: SONIOX_API_KEY
+        - name: STRIPE_API_KEY
+          valueFrom:
+            secretKeyRef:
+              key: latest
+              name: STRIPE_API_KEY
+        - name: STRIPE_WEBHOOK_SECRET
+          valueFrom:
+            secretKeyRef:
+              key: latest
+              name: STRIPE_WEBHOOK_SECRET
+        - name: TYPESENSE_API_KEY
+          valueFrom:
+            secretKeyRef:
+              key: latest
+              name: TYPESENSE_API_KEY
+        - name: TYPESENSE_HOST
+          valueFrom:
+            secretKeyRef:
+              key: latest
+              name: TYPESENSE_HOST
+        - name: WORKFLOW_API_KEY
+          valueFrom:
+            secretKeyRef:
+              key: latest
+              name: WORKFLOW_API_KEY
+        image: gcr.io/based-hardware/backend
+        name: backend-1
+        ports:
+        - containerPort: 8080
+          name: http1
+        resources:
+          limits:
+            cpu: 2000m
+            memory: 8Gi
+        startupProbe:
+          failureThreshold: 1
+          periodSeconds: 240
+          tcpSocket:
+            port: 8080
+          timeoutSeconds: 240
+      serviceAccountName: 208440318997-compute@developer.gserviceaccount.com
+      timeoutSeconds: 3600
+  traffic:
+  - latestRevision: true
+    percent: 100

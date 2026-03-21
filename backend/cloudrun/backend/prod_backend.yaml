@@ -1,0 +1,442 @@
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  annotations:
+    run.googleapis.com/default-url-disabled: 'true'
+    run.googleapis.com/ingress: internal-and-cloud-load-balancing
+    run.googleapis.com/invoker-iam-disabled: 'true'
+    run.googleapis.com/minScale: '3'
+    runapps.googleapis.com/integrations: router/custom-domains
+    runapps.googleapis.com/integrations.router.custom-domains: '2025-01-07T19:25:13.183515Z'
+  labels:
+    env: prod
+  name: backend
+spec:
+  template:
+    metadata:
+      annotations:
+        autoscaling.knative.dev/maxScale: '100'
+        autoscaling.knative.dev/minScale: '3'
+        run.googleapis.com/cpu-throttling: 'false'
+        run.googleapis.com/network-interfaces: '[{"network":"omi-prod-vpc-1","subnetwork":"omi-us-central1-prod-vpc-1-subnet-1"}]'
+        run.googleapis.com/startup-cpu-boost: 'true'
+        run.googleapis.com/vpc-access-egress: private-ranges-only
+      labels:
+        env: prod
+        run.googleapis.com/startupProbeType: Custom
+    spec:
+      containerConcurrency: 20
+      containers:
+      - env:
+        - name: API_BASE_URL
+          value: https://api.omi.me
+        - name: BASE_API_URL
+          value: https://api.omi.me
+        - name: BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
+          value: '0'
+        - name: BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
+          value: '0'
+        - name: BASIC_TIER_MINUTES_LIMIT_PER_MONTH
+          value: '4800'
+        - name: BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH
+          value: '0'
+        - name: BUCKET_APP_THUMBNAILS
+          value: omi_plugins
+        - name: BUCKET_CHAT_FILES
+          value: 39o4cj6tj7rcgcoy_chat_files
+        - name: BUCKET_OMIGLASS
+          value: omi_glass_images
+        - name: BUCKET_PLUGINS_LOGOS
+          value: omi_plugins
+        - name: BUCKET_PRIVATE_CLOUD_SYNC
+          value: omi-private-cloud-sync
+        - name: BUCKET_SPEECH_PROFILES
+          value: speech-profiles
+        - name: BUCKET_TEMPORAL_SYNC_LOCAL
+          value: syncing-local
+        - name: DEEPGRAM_SELF_HOSTED_ENABLED
+          value: 'true'
+        - name: DEEPGRAM_SELF_HOSTED_URL
+          value: https://dg.omi.me
+        - name: FAIR_USE_3DAY_SPEECH_MS
+          value: '28800000'
+        - name: FAIR_USE_BUCKET_SECONDS
+          value: '60'
+        - name: FAIR_USE_CHECK_INTERVAL_SECONDS
+          value: '300'
+        - name: FAIR_USE_CLASSIFIER_ABUSE_SCORE_THRESHOLD
+          value: '0.7'
+        - name: FAIR_USE_CLASSIFIER_COOLDOWN_SECONDS
+          value: '43200'
+        - name: FAIR_USE_CLASSIFIER_LOOKBACK_DAYS
+          value: '7'
+        - name: FAIR_USE_CLASSIFIER_MODEL
+          value: gpt-5.1
+        - name: FAIR_USE_DAILY_SPEECH_MS
+          value: '7200000'
+        - name: FAIR_USE_ENABLED
+          value: 'false'
+        - name: FAIR_USE_EXEMPT_UIDS
+          value: ''
+        - name: FAIR_USE_KILL_SWITCH
+          value: 'false'
+        - name: FAIR_USE_REDIS_RETENTION_SECONDS
+          value: '691200'
+        - name: FAIR_USE_RESTRICT_DAILY_DG_MS
+          value: '1800000'
+        - name: FAIR_USE_WEEKLY_SPEECH_MS
+          value: '36000000'
+        - name: FIREBASE_AUTH_DOMAIN
+          value: based-hardware.firebaseapp.com
+        - name: FIREBASE_PROJECT_ID
+          value: based-hardware
+        - name: GOOGLE_CLOUD_PROJECT
+          value: based-hardware
+        - name: HOSTED_PUSHER_API_URL
+          value: http://internal-alb.pusher-ep-prod.il7.us-central1.lb.based-hardware.internal
+        - name: HOSTED_SPEAKER_EMBEDDING_API_URL
+          value: http://diarizer.omi.me:80
+        - name: HOSTED_SPEECH_PROFILE_API_URL
+          value: http://vad.omi.me:80/v1/speaker-identification
+        - name: HOSTED_VAD_API_URL
+          value: http://vad.omi.me:80/v1/vad
+        - name: HTTP_DEFAULT_TIMEOUT
+          value: '600'
+        - name: HTTP_GET_TIMEOUT
+          value: '30'
+        - name: LANGCHAIN_ENDPOINT
+          value: https://api.smith.langchain.com
+        - name: LANGCHAIN_PROJECT
+          value: production
+        - name: LANGCHAIN_TRACING_V2
+          value: 'false'
+        - name: LANGSMITH_ENDPOINT
+          value: https://api.smith.langchain.com
+        - name: LANGSMITH_PROJECT
+          value: chat
+        - name: LANGSMITH_TRACING
+          value: 'false'
+        - name: NO_SOCKET_TIMEOUT
+          value: 'true'
+        - name: OMI_LANGSMITH_AGENTIC_PROMPT_NAME
+          value: agentic-chat-main
+        - name: OMI_LANGSMITH_PROMPT_CACHE_TTL_SECONDS
+          value: '3600'
+        - name: PINECONE_INDEX_NAME
+          value: memories-backend
+        - name: REDIS_DB_PORT
+          value: '13151'
+        - name: STRIPE_UNLIMITED_ANNUAL_PRICE_ID
+          value: price_1RtJQ71F8wnoWYvwKMPaGlGY
+        - name: STRIPE_UNLIMITED_MONTHLY_PRICE_ID
+          value: price_1RtJPm1F8wnoWYvwhVJ38kLb
+        - name: SUBSCRIPTION_LAUNCH_DATE
+          value: '2025-08-21'
+        - name: TYPESENSE_HOST_PORT
+          value: '443'
+        - name: ADMIN_KEY
+          valueFrom:
+            secretKeyRef:
+              key: latest
+              name: ADMIN_KEY
+        - name: ANTHROPIC_API_KEY
+          valueFrom:
+            secretKeyRef:
+              key: latest
+              name: ANTHROPIC_API_KEY
+        - name: APPLE_CLIENT_ID
+          valueFrom:
+            secretKeyRef:
+              key: latest
+              name: APPLE_CLIENT_ID
+        - name: APPLE_KEY_ID
+          valueFrom:
+            secretKeyRef:
+              key: latest
+              name: APPLE_KEY_ID
+        - name: APPLE_PRIVATE_KEY
+          valueFrom:
+            secretKeyRef:
+              key: latest
+              name: APPLE_PRIVATE_KEY
+        - name: APPLE_TEAM_ID
+          valueFrom:
+            secretKeyRef:
+              key: latest
+              name: APPLE_TEAM_ID
+        - name: ASANA_CLIENT_ID
+          valueFrom:
+            secretKeyRef:
+              key: latest
+              name: ASANA_CLIENT_ID
+        - name: ASANA_CLIENT_SECRET
+          valueFrom:
+            secretKeyRef:
+              key: latest
+              name: ASANA_CLIENT_SECRET
+        - name: CLICKUP_CLIENT_ID
+          valueFrom:
+            secretKeyRef:
+              key: latest
+              name: CLICKUP_CLIENT_ID
+        - name: CLICKUP_CLIENT_SECRET
+          valueFrom:
+            secretKeyRef:
+              key: latest
+              name: CLICKUP_CLIENT_SECRET
+        - name: CONVERSATION_SUMMARIZED_APP_IDS
+          valueFrom:
+            secretKeyRef:
+              key: latest
+              name: CONVERSATION_SUMMARIZED_APP_IDS
+        - name: DEEPGRAM_API_KEY
+          valueFrom:
+            secretKeyRef:
+              key: latest
+              name: DEEPGRAM_API_KEY
+        - name: ENCRYPTION_SECRET
+          valueFrom:
+            secretKeyRef:
+              key: latest
+              name: ENCRYPTION_SECRET
+        - name: FAL_KEY
+          valueFrom:
+            secretKeyRef:
+              key: latest
+              name: FAL_KEY
+        - name: FIREBASE_API_KEY
+          valueFrom:
+            secretKeyRef:
+              key: latest
+              name: FIREBASE_API_KEY
+        - name: GITHUB_CLIENT_ID
+          valueFrom:
+            secretKeyRef:
+              key: latest
+              name: GITHUB_CLIENT_ID
+        - name: GITHUB_CLIENT_SECRET
+          valueFrom:
+            secretKeyRef:
+              key: latest
+              name: GITHUB_CLIENT_SECRET
+        - name: GITHUB_TOKEN
+          valueFrom:
+            secretKeyRef:
+              key: latest
+              name: GITHUB_TOKEN
+        - name: GOOGLE_APPLICATION_CREDENTIALS
+          valueFrom:
+            secretKeyRef:
+              key: latest
+              name: GOOGLE_APPLICATION_CREDENTIALS
+        - name: GOOGLE_CLIENT_ID
+          valueFrom:
+            secretKeyRef:
+              key: latest
+              name: GOOGLE_CLIENT_ID
+        - name: GOOGLE_CLIENT_SECRET
+          valueFrom:
+            secretKeyRef:
+              key: latest
+              name: GOOGLE_CLIENT_SECRET
+        - name: GOOGLE_MAPS_API_KEY
+          valueFrom:
+            secretKeyRef:
+              key: latest
+              name: GOOGLE_MAPS_API_KEY
+        - name: GOOGLE_TASKS_CLIENT_ID
+          valueFrom:
+            secretKeyRef:
+              key: latest
+              name: GOOGLE_TASKS_CLIENT_ID
+        - name: GOOGLE_TASKS_CLIENT_SECRET
+          valueFrom:
+            secretKeyRef:
+              key: latest
+              name: GOOGLE_TASKS_CLIENT_SECRET
+        - name: GROQ_API_KEY
+          valueFrom:
+            secretKeyRef:
+              key: latest
+              name: GROQ_API_KEY
+        - name: LANGCHAIN_API_KEY
+          valueFrom:
+            secretKeyRef:
+              key: latest
+              name: LANGCHAIN_API_KEY
+        - name: LANGSMITH_API_KEY
+          valueFrom:
+            secretKeyRef:
+              key: latest
+              name: LANGSMITH_API_KEY
+        - name: MARKETPLACE_APP_REVIEWERS
+          valueFrom:
+            secretKeyRef:
+              key: latest
+              name: MARKETPLACE_APP_REVIEWERS
+        - name: NOTION_CLIENT_ID
+          valueFrom:
+            secretKeyRef:
+              key: latest
+              name: NOTION_CLIENT_ID
+        - name: NOTION_CLIENT_SECRET
+          valueFrom:
+            secretKeyRef:
+              key: latest
+              name: NOTION_CLIENT_SECRET
+        - name: OPENAI_API_KEY
+          valueFrom:
+            secretKeyRef:
+              key: latest
+              name: OPENAI_API_KEY_BACKEND
+        - name: OPENROUTER_API_KEY
+          valueFrom:
+            secretKeyRef:
+              key: latest
+              name: OPENROUTER_API_KEY_BACKEND
+        - name: PERPLEXITY_API_KEY
+          valueFrom:
+            secretKeyRef:
+              key: latest
+              name: PERPLEXITY_API_KEY
+        - name: PINECONE_API_KEY
+          valueFrom:
+            secretKeyRef:
+              key: latest
+              name: PINECONE_API_KEY
+        - name: RAPID_API_HOST
+          valueFrom:
+            secretKeyRef:
+              key: latest
+              name: RAPID_API_HOST
+        - name: RAPID_API_KEY
+          valueFrom:
+            secretKeyRef:
+              key: latest
+              name: RAPID_API_KEY
+        - name: REDIS_DB_HOST
+          valueFrom:
+            secretKeyRef:
+              key: latest
+              name: REDIS_DB_HOST
+        - name: REDIS_DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              key: latest
+              name: REDIS_DB_PASSWORD
+        - name: SONIOX_API_KEY
+          valueFrom:
+            secretKeyRef:
+              key: latest
+              name: SONIOX_API_KEY
+        - name: STRIPE_API_KEY
+          valueFrom:
+            secretKeyRef:
+              key: latest
+              name: STRIPE_API_KEY
+        - name: STRIPE_CONNECT_WEBHOOK_SECRET
+          valueFrom:
+            secretKeyRef:
+              key: latest
+              name: STRIPE_CONNECT_WEBHOOK_SECRET
+        - name: STRIPE_WEBHOOK_SECRET
+          valueFrom:
+            secretKeyRef:
+              key: latest
+              name: STRIPE_WEBHOOK_SECRET
+        - name: TODOIST_CLIENT_ID
+          valueFrom:
+            secretKeyRef:
+              key: latest
+              name: TODOIST_CLIENT_ID
+        - name: TODOIST_CLIENT_SECRET
+          valueFrom:
+            secretKeyRef:
+              key: latest
+              name: TODOIST_CLIENT_SECRET
+        - name: TODOIST_VERIFICATION_TOKEN
+          valueFrom:
+            secretKeyRef:
+              key: latest
+              name: TODOIST_VERIFICATION_TOKEN
+        - name: TWILIO_ACCOUNT_SID
+          valueFrom:
+            secretKeyRef:
+              key: latest
+              name: TWILIO_ACCOUNT_SID
+        - name: TWILIO_API_KEY_SECRET
+          valueFrom:
+            secretKeyRef:
+              key: latest
+              name: TWILIO_API_KEY_SECRET
+        - name: TWILIO_API_KEY_SID
+          valueFrom:
+            secretKeyRef:
+              key: latest
+              name: TWILIO_API_KEY_SID
+        - name: TWILIO_AUTH_TOKEN
+          valueFrom:
+            secretKeyRef:
+              key: latest
+              name: TWILIO_AUTH_TOKEN
+        - name: TWILIO_TWIML_APP_SID
+          valueFrom:
+            secretKeyRef:
+              key: latest
+              name: TWILIO_TWIML_APP_SID
+        - name: TWITTER_CLIENT_ID
+          valueFrom:
+            secretKeyRef:
+              key: latest
+              name: TWITTER_CLIENT_ID
+        - name: TWITTER_CLIENT_SECRET
+          valueFrom:
+            secretKeyRef:
+              key: latest
+              name: TWITTER_CLIENT_SECRET
+        - name: TYPESENSE_API_KEY
+          valueFrom:
+            secretKeyRef:
+              key: latest
+              name: TYPESENSE_API_KEY
+        - name: TYPESENSE_HOST
+          valueFrom:
+            secretKeyRef:
+              key: latest
+              name: TYPESENSE_HOST
+        - name: WHOOP_CLIENT_ID
+          valueFrom:
+            secretKeyRef:
+              key: latest
+              name: WHOOP_CLIENT_ID
+        - name: WHOOP_CLIENT_SECRET
+          valueFrom:
+            secretKeyRef:
+              key: latest
+              name: WHOOP_CLIENT_SECRET
+        - name: WORKFLOW_API_KEY
+          valueFrom:
+            secretKeyRef:
+              key: latest
+              name: WORKFLOW_API_KEY
+        image: gcr.io/based-hardware/backend
+        name: backend-1
+        ports:
+        - containerPort: 8080
+          name: http1
+        resources:
+          limits:
+            cpu: 2000m
+            memory: 8Gi
+        startupProbe:
+          failureThreshold: 3
+          initialDelaySeconds: 60
+          periodSeconds: 240
+          tcpSocket:
+            port: 8080
+          timeoutSeconds: 240
+      serviceAccountName: 208440318997-compute@developer.gserviceaccount.com
+      timeoutSeconds: 3600
+  traffic:
+  - latestRevision: true
+    percent: 100

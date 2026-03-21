@@ -70,21 +70,31 @@ jobs:
           cache-from: type=registry,ref=gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:buildcache
           cache-to: type=registry,ref=gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:buildcache,mode=max
 
+      - name: Set environment prefix
+        id: env-prefix
+        run: |
+          if [[ "${{ github.event.inputs.environment }}" == "prod" ]]; then
+            echo "prefix=prod" >> $GITHUB_OUTPUT
+          else
+            echo "prefix=dev" >> $GITHUB_OUTPUT
+          fi
+
       - name: Deploy ${{ env.SERVICE }} to Cloud Run
-        id: deploy-backend
-        uses: google-github-actions/deploy-cloudrun@v2
-        with:
-          service: ${{ env.SERVICE }}
-          region: ${{ env.REGION }}
-          image: gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}
+        run: |
+          # Update image in declarative config
+          IMAGE="gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:latest"
+          CONFIG="backend/cloudrun/${{ env.SERVICE }}/${{ steps.env-prefix.outputs.prefix }}_${{ env.SERVICE }}.yaml"
+          sed -i "s|image:.*|image: ${IMAGE}|" "$CONFIG"
+          gcloud run services replace "$CONFIG" \
+            --region=${{ env.REGION }} --project=${{ vars.GCP_PROJECT_ID }}
 
       - name: Deploy ${{ env.SERVICE }}-sync to Cloud Run
-        id: deploy-backend-sync
-        uses: google-github-actions/deploy-cloudrun@v2
-        with:
-          service: ${{ env.SERVICE }}-sync
-          region: ${{ env.REGION }}
-          image: gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}
+        run: |
+          IMAGE="gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:latest"
+          CONFIG="backend/cloudrun/${{ env.SERVICE }}-sync/${{ steps.env-prefix.outputs.prefix }}_${{ env.SERVICE }}-sync.yaml"
+          sed -i "s|image:.*|image: ${IMAGE}|" "$CONFIG"
+          gcloud run services replace "$CONFIG" \
+            --region=${{ env.REGION }} --project=${{ vars.GCP_PROJECT_ID }}
 
       - name: Connect to GKE cluster
         run: |
@@ -98,13 +108,14 @@ jobs:
           kubectl -n ${{ vars.ENV }}-omi-backend rollout restart deploy ${{ vars.ENV }}-omi-backend-listen
 
       - name: Deploy ${{ env.SERVICE }}-integration to Cloud Run
-        id: deploy-backend-integration
-        uses: google-github-actions/deploy-cloudrun@v2
-        with:
-          service: ${{ env.SERVICE }}-integration
-          region: ${{ env.REGION }}
-          image: gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}
+        run: |
+          IMAGE="gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:latest"
+          CONFIG="backend/cloudrun/${{ env.SERVICE }}-integration/${{ steps.env-prefix.outputs.prefix }}_${{ env.SERVICE }}-integration.yaml"
+          sed -i "s|image:.*|image: ${IMAGE}|" "$CONFIG"
+          gcloud run services replace "$CONFIG" \
+            --region=${{ env.REGION }} --project=${{ vars.GCP_PROJECT_ID }}
 
       # If required, use the Cloud Run url output in later steps
       - name: Show Output
-        run: echo ${{ steps.deploy.outputs.url }}
+        run: |
+          echo "Deployed all Cloud Run services from declarative configs in backend/cloudrun/"
