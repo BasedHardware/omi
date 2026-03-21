@@ -110,16 +110,22 @@ def _release_lock(key: str, token: str) -> None:
 # ---------------------------------------------------------------------------
 
 
-def record_speech_ms(uid: str, speech_ms: int) -> None:
+def record_speech_ms(uid: str, speech_ms: int, source: str = 'realtime') -> None:
     """Record speech milliseconds into the current minute bucket.
 
     Uses a Redis sorted set where:
       - member = Unix minute timestamp (as string)
       - score = Unix minute timestamp (for range queries)
     The speech_ms is stored in a separate hash keyed by minute.
+
+    Args:
+        source: Ingestion path for log traceability ('realtime' or 'sync').
+            Same Redis pool regardless of source — no separate enforcement.
     """
     if not FAIR_USE_ENABLED or speech_ms <= 0:
         return
+
+    logger.info(f'fair_use: record_speech_ms uid={uid} ms={speech_ms} source={source}')
 
     try:
         now = int(time.time())
