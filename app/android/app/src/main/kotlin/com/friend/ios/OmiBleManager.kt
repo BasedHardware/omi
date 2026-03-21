@@ -223,10 +223,13 @@ class OmiBleManager private constructor(private val application: Application) {
         OmiBleForegroundService.stopService(application)
     }
 
+    fun isManuallyDisconnected(address: String): Boolean {
+        return manuallyDisconnected.contains(address.uppercase())
+    }
+
     fun reconnectKnownPeripheral(address: String) {
         val addr = address.uppercase()
         appClosed = false
-        manuallyDisconnected.remove(addr)
         reconnectRetryCount[addr] = 0
 
         if (isPeripheralConnected(addr)) {
