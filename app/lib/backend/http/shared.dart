@@ -162,14 +162,52 @@ Future<http.MultipartRequest> _buildMultipartRequest({
   required Map<String, String> fields,
   required String fileFieldName,
   required String method,
+  void Function(int sentBytes, int totalBytes, double? speedKBps)? onUploadProgress,
+  Duration progressUpdateInterval = const Duration(milliseconds: 200),
 }) async {
   var request = http.MultipartRequest(method, Uri.parse(url));
   request.headers.addAll(headers);
   request.fields.addAll(fields);
 
+  final fileLengths = <String, int>{};
+  var totalFileBytes = 0;
   for (var file in files) {
-    var stream = http.ByteStream(file.openRead());
-    var length = await file.length();
+    final length = await file.length();
+    fileLengths[file.path] = length;
+    totalFileBytes += length;
+  }
+
+  var uploadedBytes = 0;
+  final speedStopwatch = Stopwatch()..start();
+  DateTime? lastProgressEmission;
+
+  for (var file in files) {
+    var length = fileLengths[file.path] ?? await file.length();
+    var rawStream = file.openRead();
+    var stream = http.ByteStream(rawStream.transform(
+      StreamTransformer<List<int>, List<int>>.fromHandlers(
+        handleData: (chunk, sink) {
+          uploadedBytes += chunk.length;
+
+          if (onUploadProgress != null) {
+            final now = DateTime.now();
+            final shouldEmit = lastProgressEmission == null ||
+                now.difference(lastProgressEmission!) >= progressUpdateInterval ||
+                uploadedBytes >= totalFileBytes;
+
+            if (shouldEmit) {
+              lastProgressEmission = now;
+              final elapsedMs = speedStopwatch.elapsedMilliseconds;
+              final speedKBps = elapsedMs > 0 ? (uploadedBytes / 1024) / (elapsedMs / 1000) : null;
+              onUploadProgress(uploadedBytes, totalFileBytes, speedKBps);
+            }
+          }
+
+          sink.add(chunk);
+        },
+      ),
+    ));
+
     var multipartFile = http.MultipartFile(fileFieldName, stream, length, filename: basename(file.path));
     request.files.add(multipartFile);
   }
@@ -184,6 +222,8 @@ Future<http.Response> makeMultipartApiCall({
   Map<String, String> fields = const {},
   String fileFieldName = 'files',
   String method = 'POST',
+  void Function(int sentBytes, int totalBytes, double? speedKBps)? onUploadProgress,
+  Duration progressUpdateInterval = const Duration(milliseconds: 200),
 }) async {
   try {
     final bool requireAuthCheck = _isRequiredAuthCheck(url);
@@ -196,6 +236,8 @@ Future<http.Response> makeMultipartApiCall({
       fields: fields,
       fileFieldName: fileFieldName,
       method: method,
+      onUploadProgress: onUploadProgress,
+      progressUpdateInterval: progressUpdateInterval,
     );
 
     var streamedResponse = await HttpPoolManager.instance.sendStreaming(request);
@@ -213,6 +255,8 @@ Future<http.Response> makeMultipartApiCall({
           fields: fields,
           fileFieldName: fileFieldName,
           method: method,
+          onUploadProgress: onUploadProgress,
+          progressUpdateInterval: progressUpdateInterval,
         );
         streamedResponse = await HttpPoolManager.instance.sendStreaming(request);
         response = await http.Response.fromStream(streamedResponse);
@@ -232,6 +276,16 @@ Future<http.Response> makeMultipartApiCall({
           StackTrace.current,
           message: 'Authentication failed. Please sign in again.',
         );
+      }
+    }
+
+    if (onUploadProgress != null) {
+      var totalFileBytes = 0;
+      for (var file in files) {
+        totalFileBytes += await file.length();
+      }
+      if (totalFileBytes > 0) {
+        onUploadProgress(totalFileBytes, totalFileBytes, null);
       }
     }
 

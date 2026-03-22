@@ -1,22 +1,14 @@
 import 'dart:async';
-import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:provider/provider.dart';
-import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/models/playback_state.dart';
-import 'package:omi/pages/conversations/sync_widgets/fast_transfer_suggestion_dialog.dart';
-import 'package:omi/pages/conversations/sync_widgets/location_permission_dialog.dart';
 import 'package:omi/providers/sync_provider.dart';
-import 'package:omi/services/devices/wifi_sync_error.dart';
-import 'package:omi/services/services.dart';
 import 'package:omi/services/wals.dart';
-import 'package:omi/services/wifi/wifi_network_service.dart';
 import 'package:omi/ui/molecules/omi_confirm_dialog.dart';
-import 'package:omi/pages/conversations/sync_widgets/wifi_connection_sheet.dart';
 import 'package:omi/utils/device.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/other/time_utils.dart';
@@ -93,12 +85,6 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
       totalDuration: syncProvider.totalDuration,
       playbackProgress: syncProvider.playbackProgress,
     );
-  }
-
-  void _showSnackBar(String message, [Color? backgroundColor]) {
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message), backgroundColor: backgroundColor));
-    }
   }
 
   @override
@@ -262,31 +248,60 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
                       // Progress indicator
                       if (isTransferring) ...[
                         const SizedBox(height: 32),
-                        ClipRRect(
-                          borderRadius: BorderRadius.circular(4),
-                          child: LinearProgressIndicator(
-                            value: transferProgress > 0 ? transferProgress : null,
-                            backgroundColor: Colors.grey.shade800,
-                            color: Colors.deepPurpleAccent,
-                            minHeight: 6,
+                        TweenAnimationBuilder<double>(
+                          tween: Tween<double>(
+                            begin: 0.0,
+                            end: transferProgress.clamp(0.0, 1.0),
                           ),
-                        ),
-                        const SizedBox(height: 12),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Text(
-                              '${(transferProgress * 100).toInt()}%',
-                              style: TextStyle(color: Colors.grey.shade400, fontSize: 14, fontWeight: FontWeight.w500),
-                            ),
-                            if (transferSpeedKBps != null && transferSpeedKBps > 0) ...[
-                              const SizedBox(width: 16),
-                              Text(
-                                '${transferSpeedKBps.toStringAsFixed(1)} KB/s',
-                                style: TextStyle(color: Colors.grey.shade500, fontSize: 14),
-                              ),
-                            ],
-                          ],
+                          duration: const Duration(milliseconds: 350),
+                          curve: Curves.easeOut,
+                          builder: (context, animProgress, _) {
+                            return Column(
+                              children: [
+                                ClipRRect(
+                                  borderRadius: BorderRadius.circular(4),
+                                  child: LinearProgressIndicator(
+                                    value: animProgress > 0 ? animProgress : null,
+                                    backgroundColor: Colors.grey.shade800,
+                                    color: Colors.deepPurpleAccent,
+                                    minHeight: 6,
+                                  ),
+                                ),
+                                const SizedBox(height: 12),
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Text(
+                                      '${(animProgress * 100).toStringAsFixed(1)}%',
+                                      style: TextStyle(
+                                        color: Colors.grey.shade400,
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                    if (transferSpeedKBps != null && transferSpeedKBps > 0) ...[
+                                      const SizedBox(width: 16),
+                                      TweenAnimationBuilder<double>(
+                                        tween: Tween<double>(
+                                          begin: transferSpeedKBps,
+                                          end: transferSpeedKBps,
+                                        ),
+                                        duration: const Duration(milliseconds: 600),
+                                        curve: Curves.easeOut,
+                                        builder: (context, animSpeed, _) => Text(
+                                          '${animSpeed.toStringAsFixed(1)} KB/s',
+                                          style: TextStyle(
+                                            color: Colors.grey.shade500,
+                                            fontSize: 14,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ],
+                                ),
+                              ],
+                            );
+                          },
                         ),
                         if (transferEtaSeconds != null && transferEtaSeconds > 0) ...[
                           const SizedBox(height: 8),
@@ -302,32 +317,6 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
               ),
             ),
 
-            // Transfer button
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 42),
-              child: SizedBox(
-                width: double.infinity,
-                height: 56,
-                child: ElevatedButton(
-                  onPressed: isTransferring ? _handleCancelTransfer : _handleTransferToPhone,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: isTransferring ? Colors.orange : Colors.deepPurpleAccent,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(isTransferring ? Icons.close : Icons.download, color: Colors.white, size: 22),
-                      const SizedBox(width: 12),
-                      Text(
-                        isTransferring ? context.l10n.cancelTransfer : context.l10n.transferToPhone,
-                        style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
           ],
         );
       },
@@ -485,120 +474,6 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
     );
   }
 
-  Future<void> _handleTransferToPhone() async {
-    final preferredMethod = SharedPreferencesUtil().preferredSyncMethod;
-    final wifiSupported = await ServiceManager.instance().wal.getSyncs().sdcard.isWifiSyncSupported();
-
-    bool wifiHardwareAvailable = false;
-    if (wifiSupported && widget.wal.storage == WalStorage.sdcard) {
-      wifiHardwareAvailable = await _checkWifiHardwareAvailable();
-      if (!wifiHardwareAvailable && preferredMethod == 'wifi') {
-        SharedPreferencesUtil().preferredSyncMethod = 'ble';
-        if (mounted) {
-          _showSnackBar(context.l10n.deviceDoesNotSupportWifiSwitchingToBle, Colors.orange);
-        }
-      }
-    }
-
-    if (preferredMethod == 'ble' && wifiHardwareAvailable && widget.wal.storage == WalStorage.sdcard) {
-      if (!mounted) return;
-      final result = await FastTransferSuggestionDialog.show(context);
-      if (result == null) return;
-
-      if (result == 'switch') {
-        // User wants to switch to Fast Transfer
-        SharedPreferencesUtil().preferredSyncMethod = 'wifi';
-        if (!mounted) return;
-        _showSnackBar(context.l10n.switchedToFastTransfer, Colors.green);
-      }
-    }
-
-    final currentMethod = SharedPreferencesUtil().preferredSyncMethod;
-    if (Platform.isIOS && widget.wal.storage == WalStorage.sdcard) {
-      if (currentMethod == 'wifi' && wifiHardwareAvailable) {
-        if (!mounted) return;
-        final hasPermission = await LocationPermissionHelper.checkAndRequest(context);
-        if (!hasPermission) {
-          return;
-        }
-      }
-    }
-
-    if (!mounted) return;
-
-    try {
-      final syncProvider = context.read<SyncProvider>();
-      final currentMethod = SharedPreferencesUtil().preferredSyncMethod;
-
-      // Show WiFi connection sheet if using WiFi for SD card transfer
-      if (currentMethod == 'wifi' && wifiHardwareAvailable && widget.wal.storage == WalStorage.sdcard && mounted) {
-        WifiConnectionListenerBridge? listener;
-
-        final sheetController = await WifiConnectionSheet.show(
-          context,
-          deviceName: 'Omi',
-          onCancel: () {
-            syncProvider.cancelSync();
-          },
-          onRetry: () {
-            if (listener != null) {
-              syncProvider.transferWalToPhone(widget.wal, connectionListener: listener);
-            }
-          },
-        );
-
-        listener = WifiConnectionListenerBridge(sheetController);
-        await syncProvider.transferWalToPhone(widget.wal, connectionListener: listener);
-      } else {
-        await syncProvider.transferWalToPhone(widget.wal);
-      }
-
-      if (mounted) {
-        _showSnackBar(context.l10n.transferCompleteMessage, Colors.green);
-        Navigator.of(context).pop();
-      }
-    } catch (e) {
-      if (mounted) {
-        _showSnackBar(context.l10n.transferFailedMessage(e.toString()), Colors.red);
-      }
-    }
-  }
-
-  Future<bool> _checkWifiHardwareAvailable() async {
-    try {
-      final connection = await ServiceManager.instance().device.ensureConnection(widget.wal.device);
-      if (connection == null) {
-        return true;
-      }
-
-      final ssid = WifiNetworkService.generateSsid(widget.wal.device);
-      final password = WifiNetworkService.generatePassword(widget.wal.device);
-
-      final result = await connection.setupWifiSync(ssid, password);
-
-      if (!result.success && result.errorCode == WifiSyncErrorCode.wifiHardwareNotAvailable) {
-        return false;
-      }
-
-      if (result.success) {
-        await connection.stopWifiSync();
-      }
-
-      return true;
-    } catch (e) {
-      debugPrint('Error checking WiFi hardware: $e');
-      return true;
-    }
-  }
-
-  void _handleCancelTransfer() {
-    final syncProvider = context.read<SyncProvider>();
-    syncProvider.cancelSync();
-    _showSnackBar(context.l10n.transferCancelled, Colors.orange);
-    // Pop back since the WAL state will change
-    Navigator.of(context).pop();
-  }
-
   Future<void> _handlePlayPause(SyncProvider syncProvider) async {
     await syncProvider.toggleWalPlayback(widget.wal);
   }
@@ -632,23 +507,7 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
                 _showFileDetailsDialog(context);
               },
             ),
-            if (_needsTransfer) ...[
-              ListTile(
-                leading: Icon(Icons.download, color: isTransferring ? Colors.grey : Colors.white),
-                title: Text(
-                  isTransferring ? context.l10n.transferInProgress : context.l10n.transferToPhone,
-                  style: Theme.of(
-                    sheetContext,
-                  ).textTheme.bodyMedium!.copyWith(color: isTransferring ? Colors.grey : Colors.white),
-                ),
-                onTap: isTransferring
-                    ? null
-                    : () {
-                        Navigator.pop(sheetContext);
-                        _handleTransferToPhone();
-                      },
-              ),
-            ] else ...[
+            if (!_needsTransfer) ...[
               ListTile(
                 leading: const FaIcon(FontAwesomeIcons.share, color: Colors.white, size: 18),
                 title: Text(context.l10n.shareRecording, style: Theme.of(sheetContext).textTheme.bodyMedium),

@@ -263,16 +263,7 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
   String _formatSyncError(dynamic error, Wal? wal) {
     var baseMessage = error.toString().replaceAll('Exception: ', '').replaceAll('WifiSyncException: ', '');
 
-    // Convert technical WiFi errors to user-friendly messages
-    if (baseMessage.toLowerCase().contains('internal error') ||
-        baseMessage.toLowerCase().contains('invalidpacketlength') ||
-        baseMessage.toLowerCase().contains('packet length')) {
-      baseMessage = 'Failed to enable WiFi on device';
-    } else if (baseMessage.toLowerCase().contains('wifi') && baseMessage.toLowerCase().contains('setup')) {
-      baseMessage = 'Failed to enable WiFi on device';
-    } else if (baseMessage.toLowerCase().contains('tcp') || baseMessage.toLowerCase().contains('socket')) {
-      baseMessage = 'Connection interrupted';
-    } else if (baseMessage.toLowerCase().contains('timeout')) {
+    if (baseMessage.toLowerCase().contains('timeout')) {
       baseMessage = 'Device did not respond';
     } else if (baseMessage.toLowerCase().contains('could not be processed')) {
       baseMessage = 'Audio file could not be processed';
@@ -423,24 +414,15 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
     }
   }
 
-  /// Transfer a single WAL from device storage (SD card or flash page) to phone storage
+  /// Transfer device storage recordings to phone.
+  /// Per-file sync is no longer supported - this redirects to syncAll.
   Future<void> transferWalToPhone(Wal wal, {IWifiConnectionListener? connectionListener}) async {
     if (wal.storage != WalStorage.sdcard && wal.storage != WalStorage.flashPage) {
       throw Exception('This recording is already on phone');
     }
 
-    // Set sync state to syncing so progress updates are processed
-    _updateSyncState(_syncState.toSyncing());
-
-    try {
-      await _walService.getSyncs().syncWal(wal: wal, progress: this, connectionListener: connectionListener);
-      await refreshWals();
-      _updateSyncState(_syncState.toIdle());
-    } catch (e) {
-      await refreshWals();
-      _updateSyncState(_syncState.toIdle());
-      rethrow;
-    }
+    // Redirect to sync all files (no per-file sync)
+    await syncWals(connectionListener: connectionListener);
   }
 
   /// Check if SD card sync is in progress

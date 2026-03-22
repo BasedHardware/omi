@@ -78,6 +78,16 @@ class SharedPreferencesUtil {
 
   String get deviceName => getString('deviceName');
 
+  bool getDeviceAutoSyncEnabled(String deviceId) {
+    if (deviceId.isEmpty) return true;
+    return getBool('deviceAutoSyncEnabled:$deviceId', defaultValue: true);
+  }
+
+  Future<bool> setDeviceAutoSyncEnabled(String deviceId, bool enabled) async {
+    if (deviceId.isEmpty) return false;
+    return await saveBool('deviceAutoSyncEnabled:$deviceId', enabled);
+  }
+
   bool get deviceIsV2 => getBool('deviceIsV2');
 
   set deviceIsV2(bool value) => saveBool('deviceIsV2', value);

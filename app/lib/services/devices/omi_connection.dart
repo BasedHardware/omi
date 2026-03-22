@@ -267,6 +267,131 @@ class OmiDeviceConnection extends DeviceConnection {
   }
 
   @override
+  Future<bool> performSyncDeviceTime() async {
+    try {
+      final int epochSeconds = DateTime.now().toUtc().millisecondsSinceEpoch ~/ 1000;
+      final payload = <int>[
+        epochSeconds & 0xFF,
+        (epochSeconds >> 8) & 0xFF,
+        (epochSeconds >> 16) & 0xFF,
+        (epochSeconds >> 24) & 0xFF,
+      ];
+
+      await transport.writeCharacteristic(timeSyncServiceUuid, timeSyncWriteCharacteristicUuid, payload);
+      Logger.debug('OmiDeviceConnection: Synced device time to epoch=$epochSeconds');
+      return true;
+    } catch (e) {
+      Logger.debug('OmiDeviceConnection: Error syncing device time: $e');
+      return false;
+    }
+  }
+
+  /// Send CMD_LIST_FILES (0x10) and wait for the file list notification response.
+  /// Response format: [count:1][ts1:4 BE][sz1:4 BE][ts2:4 BE][sz2:4 BE]...
+  @override
+  Future<List<StorageFile>> performListFiles() async {
+    try {
+      final completer = Completer<List<StorageFile>>();
+      StreamSubscription? sub;
+
+      final stream =
+          transport.getCharacteristicStream(storageDataStreamServiceUuid, storageDataStreamCharacteristicUuid);
+
+      sub = stream.listen((value) {
+        if (completer.isCompleted) return;
+        if (value.isEmpty) return;
+
+        int count = value[0];
+        int expectedLen = 1 + count * 8;
+
+        // Empty file list
+        if (count == 0 && value.length == 1) {
+          completer.complete([]);
+          return;
+        }
+
+        // Validate this looks like a file list response (not a data packet or status byte)
+        if (value.length >= expectedLen && count > 0 && count <= 128) {
+          List<StorageFile> files = [];
+          for (int i = 0; i < count; i++) {
+            int base = 1 + i * 8;
+            if (base + 8 > value.length) break;
+            int timestamp = (value[base] << 24) | (value[base + 1] << 16) | (value[base + 2] << 8) | value[base + 3];
+            int size = (value[base + 4] << 24) | (value[base + 5] << 16) | (value[base + 6] << 8) | value[base + 7];
+            files.add(StorageFile(index: i, timestamp: timestamp, size: size));
+          }
+          Logger.debug('OmiDeviceConnection: Listed ${files.length} files');
+          completer.complete(files);
+        }
+      });
+
+      // Send CMD_LIST_FILES
+      await transport.writeCharacteristic(storageDataStreamServiceUuid, storageDataStreamCharacteristicUuid, [0x10]);
+
+      final result = await completer.future.timeout(
+        const Duration(seconds: 10),
+        onTimeout: () {
+          Logger.debug('OmiDeviceConnection: listFiles timeout');
+          return <StorageFile>[];
+        },
+      );
+
+      await sub.cancel();
+      return result;
+    } catch (e) {
+      Logger.debug('OmiDeviceConnection: Error listing files: $e');
+      return [];
+    }
+  }
+
+  /// Send CMD_DELETE_FILE (0x12) and wait for the result notification.
+  @override
+  Future<bool> performDeleteFile(int fileIndex) async {
+    try {
+      final completer = Completer<bool>();
+      StreamSubscription? sub;
+
+      final stream =
+          transport.getCharacteristicStream(storageDataStreamServiceUuid, storageDataStreamCharacteristicUuid);
+
+      sub = stream.listen((value) {
+        if (completer.isCompleted) return;
+        if (value.length == 1) {
+          // 0 = success, other values = error codes
+          Logger.debug('OmiDeviceConnection: deleteFile result: ${value[0]}');
+          completer.complete(value[0] == 0);
+        }
+      });
+
+      // Send CMD_DELETE_FILE [0x12, fileIndex]
+      await transport.writeCharacteristic(
+          storageDataStreamServiceUuid, storageDataStreamCharacteristicUuid, [0x12, fileIndex & 0xFF]);
+
+      final result = await completer.future.timeout(
+        const Duration(seconds: 5),
+        onTimeout: () {
+          Logger.debug('OmiDeviceConnection: deleteFile timeout');
+          return false;
+        },
+      );
+
+      await sub.cancel();
+      return result;
+    } catch (e) {
+      Logger.debug('OmiDeviceConnection: Error deleting file: $e');
+      return false;
+    }
+  }
+
+  /// Deprecated for Omi firmware.
+  /// Command 0x13 is now STOP sync, so querying sync-state via BLE command is disabled.
+  @override
+  Future<SyncStateInfo> performGetSyncState() async {
+    Logger.debug('OmiDeviceConnection: getSyncState is deprecated on current firmware; returning empty state');
+    return SyncStateInfo(timestamp: 0, offset: 0);
+  }
+
+  @override
   Future performCameraStartPhotoController() async {
     try {
       // Capture photo once every 5s

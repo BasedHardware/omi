@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/models/sync_state.dart';
@@ -34,8 +33,6 @@ class WalSyncs implements IWalSync {
 
     _sdcardSync.setLocalSync(_phoneSync);
     _flashPageSync.setLocalSync(_phoneSync);
-
-    _sdcardSync.loadWifiCredentials();
   }
 
   @override
@@ -180,19 +177,8 @@ class WalSyncs implements IWalSync {
     progress?.onWalSyncedProgress(0.0, phase: SyncPhase.downloadingFromDevice);
     final missingSDCardWals = (await _sdcardSync.getMissingWals()).where((w) => w.status == WalStatus.miss).toList();
 
-    bool usedWifi = false;
     if (missingSDCardWals.isNotEmpty) {
-      final preferredMethod = SharedPreferencesUtil().preferredSyncMethod;
-      final wifiSupported = await _sdcardSync.isWifiSyncSupported();
-
-      if (preferredMethod == 'wifi' && wifiSupported) {
-        usedWifi = true;
-        DebugLogManager.logInfo('SD card sync using WiFi', {'walCount': missingSDCardWals.length});
-        await _sdcardSync.syncWithWifi(progress: progress, connectionListener: connectionListener);
-      } else {
-        DebugLogManager.logInfo('SD card sync using BLE', {'walCount': missingSDCardWals.length});
-        await _sdcardSync.syncAll(progress: progress);
-      }
+      await _sdcardSync.syncAll(progress: progress);
     }
 
     if (_isCancelled) {
@@ -209,19 +195,6 @@ class WalSyncs implements IWalSync {
     if (_isCancelled) {
       Logger.debug("WalSyncs: Cancelled after flash page phase");
       DebugLogManager.logWarning('Sync cancelled after flash page phase');
-      return resp;
-    }
-
-    if (usedWifi) {
-      Logger.debug("WalSyncs: Waiting for internet after WiFi transfer...");
-      DebugLogManager.logInfo('Waiting for internet after WiFi transfer');
-      progress?.onWalSyncedProgress(0.0, phase: SyncPhase.waitingForInternet);
-      await _waitForInternet();
-    }
-
-    if (_isCancelled) {
-      Logger.debug("WalSyncs: Cancelled after waiting for internet");
-      DebugLogManager.logWarning('Sync cancelled while waiting for internet');
       return resp;
     }
 
@@ -257,14 +230,7 @@ class WalSyncs implements IWalSync {
   }) async {
     if (wal.storage == WalStorage.sdcard) {
       progress?.onWalSyncedProgress(0.0, phase: SyncPhase.downloadingFromDevice);
-      final preferredMethod = SharedPreferencesUtil().preferredSyncMethod;
-      final wifiSupported = await _sdcardSync.isWifiSyncSupported();
-
-      if (preferredMethod == 'wifi' && wifiSupported) {
-        return await _sdcardSync.syncWithWifi(progress: progress, connectionListener: connectionListener);
-      } else {
-        return _sdcardSync.syncWal(wal: wal, progress: progress);
-      }
+      return _sdcardSync.syncWal(wal: wal, progress: progress);
     } else if (wal.storage == WalStorage.flashPage) {
       progress?.onWalSyncedProgress(0.0, phase: SyncPhase.downloadingFromDevice);
       return _flashPageSync.syncWal(wal: wal, progress: progress);

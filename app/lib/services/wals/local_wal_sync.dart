@@ -430,6 +430,8 @@ class LocalWalSyncImpl implements LocalWalSync {
           }
           files.add(file);
           wal.isSyncing = true;
+          wal.syncStartedAt = DateTime.now();
+          wal.syncSpeedKBps = null;
         } catch (e) {
           wal.status = WalStatus.corrupted;
           corruptedCount++;
@@ -443,11 +445,35 @@ class LocalWalSyncImpl implements LocalWalSync {
         continue;
       }
 
-      progress?.onWalSyncedProgress(1.0 - (left).toDouble() / wals.length);
+      final batchSize = right - left + 1;
+      final baseProgress = (left).toDouble() / wals.length;
+      final batchWeight = batchSize.toDouble() / wals.length;
+
+      progress?.onWalSyncedProgress(baseProgress);
 
       listener.onWalUpdated();
       try {
-        var partialRes = await syncLocalFiles(files);
+        var partialRes = await syncLocalFiles(
+          files,
+          onUploadProgress: (sentBytes, totalBytes, speedKBps) {
+            final batchUploadProgress = totalBytes > 0 ? sentBytes / totalBytes : 0.0;
+            final overallProgress = (baseProgress + (batchWeight * batchUploadProgress)).clamp(0.0, 1.0);
+
+            for (var idx = left; idx <= right; idx++) {
+              if (idx < wals.length) {
+                final syncWal = wals[idx];
+                syncWal.syncSpeedKBps = speedKBps;
+                if (speedKBps != null && speedKBps > 0 && totalBytes > sentBytes) {
+                  final bytesRemaining = totalBytes - sentBytes;
+                  syncWal.syncEtaSeconds = ((bytesRemaining / 1024) / speedKBps).round();
+                }
+              }
+            }
+
+            progress?.onWalSyncedProgress(overallProgress, speedKBps: speedKBps);
+            listener.onWalUpdated();
+          },
+        );
 
         resp.newConversationIds.addAll(
           partialRes.newConversationIds.where((id) => !resp.newConversationIds.contains(id)),
@@ -467,6 +493,7 @@ class LocalWalSyncImpl implements LocalWalSync {
             wals[j].isSyncing = false;
             wals[j].syncStartedAt = null;
             wals[j].syncEtaSeconds = null;
+            wals[j].syncSpeedKBps = null;
 
             listener.onWalSynced(wal);
           }
@@ -483,6 +510,7 @@ class LocalWalSyncImpl implements LocalWalSync {
             wals[j].isSyncing = false;
             wals[j].syncStartedAt = null;
             wals[j].syncEtaSeconds = null;
+            wals[j].syncSpeedKBps = null;
           }
         }
       }
@@ -542,6 +570,8 @@ class LocalWalSyncImpl implements LocalWalSync {
         } else {
           walFile = file;
           wal.isSyncing = true;
+          wal.syncStartedAt = DateTime.now();
+          wal.syncSpeedKBps = null;
         }
       }
     } catch (e) {
@@ -552,7 +582,19 @@ class LocalWalSyncImpl implements LocalWalSync {
 
     listener.onWalUpdated();
     try {
-      var partialRes = await syncLocalFiles([walFile]);
+      var partialRes = await syncLocalFiles(
+        [walFile],
+        onUploadProgress: (sentBytes, totalBytes, speedKBps) {
+          final progressPercent = totalBytes > 0 ? (sentBytes / totalBytes).clamp(0.0, 1.0) : 0.0;
+          walToSync.syncSpeedKBps = speedKBps;
+          if (speedKBps != null && speedKBps > 0 && totalBytes > sentBytes) {
+            final bytesRemaining = totalBytes - sentBytes;
+            walToSync.syncEtaSeconds = ((bytesRemaining / 1024) / speedKBps).round();
+          }
+          progress?.onWalSyncedProgress(progressPercent, speedKBps: speedKBps);
+          listener.onWalUpdated();
+        },
+      );
 
       resp.newConversationIds.addAll(
         partialRes.newConversationIds.where((id) => !resp.newConversationIds.contains(id)),
@@ -567,6 +609,7 @@ class LocalWalSyncImpl implements LocalWalSync {
       walToSync.isSyncing = false;
       walToSync.syncStartedAt = null;
       walToSync.syncEtaSeconds = null;
+      walToSync.syncSpeedKBps = null;
 
       DebugLogManager.logInfo('Single WAL upload succeeded', {'walId': wal.id});
       listener.onWalSynced(wal);
@@ -576,6 +619,7 @@ class LocalWalSyncImpl implements LocalWalSync {
       walToSync.isSyncing = false;
       walToSync.syncStartedAt = null;
       walToSync.syncEtaSeconds = null;
+      walToSync.syncSpeedKBps = null;
       rethrow;
     }
 

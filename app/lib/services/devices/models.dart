@@ -68,6 +68,31 @@ const String limitlessServiceUuid = "632de001-604c-446b-a80f-7963e950f3fb";
 const String limitlessTxCharUuid = "632de002-604c-446b-a80f-7963e950f3fb";
 const String limitlessRxCharUuid = "632de003-604c-446b-a80f-7963e950f3fb";
 
+/// Represents a file on the device's SD card storage (returned by CMD_LIST_FILES)
+class StorageFile {
+  final int index; // 0-based file index
+  final int timestamp; // Unix timestamp parsed from filename
+  final int size; // File size in bytes
+
+  StorageFile({required this.index, required this.timestamp, required this.size});
+
+  @override
+  String toString() => 'StorageFile(index=$index, ts=$timestamp, size=$size)';
+}
+
+/// Persisted sync state from firmware (if supported by a specific device protocol)
+class SyncStateInfo {
+  final int timestamp; // Unix timestamp of the file being synced
+  final int offset; // Byte offset within that file
+
+  SyncStateInfo({required this.timestamp, required this.offset});
+
+  bool get isEmpty => timestamp == 0 && offset == 0;
+
+  @override
+  String toString() => 'SyncStateInfo(ts=$timestamp, offset=$offset)';
+}
+
 // OmiGlass OTA Service UUIDs
 const String omiGlassOtaServiceUuid = "19b10010-e8f2-537e-4f6c-d104768a1214";
 const String omiGlassOtaControlCharacteristicUuid = "19b10011-e8f2-537e-4f6c-d104768a1214";

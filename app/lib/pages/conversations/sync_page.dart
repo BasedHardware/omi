@@ -1,5 +1,3 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -15,15 +13,11 @@ import 'package:omi/providers/user_provider.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/services/wals.dart';
 import 'package:omi/ui/molecules/omi_confirm_dialog.dart';
-import 'package:omi/pages/conversations/sync_widgets/wifi_connection_sheet.dart';
 import 'package:omi/utils/device.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/other/time_utils.dart';
-import 'fast_transfer_settings_page.dart';
 import 'local_storage_page.dart';
 import 'private_cloud_sync_page.dart';
-import 'sync_widgets/fast_transfer_suggestion_dialog.dart';
-import 'sync_widgets/location_permission_dialog.dart';
 import 'synced_conversations_page.dart';
 import 'wal_item_detail/wal_item_detail_page.dart';
 
@@ -369,47 +363,13 @@ class _SyncPageState extends State<SyncPage> {
     );
   }
 
-  Widget _buildSettingsCard({required bool showTransferMethod}) {
+  Widget _buildSettingsCard() {
     final isPhoneStorageOn = SharedPreferencesUtil().unlimitedLocalStorageEnabled;
-    final preferredSyncMethod = SharedPreferencesUtil().preferredSyncMethod;
-    final isFastTransfer = preferredSyncMethod == 'wifi';
 
     return Container(
       decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(20)),
       child: Column(
         children: [
-          if (showTransferMethod) ...[
-            Builder(
-              builder: (context) {
-                return _buildSettingsItem(
-                  icon: FontAwesomeIcons.bolt,
-                  title: context.l10n.transferMethod,
-                  trailing: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: isFastTransfer ? Colors.blue.withOpacity(0.2) : const Color(0xFF2A2A2E),
-                      borderRadius: BorderRadius.circular(100),
-                    ),
-                    child: Text(
-                      isFastTransfer ? context.l10n.fast : context.l10n.ble,
-                      style: TextStyle(
-                        color: isFastTransfer ? Colors.blue : Colors.white,
-                        fontSize: 13,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ),
-                  showChevron: true,
-                  onTap: () {
-                    Navigator.of(context)
-                        .push(MaterialPageRoute(builder: (context) => const FastTransferSettingsPage()))
-                        .then((_) => setState(() {}));
-                  },
-                );
-              },
-            ),
-            const Divider(height: 1, color: Color(0xFF3C3C43)),
-          ],
           Builder(
             builder: (context) {
               return _buildSettingsItem(
@@ -557,33 +517,6 @@ class _SyncPageState extends State<SyncPage> {
   void _handleSyncWals(BuildContext context, SyncProvider syncProvider) async {
     final sdCardWals = syncProvider.missingWals.where((wal) => wal.storage == WalStorage.sdcard).toList();
 
-    if (Platform.isIOS && sdCardWals.isNotEmpty) {
-      var preferredMethod = SharedPreferencesUtil().preferredSyncMethod;
-      final wifiSupported = await ServiceManager.instance().wal.getSyncs().sdcard.isWifiSyncSupported();
-
-      if (preferredMethod == 'ble' && wifiSupported) {
-        if (!context.mounted) return;
-        final result = await FastTransferSuggestionDialog.show(context);
-        if (result == null) {
-          return;
-        } else if (result == 'switch') {
-          SharedPreferencesUtil().preferredSyncMethod = 'wifi';
-          preferredMethod = 'wifi';
-          if (context.mounted) {
-            setState(() {});
-          }
-        }
-      }
-
-      if (preferredMethod == 'wifi' && wifiSupported) {
-        if (!context.mounted) return;
-        final hasPermission = await LocationPermissionHelper.checkAndRequest(context);
-        if (!hasPermission) {
-          return;
-        }
-      }
-    }
-
     if (sdCardWals.isNotEmpty) {
       // Show SD card warning dialog
       if (context.mounted) {
@@ -594,20 +527,8 @@ class _SyncPageState extends State<SyncPage> {
     }
   }
 
-  bool _isWifiSyncError(String errorMessage) {
-    final lowerMessage = errorMessage.toLowerCase();
-    return lowerMessage.contains('wifi') ||
-        lowerMessage.contains('hotspot') ||
-        lowerMessage.contains('ssid') ||
-        lowerMessage.contains('password') ||
-        lowerMessage.contains('tcp');
-  }
-
   String _formatErrorMessage(BuildContext context, String errorMessage) {
     // Clean up exception prefixes
-    if (errorMessage.startsWith('WifiSyncException: ')) {
-      errorMessage = errorMessage.substring('WifiSyncException: '.length);
-    }
     if (errorMessage.startsWith('Exception: ')) {
       errorMessage = errorMessage.substring('Exception: '.length);
     }
@@ -620,29 +541,8 @@ class _SyncPageState extends State<SyncPage> {
         lowerMessage.contains('packet length')) {
       return context.l10n.wifiEnableFailed;
     }
-    if (lowerMessage.contains('does not support wifi')) {
-      return context.l10n.deviceNoFastTransfer;
-    }
-    if (errorMessage.contains('Hotspot name must be') || errorMessage.contains('Password must be')) {
-      return errorMessage;
-    }
-    if (lowerMessage.contains('hotspot') && lowerMessage.contains('enable')) {
-      return context.l10n.enableHotspotMessage;
-    }
-    if (lowerMessage.contains('tcp server') || lowerMessage.contains('network server')) {
-      return context.l10n.transferStartFailed;
-    }
     if (lowerMessage.contains('timeout') || lowerMessage.contains('did not respond')) {
       return context.l10n.deviceNotResponding;
-    }
-    if (lowerMessage.contains('credentials')) {
-      return context.l10n.invalidWifiCredentials;
-    }
-    if (lowerMessage.contains('connection') && lowerMessage.contains('fail')) {
-      return context.l10n.wifiConnectionFailed;
-    }
-    if (lowerMessage.contains('wifi') && lowerMessage.contains('fail')) {
-      return context.l10n.wifiConnectionFailed;
     }
 
     return errorMessage;
@@ -673,7 +573,7 @@ class _SyncPageState extends State<SyncPage> {
           TextButton(
             onPressed: () {
               Navigator.of(context).pop();
-              _startSyncWithWifiSheet(context, syncProvider);
+              syncProvider.syncWals();
             },
             child: Text(
               context.l10n.process,
@@ -685,40 +585,10 @@ class _SyncPageState extends State<SyncPage> {
     );
   }
 
-  /// Start sync and show WiFi connection sheet if using WiFi sync
-  Future<void> _startSyncWithWifiSheet(BuildContext context, SyncProvider syncProvider) async {
-    final preferredMethod = SharedPreferencesUtil().preferredSyncMethod;
-    final wifiSupported = await ServiceManager.instance().wal.getSyncs().sdcard.isWifiSyncSupported();
-    final hasSDCardWals = syncProvider.missingWals.any((w) => w.storage == WalStorage.sdcard);
-
-    if (preferredMethod == 'wifi' && wifiSupported && hasSDCardWals && context.mounted) {
-      WifiConnectionListenerBridge? listener;
-
-      final controller = await WifiConnectionSheet.show(
-        context,
-        deviceName: 'Omi',
-        onCancel: () {
-          syncProvider.cancelSync();
-        },
-        onRetry: () {
-          if (listener != null) {
-            syncProvider.syncWals(connectionListener: listener);
-          }
-        },
-      );
-
-      listener = WifiConnectionListenerBridge(controller);
-      syncProvider.syncWals(connectionListener: listener);
-    } else {
-      syncProvider.syncWals();
-    }
-  }
-
   Widget _buildProcessCard(SyncProvider syncProvider) {
     // Error state
     if (syncProvider.syncError != null && syncProvider.failedWal == null) {
       final errorMessage = syncProvider.syncError!;
-      final isWifiError = _isWifiSyncError(errorMessage);
 
       return Container(
         decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(20)),
@@ -733,7 +603,7 @@ class _SyncPageState extends State<SyncPage> {
                     width: 24,
                     height: 24,
                     child: _buildFaIcon(
-                      isWifiError ? FontAwesomeIcons.wifi : FontAwesomeIcons.circleExclamation,
+                      FontAwesomeIcons.circleExclamation,
                       color: Colors.red,
                     ),
                   ),
@@ -743,7 +613,7 @@ class _SyncPageState extends State<SyncPage> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          isWifiError ? context.l10n.wifiSyncFailed : context.l10n.processingFailed,
+                          context.l10n.processingFailed,
                           style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w500),
                         ),
                         const SizedBox(height: 2),
@@ -789,15 +659,11 @@ class _SyncPageState extends State<SyncPage> {
 
     // Syncing state
     if (syncProvider.isSyncing) {
-      final progress = syncProvider.walBasedProgress > 0
-          ? syncProvider.walBasedProgress
-          : syncProvider.walsSyncedProgress;
+      final realtimeProgress = syncProvider.walsSyncedProgress.clamp(0.0, 1.0);
+      final walCountProgress = syncProvider.walBasedProgress.clamp(0.0, 1.0);
+      final progress = realtimeProgress > walCountProgress ? realtimeProgress : walCountProgress;
       final speedKBps = syncProvider.syncSpeedKBps;
       final phase = syncProvider.syncState.phase;
-
-      // Get sync method from the currently syncing WAL
-      final syncingWal = syncProvider.allWals.where((w) => w.isSyncing).firstOrNull;
-      final isWifiSync = syncingWal?.syncMethod == SyncMethod.wifi;
 
       // Phase-aware display properties
       final String phaseText;
@@ -851,12 +717,12 @@ class _SyncPageState extends State<SyncPage> {
                     width: 36,
                     height: 36,
                     decoration: BoxDecoration(
-                      color: (isWifiSync ? Colors.blue : phaseColor).withOpacity(0.2),
+                      color: Colors.deepPurple.withOpacity(0.2),
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: Icon(
-                      isWifiSync ? Icons.bolt : phaseIcon,
-                      color: isWifiSync ? Colors.blue : phaseColor,
+                      Icons.bluetooth,
+                      color: Colors.deepPurpleAccent,
                       size: 20,
                     ),
                   ),
@@ -878,17 +744,27 @@ class _SyncPageState extends State<SyncPage> {
                         ),
                         if (showSpeed && speedKBps != null && speedKBps > 0) ...[
                           const SizedBox(height: 4),
-                          Text(
-                            '${speedKBps.toStringAsFixed(1)} KB/s',
-                            style: TextStyle(color: Colors.grey.shade500, fontSize: 13),
+                          TweenAnimationBuilder<double>(
+                            tween: Tween<double>(begin: speedKBps, end: speedKBps),
+                            duration: const Duration(milliseconds: 600),
+                            curve: Curves.easeOut,
+                            builder: (context, animSpeed, _) => Text(
+                              '${animSpeed.toStringAsFixed(1)} KB/s',
+                              style: TextStyle(color: Colors.grey.shade500, fontSize: 13),
+                            ),
                           ),
                         ],
                       ],
                     ),
                   ),
-                  Text(
-                    '${(progress * 100).toInt()}%',
-                    style: TextStyle(color: Colors.grey.shade400, fontSize: 14, fontWeight: FontWeight.w500),
+                  TweenAnimationBuilder<double>(
+                    tween: Tween<double>(begin: 0.0, end: progress),
+                    duration: const Duration(milliseconds: 350),
+                    curve: Curves.easeOut,
+                    builder: (context, animPct, _) => Text(
+                      '${(animPct * 100).toStringAsFixed(1)}%',
+                      style: TextStyle(color: Colors.grey.shade400, fontSize: 14, fontWeight: FontWeight.w500),
+                    ),
                   ),
                   if (showCancel) ...[
                     const SizedBox(width: 12),
@@ -907,13 +783,18 @@ class _SyncPageState extends State<SyncPage> {
                 ],
               ),
               const SizedBox(height: 12),
-              ClipRRect(
-                borderRadius: BorderRadius.circular(3),
-                child: LinearProgressIndicator(
-                  value: progress,
-                  backgroundColor: const Color(0xFF3C3C43),
-                  color: isWifiSync ? Colors.blue : phaseColor,
-                  minHeight: 4,
+              TweenAnimationBuilder<double>(
+                tween: Tween<double>(begin: 0.0, end: progress),
+                duration: const Duration(milliseconds: 350),
+                curve: Curves.easeOut,
+                builder: (context, animProgress, _) => ClipRRect(
+                  borderRadius: BorderRadius.circular(3),
+                  child: LinearProgressIndicator(
+                    value: animProgress,
+                    backgroundColor: const Color(0xFF3C3C43),
+                    color: Colors.deepPurpleAccent,
+                    minHeight: 4,
+                  ),
                 ),
               ),
             ],
@@ -1241,12 +1122,7 @@ class _SyncPageState extends State<SyncPage> {
                         _buildProcessCard(syncProvider),
                         const SizedBox(height: 16),
                         _buildConversationsCreatedCard(syncProvider),
-                        FutureBuilder<bool>(
-                          future: ServiceManager.instance().wal.getSyncs().sdcard.isWifiSyncSupported(),
-                          builder: (context, wifiSnapshot) {
-                            return _buildSettingsCard(showTransferMethod: wifiSnapshot.data ?? false);
-                          },
-                        ),
+                        _buildSettingsCard(),
                         const SizedBox(height: 16),
                         _buildStatusChips(syncProvider),
                         const SizedBox(height: 16),

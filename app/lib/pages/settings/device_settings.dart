@@ -40,6 +40,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
 
   // WiFi sync state
   bool _isWifiSupported = false;
+  bool _autoSyncEnabled = true;
 
   Timer? _debounce;
   Timer? _micGainDebounce;
@@ -131,11 +132,32 @@ class _DeviceSettingsState extends State<DeviceSettings> {
         }
 
         final wifiSupported = await connection.isWifiSyncSupported();
+        final autoSyncEnabled = SharedPreferencesUtil().getDeviceAutoSyncEnabled(deviceProvider.pairedDevice!.id);
         if (mounted) {
           setState(() {
             _isWifiSupported = wifiSupported;
+            _autoSyncEnabled = autoSyncEnabled;
           });
         }
+      }
+    }
+  }
+
+  Future<void> _updateAutoSync(bool enabled) async {
+    final deviceProvider = context.read<DeviceProvider>();
+    final device = deviceProvider.pairedDevice;
+    if (device == null) {
+      return;
+    }
+
+    await SharedPreferencesUtil().setDeviceAutoSyncEnabled(device.id, enabled);
+
+    if (!enabled) {
+      try {
+        var connection = await ServiceManager.instance().device.ensureConnection(device.id);
+        await connection?.stopStorageSync();
+      } catch (e) {
+        Logger.debug('DeviceSettings: failed to stop storage auto-sync: $e');
       }
     }
   }
@@ -325,6 +347,41 @@ class _DeviceSettingsState extends State<DeviceSettings> {
             chipValue: manufacturer,
             copyValue: manufacturer,
             showChevron: false,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildProfileStyleSwitchItem({
+    required IconData icon,
+    required String title,
+    required bool value,
+    required ValueChanged<bool> onChanged,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      child: Row(
+        children: [
+          SizedBox(width: 24, height: 24, child: FaIcon(icon, color: const Color(0xFF8E8E93), size: 20)),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Text(
+              title,
+              style: const TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w400),
+            ),
+          ),
+          Text(
+            value ? context.l10n.on : context.l10n.off,
+            style: const TextStyle(color: Color(0xFF8E8E93), fontSize: 13, fontWeight: FontWeight.w500),
+          ),
+          const SizedBox(width: 8),
+          Switch.adaptive(
+            value: value,
+            onChanged: onChanged,
+            activeColor: Colors.white,
+            activeTrackColor: const Color(0xFF2A2A2E),
+            inactiveTrackColor: const Color(0xFF2A2A2E),
           ),
         ],
       ),
@@ -677,6 +734,18 @@ class _DeviceSettingsState extends State<DeviceSettings> {
             title: context.l10n.doubleTap,
             chipValue: _getDoubleTapActionLabel(doubleTapAction),
             onTap: _showDoubleTapActionSheet,
+          ),
+          const Divider(height: 1, color: Color(0xFF3C3C43)),
+          _buildProfileStyleSwitchItem(
+            icon: FontAwesomeIcons.arrowsRotate,
+            title: '${context.l10n.auto} ${context.l10n.sync}',
+            value: _autoSyncEnabled,
+            onChanged: (value) async {
+              setState(() {
+                _autoSyncEnabled = value;
+              });
+              await _updateAutoSync(value);
+            },
           ),
           // LED Brightness
           if (_isDimRatioLoaded && _hasDimmingFeature == true) ...[

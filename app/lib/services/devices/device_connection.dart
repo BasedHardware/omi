@@ -157,6 +157,13 @@ abstract class DeviceConnection {
       // Check connection
       await ping();
 
+      // Sync device time on every successful connection (best-effort).
+      try {
+        await performSyncDeviceTime();
+      } catch (e) {
+        Logger.debug('DeviceConnection: Time sync failed (non-fatal): $e');
+      }
+
       // Update device info
       device = await device.getDeviceInfo(this);
     } catch (e) {
@@ -344,6 +351,68 @@ abstract class DeviceConnection {
     return Future.value(false);
   }
 
+  /// List audio files on the device's SD card.
+  /// Returns a list of [StorageFile] with index, timestamp, and size.
+  /// Uses CMD_LIST_FILES (0x10) protocol command.
+  Future<List<StorageFile>> listFiles() async {
+    if (await isConnected()) {
+      return await performListFiles();
+    }
+    _showDeviceDisconnectedNotification();
+    return [];
+  }
+
+  Future<List<StorageFile>> performListFiles() async {
+    return [];
+  }
+
+  /// Delete a specific file on the device's SD card by index.
+  /// Uses CMD_DELETE_FILE (0x12) protocol command.
+  Future<bool> deleteFile(int fileIndex) async {
+    if (await isConnected()) {
+      return await performDeleteFile(fileIndex);
+    }
+    _showDeviceDisconnectedNotification();
+    return false;
+  }
+
+  Future<bool> performDeleteFile(int fileIndex) async {
+    return false;
+  }
+
+  /// Get persisted sync state from firmware when supported.
+  /// On current Omi firmware this is deprecated (0x13 is STOP sync), so most
+  /// implementations return an empty state.
+  Future<SyncStateInfo> getSyncState() async {
+    if (await isConnected()) {
+      return await performGetSyncState();
+    }
+    return SyncStateInfo(timestamp: 0, offset: 0);
+  }
+
+  Future<SyncStateInfo> performGetSyncState() async {
+    return SyncStateInfo(timestamp: 0, offset: 0);
+  }
+
+  /// Stop any active storage sync (auto-sync or manual transfer).
+  /// Sends STOP_COMMAND (3) to the device.
+  Future<bool> stopStorageSync() async {
+    if (await isConnected()) {
+      return await performStopStorageSync();
+    }
+    return false;
+  }
+
+  Future<bool> performStopStorageSync() async {
+    try {
+      await transport.writeCharacteristic(storageDataStreamServiceUuid, storageDataStreamCharacteristicUuid, [0x03]);
+      return true;
+    } catch (e) {
+      Logger.debug('Failed to send STOP command: $e');
+      return false;
+    }
+  }
+
   Future<StreamSubscription?> getBleStorageBytesListener({
     required void Function(List<int>) onStorageBytesReceived,
   }) async {
@@ -461,6 +530,18 @@ abstract class DeviceConnection {
   }
 
   Future<int?> performGetMicGain();
+
+  Future<bool> syncDeviceTime() async {
+    if (await isConnected()) {
+      return await performSyncDeviceTime();
+    }
+    _showDeviceDisconnectedNotification();
+    return false;
+  }
+
+  Future<bool> performSyncDeviceTime() async {
+    return false;
+  }
 
   Future<bool> isWifiSyncSupported() async {
     if (await isConnected()) {

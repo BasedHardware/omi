@@ -474,6 +474,17 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     ServiceManager.instance().wal.getSyncs().sdcard.setDevice(device);
     ServiceManager.instance().wal.getSyncs().flashPage.setDevice(device);
 
+    final autoSyncEnabled = SharedPreferencesUtil().getDeviceAutoSyncEnabled(device.id);
+    if (!autoSyncEnabled) {
+      try {
+        final connection = await ServiceManager.instance().device.ensureConnection(device.id);
+        await connection?.stopStorageSync();
+        Logger.debug('DeviceProvider: storage auto-sync disabled by app setting for ${device.id}');
+      } catch (e) {
+        Logger.debug('DeviceProvider: failed to disable storage auto-sync on connect: $e');
+      }
+    }
+
     notifyListeners();
 
     // Check firmware updates

@@ -345,9 +345,16 @@ Future<List<ServerConversation>> sendStorageToBackend(File file, String sdCardDa
   }
 }
 
-Future<SyncLocalFilesResponse> syncLocalFiles(List<File> files) async {
+Future<SyncLocalFilesResponse> syncLocalFiles(
+  List<File> files, {
+  void Function(int sentBytes, int totalBytes, double? speedKBps)? onUploadProgress,
+}) async {
   try {
-    var response = await makeMultipartApiCall(url: '${Env.apiBaseUrl}v1/sync-local-files', files: files);
+    var response = await makeMultipartApiCall(
+      url: '${Env.apiBaseUrl}v1/sync-local-files',
+      files: files,
+      onUploadProgress: onUploadProgress,
+    );
 
     if (response.statusCode == 200) {
       Logger.debug('syncLocalFile Response body: ${jsonDecode(response.body)}');
