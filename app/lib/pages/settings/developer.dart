@@ -1960,8 +1960,8 @@ class _ManualFirmwareFlashPageState extends State<_ManualFirmwareFlashPage> with
                   const FaIcon(FontAwesomeIcons.file, color: Colors.deepPurple, size: 20),
                   const SizedBox(width: 12),
                   Expanded(
-                    child: Column( 
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start, 
                       children: [
                         Text(widget.fileName, style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600)),
                         const SizedBox(height: 4),
