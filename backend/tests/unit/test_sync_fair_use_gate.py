@@ -279,6 +279,23 @@ class TestSyncEndpointCodeStructure:
         source = self._read_sync_source()
         assert 'total_speech_ms > 0' in source
 
+    def test_soft_cap_does_not_lock(self):
+        """Soft cap trigger must NOT set should_lock — only classifier/stage should lock."""
+        source = self._read_sync_source()
+        # Find the soft cap block: between 'if triggered_caps:' and the next unindented line
+        lines = source.split('\n')
+        in_triggered_block = False
+        for line in lines:
+            stripped = line.strip()
+            if stripped.startswith('if triggered_caps:'):
+                in_triggered_block = True
+                continue
+            if in_triggered_block:
+                if stripped and not stripped.startswith('#') and not line.startswith(' ' * 16):
+                    break  # exited the block
+                assert 'should_lock' not in stripped, \
+                    "soft cap trigger must not set should_lock — matches transcribe.py behavior"
+
 
 class TestSoftCapBoundary:
     """Test check_soft_caps at exact boundary values."""
