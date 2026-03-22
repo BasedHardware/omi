@@ -8,8 +8,13 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
 
+import database.action_items as action_items_db
+import database.conversations as conversations_db
 import database.fair_use as fair_use_db
+import database.memories as memories_db
+import database.users as users_db
 from database._client import db
+from utils.subscription import is_paid_plan
 from utils.other.endpoints import get_current_user_uid, rate_limit_dependency
 from utils.fair_use import (
     get_rolling_speech_ms,
@@ -104,6 +109,27 @@ def set_user_stage(uid: str, stage: str = Query(...), admin_id: str = Depends(_v
     fair_use_db.update_fair_use_state(uid, updates)
     invalidate_enforcement_cache(uid)
     return {'status': 'updated', 'stage': stage}
+
+
+@router.post('/v1/admin/fair-use/user/{uid}/unlock', tags=['admin'])
+def unlock_user_content(uid: str, admin_id: str = Depends(_verify_admin_key)):
+    """Unlock all conversations, memories, and action items for a paid user.
+
+    Only unlocks if user has an active paid subscription (unlimited/pro).
+    Used to remediate incorrectly locked content (e.g. sync soft cap bug PR #5878).
+    """
+    subscription = users_db.get_user_subscription(uid)
+    if not is_paid_plan(subscription.plan):
+        raise HTTPException(
+            status_code=400, detail=f'User plan is {subscription.plan}, not a paid plan. Will not unlock.'
+        )
+
+    conversations_db.unlock_all_conversations(uid)
+    memories_db.unlock_all_memories(uid)
+    action_items_db.unlock_all_action_items(uid)
+
+    logger.info(f'admin: unlocked all content for uid={uid} plan={subscription.plan} by {admin_id}')
+    return {'status': 'unlocked', 'uid': uid, 'plan': subscription.plan}
 
 
 @router.get('/v1/admin/fair-use/case/{case_ref}', tags=['admin'])
