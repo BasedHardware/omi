@@ -1870,8 +1870,8 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                   if (provider.isConnected && provider.pairedDevice != null) ...[
                     const SizedBox(height: 24),
                     _buildSectionHeader('Firmware', subtitle: 'Flash custom firmware builds'),
-                    const SizedBox(height: 8), 
-                    _buildManualFirmwareFlash(provider),
+                    const SizedBox(height: 8),
+                    _buildManualFirmwareFlash(provider), 
                   ],
 
                   const SizedBox(height: 48),
