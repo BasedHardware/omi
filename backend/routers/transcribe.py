@@ -1139,11 +1139,23 @@ async def _stream_handler(
                     )
 
                 # Stabilization delay before switching to main socket
+                # Send keepalive to main DG socket during stabilization to prevent
+                # 10s idle timeout — main socket receives no audio while profile
+                # socket is active (#5870)
                 if is_active():
                     logger.info(
                         f"Speech profile sent, waiting {SPEECH_PROFILE_STABILIZE_DELAY}s for stabilization {uid} {session_id}"
                     )
-                    await asyncio.sleep(SPEECH_PROFILE_STABILIZE_DELAY)
+                    keepalive_interval = 5  # seconds, well within DG 10s idle timeout
+                    elapsed = 0.0
+                    while elapsed < SPEECH_PROFILE_STABILIZE_DELAY and is_active():
+                        sleep_chunk = min(keepalive_interval, SPEECH_PROFILE_STABILIZE_DELAY - elapsed)
+                        await asyncio.sleep(sleep_chunk)
+                        elapsed += sleep_chunk
+                        # Keep main DG socket alive during speech profile idle window
+                        if stt_service == STTService.deepgram and deepgram_socket:
+                            deepgram_socket.keep_alive()
+                            logger.debug(f"Speech profile stabilization keepalive sent {uid} {session_id}")
 
             except Exception as e:
                 logger.error(f"Error loading speech profile in background: {e} {uid} {session_id}")
