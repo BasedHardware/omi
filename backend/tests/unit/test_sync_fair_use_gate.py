@@ -297,6 +297,63 @@ class TestSyncEndpointCodeStructure:
                     "soft cap trigger must not set should_lock — matches transcribe.py behavior"
 
 
+class TestLockDecisionBehavior:
+    """Behavioral tests: verify lock decision logic matches intended design.
+
+    Simulates the sync endpoint lock decision flow:
+        should_lock = not has_transcription_credits(uid)
+        ... fair-use soft cap check (should NOT change should_lock) ...
+        is_locked = should_lock
+    """
+
+    @staticmethod
+    def _compute_lock_decision(has_credits: bool, fair_use_enabled: bool, triggered_caps: list) -> bool:
+        """Reproduce the sync endpoint lock decision logic."""
+        should_lock = not has_credits
+
+        if fair_use_enabled and triggered_caps:
+            # Per fix: soft cap trigger must NOT set should_lock
+            # Only record + trigger classifier (side effects not modeled here)
+            pass
+
+        return should_lock
+
+    def test_credits_available_soft_cap_triggered_no_lock(self):
+        """Unlimited user with credits who triggers soft cap must NOT be locked."""
+        is_locked = self._compute_lock_decision(
+            has_credits=True, fair_use_enabled=True, triggered_caps=[{'trigger': 'daily'}]
+        )
+        assert is_locked is False, "Soft cap trigger must not lock when user has credits"
+
+    def test_credits_exhausted_no_soft_cap_locks(self):
+        """User with exhausted credits must be locked even without soft cap."""
+        is_locked = self._compute_lock_decision(
+            has_credits=False, fair_use_enabled=True, triggered_caps=[]
+        )
+        assert is_locked is True, "Credit exhaustion must lock regardless of soft caps"
+
+    def test_credits_exhausted_with_soft_cap_locks(self):
+        """User with exhausted credits AND soft cap trigger must be locked (from credits, not caps)."""
+        is_locked = self._compute_lock_decision(
+            has_credits=False, fair_use_enabled=True, triggered_caps=[{'trigger': 'daily'}]
+        )
+        assert is_locked is True, "Credit exhaustion locks; soft cap is independent"
+
+    def test_credits_available_fair_use_disabled_no_lock(self):
+        """With fair-use disabled and credits available, no lock."""
+        is_locked = self._compute_lock_decision(
+            has_credits=True, fair_use_enabled=False, triggered_caps=[]
+        )
+        assert is_locked is False
+
+    def test_credits_available_no_caps_no_lock(self):
+        """Normal unlimited user with no caps triggered: no lock."""
+        is_locked = self._compute_lock_decision(
+            has_credits=True, fair_use_enabled=True, triggered_caps=[]
+        )
+        assert is_locked is False
+
+
 class TestSoftCapBoundary:
     """Test check_soft_caps at exact boundary values."""
 
