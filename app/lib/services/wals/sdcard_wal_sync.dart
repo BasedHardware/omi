@@ -616,8 +616,7 @@ class SDCardWalSyncImpl implements SDCardWalSync {
             }
             // Timestamp marker: 0xFF followed by 4-byte little-endian epoch
             if (packageSize == 0xFF && packageOffset + 5 <= value.length) {
-              var epoch =
-                  value[packageOffset + 1] |
+              var epoch = value[packageOffset + 1] |
                   (value[packageOffset + 2] << 8) |
                   (value[packageOffset + 3] << 16) |
                   (value[packageOffset + 4] << 24);
@@ -1293,8 +1292,6 @@ class SDCardWalSyncImpl implements SDCardWalSync {
       int totalExpectedBytes = 0;
       int totalReceivedBytes = 0;
 
-      var timerStart = wal.timerStart;
-
       // Cursor-based buffer: avoids O(N²) list copies for large transfers.
       List<int> tcpBuffer = [];
       int tcpBufPos = 0;
@@ -1549,7 +1546,7 @@ class SDCardWalSyncImpl implements SDCardWalSync {
           fileTimerStart += sdcardChunkSizeSecs;
           try {
             var file = await _flushToDisk(wal, chunk, fileTimerStart);
-            await _registerSingleChunk(wal, file, fileTimerStart);
+            await _registerSingleChunk(wal, file, fileTimerStart, chunk.length);
           } catch (e) {
             Logger.debug('SDCardWalSync WiFi: Error flushing chunk: $e');
           }
@@ -1560,7 +1557,7 @@ class SDCardWalSyncImpl implements SDCardWalSync {
           fileTimerStart += sdcardChunkSizeSecs;
           try {
             var file = await _flushToDisk(wal, chunk, fileTimerStart);
-            await _registerSingleChunk(wal, file, fileTimerStart);
+            await _registerSingleChunk(wal, file, fileTimerStart, chunk.length);
           } catch (e) {
             Logger.debug('SDCardWalSync WiFi: Error flushing final chunk: $e');
           }
@@ -1601,8 +1598,8 @@ class SDCardWalSyncImpl implements SDCardWalSync {
       if (wasCancelled) {
         debugPrint("SDCardWalSync WiFi: Cancelled - partial data saved, reconnecting BLE in background");
         DebugLogManager.logWarning('SD card WiFi sync cancelled', {
-          'bytesTransferred': offset - initialOffset,
-          'totalBytes': totalBytes,
+          'bytesTransferred': totalReceivedBytes,
+          'totalBytes': totalExpectedBytes,
         });
         // Reconnect BLE and stop WiFi sync in background
         _reconnectBleAfterCancel(deviceId);
