@@ -1,13 +1,12 @@
-import hashlib
-import hmac
 import json
-import os
 import threading
 import uuid
 from typing import List, Dict, Any, Union, Optional
+import hashlib
+import os
 
 import pytz
-from fastapi import APIRouter, Depends, Header, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
@@ -53,7 +52,6 @@ from utils.subscription import (
     get_plan_limits,
     get_plan_features,
     get_monthly_usage_for_subscription,
-    is_paid_plan,
     reconcile_basic_plan_with_stripe,
 )
 from utils import stripe as stripe_utils
@@ -69,7 +67,6 @@ from utils.other.storage import (
     delete_user_person_speech_sample,
 )
 from utils.webhooks import webhook_first_time_setup
-import database.action_items as action_items_db
 from database.action_items import get_action_items as get_standalone_action_items
 from google.cloud import firestore as cloud_firestore
 import logging
@@ -1188,36 +1185,3 @@ async def export_all_user_data(uid: str = Depends(auth.get_current_user_uid)):
         media_type='application/json',
         headers={'Content-Disposition': 'attachment; filename="omi-export.json"'},
     )
-
-
-# ---------------------------------------------------------------------------
-# Admin: unlock user content
-# ---------------------------------------------------------------------------
-
-ADMIN_KEY = os.getenv('ADMIN_KEY', '')
-
-
-def _verify_admin_key(x_admin_key: str = Header(..., alias='X-Admin-Key')) -> str:
-    if not ADMIN_KEY or not hmac.compare_digest(x_admin_key, ADMIN_KEY):
-        raise HTTPException(status_code=403, detail='Invalid admin key')
-    return f'admin:{hashlib.sha256(x_admin_key.encode()).hexdigest()[:8]}'
-
-
-@router.post('/v1/admin/user/{uid}/unlock', tags=['admin'])
-def unlock_user_content(uid: str, admin_id: str = Depends(_verify_admin_key)):
-    """Unlock all conversations, memories, and action items for a paid user.
-
-    Only unlocks if user has an active paid subscription (unlimited/pro).
-    """
-    subscription = get_user_subscription(uid)
-    if not is_paid_plan(subscription.plan):
-        raise HTTPException(
-            status_code=400, detail=f'User plan is {subscription.plan}, not a paid plan. Will not unlock.'
-        )
-
-    conversations_db.unlock_all_conversations(uid)
-    memories_db.unlock_all_memories(uid)
-    action_items_db.unlock_all_action_items(uid)
-
-    logger.info(f'admin: unlocked all content for uid={uid} plan={subscription.plan} by {admin_id}')
-    return {'status': 'unlocked', 'uid': uid, 'plan': subscription.plan}
