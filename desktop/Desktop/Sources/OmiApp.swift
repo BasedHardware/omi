@@ -270,7 +270,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     let isDev = AnalyticsManager.isDevBuild
     SentrySDK.start { options in
       options.dsn =
-        "https://8f700584deda57b26041ff015539c8c1@o4507617161314304.ingest.us.sentry.io/4510790686277632"
+        "https://bbffa02d948c81ea4dccd36246c7bd20@o4511085999816704.ingest.us.sentry.io/4511086024851456"
       options.debug = false
       options.enableAutoSessionTracking = true
       options.environment = isDev ? "development" : "production"
