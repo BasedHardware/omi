@@ -270,3 +270,97 @@ def test_deepgram_options_no_keepalive():
         # DeepgramClientOptions stores options dict — keepalive key must be absent
         if hasattr(opts, 'options') and isinstance(opts.options, dict):
             assert 'keepalive' not in opts.options, f'{name} must not contain "keepalive" key'
+
+
+@pytest.mark.asyncio
+async def test_process_audio_dg_returns_safe_socket_no_gate():
+    """process_audio_dg returns SafeDeepgramSocket when no VAD gate provided (#5870)."""
+    from utils.stt.safe_socket import SafeDeepgramSocket
+
+    mock_dg_conn = MagicMock()
+    with patch(
+        'utils.stt.streaming.connect_to_deepgram_with_backoff', new_callable=AsyncMock, return_value=mock_dg_conn
+    ):
+        result = await process_audio_dg(
+            stream_transcript=MagicMock(),
+            language='en',
+            sample_rate=16000,
+            channels=1,
+        )
+    assert isinstance(result, SafeDeepgramSocket)
+    assert result.is_connection_dead is False
+
+
+@pytest.mark.asyncio
+async def test_process_audio_dg_returns_gated_socket_with_gate():
+    """process_audio_dg returns GatedDeepgramSocket wrapping SafeDeepgramSocket when VAD gate provided (#5870)."""
+    from utils.stt.safe_socket import SafeDeepgramSocket
+    from utils.stt.vad_gate import GatedDeepgramSocket, VADStreamingGate
+
+    mock_dg_conn = MagicMock()
+    mock_gate = VADStreamingGate(sample_rate=16000, channels=1, mode='active', uid='test', session_id='test')
+    with patch(
+        'utils.stt.streaming.connect_to_deepgram_with_backoff', new_callable=AsyncMock, return_value=mock_dg_conn
+    ):
+        result = await process_audio_dg(
+            stream_transcript=MagicMock(),
+            language='en',
+            sample_rate=16000,
+            channels=1,
+            vad_gate=mock_gate,
+        )
+    assert isinstance(result, GatedDeepgramSocket)
+    assert isinstance(result._conn, SafeDeepgramSocket)
+    assert result.is_connection_dead is False
+
+
+def test_stabilization_keepalive_pattern():
+    """Verify the stabilization keepalive pattern sends keep_alive during idle window (#5870).
+
+    This tests the core logic from _process_speech_profile() in transcribe.py:
+    during a stabilization window, keep_alive() should be called at regular intervals
+    to prevent DG 10s idle timeout.
+    """
+    from utils.stt.safe_socket import SafeDeepgramSocket
+
+    mock_conn = MagicMock()
+    mock_conn.keep_alive.return_value = True
+    dg_socket = SafeDeepgramSocket(mock_conn)
+
+    # Simulate the stabilization keepalive loop (mirrors transcribe.py:1149-1157)
+    keepalive_interval = 5
+    stabilize_delay = 15
+    elapsed = 0.0
+    keepalive_count = 0
+    while elapsed < stabilize_delay:
+        elapsed += keepalive_interval
+        dg_socket.keep_alive()
+        keepalive_count += 1
+
+    # Should have sent 3 keepalives (at 5s, 10s, 15s)
+    assert keepalive_count == 3
+    assert mock_conn.keep_alive.call_count == 3
+    assert dg_socket.is_connection_dead is False
+
+
+def test_stabilization_keepalive_stops_on_dead():
+    """Stabilization keepalive loop should stop when connection dies (#5870)."""
+    from utils.stt.safe_socket import SafeDeepgramSocket
+
+    mock_conn = MagicMock()
+    # First keepalive succeeds, second returns False (dead)
+    mock_conn.keep_alive.side_effect = [True, False]
+    dg_socket = SafeDeepgramSocket(mock_conn)
+
+    keepalive_interval = 5
+    stabilize_delay = 15
+    elapsed = 0.0
+    while elapsed < stabilize_delay:
+        elapsed += keepalive_interval
+        if dg_socket.is_connection_dead:
+            break
+        dg_socket.keep_alive()
+
+    # Should stop after 2nd keepalive (detected dead)
+    assert dg_socket.is_connection_dead is True
+    assert mock_conn.keep_alive.call_count == 2
