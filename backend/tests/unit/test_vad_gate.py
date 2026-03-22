@@ -9,7 +9,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from utils.stt.streaming import SafeDeepgramSocket
+from utils.stt.safe_socket import SafeDeepgramSocket
 from utils.stt.vad_gate import (
     DgWallMapper,
     GateState,
