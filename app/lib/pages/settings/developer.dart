@@ -1956,8 +1956,8 @@ class _ManualFirmwareFlashPageState extends State<_ManualFirmwareFlashPage> with
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Row(
-                children: [ 
-                  const FaIcon(FontAwesomeIcons.file, color: Colors.deepPurple, size: 20),
+                children: [
+                  const FaIcon(FontAwesomeIcons.file, color: Colors.deepPurple, size: 20), 
                   const SizedBox(width: 12),
                   Expanded(
                     child: Column(
