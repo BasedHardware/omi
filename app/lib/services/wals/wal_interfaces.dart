@@ -90,6 +90,16 @@ abstract class SDCardWalSync implements IWalSync {
   });
 }
 
+abstract class StorageSync implements IWalSync {
+  void setLocalSync(LocalWalSync localSync);
+  void setDevice(BtDevice? device);
+  Future<void> deleteAllSyncedWals();
+  Future<void> deleteAllPendingWals();
+  bool get isSyncing;
+  double get currentSpeedKBps;
+  Future<bool> hasFilesToSync();
+}
+
 abstract class FlashPageWalSync implements IWalSync {
   void setDevice(BtDevice? device);
   void setLocalSync(LocalWalSync localSync);
