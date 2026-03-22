@@ -285,8 +285,10 @@ class _AppDetailPageState extends State<AppDetailPage> {
       if (app.externalIntegration!.setupInstructionsFilePath?.isNotEmpty == true) {
         if (app.externalIntegration!.setupInstructionsFilePath?.contains('raw.githubusercontent.com') == true) {
           getAppMarkdown(app.externalIntegration!.setupInstructionsFilePath ?? '').then((value) {
-            // Note: Asset paths should be absolute URLs from the backend
-            // If relative paths are used, they need to be resolved by the backend
+            value = value.replaceAll(
+              '](assets/',
+              '](https://raw.githubusercontent.com/BasedHardware/Omi/main/plugins/instructions/${app.id}/assets/',
+            );
             setState(() => instructionsMarkdown = value);
           });
         }
@@ -787,80 +789,81 @@ class _AppDetailPageState extends State<AppDetailPage> {
                                   },
                                 );
                               },
-                            );
-                          },
+                            ),
+                          ))
+                  : const SizedBox(width: 8),
+            ],
+          ),
+          backgroundColor: Theme.of(context).colorScheme.primary,
+          body: SingleChildScrollView(
+            controller: _scrollController,
+            child: Skeletonizer(
+              enabled: isLoading,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const SizedBox(height: 20),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const SizedBox(width: 20),
+                      CachedNetworkImage(
+                        imageUrl: app.getImageUrl(),
+                        imageBuilder: (context, imageProvider) => Container(
+                          width: 108,
+                          height: 108,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.rectangle,
+                            borderRadius: BorderRadius.circular(24),
+                            image: DecorationImage(image: imageProvider, fit: BoxFit.cover),
+                          ),
                         ),
-                      ))
-                : const SizedBox(width: 8),
-          ],
-        ),
-        backgroundColor: Theme.of(context).colorScheme.primary,
-        body: SingleChildScrollView(
-          controller: _scrollController,
-          child: Skeletonizer(
-            enabled: isLoading,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const SizedBox(height: 20),
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const SizedBox(width: 20),
-                    CachedNetworkImage(
-                      imageUrl: app.getImageUrl(),
-                      imageBuilder: (context, imageProvider) => Container(
-                        width: 108,
-                        height: 108,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.rectangle,
-                          borderRadius: BorderRadius.circular(24),
-                          image: DecorationImage(image: imageProvider, fit: BoxFit.cover),
-                        ),
+                        placeholder: (context, url) => const CircularProgressIndicator(),
+                        errorWidget: (context, url, error) => const Icon(FontAwesomeIcons.circleExclamation),
                       ),
-                      placeholder: (context, url) => const CircularProgressIndicator(),
-                      errorWidget: (context, url, error) => const Icon(FontAwesomeIcons.circleExclamation),
-                    ),
-                    const SizedBox(width: 20),
-                    Expanded(
-                      child: SizedBox(
-                        height: 108,
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  app.name.decodeString,
-                                  style:
-                                      const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                                const SizedBox(height: 4),
-                                Row(
-                                  children: [
-                                    Flexible(
-                                      child: Text(
-                                        app.official ? context.l10n.officialTeamName : app.author.decodeString,
-                                        style: const TextStyle(color: Colors.grey, fontSize: 16),
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
+                      const SizedBox(width: 20),
+                      Expanded(
+                        child: SizedBox(
+                          height: 108,
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    app.name.decodeString,
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 20,
+                                      fontWeight: FontWeight.bold,
                                     ),
-                                    if (app.official) ...[
-                                      const SizedBox(width: 4),
-                                      FaIcon(
-                                        FontAwesomeIcons.solidCircleCheck,
-                                        size: 14,
-                                        color: context.accentColor,
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Row(
+                                    children: [
+                                      Flexible(
+                                        child: Text(
+                                          app.official ? context.l10n.officialTeamName : app.author.decodeString,
+                                          style: const TextStyle(color: Colors.grey, fontSize: 16),
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
                                       ),
+                                      if (app.official) ...[
+                                        const SizedBox(width: 4),
+                                        FaIcon(
+                                          FontAwesomeIcons.solidCircleCheck,
+                                          size: 14,
+                                          color: context.accentColor,
+                                        ),
+                                      ],
                                     ],
-                                  ],
-                                ),
-                              ],
+                                  ),
+                                ],
                               ),
                               isLoading
                                   ? AnimatedLoadingButton(
@@ -1866,11 +1869,7 @@ class RatingDistributionWidget extends StatelessWidget {
                       style: TextStyle(fontSize: 13, color: Colors.grey.shade400, fontWeight: FontWeight.w500),
                     ),
                     const SizedBox(width: 4),
-                    Icon(
-                      FontAwesomeIcons.solidStar,
-                      size: 10,
-                      color: context.primaryColor,
-                    ),
+                    Icon(FontAwesomeIcons.solidStar, size: 10, color: context.primaryColor),
                     const SizedBox(width: 8),
                     Expanded(
                       child: Container(
@@ -1880,10 +1879,7 @@ class RatingDistributionWidget extends StatelessWidget {
                           alignment: Alignment.centerLeft,
                           widthFactor: percentage,
                           child: Container(
-                            decoration: BoxDecoration(
-                              color: context.primaryColor,
-                              borderRadius: BorderRadius.circular(4),
-                            ),
+                            decoration: BoxDecoration(color: context.primaryColor, borderRadius: BorderRadius.circular(4)),
                           ),
                         ),
                       ),

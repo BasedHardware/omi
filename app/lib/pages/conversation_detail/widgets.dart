@@ -61,13 +61,15 @@ List<TextSpan> highlightSearchMatches(String text, String searchQuery,
 
     bool isCurrentResult = currentResultIndex >= 0 && matchCount == currentResultIndex;
 
-    spans.add(TextSpan(
-      text: text.substring(index, index + searchQuery.length),
-      style: TextStyle(
-        backgroundColor:
-            isCurrentResult ? Colors.orange.withValues(alpha: 0.9) : effectiveHighlightColor.withValues(alpha: 0.6),
-        color: Colors.white,
-        fontWeight: FontWeight.bold,
+    spans.add(
+      TextSpan(
+        text: text.substring(index, index + searchQuery.length),
+        style: TextStyle(
+          backgroundColor:
+              isCurrentResult ? Colors.orange.withValues(alpha: 0.9) : effectiveHighlightColor.withValues(alpha: 0.6),
+          color: Colors.white,
+          fontWeight: FontWeight.bold,
+        ),
       ),
     );
 

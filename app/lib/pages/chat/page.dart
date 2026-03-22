@@ -13,8 +13,6 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/message.dart';
-import 'package:omi/env/env.dart';
-import 'package:uuid/uuid.dart';
 import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/pages/apps/widgets/capability_apps_page.dart';
 import 'package:omi/pages/chat/widgets/ai_message.dart';
@@ -238,49 +236,70 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                             return Theme(
                               data: Theme.of(context).copyWith(
                                 textSelectionTheme: TextSelectionThemeData(
-                                  selectionColor: Colors.white.withOpacity(0.3),
+                                  selectionColor: context.appColors.textPrimary.withOpacity(0.3),
                                   selectionHandleColor: Colors.blue,
                                 ),
-                                const SizedBox(height: 16),
-                                Text(
-                                  context.l10n.deletingMessages,
-                                  style: const TextStyle(color: Colors.white),
-                                ),
-                              ],
-                            )
-                          : (provider.messages.isEmpty)
-                              ? Center(
-                                  child: Padding(
-                                    padding: const EdgeInsets.only(bottom: 32.0),
-                                    child: Text(
-                                        connectivityProvider.isConnected
-                                            ? context.l10n.noMessagesYet
-                                            : context.l10n.noInternetConnection,
-                                        textAlign: TextAlign.center,
-                                        style: const TextStyle(color: Colors.white)),
-                                  ),
-                                )
-                              : LayoutBuilder(
-                                  builder: (context, constraints) {
-                                    return Theme(
-                                      data: Theme.of(context).copyWith(
-                                        textSelectionTheme: TextSelectionThemeData(
-                                          selectionColor: context.appColors.textPrimary.withOpacity(0.3),
-                                          selectionHandleColor: Colors.blue,
-                                        ),
-                                      ),
-                                      child: ListView.builder(
-                                        shrinkWrap: false,
-                                        reverse: false,
-                                        controller: scrollController,
-                                        padding: const EdgeInsets.fromLTRB(18, 16, 18, 10),
-                                        itemCount: provider.messages.length,
-                                        itemBuilder: (context, chatIndex) {
-                                          if (!_hasInitialScrolled && provider.messages.isNotEmpty) {
-                                            _hasInitialScrolled = true;
-                                            SchedulerBinding.instance.addPostFrameCallback((_) {
-                                              if (scrollController.hasClients) {
-                                                scrollController.jumpTo(scrollController.position.maxScrollExtent);
+                              ),
+                              child: ListView.builder(
+                                shrinkWrap: false,
+                                reverse: false,
+                                controller: scrollController,
+                                padding: const EdgeInsets.fromLTRB(18, 16, 18, 10),
+                                itemCount: provider.messages.length,
+                                itemBuilder: (context, chatIndex) {
+                                  if (!_hasInitialScrolled && provider.messages.isNotEmpty) {
+                                    _hasInitialScrolled = true;
+                                    SchedulerBinding.instance.addPostFrameCallback((_) {
+                                      if (scrollController.hasClients) {
+                                        scrollController.jumpTo(scrollController.position.maxScrollExtent);
+                                      }
+                                    });
+                                  }
+
+                                  final message = provider.messages[chatIndex];
+                                  double topPadding = chatIndex == provider.messages.length - 1 ? 8 : 16;
+                                  double bottomPadding = chatIndex == 0 ? 16 : 0;
+
+                                  return Padding(
+                                    key: ValueKey(message.id),
+                                    padding: EdgeInsets.only(bottom: bottomPadding, top: topPadding),
+                                    child: message.sender == MessageSender.ai
+                                        ? Builder(
+                                            builder: (context) {
+                                              final child = AIMessage(
+                                                showTypingIndicator:
+                                                    provider.showTypingIndicator &&
+                                                    chatIndex == provider.messages.length - 1,
+                                                showThinkingAfterText: provider.agentThinkingAfterText,
+                                                message: message,
+                                                sendMessage: _sendMessageUtil,
+                                                onAskOmi: (text) {
+                                                  setState(() {
+                                                    _selectedContext = text;
+                                                  });
+                                                  textFieldFocusNode.requestFocus();
+                                                },
+                                                displayOptions:
+                                                    provider.messages.length <= 1 &&
+                                                    provider.messageSenderApp(message.appId)?.isNotPersona() == true,
+                                                appSender: provider.messageSenderApp(message.appId),
+                                                updateConversation: (ServerConversation conversation) {
+                                                  context.read<ConversationProvider>().updateConversation(conversation);
+                                                },
+                                                setMessageNps: (int value, {String? reason}) {
+                                                  provider.setMessageNps(message, value, reason: reason);
+                                                },
+                                              );
+
+                                              // Dynamic spacer logic
+                                              if (chatIndex == provider.messages.length - 1 && _allowSpacer) {
+                                                return Container(
+                                                  constraints: BoxConstraints(
+                                                    minHeight: MediaQuery.of(context).size.height * 0.5,
+                                                  ),
+                                                  alignment: Alignment.topLeft,
+                                                  child: child,
+                                                );
                                               }
                                               return child;
                                             },
@@ -357,125 +376,12 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                                               const Center(
                                                 child: Icon(Icons.insert_drive_file, color: Colors.white, size: 24),
                                               ),
-                                            ),
-                                          ),
-                                        ),
-                                      // Close button
-                                      Positioned(
-                                        top: 4,
-                                        right: 4,
-                                        child: GestureDetector(
-                                          onTap: () {
-                                            provider.clearSelectedFile(idx);
-                                          },
-                                          child: Container(
-                                            width: 16,
-                                            height: 16,
-                                            decoration: BoxDecoration(
-                                              color: Colors.white,
-                                              borderRadius: BorderRadius.circular(10),
-                                            ),
-                                            child: const Icon(
-                                              FontAwesomeIcons.xmark,
-                                              size: 10,
-                                              color: Colors.black,
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                );
-                              },
-                            ),
-                          );
-                        } else {
-                          return const SizedBox.shrink();
-                        }
-                      }),
-                      // Send bar
-                      SafeArea(
-                        bottom: false,
-                        maintainBottomViewPadding: false,
-                        child: Padding(
-                          padding: EdgeInsets.only(
-                            left: 8,
-                            right: 8,
-                            top: provider.selectedFiles.isNotEmpty ? 0 : 8,
-                            bottom: widget.isPivotBottom
-                                ? 6
-                                : (textFieldFocusNode.hasFocus &&
-                                        (textController.text.length > 40 || textController.text.contains('\n'))
-                                    ? 0
-                                    : 2),
-                          ),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                            decoration: BoxDecoration(
-                              color: context.appColors.secondaryCardBackground,
-                              borderRadius: BorderRadius.circular(32),
-                            ),
-                            child: Row(
-                              crossAxisAlignment: CrossAxisAlignment.end,
-                              children: [
-                                // Plus button
-                                if (shouldShowMenuButton())
-                                  GestureDetector(
-                                    onTap: () {
-                                      HapticFeedback.lightImpact();
-                                      FocusScope.of(context).unfocus();
-                                      if (provider.selectedFiles.length > 3) {
-                                        ScaffoldMessenger.of(context).showSnackBar(
-                                          SnackBar(
-                                            content: Text(context.l10n.maxFilesLimit),
-                                            duration: const Duration(seconds: 2),
-                                          ),
-                                        );
-                                        return;
-                                      }
-                                      _showIOSStyleActionSheet(context);
-                                    },
-                                    child: Container(
-                                      height: 44,
-                                      width: 44,
-                                      decoration: BoxDecoration(
-                                        color: context.appColors.handleBar,
-                                        shape: BoxShape.circle,
-                                      ),
-                                      child: Center(
-                                        child: FaIcon(
-                                          FontAwesomeIcons.plus,
-                                          color: provider.selectedFiles.length > 3
-                                              ? context.appColors.textQuaternary
-                                              : context.appColors.textPrimary,
-                                          size: 18,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                const SizedBox(width: 12),
-                                // Text field
-                                Expanded(
-                                  child: Column(
-                                    mainAxisSize: MainAxisSize.min,
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      if (_selectedContext != null && !voiceRecorderProvider.isActive)
-                                        Padding(
-                                          padding: const EdgeInsets.only(bottom: 4, top: 4, left: 2),
-                                          child: Container(
-                                            decoration: BoxDecoration(
-                                              color: context.appColors.secondaryCardBackground,
-                                              borderRadius: BorderRadius.circular(16),
-                                            ),
-                                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                                            child: Row(
-                                              mainAxisSize: MainAxisSize.min,
-                                              children: [
-                                                const Padding(
-                                                  padding: EdgeInsets.only(top: 1),
-                                                  child: Icon(Icons.subdirectory_arrow_right,
-                                                      size: 14, color: Colors.blue),
+                                            // Loading indicator
+                                            if (provider.isFileUploading(provider.selectedFiles[idx].path))
+                                              Container(
+                                                decoration: BoxDecoration(
+                                                  color: Colors.black.withOpacity(0.5),
+                                                  borderRadius: BorderRadius.circular(16),
                                                 ),
                                                 child: const Center(
                                                   child: SizedBox(
@@ -487,120 +393,31 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                                                     ),
                                                   ),
                                                 ),
-                                                const SizedBox(width: 8),
-                                                GestureDetector(
-                                                  onTap: () {
-                                                    setState(() {
-                                                      _selectedContext = null;
-                                                    });
-                                                  },
-                                                  child: const Icon(Icons.close, size: 14, color: Colors.blue),
-                                                ),
-                                              ],
-                                            ),
-                                          ),
-                                        ),
-                                      voiceRecorderProvider.isActive
-                                          ? VoiceRecorderWidget(
-                                              onTranscriptReady: (transcript) {
-                                                textController.text = transcript;
-                                                voiceRecorderProvider.close();
-                                                context.read<MessageProvider>().setNextMessageOriginIsVoice(true);
-                                              },
-                                              onClose: () {
-                                                voiceRecorderProvider.close();
-                                              },
-                                            )
-                                          : Theme(
-                                              data: Theme.of(context).copyWith(
-                                                textSelectionTheme: TextSelectionThemeData(
-                                                  selectionColor: context.appColors.textQuaternary.withOpacity(0.4),
-                                                  selectionHandleColor: context.appColors.textPrimary,
+                                              ),
+                                            // Close button
+                                            Positioned(
+                                              top: 4,
+                                              right: 4,
+                                              child: GestureDetector(
+                                                onTap: () {
+                                                  provider.clearSelectedFile(idx);
+                                                },
+                                                child: Container(
+                                                  width: 16,
+                                                  height: 16,
+                                                  decoration: BoxDecoration(
+                                                    color: Colors.white,
+                                                    borderRadius: BorderRadius.circular(10),
+                                                  ),
+                                                  child: const Icon(
+                                                    FontAwesomeIcons.xmark,
+                                                    size: 10,
+                                                    color: Colors.black,
+                                                  ),
                                                 ),
                                               ),
-                                              child: TextField(
-                                                enabled: true,
-                                                controller: textController,
-                                                focusNode: textFieldFocusNode,
-                                                obscureText: false,
-                                                textAlign: TextAlign.start,
-                                                textAlignVertical: TextAlignVertical.center,
-                                                decoration: InputDecoration(
-                                                  hintText: context.l10n.askAnything,
-                                                  hintStyle: TextStyle(
-                                                      fontSize: 16.0, color: context.appColors.textQuaternary),
-                                                  focusedBorder: InputBorder.none,
-                                                  enabledBorder: InputBorder.none,
-                                                  contentPadding:
-                                                      const EdgeInsets.symmetric(horizontal: 4, vertical: 12),
-                                                  isDense: true,
-                                                ),
-                                                minLines: 1,
-                                                maxLines: 10,
-                                                keyboardType: TextInputType.multiline,
-                                                textCapitalization: TextCapitalization.sentences,
-                                                style: TextStyle(
-                                                    fontSize: 16.0, color: context.appColors.textPrimary, height: 1.4),
-                                              ),
                                             ),
-                                    ],
-                                  ),
-                                ),
-                                // Microphone button
-                                if (shouldShowVoiceRecorderButton() && textController.text.isEmpty)
-                                  GestureDetector(
-                                    onTap: () {
-                                      HapticFeedback.lightImpact();
-                                      FocusScope.of(context).unfocus();
-                                      voiceRecorderProvider.startRecording();
-                                    },
-                                    child: Container(
-                                      height: 44,
-                                      width: 44,
-                                      alignment: Alignment.center,
-                                      child: FaIcon(
-                                        FontAwesomeIcons.microphone,
-                                        color: context.appColors.textQuaternary,
-                                        size: 20,
-                                      ),
-                                    ),
-                                  ),
-                                // Send button - only show when there's text
-                                if (shouldShowSendButton(provider))
-                                  ValueListenableBuilder<TextEditingValue>(
-                                    valueListenable: textController,
-                                    builder: (context, value, child) {
-                                      bool hasText = value.text.trim().isNotEmpty;
-                                      if (!hasText) return const SizedBox.shrink();
-
-                                      bool canSend = hasText &&
-                                          !provider.sendingMessage &&
-                                          !provider.isUploadingFiles &&
-                                          connectivityProvider.isConnected;
-
-                                      return GestureDetector(
-                                        onTap: canSend
-                                            ? () {
-                                                HapticFeedback.mediumImpact();
-                                                String message = textController.text.trim();
-                                                if (message.isEmpty) return;
-                                                _sendMessageUtil(message);
-                                              }
-                                            : null,
-                                        child: Container(
-                                          height: 44,
-                                          width: 44,
-                                          decoration: BoxDecoration(
-                                            color: context.appColors.textPrimary,
-                                            shape: BoxShape.circle,
-                                          ),
-                                          child: Center(
-                                            child: FaIcon(
-                                              FontAwesomeIcons.arrowUp,
-                                              color: context.appColors.backgroundPrimary,
-                                              size: 18,
-                                            ),
-                                          ),
+                                          ],
                                         ),
                                       );
                                     },
@@ -630,7 +447,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                               child: Container(
                                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                                 decoration: BoxDecoration(
-                                  color: const Color(0xFF2A2A2F),
+                                  color: context.appColors.secondaryCardBackground,
                                   borderRadius: BorderRadius.circular(32),
                                 ),
                                 child: Row(
@@ -656,14 +473,16 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                                         child: Container(
                                           height: 44,
                                           width: 44,
-                                          decoration: const BoxDecoration(
-                                            color: Color(0xFF3C3C43),
+                                          decoration: BoxDecoration(
+                                            color: context.appColors.handleBar,
                                             shape: BoxShape.circle,
                                           ),
                                           child: Center(
                                             child: FaIcon(
                                               FontAwesomeIcons.plus,
-                                              color: provider.selectedFiles.length > 3 ? Colors.grey : Colors.white,
+                                              color: provider.selectedFiles.length > 3
+                                                  ? context.appColors.textQuaternary
+                                                  : context.appColors.textPrimary,
                                               size: 18,
                                             ),
                                           ),
@@ -681,7 +500,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                                               padding: const EdgeInsets.only(bottom: 4, top: 4, left: 2),
                                               child: Container(
                                                 decoration: BoxDecoration(
-                                                  color: const Color(0xFF1f1f25),
+                                                  color: context.appColors.secondaryCardBackground,
                                                   borderRadius: BorderRadius.circular(16),
                                                 ),
                                                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -738,8 +557,8 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                                               : Theme(
                                                   data: Theme.of(context).copyWith(
                                                     textSelectionTheme: TextSelectionThemeData(
-                                                      selectionColor: Colors.grey.withOpacity(0.4),
-                                                      selectionHandleColor: Colors.white,
+                                                      selectionColor: context.appColors.textQuaternary.withOpacity(0.4),
+                                                      selectionHandleColor: context.appColors.textPrimary,
                                                     ),
                                                   ),
                                                   child: TextField(
@@ -751,7 +570,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                                                     textAlignVertical: TextAlignVertical.center,
                                                     decoration: InputDecoration(
                                                       hintText: context.l10n.askAnything,
-                                                      hintStyle: const TextStyle(fontSize: 16.0, color: Colors.grey),
+                                                      hintStyle: TextStyle(fontSize: 16.0, color: context.appColors.textQuaternary),
                                                       focusedBorder: InputBorder.none,
                                                       enabledBorder: InputBorder.none,
                                                       contentPadding: const EdgeInsets.symmetric(
@@ -764,9 +583,9 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                                                     maxLines: 10,
                                                     keyboardType: TextInputType.multiline,
                                                     textCapitalization: TextCapitalization.sentences,
-                                                    style: const TextStyle(
+                                                    style: TextStyle(
                                                       fontSize: 16.0,
-                                                      color: Colors.white,
+                                                      color: context.appColors.textPrimary,
                                                       height: 1.4,
                                                     ),
                                                   ),
@@ -786,9 +605,9 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                                           height: 44,
                                           width: 44,
                                           alignment: Alignment.center,
-                                          child: const FaIcon(
+                                          child: FaIcon(
                                             FontAwesomeIcons.microphone,
-                                            color: Colors.grey,
+                                            color: context.appColors.textQuaternary,
                                             size: 20,
                                           ),
                                         ),
@@ -819,14 +638,14 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                                             child: Container(
                                               height: 44,
                                               width: 44,
-                                              decoration: const BoxDecoration(
-                                                color: Colors.white,
+                                              decoration: BoxDecoration(
+                                                color: context.appColors.textPrimary,
                                                 shape: BoxShape.circle,
                                               ),
-                                              child: const Center(
+                                              child: Center(
                                                 child: FaIcon(
                                                   FontAwesomeIcons.arrowUp,
-                                                  color: Color(0xFF1f1f25),
+                                                  color: context.appColors.backgroundPrimary,
                                                   size: 18,
                                                 ),
                                               ),
@@ -1270,7 +1089,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                   child: ListView(
                     padding: EdgeInsets.zero,
                     children: [
-                      // Default app option
+                      // Omi option
                       _buildDrawerAppItem(
                         avatar: _getOmiAvatar(),
                         name: context.l10n.omiAppName,
@@ -1373,7 +1192,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                 decoration: BoxDecoration(color: Colors.redAccent, borderRadius: BorderRadius.circular(16)),
                 child: Text(
                   context.l10n.disable,
-                  style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w500),
+                  style: TextStyle(color: context.appColors.textPrimary, fontSize: 13, fontWeight: FontWeight.w500),
                 ),
               ),
             ),
@@ -1395,18 +1214,18 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
               child: FaIcon(FontAwesomeIcons.solidCircleCheck, color: context.appColors.textPrimary, size: 18),
             )
           : appId != null && onConfirmDelete != null
-              ? GestureDetector(
-                  onTap: () {
-                    setState(() {
-                      _pendingDeleteAppId = appId;
-                    });
-                  },
-                  child: Padding(
-                    padding: const EdgeInsets.only(left: 2, top: 1),
-                    child: FaIcon(FontAwesomeIcons.solidTrashCan, color: context.appColors.textQuaternary, size: 16),
-                  ),
-                )
-              : null,
+          ? GestureDetector(
+              onTap: () {
+                setState(() {
+                  _pendingDeleteAppId = appId;
+                });
+              },
+              child: Padding(
+                padding: const EdgeInsets.only(left: 2, top: 1),
+                child: FaIcon(FontAwesomeIcons.solidTrashCan, color: context.appColors.textQuaternary, size: 16),
+              ),
+            )
+          : null,
       selected: isSelected,
       selectedTileColor: context.appColors.textPrimary.withOpacity(0.1),
       onTap: onTap,

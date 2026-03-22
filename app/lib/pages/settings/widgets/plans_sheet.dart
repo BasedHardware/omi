@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:omi/theme/app_theme.dart';
+import 'package:omi/theme/app_color_tokens.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import 'package:omi/widgets/shimmer_with_timeout.dart';
@@ -22,7 +23,6 @@ import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/widgets/confirmation_dialog.dart';
 import 'package:omi/pages/settings/payment_webview_page.dart';
-import 'package:omi/theme/app_color_tokens.dart';
 
 class PlansSheet extends StatefulWidget {
   final AnimationController waveController;
@@ -86,11 +86,7 @@ class _PlansSheetState extends State<PlansSheet> {
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           title: Text(
             context.l10n.omiTraining,
-            style: TextStyle(
-              color: context.appColors.textPrimary,
-              fontSize: 18,
-              fontWeight: FontWeight.w600,
-            ),
+            style: TextStyle(color: context.appColors.textPrimary, fontSize: 18, fontWeight: FontWeight.w600),
           ),
           content: SingleChildScrollView(
             child: Column(
@@ -99,20 +95,12 @@ class _PlansSheetState extends State<PlansSheet> {
               children: [
                 Text(
                   context.l10n.getOmiUnlimitedFree,
-                  style: TextStyle(
-                    color: context.appColors.textPrimary,
-                    fontSize: 14,
-                    height: 1.5,
-                  ),
+                  style: TextStyle(color: context.appColors.textPrimary, fontSize: 14, height: 1.5),
                 ),
                 const SizedBox(height: 16),
                 Text(
                   context.l10n.trainingDataBullets,
-                  style: TextStyle(
-                    color: context.appColors.textTertiary,
-                    fontSize: 14,
-                    height: 1.5,
-                  ),
+                  style: TextStyle(color: context.appColors.textTertiary, fontSize: 14, height: 1.5),
                 ),
                 const SizedBox(height: 16),
                 TextButton(
@@ -138,10 +126,7 @@ class _PlansSheetState extends State<PlansSheet> {
                   child: Text(
                     context.l10n.learnMoreAtOmiTraining,
                     style: TextStyle(
-                      color: context.appColors.textPrimary,
-                      decoration: TextDecoration.underline,
-                      fontSize: 14,
-                    ),
+                        color: context.appColors.textPrimary, decoration: TextDecoration.underline, fontSize: 14),
                   ),
                 ),
                 const SizedBox(height: 16),
@@ -177,10 +162,7 @@ class _PlansSheetState extends State<PlansSheet> {
                       Expanded(
                         child: Text(
                           context.l10n.agreeToContributeData,
-                          style: TextStyle(
-                            color: context.appColors.textPrimary,
-                            fontSize: 13,
-                          ),
+                          style: TextStyle(color: context.appColors.textPrimary, fontSize: 13),
                         ),
                       ),
                     ],
@@ -193,19 +175,14 @@ class _PlansSheetState extends State<PlansSheet> {
           actions: [
             TextButton(
               onPressed: () => Navigator.of(ctx).pop(false),
-              child: Text(
-                context.l10n.cancel,
-                style: TextStyle(color: context.appColors.iconSecondary),
-              ),
+              child: Text(context.l10n.cancel, style: TextStyle(color: context.appColors.textTertiary)),
             ),
             TextButton(
               onPressed: isChecked ? () => Navigator.of(ctx).pop(true) : null,
               child: Text(
                 context.l10n.submitRequest,
                 style: TextStyle(
-                  color: isChecked ? context.appColors.textPrimary : context.appColors.textQuaternary,
-                  fontWeight: FontWeight.w600,
-                ),
+                    color: isChecked ? Colors.white : context.appColors.textQuaternary, fontWeight: FontWeight.w600),
               ),
             ),
           ],
@@ -364,23 +341,14 @@ class _PlansSheetState extends State<PlansSheet> {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: Text(
           'Downgrade to Freemium?',
-          style: TextStyle(
-            color: context.appColors.textPrimary,
-            fontSize: 18,
-            fontWeight: FontWeight.w600,
-          ),
+          style: TextStyle(color: context.appColors.textPrimary, fontSize: 18, fontWeight: FontWeight.w600),
         ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              'You will experience these limitations:',
-              style: TextStyle(
-                color: context.appColors.textTertiary,
-                fontSize: 14,
-              ),
-            ),
+            Text('You will experience these limitations:',
+                style: TextStyle(color: context.appColors.textTertiary, fontSize: 14)),
             const SizedBox(height: 16),
             _buildDowngradeLimitationRow(Icons.battery_alert, '7x battery consumption'),
             const SizedBox(height: 10),
@@ -470,11 +438,7 @@ class _PlansSheetState extends State<PlansSheet> {
               const SizedBox(width: 8),
               Text(
                 context.l10n.upgradeToAnnualPlan,
-                style: TextStyle(
-                  color: context.appColors.textPrimary,
-                  fontSize: 18,
-                  fontWeight: FontWeight.w600,
-                ),
+                style: TextStyle(color: context.appColors.textPrimary, fontSize: 18, fontWeight: FontWeight.w600),
               ),
             ],
           ),
@@ -484,11 +448,7 @@ class _PlansSheetState extends State<PlansSheet> {
             children: [
               Text(
                 context.l10n.importantBillingInfo,
-                style: TextStyle(
-                  color: context.appColors.textPrimary,
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                ),
+                style: TextStyle(color: context.appColors.textPrimary, fontSize: 16, fontWeight: FontWeight.w600),
               ),
               const SizedBox(height: 12),
               _buildBillingInfoItem(icon: Icons.schedule, text: context.l10n.monthlyPlanContinues),
@@ -512,10 +472,7 @@ class _PlansSheetState extends State<PlansSheet> {
                       child: Text(
                         context.l10n.thirteenMonthsCoverage,
                         style: TextStyle(
-                          color: context.primaryColor.withOpacity(0.7),
-                          fontSize: 14,
-                          fontWeight: FontWeight.w500,
-                        ),
+                            color: context.primaryColor.withOpacity(0.7), fontSize: 14, fontWeight: FontWeight.w500),
                       ),
                     ),
                   ],
@@ -526,10 +483,7 @@ class _PlansSheetState extends State<PlansSheet> {
           actions: [
             TextButton(
               onPressed: () => Navigator.of(ctx).pop(false),
-              child: Text(
-                context.l10n.cancel,
-                style: TextStyle(color: context.appColors.textQuaternary),
-              ),
+              child: Text(context.l10n.cancel, style: TextStyle(color: context.appColors.iconSecondary)),
             ),
             ElevatedButton(
               onPressed: () => Navigator.of(ctx).pop(true),
@@ -665,45 +619,41 @@ class _PlansSheetState extends State<PlansSheet> {
         final isUnlimited = sub?.plan == PlanType.unlimited;
         final isCancelled = sub?.cancelAtPeriodEnd ?? false;
 
-      String renewalDate = 'N/A';
-      if (sub?.currentPeriodEnd != null) {
-        final date = DateTime.fromMillisecondsSinceEpoch(sub!.currentPeriodEnd! * 1000);
-        renewalDate = DateFormat.yMMMd().format(date);
-      }
-      return DraggableScrollableSheet(
-        initialChildSize: 0.9,
-        minChildSize: 0.5,
-        maxChildSize: 0.9,
-        builder: (BuildContext context, ScrollController scrollController) {
-          return Container(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.bottomCenter,
-                end: Alignment.topCenter,
-                colors: [
-                  context.primaryColor.withOpacity(0.5),
-                  context.primaryColor.withOpacity(0.3),
-                  Colors.black.withOpacity(0.8),
-                  Colors.black,
-                ],
-                stops: const [0.0, 0.2, 0.6, 1.0],
+        String renewalDate = 'N/A';
+        if (sub?.currentPeriodEnd != null) {
+          final date = DateTime.fromMillisecondsSinceEpoch(sub!.currentPeriodEnd! * 1000);
+          renewalDate = DateFormat.yMMMd().format(date);
+        }
+        return DraggableScrollableSheet(
+          initialChildSize: 0.9,
+          minChildSize: 0.5,
+          maxChildSize: 0.9,
+          builder: (BuildContext context, ScrollController scrollController) {
+            return Container(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.bottomCenter,
+                  end: Alignment.topCenter,
+                  colors: [
+                    context.primaryColor.withOpacity(0.5),
+                    context.primaryColor.withOpacity(0.3),
+                    Colors.black.withOpacity(0.8),
+                    Colors.black,
+                  ],
+                  stops: const [0.0, 0.2, 0.6, 1.0],
+                ),
+                borderRadius: const BorderRadius.only(topLeft: Radius.circular(20), topRight: Radius.circular(20)),
               ),
-              borderRadius: const BorderRadius.only(
-                topLeft: Radius.circular(20),
-                topRight: Radius.circular(20),
-              ),
-            ),
-            child: ListView(
-              controller: scrollController,
-              children: [
-                Center(
-                  child: Container(
-                    margin: const EdgeInsets.symmetric(vertical: 24),
-                    width: 40,
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color: context.appColors.textQuaternary,
-                      borderRadius: BorderRadius.circular(2),
+              child: ListView(
+                controller: scrollController,
+                children: [
+                  Center(
+                    child: Container(
+                      margin: const EdgeInsets.symmetric(vertical: 24),
+                      width: 40,
+                      height: 4,
+                      decoration: BoxDecoration(
+                          color: context.appColors.textQuaternary, borderRadius: BorderRadius.circular(2)),
                     ),
                   ),
                   SizedBox(
@@ -942,129 +892,35 @@ class _PlansSheetState extends State<PlansSheet> {
                             ),
                             child: ClipOval(child: Image.asset(Assets.images.omiWithoutRope.path, fit: BoxFit.cover)),
                           ),
-                          Expanded(
-                            flex: 1,
-                            child: ClipRect(
-                              child: SizedBox(
-                                height: 120,
-                                child: AnimatedBuilder(
-                                  animation: widget.notesController,
-                                  builder: (context, child) {
-                                    const double totalWidth = 440.0;
-                                    final scrollOffset = (widget.notesController.value * totalWidth) % totalWidth;
-                                    return Stack(
-                                      children: [
-                                        Positioned(
-                                          left: -totalWidth + scrollOffset,
-                                          top: 0,
-                                          bottom: 0,
-                                          child: Row(
-                                            children: List.generate(8, (index) {
-                                              return Container(
-                                                width: 45,
-                                                height: 55,
-                                                margin: const EdgeInsets.symmetric(horizontal: 5),
-                                                decoration: BoxDecoration(
-                                                  color: context.appColors.textPrimary.withOpacity(0.95),
-                                                  borderRadius: BorderRadius.circular(8),
-                                                  boxShadow: [
-                                                    BoxShadow(
-                                                      color: Colors.black.withOpacity(0.15),
-                                                      blurRadius: 4,
-                                                      offset: const Offset(0, 2),
-                                                    ),
-                                                  ],
-                                                ),
-                                                child: Padding(
-                                                  padding: const EdgeInsets.all(6),
-                                                  child: Column(
-                                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                                    children: [
-                                                      Container(
-                                                        width: 26,
-                                                        height: 3,
-                                                        decoration: BoxDecoration(
-                                                          color: context.appColors.backgroundPrimary,
-                                                          borderRadius: BorderRadius.circular(1.5),
-                                                        ),
-                                                      ),
-                                                      const SizedBox(height: 4),
-                                                      ...List.generate(
-                                                          5,
-                                                          (i) => Container(
-                                                                width: i == 4 ? 24 : 35, // Last line shorter
-                                                                height: 2,
-                                                                margin: const EdgeInsets.symmetric(vertical: 2),
-                                                                decoration: BoxDecoration(
-                                                                  color: context.appColors.textQuaternary,
-                                                                  borderRadius: BorderRadius.circular(1),
-                                                                ),
-                                                              )),
-                                                    ],
-                                                  ),
-                                                ),
-                                              );
-                                            }),
-                                          ),
-                                        ),
-                                        Positioned(
-                                          left: scrollOffset,
-                                          top: 0,
-                                          bottom: 0,
-                                          child: Row(
-                                            children: List.generate(8, (index) {
-                                              return Container(
-                                                width: 45,
-                                                height: 55,
-                                                margin: const EdgeInsets.symmetric(horizontal: 5),
-                                                decoration: BoxDecoration(
-                                                  color: context.appColors.textPrimary.withOpacity(0.95),
-                                                  borderRadius: BorderRadius.circular(8),
-                                                  boxShadow: [
-                                                    BoxShadow(
-                                                      color: Colors.black.withOpacity(0.15),
-                                                      blurRadius: 4,
-                                                      offset: const Offset(0, 2),
-                                                    ),
-                                                  ],
-                                                ),
-                                                child: Padding(
-                                                  padding: const EdgeInsets.all(6),
-                                                  child: Column(
-                                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                                    children: [
-                                                      Container(
-                                                        width: 26,
-                                                        height: 3,
-                                                        decoration: BoxDecoration(
-                                                          color: context.appColors.backgroundPrimary,
-                                                          borderRadius: BorderRadius.circular(1.5),
-                                                        ),
-                                                      ),
-                                                      const SizedBox(height: 4),
-                                                      ...List.generate(
-                                                          5,
-                                                          (i) => Container(
-                                                                width: i == 4 ? 24 : 35, // Last line shorter
-                                                                height: 2,
-                                                                margin: const EdgeInsets.symmetric(vertical: 2),
-                                                                decoration: BoxDecoration(
-                                                                  color: context.appColors.textQuaternary,
-                                                                  borderRadius: BorderRadius.circular(1),
-                                                                ),
-                                                              )),
-                                                    ],
-                                                  ),
-                                                ),
-                                              );
-                                            }),
-                                          ),
-                                        ),
-                                      ],
-                                    );
-                                  },
-                                ),
-                              ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 24),
+                    child: Column(
+                      children: [
+                        const SizedBox(height: 24),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const FaIcon(FontAwesomeIcons.crown, color: Colors.yellow, size: 20),
+                            const SizedBox(width: 8),
+                            Builder(
+                              builder: (context) {
+                                final hasScheduledUpgrade = _hasScheduledUpgrade();
+                                if (hasScheduledUpgrade) {
+                                  return const Text(
+                                    'Upgrade Scheduled',
+                                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                                  );
+                                } else {
+                                  return Text(
+                                    isUnlimited ? 'Change Plan' : 'Keep Nooto Unlimited',
+                                    style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                                  );
+                                }
+                              },
                             ),
                           ],
                         ),
@@ -1076,15 +932,15 @@ class _PlansSheetState extends State<PlansSheet> {
                               return Text(
                                 'Your upgrade to the annual plan is already scheduled',
                                 textAlign: TextAlign.center,
-                                style: TextStyle(fontSize: 14, color: Colors.grey.shade400),
+                                style: TextStyle(fontSize: 14, color: context.appColors.textTertiary),
                               );
                             } else {
                               return Text(
                                 isUnlimited
                                     ? 'You are on the Unlimited Plan.'
-                                    : 'Choose your plan to unlock unlimited Omi.',
+                                    : 'Choose your plan to unlock unlimited Nooto.',
                                 textAlign: TextAlign.center,
-                                style: TextStyle(fontSize: 14, color: Colors.grey.shade400),
+                                style: TextStyle(fontSize: 14, color: context.appColors.textTertiary),
                               );
                             }
                           },
@@ -1095,8 +951,7 @@ class _PlansSheetState extends State<PlansSheet> {
                             builder: (context) {
                               // Check if subscription period has ended
                               final sub = provider.subscription?.subscription;
-                              final periodEnded =
-                                  sub?.currentPeriodEnd != null &&
+                              final periodEnded = sub?.currentPeriodEnd != null &&
                                   DateTime.fromMillisecondsSinceEpoch(
                                     sub!.currentPeriodEnd! * 1000,
                                   ).isBefore(DateTime.now());
@@ -1127,13 +982,13 @@ class _PlansSheetState extends State<PlansSheet> {
                                 return Text(
                                   'Your annual plan will start automatically when your monthly plan ends.',
                                   textAlign: TextAlign.center,
-                                  style: TextStyle(color: Colors.deepPurple.shade400, fontSize: 14),
+                                  style: TextStyle(color: context.primaryColor.withOpacity(0.8), fontSize: 14),
                                 );
                               } else {
                                 return Text(
                                   'Your plan renews on $renewalDate.',
                                   textAlign: TextAlign.center,
-                                  style: TextStyle(fontSize: 14, color: Colors.grey.shade400),
+                                  style: TextStyle(fontSize: 14, color: context.appColors.textTertiary),
                                 );
                               }
                             },
@@ -1148,135 +1003,22 @@ class _PlansSheetState extends State<PlansSheet> {
                               const SizedBox(height: 16),
                               _buildFeatureItem(
                                 faIcon: FontAwesomeIcons.solidComments,
-                                text: 'Ask Omi anything about your life',
+                                text: 'Ask Nooto anything about your life',
                               ),
                               const SizedBox(height: 16),
-                              _buildFeatureItem(faIcon: FontAwesomeIcons.brain, text: 'Unlock Omi\'s infinite memory'),
+                              _buildFeatureItem(
+                                  faIcon: FontAwesomeIcons.brain, text: 'Unlock Nooto\'s infinite memory'),
                             ],
                           ),
-                          child: ClipOval(
-                            child: Image.asset(
-                              Assets.images.omiWithoutRope.path,
-                              fit: BoxFit.cover,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 24),
-                  child: Column(
-                    children: [
-                      const SizedBox(height: 24),
-                      Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-                        const FaIcon(FontAwesomeIcons.crown, color: Colors.yellow, size: 20),
-                        const SizedBox(width: 8),
-                        Builder(builder: (context) {
-                          final hasScheduledUpgrade = _hasScheduledUpgrade();
-                          if (hasScheduledUpgrade) {
-                            return const Text(
-                              'Upgrade Scheduled',
-                              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                            );
-                          } else {
-                            return Text(
-                              isUnlimited ? 'Change Plan' : 'Keep Nooto Unlimited',
-                              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                            );
-                          }
-                        }),
-                      ]),
-                      const SizedBox(height: 8),
-                      Builder(builder: (context) {
-                        final hasScheduledUpgrade = _hasScheduledUpgrade();
-                        if (hasScheduledUpgrade) {
-                          return Text(
-                            'Your upgrade to the annual plan is already scheduled',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(fontSize: 14, color: context.appColors.iconSecondary),
-                          );
-                        } else {
-                          return Text(
-                            isUnlimited
-                                ? 'You are on the Unlimited Plan.'
-                                : 'Choose your plan to unlock unlimited Nooto.',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(fontSize: 14, color: context.appColors.iconSecondary),
-                          );
-                        }
-                      }),
-                      if (isUnlimited && isCancelled) ...[
-                        const SizedBox(height: 8),
-                        Builder(builder: (context) {
-                          // Check if subscription period has ended
-                          final sub = provider.subscription?.subscription;
-                          final periodEnded = sub?.currentPeriodEnd != null &&
-                              DateTime.fromMillisecondsSinceEpoch(sub!.currentPeriodEnd! * 1000)
-                                  .isBefore(DateTime.now());
+                          const SizedBox(height: 32),
+                        ],
 
-                          if (periodEnded) {
-                            // Scenario B: Must create new subscription
-                            return Text(
-                              'Your plan ended on $renewalDate.\nResubscribe now - you\'ll be charged immediately for a new billing period.',
-                              textAlign: TextAlign.center,
-                              style: TextStyle(fontSize: 14, color: Colors.orange.shade400),
-                            );
-                          } else {
-                            // Scenario A: Can reactivate without charge
-                            return Text(
-                              'Your plan is set to cancel on $renewalDate.\nResubscribe now to keep your benefits - no charge until $renewalDate.',
-                              textAlign: TextAlign.center,
-                              style: TextStyle(fontSize: 14, color: Colors.blue.shade400),
-                            );
-                          }
-                        }),
-                      ] else if (isUnlimited && !isCancelled) ...[
-                        const SizedBox(height: 8),
-                        Builder(builder: (context) {
-                          final hasScheduledUpgrade = _hasScheduledUpgrade();
-                          if (hasScheduledUpgrade) {
-                            return Text(
-                              'Your annual plan will start automatically when your monthly plan ends.',
-                              textAlign: TextAlign.center,
-                              style: TextStyle(
-                                color: context.primaryColor.withOpacity(0.8),
-                                fontSize: 14,
-                              ),
-                            );
-                          } else {
-                            return Text(
-                              'Your plan renews on $renewalDate.',
-                              textAlign: TextAlign.center,
-                              style: TextStyle(fontSize: 14, color: context.appColors.iconSecondary),
-                            );
-                          }
-                        }),
-                      ],
-                      const SizedBox(height: 24),
-                      // Features list - only for unlimited users
-                      if (isUnlimited) ...[
-                        Column(
-                          children: [
-                            _buildFeatureItem(
-                              faIcon: FontAwesomeIcons.infinity,
-                              text: 'Unlimited conversations',
-                            ),
-                            const SizedBox(height: 16),
-                            _buildFeatureItem(
-                              faIcon: FontAwesomeIcons.solidComments,
-                              text: 'Ask Nooto anything about your life',
-                            ),
-                            const SizedBox(height: 16),
-                            _buildFeatureItem(
-                              faIcon: FontAwesomeIcons.brain,
-                              text: 'Unlock Nooto\'s infinite memory',
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 32),
-                      ],
+                        // Training Data Opt-in Option - only show after plans are loaded
+                        Consumer2<UsageProvider, UserProvider>(
+                          builder: (context, usageProvider, userProvider, child) {
+                            final shouldShowTrainingOption = _showTrainingDataOptIn &&
+                                !usageProvider.isLoadingPlans &&
+                                usageProvider.availablePlans != null;
 
                             if (!shouldShowTrainingOption) {
                               return const SizedBox.shrink();
@@ -1287,35 +1029,8 @@ class _PlansSheetState extends State<PlansSheet> {
                             final isLoading = userProvider.isLoading;
 
                             return Container(
-                              padding: const EdgeInsets.all(20),
-                              decoration: BoxDecoration(
-                                color: context.primaryColor.withOpacity(0.1),
-                                borderRadius: BorderRadius.circular(16),
-                                border: Border.all(color: context.primaryColor.withOpacity(0.3)),
-                              ),
-                              child: Column(
-                                children: [
-                                  Icon(Icons.schedule, color: context.primaryColor, size: 32),
-                                  const SizedBox(height: 8),
-                                  Text(
-                                    'Upgrade Scheduled!',
-                                    style: TextStyle(
-                                      color: context.primaryColor.withOpacity(0.7),
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    'Your annual plan will start automatically when your monthly plan ends.',
-                                    textAlign: TextAlign.center,
-                                    style: TextStyle(
-                                      color: context.primaryColor.withOpacity(0.8),
-                                      fontSize: 14,
-                                    ),
-                                  ),
-                                ],
-                              ),
+                              margin: const EdgeInsets.only(top: 24, bottom: 18),
+                              child: _buildTrainingDataOption(optedIn: optedIn, status: status, isLoading: isLoading),
                             );
                           },
                         ),
@@ -1335,18 +1050,18 @@ class _PlansSheetState extends State<PlansSheet> {
                                 return Container(
                                   padding: const EdgeInsets.all(20),
                                   decoration: BoxDecoration(
-                                    color: Colors.deepPurple.withOpacity(0.1),
+                                    color: context.primaryColor.withOpacity(0.1),
                                     borderRadius: BorderRadius.circular(16),
-                                    border: Border.all(color: Colors.deepPurple.withOpacity(0.3)),
+                                    border: Border.all(color: context.primaryColor.withOpacity(0.3)),
                                   ),
                                   child: Column(
                                     children: [
-                                      const Icon(Icons.schedule, color: Colors.deepPurple, size: 32),
+                                      Icon(Icons.schedule, color: context.primaryColor, size: 32),
                                       const SizedBox(height: 8),
                                       Text(
                                         'Upgrade Scheduled!',
                                         style: TextStyle(
-                                          color: Colors.deepPurple.shade300,
+                                          color: context.primaryColor.withOpacity(0.7),
                                           fontSize: 16,
                                           fontWeight: FontWeight.w600,
                                         ),
@@ -1355,7 +1070,7 @@ class _PlansSheetState extends State<PlansSheet> {
                                       Text(
                                         'Your annual plan will start automatically when your monthly plan ends.',
                                         textAlign: TextAlign.center,
-                                        style: TextStyle(color: Colors.deepPurple.shade400, fontSize: 14),
+                                        style: TextStyle(color: context.primaryColor.withOpacity(0.8), fontSize: 14),
                                       ),
                                     ],
                                   ),
@@ -1369,293 +1084,12 @@ class _PlansSheetState extends State<PlansSheet> {
                                     borderRadius: BorderRadius.circular(16),
                                     border: Border.all(color: Colors.blue.withOpacity(0.3)),
                                   ),
-                                  const SizedBox(height: 18),
-                                  _buildDynamicPlanOption(
-                                    isSelected: selectedPlan == 'monthly',
-                                    planData: (usageProvider.availablePlans!['plans'] as List).firstWhere(
-                                      (plan) => plan['interval'] == 'month',
-                                    ),
-                                    onTap: () {
-                                      HapticFeedback.lightImpact();
-                                      setState(() => selectedPlan = 'monthly');
-                                    },
-                                  ),
-                                ] else ...[
-                                  Container(
-                                    padding: const EdgeInsets.all(20),
-                                    decoration: BoxDecoration(
-                                      color: Colors.red.withOpacity(0.1),
-                                      borderRadius: BorderRadius.circular(16),
-                                      border: Border.all(color: Colors.red.withOpacity(0.3)),
-                                    ),
-                                    child: Column(
-                                      children: [
-                                        const Icon(Icons.error_outline, color: Colors.red, size: 32),
-                                        const SizedBox(height: 8),
-                                        Text(
-                                          'Unable to load plans',
-                                          style: TextStyle(
-                                            color: Colors.red.shade300,
-                                            fontSize: 16,
-                                            fontWeight: FontWeight.w600,
-                                          ),
-                                        ),
-                                        const SizedBox(height: 4),
-                                        Text(
-                                          'Please check your connection and try again',
-                                          textAlign: TextAlign.center,
-                                          style: TextStyle(
-                                            color: Colors.red.shade400,
-                                            fontSize: 14,
-                                          ),
-                                        ),
-                                        const SizedBox(height: 12),
-                                        TextButton(
-                                          onPressed: () {
-                                            _loadAvailablePlans();
-                                          },
-                                          child: const Text(
-                                            'Retry',
-                                            style: TextStyle(color: Colors.red),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ],
-                              ],
-                            );
-                          },
-                        ),
-                      ] else if (!isUnlimited) ...[
-                        // User is on basic plan - show upgrade options
-                        Consumer<UsageProvider>(
-                          builder: (context, usageProvider, child) {
-                            return Column(
-                              children: [
-                                if (usageProvider.isLoadingPlans) ...[
-                                  _buildShimmerPlanOption(),
-                                  const SizedBox(height: 18),
-                                  _buildShimmerPlanOption(),
-                                ] else if (usageProvider.availablePlans != null) ...[
-                                  _buildDynamicPlanOption(
-                                    isSelected: selectedPlan == 'yearly',
-                                    planData: (usageProvider.availablePlans!['plans'] as List).firstWhere(
-                                      (plan) => plan['interval'] == 'year',
-                                    ),
-                                    saveTag: '2 Months Free',
-                                    isPopular: true,
-                                    onTap: () {
-                                      HapticFeedback.lightImpact();
-                                      setState(() => selectedPlan = 'yearly');
-                                    },
-                                  ),
-                                  const SizedBox(height: 18),
-                                  _buildDynamicPlanOption(
-                                    isSelected: selectedPlan == 'monthly',
-                                    planData: (usageProvider.availablePlans!['plans'] as List).firstWhere(
-                                      (plan) => plan['interval'] == 'month',
-                                    ),
-                                    onTap: () {
-                                      HapticFeedback.lightImpact();
-                                      setState(() => selectedPlan = 'monthly');
-                                    },
-                                  ),
-                                ] else ...[
-                                  Container(
-                                    padding: const EdgeInsets.all(20),
-                                    decoration: BoxDecoration(
-                                      color: Colors.red.withOpacity(0.1),
-                                      borderRadius: BorderRadius.circular(16),
-                                      border: Border.all(color: Colors.red.withOpacity(0.3)),
-                                    ),
-                                    child: Column(
-                                      children: [
-                                        const Icon(Icons.error_outline, color: Colors.red, size: 32),
-                                        const SizedBox(height: 8),
-                                        Text(
-                                          'Unable to load plans',
-                                          style: TextStyle(
-                                            color: Colors.red.shade300,
-                                            fontSize: 16,
-                                            fontWeight: FontWeight.w600,
-                                          ),
-                                        ),
-                                        const SizedBox(height: 4),
-                                        Text(
-                                          'Please check your connection and try again',
-                                          textAlign: TextAlign.center,
-                                          style: TextStyle(
-                                            color: Colors.red.shade400,
-                                            fontSize: 14,
-                                          ),
-                                        ),
-                                        const SizedBox(height: 12),
-                                        TextButton(
-                                          onPressed: () {
-                                            _loadAvailablePlans();
-                                          },
-                                          child: const Text(
-                                            'Retry',
-                                            style: TextStyle(color: Colors.red),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ],
-                              ],
-                            );
-                          },
-                        ),
-                      ],
-
-                      const SizedBox(height: 24),
-
-                      // Continue/Keep Unlimited button - only show for non-annual unlimited users
-                      Builder(builder: (context) {
-                        final currentPlan = _getCurrentPlanDetails();
-                        final isOnAnnualPlan = currentPlan?['interval'] == 'year';
-                        final hasScheduledUpgrade = _hasScheduledUpgrade();
-                        final usageProvider = context.read<UsageProvider>();
-                        final shouldShowContinueButton = !isOnAnnualPlan &&
-                            !hasScheduledUpgrade &&
-                            !isCancelled &&
-                            !usageProvider.isLoadingPlans &&
-                            usageProvider.availablePlans != null;
-
-                        if (!shouldShowContinueButton) {
-                          return const SizedBox.shrink();
-                        }
-
-                        final isLoading = _isUpgrading;
-                        // For basic users, show "Keep Unlimited". For unlimited users upgrading, show "Continue"
-                        final buttonText = isUnlimited ? 'Continue' : 'Keep Unlimited';
-
-                        return SizedBox(
-                          width: double.infinity,
-                          height: 56,
-                          child: ElevatedButton(
-                            onPressed: isLoading
-                                ? null
-                                : () {
-                                    HapticFeedback.mediumImpact();
-                                    _handleUpgradeWithSelectedPlan();
-                                  },
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: isLoading ? Colors.grey : Colors.white,
-                              foregroundColor: isLoading ? Colors.white : Colors.black,
-                              elevation: 0,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(16),
-                              ),
-                            ),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                if (isLoading) ...[
-                                  const SizedBox(
-                                    height: 20,
-                                    width: 20,
-                                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                                  ),
-                                ] else ...[
-                                  Text(
-                                    buttonText,
-                                    style: const TextStyle(
-                                      fontSize: 18,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  AnimatedBuilder(
-                                    animation: widget.arrowAnimation,
-                                    builder: (context, child) {
-                                      return Transform.translate(
-                                        offset: Offset(widget.arrowAnimation.value, 0),
-                                        child: const Icon(Icons.arrow_forward, size: 20),
-                                      );
-                                    },
-                                  ),
-                                ],
-                              ],
-                            ),
-                          ),
-                        );
-                      }),
-
-                      // Freemium limitations warning - only show for basic users before downgrade option
-                      if (!isUnlimited) ...[
-                        const SizedBox(height: 32),
-                        Text(
-                          'Nooto is free, but freemium has limits that affect your experience:',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            color: context.appColors.iconSecondary,
-                            fontSize: 14,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-                        Column(
-                          children: [
-                            _buildLimitationItem(
-                              icon: Icons.battery_alert,
-                              text: '7x battery consumption',
-                            ),
-                            const SizedBox(height: 12),
-                            _buildLimitationItem(
-                              icon: Icons.warning_amber,
-                              text: '30% less transcription quality',
-                            ),
-                            const SizedBox(height: 12),
-                            _buildLimitationItem(
-                              icon: Icons.timer_off,
-                              text: '5-7 second delay (not real-time)',
-                            ),
-                            const SizedBox(height: 12),
-                            _buildLimitationItem(
-                              icon: Icons.person_off,
-                              text: 'Cannot identify speakers',
-                            ),
-                          ],
-                        ),
-                      ],
-
-                      // Downgrade to Freemium button - only show for basic users
-                      if (!isUnlimited)
-                        Builder(builder: (context) {
-                          final usageProvider = context.read<UsageProvider>();
-                          final shouldShowDowngradeButton =
-                              !usageProvider.isLoadingPlans && usageProvider.availablePlans != null;
-
-                          if (!shouldShowDowngradeButton) {
-                            return const SizedBox.shrink();
-                          }
-
-                          return Padding(
-                            padding: const EdgeInsets.only(top: 12),
-                            child: SizedBox(
-                              width: double.infinity,
-                              height: 50,
-                              child: OutlinedButton(
-                                onPressed: _isSwitchingToFree ? null : _handleDowngradeToFreemium,
-                                style: OutlinedButton.styleFrom(
-                                  foregroundColor: context.appColors.textQuaternary,
-                                  side: BorderSide(color: context.appColors.textQuaternary, width: 1),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                ),
-                                child: _isSwitchingToFree
-                                    ? SizedBox(
-                                        height: 20,
-                                        width: 20,
-                                        child: CircularProgressIndicator(
-                                            strokeWidth: 2, color: context.appColors.textQuaternary),
-                                      )
-                                    : const Text(
-                                        'Downgrade to Freemium',
+                                  child: Column(
+                                    children: [
+                                      const Icon(Icons.check_circle_outline, color: Colors.blue, size: 32),
+                                      const SizedBox(height: 8),
+                                      Text(
+                                        'You\'re on the Annual Plan',
                                         style: TextStyle(
                                           color: Colors.blue.shade300,
                                           fontSize: 16,
@@ -1910,8 +1344,7 @@ class _PlansSheetState extends State<PlansSheet> {
                             final isOnAnnualPlan = currentPlan?['interval'] == 'year';
                             final hasScheduledUpgrade = _hasScheduledUpgrade();
                             final usageProvider = context.read<UsageProvider>();
-                            final shouldShowContinueButton =
-                                !isOnAnnualPlan &&
+                            final shouldShowContinueButton = !isOnAnnualPlan &&
                                 !hasScheduledUpgrade &&
                                 !isCancelled &&
                                 !usageProvider.isLoadingPlans &&
@@ -1977,9 +1410,10 @@ class _PlansSheetState extends State<PlansSheet> {
                         if (!isUnlimited) ...[
                           const SizedBox(height: 32),
                           Text(
-                            'Omi is free, but freemium has limits that affect your experience:',
+                            'Nooto is free, but freemium has limits that affect your experience:',
                             textAlign: TextAlign.center,
-                            style: TextStyle(color: Colors.grey.shade400, fontSize: 14, fontWeight: FontWeight.w500),
+                            style: TextStyle(
+                                color: context.appColors.textTertiary, fontSize: 14, fontWeight: FontWeight.w500),
                           ),
                           const SizedBox(height: 16),
                           Column(
@@ -2015,8 +1449,8 @@ class _PlansSheetState extends State<PlansSheet> {
                                   child: OutlinedButton(
                                     onPressed: _isSwitchingToFree ? null : _handleDowngradeToFreemium,
                                     style: OutlinedButton.styleFrom(
-                                      foregroundColor: Colors.grey.shade400,
-                                      side: BorderSide(color: Colors.grey.shade600, width: 1),
+                                      foregroundColor: context.appColors.textTertiary,
+                                      side: BorderSide(color: context.appColors.textQuaternary, width: 1),
                                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                                     ),
                                     child: _isSwitchingToFree
@@ -2166,11 +1600,7 @@ class _PlansSheetState extends State<PlansSheet> {
         Expanded(
           child: Text(
             text,
-            style: TextStyle(
-              color: context.appColors.textPrimary,
-              fontSize: 16,
-              fontWeight: FontWeight.w400,
-            ),
+            style: TextStyle(color: context.appColors.textPrimary, fontSize: 16, fontWeight: FontWeight.w400),
           ),
         ),
       ],
@@ -2252,21 +1682,11 @@ class _PlansSheetState extends State<PlansSheet> {
                   children: [
                     Text(
                       title,
-                      style: TextStyle(
-                        color: context.appColors.textPrimary,
-                        fontSize: 18,
-                        fontWeight: FontWeight.w600,
-                      ),
+                      style: TextStyle(color: context.appColors.textPrimary, fontSize: 18, fontWeight: FontWeight.w600),
                     ),
                     if (subtitle != null) ...[
                       const SizedBox(height: 4),
-                      Text(
-                        subtitle,
-                        style: TextStyle(
-                          color: context.appColors.textQuaternary,
-                          fontSize: 14,
-                        ),
-                      ),
+                      Text(subtitle, style: TextStyle(color: context.appColors.textTertiary, fontSize: 14)),
                     ],
                   ],
                 ),
@@ -2275,11 +1695,7 @@ class _PlansSheetState extends State<PlansSheet> {
                   children: [
                     Text(
                       monthlyPrice,
-                      style: TextStyle(
-                        color: context.appColors.textPrimary,
-                        fontSize: 18,
-                        fontWeight: FontWeight.w600,
-                      ),
+                      style: TextStyle(color: context.appColors.textPrimary, fontSize: 18, fontWeight: FontWeight.w600),
                     ),
                     if (saveTag != null) ...[
                       const SizedBox(height: 8),
@@ -2288,8 +1704,8 @@ class _PlansSheetState extends State<PlansSheet> {
                         decoration: BoxDecoration(color: Colors.green.shade800, borderRadius: BorderRadius.circular(8)),
                         child: Text(
                           saveTag,
-                          style: TextStyle(
-                            color: context.appColors.textPrimary,
+                          style: const TextStyle(
+                            color: Colors.white,
                             fontSize: 9,
                             fontWeight: FontWeight.w600,
                             letterSpacing: 0.3,
@@ -2304,8 +1720,8 @@ class _PlansSheetState extends State<PlansSheet> {
                         decoration: BoxDecoration(color: Colors.red.shade800, borderRadius: BorderRadius.circular(8)),
                         child: Text(
                           'Ends on $endsOnDate',
-                          style: TextStyle(
-                            color: context.appColors.textPrimary,
+                          style: const TextStyle(
+                            color: Colors.white,
                             fontSize: 9,
                             fontWeight: FontWeight.w600,
                             letterSpacing: 0.3,
@@ -2316,14 +1732,11 @@ class _PlansSheetState extends State<PlansSheet> {
                       const SizedBox(height: 8),
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: Colors.red.shade800,
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Text(
+                        decoration: BoxDecoration(color: Colors.red.shade800, borderRadius: BorderRadius.circular(8)),
+                        child: const Text(
                           'Active',
                           style: TextStyle(
-                            color: context.appColors.textPrimary,
+                            color: Colors.white,
                             fontSize: 9,
                             fontWeight: FontWeight.w600,
                             letterSpacing: 0.3,
@@ -2347,10 +1760,7 @@ class _PlansSheetState extends State<PlansSheet> {
       decoration: BoxDecoration(
         color: context.appColors.secondaryCardBackground, // Use conversation list background
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: context.appColors.textPrimary.withOpacity(0.1),
-          width: 2,
-        ),
+        border: Border.all(color: Colors.white.withOpacity(0.1), width: 2),
       ),
       child: Column(
         children: [
@@ -2364,26 +1774,26 @@ class _PlansSheetState extends State<PlansSheet> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     ShimmerWithTimeout(
-                      baseColor: context.appColors.textPrimary.withOpacity(0.1),
-                      highlightColor: context.appColors.textPrimary.withOpacity(0.3),
+                      baseColor: Colors.white.withOpacity(0.1),
+                      highlightColor: Colors.white.withOpacity(0.3),
                       child: Container(
                         height: 18,
                         width: double.infinity,
                         decoration: BoxDecoration(
-                          color: context.appColors.textPrimary.withOpacity(0.1),
+                          color: Colors.white.withOpacity(0.1),
                           borderRadius: BorderRadius.circular(4),
                         ),
                       ),
                     ),
                     const SizedBox(height: 4),
                     ShimmerWithTimeout(
-                      baseColor: context.appColors.textPrimary.withOpacity(0.1),
-                      highlightColor: context.appColors.textPrimary.withOpacity(0.3),
+                      baseColor: Colors.white.withOpacity(0.1),
+                      highlightColor: Colors.white.withOpacity(0.3),
                       child: Container(
                         height: 14,
                         width: 100,
                         decoration: BoxDecoration(
-                          color: context.appColors.textPrimary.withOpacity(0.1),
+                          color: Colors.white.withOpacity(0.1),
                           borderRadius: BorderRadius.circular(4),
                         ),
                       ),
@@ -2395,26 +1805,26 @@ class _PlansSheetState extends State<PlansSheet> {
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
                   ShimmerWithTimeout(
-                    baseColor: context.appColors.textPrimary.withOpacity(0.1),
-                    highlightColor: context.appColors.textPrimary.withOpacity(0.3),
+                    baseColor: Colors.white.withOpacity(0.1),
+                    highlightColor: Colors.white.withOpacity(0.3),
                     child: Container(
                       height: 18,
                       width: 100,
                       decoration: BoxDecoration(
-                        color: context.appColors.textPrimary.withOpacity(0.1),
+                        color: Colors.white.withOpacity(0.1),
                         borderRadius: BorderRadius.circular(4),
                       ),
                     ),
                   ),
                   const SizedBox(height: 8),
                   ShimmerWithTimeout(
-                    baseColor: context.appColors.textPrimary.withOpacity(0.1),
-                    highlightColor: context.appColors.textPrimary.withOpacity(0.3),
+                    baseColor: Colors.white.withOpacity(0.1),
+                    highlightColor: Colors.white.withOpacity(0.3),
                     child: Container(
                       height: 14,
                       width: 60,
                       decoration: BoxDecoration(
-                        color: context.appColors.textPrimary.withOpacity(0.1),
+                        color: Colors.white.withOpacity(0.1),
                         borderRadius: BorderRadius.circular(4),
                       ),
                     ),
@@ -2476,14 +1886,7 @@ class _PlansSheetState extends State<PlansSheet> {
         Icon(icon, color: Colors.green, size: 16),
         const SizedBox(width: 8),
         Expanded(
-          child: Text(
-            text,
-            style: TextStyle(
-              color: context.appColors.textPrimary,
-              fontSize: 14,
-              height: 1.4,
-            ),
-          ),
+          child: Text(text, style: TextStyle(color: context.appColors.textPrimary, fontSize: 14, height: 1.4)),
         ),
       ],
     );
@@ -2521,22 +1924,13 @@ class _PlansSheetState extends State<PlansSheet> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
+                    const Text(
                       'Get Free Unlimited Access',
-                      style: TextStyle(
-                        color: context.appColors.textPrimary,
-                        fontSize: 18,
-                        fontWeight: FontWeight.w600,
-                      ),
+                      style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
                     ),
                     const SizedBox(height: 4),
-                    Text(
-                      'Training data program',
-                      style: TextStyle(
-                        color: context.appColors.textQuaternary,
-                        fontSize: 14,
-                      ),
-                    ),
+                    Text('Training data program',
+                        style: TextStyle(color: context.appColors.textTertiary, fontSize: 14)),
                   ],
                 ),
               ),
@@ -2597,22 +1991,13 @@ class _PlansSheetState extends State<PlansSheet> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
+                    const Text(
                       'Get Free Unlimited Access',
-                      style: TextStyle(
-                        color: context.appColors.textPrimary,
-                        fontSize: 18,
-                        fontWeight: FontWeight.w600,
-                      ),
+                      style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
                     ),
                     const SizedBox(height: 4),
-                    Text(
-                      'Your request is under review',
-                      style: TextStyle(
-                        color: context.appColors.textQuaternary,
-                        fontSize: 14,
-                      ),
-                    ),
+                    Text('Your request is under review',
+                        style: TextStyle(color: context.appColors.textTertiary, fontSize: 14)),
                   ],
                 ),
               ),
@@ -2640,22 +2025,13 @@ class _PlansSheetState extends State<PlansSheet> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
+                  const Text(
                     'Get Free Unlimited Access',
-                    style: TextStyle(
-                      color: context.appColors.textPrimary,
-                      fontSize: 18,
-                      fontWeight: FontWeight.w600,
-                    ),
+                    style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
                   ),
                   const SizedBox(height: 4),
-                  Text(
-                    'Share data for training',
-                    style: TextStyle(
-                      color: context.appColors.textQuaternary,
-                      fontSize: 14,
-                    ),
-                  ),
+                  Text('Share data for training',
+                      style: TextStyle(color: context.appColors.textTertiary, fontSize: 14)),
                 ],
               ),
             ),

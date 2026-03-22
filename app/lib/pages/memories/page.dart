@@ -367,7 +367,7 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
                                           ),
                                         ),
                                         if (provider.searchQuery.isEmpty && provider.selectedCategories.isEmpty) ...[
-                                        const SizedBox(height: 8),
+                                          const SizedBox(height: 8),
                                         // Description
                                         Text(
                                           context.l10n.addFirstMemory,
@@ -412,7 +412,8 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
                                             ),
                                           ),
                                         ),
-                                        const SizedBox(height: 80),
+                                          const SizedBox(height: 80),
+                                        ],
                                       ],
                                     ),
                                   ),

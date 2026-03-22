@@ -135,12 +135,21 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
     return Selector<AppProvider, List<Map<String, dynamic>>>(
       selector: (context, provider) => provider.groupedApps,
       builder: (context, groups, child) {
+        // Filter out sections that are accessed elsewhere:
+        // - "Summary" (memories) section - accessed via conversation detail page
+        // - "Chat Assistants" (chat) section - accessed via chat page drawer
+        final filteredGroups = groups.where((group) {
+          final capabilityMap = group['capability'] as Map<String, dynamic>?;
+          final groupId = capabilityMap?['id'] as String? ?? '';
+          return groupId != 'memories' && groupId != 'chat';
+        }).toList();
+
         return SliverPadding(
           padding: const EdgeInsets.only(top: 8, bottom: 100),
           sliver: SliverList.builder(
-            itemCount: groups.length,
+            itemCount: filteredGroups.length,
             itemBuilder: (context, index) {
-              final group = groups[index];
+              final group = filteredGroups[index];
               // Support capability-based grouping (new) and category-based (legacy)
               final capabilityMap = group['capability'] as Map<String, dynamic>?;
               final categoryMap = group['category'] as Map<String, dynamic>?;
@@ -207,11 +216,8 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
       highlightColor: AppStyles.backgroundTertiary,
       child: Container(
         padding: const EdgeInsets.all(20),
-        margin: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-        decoration: BoxDecoration(
-          color: AppStyles.backgroundSecondary,
-          borderRadius: BorderRadius.circular(16),
-        ),
+        margin: const EdgeInsets.fromLTRB(16, 16, 16, 16),
+        decoration: BoxDecoration(color: AppStyles.backgroundSecondary, borderRadius: BorderRadius.circular(16)),
         child: Row(
           children: [
             Container(
@@ -260,7 +266,7 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
       baseColor: AppStyles.backgroundSecondary,
       highlightColor: AppStyles.backgroundTertiary,
       child: Container(
-        margin: const EdgeInsets.fromLTRB(16, 0, 16, 0),
+        margin: const EdgeInsets.fromLTRB(16, 12, 16, 0),
         child: Row(
           children: [
             Expanded(
@@ -524,58 +530,61 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
                 return true;
               }).toList();
 
-            return (
-              isLoading: provider.isLoading,
-              isSearching: provider.isSearching,
-              filters: provider.filters,
-              isSearchActive: provider.isSearchActive(),
-              isFilterActive: provider.isFilterActive(),
-              filterCount: provider.filters.length,
-              isMyAppsSelected: provider.isFilterSelected('My Apps', 'Apps'),
-              isInstalledSelected: provider.isFilterSelected('Installed Apps', 'Apps'),
-              visibleFilterCount: visibleFilters.length,
-              firstFilterText: visibleFilters.isNotEmpty ? filterValueToString(visibleFilters.first.value) : null,
-            );
-          },
-          builder: (context, state, child) {
-            return RefreshIndicator(
-              onRefresh: () async {
-                HapticFeedback.mediumImpact();
-                await context.read<AppProvider>().forceRefreshApps();
-              },
-              color: context.accentColor,
-              backgroundColor: Colors.white,
-              child: CustomScrollView(
-                controller: widget.scrollController,
-                physics: const AlwaysScrollableScrollPhysics(),
-                slivers: [
-                  SliverToBoxAdapter(
-                    child: state.isLoading
-                        ? _buildShimmerCreateButton()
-                        : GestureDetector(
-                            onTap: () {
-                              showModalBottomSheet(
-                                context: context,
-                                builder: (context) => const CreateOptionsSheet(),
-                                shape: const RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+              return (
+                isLoading: provider.isLoading,
+                isSearching: provider.isSearching,
+                filters: provider.filters,
+                isSearchActive: provider.isSearchActive(),
+                isFilterActive: provider.isFilterActive(),
+                filterCount: provider.filters.length,
+                isMyAppsSelected: provider.isFilterSelected('My Apps', 'Apps'),
+                isInstalledSelected: provider.isFilterSelected('Installed Apps', 'Apps'),
+                visibleFilterCount: visibleFilters.length,
+                firstFilterText: visibleFilters.isNotEmpty ? filterValueToString(visibleFilters.first.value) : null,
+              );
+            },
+            builder: (context, state, child) {
+              return RefreshIndicator(
+                onRefresh: () async {
+                  HapticFeedback.mediumImpact();
+                  await context.read<AppProvider>().forceRefreshApps();
+                },
+                color: context.accentColor,
+                backgroundColor: Colors.white,
+                child: CustomScrollView(
+                  controller: widget.scrollController,
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  slivers: [
+                    const SliverToBoxAdapter(child: SizedBox(height: 4)),
+                    SliverToBoxAdapter(
+                      child: state.isLoading
+                          ? _buildShimmerCreateButton()
+                          : GestureDetector(
+                              onTap: () {
+                                showModalBottomSheet(
+                                  context: context,
+                                  builder: (context) => const CreateOptionsSheet(),
+                                  shape: const RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+                                  ),
+                                );
+                              },
+                              child: Container(
+                                padding: const EdgeInsets.all(20),
+                                margin: const EdgeInsets.fromLTRB(16, 16, 16, 16),
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withValues(alpha: 0.9),
+                                  borderRadius: BorderRadius.circular(16),
                                 ),
-                              );
-                            },
-                            child: Container(
-                              padding: const EdgeInsets.all(20),
-                              margin: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-                              decoration: BoxDecoration(
-                                color: Colors.white.withValues(alpha: 0.9),
-                                borderRadius: BorderRadius.circular(16),
-                              ),
-                              child: Row(
-                                children: [
-                                  Container(
-                                    padding: const EdgeInsets.all(8),
-                                    decoration: BoxDecoration(
-                                      color: const Color(0xFF1F1F25),
-                                      borderRadius: BorderRadius.circular(8),
+                                child: Row(
+                                  children: [
+                                    Container(
+                                      padding: const EdgeInsets.all(8),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFF1F1F25),
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
+                                      child: const Icon(Icons.add, color: Colors.white, size: 20),
                                     ),
                                     const SizedBox(width: 16),
                                     Expanded(
@@ -605,30 +614,180 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
                             ),
                     ),
 
-                  // Top bar with search and filters - show shimmer when loading
-                  SliverToBoxAdapter(
-                    child: state.isLoading
-                        ? _buildShimmerSearchBar()
-                        : Container(
-                            margin: const EdgeInsets.fromLTRB(16, 0, 16, 0),
-                            child: Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                // Search bar - shrinks to square when filters are active (but not when search is active)
-                                AnimatedContainer(
-                                  duration: const Duration(milliseconds: 200),
-                                  curve: Curves.easeInOut,
-                                  width: (!state.isSearchActive &&
-                                          (state.isMyAppsSelected ||
-                                              state.isInstalledSelected ||
-                                              state.visibleFilterCount > 0))
-                                      ? 44
-                                      : null,
-                                  child: (!state.isSearchActive &&
-                                          (state.isMyAppsSelected ||
-                                              state.isInstalledSelected ||
-                                              state.visibleFilterCount > 0))
-                                      ? SizedBox(
+                    // Top bar with search and filters - show shimmer when loading
+                    SliverToBoxAdapter(
+                      child: state.isLoading
+                          ? _buildShimmerSearchBar()
+                          : Container(
+                              margin: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+                              child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  // Search bar - shrinks to square when filters are active (but not when search is active)
+                                  AnimatedContainer(
+                                    duration: const Duration(milliseconds: 200),
+                                    curve: Curves.easeInOut,
+                                    width:
+                                        (!state.isSearchActive &&
+                                            (state.isMyAppsSelected ||
+                                                state.isInstalledSelected ||
+                                                state.visibleFilterCount > 0))
+                                        ? 44
+                                        : null,
+                                    child:
+                                        (!state.isSearchActive &&
+                                            (state.isMyAppsSelected ||
+                                                state.isInstalledSelected ||
+                                                state.visibleFilterCount > 0))
+                                        ? SizedBox(
+                                            height: 44,
+                                            child: Container(
+                                              decoration: BoxDecoration(
+                                                color: AppStyles.backgroundSecondary,
+                                                borderRadius: BorderRadius.circular(AppStyles.radiusLarge),
+                                              ),
+                                              child: IconButton(
+                                                onPressed: () {
+                                                  // Clear all filters and expand search
+                                                  final provider = context.read<AppProvider>();
+                                                  if (state.isMyAppsSelected) {
+                                                    provider.addOrRemoveFilter('My Apps', 'Apps');
+                                                  }
+                                                  if (state.isInstalledSelected) {
+                                                    provider.addOrRemoveFilter('Installed Apps', 'Apps');
+                                                  }
+                                                  // Clear other filters
+                                                  final visibleFilters = state.filters.entries.where((entry) {
+                                                    if (entry.key == 'Apps') {
+                                                      return entry.value != 'My Apps' &&
+                                                          entry.value != 'Installed Apps';
+                                                    }
+                                                    return true;
+                                                  }).toList();
+                                                  for (final entry in visibleFilters) {
+                                                    provider.removeFilter(entry.key);
+                                                  }
+                                                  provider.applyFilters();
+                                                },
+                                                icon: const Icon(
+                                                  FontAwesomeIcons.magnifyingGlass,
+                                                  color: Colors.white70,
+                                                  size: 14,
+                                                ),
+                                                padding: EdgeInsets.zero,
+                                              ),
+                                            ),
+                                          )
+                                        : Expanded(
+                                            child: Column(
+                                              children: [
+                                                SizedBox(
+                                                  height: 44,
+                                                  child: SearchBar(
+                                                    hintText: context.l10n.searchAppsPlaceholder,
+                                                    leading: const Padding(
+                                                      padding: EdgeInsets.only(left: 6.0),
+                                                      child: Icon(
+                                                        FontAwesomeIcons.magnifyingGlass,
+                                                        color: Colors.white70,
+                                                        size: 14,
+                                                      ),
+                                                    ),
+                                                    backgroundColor: WidgetStateProperty.all(
+                                                      AppStyles.backgroundSecondary,
+                                                    ),
+                                                    elevation: WidgetStateProperty.all(0),
+                                                    padding: WidgetStateProperty.all(
+                                                      const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                                                    ),
+                                                    focusNode: context.read<HomeProvider>().appsSearchFieldFocusNode,
+                                                    controller: searchController,
+                                                    trailing: state.isSearchActive
+                                                        ? [
+                                                            IconButton(
+                                                              icon: const Icon(
+                                                                Icons.close,
+                                                                color: Colors.white70,
+                                                                size: 16,
+                                                              ),
+                                                              padding: EdgeInsets.zero,
+                                                              constraints: const BoxConstraints(
+                                                                minHeight: 36,
+                                                                minWidth: 36,
+                                                              ),
+                                                              onPressed: () {
+                                                                searchController.clear();
+                                                                context.read<AppProvider>().searchApps('');
+                                                              },
+                                                            ),
+                                                          ]
+                                                        : null,
+                                                    hintStyle: WidgetStateProperty.all(
+                                                      TextStyle(color: AppStyles.textTertiary, fontSize: 14),
+                                                    ),
+                                                    textStyle: WidgetStateProperty.all(
+                                                      const TextStyle(color: AppStyles.textPrimary, fontSize: 14),
+                                                    ),
+                                                    shape: WidgetStateProperty.all(
+                                                      RoundedRectangleBorder(
+                                                        borderRadius: BorderRadius.circular(AppStyles.radiusLarge),
+                                                      ),
+                                                    ),
+                                                    onChanged: (value) {
+                                                      debouncer.run(() {
+                                                        context.read<AppProvider>().searchApps(value);
+                                                      });
+                                                    },
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                  ),
+
+                                  const SizedBox(width: 8),
+
+                                  // My Apps button - expands when selected
+                                  state.isMyAppsSelected
+                                      ? Expanded(
+                                          child: AnimatedContainer(
+                                            duration: const Duration(milliseconds: 200),
+                                            curve: Curves.easeInOut,
+                                            height: 44,
+                                            decoration: BoxDecoration(
+                                              color: context.accentColor.withValues(alpha: 0.5),
+                                              borderRadius: BorderRadius.circular(AppStyles.radiusLarge),
+                                            ),
+                                            child: TextButton.icon(
+                                              onPressed: () {
+                                                HapticFeedback.mediumImpact();
+                                                final provider = context.read<AppProvider>();
+                                                final wasSelected = provider.isFilterSelected('My Apps', 'Apps');
+                                                provider.addOrRemoveFilter('My Apps', 'Apps');
+                                                provider.applyFilters();
+                                                MixpanelManager().appsTypeFilter('My Apps', !wasSelected);
+                                              },
+                                              icon: const FaIcon(
+                                                FontAwesomeIcons.solidUser,
+                                                size: 16,
+                                                color: Colors.white,
+                                              ),
+                                              label: Text(
+                                                context.l10n.myApps,
+                                                style: const TextStyle(
+                                                  fontSize: 14,
+                                                  color: Colors.white,
+                                                  fontWeight: FontWeight.w500,
+                                                ),
+                                              ),
+                                              style: TextButton.styleFrom(
+                                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
+                                              ),
+                                            ),
+                                          ),
+                                        )
+                                      : SizedBox(
+                                          width: 44,
                                           height: 44,
                                           child: AnimatedContainer(
                                             duration: const Duration(milliseconds: 200),
@@ -666,7 +825,7 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
                                             curve: Curves.easeInOut,
                                             height: 44,
                                             decoration: BoxDecoration(
-                                              color: Colors.deepPurpleAccent.withValues(alpha: 0.5),
+                                              color: context.accentColor.withValues(alpha: 0.5),
                                               borderRadius: BorderRadius.circular(AppStyles.radiusLarge),
                                             ),
                                             child: TextButton.icon(
@@ -738,7 +897,7 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
                                             curve: Curves.easeInOut,
                                             height: 44,
                                             decoration: BoxDecoration(
-                                              color: Colors.deepPurpleAccent.withValues(alpha: 0.5),
+                                              color: context.accentColor.withValues(alpha: 0.5),
                                               borderRadius: BorderRadius.circular(AppStyles.radiusLarge),
                                             ),
                                             child: TextButton.icon(
@@ -750,7 +909,7 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
                                                   shape: const RoundedRectangleBorder(
                                                     borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
                                                   ),
-                                                  builder: (context) => const FilterBottomSheet(),
+                                                  builder: (context) => FilterBottomSheet(),
                                                 );
                                               },
                                               icon: const Icon(FontAwesomeIcons.filter, size: 16, color: Colors.white),
@@ -779,7 +938,7 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
                                                 curve: Curves.easeInOut,
                                                 decoration: BoxDecoration(
                                                   color: state.visibleFilterCount > 0
-                                                      ? Colors.deepPurpleAccent.withValues(alpha: 0.5)
+                                                      ? context.accentColor.withValues(alpha: 0.5)
                                                       : AppStyles.backgroundSecondary,
                                                   borderRadius: BorderRadius.circular(AppStyles.radiusLarge),
                                                 ),
@@ -792,7 +951,7 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
                                                       shape: const RoundedRectangleBorder(
                                                         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
                                                       ),
-                                                      builder: (context) => const FilterBottomSheet(),
+                                                      builder: (context) => FilterBottomSheet(),
                                                     );
                                                   },
                                                   icon: const Icon(
@@ -833,266 +992,8 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
                                             ],
                                           ),
                                         ),
-                                ),
-
-                                const SizedBox(width: 8),
-
-                                // My Apps button - expands when selected
-                                state.isMyAppsSelected
-                                    ? Expanded(
-                                        child: AnimatedContainer(
-                                          duration: const Duration(milliseconds: 200),
-                                          curve: Curves.easeInOut,
-                                          height: 44,
-                                          decoration: BoxDecoration(
-                                            color: context.accentColor.withValues(alpha: 0.5),
-                                            borderRadius: BorderRadius.circular(AppStyles.radiusLarge),
-                                          ),
-                                          child: TextButton.icon(
-                                            onPressed: () {
-                                              HapticFeedback.mediumImpact();
-                                              final provider = context.read<AppProvider>();
-                                              final wasSelected = provider.isFilterSelected('My Apps', 'Apps');
-                                              provider.addOrRemoveFilter('My Apps', 'Apps');
-                                              provider.applyFilters();
-                                              MixpanelManager().appsTypeFilter('My Apps', !wasSelected);
-                                            },
-                                            icon: const FaIcon(
-                                              FontAwesomeIcons.solidUser,
-                                              size: 16,
-                                              color: Colors.white,
-                                            ),
-                                            label: Text(
-                                              context.l10n.myApps,
-                                              style: const TextStyle(
-                                                fontSize: 14,
-                                                color: Colors.white,
-                                                fontWeight: FontWeight.w500,
-                                              ),
-                                            ),
-                                            style: TextButton.styleFrom(
-                                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
-                                            ),
-                                          ),
-                                        ),
-                                      )
-                                    : SizedBox(
-                                        width: 44,
-                                        height: 44,
-                                        child: AnimatedContainer(
-                                          duration: const Duration(milliseconds: 200),
-                                          curve: Curves.easeInOut,
-                                          decoration: BoxDecoration(
-                                            color: AppStyles.backgroundSecondary,
-                                            borderRadius: BorderRadius.circular(AppStyles.radiusLarge),
-                                          ),
-                                          child: IconButton(
-                                            onPressed: () {
-                                              HapticFeedback.mediumImpact();
-                                              final provider = context.read<AppProvider>();
-                                              final wasSelected = provider.isFilterSelected('My Apps', 'Apps');
-                                              provider.addOrRemoveFilter('My Apps', 'Apps');
-                                              provider.applyFilters();
-                                              MixpanelManager().appsTypeFilter('My Apps', !wasSelected);
-                                            },
-                                            icon: const FaIcon(
-                                              FontAwesomeIcons.solidUser,
-                                              size: 16,
-                                              color: Colors.white,
-                                            ),
-                                            padding: EdgeInsets.zero,
-                                          ),
-                                        ),
-                                      ),
-
-                                const SizedBox(width: 8),
-
-                                // Installed Apps button - expands when selected
-                                state.isInstalledSelected
-                                    ? Expanded(
-                                        child: AnimatedContainer(
-                                          duration: const Duration(milliseconds: 200),
-                                          curve: Curves.easeInOut,
-                                          height: 44,
-                                          decoration: BoxDecoration(
-                                            color: context.accentColor.withValues(alpha: 0.5),
-                                            borderRadius: BorderRadius.circular(AppStyles.radiusLarge),
-                                          ),
-                                          child: TextButton.icon(
-                                            onPressed: () {
-                                              HapticFeedback.mediumImpact();
-                                              final provider = context.read<AppProvider>();
-                                              final wasSelected = provider.isFilterSelected('Installed Apps', 'Apps');
-                                              provider.addOrRemoveFilter('Installed Apps', 'Apps');
-                                              provider.applyFilters();
-                                              MixpanelManager().appsTypeFilter('Installed Apps', !wasSelected);
-                                            },
-                                            icon: const FaIcon(
-                                              FontAwesomeIcons.download,
-                                              size: 16,
-                                              color: Colors.white,
-                                            ),
-                                            label: Text(
-                                              (state.visibleFilterCount > 0 && !state.isSearchActive)
-                                                  ? context.l10n.installed
-                                                  : context.l10n.installedApps,
-                                              style: const TextStyle(
-                                                fontSize: 14,
-                                                color: Colors.white,
-                                                fontWeight: FontWeight.w500,
-                                              ),
-                                            ),
-                                            style: TextButton.styleFrom(
-                                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
-                                            ),
-                                          ),
-                                        ),
-                                      )
-                                    : SizedBox(
-                                        width: 44,
-                                        height: 44,
-                                        child: AnimatedContainer(
-                                          duration: const Duration(milliseconds: 200),
-                                          curve: Curves.easeInOut,
-                                          decoration: BoxDecoration(
-                                            color: AppStyles.backgroundSecondary,
-                                            borderRadius: BorderRadius.circular(AppStyles.radiusLarge),
-                                          ),
-                                          child: IconButton(
-                                            onPressed: () {
-                                              HapticFeedback.mediumImpact();
-                                              final provider = context.read<AppProvider>();
-                                              final wasSelected = provider.isFilterSelected('Installed Apps', 'Apps');
-                                              provider.addOrRemoveFilter('Installed Apps', 'Apps');
-                                              provider.applyFilters();
-                                              MixpanelManager().appsTypeFilter('Installed Apps', !wasSelected);
-                                            },
-                                            icon: const FaIcon(
-                                              FontAwesomeIcons.download,
-                                              size: 16,
-                                              color: Colors.white,
-                                            ),
-                                            padding: EdgeInsets.zero,
-                                          ),
-                                        ),
-                                      ),
-
-                                const SizedBox(width: 8),
-
-                                // Filter button - expands when filters are active (but not when search is active)
-                                state.visibleFilterCount > 0 && !state.isSearchActive
-                                    ? Expanded(
-                                        child: AnimatedContainer(
-                                          duration: const Duration(milliseconds: 200),
-                                          curve: Curves.easeInOut,
-                                          height: 44,
-                                          decoration: BoxDecoration(
-                                            color: context.accentColor.withValues(alpha: 0.5),
-                                            borderRadius: BorderRadius.circular(AppStyles.radiusLarge),
-                                          ),
-                                          child: TextButton.icon(
-                                            onPressed: () {
-                                              HapticFeedback.mediumImpact();
-                                              showModalBottomSheet(
-                                                context: context,
-                                                isScrollControlled: true,
-                                                shape: const RoundedRectangleBorder(
-                                                  borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-                                                ),
-                                                builder: (context) => FilterBottomSheet(),
-                                              );
-                                            },
-                                            icon: const Icon(
-                                              FontAwesomeIcons.filter,
-                                              size: 16,
-                                              color: Colors.white,
-                                            ),
-                                            label: Text(
-                                              context.l10n.filters,
-                                              style: const TextStyle(
-                                                fontSize: 14,
-                                                color: Colors.white,
-                                                fontWeight: FontWeight.w500,
-                                              ),
-                                            ),
-                                            style: TextButton.styleFrom(
-                                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
-                                            ),
-                                          ),
-                                        ),
-                                      )
-                                    : SizedBox(
-                                        width: 44,
-                                        height: 44,
-                                        child: Stack(
-                                          clipBehavior: Clip.none,
-                                          children: [
-                                            AnimatedContainer(
-                                              duration: const Duration(milliseconds: 200),
-                                              curve: Curves.easeInOut,
-                                              decoration: BoxDecoration(
-                                                color: state.visibleFilterCount > 0
-                                                    ? context.accentColor.withValues(alpha: 0.5)
-                                                    : AppStyles.backgroundSecondary,
-                                                borderRadius: BorderRadius.circular(AppStyles.radiusLarge),
-                                              ),
-                                              child: IconButton(
-                                                onPressed: () {
-                                                  HapticFeedback.mediumImpact();
-                                                  showModalBottomSheet(
-                                                    context: context,
-                                                    isScrollControlled: true,
-                                                    shape: const RoundedRectangleBorder(
-                                                      borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-                                                    ),
-                                                    builder: (context) => FilterBottomSheet(),
-                                                  );
-                                                },
-                                                icon: const Icon(
-                                                  FontAwesomeIcons.filter,
-                                                  size: 16,
-                                                  color: Colors.white,
-                                                ),
-                                                padding: EdgeInsets.zero,
-                                              ),
-                                            ),
-                                            // Badge showing filter count when filters are active
-                                            if (state.visibleFilterCount > 0)
-                                              Positioned(
-                                                top: -4,
-                                                right: -4,
-                                                child: Container(
-                                                  padding: const EdgeInsets.all(4),
-                                                  decoration: BoxDecoration(
-                                                    color: Colors.white,
-                                                    shape: BoxShape.circle,
-                                                    border: Border.all(
-                                                      color: Colors.black,
-                                                      width: 1.5,
-                                                    ),
-                                                  ),
-                                                  constraints: const BoxConstraints(
-                                                    minWidth: 16,
-                                                    minHeight: 16,
-                                                  ),
-                                                  child: Center(
-                                                    child: Text(
-                                                      state.visibleFilterCount.toString(),
-                                                      style: const TextStyle(
-                                                        color: Colors.black,
-                                                        fontSize: 10,
-                                                        fontWeight: FontWeight.w600,
-                                                        height: 1.0,
-                                                      ),
-                                                      textAlign: TextAlign.center,
-                                                    ),
-                                                  ),
-                                                ),
-                                              ),
-                                          ],
-                                        ),
-                                      ),
-                              ],
+                                ],
+                              ),
                             ),
                     ),
 

@@ -1,0 +1,67 @@
+# Nooto Desktop Backend - Coolify Deployment
+# Based on upstream Dockerfile with Coolify-friendly additions:
+# - No baked-in credentials (uses SERVICE_ACCOUNT_JSON env var)
+# - Entrypoint script creates credentials file at runtime
+# - Health check built in
+# - curl + python3 for entrypoint JSON validation
+
+# Build stage
+FROM rust:1.83-slim AS builder
+
+WORKDIR /app
+
+# Install build dependencies
+RUN apt-get update && apt-get install -y \
+    pkg-config \
+    libssl-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy manifests
+COPY Cargo.toml Cargo.lock* ./
+
+# Create dummy src to cache dependencies
+RUN mkdir src && echo "fn main() {}" > src/main.rs
+
+# Build dependencies only (cached layer)
+RUN cargo build --release && rm -rf src
+
+# Copy actual source code and templates
+COPY src ./src
+COPY templates ./templates
+
+# Build the application
+RUN touch src/main.rs && cargo build --release
+
+# Runtime stage
+FROM debian:bookworm-slim
+
+WORKDIR /app
+
+# Install runtime dependencies
+# - curl: health checks
+RUN apt-get update && apt-get install -y \
+    ca-certificates \
+    libssl3 \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy binary from builder
+COPY --from=builder /app/target/release/omi-desktop-backend /app/omi-desktop-backend
+
+# Copy templates
+COPY templates ./templates
+
+# Copy entrypoint script
+COPY docker-entrypoint.sh /app/docker-entrypoint.sh
+RUN chmod +x /app/docker-entrypoint.sh
+
+# Default port for containerized environments
+ENV PORT=8080
+
+EXPOSE 8080
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+    CMD curl -f http://localhost:8080/health || exit 1
+
+ENTRYPOINT ["/app/docker-entrypoint.sh"]
+CMD ["./omi-desktop-backend"]
