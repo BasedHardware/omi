@@ -42,6 +42,10 @@ class BleCompanionService : CompanionDeviceService() {
             Log.i(TAG, "App is closed, skipping reconnect")
             return
         }
+        if (OmiBleManager.instance.isManuallyDisconnected(address)) {
+            Log.i(TAG, "Device was manually disconnected, skipping reconnect")
+            return
+        }
         if (!hasBluetoothPermission()) {
             Log.w(TAG, "No Bluetooth permission, cannot start foreground service")
             return

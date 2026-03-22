@@ -185,7 +185,7 @@ final class OmiBleManager: NSObject {
         }
 
         let key = "\(peripheralUuid):\(serviceUuid):\(characteristicUuid)".lowercased()
-        let writeType: CBCharacteristicWriteType = characteristic.properties.contains(.writeWithoutResponse) ? .withoutResponse : .withResponse
+        let writeType: CBCharacteristicWriteType = characteristic.properties.contains(.write) ? .withResponse : .withoutResponse
 
         if writeType == .withResponse {
             writeCompletions[key] = completion
@@ -435,6 +435,16 @@ extension OmiBleManager: CBPeripheralDelegate {
             } else {
                 completion(.success(()))
             }
+        }
+    }
+
+    func peripheral(_ peripheral: CBPeripheral, didUpdateNotificationStateFor characteristic: CBCharacteristic, error: Error?) {
+        let uuid = peripheralUuidString(peripheral)
+        let charUuid = fullUuidString(characteristic.uuid)
+        if let error = error {
+            NSLog("[OmiBle] Failed to update notification state for \(charUuid): \(error.localizedDescription)")
+        } else {
+            NSLog("[OmiBle] Notification state updated for \(charUuid): isNotifying=\(characteristic.isNotifying)")
         }
     }
 }
