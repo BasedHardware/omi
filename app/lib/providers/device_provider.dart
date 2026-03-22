@@ -60,6 +60,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   Map<String, dynamic> get latestOmiGlassFirmwareDetails => _latestOmiGlassFirmwareDetails;
 
   Timer? _disconnectNotificationTimer;
+  bool _manualDisconnect = false;
   final Debouncer _disconnectDebouncer = Debouncer(delay: const Duration(milliseconds: 500));
   final Debouncer _connectDebouncer = Debouncer(delay: const Duration(milliseconds: 100));
 
@@ -103,6 +104,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
 
   // TODO: thinh, use connection directly
   Future _bleDisconnectDevice(BtDevice btDevice) async {
+    _manualDisconnect = true;
     var connection = await ServiceManager.instance().device.ensureConnection(btDevice.id);
     if (connection == null) {
       return Future.value(null);
@@ -408,7 +410,13 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
       isConnected: false,
     );
 
-    // Retired 1s to prevent the race condition made by standby power of ble device
+    if (_manualDisconnect) {
+      _manualDisconnect = false;
+      _reconnectionTimer?.cancel();
+      return;
+    }
+
+    // Retry 1s to prevent the race condition made by standby power of ble device
     Future.delayed(const Duration(seconds: 1), () {
       periodicConnect('coming from onDisconnect');
     });
