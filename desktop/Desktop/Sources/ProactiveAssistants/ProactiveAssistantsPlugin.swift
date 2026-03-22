@@ -448,6 +448,7 @@ public class ProactiveAssistantsPlugin: NSObject {
         lastDistributedApp = nil
         lastDistributedWindowTitle = nil
         latestCapturedFrame = nil
+        lastDistributionTime = .distantPast
 
         windowMonitor?.stop()
         windowMonitor = nil
@@ -829,6 +830,12 @@ public class ProactiveAssistantsPlugin: NSObject {
     private func distributeFrameIfChanged(_ frame: CapturedFrame) {
         latestCapturedFrame = frame
 
+        // First frame after monitoring starts — distribute immediately, no debounce
+        if lastDistributedApp == nil {
+            flushDebouncedFrame()
+            return
+        }
+
         let contextChanged = ContextDetection.didContextChange(
             fromApp: lastDistributedApp,
             fromWindowTitle: lastDistributedWindowTitle,
@@ -840,7 +847,12 @@ public class ProactiveAssistantsPlugin: NSObject {
         let fallbackDue = timeSinceLastDistribution >= distributionFallbackInterval
 
         if contextChanged {
-            // Context changed — restart the 3s debounce timer
+            // Update tracking immediately so subsequent captures in the same new context
+            // don't keep resetting the debounce timer (fixes starvation bug).
+            lastDistributedApp = frame.appName
+            lastDistributedWindowTitle = frame.windowTitle
+
+            // Restart the 3s debounce timer — fires 3s after the last context change
             distributionDebounceTimer?.invalidate()
             distributionDebounceTimer = Timer.scheduledTimer(withTimeInterval: 3.0, repeats: false) { [weak self] _ in
                 Task { @MainActor in
