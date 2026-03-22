@@ -64,6 +64,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   final Debouncer _connectDebouncer = Debouncer(delay: const Duration(milliseconds: 100));
 
   void Function(BtDevice device)? onDeviceConnected;
+  void Function(BtDevice device, int fileCount, int totalBytes)? onOfflineDataDetected;
 
   DeviceProvider() {
     ServiceManager.instance().device.subscribe(this, this);
@@ -473,6 +474,10 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     // Wals
     ServiceManager.instance().wal.getSyncs().sdcard.setDevice(device);
     ServiceManager.instance().wal.getSyncs().flashPage.setDevice(device);
+    ServiceManager.instance().wal.getSyncs().storage.setDevice(device);
+
+    // Auto-sync: check if device has offline files (new multi-file firmware)
+    _checkAndStartAutoSync(device);
 
     notifyListeners();
 
@@ -484,6 +489,21 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     }
 
     onDeviceConnected?.call(device);
+  }
+
+  Future<void> _checkAndStartAutoSync(BtDevice device) async {
+    try {
+      var connection = await ServiceManager.instance().device.ensureConnection(device.id);
+      if (connection == null) return;
+
+      final status = await connection.getStorageFileStats();
+      if (status == null || status.fileCount == 0) return;
+
+      Logger.debug('DeviceProvider: Auto-sync detected ${status.fileCount} files (${status.totalUsedBytes} bytes)');
+      onOfflineDataDetected?.call(device, status.fileCount, status.totalUsedBytes);
+    } catch (e) {
+      Logger.debug('DeviceProvider: Auto-sync check failed: $e');
+    }
   }
 
   Future<void> _ensureCompanionAssociation(BtDevice device) async {
