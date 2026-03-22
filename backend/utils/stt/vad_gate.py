@@ -756,6 +756,12 @@ class GatedDeepgramSocket:
                 self._gate._finalize_errors += 1
                 logger.warning('finalize failed uid=%s session=%s', self._gate.uid, self._gate.session_id)
 
+    def keep_alive(self):
+        """Send keepalive to DG, delegates to underlying SafeDeepgramSocket."""
+        if self.is_connection_dead:
+            return False
+        return self._conn.keep_alive()
+
     def finalize(self) -> None:
         """Flush pending transcript."""
         self._conn.finalize()
