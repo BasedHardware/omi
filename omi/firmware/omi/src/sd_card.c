@@ -24,6 +24,7 @@
 #include <zephyr/logging/log.h>
 #include <zephyr/pm/device.h>
 #include <zephyr/storage/disk_access.h>
+#include <zephyr/sys/atomic.h>
 
 #include "rtc.h"
 
@@ -33,14 +34,16 @@ LOG_MODULE_REGISTER(sd_card, CONFIG_LOG_DEFAULT_LEVEL);
 #define SD_REQ_QUEUE_MSGS 100
 #define SD_FSYNC_INTERVAL_MS (60 * 1000)
 #define WRITE_BATCH_COUNT 200
+#define WRITE_DRAIN_BURST 16
 #define ERROR_THRESHOLD 5
+#define FILE_CACHE_TTL_MS (30 * 1000)
 
 /* LittleFS paths are relative to FS root (no mount-point prefix) */
 #define FILE_DATA_DIR "audio"
 #define FILE_INFO_PATH "info.txt"
 
 /* ------------------------------------------------------------------ */
-/* LittleFS state                                                      */
+/* LittleFS state                                                     */
 /* ------------------------------------------------------------------ */
 
 /* Raw LFS instance */
@@ -60,7 +63,17 @@ static struct lfs_file_config lfs_finfo_cfg = {.buffer = lfs_finfo_buf};
 /* LFS I/O buffers — sized to cache_size (4096) for multi-sector I/O */
 static uint8_t lfs_read_buf[4096];
 static uint8_t lfs_prog_buf[4096];
-static uint8_t lfs_lookahead_buf[128]; /* 128 bytes = 1024 blocks * 4096 = 4 MB lookahead */
+/* Lookahead buffer sizing:
+ * 128 bytes = 1024 blocks = 4 MB window → too small for 512 MB SD (128K blocks).
+ * Every time the window is exhausted, LFS triggers a FULL filesystem traversal
+ * (lfs_alloc_scan → lfs_fs_traverse_) which reads every block in every file.
+ * With 200 MB of data (~50K blocks) this costs 10-50+ seconds per scan over SPI.
+ *
+ * 2048 bytes = 16384 blocks = 64 MB window → only ~8 scans to cover entire disk.
+ * Reduces scan frequency from every ~4 MB written to every ~64 MB written.
+ * Cost: 1920 bytes extra static RAM (nRF52840 has 256 KB). */
+#define LFS_LOOKAHEAD_SIZE 2048
+static uint8_t lfs_lookahead_buf[LFS_LOOKAHEAD_SIZE];
 
 /* Shared temp sector buffer â€” only used from worker thread, safe as static */
 static uint8_t _lfs_io_tmp[512];
@@ -169,9 +182,9 @@ static struct lfs_config lfs_cfg = {
     .read_size = DISK_SECTOR_SIZE,
     .prog_size = DISK_SECTOR_SIZE,
     .block_size = LFS_BLOCK_SIZE,
-    .block_count = 0,             /* set at mount time */
-    .cache_size = LFS_CACHE_SIZE, /* 4096: full-block cache → multi-sector I/O */
-    .lookahead_size = 128,        /* must match lfs_lookahead_buf[] size (bytes, not bits) */
+    .block_count = 0,                     /* set at mount time */
+    .cache_size = LFS_CACHE_SIZE,         /* 4096: full-block cache → multi-sector I/O */
+    .lookahead_size = LFS_LOOKAHEAD_SIZE, /* 2048 bytes = 16384 blocks = 64 MB window */
 
     .read_buffer = lfs_read_buf,
     .prog_buffer = lfs_prog_buf,
@@ -179,6 +192,13 @@ static struct lfs_config lfs_cfg = {
 
     /* SD card has internal wear leveling â†’ disable LFS wear leveling */
     .block_cycles = -1,
+
+#if LFS_VERSION >= 0x00020009
+    /* Disable metadata compaction during lfs_fs_gc() -- we only want
+     * the allocator pre-warm (lookahead scan), not expensive compaction.
+     * compact_thresh was added in LFS 2.9. */
+    .compact_thresh = (lfs_size_t) -1,
+#endif
 };
 
 /* ------------------------------------------------------------------ */
@@ -191,6 +211,18 @@ static int write_batch_counter = 0;
 static uint8_t writing_error_counter = 0;
 static bool sd_write_blocked = false;
 static int64_t last_write_blocked_log_ms = 0;
+static uint32_t write_drop_packets = 0;
+static uint32_t write_drop_bytes = 0;
+
+/* SD boot readiness gate: cleared during init, set after pre-warm + file open.
+ * write_to_file() silently discards data while this is 0, preventing the message
+ * queue from filling up while lfs_fs_gc() is running on the worker thread. */
+static atomic_t sd_boot_ready;
+
+/* Deferred control requests when prio queue is temporarily saturated */
+static atomic_t pending_flush_on_ble_connect;
+static atomic_t pending_time_synced;
+static uint32_t pending_time_synced_utc = 0;
 
 static bool is_mounted = false;
 static bool sd_enabled = false;
@@ -209,6 +241,12 @@ static uint32_t deferred_timesync_utc_time = 0;
 static uint32_t cached_stats_file_count = 0;
 static uint64_t cached_stats_total_size = 0;
 static int64_t cached_stats_valid_until_ms = 0;
+static bool file_cache_valid = false;
+static int cached_file_list_count = 0;
+static uint32_t cached_total_file_count = 0;
+static uint64_t cached_total_file_size = 0;
+static char cached_file_names[MAX_AUDIO_FILES][MAX_FILENAME_LEN] = {0};
+static uint32_t cached_file_sizes[MAX_AUDIO_FILES] = {0};
 
 /* BLE connection tracking for file rotation */
 static bool ble_connected = false;
@@ -250,6 +288,101 @@ static lfs_soff_t read_handle_pos = 0;
 static uint32_t data_sync_gen = 0;
 static uint32_t read_handle_gen = 0;
 
+/* Forward declarations */
+void sd_worker_thread(void);
+static void process_write_data_req(const sd_req_t *req);
+static int create_audio_file_with_timestamp(void);
+static int flush_batch_buffer(void);
+static bool should_rotate_file(void);
+static void build_file_path(const char *filename, char *path, size_t path_size);
+static void invalidate_file_cache(void);
+static void update_current_file_cache_size(uint32_t delta);
+static void sort_cached_file_entries(void);
+
+static void process_save_offset_req(const sd_req_t *req)
+{
+    if (sd_write_blocked)
+        return;
+
+    lfs_file_seek(&lfs_fs, &lfs_fil_info, 0, LFS_SEEK_SET);
+    lfs_ssize_t bw = lfs_file_write(&lfs_fs, &lfs_fil_info, &req->u.info.offset_info, sizeof(sd_offset_info_t));
+    if (bw == (lfs_ssize_t) sizeof(sd_offset_info_t)) {
+        lfs_file_sync(&lfs_fs, &lfs_fil_info);
+        memcpy(&current_offset_info, &req->u.info.offset_info, sizeof(sd_offset_info_t));
+    } else {
+        LOG_ERR("[SD_WORK] save offset write err %d", (int) bw);
+    }
+}
+
+static void drain_pending_write_queue_for_shutdown(void)
+{
+    while (1) {
+        sd_req_t pending_req;
+        if (k_msgq_get(&sd_msgq, &pending_req, K_NO_WAIT) != 0) {
+            break;
+        }
+
+        if (pending_req.type == REQ_WRITE_DATA) {
+            process_write_data_req(&pending_req);
+        } else if (pending_req.type == REQ_SAVE_OFFSET) {
+            process_save_offset_req(&pending_req);
+        }
+    }
+}
+
+static void process_write_data_req(const sd_req_t *req)
+{
+    if (sd_write_blocked)
+        return;
+    if (current_file_deleted && ble_connected)
+        return;
+
+    if (current_filename[0] == '\0') {
+        int res = create_audio_file_with_timestamp();
+        if (res < 0) {
+            sd_write_blocked = true;
+            return;
+        }
+    }
+
+    if (should_rotate_file()) {
+        LOG_INF("[SD_WORK] Rotating file after 30 min");
+        flush_batch_buffer();
+        create_audio_file_with_timestamp();
+    }
+
+    if (write_batch_offset + req->u.write.len > sizeof(write_batch_buffer)) {
+        flush_batch_buffer();
+        if (write_batch_offset + req->u.write.len > sizeof(write_batch_buffer)) {
+            LOG_ERR("[SD_WORK] batch buffer overflow guard len=%u off=%u",
+                    (unsigned) req->u.write.len,
+                    (unsigned) write_batch_offset);
+            return;
+        }
+    }
+
+    memcpy(write_batch_buffer + write_batch_offset, req->u.write.buf, req->u.write.len);
+    write_batch_offset += req->u.write.len;
+    write_batch_counter++;
+
+    int queued_writes = k_msgq_num_used_get(&sd_msgq);
+    bool queue_pressure_high = queued_writes >= (SD_REQ_QUEUE_MSGS / 3);
+
+    if (write_batch_counter >= WRITE_BATCH_COUNT || queue_pressure_high) {
+        flush_batch_buffer();
+    }
+
+    bool sync_due_to_interval =
+        (bytes_since_sync > 0) && ((k_uptime_get() - last_file_sync_uptime_ms) >= SD_FSYNC_INTERVAL_MS);
+
+    if (sync_due_to_interval) {
+        lfs_file_sync(&lfs_fs, &lfs_fil_data);
+        data_sync_gen++;
+        bytes_since_sync = 0;
+        last_file_sync_uptime_ms = k_uptime_get();
+    }
+}
+
 static void close_read_handle(void)
 {
     if (read_handle_open) {
@@ -259,13 +392,6 @@ static void close_read_handle(void)
         read_handle_pos = 0;
     }
 }
-
-void sd_worker_thread(void);
-
-/* Forward declarations */
-static int create_audio_file_with_timestamp(void);
-static int flush_batch_buffer(void);
-static void build_file_path(const char *filename, char *path, size_t path_size);
 
 /* ------------------------------------------------------------------ */
 /* Power management                                                    */
@@ -371,7 +497,9 @@ static int sd_mount(void)
     lfs_cfg.block_count = sector_count / (LFS_BLOCK_SIZE / ss);
 
     /* Try to mount existing filesystem */
+    int64_t mount_start_ms = k_uptime_get();
     ret = lfs_mount(&lfs_fs, &lfs_cfg);
+    LOG_INF("[SD_BOOT] lfs_mount took %lld ms (ret=%d)", k_uptime_get() - mount_start_ms, ret);
     if (ret != LFS_ERR_OK) {
         LOG_WRN("LFS mount failed (%d), formattingâ€¦", ret);
         ret = lfs_format(&lfs_fs, &lfs_cfg);
@@ -389,7 +517,11 @@ static int sd_mount(void)
     }
 
     is_mounted = true;
-    LOG_INF("LittleFS mounted OK");
+    LOG_INF("LittleFS mounted OK (block_size=%u, block_count=%u, lookahead=%u bytes = %u blocks window)",
+            (unsigned) lfs_cfg.block_size,
+            (unsigned) lfs_cfg.block_count,
+            (unsigned) lfs_cfg.lookahead_size,
+            (unsigned) lfs_cfg.lookahead_size * 8);
     return 0;
 }
 
@@ -447,6 +579,11 @@ static void print_audio_files_at_boot(void)
         return;
     }
 
+    /* Clear file cache arrays before populating */
+    memset(cached_file_names, 0, sizeof(cached_file_names));
+    memset(cached_file_sizes, 0, sizeof(cached_file_sizes));
+    int list_count = 0;
+
     LOG_INF("========== AUDIO FILES ON SD CARD ==========");
     while (lfs_dir_read(&lfs_fs, &dir, &info) > 0) {
         if (info.type != LFS_TYPE_REG)
@@ -456,12 +593,25 @@ static void print_audio_files_at_boot(void)
             LOG_INF("  [%u] %s - %u bytes", file_count + 1, info.name, (unsigned) info.size);
             total_size += info.size;
             file_count++;
+            /* Also populate the file list cache so that get_file_list
+             * can return data immediately during the long gc pre-warm. */
+            if (list_count < MAX_AUDIO_FILES) {
+                strncpy(cached_file_names[list_count], info.name, MAX_FILENAME_LEN - 1);
+                cached_file_names[list_count][MAX_FILENAME_LEN - 1] = '\0';
+                cached_file_sizes[list_count] = (uint32_t) info.size;
+                list_count++;
+            }
         }
     }
     lfs_dir_close(&lfs_fs, &dir);
+    cached_file_list_count = list_count;
+    sort_cached_file_entries();
     cached_stats_file_count = file_count;
     cached_stats_total_size = total_size;
-    cached_stats_valid_until_ms = k_uptime_get() + 45000;
+    cached_stats_valid_until_ms = k_uptime_get() + FILE_CACHE_TTL_MS;
+    cached_total_file_count = file_count;
+    cached_total_file_size = total_size;
+    file_cache_valid = true;
     LOG_INF("[SD_BOOT] %u files, %u bytes total", file_count, (unsigned) total_size);
     LOG_INF("=============================================");
 }
@@ -567,8 +717,9 @@ static int create_audio_file_with_timestamp(void)
         snprintf(current_filename, sizeof(current_filename), "%08X.txt", timestamp);
         current_file_needs_rename = false;
     } else {
-        uint32_t uptime_s = (uint32_t) (k_uptime_get() / 1000);
-        snprintf(current_filename, sizeof(current_filename), "TMP_%04X.txt", uptime_s & 0xFFFFU);
+        uint32_t boot_tag = (uint32_t) k_uptime_get_32();
+        uint32_t cycle_tag = (uint32_t) k_cycle_get_32();
+        snprintf(current_filename, sizeof(current_filename), "TMP_%08X_%04X.txt", boot_tag, cycle_tag & 0xFFFFU);
         current_file_needs_rename = true;
         LOG_WRN("RTC not synced, temp file: %s", current_filename);
     }
@@ -595,6 +746,7 @@ static int create_audio_file_with_timestamp(void)
     current_file_created_uptime_ms = k_uptime_get();
 
     LOG_INF("Audio file created: %s", current_filename);
+    invalidate_file_cache();
     return 0;
 }
 
@@ -613,7 +765,15 @@ static int flush_batch_buffer(void)
         return -EIO;
     }
 
+    int64_t flush_start_ms = k_uptime_get();
     lfs_ssize_t bw = lfs_file_write(&lfs_fs, &lfs_fil_data, write_batch_buffer, write_batch_offset);
+    int64_t flush_cost_ms = k_uptime_get() - flush_start_ms;
+    if (flush_cost_ms > 2000) {
+        LOG_WRN("[SD_PERF] flush_batch_buffer took %lld ms (wrote %u bytes, batch=%d)",
+                flush_cost_ms,
+                (unsigned) write_batch_offset,
+                write_batch_counter);
+    }
     if (bw < 0 || (size_t) bw != write_batch_offset) {
         writing_error_counter++;
         LOG_ERR("batch write error bw=%d wanted=%u", (int) bw, (unsigned) write_batch_offset);
@@ -629,6 +789,7 @@ static int flush_batch_buffer(void)
 
     bytes_since_sync += (size_t) bw;
     current_file_size += (uint32_t) bw;
+    update_current_file_cache_size((uint32_t) bw);
     write_batch_offset = 0;
     write_batch_counter = 0;
     writing_error_counter = 0;
@@ -655,6 +816,140 @@ static int compare_filenames(const void *a, const void *b)
     uint32_t ta = (uint32_t) strtoul((const char *) a, NULL, 16);
     uint32_t tb = (uint32_t) strtoul((const char *) b, NULL, 16);
     return (ta < tb) ? -1 : (ta > tb) ? 1 : 0;
+}
+
+static void invalidate_file_cache(void)
+{
+    file_cache_valid = false;
+    cached_stats_valid_until_ms = 0;
+}
+
+static void sort_cached_file_entries(void)
+{
+    if (cached_file_list_count <= 1) {
+        return;
+    }
+
+    for (int i = 1; i < cached_file_list_count; i++) {
+        char tmp_name[MAX_FILENAME_LEN] = {0};
+        uint32_t tmp_size = cached_file_sizes[i];
+        strncpy(tmp_name, cached_file_names[i], MAX_FILENAME_LEN - 1);
+
+        int j = i - 1;
+        while (j >= 0 && compare_filenames(cached_file_names[j], tmp_name) > 0) {
+            strncpy(cached_file_names[j + 1], cached_file_names[j], MAX_FILENAME_LEN);
+            cached_file_sizes[j + 1] = cached_file_sizes[j];
+            j--;
+        }
+
+        strncpy(cached_file_names[j + 1], tmp_name, MAX_FILENAME_LEN);
+        cached_file_sizes[j + 1] = tmp_size;
+    }
+}
+
+static void update_current_file_cache_size(uint32_t delta)
+{
+    if (!file_cache_valid || delta == 0 || current_filename[0] == '\0') {
+        return;
+    }
+
+    cached_total_file_size += delta;
+    cached_stats_total_size = cached_total_file_size;
+    cached_stats_file_count = cached_total_file_count;
+    cached_stats_valid_until_ms = k_uptime_get() + FILE_CACHE_TTL_MS;
+
+    for (int i = 0; i < cached_file_list_count; i++) {
+        if (strcmp(cached_file_names[i], current_filename) == 0) {
+            cached_file_sizes[i] += delta;
+            return;
+        }
+    }
+
+    /* Cache became stale (e.g. filename not indexed due truncation). */
+    invalidate_file_cache();
+}
+
+static int refresh_file_cache(void)
+{
+    if (!is_mounted) {
+        return -ENODEV;
+    }
+
+    lfs_dir_t dir;
+    struct lfs_info info;
+    int list_count = 0;
+    uint32_t total_count = 0;
+    uint64_t total_size = 0;
+
+    memset(cached_file_names, 0, sizeof(cached_file_names));
+    memset(cached_file_sizes, 0, sizeof(cached_file_sizes));
+
+    int dres = lfs_dir_open(&lfs_fs, &dir, FILE_DATA_DIR);
+    if (dres < 0) {
+        if (dres == LFS_ERR_NOENT) {
+            cached_file_list_count = 0;
+            cached_total_file_count = 0;
+            cached_total_file_size = 0;
+            cached_stats_file_count = 0;
+            cached_stats_total_size = 0;
+            cached_stats_valid_until_ms = k_uptime_get() + FILE_CACHE_TTL_MS;
+            file_cache_valid = true;
+            return 0;
+        }
+        return dres;
+    }
+
+    while (lfs_dir_read(&lfs_fs, &dir, &info) > 0) {
+        if (info.type != LFS_TYPE_REG) {
+            continue;
+        }
+
+        char *dot = strrchr(info.name, '.');
+        if (!dot || strcasecmp(dot, ".txt") != 0) {
+            continue;
+        }
+
+        total_count++;
+        total_size += info.size;
+
+        if (list_count < MAX_AUDIO_FILES) {
+            strncpy(cached_file_names[list_count], info.name, MAX_FILENAME_LEN - 1);
+            cached_file_names[list_count][MAX_FILENAME_LEN - 1] = '\0';
+            cached_file_sizes[list_count] = (uint32_t) info.size;
+            list_count++;
+        }
+    }
+    lfs_dir_close(&lfs_fs, &dir);
+
+    cached_file_list_count = list_count;
+    sort_cached_file_entries();
+
+    if (current_filename[0] != '\0') {
+        for (int i = 0; i < cached_file_list_count; i++) {
+            if (strcmp(cached_file_names[i], current_filename) == 0) {
+                total_size = total_size - cached_file_sizes[i] + current_file_size;
+                cached_file_sizes[i] = current_file_size;
+                break;
+            }
+        }
+    }
+
+    cached_total_file_count = total_count;
+    cached_total_file_size = total_size;
+    cached_stats_file_count = total_count;
+    cached_stats_total_size = total_size;
+    cached_stats_valid_until_ms = k_uptime_get() + FILE_CACHE_TTL_MS;
+    file_cache_valid = true;
+
+    return 0;
+}
+
+static int ensure_file_cache(void)
+{
+    if (file_cache_valid) {
+        return 0;
+    }
+    return refresh_file_cache();
 }
 
 /* ------------------------------------------------------------------ */
@@ -721,58 +1016,24 @@ static int get_audio_file_list_internal(char filenames[][MAX_FILENAME_LEN], uint
     if (!is_mounted)
         return -ENODEV;
 
-    lfs_dir_t dir;
-    struct lfs_info info;
-    int file_count = 0;
-    static uint32_t tmp_sizes[MAX_AUDIO_FILES];
-
-    if (lfs_dir_open(&lfs_fs, &dir, FILE_DATA_DIR) < 0)
-        return -ENOENT;
-
-    while (file_count < max_files) {
-        int rc = lfs_dir_read(&lfs_fs, &dir, &info);
-        if (rc <= 0)
-            break;
-        if (info.type != LFS_TYPE_REG)
-            continue;
-        char *dot = strrchr(info.name, '.');
-        if (dot && strcasecmp(dot, ".txt") == 0) {
-            strncpy(filenames[file_count], info.name, MAX_FILENAME_LEN - 1);
-            filenames[file_count][MAX_FILENAME_LEN - 1] = '\0';
-            tmp_sizes[file_count] = (uint32_t) info.size;
-            file_count++;
-        }
+    int cache_res = ensure_file_cache();
+    if (cache_res < 0) {
+        return cache_res;
     }
-    lfs_dir_close(&lfs_fs, &dir);
 
-    /* Sort filenames and keep sizes in sync (insertion sort) */
-    if (file_count > 1) {
-        for (int i = 1; i < file_count; i++) {
-            char tmp_name[MAX_FILENAME_LEN];
-            uint32_t tmp_sz = tmp_sizes[i];
-            strncpy(tmp_name, filenames[i], MAX_FILENAME_LEN);
-            int j = i - 1;
-            while (j >= 0 && strcmp(filenames[j], tmp_name) > 0) {
-                strncpy(filenames[j + 1], filenames[j], MAX_FILENAME_LEN);
-                tmp_sizes[j + 1] = tmp_sizes[j];
-                j--;
-            }
-            strncpy(filenames[j + 1], tmp_name, MAX_FILENAME_LEN);
-            tmp_sizes[j + 1] = tmp_sz;
+    int file_count = cached_file_list_count;
+    if (file_count > max_files) {
+        file_count = max_files;
+    }
+
+    for (int i = 0; i < file_count; i++) {
+        strncpy(filenames[i], cached_file_names[i], MAX_FILENAME_LEN - 1);
+        filenames[i][MAX_FILENAME_LEN - 1] = '\0';
+        if (sizes) {
+            sizes[i] = cached_file_sizes[i];
         }
     }
 
-    if (sizes) {
-        /* Fix up size for the currently-open file: directory entry
-         * may be stale, use tracked current_file_size instead */
-        for (int i = 0; i < file_count; i++) {
-            if (current_filename[0] != '\0' && strcmp(filenames[i], current_filename) == 0) {
-                tmp_sizes[i] = current_file_size;
-                break;
-            }
-        }
-        memcpy(sizes, tmp_sizes, file_count * sizeof(uint32_t));
-    }
     *count = file_count;
     return 0;
 }
@@ -806,6 +1067,31 @@ void sd_worker_thread(void)
 
     /* ---- Print existing files at boot ---- */
     print_audio_files_at_boot();
+
+    /* ---- Pre-warm LFS block allocator ---- */
+    /* After mount, the LFS lookahead buffer is EMPTY and the start position
+     * is random (seed % block_count).  The very first lfs_alloc() would
+     * trigger lfs_alloc_scan() — a full O(used_blocks) filesystem traversal
+     * over SPI SD that can take 10-50+ seconds with 100-200 MB of data.
+     *
+     * By calling lfs_fs_gc() here (with compact_thresh=-1 so it skips
+     * metadata compaction), we force that expensive scan to happen NOW,
+     * during boot init, BEFORE the audio pipeline starts feeding data.
+     * This moves the latency spike from the real-time write path to a
+     * one-time boot cost where dropping audio is acceptable. */
+    {
+        int64_t gc_start_ms = k_uptime_get();
+        LOG_INF("[SD_BOOT] Pre-warming LFS allocator (lookahead=%u bytes, %u blocks window)...",
+                LFS_LOOKAHEAD_SIZE,
+                LFS_LOOKAHEAD_SIZE * 8);
+        int gc_res = lfs_fs_gc(&lfs_fs);
+        int64_t gc_elapsed_ms = k_uptime_get() - gc_start_ms;
+        if (gc_res < 0) {
+            LOG_WRN("[SD_BOOT] lfs_fs_gc failed: %d (took %lld ms)", gc_res, gc_elapsed_ms);
+        } else {
+            LOG_INF("[SD_BOOT] LFS allocator pre-warmed OK in %lld ms", gc_elapsed_ms);
+        }
+    }
 
     /* ---- Open / create info file ---- */
     {
@@ -849,8 +1135,24 @@ void sd_worker_thread(void)
         }
     }
 
+    /* ---- SD boot init complete, allow writes ---- */
+    atomic_set(&sd_boot_ready, 1);
+    LOG_INF("[SD_BOOT] SD card ready for audio writes (boot took %lld ms)", k_uptime_get());
+
     /* ---- Main loop ---- */
     while (1) {
+        /* Handle deferred control requests first (when queue was saturated). */
+        if (atomic_cas(&pending_flush_on_ble_connect, 1, 0)) {
+            req.type = REQ_FLUSH_FILE;
+            req.u.create_file.resp = NULL;
+            goto handle_req;
+        }
+        if (atomic_cas(&pending_time_synced, 1, 0)) {
+            req.type = REQ_TIME_SYNCED;
+            req.u.time_synced.utc_time = pending_time_synced_utc;
+            goto handle_req;
+        }
+
         /* Priority queue first: reads, flush, file-list, delete, etc.
          * These never wait behind pending audio writes. */
         if (k_msgq_get(&sd_prio_msgq, &req, K_NO_WAIT) == 0) {
@@ -868,51 +1170,23 @@ void sd_worker_thread(void)
 
         /* ---- Write data ---- */
         case REQ_WRITE_DATA:
-            if (sd_write_blocked)
-                break;
-            if (current_file_deleted && ble_connected)
-                break;
+            process_write_data_req(&req);
 
-            if (current_filename[0] == '\0') {
-                res = create_audio_file_with_timestamp();
-                if (res < 0) {
-                    sd_write_blocked = true;
+            /* Drain additional queued write/save_offset messages in one pass.
+             * This reduces queue churn and improves effective SD throughput. */
+            for (int i = 0; i < WRITE_DRAIN_BURST; i++) {
+                if (k_msgq_num_used_get(&sd_prio_msgq) > 0) {
                     break;
                 }
-            }
-
-            if (should_rotate_file()) {
-                LOG_INF("[SD_WORK] Rotating file after 30 min");
-                flush_batch_buffer();
-                create_audio_file_with_timestamp();
-            }
-
-            if (write_batch_offset + req.u.write.len > sizeof(write_batch_buffer)) {
-                flush_batch_buffer();
-                if (write_batch_offset + req.u.write.len > sizeof(write_batch_buffer)) {
-                    LOG_ERR("[SD_WORK] batch buffer overflow guard len=%u off=%u",
-                            (unsigned) req.u.write.len,
-                            (unsigned) write_batch_offset);
+                sd_req_t next_req;
+                if (k_msgq_get(&sd_msgq, &next_req, K_NO_WAIT) != 0) {
                     break;
                 }
-            }
-
-            memcpy(write_batch_buffer + write_batch_offset, req.u.write.buf, req.u.write.len);
-            write_batch_offset += req.u.write.len;
-            write_batch_counter++;
-
-            if (write_batch_counter >= WRITE_BATCH_COUNT) {
-                flush_batch_buffer();
-            }
-
-            bool sync_due_to_interval =
-                (bytes_since_sync > 0) && ((k_uptime_get() - last_file_sync_uptime_ms) >= SD_FSYNC_INTERVAL_MS);
-
-            if (sync_due_to_interval) {
-                lfs_file_sync(&lfs_fs, &lfs_fil_data);
-                data_sync_gen++;
-                bytes_since_sync = 0;
-                last_file_sync_uptime_ms = k_uptime_get();
+                if (next_req.type == REQ_WRITE_DATA) {
+                    process_write_data_req(&next_req);
+                } else if (next_req.type == REQ_SAVE_OFFSET) {
+                    process_save_offset_req(&next_req);
+                }
             }
             break;
 
@@ -1010,19 +1284,7 @@ void sd_worker_thread(void)
 
         /* ---- Save offset ---- */
         case REQ_SAVE_OFFSET:
-            if (sd_write_blocked)
-                break;
-            lfs_file_seek(&lfs_fs, &lfs_fil_info, 0, LFS_SEEK_SET);
-            {
-                lfs_ssize_t bw =
-                    lfs_file_write(&lfs_fs, &lfs_fil_info, &req.u.info.offset_info, sizeof(sd_offset_info_t));
-                if (bw == (lfs_ssize_t) sizeof(sd_offset_info_t)) {
-                    lfs_file_sync(&lfs_fs, &lfs_fil_info);
-                    memcpy(&current_offset_info, &req.u.info.offset_info, sizeof(sd_offset_info_t));
-                } else {
-                    LOG_ERR("[SD_WORK] save offset write err %d", (int) bw);
-                }
-            }
+            process_save_offset_req(&req);
             break;
 
         /* ---- Clear audio directory ---- */
@@ -1053,6 +1315,7 @@ void sd_worker_thread(void)
             lfs_file_seek(&lfs_fs, &lfs_fil_info, 0, LFS_SEEK_SET);
             lfs_file_write(&lfs_fs, &lfs_fil_info, &current_offset_info, sizeof(current_offset_info));
             lfs_file_sync(&lfs_fs, &lfs_fil_info);
+            invalidate_file_cache();
 
             res = create_audio_file_with_timestamp();
 
@@ -1075,38 +1338,12 @@ void sd_worker_thread(void)
 
         /* ---- Get file stats ---- */
         case REQ_GET_FILE_STATS: {
-            lfs_dir_t dir;
-            struct lfs_info info;
-            char fpath[64];
-            uint32_t file_count = 0;
-            uint64_t total_size = 0;
-
-            res = lfs_dir_open(&lfs_fs, &dir, FILE_DATA_DIR);
-            if (res < 0) {
-                if (req.u.file_stats.resp) {
-                    req.u.file_stats.resp->res = res;
-                    req.u.file_stats.resp->file_count = 0;
-                    req.u.file_stats.resp->total_size = 0;
-                    k_sem_give(&req.u.file_stats.resp->sem);
-                }
-                break;
-            }
-            while (lfs_dir_read(&lfs_fs, &dir, &info) > 0) {
-                if (info.type != LFS_TYPE_REG)
-                    continue;
-                char *dot = strrchr(info.name, '.');
-                if (dot && strcasecmp(dot, ".txt") == 0) {
-                    file_count++;
-                    total_size += info.size;
-                    (void) fpath; /* used to silence unused warning â€” path not needed */
-                }
-            }
-            lfs_dir_close(&lfs_fs, &dir);
+            res = ensure_file_cache();
 
             if (req.u.file_stats.resp) {
-                req.u.file_stats.resp->res = 0;
-                req.u.file_stats.resp->file_count = file_count;
-                req.u.file_stats.resp->total_size = total_size;
+                req.u.file_stats.resp->res = res;
+                req.u.file_stats.resp->file_count = (res == 0) ? cached_total_file_count : 0;
+                req.u.file_stats.resp->total_size = (res == 0) ? cached_total_file_size : 0;
                 k_sem_give(&req.u.file_stats.resp->sem);
             }
             break;
@@ -1152,6 +1389,9 @@ void sd_worker_thread(void)
 
         /* ---- Unmount SD/LFS (must run on worker thread) ---- */
         case REQ_UNMOUNT: {
+            /* Shutdown path: stop accepting new writes and drain queued writes
+             * so data already enqueued by mic thread is persisted before unmount. */
+            drain_pending_write_queue_for_shutdown();
             int off_res = sd_unmount();
             if (req.u.create_file.resp) {
                 req.u.create_file.resp->res = off_res;
@@ -1188,6 +1428,8 @@ void sd_worker_thread(void)
             int rm = lfs_remove(&lfs_fs, del_path);
             if (rm < 0 && rm != LFS_ERR_NOENT) {
                 LOG_ERR("[SD_WORK] remove %s failed: %d", del_path, rm);
+            } else {
+                invalidate_file_cache();
             }
             if (req.u.delete_file.resp) {
                 req.u.delete_file.resp->res = rm;
@@ -1205,6 +1447,7 @@ void sd_worker_thread(void)
                     LOG_INF("[SD_WORK] Deferring TMP rename while BLE connected");
                 } else {
                     sd_update_filename_after_timesync(req.u.time_synced.utc_time);
+                    invalidate_file_cache();
                     deferred_timesync_rename_pending = false;
                 }
             } else if (current_filename[0] == '\0') {
@@ -1246,6 +1489,7 @@ int app_sd_init(void)
 int app_sd_off(void)
 {
     sd_shutdown_in_progress = true;
+    bool unmount_completed = false;
 
     if (is_mounted && sd_worker_tid) {
         struct read_resp resp;
@@ -1256,23 +1500,28 @@ int app_sd_off(void)
         req.type = REQ_UNMOUNT;
         req.u.create_file.resp = &resp;
 
-        int qret = k_msgq_put(&sd_prio_msgq, &req, K_MSEC(500));
+        int qret = k_msgq_put(&sd_prio_msgq, &req, K_MSEC(2000));
         if (qret == 0) {
-            if (k_sem_take(&resp.sem, K_MSEC(15000)) != 0) {
-                LOG_ERR("Timeout waiting for sd_worker unmount; continuing shutdown");
+            if (k_sem_take(&resp.sem, K_MSEC(45000)) != 0) {
+                LOG_ERR("Timeout waiting for sd_worker unmount; skip force SD power-off");
             } else if (resp.res < 0) {
                 LOG_ERR("sd_worker unmount failed: %d", resp.res);
+            } else {
+                unmount_completed = true;
             }
         } else {
             LOG_ERR("Failed to queue sd unmount request: %d", qret);
         }
     }
 
-    if (is_mounted) {
-        is_mounted = false;
+    /* Avoid forcing SD power-off while worker may still be writing/syncing,
+     * which can trigger SPI transfer timeouts and filesystem corruption. */
+    if (unmount_completed || !is_mounted) {
+        if (sd_enabled) {
+            sd_enable_power(false);
+        }
+        sd_enabled = false;
     }
-    sd_enable_power(false);
-    sd_enabled = false;
 
     return 0;
 }
@@ -1298,13 +1547,17 @@ int get_current_filename(char *buf, size_t buf_size)
 
 void sd_notify_time_synced(uint32_t utc_time)
 {
+    pending_time_synced_utc = utc_time;
+    atomic_set(&pending_time_synced, 1);
+
     sd_req_t req = {0};
     req.type = REQ_TIME_SYNCED;
     req.u.time_synced.utc_time = utc_time;
-    /* Use priority queue so this doesn't fail when write queue is full */
+    /* Use priority queue if possible; otherwise worker will handle deferred flag. */
     int ret = k_msgq_put(&sd_prio_msgq, &req, K_NO_WAIT);
-    if (ret)
-        LOG_ERR("Failed to queue time_synced: %d", ret);
+    if (ret == 0) {
+        atomic_set(&pending_time_synced, 0);
+    }
 }
 
 void sd_notify_ble_state(bool connected)
@@ -1321,8 +1574,10 @@ void sd_notify_ble_state(bool connected)
         req.type = REQ_FLUSH_FILE;
         req.u.create_file.resp = NULL; /* no response needed */
         int ret = k_msgq_put(&sd_prio_msgq, &req, K_NO_WAIT);
-        if (ret)
-            LOG_WRN("Flush on BLE connect: queue full (%d)", ret);
+        if (ret) {
+            atomic_set(&pending_flush_on_ble_connect, 1);
+            LOG_WRN("Flush on BLE connect deferred (%d)", ret);
+        }
     } else if (!connected && ble_connected) {
         LOG_INF("BLE disconnected");
         if (deferred_timesync_rename_pending) {
@@ -1334,7 +1589,9 @@ void sd_notify_ble_state(bool connected)
                 deferred_timesync_rename_pending = false;
                 LOG_INF("Queued deferred TMP rename after BLE disconnect");
             } else {
-                LOG_WRN("Failed to queue deferred TMP rename: %d", ret);
+                pending_time_synced_utc = deferred_timesync_utc_time;
+                atomic_set(&pending_time_synced, 1);
+                LOG_WRN("Deferred TMP rename pending (%d)", ret);
             }
         }
         if (current_file_deleted) {
@@ -1351,6 +1608,30 @@ void sd_notify_ble_state(bool connected)
 uint32_t write_to_file(uint8_t *data, uint32_t length)
 {
     static int64_t last_write_err_log_ms;
+    static int64_t last_shutdown_drop_log_ms;
+
+    /* Silently discard data while SD boot init is still running
+     * (mount + lfs_fs_gc pre-warm + file open). No logging here to
+     * avoid flooding — the worker thread logs when ready. */
+    if (!atomic_get(&sd_boot_ready)) {
+        static int64_t last_not_ready_log_ms;
+        int64_t now = k_uptime_get();
+        if (now - last_not_ready_log_ms > 5000) {
+            LOG_WRN("write_to_file dropped: SD not ready (boot in progress)");
+            last_not_ready_log_ms = now;
+        }
+        return 0;
+    }
+
+    if (sd_shutdown_in_progress) {
+        int64_t now = k_uptime_get();
+        if (now - last_shutdown_drop_log_ms > 1000) {
+            LOG_WRN("write_to_file dropped: SD shutdown in progress");
+            last_shutdown_drop_log_ms = now;
+        }
+        return 0;
+    }
+
     if (sd_write_blocked) {
         int64_t now = k_uptime_get();
         if (now - last_write_blocked_log_ms > 1000) {
@@ -1363,14 +1644,26 @@ uint32_t write_to_file(uint8_t *data, uint32_t length)
     req.type = REQ_WRITE_DATA;
     memcpy(req.u.write.buf, data, length);
     req.u.write.len = length;
-    /* Non-blocking put: audio writes are fire-and-forget.
-     * If the queue is full (worker busy with slow I/O), we drop
-     * the write rather than blocking the caller for 100ms. */
+    /* Fast path: non-blocking enqueue first. */
     int ret = k_msgq_put(&sd_msgq, &req, K_NO_WAIT);
+
+    /* Backpressure: if queue is temporarily full, wait a very short time
+     * for worker to drain instead of dropping immediately.
+     * This reduces packet loss and CPU spin when SD path stalls briefly. */
+    if (ret != 0) {
+        k_timeout_t retry_wait = ble_connected ? K_MSEC(1) : K_MSEC(5);
+        ret = k_msgq_put(&sd_msgq, &req, retry_wait);
+    }
+
     if (ret) {
+        write_drop_packets++;
+        write_drop_bytes += length;
         int64_t now = k_uptime_get();
         if (now - last_write_err_log_ms > 2000) {
-            LOG_WRN("Write queue full, dropping audio data (%d)", ret);
+            LOG_WRN("Write queue full, dropping audio data (%d), dropped=%u pkts (%u bytes)",
+                    ret,
+                    write_drop_packets,
+                    write_drop_bytes);
             last_write_err_log_ms = now;
         }
         return 0;
@@ -1549,7 +1842,7 @@ int save_offset(const char *filename, uint32_t offset)
     strncpy(req.u.info.offset_info.oldest_filename, filename, MAX_FILENAME_LEN - 1);
     req.u.info.offset_info.offset_in_file = offset;
 
-    int ret = k_msgq_put(&sd_msgq, &req, K_NO_WAIT);
+    int ret = k_msgq_put(&sd_msgq, &req, K_MSEC(20));
     if (ret) {
         LOG_ERR("Failed to queue save_offset: %d", ret);
         return -1;
@@ -1587,7 +1880,7 @@ int create_new_audio_file(void)
     req.type = REQ_CREATE_NEW_FILE;
     req.u.create_file.resp = &resp;
 
-    int ret = k_msgq_put(&sd_prio_msgq, &req, K_MSEC(500));
+    int ret = k_msgq_put(&sd_prio_msgq, &req, K_MSEC(2000));
     if (ret) {
         LOG_ERR("Failed to queue create_new_audio_file: %d", ret);
         create_in_flight = false;
@@ -1626,7 +1919,7 @@ int get_audio_file_stats(uint32_t *file_count, uint64_t *total_size)
     static struct file_stats_resp resp;
     static volatile bool stats_in_flight;
     int64_t now = k_uptime_get();
-    k_timeout_t wait_timeout = ble_connected ? K_MSEC(300) : K_MSEC(30000);
+    k_timeout_t wait_timeout = ble_connected ? K_MSEC(1000) : K_MSEC(30000);
 
     if (now < cached_stats_valid_until_ms) {
         *file_count = cached_stats_file_count;
@@ -1654,7 +1947,7 @@ int get_audio_file_stats(uint32_t *file_count, uint64_t *total_size)
     req.type = REQ_GET_FILE_STATS;
     req.u.file_stats.resp = &resp;
 
-    int ret = k_msgq_put(&sd_prio_msgq, &req, K_MSEC(500));
+    int ret = k_msgq_put(&sd_prio_msgq, &req, K_MSEC(2000));
     if (ret) {
         LOG_ERR("Failed to queue get_file_stats: %d", ret);
         stats_in_flight = false;
@@ -1684,7 +1977,7 @@ int get_audio_file_stats(uint32_t *file_count, uint64_t *total_size)
 
     cached_stats_file_count = resp.file_count;
     cached_stats_total_size = resp.total_size;
-    cached_stats_valid_until_ms = k_uptime_get() + 2000;
+    cached_stats_valid_until_ms = k_uptime_get() + FILE_CACHE_TTL_MS;
 
     *file_count = resp.file_count;
     *total_size = resp.total_size;
@@ -1698,6 +1991,19 @@ int get_audio_file_list(char filenames[][MAX_FILENAME_LEN], int max_files, int *
 
     if (sd_shutdown_in_progress) {
         return -ECANCELED;
+    }
+
+    /* Fast path: during boot the worker is blocked in lfs_fs_gc(),
+     * so it cannot service the priority queue.  Return the file list
+     * that was cached during print_audio_files_at_boot() instead. */
+    if (!atomic_get(&sd_boot_ready) && file_cache_valid) {
+        int n = cached_file_list_count < max_files ? cached_file_list_count : max_files;
+        for (int i = 0; i < n; i++) {
+            strncpy(filenames[i], cached_file_names[i], MAX_FILENAME_LEN - 1);
+            filenames[i][MAX_FILENAME_LEN - 1] = '\0';
+        }
+        *count = n;
+        return 0;
     }
 
     static struct file_list_resp resp;
@@ -1722,7 +2028,7 @@ int get_audio_file_list(char filenames[][MAX_FILENAME_LEN], int max_files, int *
     req.u.file_list.max_files = max_files;
     req.u.file_list.resp = &resp;
 
-    int ret = k_msgq_put(&sd_prio_msgq, &req, K_MSEC(500));
+    int ret = k_msgq_put(&sd_prio_msgq, &req, K_MSEC(2000));
     if (ret) {
         LOG_ERR("Failed to queue get_file_list: %d", ret);
         list_in_flight = false;
@@ -1751,6 +2057,22 @@ int get_audio_file_list_with_sizes(char filenames[][MAX_FILENAME_LEN], uint32_t 
 
     if (sd_shutdown_in_progress) {
         return -ECANCELED;
+    }
+
+    /* Fast path: during boot the worker is blocked in lfs_fs_gc(),
+     * so it cannot service the priority queue.  Return the file list
+     * that was cached during print_audio_files_at_boot() instead. */
+    if (!atomic_get(&sd_boot_ready) && file_cache_valid) {
+        int n = cached_file_list_count < max_files ? cached_file_list_count : max_files;
+        for (int i = 0; i < n; i++) {
+            strncpy(filenames[i], cached_file_names[i], MAX_FILENAME_LEN - 1);
+            filenames[i][MAX_FILENAME_LEN - 1] = '\0';
+            if (sizes) {
+                sizes[i] = cached_file_sizes[i];
+            }
+        }
+        *count = n;
+        return 0;
     }
 
     static struct file_list_resp resp;
