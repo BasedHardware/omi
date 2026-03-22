@@ -453,6 +453,15 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
 
       // Register callback for device connection to check firmware announcements
       deviceProvider.onDeviceConnected = _onDeviceConnectedForAnnouncements;
+
+      // Register callback for auto-sync when device has offline data
+      final syncProvider = Provider.of<SyncProvider>(context, listen: false);
+      deviceProvider.onOfflineDataDetected = (device, fileCount, totalBytes) {
+        if (!syncProvider.isSyncing) {
+          Logger.debug('HomePage: Auto-sync triggered ($fileCount files, $totalBytes bytes)');
+          syncProvider.syncWals();
+        }
+      };
     });
   }
 
@@ -1091,6 +1100,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
     try {
       final deviceProvider = Provider.of<DeviceProvider>(context, listen: false);
       deviceProvider.onDeviceConnected = null;
+      deviceProvider.onOfflineDataDetected = null;
     } catch (_) {}
     // Clean up freemium handler
     _freemiumHandler.dispose();
