@@ -1037,6 +1037,79 @@ class TestDgDeadDetection:
         assert mock_conn.send.call_count == send_count
 
 
+class TestGatedKeepAlive:
+    """Tests for GatedDeepgramSocket.keep_alive() delegation (#5870)."""
+
+    def test_keep_alive_delegates_to_safe_socket(self):
+        """GatedDeepgramSocket.keep_alive() delegates to SafeDeepgramSocket."""
+        mock_conn = MagicMock()
+        mock_conn.keep_alive.return_value = True
+        safe = SafeDeepgramSocket(mock_conn)
+        gate = VADStreamingGate(sample_rate=16000, channels=1, mode='active', uid='test', session_id='test')
+        socket = GatedDeepgramSocket(safe, gate=gate)
+
+        result = socket.keep_alive()
+        assert result is True
+        mock_conn.keep_alive.assert_called_once()
+
+    def test_keep_alive_returns_false_when_dead(self):
+        """GatedDeepgramSocket.keep_alive() returns False when connection is dead."""
+        mock_conn = MagicMock()
+        mock_conn.send.return_value = False
+        safe = SafeDeepgramSocket(mock_conn)
+        safe.send(b'\x00' * 960)  # Mark dead
+        assert safe.is_connection_dead is True
+
+        gate = VADStreamingGate(sample_rate=16000, channels=1, mode='active', uid='test', session_id='test')
+        socket = GatedDeepgramSocket(safe, gate=gate)
+
+        result = socket.keep_alive()
+        assert result is False
+        # keep_alive should NOT be called on underlying conn when dead
+        mock_conn.keep_alive.assert_not_called()
+
+    def test_keep_alive_marks_dead_on_false_return(self):
+        """GatedDeepgramSocket.keep_alive() marks dead when SafeDeepgramSocket detects failure."""
+        mock_conn = MagicMock()
+        mock_conn.keep_alive.return_value = False
+        safe = SafeDeepgramSocket(mock_conn)
+        gate = VADStreamingGate(sample_rate=16000, channels=1, mode='active', uid='test', session_id='test')
+        socket = GatedDeepgramSocket(safe, gate=gate)
+
+        result = socket.keep_alive()
+        assert result is False
+        assert socket.is_connection_dead is True
+
+    def test_keep_alive_no_gate(self):
+        """GatedDeepgramSocket.keep_alive() works without gate (passthrough)."""
+        mock_conn = MagicMock()
+        mock_conn.keep_alive.return_value = True
+        safe = SafeDeepgramSocket(mock_conn)
+        socket = GatedDeepgramSocket(safe, gate=None)
+
+        result = socket.keep_alive()
+        assert result is True
+        mock_conn.keep_alive.assert_called_once()
+
+
+class TestSafeSocketDelegation:
+    """Tests for SafeDeepgramSocket finalize/finish delegation (#5870)."""
+
+    def test_finalize_delegates(self):
+        """SafeDeepgramSocket.finalize() delegates to underlying connection."""
+        mock_conn = MagicMock()
+        safe = SafeDeepgramSocket(mock_conn)
+        safe.finalize()
+        mock_conn.finalize.assert_called_once()
+
+    def test_finish_delegates(self):
+        """SafeDeepgramSocket.finish() delegates to underlying connection."""
+        mock_conn = MagicMock()
+        safe = SafeDeepgramSocket(mock_conn)
+        safe.finish()
+        mock_conn.finish.assert_called_once()
+
+
 class TestActivateMode:
     """Tests for shadow→active mode switching (preseconds solution)."""
 
