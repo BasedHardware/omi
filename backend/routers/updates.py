@@ -202,7 +202,7 @@ def _download_landing_html(dmg_url: str, channel: str = "stable", version: str =
         body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
                background: #0a0a0a; color: #fff; display: flex; align-items: center;
                justify-content: center; min-height: 100vh; text-align: center; }}
-        .container {{ max-width: 480px; padding: 40px 24px; }}
+        .container {{ max-width: 960px; padding: 40px 24px; }}
         h1 {{ font-size: 28px; font-weight: 600; margin-bottom: 12px; }}
         .version {{ color: #555; font-size: 14px; margin-bottom: 24px; }}
         .subtitle {{ color: #888; font-size: 16px; margin-bottom: 32px; }}
