@@ -443,7 +443,10 @@ def test_keepalive_config_validation():
 
 
 def test_concurrent_send_and_keepalive():
-    """Thread safety: concurrent send() calls while keepalive thread fires (#5870)."""
+    """Thread safety: concurrent send() calls while keepalive thread fires (#5870).
+
+    Verifies no exceptions AND that keepalive actually executes during contention.
+    """
     import threading
     from utils.stt.safe_socket import KeepaliveConfig, SafeDeepgramSocket
 
@@ -471,17 +474,33 @@ def test_concurrent_send_and_keepalive():
                 except Exception as e:
                     errors.append(e)
 
-        # Start sender threads while advancing clock past keepalive interval
+        # Advance clock past keepalive interval FIRST so keepalive fires
+        with lock:
+            fake_time[0] = 3.0
+
+        import time
+
+        time.sleep(0.1)  # Let keepalive thread fire
+
+        # Verify keepalive actually fired during this idle window
+        assert mock_conn.keep_alive.call_count >= 1, "keepalive must fire before concurrent sends start"
+
+        # Now start sender threads while keepalive thread continues running
+        mock_conn.keep_alive.reset_mock()
         threads = [threading.Thread(target=sender) for _ in range(3)]
         for t in threads:
             t.start()
+        # Advance clock again so keepalive fires during contention
         with lock:
-            fake_time[0] = 3.0  # trigger keepalive
+            fake_time[0] = 6.0
+        time.sleep(0.1)  # Let keepalive thread fire during send contention
         for t in threads:
             t.join(timeout=5.0)
 
         assert not errors, f"Concurrent send/keepalive raised: {errors}"
         assert not safe.is_connection_dead
+        # Keepalive must have fired at least once during the concurrent send window
+        assert mock_conn.keep_alive.call_count >= 1, "keepalive must fire during concurrent sends"
     finally:
         safe.finish()
 
