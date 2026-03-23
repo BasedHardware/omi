@@ -216,7 +216,11 @@ def _download_landing_html(dmg_url: str, channel: str = "stable", version: str =
         @keyframes spin {{ to {{ transform: rotate(360deg); }} }}
         .download-link {{ color: #6C8FFF; text-decoration: none; font-size: 15px; }}
         .download-link:hover {{ text-decoration: underline; }}
-        .steps {{ color: #888; font-size: 13px; margin-top: 32px; line-height: 1.8; text-align: left;
+        .video-container {{ margin-top: 32px; border-radius: 12px; overflow: hidden;
+                            background: #151515; display: none; }}
+        .video-container video {{ width: 100%; display: block; }}
+        .video-label {{ color: #888; font-size: 13px; padding: 12px 16px; text-align: center; }}
+        .steps {{ color: #888; font-size: 13px; margin-top: 20px; line-height: 1.8; text-align: left;
                   background: #151515; border-radius: 12px; padding: 20px 24px; }}
         .steps b {{ color: #ccc; }}
         .discord {{ margin-top: 24px; font-size: 14px; color: #888; }}
@@ -234,6 +238,12 @@ def _download_landing_html(dmg_url: str, channel: str = "stable", version: str =
             <div class="checkmark">&#10003;</div>
         </div>
         <p><a class="download-link" href="{dmg_url}">Click here if the download doesn&rsquo;t start</a></p>
+        <div class="video-container" id="demo-video">
+            <video autoplay muted loop playsinline>
+                <source src="https://storage.googleapis.com/omi_macos_updates/omi-demo.mp4" type="video/mp4">
+            </video>
+            <p class="video-label">See how Omi works</p>
+        </div>
         <div class="steps">
             <b>Installation steps:</b><br>
             1. Open the downloaded .dmg file<br>
@@ -247,6 +257,7 @@ def _download_landing_html(dmg_url: str, channel: str = "stable", version: str =
             window.location.href = "{dmg_url}";
             document.getElementById("status-icon").classList.add("done");
             document.getElementById("status-text").textContent = "Download started!";
+            document.getElementById("demo-video").style.display = "block";
         }}, 2000);
     </script>
 </body>
