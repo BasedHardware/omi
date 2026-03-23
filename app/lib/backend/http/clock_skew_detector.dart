@@ -59,6 +59,11 @@ class ClockSkewDetector {
     _lastEmittedAt = null;
   }
 
+  @visibleForTesting
+  void setLastEmittedAtForTesting(DateTime dt) {
+    _lastEmittedAt = dt;
+  }
+
   static ClockSkewEvent? parseResponse(http.Response response) {
     if (response.statusCode != 408 || response.body.isEmpty) {
       return null;
