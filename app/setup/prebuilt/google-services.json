@@ -1,7 +1,7 @@
 {
   "project_info": {
     "project_number": "1031333818730",
-    "project_id": "based-hardware-dev",
+    "project_id": "based-hardware",
     "storage_bucket": "based-hardware-dev.firebasestorage.app"
   },
   "client": [

@@ -44,7 +44,7 @@ class DefaultFirebaseOptions {
     apiKey: 'AIzaSyCz33hNRKsSsWT_Kaxi5Q_9uB7EWGn3Dq0',
     appId: '1:1031333818730:android:de181b5b4681b7a1afb513',
     messagingSenderId: '1031333818730',
-    projectId: 'based-hardware-dev',
+    projectId: 'based-hardware',
     storageBucket: 'based-hardware-dev.firebasestorage.app',
   );
 
@@ -52,7 +52,7 @@ class DefaultFirebaseOptions {
     apiKey: 'AIzaSyBK-G7KmEoC72mR10gmQyb2NFBbZyDvcqM',
     appId: '1:1031333818730:ios:3bea63d8e4f41dbfafb513',
     messagingSenderId: '1031333818730',
-    projectId: 'based-hardware-dev',
+    projectId: 'based-hardware',
     storageBucket: 'based-hardware-dev.firebasestorage.app',
     androidClientId: '1031333818730-1cgqp3jc5p8n2rk467pl4t56qc4lnnbr.apps.googleusercontent.com',
     iosClientId: '1031333818730-dusn243nct6i5rgfpfkj5mchuj1qnmde.apps.googleusercontent.com',
@@ -63,7 +63,7 @@ class DefaultFirebaseOptions {
     apiKey: 'AIzaSyC1U6S-hp8x_utpVDHtZwwBDxobhzRZI1w',
     appId: '1:1031333818730:web:e1b83d713c04245cafb513',
     messagingSenderId: '1031333818730',
-    projectId: 'based-hardware-dev',
+    projectId: 'based-hardware',
     authDomain: 'based-hardware-dev.firebaseapp.com',
     storageBucket: 'based-hardware-dev.firebasestorage.app',
   );
@@ -72,7 +72,7 @@ class DefaultFirebaseOptions {
     apiKey: 'AIzaSyBK-G7KmEoC72mR10gmQyb2NFBbZyDvcqM',
     appId: '1:1031333818730:ios:3bea63d8e4f41dbfafb513',
     messagingSenderId: '1031333818730',
-    projectId: 'based-hardware-dev',
+    projectId: 'based-hardware',
     storageBucket: 'based-hardware-dev.firebasestorage.app',
     androidClientId: '1031333818730-1cgqp3jc5p8n2rk467pl4t56qc4lnnbr.apps.googleusercontent.com',
     iosClientId: '1031333818730-dusn243nct6i5rgfpfkj5mchuj1qnmde.apps.googleusercontent.com',

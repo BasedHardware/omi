@@ -17,7 +17,7 @@
 	<key>BUNDLE_ID</key>
 	<string>com.friend-app-with-wearable.ios12.development</string>
 	<key>PROJECT_ID</key>
-	<string>based-hardware-dev</string>
+	<string>based-hardware</string>
 	<key>STORAGE_BUCKET</key>
 	<string>based-hardware-dev.firebasestorage.app</string>
 	<key>IS_ADS_ENABLED</key>
