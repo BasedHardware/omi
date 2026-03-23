@@ -957,6 +957,37 @@ class TestSafeSocketDelegation:
         assert not safe._thread.is_alive()
         mock_conn.finish.assert_called_once()
 
+    def test_finish_idempotent(self):
+        """SafeDeepgramSocket.finish() is idempotent — second call is a no-op."""
+        mock_conn = MagicMock()
+        safe = SafeDeepgramSocket(mock_conn, cfg=self._test_cfg)
+        safe.finish()
+        mock_conn.finish.assert_called_once()
+        # Second call should not call _conn.finish() again
+        safe.finish()
+        mock_conn.finish.assert_called_once()
+
+    def test_auto_keepalive_exception_marks_dead(self):
+        """Background keepalive thread marks dead when keep_alive() raises."""
+        mock_conn = MagicMock()
+        mock_conn.keep_alive.side_effect = RuntimeError("connection reset")
+
+        fake_time = [0.0]
+
+        def clock():
+            return fake_time[0]
+
+        cfg = KeepaliveConfig(keepalive_interval_sec=5.0, check_period_sec=0.01)
+        safe = SafeDeepgramSocket(mock_conn, cfg=cfg, clock=clock)
+
+        try:
+            # Advance past keepalive interval to trigger exception path
+            fake_time[0] = 6.0
+            time.sleep(0.1)
+            assert safe.is_connection_dead is True
+        finally:
+            safe.finish()
+
 
 class TestActivateMode:
     """Tests for shadow→active mode switching (preseconds solution)."""
