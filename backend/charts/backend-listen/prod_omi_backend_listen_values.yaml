@@ -378,7 +378,7 @@ autoscaling:
   # targetMemoryUtilizationPercentage: 70
   # requestsPerPod: 10
   # failedResponseCode: 10
-  activeConnectionsPerPod: 21
+  activeConnectionsPerPod: 22
 
 podDisruptionBudget:
   minAvailable: "80%"
