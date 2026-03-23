@@ -76,8 +76,7 @@ def test_multipart_with_boundary_skips_stale_check():
         },
         content=b"fake",
     )
-    # Should not be 408 — multipart skips stale check
-    assert response.status_code != 408
+    assert response.status_code == 200
 
 
 def test_fresh_non_multipart_passes():
@@ -127,11 +126,11 @@ def test_uppercase_multipart_skips_stale_check():
         },
         content=b"fake",
     )
-    assert response.status_code != 408
+    assert response.status_code == 200
 
 
-def test_non_multipart_with_multipart_token_still_rejected():
-    """Non-multipart content-type is not tricked by substring containing 'multipart/form-data'."""
+def test_non_multipart_with_multipart_substring_still_rejected():
+    """Content-type containing 'multipart/form-data' as substring but not as base type still gets 408."""
     app = _make_app()
     client = TestClient(app)
     stale_time = str(time.time() - 600)
@@ -139,9 +138,9 @@ def test_non_multipart_with_multipart_token_still_rejected():
         "/ok",
         headers={
             "X-Request-Start-Time": stale_time,
-            "Content-Type": "application/json",
+            "Content-Type": "application/x-multipart/form-data-wrapper",
         },
-        content=b'{"key": "value"}',
+        content=b'fake',
     )
     assert response.status_code == 408
 
