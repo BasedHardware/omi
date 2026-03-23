@@ -8651,4 +8651,9 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get improveConnectionAction => 'Mengerti';
+
+  @override
+  String clockSkewWarning(int minutes) {
+    return 'Jam perangkat Anda melenceng ~$minutes menit. Periksa pengaturan tanggal & waktu.';
+  }
 }

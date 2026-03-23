@@ -8621,4 +8621,9 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get improveConnectionAction => 'समझ गया';
+
+  @override
+  String clockSkewWarning(int minutes) {
+    return 'आपके डिवाइस की घड़ी ~$minutes मिनट गलत है। अपनी तारीख और समय सेटिंग जांचें।';
+  }
 }

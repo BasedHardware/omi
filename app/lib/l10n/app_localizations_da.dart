@@ -8625,4 +8625,9 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get improveConnectionAction => 'Forstået';
+
+  @override
+  String clockSkewWarning(int minutes) {
+    return 'Dit enheds ur er forskudt ~$minutes min. Tjek dine dato- og tidsindstillinger.';
+  }
 }

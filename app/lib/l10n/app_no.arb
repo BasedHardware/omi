@@ -2805,5 +2805,6 @@
     },
     "improveConnectionTitle": "Forbedre tilkobling",
     "improveConnectionContent": "Vi har forbedret hvordan Omi holder seg tilkoblet enheten din. For å aktivere dette, gå til Enhetsinformasjon-siden, trykk på \"Koble fra enhet\", og koble til enheten din på nytt.",
-    "improveConnectionAction": "Forstått"
+    "improveConnectionAction": "Forstått",
+    "clockSkewWarning": "Enhetens klokke avviker ~{minutes} min. Sjekk dato- og tidsinnstillingene."
 }

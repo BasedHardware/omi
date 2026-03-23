@@ -8659,4 +8659,9 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get improveConnectionAction => 'Entendido';
+
+  @override
+  String clockSkewWarning(int minutes) {
+    return 'El reloj de tu dispositivo está desfasado ~$minutes min. Revisa la configuración de fecha y hora.';
+  }
 }

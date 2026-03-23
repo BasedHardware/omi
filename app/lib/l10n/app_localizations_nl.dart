@@ -8669,4 +8669,9 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get improveConnectionAction => 'Begrepen';
+
+  @override
+  String clockSkewWarning(int minutes) {
+    return 'De klok van je apparaat wijkt ~$minutes min. af. Controleer je datum- en tijdinstellingen.';
+  }
 }

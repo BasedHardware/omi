@@ -2847,5 +2847,6 @@
     },
     "improveConnectionTitle": "Tingkatkan Koneksi",
     "improveConnectionContent": "Kami telah meningkatkan cara Omi tetap terhubung ke perangkat Anda. Untuk mengaktifkan ini, buka halaman Info Perangkat, ketuk \"Putuskan Perangkat\", lalu pasangkan perangkat Anda kembali.",
-    "improveConnectionAction": "Mengerti"
+    "improveConnectionAction": "Mengerti",
+    "clockSkewWarning": "Jam perangkat Anda melenceng ~{minutes} menit. Periksa pengaturan tanggal & waktu."
 }

@@ -8638,4 +8638,9 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get improveConnectionAction => 'Got it';
+
+  @override
+  String clockSkewWarning(int minutes) {
+    return 'Your device clock is off by ~$minutes min. Check your date & time settings.';
+  }
 }

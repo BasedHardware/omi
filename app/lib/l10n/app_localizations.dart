@@ -16136,6 +16136,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Got it'**
   String get improveConnectionAction;
+
+  /// No description provided for @clockSkewWarning.
+  ///
+  /// In en, this message translates to:
+  /// **'Your device clock is off by ~{minutes} min. Check your date & time settings.'**
+  String clockSkewWarning(int minutes);
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

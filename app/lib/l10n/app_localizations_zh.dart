@@ -8485,4 +8485,9 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get improveConnectionAction => '知道了';
+
+  @override
+  String clockSkewWarning(int minutes) {
+    return '您的设备时钟偏差约$minutes分钟。请检查日期和时间设置。';
+  }
 }

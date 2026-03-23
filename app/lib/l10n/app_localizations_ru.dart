@@ -8670,4 +8670,9 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get improveConnectionAction => 'Понятно';
+
+  @override
+  String clockSkewWarning(int minutes) {
+    return 'Часы вашего устройства отличаются на ~$minutes мин. Проверьте настройки даты и времени.';
+  }
 }

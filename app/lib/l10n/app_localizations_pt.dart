@@ -8644,4 +8644,9 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get improveConnectionAction => 'Entendi';
+
+  @override
+  String clockSkewWarning(int minutes) {
+    return 'O relógio do dispositivo está desajustado ~$minutes min. Verifique as configurações de data e hora.';
+  }
 }

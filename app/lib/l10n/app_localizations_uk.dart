@@ -8655,4 +8655,9 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get improveConnectionAction => 'Зрозуміло';
+
+  @override
+  String clockSkewWarning(int minutes) {
+    return 'Годинник вашого пристрою відрізняється на ~$minutes хв. Перевірте налаштування дати та часу.';
+  }
 }
