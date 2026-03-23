@@ -85,11 +85,21 @@ def test_beyond_tolerance_rejected_with_clock_skew_json():
     assert "hint" in body
 
 
-def test_at_exact_boundary_rejected():
-    """Request exactly at max_age + skew_allowance + 1s is rejected."""
+def test_at_threshold_minus_1s_passes():
+    """Request 1s under threshold passes (strict > comparison)."""
     app = _make_app()
     client = TestClient(app)
-    # Default threshold: 5*60 + 5*60 = 600s. Set to 601s ago.
+    # Default threshold: 5*60 + 5*60 = 600s. 599s should pass (under threshold).
+    near_time = str(time.time() - 599)
+    response = client.get("/ok", headers={"X-Request-Start-Time": near_time})
+    assert response.status_code == 200
+
+
+def test_just_beyond_boundary_rejected():
+    """Request 1s beyond threshold is rejected."""
+    app = _make_app()
+    client = TestClient(app)
+    # Default threshold: 600s. Set to 601s ago — just beyond.
     boundary_time = str(time.time() - 601)
     response = client.get("/ok", headers={"X-Request-Start-Time": boundary_time})
     assert response.status_code == 408
