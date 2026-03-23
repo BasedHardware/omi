@@ -9,6 +9,7 @@ import 'package:omi/backend/http/http_pool_manager.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/services/auth_service.dart';
+import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 
@@ -25,10 +26,9 @@ Future<String> getAuthHeader() async {
   DateTime? expiry = DateTime.fromMillisecondsSinceEpoch(SharedPreferencesUtil().tokenExpirationTime);
   bool hasAuthToken = SharedPreferencesUtil().authToken.isNotEmpty;
 
-  bool isExpirationDateValid =
-      !(expiry.isBefore(DateTime.now()) ||
-          expiry.isAtSameMomentAs(DateTime.fromMillisecondsSinceEpoch(0)) ||
-          (expiry.isBefore(DateTime.now().add(const Duration(minutes: 5))) && expiry.isAfter(DateTime.now())));
+  bool isExpirationDateValid = !(expiry.isBefore(DateTime.now()) ||
+      expiry.isAtSameMomentAs(DateTime.fromMillisecondsSinceEpoch(0)) ||
+      (expiry.isBefore(DateTime.now().add(const Duration(minutes: 5))) && expiry.isAfter(DateTime.now())));
 
   if (!hasAuthToken || !isExpirationDateValid) {
     SharedPreferencesUtil().authToken = await AuthService.instance.getIdToken() ?? '';
@@ -64,6 +64,29 @@ Future<Map<String, String>> buildHeaders({
   }
 
   return headers;
+}
+
+/// Check for 408 clock skew response and show user warning.
+/// Returns true if the response was a clock skew 408.
+bool _checkClockSkewResponse(http.Response response) {
+  if (response.statusCode != 408) return false;
+  try {
+    final body = jsonDecode(response.body);
+    if (body is Map && body['error'] == 'clock_skew') {
+      final skewSeconds = (body['skew_seconds'] as num?)?.round() ?? 0;
+      final skewMinutes = (skewSeconds / 60).round();
+      Logger.debug(
+          'Clock skew detected: ${skewSeconds}s (server_time=${body['server_time']}, client_time=${body['client_time']})');
+      if (skewMinutes > 0) {
+        AppSnackbar.showSnackbarError(
+          'Your device clock is off by ~$skewMinutes min. Check your date & time settings.',
+          duration: const Duration(seconds: 6),
+        );
+      }
+      return true;
+    }
+  } catch (_) {}
+  return false;
 }
 
 bool _isRequiredAuthCheck(String url) {
@@ -107,6 +130,8 @@ Future<http.Response?> makeApiCall({
       timeout: effectiveTimeout,
       retries: effectiveRetries,
     );
+
+    _checkClockSkewResponse(response);
 
     if (requireAuthCheck && response.statusCode == 401) {
       Logger.log('Token expired on 1st attempt');
@@ -200,6 +225,8 @@ Future<http.Response> makeMultipartApiCall({
 
     var streamedResponse = await HttpPoolManager.instance.sendStreaming(request);
     var response = await http.Response.fromStream(streamedResponse);
+
+    _checkClockSkewResponse(response);
 
     if (requireAuthCheck && response.statusCode == 401) {
       Logger.log('Token expired on 1st multipart attempt');
