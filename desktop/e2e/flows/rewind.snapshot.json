@@ -1,0 +1,39 @@
+{
+  "version": 1,
+  "flow": "rewind",
+  "flowHash": "4562a211a77be39c",
+  "device": {
+    "model": "unknown",
+    "resolution": "unknown"
+  },
+  "createdAt": "2026-03-20T10:13:31.188Z",
+  "runId": "wAnVbnw",
+  "totalDurationMs": 187000,
+  "verifySteps": [
+    "S1",
+    "S2",
+    "S4"
+  ],
+  "steps": {
+    "S1": {
+      "kind": "action",
+      "waitAfterMs": 52000,
+      "durationMs": 0
+    },
+    "S2": {
+      "kind": "verify",
+      "waitAfterMs": 49000,
+      "durationMs": 0
+    },
+    "S3": {
+      "kind": "action",
+      "waitAfterMs": 86000,
+      "durationMs": 0
+    },
+    "S4": {
+      "kind": "action",
+      "waitAfterMs": 500,
+      "durationMs": 0
+    }
+  }
+}
