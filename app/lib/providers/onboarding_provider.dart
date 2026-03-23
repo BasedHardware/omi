@@ -203,7 +203,7 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
       var cDevice = await _getConnectedDevice(deviceId);
       if (cDevice != null) {
         deviceProvider!.setConnectedDevice(cDevice);
-        SharedPreferencesUtil().deviceName = cDevice.name;
+        SharedPreferencesUtil().updateDeviceNameOnConnect(cDevice.id, cDevice.name);
         deviceProvider!.setIsConnected(true);
       }
       await deviceProvider?.scanAndConnectToDevice();
@@ -215,7 +215,7 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
       notifyListeners();
       await Future.delayed(const Duration(seconds: 2));
       SharedPreferencesUtil().btDevice = connectedDevice!;
-      SharedPreferencesUtil().deviceName = connectedDevice.name;
+      SharedPreferencesUtil().updateDeviceNameOnConnect(connectedDevice.id, connectedDevice.name);
 
       foundDevicesMap.clear();
       deviceList.clear();

@@ -82,6 +82,111 @@ class _DeviceSettingsState extends State<DeviceSettings> {
     super.dispose();
   }
 
+  void _showRenameDeviceDialog(BtDevice? device) {
+    final storedName = SharedPreferencesUtil().deviceName;
+    final currentName = storedName.isNotEmpty ? storedName : (device?.name ?? 'Omi DevKit');
+    final controller = TextEditingController(text: currentName);
+
+    showDialog(
+      context: context,
+      builder: (ctx) => Dialog(
+        backgroundColor: const Color(0xFF1C1C1E),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                context.l10n.renameDevice,
+                style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w600),
+              ),
+              const SizedBox(height: 20),
+              Container(
+                decoration: BoxDecoration(
+                  color: const Color(0xFF2C2C2E),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: TextField(
+                  controller: controller,
+                  autofocus: true,
+                  style: const TextStyle(color: Colors.white, fontSize: 16),
+                  decoration: InputDecoration(
+                    hintText: context.l10n.enterDeviceName,
+                    hintStyle: TextStyle(color: Colors.grey.shade600, fontSize: 16),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                    border: InputBorder.none,
+                    enabledBorder: InputBorder.none,
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: const BorderSide(color: Colors.white24, width: 1),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 24),
+              Row(
+                children: [
+                  Expanded(
+                    child: GestureDetector(
+                      onTap: () => Navigator.of(ctx).pop(),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF2A2A2E),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Center(
+                          child: Text(
+                            context.l10n.cancel,
+                            style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w500),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: GestureDetector(
+                      onTap: () {
+                        final newName = controller.text.trim();
+                        if (newName.isEmpty) {
+                          AppSnackbar.showSnackbarError(context.l10n.deviceNameCannotBeEmpty);
+                          return;
+                        }
+                        SharedPreferencesUtil().deviceName = newName;
+                        if (device != null) {
+                          SharedPreferencesUtil().deviceNameDeviceId = device.id;
+                        }
+                        Navigator.of(ctx).pop();
+                        if (mounted) setState(() {});
+                        AppSnackbar.showSnackbar(context.l10n.deviceNameUpdated);
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Center(
+                          child: Text(
+                            context.l10n.save,
+                            style: const TextStyle(color: Colors.black, fontSize: 16, fontWeight: FontWeight.w600),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    ).then((_) => controller.dispose());
+  }
+
   void _loadInitialDimRatio() async {
     final deviceProvider = context.read<DeviceProvider>();
     if (deviceProvider.pairedDevice != null) {
@@ -252,7 +357,8 @@ class _DeviceSettingsState extends State<DeviceSettings> {
             title: context.l10n.deviceName,
             chipValue: deviceName,
             copyValue: deviceName,
-            showChevron: false,
+            showChevron: true,
+            onTap: () => _showRenameDeviceDialog(device),
           ),
           const Divider(height: 1, color: Color(0xFF3C3C43)),
           _buildProfileStyleItem(
@@ -779,6 +885,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
 
                 await SharedPreferencesUtil().btDeviceSet(BtDevice(id: '', name: '', type: DeviceType.omi, rssi: 0));
                 SharedPreferencesUtil().deviceName = '';
+                SharedPreferencesUtil().deviceNameDeviceId = '';
 
                 if (deviceId.isNotEmpty) {
                   await ServiceManager.instance().device.forgetDevice(deviceId);
@@ -868,6 +975,98 @@ class _DeviceSettingsState extends State<DeviceSettings> {
                     Text(
                       context.l10n.unpairAndForget,
                       style: const TextStyle(color: Colors.orange, fontSize: 17, fontWeight: FontWeight.w400),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDisconnectedOverlay() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(32),
+      decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(14)),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 64,
+            height: 64,
+            decoration: BoxDecoration(color: const Color(0xFF2A2A2E), borderRadius: BorderRadius.circular(16)),
+            child: Center(child: FaIcon(FontAwesomeIcons.linkSlash, color: Colors.grey.shade500, size: 24)),
+          ),
+          const SizedBox(height: 20),
+          Text(
+            context.l10n.deviceNotConnected,
+            style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            context.l10n.connectDeviceMessage,
+            textAlign: TextAlign.center,
+            style: TextStyle(color: Colors.grey.shade500, fontSize: 14, height: 1.4),
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Consumer<DeviceProvider>(
+      builder: (context, provider, child) {
+        return Scaffold(
+          backgroundColor: const Color(0xFF0D0D0D),
+          appBar: AppBar(
+            backgroundColor: const Color(0xFF0D0D0D),
+            elevation: 0,
+            leading: IconButton(
+              icon: const FaIcon(FontAwesomeIcons.chevronLeft, size: 18),
+              onPressed: () => Navigator.of(context).pop(),
+            ),
+            title: Text(
+              context.l10n.deviceSettings,
+              style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
+            ),
+            centerTitle: true,
+          ),
+          body: SingleChildScrollView(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (!provider.isConnected) ...[
+                  const SizedBox(height: 16),
+                  _buildDisconnectedOverlay(),
+                  const SizedBox(height: 32),
+                ],
+                if (provider.isConnected) ...[
+                  const SizedBox(height: 16),
+                  _buildSectionHeader(context.l10n.customizationSection),
+                  _buildCustomizationSection(),
+                  const SizedBox(height: 32),
+                  _buildSectionHeader(context.l10n.deviceInfoSection),
+                  _buildDeviceInfoSection(provider.pairedDevice, provider),
+                  const SizedBox(height: 32),
+                  _buildSectionHeader(context.l10n.hardwareSection),
+                  _buildHardwareInfoSection(provider.pairedDevice),
+                  const SizedBox(height: 32),
+                ],
+                _buildActionsSection(provider),
+                const SizedBox(height: 48),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
                     ),
                   ],
                 ),
