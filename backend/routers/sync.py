@@ -555,6 +555,7 @@ def decode_files_to_wav(files_path: List[str]):
 
 
 def retrieve_vad_segments(path: str, segmented_paths: set, errors: list = None):
+    t_vad_start = time.time()
     try:
         start_timestamp = get_timestamp_from_path(path)
         voice_segments = vad_is_empty(path, return_segments=True, cache=True)
@@ -564,6 +565,8 @@ def retrieve_vad_segments(path: str, segmented_paths: set, errors: list = None):
         if errors is not None:
             errors.append(error_msg)
         raise  # Re-raise to ensure thread failure is visible
+
+    t_vad_done = time.time()
 
     segments = []
     # should we merge more aggressively, to avoid too many small segments? ~ not for now
@@ -582,6 +585,11 @@ def retrieve_vad_segments(path: str, segmented_paths: set, errors: list = None):
             segments.append(segment)
 
     logger.info(f"{path} {len(segments)}")
+    logger.info(
+        f'sync_timing stage=vad_segment path={os.path.basename(path)} '
+        f'voice_segments={len(voice_segments)} merged_segments={len(segments)} '
+        f'vad_api={t_vad_done - t_vad_start:.1f}s'
+    )
 
     aseg = AudioSegment.from_wav(path)
     path_dir = '/'.join(path.split('/')[:-1])
@@ -631,7 +639,9 @@ def _reprocess_conversation_after_update(uid: str, conversation_id: str, languag
 def process_segment(
     path: str, uid: str, response: dict, source: ConversationSource = ConversationSource.omi, is_locked: bool = False
 ):
+    t_seg_start = time.time()
     url = get_syncing_file_temporal_signed_url(path)
+    t_gcs = time.time()
 
     def delete_file():
         time.sleep(480)
@@ -640,6 +650,12 @@ def process_segment(
     threading.Thread(target=delete_file).start()
 
     words, language = deepgram_prerecorded(url, speakers_count=3, attempts=0, return_language=True)
+    t_deepgram = time.time()
+    logger.info(
+        f'sync_timing uid={uid} stage=segment_deepgram path={os.path.basename(path)} '
+        f'words={len(words)} gcs={t_gcs - t_seg_start:.1f}s deepgram={t_deepgram - t_gcs:.1f}s'
+    )
+
     transcript_segments: List[TranscriptSegment] = postprocess_words(words, 0)
     if not transcript_segments:
         logger.error('failed to get deepgram segments')
@@ -660,6 +676,11 @@ def process_segment(
             is_locked=is_locked,
         )
         created = process_conversation(uid, language, create_memory)
+        t_llm = time.time()
+        logger.info(
+            f'sync_timing uid={uid} stage=segment_llm path={os.path.basename(path)} '
+            f'action=new_memory llm={t_llm - t_deepgram:.1f}s total={t_llm - t_seg_start:.1f}s'
+        )
         response['new_memories'].add(created.id)
     else:
 
@@ -708,6 +729,12 @@ def process_segment(
             logger.info(f'Conversation {closest_memory["id"]} was discarded, checking if it should be reprocessed')
             _reprocess_conversation_after_update(uid, closest_memory['id'], language)
 
+        t_merge = time.time()
+        logger.info(
+            f'sync_timing uid={uid} stage=segment_merge path={os.path.basename(path)} '
+            f'action=update_memory merge={t_merge - t_deepgram:.1f}s total={t_merge - t_seg_start:.1f}s'
+        )
+
 
 def _cleanup_files(file_paths):
     """Helper to clean up temporary files."""
@@ -721,6 +748,8 @@ def _cleanup_files(file_paths):
 
 @router.post("/v1/sync-local-files")
 async def sync_local_files(files: List[UploadFile] = File(...), uid: str = Depends(auth.get_current_user_uid)):
+    t_start = time.time()
+
     # Pre-check gates (#5854)
     if is_hard_restricted(uid):
         raise HTTPException(status_code=429, detail="Account temporarily restricted due to fair-use policy")
@@ -735,13 +764,21 @@ async def sync_local_files(files: List[UploadFile] = File(...), uid: str = Depen
             source = ConversationSource.limitless
             break
 
+    total_upload_bytes = sum(f.size or 0 for f in files)
     paths = []
     wav_paths = []
     segmented_paths = set()
 
     try:
         paths = retrieve_file_paths(files, uid)
+        t_upload = time.time()
+
         wav_paths = decode_files_to_wav(paths)
+        t_decode = time.time()
+        logger.info(
+            f'sync_timing uid={uid} stage=decode files={len(wav_paths)} '
+            f'upload_bytes={total_upload_bytes} elapsed={t_decode - t_upload:.1f}s total={t_decode - t_start:.1f}s'
+        )
 
         def chunk_threads(threads):
             chunk_size = 5
@@ -755,6 +792,11 @@ async def sync_local_files(files: List[UploadFile] = File(...), uid: str = Depen
             for path in wav_paths
         ]
         chunk_threads(threads)
+        t_vad = time.time()
+        logger.info(
+            f'sync_timing uid={uid} stage=vad wav_files={len(wav_paths)} segments={len(segmented_paths)} '
+            f'elapsed={t_vad - t_decode:.1f}s total={t_vad - t_start:.1f}s'
+        )
 
         # Clean up original wav files after VAD segmentation (segments are now in segmented_paths)
         _cleanup_files(wav_paths)
@@ -800,6 +842,19 @@ async def sync_local_files(files: List[UploadFile] = File(...), uid: str = Depen
             for path in segmented_paths
         ]
         chunk_threads(threads)
+        t_process = time.time()
+        logger.info(
+            f'sync_timing uid={uid} stage=process_segments segments={len(segmented_paths)} '
+            f'elapsed={t_process - t_vad:.1f}s total={t_process - t_start:.1f}s'
+        )
+
+        logger.info(
+            f'sync_timing uid={uid} stage=complete upload_bytes={total_upload_bytes} '
+            f'speech_seconds={int(total_speech_seconds)} segments={len(segmented_paths)} '
+            f'new={len(response["new_memories"])} updated={len(response["updated_memories"])} '
+            f'timing: decode={t_decode - t_upload:.1f}s vad={t_vad - t_decode:.1f}s '
+            f'process={t_process - t_vad:.1f}s total={t_process - t_start:.1f}s'
+        )
 
         return response
     finally:
