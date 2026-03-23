@@ -1886,8 +1886,8 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
 }
 
 // ============================================================
-// Manual Firmware Flash Page 
-// ============================================================
+// Manual Firmware Flash Page
+// ============================================================ 
 
 class _ManualFirmwareFlashPage extends StatefulWidget {
   final String zipFilePath;
