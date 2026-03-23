@@ -628,6 +628,65 @@ def _reprocess_conversation_after_update(uid: str, conversation_id: str, languag
     logger.info(f'Successfully reprocessed conversation {conversation_id}')
 
 
+def _create_audio_files_for_synced_segment(uid: str, conversation_id: str, syncing_path: str):
+    """
+    Upload synced audio segment to GCS and create audio_files entry.
+    
+    For offline-synced recordings, the audio is stored in the syncing bucket.
+    This function copies it to the chunks bucket so it can be used with the
+    existing audio playback infrastructure.
+    
+    Args:
+        uid: User ID
+        conversation_id: Conversation ID 
+        syncing_path: Local path to the audio file in syncing directory
+    """
+    try:
+        from utils.other.storage import list_audio_chunks
+
+        timestamp = get_timestamp_from_path(syncing_path)
+        formatted_timestamp = f'{timestamp:.3f}'
+        
+        # Check if this chunk already exists in GCS to avoid duplicates
+        existing_chunks = list_audio_chunks(uid, conversation_id)
+        ts_rounded = round(timestamp, 3)
+        if any(round(c['timestamp'], 3) == ts_rounded for c in existing_chunks):
+            logger.info(f'Chunk for timestamp {formatted_timestamp} already exists, skipping upload')
+            return
+        
+        # Upload the audio file to GCS chunks directory
+        # Using .bin extension since download_single_chunk tries .bin extensions
+        chunk_path = f'chunks/{uid}/{conversation_id}/{formatted_timestamp}.bin'
+        bucket = storage_client.bucket(private_cloud_sync_bucket)
+        blob = bucket.blob(chunk_path)
+        
+        # Upload from local file (the WAV in syncing directory)
+        blob.upload_from_filename(syncing_path)
+        logger.info(f'Uploaded synced audio to GCS: {chunk_path}')
+        
+        # Create audio_files entry
+        audio_files = conversations_db.create_audio_files_from_chunks(uid, conversation_id)
+        if audio_files:
+            # Update conversation with audio_files
+            conversations_db.update_conversation(
+                uid, conversation_id, {'audio_files': [af.dict() for af in audio_files]}
+            )
+            logger.info(f'Created {len(audio_files)} audio_files entries for conversation {conversation_id}')
+            
+            # Precache audio in background
+            def _precache():
+                try:
+                    from utils.other.storage import precache_conversation_audio
+                    precache_conversation_audio(uid, conversation_id, [af.dict() for af in audio_files])
+                except Exception as e:
+                    logger.error(f'Error precaching audio for conversation {conversation_id}: {e}')
+            
+            threading.Thread(target=_precache, daemon=True).start()
+        
+    except Exception as e:
+        logger.error(f'Error creating audio files for synced segment: {e}')
+
+
 def process_segment(
     path: str, uid: str, response: dict, source: ConversationSource = ConversationSource.omi, is_locked: bool = False
 ):
@@ -661,6 +720,9 @@ def process_segment(
         )
         created = process_conversation(uid, language, create_memory)
         response['new_memories'].add(created.id)
+
+        # Create audio_files for the new conversation from the synced audio segment
+        _create_audio_files_for_synced_segment(uid, created.id, path)
     else:
 
         transcript_segments = [s.dict() for s in transcript_segments]
@@ -702,6 +764,12 @@ def process_segment(
         # Lock existing conversation if credits exhausted
         if is_locked:
             conversations_db.update_conversation(uid, closest_memory['id'], {'is_locked': True})
+
+        # Create audio_files for the existing conversation from the synced audio segment
+        # (if conversation doesn't already have audio_files from live recording)
+        existing_conv = conversations_db.get_conversation(uid, closest_memory['id'])
+        if existing_conv and not existing_conv.get('audio_files'):
+            _create_audio_files_for_synced_segment(uid, closest_memory['id'], path)
 
         # If the conversation was previously discarded, reprocess it with the new segments
         if closest_memory.get('discarded', False):
