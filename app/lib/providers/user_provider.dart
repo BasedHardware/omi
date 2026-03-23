@@ -8,7 +8,7 @@ import 'package:omi/backend/http/api/users.dart' as users_api;
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/geolocation.dart';
-import 'package:omi/main.dart';
+import 'package:omi/app_globals.dart';
 import 'package:omi/services/notifications.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
@@ -63,7 +63,7 @@ class UserProvider with ChangeNotifier {
   String get targetLevel => _targetLevel;
 
   String get migrationETA {
-    final ctx = MyApp.navigatorKey.currentContext;
+    final ctx = globalNavigatorKey.currentContext;
     if (_processedCount == 0 || _startTime == null || migrationTotalCount == 0) {
       return ctx?.l10n.calculatingETA ?? 'Calculating...';
     }
@@ -88,7 +88,7 @@ class UserProvider with ChangeNotifier {
   }
 
   String _getMigrationItemName(String type) {
-    final ctx = MyApp.navigatorKey.currentContext;
+    final ctx = globalNavigatorKey.currentContext;
     switch (type) {
       case 'conversation':
         return ctx?.l10n.conversations.toLowerCase() ?? 'conversations';
@@ -329,7 +329,7 @@ class UserProvider with ChangeNotifier {
   Future<void> updateDataProtectionLevel(String targetLevel) async {
     if (_isMigrating) return;
 
-    final ctx = MyApp.navigatorKey.currentContext;
+    final ctx = globalNavigatorKey.currentContext;
     _isMigrating = true;
     _migrationFailed = false;
     _sourceLevel = _dataProtectionLevel;
@@ -398,7 +398,7 @@ class UserProvider with ChangeNotifier {
   }
 
   Future<void> _finalize(String targetLevel) async {
-    final ctx = MyApp.navigatorKey.currentContext;
+    final ctx = globalNavigatorKey.currentContext;
     await PrivacyApi.finalizeMigration(targetLevel);
     _dataProtectionLevel = targetLevel;
     _isMigrating = false;
@@ -411,8 +411,7 @@ class UserProvider with ChangeNotifier {
     NotificationService.instance.showNotification(
       id: _migrationNotificationId,
       title: ctx?.l10n.omiSays ?? 'omi says',
-      body:
-          ctx?.l10n.dataProtectedWithSettings(targetLevel) ??
+      body: ctx?.l10n.dataProtectedWithSettings(targetLevel) ??
           'Your data is now protected with the new $targetLevel settings.',
       layout: NotificationLayout.Default,
       payload: {'navigate_to': '/settings/data-privacy'},

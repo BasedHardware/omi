@@ -21,7 +21,7 @@ import 'package:omi/backend/schema/app.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/message.dart';
 import 'package:omi/providers/app_provider.dart';
-import 'package:omi/main.dart';
+import 'package:omi/app_globals.dart';
 import 'package:omi/services/agent_chat_service.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/l10n_extensions.dart';
@@ -208,7 +208,7 @@ class MessageProvider extends ChangeNotifier {
   }
 
   void captureImage() async {
-    final l10n = MyApp.navigatorKey.currentContext?.l10n;
+    final l10n = globalNavigatorKey.currentContext?.l10n;
     if (PlatformService.isDesktop) {
       AppSnackbar.showSnackbarError(l10n?.msgCameraNotAvailable ?? 'Camera capture is not available on this platform');
       return;
@@ -239,7 +239,7 @@ class MessageProvider extends ChangeNotifier {
   }
 
   void selectImage() async {
-    final l10n = MyApp.navigatorKey.currentContext?.l10n;
+    final l10n = globalNavigatorKey.currentContext?.l10n;
     if (selectedFiles.length >= 4) {
       AppSnackbar.showSnackbarError(l10n?.msgMaxImagesLimit ?? 'You can only select up to 4 images');
       return;
@@ -318,7 +318,7 @@ class MessageProvider extends ChangeNotifier {
   }
 
   void selectFile() async {
-    final l10n = MyApp.navigatorKey.currentContext?.l10n;
+    final l10n = globalNavigatorKey.currentContext?.l10n;
     if (selectedFiles.length >= 4) {
       AppSnackbar.showSnackbarError(l10n?.msgMaxFilesLimit ?? 'You can only select up to 4 files');
       return;
@@ -384,7 +384,7 @@ class MessageProvider extends ChangeNotifier {
         uploadedFiles.addAll(res);
       } else {
         clearSelectedFiles();
-        final l10n = MyApp.navigatorKey.currentContext?.l10n;
+        final l10n = globalNavigatorKey.currentContext?.l10n;
         AppSnackbar.showSnackbarError(l10n?.msgUploadFileFailed ?? 'Failed to upload file, please try again later');
       }
       setMultiUploadingFileStatus(files.map((e) => e.path).toList(), false);
@@ -427,7 +427,7 @@ class MessageProvider extends ChangeNotifier {
   }
 
   Future<List<ServerMessage>> getMessagesFromServer({bool dropdownSelected = false}) async {
-    final l10n = MyApp.navigatorKey.currentContext?.l10n;
+    final l10n = globalNavigatorKey.currentContext?.l10n;
     if (!hasCachedMessages) {
       firstTimeLoadingText = l10n?.msgReadingMemories ?? 'Reading your memories...';
       notifyListeners();
@@ -957,7 +957,7 @@ class MessageProvider extends ChangeNotifier {
           if (uploadedFilesResult != null) {
             fileIds = uploadedFilesResult.map((f) => f.id).toList();
           } else {
-            final l10n = MyApp.navigatorKey.currentContext?.l10n;
+            final l10n = globalNavigatorKey.currentContext?.l10n;
             _askAIChannel.invokeMethod('aiResponseChunk', {
               'type': 'error',
               'text': l10n?.msgUploadAttachedFileFailed ?? 'Failed to upload the attached file.',
