@@ -24,6 +24,11 @@ struct SettingsSearchItem: Identifiable {
         SettingsSearchItem(name: "Font Size", subtitle: "Adjust text size across the app", keywords: ["text size", "zoom", "scale", "reset"], section: .general, icon: "gearshape", settingId: "general.fontsize"),
         SettingsSearchItem(name: "Reset Window Size", subtitle: "Restore the default window dimensions", keywords: ["resize", "window", "default size"], section: .general, icon: "gearshape", settingId: "general.resetwindow"),
 
+        // Device
+        SettingsSearchItem(name: "Device", subtitle: "Connect and manage your omi hardware device", keywords: ["hardware", "omi device"], section: .device, icon: "wave.3.right.circle", settingId: "device.device"),
+        SettingsSearchItem(name: "Bluetooth", subtitle: "Pair and connect via Bluetooth", keywords: ["bluetooth", "ble", "connect", "pair", "wireless"], section: .device, icon: "wave.3.right.circle", settingId: "device.bluetooth"),
+        SettingsSearchItem(name: "Firmware Update", subtitle: "Update your device firmware", keywords: ["firmware", "flash", "device update"], section: .device, icon: "wave.3.right.circle", settingId: "device.firmware"),
+
         // Rewind
         SettingsSearchItem(name: "Rewind", subtitle: "Browse your screen history", keywords: ["screen history", "screenshots", "recording"], section: .rewind, icon: "clock.arrow.circlepath", settingId: "rewind.rewind"),
         SettingsSearchItem(name: "Screen Capture", subtitle: "Toggle screen capture on or off", keywords: ["screen capture", "screenshot", "monitor", "recording", "rewind"], section: .rewind, icon: "rectangle.dashed.badge.record", settingId: "rewind.screencapture"),
@@ -316,6 +321,7 @@ struct SettingsSidebarItem: View {
     private var icon: String {
         switch section {
         case .general: return "gearshape"
+        case .device: return "wave.3.right.circle"
         case .rewind: return "clock.arrow.circlepath"
         case .transcription: return "waveform"
         case .notifications: return "bell"
