@@ -30,7 +30,10 @@ Future<String> getAuthHeader() async {
       (expiry.isBefore(DateTime.now().add(const Duration(minutes: 5))) && expiry.isAfter(DateTime.now())));
 
   if (!hasAuthToken || !isExpirationDateValid) {
-    SharedPreferencesUtil().authToken = await AuthService.instance.getIdToken() ?? '';
+    final refreshedToken = await AuthService.instance.getIdToken();
+    if (refreshedToken != null) {
+      SharedPreferencesUtil().authToken = refreshedToken;
+    }
     hasAuthToken = SharedPreferencesUtil().authToken.isNotEmpty;
   }
 
