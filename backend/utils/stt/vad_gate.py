@@ -743,24 +743,14 @@ class GatedDeepgramSocket:
         if gate_out.audio_to_send:
             # SafeDeepgramSocket.send() handles dead detection internally
             self._conn.send(gate_out.audio_to_send)
-        elif self._gate.needs_keepalive(now):
-            # Prevent DG 10s idle timeout during extended silence
-            # SafeDeepgramSocket.keep_alive() handles dead detection internally
-            ret = self._conn.keep_alive()
-            if ret is not False:
-                self._gate.record_keepalive(now)
+        # Keepalive is handled automatically by SafeDeepgramSocket's background thread.
+        # No explicit keep_alive() call needed here (#5870 architecture).
         if gate_out.should_finalize:
             try:
                 self._conn.finalize()
             except Exception:
                 self._gate._finalize_errors += 1
                 logger.warning('finalize failed uid=%s session=%s', self._gate.uid, self._gate.session_id)
-
-    def keep_alive(self):
-        """Send keepalive to DG, delegates to underlying SafeDeepgramSocket."""
-        if self.is_connection_dead:
-            return False
-        return self._conn.keep_alive()
 
     def finalize(self) -> None:
         """Flush pending transcript."""
