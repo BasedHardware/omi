@@ -342,7 +342,7 @@ autoscaling:
       selectPolicy: Max
   # targetCPUUtilizationPercentage: 60
   # targetMemoryUtilizationPercentage: 60
-  activeConnectionsPerPod: 21
+  activeConnectionsPerPod: 22
 
 podDisruptionBudget:
   minAvailable: "80%"
