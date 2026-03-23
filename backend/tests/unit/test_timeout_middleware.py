@@ -1,16 +1,17 @@
 """Unit tests for TimeoutMiddleware stale request check (#5929).
 
 Verifies:
-- Stale non-multipart requests are rejected with 408
-- Multipart file uploads skip the stale check (clock skew safe)
+- Clock skew tolerance: requests within max_age + skew_allowance pass
+- Truly stale requests (beyond tolerance) are rejected with 408
 - Malformed headers are ignored (request proceeds)
 - Future-dated headers are not rejected
+- Clock skew allowance is configurable via env var
 - Timeout path returns 504
 """
 
 import asyncio
+import os
 import time
-from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from starlette.testclient import TestClient
@@ -41,50 +42,73 @@ def _make_app(methods_timeout=None):
     return app
 
 
-def test_stale_non_multipart_rejected():
-    """Non-multipart request with stale X-Request-Start-Time gets 408."""
-    app = _make_app()
-    client = TestClient(app)
-    stale_time = str(time.time() - 600)  # 10 minutes ago
-    response = client.get("/ok", headers={"X-Request-Start-Time": stale_time})
-    assert response.status_code == 408
-
-
-def test_multipart_skips_stale_check():
-    """Multipart file upload with stale header should NOT get 408 (#5929)."""
-    app = _make_app()
-    client = TestClient(app)
-    stale_time = str(time.time() - 600)  # 10 minutes ago
-    response = client.post(
-        "/ok",
-        files={"file": ("test.wav", b"fake audio data", "audio/wav")},
-        headers={"X-Request-Start-Time": stale_time},
-    )
-    assert response.status_code == 200
-
-
-def test_multipart_with_boundary_skips_stale_check():
-    """Multipart with boundary param in content-type still skips stale check."""
-    app = _make_app()
-    client = TestClient(app)
-    stale_time = str(time.time() - 600)
-    response = client.post(
-        "/ok",
-        headers={
-            "X-Request-Start-Time": stale_time,
-            "Content-Type": "multipart/form-data; boundary=----WebKitFormBoundary",
-        },
-        content=b"fake",
-    )
-    assert response.status_code == 200
-
-
-def test_fresh_non_multipart_passes():
-    """Non-multipart request with fresh header passes through."""
+def test_fresh_request_passes():
+    """Request with fresh timestamp passes through."""
     app = _make_app()
     client = TestClient(app)
     fresh_time = str(time.time())
     response = client.get("/ok", headers={"X-Request-Start-Time": fresh_time})
+    assert response.status_code == 200
+
+
+def test_within_clock_skew_tolerance_passes():
+    """Request from phone with ~5min clock skew passes (within tolerance).
+
+    Default: max_age=5min, skew_allowance=5min, effective threshold=10min.
+    A 7-minute-old request should pass.
+    """
+    app = _make_app()
+    client = TestClient(app)
+    # 7 minutes ago — beyond max_age (5min) but within max_age + skew_allowance (10min)
+    skewed_time = str(time.time() - 420)
+    response = client.get("/ok", headers={"X-Request-Start-Time": skewed_time})
+    assert response.status_code == 200
+
+
+def test_beyond_tolerance_rejected():
+    """Request beyond max_age + skew_allowance is rejected with 408.
+
+    Default: max_age=5min, skew_allowance=5min, effective threshold=10min.
+    A 15-minute-old request should be rejected.
+    """
+    app = _make_app()
+    client = TestClient(app)
+    very_stale_time = str(time.time() - 900)  # 15 minutes ago
+    response = client.get("/ok", headers={"X-Request-Start-Time": very_stale_time})
+    assert response.status_code == 408
+
+
+def test_at_exact_boundary_rejected():
+    """Request exactly at max_age + skew_allowance + 1s is rejected."""
+    app = _make_app()
+    client = TestClient(app)
+    # Default threshold: 5*60 + 5*60 = 600s. Set to 601s ago.
+    boundary_time = str(time.time() - 601)
+    response = client.get("/ok", headers={"X-Request-Start-Time": boundary_time})
+    assert response.status_code == 408
+
+
+def test_just_within_boundary_passes():
+    """Request just within max_age + skew_allowance passes."""
+    app = _make_app()
+    client = TestClient(app)
+    # Default threshold: 600s. Set to 590s ago (10s margin).
+    within_time = str(time.time() - 590)
+    response = client.get("/ok", headers={"X-Request-Start-Time": within_time})
+    assert response.status_code == 200
+
+
+def test_multipart_upload_with_skew_passes():
+    """Multipart file upload with clock skew within tolerance passes (#5929)."""
+    app = _make_app()
+    client = TestClient(app)
+    # 7 minutes ago — simulates phone clock 5min behind + 2min transfer
+    skewed_time = str(time.time() - 420)
+    response = client.post(
+        "/ok",
+        files={"file": ("test.wav", b"fake audio data", "audio/wav")},
+        headers={"X-Request-Start-Time": skewed_time},
+    )
     assert response.status_code == 200
 
 
@@ -113,43 +137,24 @@ def test_future_dated_header_passes():
     assert response.status_code == 200
 
 
-def test_uppercase_multipart_skips_stale_check():
-    """Mixed-case Content-Type 'Multipart/Form-Data' still skips stale check."""
+def test_custom_skew_allowance_via_env(monkeypatch):
+    """HTTP_CLOCK_SKEW_ALLOWANCE env var controls clock skew tolerance."""
+    monkeypatch.setenv("HTTP_CLOCK_SKEW_ALLOWANCE", "60")  # only 1 min allowance
     app = _make_app()
     client = TestClient(app)
-    stale_time = str(time.time() - 600)
-    response = client.post(
-        "/ok",
-        headers={
-            "X-Request-Start-Time": stale_time,
-            "Content-Type": "Multipart/Form-Data; boundary=----abc",
-        },
-        content=b"fake",
-    )
-    assert response.status_code == 200
-
-
-def test_non_multipart_with_multipart_substring_still_rejected():
-    """Content-type containing 'multipart/form-data' as substring but not as base type still gets 408."""
-    app = _make_app()
-    client = TestClient(app)
-    stale_time = str(time.time() - 600)
-    response = client.post(
-        "/ok",
-        headers={
-            "X-Request-Start-Time": stale_time,
-            "Content-Type": "application/x-multipart/form-data-wrapper",
-        },
-        content=b'fake',
-    )
+    # 7 minutes ago — beyond max_age(5min) + skew(1min) = 6min threshold
+    skewed_time = str(time.time() - 420)
+    response = client.get("/ok", headers={"X-Request-Start-Time": skewed_time})
     assert response.status_code == 408
 
 
-def test_missing_content_type_still_checked():
-    """Request with no Content-Type header still gets stale check."""
+def test_zero_skew_allowance_original_behavior(monkeypatch):
+    """With zero skew allowance, behavior matches original (max_age only)."""
+    monkeypatch.setenv("HTTP_CLOCK_SKEW_ALLOWANCE", "0")
     app = _make_app()
     client = TestClient(app)
-    stale_time = str(time.time() - 600)
+    # 6 minutes ago — beyond max_age(5min) + skew(0) = 5min threshold
+    stale_time = str(time.time() - 360)
     response = client.get("/ok", headers={"X-Request-Start-Time": stale_time})
     assert response.status_code == 408
 
