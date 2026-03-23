@@ -203,9 +203,14 @@ class AuthService {
       }
       Logger.debug('getIdToken: token refresh returned null');
       return null;
+    } on FirebaseAuthException catch (e) {
+      Logger.debug('getIdToken: FirebaseAuthException: ${e.code} - $e');
+      if (e.code == 'user-not-found' || e.code == 'user-disabled' || e.code == 'user-token-expired') {
+        _clearCachedAuth();
+      }
+      return null;
     } catch (e) {
-      Logger.debug('getIdToken: token refresh failed: $e');
-      _clearCachedAuth();
+      Logger.debug('getIdToken: token refresh failed (transient): $e');
       return null;
     }
   }
