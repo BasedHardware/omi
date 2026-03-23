@@ -289,6 +289,7 @@ async def test_process_audio_dg_returns_safe_socket_no_gate():
         )
     assert isinstance(result, SafeDeepgramSocket)
     assert result.is_connection_dead is False
+    result.finish()
 
 
 @pytest.mark.asyncio
@@ -312,55 +313,130 @@ async def test_process_audio_dg_returns_gated_socket_with_gate():
     assert isinstance(result, GatedDeepgramSocket)
     assert isinstance(result._conn, SafeDeepgramSocket)
     assert result.is_connection_dead is False
+    result.finish()
 
 
-def test_stabilization_keepalive_pattern():
-    """Verify the stabilization keepalive pattern sends keep_alive during idle window (#5870).
+def test_auto_keepalive_sends_during_idle():
+    """SafeDeepgramSocket auto-keepalive thread sends keepalive when idle > interval (#5870).
 
-    This tests the core logic from _process_speech_profile() in transcribe.py:
-    during a stabilization window, keep_alive() should be called at regular intervals
-    to prevent DG 10s idle timeout.
+    Uses injectable clock to simulate time passing without real sleeps.
+    The background thread detects idle time and sends keepalive automatically.
     """
-    from utils.stt.safe_socket import SafeDeepgramSocket
+    from utils.stt.safe_socket import KeepaliveConfig, SafeDeepgramSocket
 
     mock_conn = MagicMock()
     mock_conn.keep_alive.return_value = True
-    dg_socket = SafeDeepgramSocket(mock_conn)
+    mock_conn.send.return_value = True
 
-    # Simulate the stabilization keepalive loop (mirrors transcribe.py:1149-1157)
-    keepalive_interval = 5
-    stabilize_delay = 15
-    elapsed = 0.0
-    keepalive_count = 0
-    while elapsed < stabilize_delay:
-        elapsed += keepalive_interval
-        dg_socket.keep_alive()
-        keepalive_count += 1
+    # Use a fake clock that we control
+    fake_time = [0.0]
 
-    # Should have sent 3 keepalives (at 5s, 10s, 15s)
-    assert keepalive_count == 3
-    assert mock_conn.keep_alive.call_count == 3
-    assert dg_socket.is_connection_dead is False
+    def clock():
+        return fake_time[0]
+
+    # Short check period so the thread fires quickly
+    cfg = KeepaliveConfig(keepalive_interval_sec=5.0, check_period_sec=0.01)
+    safe = SafeDeepgramSocket(mock_conn, cfg=cfg, clock=clock)
+
+    try:
+        # First send — resets activity timer
+        safe.send(b'\x00' * 960)
+        assert mock_conn.send.call_count == 1
+
+        # Advance clock past keepalive interval
+        fake_time[0] = 6.0
+
+        # Wait for background thread to fire
+        import time
+
+        time.sleep(0.05)
+
+        # Background thread should have sent keepalive
+        assert mock_conn.keep_alive.call_count >= 1
+        assert safe.keepalive_count >= 1
+        assert safe.is_connection_dead is False
+    finally:
+        safe.finish()
 
 
-def test_stabilization_keepalive_stops_on_dead():
-    """Stabilization keepalive loop should stop when connection dies (#5870)."""
-    from utils.stt.safe_socket import SafeDeepgramSocket
+def test_auto_keepalive_stops_on_dead():
+    """Auto-keepalive thread stops when connection dies (#5870)."""
+    from utils.stt.safe_socket import KeepaliveConfig, SafeDeepgramSocket
 
     mock_conn = MagicMock()
-    # First keepalive succeeds, second returns False (dead)
-    mock_conn.keep_alive.side_effect = [True, False]
-    dg_socket = SafeDeepgramSocket(mock_conn)
+    mock_conn.keep_alive.return_value = False  # Connection dead
+    mock_conn.send.return_value = True
 
-    keepalive_interval = 5
-    stabilize_delay = 15
-    elapsed = 0.0
-    while elapsed < stabilize_delay:
-        elapsed += keepalive_interval
-        if dg_socket.is_connection_dead:
-            break
-        dg_socket.keep_alive()
+    fake_time = [0.0]
 
-    # Should stop after 2nd keepalive (detected dead)
-    assert dg_socket.is_connection_dead is True
-    assert mock_conn.keep_alive.call_count == 2
+    def clock():
+        return fake_time[0]
+
+    cfg = KeepaliveConfig(keepalive_interval_sec=5.0, check_period_sec=0.01)
+    safe = SafeDeepgramSocket(mock_conn, cfg=cfg, clock=clock)
+
+    try:
+        safe.send(b'\x00' * 960)
+        # Advance clock past keepalive interval
+        fake_time[0] = 6.0
+
+        import time
+
+        time.sleep(0.05)
+
+        # keep_alive returned False — should be dead
+        assert safe.is_connection_dead is True
+        # No more keepalives should be sent after death
+        count_at_death = mock_conn.keep_alive.call_count
+        fake_time[0] = 12.0
+        time.sleep(0.05)
+        assert mock_conn.keep_alive.call_count == count_at_death
+    finally:
+        safe.finish()
+
+
+def test_auto_keepalive_resets_on_send():
+    """send() resets idle timer, preventing unnecessary keepalives (#5870)."""
+    from utils.stt.safe_socket import KeepaliveConfig, SafeDeepgramSocket
+
+    mock_conn = MagicMock()
+    mock_conn.keep_alive.return_value = True
+    mock_conn.send.return_value = True
+
+    fake_time = [0.0]
+
+    def clock():
+        return fake_time[0]
+
+    cfg = KeepaliveConfig(keepalive_interval_sec=5.0, check_period_sec=0.01)
+    safe = SafeDeepgramSocket(mock_conn, cfg=cfg, clock=clock)
+
+    try:
+        # Send at t=0
+        safe.send(b'\x00' * 960)
+        # Advance to t=4 (within interval)
+        fake_time[0] = 4.0
+        # Send again — resets timer
+        safe.send(b'\x00' * 960)
+        # Advance to t=8 (only 4s since last send, within interval)
+        fake_time[0] = 8.0
+
+        import time
+
+        time.sleep(0.05)
+
+        # No keepalive should have been sent (always within interval)
+        assert mock_conn.keep_alive.call_count == 0
+    finally:
+        safe.finish()
+
+
+def test_keepalive_config_validation():
+    """KeepaliveConfig rejects invalid values (#5870)."""
+    from utils.stt.safe_socket import KeepaliveConfig
+
+    with pytest.raises(ValueError, match='keepalive_interval_sec must be > 0'):
+        KeepaliveConfig(keepalive_interval_sec=0)
+
+    with pytest.raises(ValueError, match='check_period_sec must be > 0'):
+        KeepaliveConfig(check_period_sec=-1)
