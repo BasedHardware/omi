@@ -32,10 +32,7 @@ abstract class Env {
   static bool get isUsingStagingApi {
     final effective = apiBaseUrl;
     if (effective == null) return false;
-    // Only show staging banner if STAGING_API_URL is explicitly configured
-    final configuredStagingUrl = _instance.stagingApiUrl;
-    if (configuredStagingUrl == null || configuredStagingUrl.isEmpty) return false;
-    return _normalizeUrl(effective) == _normalizeUrl(configuredStagingUrl);
+    return _normalizeUrl(effective) == _normalizeUrl(stagingApiUrl);
   }
 
   static String _normalizeUrl(String url) {
