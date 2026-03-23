@@ -188,7 +188,7 @@ struct FloatingControlBarView: View {
                     .transition(.opacity)
             } else if isHovering || state.showingAIConversation {
                 VStack(spacing: 1) {
-                    compactButton(title: "Ask omi", keys: shortcutSettings.askOmiKey.hintKeys) {
+                    compactButton(title: "Ask omi / Collapse", keys: shortcutSettings.askOmiKey.hintKeys) {
                         onAskAI()
                     }
 
