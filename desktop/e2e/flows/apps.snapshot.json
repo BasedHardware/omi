@@ -1,0 +1,48 @@
+{
+  "version": 1,
+  "flow": "apps",
+  "flowHash": "06b1f453ca932ef4",
+  "device": {
+    "model": "unknown",
+    "resolution": "unknown"
+  },
+  "createdAt": "2026-03-20T10:27:01.411Z",
+  "runId": "EXZpIxI",
+  "totalDurationMs": 263000,
+  "verifySteps": [
+    "S1",
+    "S6"
+  ],
+  "steps": {
+    "S1": {
+      "kind": "action",
+      "waitAfterMs": 59000,
+      "durationMs": 0
+    },
+    "S2": {
+      "kind": "action",
+      "waitAfterMs": 59000,
+      "durationMs": 0
+    },
+    "S3": {
+      "kind": "action",
+      "waitAfterMs": 46000,
+      "durationMs": 0
+    },
+    "S4": {
+      "kind": "action",
+      "waitAfterMs": 57000,
+      "durationMs": 0
+    },
+    "S5": {
+      "kind": "action",
+      "waitAfterMs": 42000,
+      "durationMs": 0
+    },
+    "S6": {
+      "kind": "action",
+      "waitAfterMs": 500,
+      "durationMs": 0
+    }
+  }
+}
