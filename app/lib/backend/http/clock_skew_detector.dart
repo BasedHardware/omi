@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
 import 'package:omi/utils/logger.dart';
@@ -51,6 +52,11 @@ class ClockSkewDetector {
 
     _lastEmittedAt = now;
     _controller.add(event);
+  }
+
+  @visibleForTesting
+  void resetForTesting() {
+    _lastEmittedAt = null;
   }
 
   static ClockSkewEvent? parseResponse(http.Response response) {
