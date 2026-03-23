@@ -440,3 +440,177 @@ def test_keepalive_config_validation():
 
     with pytest.raises(ValueError, match='check_period_sec must be > 0'):
         KeepaliveConfig(check_period_sec=-1)
+
+
+def test_concurrent_send_and_keepalive():
+    """Thread safety: concurrent send() calls while keepalive thread fires (#5870)."""
+    import threading
+    from utils.stt.safe_socket import KeepaliveConfig, SafeDeepgramSocket
+
+    mock_conn = MagicMock()
+    mock_conn.keep_alive.return_value = True
+    mock_conn.send.return_value = True
+
+    fake_time = [0.0]
+    lock = threading.Lock()
+
+    def clock():
+        with lock:
+            return fake_time[0]
+
+    cfg = KeepaliveConfig(keepalive_interval_sec=2.0, check_period_sec=0.01)
+    safe = SafeDeepgramSocket(mock_conn, cfg=cfg, clock=clock)
+
+    try:
+        errors = []
+
+        def sender():
+            for i in range(50):
+                try:
+                    safe.send(b'\x00' * 960)
+                except Exception as e:
+                    errors.append(e)
+
+        # Start sender threads while advancing clock past keepalive interval
+        threads = [threading.Thread(target=sender) for _ in range(3)]
+        for t in threads:
+            t.start()
+        with lock:
+            fake_time[0] = 3.0  # trigger keepalive
+        for t in threads:
+            t.join(timeout=5.0)
+
+        assert not errors, f"Concurrent send/keepalive raised: {errors}"
+        assert not safe.is_connection_dead
+    finally:
+        safe.finish()
+
+
+def test_keepalive_fires_at_exact_threshold():
+    """Keepalive fires when elapsed == interval (boundary) (#5870)."""
+    from utils.stt.safe_socket import KeepaliveConfig, SafeDeepgramSocket
+
+    mock_conn = MagicMock()
+    mock_conn.keep_alive.return_value = True
+    mock_conn.send.return_value = True
+
+    fake_time = [0.0]
+
+    def clock():
+        return fake_time[0]
+
+    cfg = KeepaliveConfig(keepalive_interval_sec=5.0, check_period_sec=0.01)
+    safe = SafeDeepgramSocket(mock_conn, cfg=cfg, clock=clock)
+
+    try:
+        safe.send(b'\x00' * 960)
+        # Advance to exactly the threshold
+        fake_time[0] = 5.0
+        import time
+
+        time.sleep(0.1)
+        assert mock_conn.keep_alive.call_count >= 1
+    finally:
+        safe.finish()
+
+
+def test_repeated_idle_sends_multiple_keepalives():
+    """Repeated idle periods send multiple keepalives (#5870)."""
+    from utils.stt.safe_socket import KeepaliveConfig, SafeDeepgramSocket
+
+    mock_conn = MagicMock()
+    mock_conn.keep_alive.return_value = True
+    mock_conn.send.return_value = True
+
+    # Use a list that we mutate as keepalive resets _last_activity via clock
+    fake_time = [0.0]
+
+    def clock():
+        return fake_time[0]
+
+    cfg = KeepaliveConfig(keepalive_interval_sec=5.0, check_period_sec=0.01)
+    safe = SafeDeepgramSocket(mock_conn, cfg=cfg, clock=clock)
+
+    try:
+        import time
+
+        # First keepalive at t=6
+        fake_time[0] = 6.0
+        time.sleep(0.1)
+        first_count = mock_conn.keep_alive.call_count
+        assert first_count >= 1
+
+        # Second keepalive at t=12 (6s after keepalive reset at t=6)
+        fake_time[0] = 12.0
+        time.sleep(0.1)
+        assert mock_conn.keep_alive.call_count > first_count
+    finally:
+        safe.finish()
+
+
+def test_send_after_finish_is_noop():
+    """send() and finalize() after finish() are silent no-ops (#5870)."""
+    from utils.stt.safe_socket import KeepaliveConfig, SafeDeepgramSocket
+
+    mock_conn = MagicMock()
+    mock_conn.send.return_value = True
+
+    cfg = KeepaliveConfig(keepalive_interval_sec=5.0, check_period_sec=999.0)
+    safe = SafeDeepgramSocket(mock_conn, cfg=cfg)
+
+    safe.finish()
+    mock_conn.send.reset_mock()
+    mock_conn.finalize.reset_mock()
+
+    # These should not raise or forward to underlying connection
+    safe.send(b'\x00' * 960)
+    safe.finalize()
+    mock_conn.send.assert_not_called()
+    mock_conn.finalize.assert_not_called()
+
+
+def test_profile_socket_routing_when_main_dies():
+    """Profile socket continues receiving audio when main DG socket dies (#5870).
+
+    Mimics the routing logic in transcribe.py flush_stt_buffer: when dg_socket
+    is_connection_dead becomes True, profile socket should still get chunks.
+    """
+    from utils.stt.safe_socket import KeepaliveConfig, SafeDeepgramSocket
+
+    # Main socket that is dead
+    mock_main_conn = MagicMock()
+    cfg = KeepaliveConfig(keepalive_interval_sec=5.0, check_period_sec=999.0)
+    main_socket = SafeDeepgramSocket(mock_main_conn, cfg=cfg)
+    main_socket._dg_dead = True  # Simulate dead connection
+
+    # Profile socket still alive
+    mock_profile_conn = MagicMock()
+    profile_socket = SafeDeepgramSocket(mock_profile_conn, cfg=cfg)
+
+    try:
+        # Simulate routing logic from transcribe.py:2308-2348
+        dg_socket = main_socket
+        deepgram_profile_socket = profile_socket
+        profile_complete = False
+        chunk = b'\x00' * 960
+
+        # Dead check (separated from routing)
+        if dg_socket is not None and dg_socket.is_connection_dead:
+            dg_socket = None
+
+        # Routing
+        if dg_socket is not None:
+            if profile_complete or not deepgram_profile_socket:
+                dg_socket.send(chunk)
+            else:
+                deepgram_profile_socket.send(chunk)
+        elif deepgram_profile_socket and not profile_complete:
+            deepgram_profile_socket.send(chunk)
+
+        # Profile socket should have received the chunk
+        mock_profile_conn.send.assert_called_once_with(chunk)
+        # Main socket should NOT have received anything
+        mock_main_conn.send.assert_not_called()
+    finally:
+        main_socket.finish()
+        profile_socket.finish()
