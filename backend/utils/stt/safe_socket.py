@@ -131,8 +131,10 @@ class SafeDeepgramSocket:
             self._last_activity = self._clock()
 
     def finish(self) -> None:
-        """Stop keepalive thread and close DG connection."""
+        """Stop keepalive thread and close DG connection. Idempotent."""
         with self._lock:
+            if self._closed:
+                return
             self._closed = True
         self._stop_event.set()
         self._thread.join(timeout=2.0)
