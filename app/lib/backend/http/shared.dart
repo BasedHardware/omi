@@ -9,7 +9,7 @@ import 'package:omi/backend/http/http_pool_manager.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/l10n/app_localizations.dart';
-import 'package:omi/main.dart';
+import 'package:omi/app_globals.dart';
 import 'package:omi/services/auth_service.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/logger.dart';
@@ -114,7 +114,7 @@ void _checkClockSkewResponse(http.Response response) {
     return;
   }
 
-  final navigatorState = MyApp.navigatorKey.currentState;
+  final navigatorState = globalNavigatorKey.currentState;
   if (navigatorState == null) {
     return;
   }
