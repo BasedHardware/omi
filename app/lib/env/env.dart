@@ -1,13 +1,11 @@
-import 'package:omi/env/dev_env.dart';
-
 abstract class Env {
   static late final EnvFields _instance;
   static String? _apiBaseUrlOverride;
   static String? _agentProxyWsUrlOverride;
   static bool isTestFlight = false;
 
-  static void init([EnvFields? instance]) {
-    _instance = instance ?? DevEnv() as EnvFields;
+  static void init(EnvFields instance) {
+    _instance = instance;
   }
 
   static void overrideApiBaseUrl(String url) {
