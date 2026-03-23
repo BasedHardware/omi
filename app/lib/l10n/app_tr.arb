@@ -2840,5 +2840,6 @@
     },
     "improveConnectionTitle": "Bağlantıyı İyileştir",
     "improveConnectionContent": "Omi'nin cihazınıza bağlı kalma şeklini iyileştirdik. Bunu etkinleştirmek için Cihaz Bilgileri sayfasına gidin, \"Cihazı Kes\" seçeneğine dokunun ve cihazınızı tekrar eşleştirin.",
-    "improveConnectionAction": "Anladım"
+    "improveConnectionAction": "Anladım",
+    "clockSkewWarning": "Cihazınızın saati ~{minutes} dk. farklı. Tarih ve saat ayarlarınızı kontrol edin."
 }

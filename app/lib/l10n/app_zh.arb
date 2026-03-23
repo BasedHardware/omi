@@ -2827,5 +2827,6 @@
     },
     "improveConnectionTitle": "改善连接",
     "improveConnectionContent": "我们改进了 Omi 与您设备保持连接的方式。要激活此功能，请前往设备信息页面，点击\"断开设备\"，然后重新配对您的设备。",
-    "improveConnectionAction": "知道了"
+    "improveConnectionAction": "知道了",
+    "clockSkewWarning": "您的设备时钟偏差约{minutes}分钟。请检查日期和时间设置。"
 }

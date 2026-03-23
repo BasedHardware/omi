@@ -2805,5 +2805,6 @@
     },
     "improveConnectionTitle": "Tingkatkan Sambungan",
     "improveConnectionContent": "Kami telah meningkatkan cara Omi kekal bersambung dengan peranti anda. Untuk mengaktifkan ini, pergi ke halaman Maklumat Peranti, ketik \"Putuskan Peranti\", dan gandingkan semula peranti anda.",
-    "improveConnectionAction": "Faham"
+    "improveConnectionAction": "Faham",
+    "clockSkewWarning": "Jam peranti anda berbeza ~{minutes} min. Semak tetapan tarikh & masa anda."
 }
