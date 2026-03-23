@@ -23,6 +23,7 @@ import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/platform/platform_service.dart';
+import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/widgets/dialog.dart';
 
 class DeviceSettings extends StatefulWidget {
@@ -338,7 +339,8 @@ class _DeviceSettingsState extends State<DeviceSettings> {
   }
 
   Widget _buildDeviceInfoSection(BtDevice? device, DeviceProvider provider) {
-    final deviceName = device?.name ?? 'Omi DevKit';
+    final storedName = SharedPreferencesUtil().deviceName;
+    final deviceName = storedName.isNotEmpty ? storedName : (device?.name ?? 'Omi DevKit');
     final deviceId = device?.id ?? '12AB34CD:56EF78GH';
 
     String truncateId(String id) {
@@ -975,98 +977,6 @@ class _DeviceSettingsState extends State<DeviceSettings> {
                     Text(
                       context.l10n.unpairAndForget,
                       style: const TextStyle(color: Colors.orange, fontSize: 17, fontWeight: FontWeight.w400),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-
-  Widget _buildDisconnectedOverlay() {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(32),
-      decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(14)),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 64,
-            height: 64,
-            decoration: BoxDecoration(color: const Color(0xFF2A2A2E), borderRadius: BorderRadius.circular(16)),
-            child: Center(child: FaIcon(FontAwesomeIcons.linkSlash, color: Colors.grey.shade500, size: 24)),
-          ),
-          const SizedBox(height: 20),
-          Text(
-            context.l10n.deviceNotConnected,
-            style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            context.l10n.connectDeviceMessage,
-            textAlign: TextAlign.center,
-            style: TextStyle(color: Colors.grey.shade500, fontSize: 14, height: 1.4),
-          ),
-        ],
-      ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Consumer<DeviceProvider>(
-      builder: (context, provider, child) {
-        return Scaffold(
-          backgroundColor: const Color(0xFF0D0D0D),
-          appBar: AppBar(
-            backgroundColor: const Color(0xFF0D0D0D),
-            elevation: 0,
-            leading: IconButton(
-              icon: const FaIcon(FontAwesomeIcons.chevronLeft, size: 18),
-              onPressed: () => Navigator.of(context).pop(),
-            ),
-            title: Text(
-              context.l10n.deviceSettings,
-              style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
-            ),
-            centerTitle: true,
-          ),
-          body: SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                if (!provider.isConnected) ...[
-                  const SizedBox(height: 16),
-                  _buildDisconnectedOverlay(),
-                  const SizedBox(height: 32),
-                ],
-                if (provider.isConnected) ...[
-                  const SizedBox(height: 16),
-                  _buildSectionHeader(context.l10n.customizationSection),
-                  _buildCustomizationSection(),
-                  const SizedBox(height: 32),
-                  _buildSectionHeader(context.l10n.deviceInfoSection),
-                  _buildDeviceInfoSection(provider.pairedDevice, provider),
-                  const SizedBox(height: 32),
-                  _buildSectionHeader(context.l10n.hardwareSection),
-                  _buildHardwareInfoSection(provider.pairedDevice),
-                  const SizedBox(height: 32),
-                ],
-                _buildActionsSection(provider),
-                const SizedBox(height: 48),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
-}
                     ),
                   ],
                 ),
