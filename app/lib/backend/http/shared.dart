@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:path/path.dart';
 
+import 'package:omi/backend/http/clock_skew_detector.dart';
 import 'package:omi/backend/http/http_pool_manager.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/env/env.dart';
@@ -89,6 +90,10 @@ Future<http.StreamedResponse> makeRawApiCall({
   return HttpPoolManager.instance.sendStreaming(request);
 }
 
+void _checkClockSkewResponse(http.Response response) {
+  ClockSkewDetector.instance.checkResponse(response);
+}
+
 Future<http.Response?> makeApiCall({
   required String url,
   required Map<String, String> headers,
@@ -140,6 +145,7 @@ Future<http.Response?> makeApiCall({
       }
     }
 
+    _checkClockSkewResponse(response);
     return response;
   } catch (e, stackTrace) {
     Logger.debug('HTTP request failed: $e, $stackTrace');
@@ -238,6 +244,7 @@ Future<http.Response> makeMultipartApiCall({
       }
     }
 
+    _checkClockSkewResponse(response);
     return response;
   } catch (e, stackTrace) {
     Logger.debug('Multipart HTTP request failed: $e, $stackTrace');

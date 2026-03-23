@@ -2805,5 +2805,6 @@
     },
     "improveConnectionTitle": "Uzlabot savienojumu",
     "improveConnectionContent": "Mēs esam uzlabojuši veidu, kā Omi paliek savienots ar jūsu ierīci. Lai to aktivizētu, dodieties uz ierīces informācijas lapu, pieskarieties \"Atvienot ierīci\" un savienojiet ierīci pārī no jauna.",
-    "improveConnectionAction": "Sapratu"
+    "improveConnectionAction": "Sapratu",
+    "clockSkewWarning": "Jūsu ierīces pulkstenis atšķiras par ~{minutes} min. Pārbaudiet datuma un laika iestatījumus."
 }

@@ -8597,4 +8597,9 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get improveConnectionAction => 'เข้าใจแล้ว';
+
+  @override
+  String clockSkewWarning(int minutes) {
+    return 'นาฬิกาอุปกรณ์ของคุณคลาดเคลื่อน ~$minutes นาที ตรวจสอบการตั้งค่าวันที่และเวลา';
+  }
 }

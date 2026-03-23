@@ -2806,5 +2806,6 @@
     },
     "improveConnectionTitle": "Mejorar conexión",
     "improveConnectionContent": "Hemos mejorado cómo Omi se mantiene conectado a tu dispositivo. Para activarlo, ve a la página de Información del dispositivo, toca \"Desconectar dispositivo\" y vuelve a vincular tu dispositivo.",
-    "improveConnectionAction": "Entendido"
+    "improveConnectionAction": "Entendido",
+    "clockSkewWarning": "El reloj de tu dispositivo está desfasado ~{minutes} min. Revisa la configuración de fecha y hora."
 }

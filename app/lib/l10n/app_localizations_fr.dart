@@ -8720,4 +8720,9 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get improveConnectionAction => 'Compris';
+
+  @override
+  String clockSkewWarning(int minutes) {
+    return 'L\'horloge de votre appareil est décalée de ~$minutes min. Vérifiez vos paramètres de date et heure.';
+  }
 }

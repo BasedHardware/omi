@@ -2805,5 +2805,6 @@
     },
     "improveConnectionTitle": "Verbinding verbeteren",
     "improveConnectionContent": "We hebben verbeterd hoe Omi verbonden blijft met je apparaat. Om dit te activeren, ga naar de Apparaatinfo-pagina, tik op \"Apparaat loskoppelen\" en koppel je apparaat opnieuw.",
-    "improveConnectionAction": "Begrepen"
+    "improveConnectionAction": "Begrepen",
+    "clockSkewWarning": "De klok van je apparaat wijkt ~{minutes} min. af. Controleer je datum- en tijdinstellingen."
 }

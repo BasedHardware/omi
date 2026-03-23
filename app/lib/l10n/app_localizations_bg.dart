@@ -8677,4 +8677,9 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get improveConnectionAction => 'Разбрах';
+
+  @override
+  String clockSkewWarning(int minutes) {
+    return 'Часовникът на устройството ви е разместен с ~$minutes мин. Проверете настройките за дата и час.';
+  }
 }

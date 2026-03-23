@@ -8715,4 +8715,9 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get improveConnectionAction => 'Verstanden';
+
+  @override
+  String clockSkewWarning(int minutes) {
+    return 'Die Uhr deines Geräts weicht um ~$minutes Min. ab. Überprüfe deine Datums- und Uhrzeiteinstellungen.';
+  }
 }

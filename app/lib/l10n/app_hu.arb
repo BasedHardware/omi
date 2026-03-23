@@ -2901,5 +2901,6 @@
     },
     "improveConnectionTitle": "Kapcsolat javítása",
     "improveConnectionContent": "Javítottuk, hogyan marad az Omi csatlakozva az eszközödhöz. Az aktiváláshoz menj az Eszközinfo oldalra, koppints az \"Eszköz leválasztása\" gombra, majd párosítsd újra az eszközödet.",
-    "improveConnectionAction": "Értem"
+    "improveConnectionAction": "Értem",
+    "clockSkewWarning": "Az eszköz órája ~{minutes} perccel eltér. Ellenőrizze a dátum- és időbeállításokat."
 }

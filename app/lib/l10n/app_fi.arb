@@ -2805,5 +2805,6 @@
     },
     "improveConnectionTitle": "Paranna yhteyttä",
     "improveConnectionContent": "Olemme parantaneet Omin yhteydenpitoa laitteeseesi. Aktivoidaksesi tämän, siirry Laitteen tiedot -sivulle, napauta \"Katkaise laitteen yhteys\" ja yhdistä laitteesi uudelleen.",
-    "improveConnectionAction": "Selvä"
+    "improveConnectionAction": "Selvä",
+    "clockSkewWarning": "Laitteesi kello on ~{minutes} min. väärässä. Tarkista päivämäärä- ja aika-asetukset."
 }

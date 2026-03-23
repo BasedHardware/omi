@@ -8665,4 +8665,9 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get improveConnectionAction => 'Faham';
+
+  @override
+  String clockSkewWarning(int minutes) {
+    return 'Jam peranti anda berbeza ~$minutes min. Semak tetapan tarikh & masa anda.';
+  }
 }

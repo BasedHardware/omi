@@ -8660,4 +8660,9 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get improveConnectionAction => 'Rozumiem';
+
+  @override
+  String clockSkewWarning(int minutes) {
+    return 'Zegar urządzenia różni się o ~$minutes min. Sprawdź ustawienia daty i godziny.';
+  }
 }
