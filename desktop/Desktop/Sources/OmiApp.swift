@@ -284,8 +284,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if event.message?.formatted.hasPrefix("User Report") == true { return event }
         // Never send other events from dev builds — they pollute production Sentry data
         if isDev { return nil }
-        // Filter out HTTP errors targeting the dev tunnel — noise when the tunnel is down
-        if let urlTag = event.tags?["url"], urlTag.contains("m13v.com") {
+        // Filter out HTTP errors targeting dev/local URLs — noise when tunnels or local backends are down
+        if let urlTag = event.tags?["url"],
+          urlTag.contains("localhost") || urlTag.contains("127.0.0.1")
+            || urlTag.contains("trycloudflare.com")
+        {
           return nil
         }
         // Filter out NSURLErrorCancelled (-999) — these are intentional cancellations
