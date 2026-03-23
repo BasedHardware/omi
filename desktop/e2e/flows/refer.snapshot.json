@@ -1,0 +1,34 @@
+{
+  "version": 1,
+  "flow": "refer",
+  "flowHash": "fdbd8982cee8ac90",
+  "device": {
+    "model": "unknown",
+    "resolution": "unknown"
+  },
+  "createdAt": "2026-03-20T10:35:14.214Z",
+  "runId": "RncKA1E",
+  "totalDurationMs": 110000,
+  "verifySteps": [
+    "S1",
+    "S2",
+    "S3"
+  ],
+  "steps": {
+    "S1": {
+      "kind": "action",
+      "waitAfterMs": 53000,
+      "durationMs": 0
+    },
+    "S2": {
+      "kind": "verify",
+      "waitAfterMs": 57000,
+      "durationMs": 0
+    },
+    "S3": {
+      "kind": "action",
+      "waitAfterMs": 500,
+      "durationMs": 0
+    }
+  }
+}
