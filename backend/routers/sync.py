@@ -688,7 +688,8 @@ def _create_audio_files_for_synced_segment(uid: str, conversation_id: str, synci
 
 
 def process_segment(
-    path: str, uid: str, response: dict, source: ConversationSource = ConversationSource.omi, is_locked: bool = False
+    path: str, uid: str, response: dict, source: ConversationSource = ConversationSource.omi, is_locked: bool = False,
+    vocabulary: List[str] = None,
 ):
     url = get_syncing_file_temporal_signed_url(path)
 
@@ -698,7 +699,18 @@ def process_segment(
 
     threading.Thread(target=delete_file).start()
 
-    words, language = deepgram_prerecorded(url, speakers_count=3, attempts=0, return_language=True)
+    # Fetch user vocabulary if not provided
+    if vocabulary is None:
+        transcription_prefs = users_db.get_user_transcription_preferences(uid)
+        vocabulary = transcription_prefs.get('vocabulary', [])
+
+    # Always include "Omi" as predefined vocabulary
+    if vocabulary:
+        vocabulary = list({"Omi"} | set(vocabulary))
+    else:
+        vocabulary = ["Omi"]
+
+    words, language = deepgram_prerecorded(url, speakers_count=3, attempts=0, return_language=True, keywords=vocabulary)
     transcript_segments: List[TranscriptSegment] = postprocess_words(words, 0)
     if not transcript_segments:
         logger.error('failed to get deepgram segments')
@@ -853,6 +865,15 @@ async def sync_local_files(files: List[UploadFile] = File(...), uid: str = Depen
 
         is_locked = should_lock
 
+        # Fetch user transcription preferences for custom vocabulary
+        transcription_prefs = users_db.get_user_transcription_preferences(uid)
+        vocabulary = transcription_prefs.get('vocabulary', [])
+        # Always include "Omi" as predefined vocabulary
+        if vocabulary:
+            vocabulary = list({"Omi"} | set(vocabulary))
+        else:
+            vocabulary = ["Omi"]
+
         response = {'updated_memories': set(), 'new_memories': set()}
         threads = [
             threading.Thread(
@@ -863,6 +884,7 @@ async def sync_local_files(files: List[UploadFile] = File(...), uid: str = Depen
                     response,
                     source,
                     is_locked,
+                    vocabulary,
                 ),
             )
             for path in segmented_paths

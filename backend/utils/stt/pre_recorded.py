@@ -115,6 +115,7 @@ def deepgram_prerecorded(
     diarize: bool = True,
     language: Optional[str] = None,
     model: str = "nova-3",
+    keywords: List[str] = [],
 ) -> Union[List[dict], Tuple[List[dict], str]]:
     """
     Transcribe audio using Deepgram's pre-recorded API.
@@ -127,12 +128,13 @@ def deepgram_prerecorded(
         return_language: If True, returns (words, language) tuple
         language: Language code to force, or 'multi' for multilingual auto-detection
         diarize: If True, enable speaker diarization
+        keywords: List of custom vocabulary/keywords to improve transcription accuracy (keyterms for nova-3)
 
     Returns:
         List of word dicts with format: {'timestamp': [start, end], 'speaker': 'SPEAKER_XX', 'text': 'word'}
         Or tuple of (words, language) if return_language=True
     """
-    logger.info(f'deepgram_prerecorded {audio_url} {speakers_count} {attempts}')
+    logger.info(f'deepgram_prerecorded {audio_url} {speakers_count} {attempts} keywords={keywords}')
 
     try:
         # 'multi' language means auto-detection
@@ -148,6 +150,13 @@ def deepgram_prerecorded(
         }
         if language and not is_multi:
             options["language"] = language
+
+        # Add keywords/keyterms for custom vocabulary (nova-3 uses keyterm, nova-2 uses keywords)
+        if keywords:
+            if model in ['nova-3', 'nova-3-general']:
+                options["keyterm"] = keywords
+            else:
+                options["keywords"] = keywords
 
         response = _deepgram_client.listen.rest.v("1").transcribe_url({"url": audio_url}, options)
 
@@ -205,6 +214,7 @@ def deepgram_prerecorded(
                 diarize,
                 language,
                 model,
+                keywords,
             )
         if return_language:
             return [], 'en'
