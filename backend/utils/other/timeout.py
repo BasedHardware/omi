@@ -1,5 +1,5 @@
 from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.responses import Response
+from starlette.responses import JSONResponse, Response
 from fastapi import Request
 import asyncio
 import os
@@ -47,7 +47,17 @@ class TimeoutMiddleware(BaseHTTPMiddleware):
                 request_age = current_time - request_start_time
 
                 if request_age > self.maximum_age_seconds + self.clock_skew_allowance:
-                    return Response(status_code=408, content="Request is too old and has been rejected.")
+                    return JSONResponse(
+                        status_code=408,
+                        content={
+                            "error": "clock_skew",
+                            "message": "Request rejected — your device clock may be out of sync",
+                            "server_time": current_time,
+                            "client_time": request_start_time,
+                            "skew_seconds": round(request_age, 1),
+                            "hint": "Check your device date/time settings and enable automatic time",
+                        },
+                    )
             except (ValueError, TypeError):
                 pass
 
