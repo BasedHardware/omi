@@ -41,6 +41,8 @@ class UpdateActionItemRequest(BaseModel):
     export_platform: Optional[str] = Field(default=None, description="Platform the item was exported to")
     sort_order: Optional[int] = Field(default=None, description="Manual sort order within category")
     indent_level: Optional[int] = Field(default=None, ge=0, le=3, description="Indentation level (0-3)")
+    external_task_id: Optional[str] = Field(default=None, description="External task ID from sync platform")
+    synced_from_platform: Optional[str] = Field(default=None, description="Platform tasks were synced from")
 
 
 class ActionItemResponse(BaseModel):
@@ -58,6 +60,8 @@ class ActionItemResponse(BaseModel):
     export_platform: Optional[str] = None
     sort_order: int = 0
     indent_level: int = 0
+    external_task_id: Optional[str] = None
+    synced_from_platform: Optional[str] = None
 
 
 def _get_valid_action_item(uid: str, action_item_id: str) -> dict:
@@ -230,6 +234,10 @@ def update_action_item(
         update_data['sort_order'] = request.sort_order
     if request.indent_level is not None:
         update_data['indent_level'] = request.indent_level
+    if request.external_task_id is not None:
+        update_data['external_task_id'] = request.external_task_id
+    if request.synced_from_platform is not None:
+        update_data['synced_from_platform'] = request.synced_from_platform
 
     # Update the action item
     success = action_items_db.update_action_item(uid, action_item_id, update_data)

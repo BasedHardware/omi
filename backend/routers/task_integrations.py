@@ -675,6 +675,17 @@ class CreateTaskResponse(BaseModel):
     error: Optional[str] = None
 
 
+class SyncInboundResponse(BaseModel):
+    """Response for inbound sync (pulling tasks from external services)"""
+
+    success: bool
+    platform: Optional[str] = None
+    imported: int = 0
+    updated: int = 0
+    total_external: int = 0
+    error: Optional[str] = None
+
+
 @router.post("/v1/task-integrations/{app_key}/tasks", response_model=CreateTaskResponse, tags=['task-integrations'])
 async def create_task_via_integration(
     app_key: str, request: CreateTaskRequest, uid: str = Depends(auth.get_current_user_uid)
@@ -1215,6 +1226,38 @@ async def clickup_oauth_callback(
     )
 
     return await handle_oauth_callback(request, 'clickup', code, state, config)
+
+
+@router.get(
+    "/v1/task-integrations/{app_key}/sync-inbound",
+    response_model=SyncInboundResponse,
+    tags=['task-integrations'],
+)
+async def sync_tasks_from_integration(
+    app_key: str, uid: str = Depends(auth.get_current_user_uid)
+):
+    """
+    Pull/fetch tasks from an external task integration into Omi action items.
+
+    This is the inbound (pull) direction of two-way sync. It fetches tasks
+    from the specified platform and creates new action_items in Omi for any
+    tasks that don't already exist (tracked via external_task_id).
+
+    Note: Only tasks that originated in the external service are imported.
+    Tasks created in Omi and pushed to the external service are not pulled back.
+    """
+    from utils.task_sync import sync_tasks_from_external
+
+    result = await sync_tasks_from_external(uid, app_key=app_key)
+    # Map 'synced' from task_sync to 'success' for the response model
+    return SyncInboundResponse(
+        success=result.get("synced", False),
+        platform=result.get("platform"),
+        imported=result.get("imported", 0),
+        updated=result.get("updated", 0),
+        total_external=result.get("total_external", 0),
+        error=result.get("error"),
+    )
 
 
 @router.on_event("shutdown")
