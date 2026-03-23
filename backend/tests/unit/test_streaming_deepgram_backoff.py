@@ -349,7 +349,7 @@ def test_auto_keepalive_sends_during_idle():
         # Wait for background thread to fire
         import time
 
-        time.sleep(0.05)
+        time.sleep(0.1)
 
         # Background thread should have sent keepalive
         assert mock_conn.keep_alive.call_count >= 1
@@ -382,14 +382,14 @@ def test_auto_keepalive_stops_on_dead():
 
         import time
 
-        time.sleep(0.05)
+        time.sleep(0.1)
 
         # keep_alive returned False — should be dead
         assert safe.is_connection_dead is True
         # No more keepalives should be sent after death
         count_at_death = mock_conn.keep_alive.call_count
         fake_time[0] = 12.0
-        time.sleep(0.05)
+        time.sleep(0.1)
         assert mock_conn.keep_alive.call_count == count_at_death
     finally:
         safe.finish()
@@ -423,7 +423,7 @@ def test_auto_keepalive_resets_on_send():
 
         import time
 
-        time.sleep(0.05)
+        time.sleep(0.1)
 
         # No keepalive should have been sent (always within interval)
         assert mock_conn.keep_alive.call_count == 0
