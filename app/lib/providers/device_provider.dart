@@ -490,7 +490,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     try {
       if (SharedPreferencesUtil().companionAssociationPrompted) return;
       if (await BleHostApi().hasCompanionDeviceAssociation()) return;
-      final ctx = MyApp.navigatorKey.currentContext;
+      final ctx = globalNavigatorKey.currentContext;
       if (ctx == null || !ctx.mounted) return;
       SharedPreferencesUtil().companionAssociationPrompted = true;
       await showDialog(
