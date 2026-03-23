@@ -86,6 +86,15 @@ void main() {
       expect(ClockSkewDetector.parseResponse(response), isNull);
     });
 
+    test('handles string skew_seconds', () {
+      final response = _make408(
+        body: jsonEncode({'error': 'clock_skew', 'skew_seconds': '900'}),
+      );
+      final result = ClockSkewDetector.parseResponse(response);
+      expect(result, isNotNull);
+      expect(result!.skewSeconds, 900);
+    });
+
     test('handles integer skew_seconds', () {
       final response = _make408(
         body: jsonEncode({'error': 'clock_skew', 'skew_seconds': 900}),
@@ -252,6 +261,26 @@ void main() {
       detector.checkResponse(_makeValid408());
       await Future.delayed(Duration.zero);
       expect(events, hasLength(1)); // Still suppressed
+      await sub.cancel();
+    });
+
+    test('suppresses at exact cooldown boundary (45s)', () async {
+      final events = <ClockSkewEvent>[];
+      final sub = detector.onClockSkew.listen(events.add);
+
+      detector.checkResponse(_makeValid408());
+      await Future.delayed(Duration.zero);
+      expect(events, hasLength(1));
+
+      // Set _lastEmittedAt to exactly 45s ago — code uses strict < so this is NOT suppressed
+      detector.setLastEmittedAtForTesting(
+        DateTime.now().subtract(const Duration(seconds: 45)),
+      );
+
+      detector.checkResponse(_makeValid408());
+      await Future.delayed(Duration.zero);
+      // At exactly 45s, difference == cooldown, so !(diff < cooldown) → emits
+      expect(events, hasLength(2));
       await sub.cancel();
     });
 
