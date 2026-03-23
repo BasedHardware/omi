@@ -9,7 +9,7 @@ import 'package:omi/gen/pigeon_communicator.g.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
-import 'package:omi/main.dart';
+import 'package:omi/app_globals.dart';
 import 'package:omi/pages/home/firmware_update.dart';
 import 'package:omi/pages/home/omiglass_ota_update.dart';
 import 'package:omi/providers/capture_provider.dart';
@@ -165,7 +165,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
         );
         if (batteryLevel < 20 && !_hasLowBatteryAlerted) {
           _hasLowBatteryAlerted = true;
-          final ctx = MyApp.navigatorKey.currentContext;
+          final ctx = globalNavigatorKey.currentContext;
           NotificationService.instance.createNotification(
             title: ctx?.l10n.lowBatteryAlertTitle ?? "Low Battery Alert",
             body: ctx?.l10n.lowBatteryAlertBody ?? "Your device is running low on battery. Time for a recharge! 🔋",
@@ -394,7 +394,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     PlatformManager.instance.crashReporter.logInfo('Omi Device Disconnected');
     _disconnectNotificationTimer?.cancel();
     _disconnectNotificationTimer = Timer(const Duration(seconds: 30), () {
-      final ctx = MyApp.navigatorKey.currentContext;
+      final ctx = globalNavigatorKey.currentContext;
       NotificationService.instance.createNotification(
         title: ctx?.l10n.deviceDisconnectedNotificationTitle ?? 'Your Omi Device Disconnected',
         body: ctx?.l10n.deviceDisconnectedNotificationBody ?? 'Please reconnect to continue using your Omi.',
@@ -532,7 +532,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
       if (_havingNewFirmware) {
         // Use a small delay to ensure the UI is ready
         Future.delayed(const Duration(milliseconds: 500), () {
-          final context = MyApp.navigatorKey.currentContext;
+          final context = globalNavigatorKey.currentContext;
           if (context != null) {
             showFirmwareUpdateDialog(context);
           }

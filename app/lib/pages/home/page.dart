@@ -19,7 +19,7 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/geolocation.dart';
-import 'package:omi/main.dart';
+import 'package:omi/app_globals.dart';
 import 'package:omi/pages/action_items/action_items_page.dart';
 import 'package:omi/pages/apps/app_detail/app_detail.dart';
 import 'package:omi/pages/apps/page.dart';
@@ -362,11 +362,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
             }
           });
           if (detailPageId == 'data-privacy') {
-            MyApp.navigatorKey.currentState?.push(MaterialPageRoute(builder: (context) => const DataPrivacyPage()));
+            globalNavigatorKey.currentState?.push(MaterialPageRoute(builder: (context) => const DataPrivacyPage()));
           }
           break;
         case "facts":
-          MyApp.navigatorKey.currentState?.push(MaterialPageRoute(builder: (context) => const MemoriesPage()));
+          globalNavigatorKey.currentState?.push(MaterialPageRoute(builder: (context) => const MemoriesPage()));
           break;
         case "conversation":
           // Handle conversation deep link: /conversation/{id}?share=1
