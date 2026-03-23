@@ -1465,7 +1465,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String get payYourSttProvider => 'Omi\'yi özgürce kullanın. Sadece STT sağlayıcınıza doğrudan ödeme yaparsınız.';
 
   @override
-  String get freeMinutesMonth => 'Ayda 4.800 ücretsiz dakika dahildir. ';
+  String get freeMinutesMonth => 'Ayda 1.200 ücretsiz dakika dahildir. ';
 
   @override
   String get omiUnlimited => 'Omi Sınırsız';
@@ -4773,7 +4773,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String get noSpecificDataAccessConfigured => 'Belirli veri erişimi yapılandırılmamış.';
 
   @override
-  String get basicPlanDescription => '4.800 premium dakika + cihazda sınırsız';
+  String get basicPlanDescription => '1.200 premium dakika + cihazda sınırsız';
 
   @override
   String get minutes => 'dakika';
@@ -6102,7 +6102,7 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get premiumMinutesInfo =>
-      'Ayda 4.800 premium dakika. Cihaz Üzerinde sekmesi sınırsız ücretsiz transkripsiyon sunar.';
+      'Ayda 1.200 premium dakika. Cihaz Üzerinde sekmesi sınırsız ücretsiz transkripsiyon sunar.';
 
   @override
   String get viewUsage => 'Kullanımı görüntüle';
@@ -6183,7 +6183,7 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get premiumMinutesMonth =>
-      'Ayda 4.800 premium dakika. Cihaz Üzerinde sekmesi sınırsız ücretsiz transkripsiyon sunar. ';
+      'Ayda 1.200 premium dakika. Cihaz Üzerinde sekmesi sınırsız ücretsiz transkripsiyon sunar. ';
 
   @override
   String get audioProcessedLocally =>

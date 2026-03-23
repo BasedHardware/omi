@@ -1464,7 +1464,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get payYourSttProvider => 'Voľne používajte omi. Platíte len svojmu poskytovateľovi STT priamo.';
 
   @override
-  String get freeMinutesMonth => '4 800 bezplatných minút/mesiac je zahrnutých. Neobmedzené s ';
+  String get freeMinutesMonth => '1 200 bezplatných minút/mesiac je zahrnutých. Neobmedzené s ';
 
   @override
   String get omiUnlimited => 'Omi Unlimited';
@@ -4760,7 +4760,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get noSpecificDataAccessConfigured => 'Nie je nakonfigurovaný žiadny konkrétny prístup k údajom.';
 
   @override
-  String get basicPlanDescription => '4 800 prémiových minút + neobmedzené na zariadení';
+  String get basicPlanDescription => '1 200 prémiových minút + neobmedzené na zariadení';
 
   @override
   String get minutes => 'minút';
@@ -6088,7 +6088,7 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get premiumMinutesInfo =>
-      '4 800 prémiových minút/mesiac. Karta Na zariadení ponúka neobmedzený bezplatný prepis.';
+      '1 200 prémiových minút/mesiac. Karta Na zariadení ponúka neobmedzený bezplatný prepis.';
 
   @override
   String get viewUsage => 'Zobraziť využitie';
@@ -6170,7 +6170,7 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get premiumMinutesMonth =>
-      '4 800 prémiových minút/mesiac. Karta Na zariadení ponúka neobmedzený bezplatný prepis. ';
+      '1 200 prémiových minút/mesiac. Karta Na zariadení ponúka neobmedzený bezplatný prepis. ';
 
   @override
   String get audioProcessedLocally =>

@@ -264,7 +264,7 @@ env:
         name: prod-omi-backend-secrets
         key: STT_SERVICE_MODELS
   - name: BASIC_TIER_MINUTES_LIMIT_PER_MONTH
-    value: "4800"
+    value: "1200"
   - name: BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH
     value: "0"
   - name: BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH

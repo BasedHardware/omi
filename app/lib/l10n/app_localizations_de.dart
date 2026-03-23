@@ -1472,7 +1472,7 @@ class AppLocalizationsDe extends AppLocalizations {
   String get payYourSttProvider => 'Nutzen Sie Omi kostenlos. Sie bezahlen nur Ihren STT-Anbieter direkt.';
 
   @override
-  String get freeMinutesMonth => '4.800 kostenlose Minuten/Monat inklusive. Unbegrenzt mit ';
+  String get freeMinutesMonth => '1.200 kostenlose Minuten/Monat inklusive. Unbegrenzt mit ';
 
   @override
   String get omiUnlimited => 'Omi Unbegrenzt';
@@ -4801,7 +4801,7 @@ class AppLocalizationsDe extends AppLocalizations {
   String get noSpecificDataAccessConfigured => 'Kein spezifischer Datenzugriff konfiguriert.';
 
   @override
-  String get basicPlanDescription => '4.800 Premium-Minuten + unbegrenzt on-device';
+  String get basicPlanDescription => '1.200 Premium-Minuten + unbegrenzt on-device';
 
   @override
   String get minutes => 'Minuten';
@@ -6137,7 +6137,7 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get premiumMinutesInfo =>
-      '4.800 Premium-Minuten/Monat. Der Tab Auf Gerät bietet unbegrenzte kostenlose Transkription.';
+      '1.200 Premium-Minuten/Monat. Der Tab Auf Gerät bietet unbegrenzte kostenlose Transkription.';
 
   @override
   String get viewUsage => 'Nutzung anzeigen';
@@ -6220,7 +6220,7 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get premiumMinutesMonth =>
-      '4.800 Premium-Minuten/Monat. Der Tab Auf Gerät bietet unbegrenzte kostenlose Transkription. ';
+      '1.200 Premium-Minuten/Monat. Der Tab Auf Gerät bietet unbegrenzte kostenlose Transkription. ';
 
   @override
   String get audioProcessedLocally =>

@@ -4749,7 +4749,7 @@ class AppLocalizationsDa extends AppLocalizations {
   String get noSpecificDataAccessConfigured => 'Ingen specifik dataadgang konfigureret.';
 
   @override
-  String get basicPlanDescription => '4.800 premium minutter + ubegrænset on-device';
+  String get basicPlanDescription => '1.200 premium minutter + ubegrænset on-device';
 
   @override
   String get minutes => 'minutter';
@@ -6075,7 +6075,7 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get premiumMinutesInfo =>
-      '4.800 premium minutter/måned. Lokal-fanen tilbyder ubegrænset gratis transskription.';
+      '1.200 premium minutter/måned. Lokal-fanen tilbyder ubegrænset gratis transskription.';
 
   @override
   String get viewUsage => 'Se forbrug';
@@ -6156,7 +6156,7 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get premiumMinutesMonth =>
-      '4.800 premium minutter/måned. Fanen På enheden tilbyder ubegrænset gratis transskription. ';
+      '1.200 premium minutter/måned. Fanen På enheden tilbyder ubegrænset gratis transskription. ';
 
   @override
   String get audioProcessedLocally => 'Lyd behandles lokalt. Fungerer offline, mere privat, men bruger mere batteri.';
