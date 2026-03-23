@@ -65,17 +65,24 @@ def test_within_clock_skew_tolerance_passes():
     assert response.status_code == 200
 
 
-def test_beyond_tolerance_rejected():
-    """Request beyond max_age + skew_allowance is rejected with 408.
+def test_beyond_tolerance_rejected_with_clock_skew_json():
+    """Request beyond max_age + skew_allowance returns 408 with clock skew JSON.
 
     Default: max_age=5min, skew_allowance=5min, effective threshold=10min.
-    A 15-minute-old request should be rejected.
+    A 15-minute-old request should be rejected with diagnostic info.
     """
     app = _make_app()
     client = TestClient(app)
     very_stale_time = str(time.time() - 900)  # 15 minutes ago
     response = client.get("/ok", headers={"X-Request-Start-Time": very_stale_time})
     assert response.status_code == 408
+    body = response.json()
+    assert body["error"] == "clock_skew"
+    assert "server_time" in body
+    assert "client_time" in body
+    assert "skew_seconds" in body
+    assert body["skew_seconds"] >= 900
+    assert "hint" in body
 
 
 def test_at_exact_boundary_rejected():
