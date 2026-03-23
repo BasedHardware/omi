@@ -1471,7 +1471,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get payYourSttProvider => 'Χρησιμοποιήστε ελεύθερα το omi. Πληρώνετε μόνο τον πάροχο STT σας απευθείας.';
 
   @override
-  String get freeMinutesMonth => '4.800 δωρεάν λεπτά/μήνα συμπεριλαμβάνονται. Απεριόριστο με ';
+  String get freeMinutesMonth => '1.200 δωρεάν λεπτά/μήνα συμπεριλαμβάνονται. Απεριόριστο με ';
 
   @override
   String get omiUnlimited => 'Omi Απεριόριστο';
@@ -4801,7 +4801,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get noSpecificDataAccessConfigured => 'Δεν έχει ρυθμιστεί συγκεκριμένη πρόσβαση δεδομένων.';
 
   @override
-  String get basicPlanDescription => '4.800 premium λεπτά + απεριόριστα στη συσκευή';
+  String get basicPlanDescription => '1.200 premium λεπτά + απεριόριστα στη συσκευή';
 
   @override
   String get minutes => 'λεπτά';
@@ -6135,7 +6135,7 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get premiumMinutesInfo =>
-      '4.800 premium λεπτά/μήνα. Η καρτέλα Στη Συσκευή προσφέρει απεριόριστη δωρεάν μεταγραφή.';
+      '1.200 premium λεπτά/μήνα. Η καρτέλα Στη Συσκευή προσφέρει απεριόριστη δωρεάν μεταγραφή.';
 
   @override
   String get viewUsage => 'Προβολή χρήσης';
@@ -6217,7 +6217,7 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get premiumMinutesMonth =>
-      '4.800 premium λεπτά/μήνα. Η καρτέλα Στη συσκευή προσφέρει απεριόριστη δωρεάν μεταγραφή. ';
+      '1.200 premium λεπτά/μήνα. Η καρτέλα Στη συσκευή προσφέρει απεριόριστη δωρεάν μεταγραφή. ';
 
   @override
   String get audioProcessedLocally =>

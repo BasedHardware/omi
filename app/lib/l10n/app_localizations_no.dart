@@ -1460,7 +1460,7 @@ class AppLocalizationsNo extends AppLocalizations {
   String get payYourSttProvider => 'Bruk omi fritt. Du betaler bare STT-leverandøren direkte.';
 
   @override
-  String get freeMinutesMonth => '4 800 gratis minutter/måned inkludert. Ubegrenset med ';
+  String get freeMinutesMonth => '1 200 gratis minutter/måned inkludert. Ubegrenset med ';
 
   @override
   String get omiUnlimited => 'Omi Ubegrenset';
@@ -4765,7 +4765,7 @@ class AppLocalizationsNo extends AppLocalizations {
   String get noSpecificDataAccessConfigured => 'Ingen spesifikk datatilgang konfigurert.';
 
   @override
-  String get basicPlanDescription => '4 800 premium minutter + ubegrenset on-device';
+  String get basicPlanDescription => '1 200 premium minutter + ubegrenset on-device';
 
   @override
   String get minutes => 'minutter';
@@ -6090,7 +6090,7 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get premiumMinutesInfo =>
-      '4800 premium-minutter/måned. Fanen På enheten tilbyr ubegrenset gratis transkribering.';
+      '1200 premium-minutter/måned. Fanen På enheten tilbyr ubegrenset gratis transkribering.';
 
   @override
   String get viewUsage => 'Se forbruk';
@@ -6170,7 +6170,7 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get premiumMinutesMonth =>
-      '4800 premium minutter/måned. På enheten-fanen tilbyr ubegrenset gratis transkribering. ';
+      '1200 premium minutter/måned. På enheten-fanen tilbyr ubegrenset gratis transkribering. ';
 
   @override
   String get audioProcessedLocally => 'Lyd behandles lokalt. Fungerer offline, mer privat, men bruker mer batteri.';

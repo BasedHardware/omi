@@ -1465,7 +1465,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get payYourSttProvider => 'Sử dụng omi tự do. Bạn chỉ trả tiền cho nhà cung cấp STT trực tiếp.';
 
   @override
-  String get freeMinutesMonth => '4.800 phút miễn phí/tháng được bao gồm. Không giới hạn với ';
+  String get freeMinutesMonth => '1.200 phút miễn phí/tháng được bao gồm. Không giới hạn với ';
 
   @override
   String get omiUnlimited => 'Omi Unlimited';
@@ -4771,7 +4771,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get noSpecificDataAccessConfigured => 'Không có quyền truy cập dữ liệu cụ thể nào được cấu hình.';
 
   @override
-  String get basicPlanDescription => '4.800 phút cao cấp + không giới hạn trên thiết bị';
+  String get basicPlanDescription => '1.200 phút cao cấp + không giới hạn trên thiết bị';
 
   @override
   String get minutes => 'phút';
@@ -6176,7 +6176,7 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get premiumMinutesMonth =>
-      '4.800 phút premium/tháng. Tab Trên thiết bị cung cấp phiên âm miễn phí không giới hạn. ';
+      '1.200 phút premium/tháng. Tab Trên thiết bị cung cấp phiên âm miễn phí không giới hạn. ';
 
   @override
   String get audioProcessedLocally =>
