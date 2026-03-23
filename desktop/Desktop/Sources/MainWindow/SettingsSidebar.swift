@@ -75,6 +75,11 @@ struct SettingsSearchItem: Identifiable {
         SettingsSearchItem(name: "AI Provider", subtitle: "Choose between Agent SDK and Claude Code for AI chat", keywords: ["provider", "agent sdk", "claude code", "acp", "bridge mode"], section: .aiChat, icon: "cpu", settingId: "aichat.provider"),
         SettingsSearchItem(name: "Dev Mode", subtitle: "Developer tools and debugging options", keywords: ["developer", "debug", "dev mode", "development"], section: .aiChat, icon: "cpu", settingId: "aichat.devmode"),
 
+        // Device
+        SettingsSearchItem(name: "Device", subtitle: "Connect and manage your omi hardware device", keywords: ["hardware", "omi device", "bluetooth", "ble", "pair", "connect", "wireless"], section: .device, icon: "wave.3.right.circle", settingId: "device.device"),
+        SettingsSearchItem(name: "Bluetooth", subtitle: "Pair and connect via Bluetooth", keywords: ["bluetooth", "ble", "connect", "pair", "wireless"], section: .device, icon: "wave.3.right.circle", settingId: "device.bluetooth"),
+        SettingsSearchItem(name: "Firmware Update", subtitle: "Update your device firmware", keywords: ["firmware", "flash", "device update"], section: .device, icon: "wave.3.right.circle", settingId: "device.firmware"),
+
         // About
         SettingsSearchItem(name: "Software Updates", subtitle: "Check for and manage app updates", keywords: ["update", "auto update", "sparkle", "version", "check for updates", "check now"], section: .about, icon: "info.circle", settingId: "about.updates"),
         SettingsSearchItem(name: "Automatic Updates", subtitle: "Check for updates automatically in the background", keywords: ["auto check", "background updates", "check automatically"], section: .about, icon: "info.circle", settingId: "about.autoupdates"),
@@ -324,6 +329,7 @@ struct SettingsSidebarItem: View {
         case .planUsage: return "creditcard"
         case .aiChat: return "cpu"
         case .floatingBar: return "sparkles"
+        case .device: return "wave.3.right.circle"
         case .advanced: return "chart.bar"
         case .about: return "info.circle"
         }

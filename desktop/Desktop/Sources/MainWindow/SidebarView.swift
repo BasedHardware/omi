@@ -265,11 +265,9 @@ struct SidebarView: View {
                     // Subscription upgrade banner
                     // upgradeToPro
 
-                    // Device status widget (when device paired/connected)
-                    if deviceProvider.isConnected || deviceProvider.pairedDevice != nil {
-                        Spacer().frame(height: 12)
-                        deviceStatusWidget
-                    }
+                    // Device status widget
+                    Spacer().frame(height: 12)
+                    deviceStatusWidget
 
                     // Get Omi promo widget (dismissible sales link)
                     if showGetOmiWidget {

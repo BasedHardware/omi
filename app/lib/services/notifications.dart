@@ -22,6 +22,20 @@ class NotificationUtil {
   static Future<void> initializeNotificationsEventListeners() async {
     // Only after at least the action method is set, the notification events are delivered
     AwesomeNotifications().setListeners(onActionReceivedMethod: NotificationUtil.onActionReceivedMethod);
+
+    // Check if the app was launched from a notification tap
+    // This handles the case where the app was killed and launched via notification
+    try {
+      final receivedAction = await AwesomeNotifications().getInitialNotification();
+      if (receivedAction != null && receivedAction.payload != null && receivedAction.payload!.isNotEmpty) {
+        // Use addPostFrameCallback to ensure the navigator is ready
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          onActionReceivedMethodImpl(receivedAction);
+        });
+      }
+    } catch (e) {
+      Logger.debug('Failed to get initial notification: $e');
+    }
   }
 
   static Future<void> initializeIsolateReceivePort() async {

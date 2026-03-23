@@ -244,6 +244,7 @@ struct SettingsContentView: View {
         case planUsage = "Plan and Usage"
         case aiChat = "AI Chat"
         case floatingBar = "Floating Bar"
+        case device = "Device"
         case advanced = "Advanced"
         case about = "About"
     }
@@ -389,6 +390,8 @@ struct SettingsContentView: View {
                     aiChatSection
                 case .floatingBar:
                     floatingBarSection
+                case .device:
+                    deviceSection
                 case .advanced:
                     advancedSection
                 case .about:
@@ -2499,6 +2502,10 @@ struct SettingsContentView: View {
             Spacer()
         }
         .padding(.top, 16)
+    }
+
+    private var deviceSection: some View {
+        DeviceSettingsPage()
     }
 
     private var advancedSection: some View {

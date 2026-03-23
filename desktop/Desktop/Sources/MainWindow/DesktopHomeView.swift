@@ -635,7 +635,8 @@ struct DesktopHomeView: View {
       }
     }
     .onReceive(NotificationCenter.default.publisher(for: .navigateToDeviceSettings)) { _ in
-      // Set the section directly and navigate to settings
+      // Navigate to Settings > Device section
+      selectedSettingsSection = .device
       withAnimation(.easeInOut(duration: 0.2)) {
         selectedIndex = SidebarNavItem.settings.rawValue
       }
