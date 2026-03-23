@@ -1,0 +1,38 @@
+issue: 5929
+title: "Voice chat transcription fails with 408 on retry due to clock skew"
+driver: kelvin
+integration_branch: collab/5929-integration
+
+scopes:
+  - name: backend-clock-skew-tolerance
+    owner: kenji
+    status: in_progress
+    files:
+      - backend/utils/other/timeout.py
+      - backend/tests/unit/test_timeout_middleware.py
+    endpoints:
+      - "ALL (middleware affects all endpoints)"
+    description: >
+      Add HTTP_CLOCK_SKEW_ALLOWANCE env var to TimeoutMiddleware.
+      Change stale check threshold from max_age to max_age + skew_allowance.
+      Return JSON body on 408 with server_time, client_time, skew_seconds.
+      12+ unit tests.
+
+  - name: app-clock-skew-notification
+    owner: kelvin
+    status: planned
+    files:
+      - app/lib/backend/http/shared.dart
+      - app/lib/l10n/app_en.arb
+      - app/lib/l10n/app_*.arb
+    endpoints: []
+    description: >
+      Parse 408 JSON response in Flutter HTTP layer.
+      Detect clock skew from server response.
+      Show user-facing warning about device clock being off.
+
+do_not_touch:
+  - kenji does NOT edit app/ files
+  - kelvin does NOT edit backend/utils/other/timeout.py or backend/tests/unit/test_timeout_middleware.py
+
+shared_zones: []
