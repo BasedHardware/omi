@@ -1,0 +1,58 @@
+{
+  "version": 1,
+  "flow": "screen-recording-permission",
+  "flowHash": "ce2b70ad453553a4",
+  "device": {
+    "model": "unknown",
+    "resolution": "unknown"
+  },
+  "createdAt": "2026-03-20T11:25:45.569Z",
+  "runId": "EnM-aak",
+  "totalDurationMs": 1,
+  "verifySteps": [
+    "S1",
+    "S2",
+    "S3",
+    "S4",
+    "S5",
+    "S6",
+    "S7"
+  ],
+  "steps": {
+    "S1": {
+      "kind": "verify",
+      "waitAfterMs": 200,
+      "durationMs": 1
+    },
+    "S2": {
+      "kind": "verify",
+      "waitAfterMs": 200,
+      "durationMs": 0
+    },
+    "S3": {
+      "kind": "verify",
+      "waitAfterMs": 200,
+      "durationMs": 0
+    },
+    "S4": {
+      "kind": "verify",
+      "waitAfterMs": 200,
+      "durationMs": 0
+    },
+    "S5": {
+      "kind": "verify",
+      "waitAfterMs": 200,
+      "durationMs": 0
+    },
+    "S6": {
+      "kind": "verify",
+      "waitAfterMs": 200,
+      "durationMs": 0
+    },
+    "S7": {
+      "kind": "verify",
+      "waitAfterMs": 500,
+      "durationMs": 0
+    }
+  }
+}
