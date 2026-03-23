@@ -231,17 +231,26 @@ for lang_patterns in SPEAKER_IDENTIFICATION_PATTERNS.values():
 
 # Lazy import to avoid hard dependency on spaCy (NER is an optional enhancement)
 _ner_detection_available = None
+_ner_module = None
+
+try:
+    from utils import ner_speaker_detection
+    _ner_module = ner_speaker_detection
+except ImportError:
+    pass
 
 
 def _is_ner_available() -> bool:
     """Check if NER-based detection is available (cached)."""
     global _ner_detection_available
     if _ner_detection_available is None:
-        try:
-            from utils.ner_speaker_detection import is_ner_available
-            _ner_detection_available = is_ner_available()
-        except Exception:
+        if _ner_module is None:
             _ner_detection_available = False
+        else:
+            try:
+                _ner_detection_available = _ner_module.is_ner_available()
+            except Exception:
+                _ner_detection_available = False
     return _ner_detection_available
 
 
@@ -274,8 +283,7 @@ def detect_speaker_from_text(text: str) -> Optional[str]:
     # other contexts that don't follow self-introduction patterns
     if _is_ner_available():
         try:
-            from utils.ner_speaker_detection import detect_persons_with_ner
-            persons = detect_persons_with_ner(text, max_persons=1)
+            persons = _ner_module.detect_persons_with_ner(text, max_persons=1)
             if persons:
                 # Return the first detected person name
                 return persons[0]
@@ -319,8 +327,7 @@ def detect_all_speakers_from_text(text: str) -> List[str]:
     # Add NER-based detection (may find additional names)
     if _is_ner_available():
         try:
-            from utils.ner_speaker_detection import detect_persons_with_ner
-            ner_persons = detect_persons_with_ner(text, max_persons=5)
+            ner_persons = _ner_module.detect_persons_with_ner(text, max_persons=5)
             for name in ner_persons:
                 if name.lower() not in seen_lower:
                     found_names.append(name)

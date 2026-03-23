@@ -23,7 +23,7 @@ import re
 from typing import List, Optional, Set
 
 import spacy
-from spacy.tokens import Doc
+from spacy.tokens import Doc, Span
 
 logger = logging.getLogger(__name__)
 
@@ -103,9 +103,20 @@ def _is_valid_person_name(name: str, context_before: str = "", context_after: st
         return False
 
     # Check for common name introduction patterns - if "name" appears after
-    # words like "called" or "named", it's more likely to be a real name
+    # words like "called" or "named", it's more likely to be a real name.
+    # Use word-boundary-aware matching to avoid false positives from "is "
+    # appearing in unrelated sentences like "The issue is complex".
     context_lower = context_before.lower()
-    if any(p in context_lower for p in ["called ", "named ", "is ", "this is ", "i'm ", "i am "]):
+    # Match patterns like "I'm John", "I am John", "This is John", "called John", "named John"
+    # The pattern ends with a word boundary to ensure we match complete phrases.
+    introduction_patterns = [
+        r"\bi'm\s",       # "I'm " - I am contraction
+        r"\bi\s+am\s+",   # "I am " - full form
+        r"\bthis\s+is\s+", # "This is " - demonstrative
+        r"\bcalled\s+",   # "called " - explicit naming
+        r"\bnamed\s+",    # "named " - explicit naming
+    ]
+    if any(re.search(p, context_lower) for p in introduction_patterns):
         return True
 
     # Filter if preceded by just a greeting or filler word
@@ -117,7 +128,7 @@ def _is_valid_person_name(name: str, context_before: str = "", context_after: st
     return True
 
 
-def _get_context(doc: Doc, ent: spacy.tokensSpan, window: int = 10) -> tuple:
+def _get_context(doc: Doc, ent: Span, window: int = 10) -> tuple:
     """
     Get surrounding text context for an entity.
 

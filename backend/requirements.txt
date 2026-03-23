@@ -207,7 +207,8 @@ sortedcontainers==2.4.0
 SoundCard==0.4.3
 soundfile==0.12.1
 soxr==0.4.0
-spacy>=3.7.0
+spacy>=3.7.0,<4.0.0
+en-core-web-sm>=3.7.0,<3.8.0
 speechbrain==1.0.0
 speechmatics-python==2.0.1
 SQLAlchemy==2.0.32
