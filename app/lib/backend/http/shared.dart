@@ -5,13 +5,11 @@ import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:path/path.dart';
 
+import 'package:omi/backend/http/clock_skew_detector.dart';
 import 'package:omi/backend/http/http_pool_manager.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/env/env.dart';
-import 'package:omi/l10n/app_localizations.dart';
-import 'package:omi/app_globals.dart';
 import 'package:omi/services/auth_service.dart';
-import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 
@@ -92,113 +90,8 @@ Future<http.StreamedResponse> makeRawApiCall({
   return HttpPoolManager.instance.sendStreaming(request);
 }
 
-const Duration _clockSkewSnackbarCooldown = Duration(seconds: 45);
-DateTime? _lastClockSkewSnackbarAt;
-
 void _checkClockSkewResponse(http.Response response) {
-  final clockSkewResponse = _parseClockSkewResponse(response);
-  if (clockSkewResponse == null) {
-    return;
-  }
-
-  final skewMinutes = _toSkewMinutes(clockSkewResponse.skewSeconds);
-
-  Logger.warning(
-    'Clock skew detected: skew_seconds=${clockSkewResponse.skewSeconds}, '
-    'server_time=${clockSkewResponse.serverTime}, '
-    'client_time=${clockSkewResponse.clientTime}',
-  );
-
-  final now = DateTime.now();
-  if (_lastClockSkewSnackbarAt != null && now.difference(_lastClockSkewSnackbarAt!) < _clockSkewSnackbarCooldown) {
-    return;
-  }
-
-  final navigatorState = globalNavigatorKey.currentState;
-  if (navigatorState == null) {
-    return;
-  }
-
-  final l10n = AppLocalizations.of(navigatorState.context);
-  AppSnackbar.showSnackbarError(
-    l10n.clockSkewWarning(skewMinutes),
-    duration: const Duration(seconds: 6),
-  );
-  _lastClockSkewSnackbarAt = now;
-}
-
-_ClockSkewResponse? _parseClockSkewResponse(http.Response response) {
-  if (response.statusCode != 408 || response.body.isEmpty) {
-    return null;
-  }
-
-  final contentType = response.headers['content-type']?.toLowerCase() ?? '';
-  if (!contentType.contains('json')) {
-    return null;
-  }
-
-  try {
-    final dynamic decoded = jsonDecode(response.body);
-    if (decoded is! Map) {
-      return null;
-    }
-    final responseMap = decoded.map((key, value) => MapEntry(key.toString(), value));
-    if (responseMap['error']?.toString() != 'clock_skew') {
-      return null;
-    }
-
-    final skewSeconds = _parseInt(responseMap['skew_seconds']);
-    if (skewSeconds == null) {
-      return null;
-    }
-
-    return _ClockSkewResponse(
-      serverTime: responseMap['server_time']?.toString(),
-      clientTime: responseMap['client_time']?.toString(),
-      skewSeconds: skewSeconds,
-      hint: responseMap['hint']?.toString(),
-    );
-  } catch (e, stackTrace) {
-    Logger.debug('Failed to parse clock skew response: $e');
-    PlatformManager.instance.crashReporter.reportCrash(
-      e,
-      stackTrace,
-      userAttributes: {'status_code': response.statusCode.toString(), 'response_body': response.body},
-    );
-    return null;
-  }
-}
-
-int _toSkewMinutes(int skewSeconds) {
-  final minutes = (skewSeconds.abs() / 60).ceil();
-  return minutes == 0 ? 1 : minutes;
-}
-
-int? _parseInt(dynamic value) {
-  if (value is int) {
-    return value;
-  }
-  if (value is num) {
-    return value.round();
-  }
-  if (value is String) {
-    return int.tryParse(value);
-  }
-  return null;
-}
-
-class _ClockSkewResponse {
-  final String? serverTime;
-  final String? clientTime;
-  final int skewSeconds;
-  final String? hint;
-
-  const _ClockSkewResponse({
-    required this.serverTime,
-    required this.clientTime,
-    required this.skewSeconds,
-    required this.hint,
-  });
+  ClockSkewDetector.instance.checkResponse(response);
 }
 
 Future<http.Response?> makeApiCall({
