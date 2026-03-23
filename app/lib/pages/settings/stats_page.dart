@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import 'package:omi/providers/stats_provider.dart';
 import 'package:omi/models/user_stats.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 
 class StatsPage extends StatefulWidget {
   const StatsPage({super.key});
@@ -21,13 +22,18 @@ class _StatsPageState extends State<StatsPage> with SingleTickerProviderStateMix
     _fireController = AnimationController(
       duration: const Duration(milliseconds: 1200),
       vsync: this,
-    )..repeat(reverse: true);
+    );
     _fireAnimation = Tween<double>(begin: 0.9, end: 1.15).animate(
       CurvedAnimation(parent: _fireController, curve: Curves.easeInOut),
     );
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<StatsProvider>().loadStats();
+      context.read<StatsProvider>().loadStats().then((_) {
+        final stats = context.read<StatsProvider>().stats;
+        if (stats != null && stats.currentStreak > 0 && mounted) {
+          _fireController.repeat(reverse: true);
+        }
+      });
     });
   }
 
@@ -47,7 +53,7 @@ class _StatsPageState extends State<StatsPage> with SingleTickerProviderStateMix
       backgroundColor: Colors.black,
       appBar: AppBar(
         backgroundColor: Colors.black,
-        title: const Text('Stats', style: TextStyle(color: Colors.white)),
+        title: Text(context.l10n.stats, style: const TextStyle(color: Colors.white)),
         iconTheme: const IconThemeData(color: Colors.white),
         elevation: 0,
       ),
@@ -69,7 +75,7 @@ class _StatsPageState extends State<StatsPage> with SingleTickerProviderStateMix
                   ElevatedButton(
                     onPressed: () => provider.loadStats(),
                     style: ElevatedButton.styleFrom(backgroundColor: Colors.deepPurple),
-                    child: const Text('Retry', style: TextStyle(color: Colors.white)),
+                    child: Text(context.l10n.retry, style: const TextStyle(color: Colors.white)),
                   ),
                 ],
               ),
@@ -78,8 +84,8 @@ class _StatsPageState extends State<StatsPage> with SingleTickerProviderStateMix
 
           final stats = provider.stats;
           if (stats == null) {
-            return const Center(
-              child: Text('No stats available', style: TextStyle(color: Colors.white70)),
+            return Center(
+              child: Text(context.l10n.noStatsAvailable, style: const TextStyle(color: Colors.white70)),
             );
           }
 
@@ -94,7 +100,7 @@ class _StatsPageState extends State<StatsPage> with SingleTickerProviderStateMix
                 const SizedBox(height: 16),
                 Center(
                   child: Text(
-                    'Longest streak: ${stats.longestStreak} days',
+                    context.l10n.longestStreak(stats.longestStreak),
                     style: const TextStyle(
                       color: Colors.white70,
                       fontSize: 15,
@@ -114,9 +120,9 @@ class _StatsPageState extends State<StatsPage> with SingleTickerProviderStateMix
   Widget _buildStatCards(UserStats stats) {
     return Row(
       children: [
-        Expanded(child: _buildStatCard('Words Spoken', _formatNumber(stats.totalWords), Icons.chat_bubble_outline)),
+        Expanded(child: _buildStatCard(context.l10n.wordsSpoken, _formatNumber(stats.totalWords), Icons.chat_bubble_outline)),
         const SizedBox(width: 8),
-        Expanded(child: _buildStatCard('Hours Recorded', '${stats.totalHours.toStringAsFixed(1)}h', Icons.access_time)),
+        Expanded(child: _buildStatCard(context.l10n.hoursRecorded, '${stats.totalHours.toStringAsFixed(1)}h', Icons.access_time)),
         const SizedBox(width: 8),
         Expanded(child: _buildStreakCard(stats.currentStreak)),
       ],
@@ -197,15 +203,12 @@ class _StatsPageState extends State<StatsPage> with SingleTickerProviderStateMix
   }
 
   Widget _buildStreakCalendar(UserStats stats) {
-    final today = DateTime.now();
+    final today = DateTime.now().toUtc();
     final activeDaysSet = stats.activeDays.toSet();
 
     // Build 90 days grid (13 weeks)
-    // Start from 89 days ago
+    // Start from 89 days ago — use UTC to match backend dates
     final startDate = today.subtract(const Duration(days: 89));
-
-    // Generate all 90 days
-    final days = List.generate(90, (i) => startDate.add(Duration(days: i)));
 
     // Group by week (columns), each week starts on Monday
     // We'll do a simple grid: 7 rows (Mon-Sun) x N columns

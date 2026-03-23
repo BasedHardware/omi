@@ -10302,5 +10302,18 @@
   "phoneHideKeypad": "Hide Keypad",
   "@phoneHideKeypad": {
     "description": "Label for the button to dismiss the in-call keypad"
+  },
+  "stats": "Stats",
+  "noStatsAvailable": "No stats available",
+  "wordsSpoken": "Words Spoken",
+  "hoursRecorded": "Hours Recorded",
+  "currentStreak": "Current Streak",
+  "longestStreak": "Longest streak: {count} days",
+  "@longestStreak": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
   }
 }

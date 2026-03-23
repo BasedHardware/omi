@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Optional
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
@@ -82,10 +82,10 @@ def _aggregate_stats(query) -> dict:
     }
     for doc in docs:
         data = doc.to_dict()
-        stats['transcription_seconds'] += data.get('transcription_seconds', 0)
-        stats['words_transcribed'] += data.get('words_transcribed', 0)
-        stats['insights_gained'] += data.get('insights_gained', 0)
-        stats['memories_created'] += data.get('memories_created', 0)
+        stats['transcription_seconds'] += int(data.get('transcription_seconds') or 0)
+        stats['words_transcribed'] += int(data.get('words_transcribed') or 0)
+        stats['insights_gained'] += int(data.get('insights_gained') or 0)
+        stats['memories_created'] += int(data.get('memories_created') or 0)
     return stats
 
 
@@ -152,10 +152,10 @@ def get_hourly_history_for_today(uid: str, date: datetime) -> list[dict]:
                 'memories_created': 0,
             }
 
-        hourly_totals[hour]['transcription_seconds'] += data.get('transcription_seconds', 0)
-        hourly_totals[hour]['words_transcribed'] += data.get('words_transcribed', 0)
-        hourly_totals[hour]['insights_gained'] += data.get('insights_gained', 0)
-        hourly_totals[hour]['memories_created'] += data.get('memories_created', 0)
+        hourly_totals[hour]['transcription_seconds'] += int(data.get('transcription_seconds') or 0)
+        hourly_totals[hour]['words_transcribed'] += int(data.get('words_transcribed') or 0)
+        hourly_totals[hour]['insights_gained'] += int(data.get('insights_gained') or 0)
+        hourly_totals[hour]['memories_created'] += int(data.get('memories_created') or 0)
 
     history = [
         {'date': f"{date.year}-{date.month:02d}-{date.day:02d}T{hour:02d}:00:00Z", **stats}
@@ -185,10 +185,10 @@ def get_daily_history_for_month(uid: str, date: datetime) -> list[dict]:
                 'memories_created': 0,
             }
 
-        daily_totals[day]['transcription_seconds'] += data.get('transcription_seconds', 0)
-        daily_totals[day]['words_transcribed'] += data.get('words_transcribed', 0)
-        daily_totals[day]['insights_gained'] += data.get('insights_gained', 0)
-        daily_totals[day]['memories_created'] += data.get('memories_created', 0)
+        daily_totals[day]['transcription_seconds'] += int(data.get('transcription_seconds') or 0)
+        daily_totals[day]['words_transcribed'] += int(data.get('words_transcribed') or 0)
+        daily_totals[day]['insights_gained'] += int(data.get('insights_gained') or 0)
+        daily_totals[day]['memories_created'] += int(data.get('memories_created') or 0)
 
     history = [{'date': f"{date.year}-{date.month:02d}-{day:02d}", **stats} for day, stats in daily_totals.items()]
     history.sort(key=lambda x: x['date'])
@@ -213,10 +213,10 @@ def get_monthly_history_for_year(uid: str, date: datetime) -> list[dict]:
                 'memories_created': 0,
             }
 
-        monthly_totals[month]['transcription_seconds'] += data.get('transcription_seconds', 0)
-        monthly_totals[month]['words_transcribed'] += data.get('words_transcribed', 0)
-        monthly_totals[month]['insights_gained'] += data.get('insights_gained', 0)
-        monthly_totals[month]['memories_created'] += data.get('memories_created', 0)
+        monthly_totals[month]['transcription_seconds'] += int(data.get('transcription_seconds') or 0)
+        monthly_totals[month]['words_transcribed'] += int(data.get('words_transcribed') or 0)
+        monthly_totals[month]['insights_gained'] += int(data.get('insights_gained') or 0)
+        monthly_totals[month]['memories_created'] += int(data.get('memories_created') or 0)
 
     history = [{'date': f"{date.year}-{month:02d}-01", **stats} for month, stats in monthly_totals.items()]
     history.sort(key=lambda x: x['date'])
@@ -240,10 +240,10 @@ def get_yearly_history(uid: str) -> list[dict]:
                 'memories_created': 0,
             }
 
-        yearly_totals[year]['transcription_seconds'] += data.get('transcription_seconds', 0)
-        yearly_totals[year]['words_transcribed'] += data.get('words_transcribed', 0)
-        yearly_totals[year]['insights_gained'] += data.get('insights_gained', 0)
-        yearly_totals[year]['memories_created'] += data.get('memories_created', 0)
+        yearly_totals[year]['transcription_seconds'] += int(data.get('transcription_seconds') or 0)
+        yearly_totals[year]['words_transcribed'] += int(data.get('words_transcribed') or 0)
+        yearly_totals[year]['insights_gained'] += int(data.get('insights_gained') or 0)
+        yearly_totals[year]['memories_created'] += int(data.get('memories_created') or 0)
 
     history = [{'date': f"{year}-01-01", **stats} for year, stats in yearly_totals.items()]
     history.sort(key=lambda x: x['date'])
@@ -255,32 +255,45 @@ def get_user_stats(uid: str) -> dict:
     user_ref = db.collection('users').document(uid)
     hourly_usage_collection = user_ref.collection('hourly_usage')
 
-    # Get all docs for totals + active days
-    docs = list(hourly_usage_collection.stream())
-
-    total_words = 0
-    total_seconds = 0
-    daily_activity: dict[str, bool] = {}
-
-    for doc in docs:
-        data = doc.to_dict()
-        words = data.get('words_transcribed', 0)
-        seconds = data.get('transcription_seconds', 0)
-        total_words += words
-        total_seconds += seconds
-
-        if seconds > 0:
-            year = data.get('year', 0)
-            month = data.get('month', 0)
-            day = data.get('day', 0)
-            if year and month and day:
-                date_str = f"{year}-{month:02d}-{day:02d}"
-                daily_activity[date_str] = True
-
+    # All-time totals: scans full collection (no date filter needed for lifetime aggregation)
+    all_time_stats = _aggregate_stats(hourly_usage_collection)
+    total_words = all_time_stats['words_transcribed']
+    total_seconds = all_time_stats['transcription_seconds']
     total_hours = round(total_seconds / 3600, 1)
 
-    # Calculate streaks
+    # Active days: only query last 90 days for streak/calendar display
     today = datetime.utcnow().date()
+    ninety_days_ago = today - timedelta(days=89)
+
+    # Collect distinct (year, month) pairs covering the 90-day window
+    months_to_query: set[tuple[int, int]] = set()
+    d = ninety_days_ago
+    while d <= today:
+        months_to_query.add((d.year, d.month))
+        if d.month == 12:
+            d = d.replace(year=d.year + 1, month=1, day=1)
+        else:
+            d = d.replace(month=d.month + 1, day=1)
+
+    daily_activity: dict[str, bool] = {}
+    for yr, mo in months_to_query:
+        query = (
+            hourly_usage_collection
+            .where(filter=FieldFilter('year', '==', yr))
+            .where(filter=FieldFilter('month', '==', mo))
+        )
+        for doc in query.stream():
+            data = doc.to_dict()
+            seconds_val = int(data.get('transcription_seconds') or 0)
+            if seconds_val > 0:
+                year = data.get('year', 0)
+                month = data.get('month', 0)
+                day_val = data.get('day', 0)
+                if year and month and day_val:
+                    date_str = f"{year}-{month:02d}-{day_val:02d}"
+                    daily_activity[date_str] = True
+
+    # Calculate streaks
     sorted_dates = sorted(daily_activity.keys(), reverse=True)
 
     # Current streak: consecutive days ending today (or yesterday)
@@ -315,8 +328,7 @@ def get_user_stats(uid: str) -> dict:
 
     longest_streak = max(longest_streak, current_streak)
 
-    # Active days for last 90 days
-    ninety_days_ago = today - timedelta(days=89)
+    # Filter active days to the 90-day window
     active_days = [
         d for d in sorted_dates
         if datetime.strptime(d, '%Y-%m-%d').date() >= ninety_days_ago
