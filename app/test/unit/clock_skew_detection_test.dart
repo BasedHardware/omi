@@ -123,6 +123,19 @@ void main() {
       );
       expect(ClockSkewDetector.parseResponse(response), isNull);
     });
+
+    test('returns null when content-type header is missing', () {
+      final response = http.Response(
+        jsonEncode({'error': 'clock_skew', 'skew_seconds': 900}),
+        408,
+      );
+      expect(ClockSkewDetector.parseResponse(response), isNull);
+    });
+
+    test('returns null when body is a JSON array', () {
+      final response = _make408(body: jsonEncode([1, 2, 3]));
+      expect(ClockSkewDetector.parseResponse(response), isNull);
+    });
   });
 
   group('ClockSkewEvent.skewMinutes', () {
@@ -202,6 +215,61 @@ void main() {
 
       expect(events, isEmpty);
       await sub.cancel();
+    });
+
+    test('emits again after cooldown expires', () async {
+      final events = <ClockSkewEvent>[];
+      final sub = detector.onClockSkew.listen(events.add);
+
+      detector.checkResponse(_makeValid408());
+      await Future.delayed(Duration.zero);
+      expect(events, hasLength(1));
+
+      // Simulate cooldown expiry by backdating _lastEmittedAt
+      detector.setLastEmittedAtForTesting(
+        DateTime.now().subtract(const Duration(seconds: 46)),
+      );
+
+      detector.checkResponse(_makeValid408());
+      await Future.delayed(Duration.zero);
+      expect(events, hasLength(2));
+      await sub.cancel();
+    });
+
+    test('still suppresses just before cooldown expires', () async {
+      final events = <ClockSkewEvent>[];
+      final sub = detector.onClockSkew.listen(events.add);
+
+      detector.checkResponse(_makeValid408());
+      await Future.delayed(Duration.zero);
+      expect(events, hasLength(1));
+
+      // Set _lastEmittedAt to 44s ago — still within 45s cooldown
+      detector.setLastEmittedAtForTesting(
+        DateTime.now().subtract(const Duration(seconds: 44)),
+      );
+
+      detector.checkResponse(_makeValid408());
+      await Future.delayed(Duration.zero);
+      expect(events, hasLength(1)); // Still suppressed
+      await sub.cancel();
+    });
+
+    test('broadcast stream delivers to multiple subscribers', () async {
+      final events1 = <ClockSkewEvent>[];
+      final events2 = <ClockSkewEvent>[];
+      final sub1 = detector.onClockSkew.listen(events1.add);
+      final sub2 = detector.onClockSkew.listen(events2.add);
+
+      detector.checkResponse(_makeValid408());
+      await Future.delayed(Duration.zero);
+
+      expect(events1, hasLength(1));
+      expect(events2, hasLength(1));
+      expect(events1.first.skewSeconds, 900);
+      expect(events2.first.skewSeconds, 900);
+      await sub1.cancel();
+      await sub2.cancel();
     });
   });
 }
