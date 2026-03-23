@@ -31,6 +31,7 @@ Future<String> getAuthHeader() async {
 
   if (!hasAuthToken || !isExpirationDateValid) {
     SharedPreferencesUtil().authToken = await AuthService.instance.getIdToken() ?? '';
+    hasAuthToken = SharedPreferencesUtil().authToken.isNotEmpty;
   }
 
   if (!hasAuthToken) {
