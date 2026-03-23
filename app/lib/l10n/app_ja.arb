@@ -2806,5 +2806,6 @@
     },
     "improveConnectionTitle": "接続を改善",
     "improveConnectionContent": "Omiがデバイスとの接続を維持する方法を改善しました。これを有効にするには、デバイス情報ページに移動し、「デバイスを切断」をタップしてから、デバイスを再度ペアリングしてください。",
-    "improveConnectionAction": "了解"
+    "improveConnectionAction": "了解",
+    "clockSkewWarning": "デバイスの時計が約{minutes}分ずれています。日付と時刻の設定を確認してください。"
 }

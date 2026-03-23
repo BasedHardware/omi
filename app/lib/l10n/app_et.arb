@@ -2805,5 +2805,6 @@
     },
     "improveConnectionTitle": "Ühenduse parandamine",
     "improveConnectionContent": "Oleme parandanud, kuidas Omi jääb teie seadmega ühendusse. Selle aktiveerimiseks minge seadme teabe lehele, puudutage \"Katkesta seadme ühendus\" ja ühendage seade uuesti.",
-    "improveConnectionAction": "Selge"
+    "improveConnectionAction": "Selge",
+    "clockSkewWarning": "Teie seadme kell erineb ~{minutes} min. Kontrollige kuupäeva ja kellaaja seadeid."
 }

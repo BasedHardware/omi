@@ -2805,5 +2805,6 @@
     },
     "improveConnectionTitle": "Pagerinti ryšį",
     "improveConnectionContent": "Patobulinome, kaip Omi lieka prisijungęs prie jūsų įrenginio. Norėdami tai aktyvuoti, eikite į įrenginio informacijos puslapį, bakstelėkite \"Atjungti įrenginį\" ir vėl susiekite savo įrenginį.",
-    "improveConnectionAction": "Supratau"
+    "improveConnectionAction": "Supratau",
+    "clockSkewWarning": "Jūsų įrenginio laikrodis skiriasi ~{minutes} min. Patikrinkite datos ir laiko nustatymus."
 }

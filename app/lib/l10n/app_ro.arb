@@ -2805,5 +2805,6 @@
     },
     "improveConnectionTitle": "Îmbunătățire conexiune",
     "improveConnectionContent": "Am îmbunătățit modul în care Omi rămâne conectat la dispozitivul tău. Pentru a activa acest lucru, mergi la pagina Informații dispozitiv, apasă \"Deconectare dispozitiv\" și împerechează din nou dispozitivul.",
-    "improveConnectionAction": "Am înțeles"
+    "improveConnectionAction": "Am înțeles",
+    "clockSkewWarning": "Ceasul dispozitivului diferă cu ~{minutes} min. Verificați setările de dată și oră."
 }

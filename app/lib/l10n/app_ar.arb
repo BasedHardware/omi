@@ -2772,5 +2772,6 @@
     },
     "improveConnectionTitle": "تحسين الاتصال",
     "improveConnectionContent": "لقد حسّنا طريقة بقاء Omi متصلاً بجهازك. لتفعيل ذلك، يرجى الانتقال إلى صفحة معلومات الجهاز، والضغط على \"فصل الجهاز\"، ثم إعادة إقران جهازك.",
-    "improveConnectionAction": "فهمت"
+    "improveConnectionAction": "فهمت",
+    "clockSkewWarning": "ساعة جهازك متأخرة بـ ~{minutes} دقيقة. تحقق من إعدادات التاريخ والوقت."
 }
