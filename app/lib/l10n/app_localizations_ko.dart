@@ -8499,4 +8499,9 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get improveConnectionAction => '알겠습니다';
+
+  @override
+  String clockSkewWarning(int minutes) {
+    return '기기 시계가 ~$minutes분 차이납니다. 날짜 및 시간 설정을 확인하세요.';
+  }
 }

@@ -8639,4 +8639,9 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get improveConnectionAction => 'Selge';
+
+  @override
+  String clockSkewWarning(int minutes) {
+    return 'Teie seadme kell erineb ~$minutes min. Kontrollige kuupäeva ja kellaaja seadeid.';
+  }
 }

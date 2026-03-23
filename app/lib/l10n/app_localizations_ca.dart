@@ -8693,4 +8693,9 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get improveConnectionAction => 'Entesos';
+
+  @override
+  String clockSkewWarning(int minutes) {
+    return 'El rellotge del dispositiu va desajustat ~$minutes min. Comproveu la configuració de data i hora.';
+  }
 }

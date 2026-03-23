@@ -8684,4 +8684,9 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get improveConnectionAction => 'Am înțeles';
+
+  @override
+  String clockSkewWarning(int minutes) {
+    return 'Ceasul dispozitivului diferă cu ~$minutes min. Verificați setările de dată și oră.';
+  }
 }

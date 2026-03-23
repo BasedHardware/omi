@@ -8649,4 +8649,9 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get improveConnectionAction => 'Supratau';
+
+  @override
+  String clockSkewWarning(int minutes) {
+    return 'Jūsų įrenginio laikrodis skiriasi ~$minutes min. Patikrinkite datos ir laiko nustatymus.';
+  }
 }

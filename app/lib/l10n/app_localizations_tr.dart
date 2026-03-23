@@ -8654,4 +8654,9 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get improveConnectionAction => 'Anladım';
+
+  @override
+  String clockSkewWarning(int minutes) {
+    return 'Cihazınızın saati ~$minutes dk. farklı. Tarih ve saat ayarlarınızı kontrol edin.';
+  }
 }

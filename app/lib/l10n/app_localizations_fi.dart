@@ -8640,4 +8640,9 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get improveConnectionAction => 'Selvä';
+
+  @override
+  String clockSkewWarning(int minutes) {
+    return 'Laitteesi kello on ~$minutes min. väärässä. Tarkista päivämäärä- ja aika-asetukset.';
+  }
 }

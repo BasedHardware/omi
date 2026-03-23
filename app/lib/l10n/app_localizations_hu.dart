@@ -8679,4 +8679,9 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get improveConnectionAction => 'Értem';
+
+  @override
+  String clockSkewWarning(int minutes) {
+    return 'Az eszköz órája ~$minutes perccel eltér. Ellenőrizze a dátum- és időbeállításokat.';
+  }
 }

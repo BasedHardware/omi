@@ -8705,4 +8705,9 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get improveConnectionAction => 'Κατάλαβα';
+
+  @override
+  String clockSkewWarning(int minutes) {
+    return 'Το ρολόι της συσκευής σας αποκλίνει κατά ~$minutes λεπτά. Ελέγξτε τις ρυθμίσεις ημερομηνίας και ώρας.';
+  }
 }

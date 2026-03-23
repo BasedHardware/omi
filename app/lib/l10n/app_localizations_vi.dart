@@ -8644,4 +8644,9 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get improveConnectionAction => 'Đã hiểu';
+
+  @override
+  String clockSkewWarning(int minutes) {
+    return 'Đồng hồ thiết bị của bạn lệch ~$minutes phút. Kiểm tra cài đặt ngày và giờ.';
+  }
 }
