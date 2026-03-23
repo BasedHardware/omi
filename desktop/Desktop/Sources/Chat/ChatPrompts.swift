@@ -1,7 +1,7 @@
 import Foundation
 
 // MARK: - Chat Prompts
-// Converted from OMI Python backend: /Users/matthewdi/omi/backend/utils/llm/chat.py
+// Converted from OMI Python backend: backend/utils/llm/chat.py
 // These prompts use template variables that should be replaced at runtime:
 // - {user_name} - User's display name
 // - {tz} - User's timezone identifier
