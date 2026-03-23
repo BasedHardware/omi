@@ -143,4 +143,65 @@ void main() {
       expect(ClockSkewEvent(serverTime: null, clientTime: null, skewSeconds: -1, hint: null).skewMinutes, 1);
     });
   });
+
+  group('ClockSkewDetector.checkResponse', () {
+    late ClockSkewDetector detector;
+
+    setUp(() {
+      detector = ClockSkewDetector.instance;
+      detector.resetForTesting();
+    });
+
+    http.Response _makeValid408() {
+      return _make408(
+        body: jsonEncode({'error': 'clock_skew', 'skew_seconds': 900}),
+      );
+    }
+
+    test('emits event on first valid 408', () async {
+      final events = <ClockSkewEvent>[];
+      final sub = detector.onClockSkew.listen(events.add);
+
+      detector.checkResponse(_makeValid408());
+      await Future.delayed(Duration.zero);
+
+      expect(events, hasLength(1));
+      expect(events.first.skewSeconds, 900);
+      await sub.cancel();
+    });
+
+    test('suppresses second event within cooldown', () async {
+      final events = <ClockSkewEvent>[];
+      final sub = detector.onClockSkew.listen(events.add);
+
+      detector.checkResponse(_makeValid408());
+      detector.checkResponse(_makeValid408());
+      await Future.delayed(Duration.zero);
+
+      expect(events, hasLength(1));
+      await sub.cancel();
+    });
+
+    test('does not emit for non-clock-skew response', () async {
+      final events = <ClockSkewEvent>[];
+      final sub = detector.onClockSkew.listen(events.add);
+
+      detector.checkResponse(http.Response('ok', 200));
+      await Future.delayed(Duration.zero);
+
+      expect(events, isEmpty);
+      await sub.cancel();
+    });
+
+    test('does not emit for non-JSON 408', () async {
+      final events = <ClockSkewEvent>[];
+      final sub = detector.onClockSkew.listen(events.add);
+
+      detector.checkResponse(_make408(body: 'Request Timeout', contentType: 'text/html'));
+      await Future.delayed(Duration.zero);
+
+      expect(events, isEmpty);
+      await sub.cancel();
+    });
+  });
 }
