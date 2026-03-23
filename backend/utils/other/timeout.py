@@ -37,18 +37,21 @@ class TimeoutMiddleware(BaseHTTPMiddleware):
 
     async def dispatch(self, request: Request, call_next):
         # Check for stale request header first
+        # Skip stale check for multipart file uploads — large uploads are
+        # vulnerable to client clock skew + transfer delay causing false 408s (#5929)
         request_start_header = request.headers.get("x-request-start-time")
-        if request_start_header:
+        content_type = request.headers.get("content-type", "")
+        is_file_upload = "multipart/form-data" in content_type
+
+        if request_start_header and not is_file_upload:
             try:
                 request_start_time = float(request_start_header)
                 current_time = time.time()
                 request_age = current_time - request_start_time
 
                 if request_age > self.maximum_age_seconds:
-                    # 408 Request Timeout is a fitting status code.
                     return Response(status_code=408, content="Request is too old and has been rejected.")
             except (ValueError, TypeError):
-                # Header is malformed, proceed as normal or reject with 400
                 pass
 
         timeout = self.methods_timeout.get(request.method, self.default_timeout)
