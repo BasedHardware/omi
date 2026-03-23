@@ -2305,12 +2305,14 @@ async def _stream_handler(
             # Use event-based routing instead of time-based
             profile_complete = speech_profile_complete.is_set()
 
+            # Check if DG connection died (keepalive or send failure) (#5870)
+            # Separated from routing so profile socket still receives audio if main dies.
+            if dg_socket is not None and dg_socket.is_connection_dead:
+                logger.error('DG connection died mid-session uid=%s session=%s', uid, session_id)
+                dg_socket = None  # Stop sending to dead connection
+
             if dg_socket is not None:
-                # Check if DG connection died (keepalive or send failure) (#5870)
-                if dg_socket.is_connection_dead:
-                    logger.error('DG connection died mid-session uid=%s session=%s', uid, session_id)
-                    dg_socket = None  # Stop sending to dead connection
-                elif profile_complete or not deepgram_profile_socket:
+                if profile_complete or not deepgram_profile_socket:
                     # DG budget gate: skip sending if restricted user's daily budget is exhausted (#5746)
                     if fair_use_dg_budget_exhausted:
                         pass  # Audio not forwarded to DG — budget exhausted
@@ -2342,6 +2344,9 @@ async def _stream_handler(
                         spawn(close_dg_profile())
                 else:
                     deepgram_profile_socket.send(chunk)
+            elif deepgram_profile_socket and not profile_complete:
+                # Main socket dead but profile socket still alive — keep routing (#5870)
+                deepgram_profile_socket.send(chunk)
 
             if soniox_sock is not None and not fair_use_dg_budget_exhausted:
                 if profile_complete or not soniox_profile_socket:
