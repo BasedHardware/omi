@@ -41,7 +41,7 @@ class TimeoutMiddleware(BaseHTTPMiddleware):
         # vulnerable to client clock skew + transfer delay causing false 408s (#5929)
         request_start_header = request.headers.get("x-request-start-time")
         content_type = request.headers.get("content-type", "")
-        is_file_upload = "multipart/form-data" in content_type
+        is_file_upload = content_type.split(";", 1)[0].strip().lower() == "multipart/form-data"
 
         if request_start_header and not is_file_upload:
             try:
