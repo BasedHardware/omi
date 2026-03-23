@@ -588,7 +588,22 @@ class LimitlessDeviceConnection extends DeviceConnection {
 
           pos = wrapperEnd;
         } else {
+          // Non-0x1a top-level field — skip it properly using wire type
+          final wireType = flashPageData[pos] & 0x07;
           pos++;
+          if (wireType == 0) {
+            final r = _decodeVarint(flashPageData, pos);
+            pos = r[1] as int;
+          } else if (wireType == 2) {
+            final r = _decodeVarint(flashPageData, pos);
+            pos = (r[1] as int) + (r[0] as int);
+          } else if (wireType == 1) {
+            pos += 8;
+          } else if (wireType == 5) {
+            pos += 4;
+          } else {
+            return true; // Unknown wire type — conservatively treat as audio
+          }
         }
       }
     } catch (e) {
