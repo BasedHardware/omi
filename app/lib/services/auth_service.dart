@@ -203,9 +203,14 @@ class AuthService {
       }
       Logger.debug('getIdToken: token refresh returned null');
       return null;
+    } on FirebaseAuthException catch (e) {
+      Logger.debug('getIdToken: FirebaseAuthException: ${e.code} - $e');
+      if (e.code == 'user-not-found' || e.code == 'user-disabled' || e.code == 'user-token-expired') {
+        _clearCachedAuth();
+      }
+      return null;
     } catch (e) {
-      Logger.debug('getIdToken: token refresh failed: $e');
-      _clearCachedAuth();
+      Logger.debug('getIdToken: token refresh failed (transient): $e');
       return null;
     }
   }
@@ -220,8 +225,7 @@ class AuthService {
 
       Logger.debug('Starting OAuth flow for provider: $provider');
 
-      final authUrl =
-          '${Env.apiBaseUrl}v1/auth/authorize'
+      final authUrl = '${Env.apiBaseUrl}v1/auth/authorize'
           '?provider=$provider'
           '&redirect_uri=${Uri.encodeComponent(redirectUri)}'
           '&state=$state';
@@ -514,15 +518,13 @@ class AuthService {
             Logger.debug('Desktop/Web platform detected - attempting updateProfile with caution');
 
             // Try with a timeout to prevent hanging
-            await user
-                .updateProfile(displayName: fullName)
-                .timeout(
-                  const Duration(seconds: 5),
-                  onTimeout: () {
-                    Logger.debug('updateProfile timed out on desktop platform');
-                    throw TimeoutException('updateProfile timed out', const Duration(seconds: 5));
-                  },
-                );
+            await user.updateProfile(displayName: fullName).timeout(
+              const Duration(seconds: 5),
+              onTimeout: () {
+                Logger.debug('updateProfile timed out on desktop platform');
+                throw TimeoutException('updateProfile timed out', const Duration(seconds: 5));
+              },
+            );
           } else {
             await user.updateProfile(displayName: fullName);
           }
@@ -569,8 +571,7 @@ class AuthService {
 
       Logger.debug('Starting OAuth linking flow for provider: $provider');
 
-      final authUrl =
-          '${Env.apiBaseUrl}v1/auth/authorize'
+      final authUrl = '${Env.apiBaseUrl}v1/auth/authorize'
           '?provider=$provider'
           '&redirect_uri=${Uri.encodeComponent(redirectUri)}'
           '&state=$state';
