@@ -8693,4 +8693,9 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get improveConnectionAction => 'Capito';
+
+  @override
+  String clockSkewWarning(int minutes) {
+    return 'L\'orologio del dispositivo è sfasato di ~$minutes min. Controlla le impostazioni di data e ora.';
+  }
 }

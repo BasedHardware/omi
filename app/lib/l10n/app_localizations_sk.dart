@@ -8631,4 +8631,9 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get improveConnectionAction => 'Rozumiem';
+
+  @override
+  String clockSkewWarning(int minutes) {
+    return 'Hodiny zariadenia sa líšia o ~$minutes min. Skontrolujte nastavenia dátumu a času.';
+  }
 }

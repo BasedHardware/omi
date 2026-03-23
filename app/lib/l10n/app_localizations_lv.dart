@@ -8659,4 +8659,9 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get improveConnectionAction => 'Sapratu';
+
+  @override
+  String clockSkewWarning(int minutes) {
+    return 'Jūsu ierīces pulkstenis atšķiras par ~$minutes min. Pārbaudiet datuma un laika iestatījumus.';
+  }
 }

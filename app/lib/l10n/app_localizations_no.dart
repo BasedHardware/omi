@@ -8636,4 +8636,9 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get improveConnectionAction => 'Forstått';
+
+  @override
+  String clockSkewWarning(int minutes) {
+    return 'Enhetens klokke avviker ~$minutes min. Sjekk dato- og tidsinnstillingene.';
+  }
 }
