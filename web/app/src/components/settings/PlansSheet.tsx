@@ -19,6 +19,7 @@ import type {
   AvailablePlansResponse,
 } from '@/types/user';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
+import { UnsubscribeReasonDialog, type UnsubscribeReasonId } from '@/components/ui/UnsubscribeReasonDialog';
 
 interface PlansSheetProps {
   open: boolean;
@@ -40,7 +41,7 @@ export function PlansSheet({
   const [isLoading, setIsLoading] = useState(false);
   const [isLoadingPlans, setIsLoadingPlans] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [showCancelConfirm, setShowCancelConfirm] = useState(false);
+  const [showUnsubscribeReason, setShowUnsubscribeReason] = useState(false);
   const [isCanceling, setIsCanceling] = useState(false);
 
   const isUnlimited = subscription?.is_unlimited;
@@ -150,13 +151,13 @@ export function PlansSheet({
     }
   };
 
-  const handleCancelSubscription = async () => {
+  const handleCancelSubscription = async (reason: UnsubscribeReasonId, details?: string) => {
     setIsCanceling(true);
     try {
-      const result = await cancelSubscription();
+      const result = await cancelSubscription(reason, details);
       if (result?.status === 'success' || result?.cancel_at_period_end) {
         onSubscriptionUpdate();
-        setShowCancelConfirm(false);
+        setShowUnsubscribeReason(false);
         onOpenChange(false);
       } else {
         setError(result?.message || 'Failed to cancel subscription');
@@ -372,7 +373,7 @@ export function PlansSheet({
 
                             {!isCanceling_ && (
                               <button
-                                onClick={() => setShowCancelConfirm(true)}
+                                onClick={() => setShowUnsubscribeReason(true)}
                                 disabled={isLoading}
                                 className="w-full py-2.5 text-sm text-error/70 hover:text-error transition-colors"
                               >
@@ -391,20 +392,11 @@ export function PlansSheet({
         </AnimatePresence>
       </Dialog.Root>
 
-      {/* Cancel Confirmation Dialog */}
-      <ConfirmDialog
-        open={showCancelConfirm}
-        onOpenChange={setShowCancelConfirm}
-        title="Cancel Subscription?"
-        description={
-          subscription?.current_period_end
-            ? `Your subscription will remain active until ${formatDate(subscription.current_period_end)}. After that, you'll be moved to the Free plan.`
-            : "Are you sure you want to cancel your subscription? You'll lose access to unlimited features."
-        }
-        confirmLabel="Cancel Subscription"
-        cancelLabel="Keep Subscription"
-        variant="danger"
-        onConfirm={handleCancelSubscription}
+      {/* Unsubscribe Reason Dialog */}
+      <UnsubscribeReasonDialog
+        open={showUnsubscribeReason}
+        onOpenChange={setShowUnsubscribeReason}
+        onSubmit={handleCancelSubscription}
         isLoading={isCanceling}
       />
     </>

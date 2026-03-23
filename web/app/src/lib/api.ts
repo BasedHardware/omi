@@ -1527,10 +1527,16 @@ export async function upgradeSubscription(priceId: string): Promise<UpgradeSubsc
 
 /**
  * Cancel subscription
+ * @param reason - Optional cancellation reason from UNSUBSCRIBE_REASONS
+ * @param details - Optional additional details
  */
-export async function cancelSubscription(): Promise<CancelSubscriptionResponse | null> {
+export async function cancelSubscription(reason?: string, details?: string): Promise<CancelSubscriptionResponse | null> {
   try {
-    const response = await fetchWithAuth<CancelSubscriptionResponse>('/v1/payments/subscription', {
+    const params = new URLSearchParams();
+    if (reason) params.set('reason', reason);
+    if (details) params.set('details', details);
+    const query = params.toString() ? `?${params.toString()}` : '';
+    const response = await fetchWithAuth<CancelSubscriptionResponse>(`/v1/payments/subscription${query}`, {
       method: 'DELETE',
     });
     return response;
