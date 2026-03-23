@@ -714,17 +714,8 @@ class GatedDeepgramSocket:
             self._raw_file = open(os.path.join(self._capture_dir, f'{session_id}_raw.pcm'), 'wb')
             self._gated_file = open(os.path.join(self._capture_dir, f'{session_id}_gated.pcm'), 'wb')
 
-    @property
-    def is_connection_dead(self) -> bool:
-        """True if DG connection has been detected as dead. Delegates to SafeDeepgramSocket."""
-        if getattr(self._conn, '_is_safe_dg_socket', None) is True:
-            return self._conn.is_connection_dead
-        return False
-
     def send(self, data: bytes, wall_time: Optional[float] = None) -> None:
         """Send audio through VAD gate (if active), then to DG."""
-        if self.is_connection_dead:
-            return
         if self._gate is None:
             return self._conn.send(data)
 
@@ -741,10 +732,14 @@ class GatedDeepgramSocket:
         if self._gated_file and gate_out.audio_to_send:
             self._gated_file.write(gate_out.audio_to_send)
         if gate_out.audio_to_send:
-            # SafeDeepgramSocket.send() handles dead detection internally
             self._conn.send(gate_out.audio_to_send)
-        # Keepalive is handled automatically by SafeDeepgramSocket's background thread.
-        # No explicit keep_alive() call needed here (#5870 architecture).
+        elif self._gate.needs_keepalive(now):
+            # Prevent DG 10s idle timeout during extended silence
+            try:
+                self._conn.keep_alive()
+                self._gate.record_keepalive(now)
+            except Exception:
+                logger.debug('keepalive failed uid=%s', self._gate.uid)
         if gate_out.should_finalize:
             try:
                 self._conn.finalize()

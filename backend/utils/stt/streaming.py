@@ -9,13 +9,11 @@ import websockets
 from deepgram import DeepgramClient, DeepgramClientOptions, LiveTranscriptionEvents
 from deepgram.clients.live.v1 import LiveOptions
 
-from utils.stt.safe_socket import KeepaliveConfig, SafeDeepgramSocket  # noqa: F401 — re-exported for backward compat
 from utils.stt.soniox_util import *
 from utils.stt.vad_gate import GatedDeepgramSocket
 import logging
 
 logger = logging.getLogger(__name__)
-
 
 headers = {"Authorization": f"Token {os.getenv('DEEPGRAM_API_KEY')}", "Content-Type": "audio/*"}
 
@@ -289,9 +287,9 @@ async def send_initial_file(data: List[List[int]], transcript_socket):
 
 # Initialize Deepgram client based on environment configuration
 is_dg_self_hosted = os.getenv('DEEPGRAM_SELF_HOSTED_ENABLED', '').lower() == 'true'
-deepgram_options = DeepgramClientOptions(options={"termination_exception_connect": "true"})
+deepgram_options = DeepgramClientOptions(options={"keepalive": "true", "termination_exception_connect": "true"})
 
-deepgram_cloud_options = DeepgramClientOptions(options={"termination_exception_connect": "true"})
+deepgram_cloud_options = DeepgramClientOptions(options={"keepalive": "true", "termination_exception_connect": "true"})
 deepgram_cloud_options.url = "https://api.deepgram.com"
 
 if is_dg_self_hosted:
@@ -393,13 +391,10 @@ async def process_audio_dg(
     if dg_connection is None:
         return None
 
-    # Always wrap with SafeDeepgramSocket for dead-connection detection (#5870)
-    safe_conn = SafeDeepgramSocket(dg_connection)
-
     # Wrap with VAD gate if provided
     if vad_gate is not None:
-        return GatedDeepgramSocket(safe_conn, gate=vad_gate)
-    return safe_conn
+        return GatedDeepgramSocket(dg_connection, gate=vad_gate)
+    return dg_connection
 
 
 # Calculate backoff with jitter

@@ -9,7 +9,6 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from utils.stt.safe_socket import KeepaliveConfig, SafeDeepgramSocket
 from utils.stt.vad_gate import (
     DgWallMapper,
     GateState,
@@ -752,6 +751,65 @@ class TestGatedDeepgramSocket:
         socket = GatedDeepgramSocket(mock_conn, gate=None)
         assert socket.get_metrics() is None
 
+    def test_keepalive_sent_during_extended_silence(self):
+        """Keepalive should be sent after VAD_GATE_KEEPALIVE_SEC of silence."""
+        mock_conn = MagicMock()
+        gate = self._make_gate()
+        socket = GatedDeepgramSocket(mock_conn, gate=gate)
+
+        t = 1000.0
+        # Feed enough speech to trigger detection (need >= 512 samples at 16kHz)
+        _set_vad_speech(True)
+        for i in range(5):
+            socket.send(_make_pcm(30), wall_time=t + i * 0.03)
+
+        # Silence to trigger hangover then SILENCE state (need >4000ms)
+        _set_vad_speech(False)
+        for i in range(140):
+            socket.send(_make_pcm(30), wall_time=t + 0.15 + i * 0.03)
+
+        # Now in SILENCE state. Set _last_send_wall_time directly for clarity
+        last_send = gate._last_send_wall_time
+        assert last_send is not None
+
+        # Send a chunk 25s later — should trigger keepalive
+        socket.send(_make_pcm(30), wall_time=last_send + 25.0)
+
+        mock_conn.keep_alive.assert_called()
+        assert gate._keepalive_count > 0
+
+    def test_keepalive_records_via_gate_api(self):
+        """Socket should call gate.record_keepalive instead of mutating internals."""
+        mock_conn = MagicMock()
+        gate = self._make_gate()
+        gate.record_keepalive = MagicMock(wraps=gate.record_keepalive)
+        socket = GatedDeepgramSocket(mock_conn, gate=gate)
+
+        t = 1000.0
+        _set_vad_speech(False)
+        for i in range(5):
+            socket.send(_make_pcm(30), wall_time=t + i * 0.03)
+
+        socket.send(_make_pcm(30), wall_time=t + 25.0)
+
+        mock_conn.keep_alive.assert_called_once()
+        gate.record_keepalive.assert_called_once_with(t + 25.0)
+
+    def test_keepalive_not_sent_in_shadow_mode(self):
+        """Keepalive should NOT be sent in shadow mode (all audio forwarded)."""
+        mock_conn = MagicMock()
+        gate = self._make_gate(mode='shadow')
+        socket = GatedDeepgramSocket(mock_conn, gate=gate)
+
+        _set_vad_speech(False)
+        t = 1000.0
+        for i in range(5):
+            socket.send(_make_pcm(30), wall_time=t + i * 0.03)
+        # Skip 25 seconds
+        socket.send(_make_pcm(30), wall_time=t + 25.0)
+
+        mock_conn.keep_alive.assert_not_called()
+
     def test_finalize_error_tracked_in_metrics(self):
         """Finalize exceptions should increment finalize_errors counter."""
         mock_conn = MagicMock()
@@ -771,6 +829,28 @@ class TestGatedDeepgramSocket:
         metrics = socket.get_metrics()
         assert metrics['finalize_errors'] > 0
 
+    def test_keepalive_on_initial_prolonged_silence(self):
+        """Keepalive should trigger even if no audio was ever sent (initial silence)."""
+        mock_conn = MagicMock()
+        gate = self._make_gate()
+        socket = GatedDeepgramSocket(mock_conn, gate=gate)
+
+        t = 1000.0
+        # Only silence — _last_send_wall_time stays None, but _first_audio_wall_time is set
+        _set_vad_speech(False)
+        for i in range(5):
+            socket.send(_make_pcm(30), wall_time=t + i * 0.03)
+
+        # _last_send_wall_time should be None (no audio forwarded)
+        assert gate._last_send_wall_time is None
+        # _first_audio_wall_time should be set
+        assert gate._first_audio_wall_time == t
+
+        # Send chunk 25s after first audio — should trigger keepalive via fallback
+        socket.send(_make_pcm(30), wall_time=t + 25.0)
+        mock_conn.keep_alive.assert_called()
+        assert gate._keepalive_count > 0
+
     def test_finish_tracks_finalize_errors(self):
         """finish() should increment finalize_errors when finalize throws."""
         mock_conn = MagicMock()
@@ -782,211 +862,6 @@ class TestGatedDeepgramSocket:
         socket.finish()
         assert gate._finalize_errors == 1
         mock_conn.finish.assert_called_once()
-
-
-class TestDgDeadDetection:
-    """Tests for dead-connection detection via SafeDeepgramSocket + GatedDeepgramSocket (#5870)."""
-
-    def _make_gate(self, mode='active'):
-        return VADStreamingGate(
-            sample_rate=16000,
-            channels=1,
-            mode=mode,
-            uid='test',
-            session_id='test',
-        )
-
-    # Use a long check period so the background thread never fires during tests
-    _test_cfg = KeepaliveConfig(keepalive_interval_sec=5.0, check_period_sec=999.0)
-
-    def _wrap(self, mock_conn):
-        """Wrap mock connection with SafeDeepgramSocket (matches production flow)."""
-        return SafeDeepgramSocket(mock_conn, cfg=self._test_cfg)
-
-    def test_safe_socket_dead_initially_false(self):
-        """SafeDeepgramSocket should not be dead initially."""
-        mock_conn = MagicMock()
-        safe = self._wrap(mock_conn)
-        assert safe.is_connection_dead is False
-        safe.finish()
-
-    def test_safe_socket_send_false_sets_dead(self):
-        """SafeDeepgramSocket marks dead when send() returns False."""
-        mock_conn = MagicMock()
-        mock_conn.send.return_value = False
-        safe = self._wrap(mock_conn)
-        safe.send(b'\x00' * 960)
-        assert safe.is_connection_dead is True
-        safe.finish()
-
-    def test_safe_socket_send_exception_sets_dead(self):
-        """SafeDeepgramSocket marks dead when send() raises."""
-        mock_conn = MagicMock()
-        mock_conn.send.side_effect = RuntimeError("connection reset")
-        safe = self._wrap(mock_conn)
-        safe.send(b'\x00' * 960)
-        assert safe.is_connection_dead is True
-        safe.finish()
-
-    def test_safe_socket_dead_stops_sending(self):
-        """After SafeDeepgramSocket is dead, send() silently drops audio."""
-        mock_conn = MagicMock()
-        mock_conn.send.return_value = False
-        safe = self._wrap(mock_conn)
-        safe.send(b'\x00' * 960)
-        assert safe.is_connection_dead is True
-        count_at_death = mock_conn.send.call_count
-        safe.send(b'\x00' * 960)
-        assert mock_conn.send.call_count == count_at_death
-        safe.finish()
-
-    def test_gated_delegates_dead_to_safe(self):
-        """GatedDeepgramSocket.is_connection_dead delegates to SafeDeepgramSocket."""
-        mock_conn = MagicMock()
-        mock_conn.send.return_value = False
-        safe = self._wrap(mock_conn)
-        gate = self._make_gate()
-        socket = GatedDeepgramSocket(safe, gate=gate)
-        assert socket.is_connection_dead is False
-
-        _set_vad_speech(True)
-        t = 1000.0
-        for i in range(5):
-            socket.send(_make_pcm(30), wall_time=t + i * 0.03)
-
-        assert socket.is_connection_dead is True
-        assert safe.is_connection_dead is True
-        safe.finish()
-
-    def test_gated_dead_stops_sending(self):
-        """After connection dies through SafeDeepgramSocket, GatedDeepgramSocket stops sending."""
-        mock_conn = MagicMock()
-        mock_conn.send.return_value = False
-        safe = self._wrap(mock_conn)
-        gate = self._make_gate()
-        socket = GatedDeepgramSocket(safe, gate=gate)
-
-        _set_vad_speech(True)
-        t = 1000.0
-        for i in range(5):
-            socket.send(_make_pcm(30), wall_time=t + i * 0.03)
-
-        assert socket.is_connection_dead is True
-        call_count_at_death = mock_conn.send.call_count
-
-        for i in range(5):
-            socket.send(_make_pcm(30), wall_time=t + 0.15 + i * 0.03)
-
-        assert mock_conn.send.call_count == call_count_at_death
-        safe.finish()
-
-    def test_passthrough_dead_on_send_false(self):
-        """Without gate, SafeDeepgramSocket still detects dead connection."""
-        mock_conn = MagicMock()
-        mock_conn.send.return_value = False
-        safe = self._wrap(mock_conn)
-        socket = GatedDeepgramSocket(safe, gate=None)
-        socket.send(b'\x00' * 960)
-        assert socket.is_connection_dead is True
-        mock_conn.send.assert_called_once()
-        safe.finish()
-
-    def test_dead_socket_nulled_by_caller_gated(self):
-        """Simulates flush_stt_buffer pattern with GatedDeepgramSocket (VAD gate enabled)."""
-        mock_conn = MagicMock()
-        mock_conn.send.return_value = False
-        safe = self._wrap(mock_conn)
-        gate = self._make_gate()
-        dg_socket = GatedDeepgramSocket(safe, gate=gate)
-
-        _set_vad_speech(True)
-        t = 1000.0
-        for i in range(5):
-            dg_socket.send(_make_pcm(30), wall_time=t + i * 0.03)
-
-        assert dg_socket.is_connection_dead is True
-
-        # Simulate the flush_stt_buffer dead-socket detection pattern
-        # (mirrors backend/routers/transcribe.py:2307-2310)
-        if dg_socket.is_connection_dead:
-            dg_socket = None
-        assert dg_socket is None
-        safe.finish()
-
-    def test_dead_socket_nulled_by_caller_no_gate(self):
-        """Simulates flush_stt_buffer pattern with SafeDeepgramSocket only (no VAD gate)."""
-        mock_conn = MagicMock()
-        mock_conn.send.return_value = False
-        safe = self._wrap(mock_conn)
-
-        safe.send(b'\x00' * 960)
-        assert safe.is_connection_dead is True
-
-        safe.finish()
-
-        # Verify send was called before death
-        assert mock_conn.send.call_count > 0
-
-
-class TestSafeSocketDelegation:
-    """Tests for SafeDeepgramSocket finalize/finish delegation (#5870)."""
-
-    _test_cfg = KeepaliveConfig(keepalive_interval_sec=5.0, check_period_sec=999.0)
-
-    def test_finalize_delegates(self):
-        """SafeDeepgramSocket.finalize() delegates to underlying connection."""
-        mock_conn = MagicMock()
-        safe = SafeDeepgramSocket(mock_conn, cfg=self._test_cfg)
-        safe.finalize()
-        mock_conn.finalize.assert_called_once()
-        safe.finish()
-
-    def test_finish_delegates(self):
-        """SafeDeepgramSocket.finish() delegates to underlying connection."""
-        mock_conn = MagicMock()
-        safe = SafeDeepgramSocket(mock_conn, cfg=self._test_cfg)
-        safe.finish()
-        mock_conn.finish.assert_called_once()
-
-    def test_finish_stops_keepalive_thread(self):
-        """SafeDeepgramSocket.finish() stops the background keepalive thread."""
-        mock_conn = MagicMock()
-        safe = SafeDeepgramSocket(mock_conn, cfg=self._test_cfg)
-        assert safe._thread.is_alive()
-        safe.finish()
-        assert not safe._thread.is_alive()
-        mock_conn.finish.assert_called_once()
-
-    def test_finish_idempotent(self):
-        """SafeDeepgramSocket.finish() is idempotent — second call is a no-op."""
-        mock_conn = MagicMock()
-        safe = SafeDeepgramSocket(mock_conn, cfg=self._test_cfg)
-        safe.finish()
-        mock_conn.finish.assert_called_once()
-        # Second call should not call _conn.finish() again
-        safe.finish()
-        mock_conn.finish.assert_called_once()
-
-    def test_auto_keepalive_exception_marks_dead(self):
-        """Background keepalive thread marks dead when keep_alive() raises."""
-        mock_conn = MagicMock()
-        mock_conn.keep_alive.side_effect = RuntimeError("connection reset")
-
-        fake_time = [0.0]
-
-        def clock():
-            return fake_time[0]
-
-        cfg = KeepaliveConfig(keepalive_interval_sec=5.0, check_period_sec=0.01)
-        safe = SafeDeepgramSocket(mock_conn, cfg=cfg, clock=clock)
-
-        try:
-            # Advance past keepalive interval to trigger exception path
-            fake_time[0] = 6.0
-            time.sleep(0.1)
-            assert safe.is_connection_dead is True
-        finally:
-            safe.finish()
 
 
 class TestActivateMode:
@@ -1594,6 +1469,30 @@ class TestKeepaliveBoundary:
         # At boundary: keepalive
         assert gate.needs_keepalive(1000.0 + VAD_GATE_KEEPALIVE_SEC)
 
+    def test_keepalive_no_spam(self):
+        """After keepalive fires, next chunk should NOT trigger another immediately."""
+        mock_conn = MagicMock()
+        gate = self._make_gate()
+        socket = GatedDeepgramSocket(mock_conn, gate=gate)
+
+        t = 1000.0
+        # Feed speech then silence past hangover (>4000ms)
+        _set_vad_speech(True)
+        for i in range(5):
+            socket.send(_make_pcm(30), wall_time=t + i * 0.03)
+        _set_vad_speech(False)
+        for i in range(140):
+            socket.send(_make_pcm(30), wall_time=t + 0.15 + i * 0.03)
+
+        last_send = gate._last_send_wall_time
+        # First keepalive at +25s
+        socket.send(_make_pcm(30), wall_time=last_send + 25.0)
+        assert mock_conn.keep_alive.call_count == 1
+
+        # Next chunk 0.03s later should NOT trigger another keepalive
+        socket.send(_make_pcm(30), wall_time=last_send + 25.03)
+        assert mock_conn.keep_alive.call_count == 1  # Still just 1
+
 
 class TestStereoAudio:
     """Tests for stereo audio path through VAD."""
@@ -2154,80 +2053,89 @@ class TestProcessAudioDgRemapWiring:
 
 
 class TestDG1011KeepaliveGap:
-    """Verify DG 1011 protection via SafeDeepgramSocket auto-keepalive.
+    """Verify DG 1011 protection when idle timeout is 10s.
 
     Deepgram disconnects with 1011 (NET-0001) if no audio or KeepAlive is
-    received within 10 seconds. SafeDeepgramSocket's background thread sends
-    keepalive automatically when idle > 5s, preventing the timeout.
+    received within 10 seconds. The historical 20s keepalive left a gap
+    where DG got nothing for 10+ seconds during initial silence.
 
-    Architecture: SafeDeepgramSocket is the SOLE keepalive owner (#5870).
+    These tests verify the fix: keepalive must fire within 10s to prevent
+    DG disconnect.
     """
 
     DG_IDLE_TIMEOUT_SEC = 10  # Deepgram's documented idle timeout
 
-    def test_auto_keepalive_prevents_1011_during_initial_silence(self):
-        """SafeDeepgramSocket auto-keepalive fires during idle, preventing DG 1011.
+    def _make_gate(self, mode='active'):
+        return VADStreamingGate(
+            sample_rate=16000,
+            channels=1,
+            mode=mode,
+            uid='test',
+            session_id='test',
+        )
 
-        Uses injectable clock to simulate time. Background thread detects
-        idle > 5s and sends keepalive automatically — no external caller needed.
+    def test_reproduce_1011_gap_initial_silence(self):
+        """Regression test: DG must receive traffic within 10s during silence.
+
+        Simulates a user WITHOUT speech profile connecting in a quiet room.
+        Gate starts in active mode. All audio is silence. DG should receive
+        a keepalive within 10s.
         """
         mock_conn = MagicMock()
-        mock_conn.keep_alive.return_value = True
-        mock_conn.send.return_value = True
+        gate = self._make_gate()
+        socket = GatedDeepgramSocket(mock_conn, gate=gate)
 
-        fake_time = [0.0]
+        t = 1000.0
+        _set_vad_speech(False)
 
-        def clock():
-            return fake_time[0]
+        # Simulate 10 seconds of silence chunks (30ms each = ~333 chunks)
+        dg_received_anything = False
+        for i in range(334):
+            chunk_time = t + i * 0.03
+            socket.send(_make_pcm(30), wall_time=chunk_time)
+            if mock_conn.send.called or mock_conn.keep_alive.called:
+                dg_received_anything = True
+                break
 
-        cfg = KeepaliveConfig(keepalive_interval_sec=5.0, check_period_sec=0.01)
-        safe = SafeDeepgramSocket(mock_conn, cfg=cfg, clock=clock)
+        # With the fix, DG should have received a keepalive within 10s.
+        # Historically, this failed with a 20s keepalive interval.
+        assert dg_received_anything, (
+            f"DG received nothing for {self.DG_IDLE_TIMEOUT_SEC}s of initial silence. "
+            f"DG would disconnect with 1011 (NET-0001). "
+            f"KeepAlive must fire within {self.DG_IDLE_TIMEOUT_SEC}s."
+        )
 
-        try:
-            # Advance past keepalive interval (simulates initial silence)
-            fake_time[0] = 6.0
-            time.sleep(0.1)
+    def test_keepalive_fires_within_dg_timeout_after_speech_ends(self):
+        """After speech ends and hangover expires, keepalive must fire within 10s.
 
-            # Background thread should have sent keepalive automatically
-            assert mock_conn.keep_alive.call_count >= 1, (
-                f"SafeDeepgramSocket auto-keepalive did not fire within {self.DG_IDLE_TIMEOUT_SEC}s. "
-                f"DG would disconnect with 1011 (NET-0001)."
-            )
-        finally:
-            safe.finish()
-
-    def test_auto_keepalive_prevents_1011_after_speech_ends(self):
-        """After speech ends, auto-keepalive fires within DG timeout.
-
-        Simulates send() activity followed by idle period. Background thread
-        sends keepalive when idle > 5s.
+        Simulates speech followed by extended silence. After hangover (4s),
+        the gate stops sending audio. Keepalive must fire within 10s of
+        the last audio sent.
         """
         mock_conn = MagicMock()
-        mock_conn.keep_alive.return_value = True
-        mock_conn.send.return_value = True
+        gate = self._make_gate()
+        socket = GatedDeepgramSocket(mock_conn, gate=gate)
 
-        fake_time = [0.0]
+        t = 1000.0
+        # Speech phase
+        _set_vad_speech(True)
+        for i in range(10):
+            socket.send(_make_pcm(30), wall_time=t + i * 0.03)
 
-        def clock():
-            return fake_time[0]
+        # Silence phase — hangover (4s) then silence
+        _set_vad_speech(False)
+        for i in range(200):  # 6s of silence (past 4s hangover)
+            socket.send(_make_pcm(30), wall_time=t + 0.3 + i * 0.03)
 
-        cfg = KeepaliveConfig(keepalive_interval_sec=5.0, check_period_sec=0.01)
-        safe = SafeDeepgramSocket(mock_conn, cfg=cfg, clock=clock)
+        last_send = gate._last_send_wall_time
+        assert last_send is not None
 
-        try:
-            # Simulate active audio sending
-            for i in range(10):
-                fake_time[0] = i * 0.03
-                safe.send(b'\x00' * 960)
+        # Reset call tracking
+        mock_conn.keep_alive.reset_mock()
 
-            # Speech ends, no more sends. Advance past keepalive interval.
-            fake_time[0] = fake_time[0] + 6.0
-            mock_conn.keep_alive.reset_mock()
-            time.sleep(0.1)
-
-            assert mock_conn.keep_alive.call_count >= 1, (
-                f"Auto-keepalive not sent within {self.DG_IDLE_TIMEOUT_SEC}s after last audio. "
-                f"DG would disconnect with 1011."
-            )
-        finally:
-            safe.finish()
+        # Send silence at last_send + 10s (DG timeout boundary)
+        socket.send(_make_pcm(30), wall_time=last_send + self.DG_IDLE_TIMEOUT_SEC)
+        assert mock_conn.keep_alive.called, (
+            f"KeepAlive not sent within {self.DG_IDLE_TIMEOUT_SEC}s after last audio. "
+            f"DG would disconnect with 1011."
+        )

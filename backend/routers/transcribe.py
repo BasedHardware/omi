@@ -1139,8 +1139,6 @@ async def _stream_handler(
                     )
 
                 # Stabilization delay before switching to main socket
-                # SafeDeepgramSocket's auto-keepalive thread keeps the main DG socket
-                # alive during this idle window — no manual keepalive needed (#5870)
                 if is_active():
                     logger.info(
                         f"Speech profile sent, waiting {SPEECH_PROFILE_STABILIZE_DELAY}s for stabilization {uid} {session_id}"
@@ -2292,7 +2290,7 @@ async def _stream_handler(
         stt_buffer_flush_size = int(sample_rate * 2 * 0.03)  # 30ms at 16-bit mono (e.g., 6400 bytes at 16kHz)
 
         async def flush_stt_buffer(force: bool = False):
-            nonlocal stt_audio_buffer, soniox_profile_socket, deepgram_profile_socket, dg_usage_ms_pending, dg_socket
+            nonlocal stt_audio_buffer, soniox_profile_socket, deepgram_profile_socket, dg_usage_ms_pending
 
             if not stt_audio_buffer:
                 return
@@ -2304,12 +2302,6 @@ async def _stream_handler(
 
             # Use event-based routing instead of time-based
             profile_complete = speech_profile_complete.is_set()
-
-            # Check if DG connection died (keepalive or send failure) (#5870)
-            # Separated from routing so profile socket still receives audio if main dies.
-            if dg_socket is not None and dg_socket.is_connection_dead:
-                logger.error('DG connection died mid-session uid=%s session=%s', uid, session_id)
-                dg_socket = None  # Stop sending to dead connection
 
             if dg_socket is not None:
                 if profile_complete or not deepgram_profile_socket:
@@ -2344,9 +2336,6 @@ async def _stream_handler(
                         spawn(close_dg_profile())
                 else:
                     deepgram_profile_socket.send(chunk)
-            elif deepgram_profile_socket and not profile_complete:
-                # Main socket dead but profile socket still alive — keep routing (#5870)
-                deepgram_profile_socket.send(chunk)
 
             if soniox_sock is not None and not fair_use_dg_budget_exhausted:
                 if profile_complete or not soniox_profile_socket:
