@@ -114,6 +114,47 @@ def test_future_dated_header_passes():
     assert response.status_code == 200
 
 
+def test_uppercase_multipart_skips_stale_check():
+    """Mixed-case Content-Type 'Multipart/Form-Data' still skips stale check."""
+    app = _make_app()
+    client = TestClient(app)
+    stale_time = str(time.time() - 600)
+    response = client.post(
+        "/ok",
+        headers={
+            "X-Request-Start-Time": stale_time,
+            "Content-Type": "Multipart/Form-Data; boundary=----abc",
+        },
+        content=b"fake",
+    )
+    assert response.status_code != 408
+
+
+def test_non_multipart_with_multipart_token_still_rejected():
+    """Non-multipart content-type is not tricked by substring containing 'multipart/form-data'."""
+    app = _make_app()
+    client = TestClient(app)
+    stale_time = str(time.time() - 600)
+    response = client.post(
+        "/ok",
+        headers={
+            "X-Request-Start-Time": stale_time,
+            "Content-Type": "application/json",
+        },
+        content=b'{"key": "value"}',
+    )
+    assert response.status_code == 408
+
+
+def test_missing_content_type_still_checked():
+    """Request with no Content-Type header still gets stale check."""
+    app = _make_app()
+    client = TestClient(app)
+    stale_time = str(time.time() - 600)
+    response = client.get("/ok", headers={"X-Request-Start-Time": stale_time})
+    assert response.status_code == 408
+
+
 def test_timeout_returns_504():
     """Request exceeding timeout returns 504."""
     app = _make_app(methods_timeout={"GET": 0.1})
