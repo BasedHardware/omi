@@ -1125,6 +1125,11 @@ class LimitlessDeviceConnection extends DeviceConnection {
           'pageCount': pageCount,
           'maxIndex': maxIndex,
         });
+        if (maxIndex == null) {
+          DebugLogManager.logWarning('limitless_batch_diagnostic_no_index', {
+            'pageCount': pageCount,
+          });
+        }
         return {
           'opus_frames': <List<int>>[],
           'timestamp_ms': timestampMs ?? _firstFlashPageTimestampMs ?? DateTime.now().millisecondsSinceEpoch,
