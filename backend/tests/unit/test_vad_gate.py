@@ -2186,7 +2186,7 @@ class TestDG1011KeepaliveGap:
         try:
             # Advance past keepalive interval (simulates initial silence)
             fake_time[0] = 6.0
-            time.sleep(0.05)
+            time.sleep(0.1)
 
             # Background thread should have sent keepalive automatically
             assert mock_conn.keep_alive.call_count >= 1, (
@@ -2223,7 +2223,7 @@ class TestDG1011KeepaliveGap:
             # Speech ends, no more sends. Advance past keepalive interval.
             fake_time[0] = fake_time[0] + 6.0
             mock_conn.keep_alive.reset_mock()
-            time.sleep(0.05)
+            time.sleep(0.1)
 
             assert mock_conn.keep_alive.call_count >= 1, (
                 f"Auto-keepalive not sent within {self.DG_IDLE_TIMEOUT_SEC}s after last audio. "
