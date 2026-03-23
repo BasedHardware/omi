@@ -97,7 +97,7 @@ curl -s "http://localhost:8080/v3/memories?limit=5" -H "Authorization: Bearer $T
 ## Configuration
 
 - **Backend URL**: `http://localhost:8080` (started via `Backend-Rust/run.sh`)
-- **Tunnel URL**: `https://omi-dev.m13v.com` (Cloudflare tunnel, also started by run.sh)
+- **Tunnel URL**: Auto-generated `*.trycloudflare.com` quick tunnel (started by run.sh)
 - **Firebase Project**: `based-hardware`
 - **API Key**: `AIzaSyD9dzBdglc7IO9pPDIOvqnCoTis_xKkkC8`
 - **Credentials**: `/Users/matthewdi/omi/backend/google-credentials.json`
