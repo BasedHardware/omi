@@ -229,15 +229,106 @@ patterns_to_check = []
 for lang_patterns in SPEAKER_IDENTIFICATION_PATTERNS.values():
     patterns_to_check.extend(lang_patterns)
 
+# Lazy import to avoid hard dependency on spaCy (NER is an optional enhancement)
+_ner_detection_available = None
+
+
+def _is_ner_available() -> bool:
+    """Check if NER-based detection is available (cached)."""
+    global _ner_detection_available
+    if _ner_detection_available is None:
+        try:
+            from utils.ner_speaker_detection import is_ner_available
+            _ner_detection_available = is_ner_available()
+        except Exception:
+            _ner_detection_available = False
+    return _ner_detection_available
+
 
 def detect_speaker_from_text(text: str) -> Optional[str]:
+    """Detect speaker name from transcript text.
+
+    Uses a two-pass approach:
+    1. Regex patterns (fast, high-precision for self-introductions like "I am X")
+    2. NER-based PERSON entity extraction (slower but catches more names)
+
+    Args:
+        text: Transcript text to analyze
+
+    Returns:
+        Detected speaker name (capitalized) or None if no name found
+    """
+    if not text:
+        return None
+
+    # Pass 1: Regex patterns (fast path - self-introduction phrases)
     for pattern in patterns_to_check:
         match = re.search(pattern, text)
         if match:
             name = match.groups()[-1]
             if name and len(name) >= 2:
                 return name.capitalize()
+
+    # Pass 2: NER-based detection (fallback for names not caught by regex)
+    # This catches names mentioned in third-person ("John said...") or
+    # other contexts that don't follow self-introduction patterns
+    if _is_ner_available():
+        try:
+            from utils.ner_speaker_detection import detect_persons_with_ner
+            persons = detect_persons_with_ner(text, max_persons=1)
+            if persons:
+                # Return the first detected person name
+                return persons[0]
+        except Exception:
+            # NER failed, return None (regex already didn't find anything)
+            pass
+
     return None
+
+
+def detect_all_speakers_from_text(text: str) -> List[str]:
+    """Detect ALL speaker names from transcript text (not just the first).
+
+    Uses both regex patterns and NER to find all person names mentioned
+    in the text. Useful for multi-speaker conversations where multiple
+    people introduce themselves or are mentioned.
+
+    Args:
+        text: Transcript text to analyze
+
+    Returns:
+        List of unique speaker names found (capitalized), ordered by appearance.
+        Returns empty list if no names found.
+    """
+    if not text:
+        return []
+
+    found_names: List[str] = []
+    seen_lower: set = set()
+
+    # Collect from regex patterns (preserving order)
+    for pattern in patterns_to_check:
+        for match in re.finditer(pattern, text):
+            name = match.groups()[-1]
+            if name and len(name) >= 2:
+                normalized = name.capitalize()
+                if normalized.lower() not in seen_lower:
+                    found_names.append(normalized)
+                    seen_lower.add(normalized.lower())
+
+    # Add NER-based detection (may find additional names)
+    if _is_ner_available():
+        try:
+            from utils.ner_speaker_detection import detect_persons_with_ner
+            ner_persons = detect_persons_with_ner(text, max_persons=5)
+            for name in ner_persons:
+                if name.lower() not in seen_lower:
+                    found_names.append(name)
+                    seen_lower.add(name.lower())
+        except Exception:
+            pass
+
+    return found_names
 
 
 async def extract_speaker_samples(
