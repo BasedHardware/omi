@@ -658,6 +658,12 @@ struct OnboardingChatView: View {
       }
 
       Task {
+        // Wait for API keys before starting the bridge (same race condition as fresh start)
+        for _ in 0..<30 {
+          if APIKeyService.shared.isLoaded { break }
+          try? await Task.sleep(nanoseconds: 200_000_000)
+        }
+
         // Start bridge eagerly so it's ready by the time we need to send
         async let bridgeWarmup: () = chatProvider.warmupBridge()
 
@@ -702,6 +708,18 @@ struct OnboardingChatView: View {
       OnboardingChatPersistence.saveMidOnboarding()
 
       Task {
+        // Wait for API keys to be fetched before starting the chat bridge.
+        // fetchKeys() runs as a detached Task after sign-in — if we start
+        // the ACP bridge before it completes, ANTHROPIC_API_KEY is nil and
+        // the bridge fails with "Invalid API key".
+        for _ in 0..<30 {
+          if APIKeyService.shared.isLoaded { break }
+          try? await Task.sleep(nanoseconds: 200_000_000)
+        }
+        if !APIKeyService.shared.isLoaded {
+          log("OnboardingChat: WARNING — API keys not loaded after 6s, starting chat anyway")
+        }
+
         await chatProvider.sendMessage(
           "Hi, I just installed omi!",
           systemPromptPrefix: systemPrompt
