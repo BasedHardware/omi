@@ -1908,8 +1908,8 @@ class _ManualFirmwareFlashPageState extends State<_ManualFirmwareFlashPage> with
   bool _confirmed = false;
   String? _error;
 
-  @override 
-  void initState() {
+  @override
+  void initState() { 
     super.initState();
   }
 
