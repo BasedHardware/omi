@@ -76,6 +76,33 @@ def update_speaker_assignment_maps(
     return True
 
 
+def rehydrate_session_segments(existing_segments: List) -> Dict[str, bool]:
+    """Rehydrate current_session_segments from persisted conversation segments.
+
+    When a WS reconnection resumes an existing conversation, the session-local
+    current_session_segments dict is empty. This function rebuilds it from the
+    conversation's persisted transcript_segments so that can_assign works
+    correctly for speaker sample extraction (#5949).
+
+    Args:
+        existing_segments: List of segment dicts (from Firestore) or TranscriptSegment objects.
+
+    Returns:
+        Dict mapping segment ID -> speech_profile_processed status.
+    """
+    result: Dict[str, bool] = {}
+    for seg in existing_segments:
+        sid = seg.get('id') if isinstance(seg, dict) else getattr(seg, 'id', None)
+        if sid:
+            spp = (
+                seg.get('speech_profile_processed', True)
+                if isinstance(seg, dict)
+                else getattr(seg, 'speech_profile_processed', True)
+            )
+            result[sid] = spp
+    return result
+
+
 def should_update_speaker_to_person_map(speaker_id: Optional[int]) -> bool:
     """Check if speaker_to_person_map should be updated for text detection.
 
