@@ -62,6 +62,41 @@ private struct BrowserConfig {
   }
 }
 
+// MARK: - Shared Keychain Cache
+
+/// Shared cache for browser keychain passwords so we only prompt once per session.
+/// Used by both GmailReaderService and CalendarReaderService.
+final class BrowserKeychainCache: @unchecked Sendable {
+  static let shared = BrowserKeychainCache()
+  private var cache: [String: String] = [:]
+  private let lock = NSLock()
+
+  func get(_ service: String) -> String? {
+    lock.lock()
+    defer { lock.unlock() }
+    return cache[service]
+  }
+
+  func set(_ service: String, password: String) {
+    lock.lock()
+    defer { lock.unlock() }
+    cache[service] = password
+  }
+
+  /// Returns true if we already tried and failed for this service
+  func hasAttempted(_ service: String) -> Bool {
+    lock.lock()
+    defer { lock.unlock() }
+    return cache.keys.contains(service)
+  }
+
+  func markFailed(_ service: String) {
+    lock.lock()
+    defer { lock.unlock() }
+    cache[service] = ""
+  }
+}
+
 // MARK: - GmailReaderService
 
 actor GmailReaderService {
@@ -525,6 +560,14 @@ actor GmailReaderService {
   // MARK: - Keychain
 
   private func getKeychainPassword(service: String) -> String? {
+    // Check shared cache first to avoid duplicate keychain prompts
+    if let cached = BrowserKeychainCache.shared.get(service) {
+      return cached.isEmpty ? nil : cached
+    }
+    if BrowserKeychainCache.shared.hasAttempted(service) {
+      return nil
+    }
+
     let query: [String: Any] = [
       kSecClass as String: kSecClassGenericPassword,
       kSecAttrService as String: service,
@@ -536,10 +579,14 @@ actor GmailReaderService {
     guard status == errSecSuccess, let data = result as? Data,
       let password = String(data: data, encoding: .utf8)
     else {
+      BrowserKeychainCache.shared.markFailed(service)
       if status != errSecItemNotFound {
         log("GmailReaderService: Keychain lookup for '\(service)' failed with status \(status)")
       }
       return nil
+    }
+    if !password.isEmpty {
+      BrowserKeychainCache.shared.set(service, password: password)
     }
     return password.isEmpty ? nil : password
   }
