@@ -1581,6 +1581,7 @@ struct OnboardingChatView: View {
           gmailReadingText = summaryText
           gmailReadingCompleted = true
           gmailReadingRunning = false
+          ChatToolExecutor.emailInsightsText = summaryText
         }
 
         log(
@@ -1645,6 +1646,7 @@ struct OnboardingChatView: View {
           calendarReadingText = summaryText
           calendarReadingCompleted = true
           calendarReadingRunning = false
+          ChatToolExecutor.calendarInsightsText = summaryText
         }
 
         log(
