@@ -1,7 +1,7 @@
 import Foundation
 
 enum OnboardingFlow {
-  static let steps = ["Chat", "FloatingBar", "VoiceShortcut", "Tasks"]
+  static let steps = ["Chat", "FloatingBarShortcut", "FloatingBar", "VoiceShortcut", "Tasks"]
   static let lastStepIndex = steps.count - 1
 
   static func migratedStep(
@@ -9,7 +9,8 @@ enum OnboardingFlow {
     hasMigratedVideoStep: Bool,
     hasInsertedVoiceShortcutStep: Bool,
     hasMergedVoiceInputStep: Bool,
-    hasRemovedNotificationStep: Bool
+    hasRemovedNotificationStep: Bool,
+    hasInsertedFloatingBarShortcutStep: Bool
   ) -> Int {
     var migratedStep = currentStep
 
@@ -28,6 +29,11 @@ enum OnboardingFlow {
     // Notifications step (old step 1) was removed; shift users down
     if !hasRemovedNotificationStep, migratedStep >= 1 {
       migratedStep -= 1
+    }
+
+    // FloatingBarShortcut step inserted at index 1; shift users at 1+ up
+    if !hasInsertedFloatingBarShortcutStep, migratedStep >= 1 {
+      migratedStep += 1
     }
 
     return min(max(0, migratedStep), lastStepIndex)

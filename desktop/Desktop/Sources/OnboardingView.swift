@@ -13,6 +13,7 @@ struct OnboardingView: View {
     false
   @AppStorage("onboardingVoiceInputMergeMigrationDone") private var hasMergedVoiceInputStep = false
   @AppStorage("onboardingNotificationStepRemoved") private var hasRemovedNotificationStep = false
+  @AppStorage("onboardingFloatingBarShortcutStepInserted") private var hasInsertedFloatingBarShortcutStep = false
   @StateObject private var graphViewModel = MemoryGraphViewModel()
   @State private var graphHasData = false
   @State private var showTrustPreview = true
@@ -53,12 +54,14 @@ struct OnboardingView: View {
         hasMigratedVideoStep: hasMigratedOnboardingSteps,
         hasInsertedVoiceShortcutStep: hasInsertedVoiceShortcutStep,
         hasMergedVoiceInputStep: hasMergedVoiceInputStep,
-        hasRemovedNotificationStep: hasRemovedNotificationStep
+        hasRemovedNotificationStep: hasRemovedNotificationStep,
+        hasInsertedFloatingBarShortcutStep: hasInsertedFloatingBarShortcutStep
       )
       hasMigratedOnboardingSteps = true
       hasInsertedVoiceShortcutStep = true
       hasMergedVoiceInputStep = true
       hasRemovedNotificationStep = true
+      hasInsertedFloatingBarShortcutStep = true
     }
     .task {
       // Pre-warm the ACP bridge before the chat step starts.
@@ -161,40 +164,55 @@ struct OnboardingView: View {
           }
         }
       } else if currentStep == 1 {
-        // Step 1: Floating Bar Demo
-        OnboardingFloatingBarDemoView(
+        // Step 1: Floating Bar Shortcut Selection
+        OnboardingFloatingBarShortcutStepView(
           appState: appState,
           chatProvider: chatProvider,
           onComplete: {
-            AnalyticsManager.shared.onboardingStepCompleted(step: 1, stepName: "FloatingBar")
+            AnalyticsManager.shared.onboardingStepCompleted(step: 1, stepName: "FloatingBarShortcut")
             currentStep = 2
           },
           onSkip: {
             AnalyticsManager.shared.onboardingStepCompleted(
-              step: 1, stepName: "FloatingBar_Skipped")
+              step: 1, stepName: "FloatingBarShortcut_Skipped")
             currentStep = 2
           }
         )
       } else if currentStep == 2 {
-        // Step 2: Verify Push-to-Talk Shortcut + Voice Input
-        OnboardingVoiceShortcutStepView(
+        // Step 2: Floating Bar Demo (type a question)
+        OnboardingFloatingBarDemoView(
           appState: appState,
           chatProvider: chatProvider,
           onComplete: {
-            AnalyticsManager.shared.onboardingStepCompleted(step: 2, stepName: "VoiceShortcut")
+            AnalyticsManager.shared.onboardingStepCompleted(step: 2, stepName: "FloatingBar")
             currentStep = 3
           },
           onSkip: {
             AnalyticsManager.shared.onboardingStepCompleted(
-              step: 2, stepName: "VoiceShortcut_Skipped")
+              step: 2, stepName: "FloatingBar_Skipped")
             currentStep = 3
           }
         )
+      } else if currentStep == 3 {
+        // Step 3: Verify Push-to-Talk Shortcut + Voice Input
+        OnboardingVoiceShortcutStepView(
+          appState: appState,
+          chatProvider: chatProvider,
+          onComplete: {
+            AnalyticsManager.shared.onboardingStepCompleted(step: 3, stepName: "VoiceShortcut")
+            currentStep = 4
+          },
+          onSkip: {
+            AnalyticsManager.shared.onboardingStepCompleted(
+              step: 3, stepName: "VoiceShortcut_Skipped")
+            currentStep = 4
+          }
+        )
       } else {
-        // Step 3: Tasks
+        // Step 4: Tasks
         OnboardingTasksStepView(
           onComplete: {
-            AnalyticsManager.shared.onboardingStepCompleted(step: 3, stepName: "Tasks")
+            AnalyticsManager.shared.onboardingStepCompleted(step: 4, stepName: "Tasks")
             handleOnboardingComplete()
           },
           onSkip: {

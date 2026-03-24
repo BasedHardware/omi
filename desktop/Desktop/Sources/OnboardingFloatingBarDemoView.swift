@@ -47,8 +47,8 @@ struct OnboardingFloatingBarDemoView: View {
                         .font(.system(size: 24, weight: .bold))
                         .foregroundColor(OmiColors.textPrimary)
 
-                    Text("Try asking: Which computer suits me best?")
-                        .font(.system(size: 14))
+                    Text("Type: Which computer suits me best?")
+                        .font(.system(size: 18, weight: .medium))
                         .foregroundColor(OmiColors.textSecondary)
                         .multilineTextAlignment(.center)
                         .lineSpacing(4)
