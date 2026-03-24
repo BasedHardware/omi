@@ -2642,10 +2642,16 @@ class AppState: ObservableObject {
     OnboardingChatPersistence.clear()
     log("Cleared onboarding chat persistence")
 
-    // Clear local knowledge graph so the onboarding chart starts fresh
+    // Clear knowledge graph (local + server) so the onboarding chart starts fresh
     Task {
       await KnowledgeGraphStorage.shared.clearAll()
       log("Cleared local knowledge graph storage")
+      do {
+        try await APIClient.shared.deleteKnowledgeGraph()
+        log("Cleared server knowledge graph")
+      } catch {
+        logError("Failed to clear server knowledge graph during onboarding reset", error: error)
+      }
     }
 
     // Clear persisted backend chat messages so onboarding does not resume old history.
