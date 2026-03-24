@@ -43,6 +43,9 @@ icon_locations = {
     "Applications": (455, 175),
 }
 
+# Hide extension for the app
+hide_extensions = [app_name + ".app"]
+
 # Volume icon
 if icon_path:
     badge_icon = icon_path
