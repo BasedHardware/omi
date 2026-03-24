@@ -20,6 +20,7 @@ from typing import Any, Callable, Dict, Optional
 @dataclass
 class CacheEntry:
     """Represents a cache entry with metadata."""
+
     data: Any
     timestamp: float
     size_bytes: int
@@ -59,8 +60,9 @@ class InMemoryCacheManager:
         self.misses = 0
         self.evictions = 0
 
-        # Singleflight: per-key locks to prevent thundering herd
+        # Singleflight: per-key locks with refcount to prevent thundering herd
         self._fetch_locks: Dict[str, threading.Lock] = {}
+        self._fetch_refcounts: Dict[str, int] = {}
         self._fetch_lock_manager = threading.Lock()
 
     def get(self, key: str) -> Optional[Any]:
@@ -110,23 +112,33 @@ class InMemoryCacheManager:
         if (value := self.get(key)) is not None:
             return value
 
-        # Get or create lock for this key
+        # Get or create lock for this key, increment refcount
         with self._fetch_lock_manager:
             if key not in self._fetch_locks:
                 self._fetch_locks[key] = threading.Lock()
+                self._fetch_refcounts[key] = 0
+            self._fetch_refcounts[key] += 1
             fetch_lock = self._fetch_locks[key]
 
         # Only one request fetches, others wait
-        with fetch_lock:
-            # Double-check after acquiring lock (another thread may have fetched)
-            if (value := self.get(key)) is not None:
-                return value
+        try:
+            with fetch_lock:
+                # Double-check after acquiring lock (another thread may have fetched)
+                if (value := self.get(key)) is not None:
+                    return value
 
-            # Fetch and cache
-            value = fetch_fn()
-            if value is not None:
-                self.set(key, value, ttl=ttl)
-            return value
+                # Fetch and cache
+                value = fetch_fn()
+                if value is not None:
+                    self.set(key, value, ttl=ttl)
+                return value
+        finally:
+            # Decrement refcount; delete lock only when no waiters remain
+            with self._fetch_lock_manager:
+                self._fetch_refcounts[key] -= 1
+                if self._fetch_refcounts[key] == 0:
+                    del self._fetch_locks[key]
+                    del self._fetch_refcounts[key]
 
     def set(self, key: str, data: Any, ttl: int = 30):
         """
@@ -149,12 +161,7 @@ class InMemoryCacheManager:
             self._evict_if_needed(size_bytes)
 
             # Add new entry
-            entry = CacheEntry(
-                data=data,
-                timestamp=time.time(),
-                size_bytes=size_bytes,
-                ttl=ttl
-            )
+            entry = CacheEntry(data=data, timestamp=time.time(), size_bytes=size_bytes, ttl=ttl)
             self.cache[key] = entry
             self.current_size += size_bytes
 
@@ -195,8 +202,7 @@ class InMemoryCacheManager:
         Args:
             required_bytes: Bytes needed for new entry
         """
-        while (self.current_size + required_bytes > self.max_memory_bytes
-               and len(self.cache) > 0):
+        while self.current_size + required_bytes > self.max_memory_bytes and len(self.cache) > 0:
             # Remove oldest (first item in OrderedDict)
             key, entry = self.cache.popitem(last=False)
             self.current_size -= entry.size_bytes
@@ -237,5 +243,5 @@ class InMemoryCacheManager:
                 'hits': self.hits,
                 'misses': self.misses,
                 'hit_rate': round(hit_rate, 2),
-                'evictions': self.evictions
+                'evictions': self.evictions,
             }

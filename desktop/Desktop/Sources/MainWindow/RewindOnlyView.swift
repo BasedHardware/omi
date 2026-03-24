@@ -47,7 +47,7 @@ struct RewindOnlyView: View {
             // Force dark appearance on the window
             DispatchQueue.main.async {
                 for window in NSApp.windows {
-                    if window.title.contains("Rewind") || window.title.hasPrefix("Omi") {
+                    if window.title.contains("Rewind") || window.title.lowercased().hasPrefix("omi") {
                         window.appearance = NSAppearance(named: .darkAqua)
                     }
                 }
@@ -83,7 +83,7 @@ struct RewindOnlyView: View {
             Button {
                 openFullApp()
             } label: {
-                Label("Open Full Omi App", systemImage: "square.grid.2x2")
+                Label("Open Full omi App", systemImage: "square.grid.2x2")
             }
 
             Divider()
@@ -147,7 +147,7 @@ class RewindSettingsWindow {
         // If window exists, just bring it to front
         if let existingWindow = window, existingWindow.isVisible {
             existingWindow.makeKeyAndOrderFront(nil)
-            NSApp.activate(ignoringOtherApps: true)
+            NSApp.activate()
             return
         }
 
@@ -170,7 +170,7 @@ class RewindSettingsWindow {
         newWindow.isReleasedWhenClosed = false
         newWindow.makeKeyAndOrderFront(nil)
 
-        NSApp.activate(ignoringOtherApps: true)
+        NSApp.activate()
 
         self.window = newWindow
     }

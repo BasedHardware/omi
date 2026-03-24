@@ -15,6 +15,9 @@ from utils.llm.external_integrations import get_conversation_summary, generate_c
 from utils.notifications import send_bulk_notification, send_notification
 from utils.webhooks import day_summary_webhook
 import database.daily_summaries as daily_summaries_db
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 def should_run_job():
@@ -29,7 +32,7 @@ async def start_cron_job():
     """
     Main cron job entry point. Runs at the top of every UTC hour.
     """
-    print(f'start_cron_job at UTC hour {datetime.now(pytz.utc).hour}')
+    logger.info(f'start_cron_job at UTC hour {datetime.now(pytz.utc).hour}')
     await send_daily_notification()
     await send_daily_summary_notification()
 
@@ -50,11 +53,11 @@ async def send_daily_summary_notification():
             users = await notification_db.get_users_for_daily_summary(timezones, target_hour)
 
             if users:
-                print(f"Sending daily summary to {len(users)} users at local hour {target_hour}")
+                logger.info(f"Sending daily summary to {len(users)} users at local hour {target_hour}")
                 await _send_bulk_summary_notification(users)
 
     except Exception as e:
-        print(f"Error sending daily summary: {e}")
+        logger.error(f"Error sending daily summary: {e}")
         return None
 
 
@@ -74,7 +77,7 @@ def _send_summary_notification(user_data: tuple):
     uid = user_data[0]
     user_tz_name = user_data[2] if len(user_data) > 2 else None
 
-    # Calculate past 24 hours for conversation fetching
+    # Calculate local day boundaries for conversation fetching
     # date_str is set based on current hour:
     #   - Before 12 PM (noon): use previous day's date
     #   - 12 PM or after: use current day's date
@@ -86,34 +89,36 @@ def _send_summary_notification(user_data: tuple):
             user_tz = pytz.timezone(user_tz_name)
             now_in_user_tz = datetime.now(user_tz)
 
-            # Use past 24 hours for conversation range
-            end_date_utc = now_in_user_tz.astimezone(pytz.utc)
-            start_date_utc = (now_in_user_tz - timedelta(hours=24)).astimezone(pytz.utc)
-
-            # Determine display date based on current hour
+            # Determine which calendar day to summarize
             if now_in_user_tz.hour < 12:
-                # Before noon: show previous day
+                # Before noon: summarize previous day
                 display_date = now_in_user_tz.date() - timedelta(days=1)
             else:
-                # Noon or after: show current day
+                # Noon or after: summarize current day
                 display_date = now_in_user_tz.date()
+
+            # Use local day boundaries (midnight-to-midnight) converted to UTC
+            start_of_day = user_tz.localize(datetime.combine(display_date, time.min))
+            end_of_day = user_tz.localize(datetime.combine(display_date, time.max))
+            start_date_utc = start_of_day.astimezone(pytz.utc)
+            end_date_utc = end_of_day.astimezone(pytz.utc)
             date_str = display_date.strftime('%Y-%m-%d')
         except Exception as e:
-            print(e)
+            logger.error(e)
 
     # Fallback to UTC if timezone not available
     if not start_date_utc or not end_date_utc:
         now_utc = datetime.now(pytz.utc)
 
-        # Use past 24 hours for conversation range
-        end_date_utc = now_utc
-        start_date_utc = now_utc - timedelta(hours=24)
-
-        # Determine display date based on current hour
+        # Determine which calendar day to summarize
         if now_utc.hour < 12:
             display_date = now_utc.date() - timedelta(days=1)
         else:
             display_date = now_utc.date()
+
+        # Use UTC day boundaries
+        start_date_utc = datetime.combine(display_date, time.min).replace(tzinfo=pytz.utc)
+        end_date_utc = datetime.combine(display_date, time.max).replace(tzinfo=pytz.utc)
         date_str = display_date.strftime('%Y-%m-%d')
 
     # Atomically acquire lock BEFORE expensive LLM work to prevent race condition
@@ -172,15 +177,15 @@ async def send_daily_notification():
         await _send_notification_for_time(morning_target_time, morning_alert_title, morning_alert_body)
 
     except Exception as e:
-        print(e)
-        print("Error sending message:", e)
+        logger.error(e)
+        logger.error(f"Error sending message: {e}")
         return None
 
 
 async def _send_notification_for_time(target_time: str, title: str, body: str):
     user_in_time_zone = await _get_users_in_timezone(target_time)
     if not user_in_time_zone:
-        print("No users found in time zone")
+        logger.info("No users found in time zone")
         return None
     await send_bulk_notification(user_in_time_zone, title, body)
     return user_in_time_zone

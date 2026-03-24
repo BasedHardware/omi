@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 
@@ -10,6 +11,7 @@ import 'package:omi/services/devices/device_connection.dart';
 import 'package:omi/services/devices/discovery/apple_watch_discoverer.dart';
 import 'package:omi/services/devices/discovery/bluetooth_discoverer.dart';
 import 'package:omi/services/devices/discovery/device_discoverer.dart';
+import 'package:omi/services/devices/discovery/native_bluetooth_discoverer.dart';
 import 'package:omi/services/devices/errors.dart';
 import 'package:omi/utils/debug_log_manager.dart';
 import 'package:omi/utils/logger.dart';
@@ -32,17 +34,9 @@ abstract class IDeviceService {
   Future<void> disconnectDevice();
 }
 
-enum DeviceServiceStatus {
-  init,
-  ready,
-  scanning,
-  stop,
-}
+enum DeviceServiceStatus { init, ready, scanning, stop }
 
-enum DeviceConnectionState {
-  connected,
-  disconnected,
-}
+enum DeviceConnectionState { connected, disconnected }
 
 /// Feature flags for Omi device capabilities
 /// Must match the firmware definitions in features.h
@@ -70,7 +64,7 @@ class DeviceService implements IDeviceService {
   List<BtDevice> _devices = [];
 
   final List<DeviceDiscoverer> _discoverers = [
-    BluetoothDeviceDiscoverer(),
+    NativeBluetoothDiscoverer(),
     AppleWatchDiscoverer(),
   ];
 
@@ -84,10 +78,7 @@ class DeviceService implements IDeviceService {
   DateTime? _firstConnectedAt;
 
   @override
-  Future<void> discover({
-    String? desirableDeviceId,
-    int timeout = 5,
-  }) async {
+  Future<void> discover({String? desirableDeviceId, int timeout = 5}) async {
     Logger.debug("Device discovering...");
     if (_status != DeviceServiceStatus.ready) {
       logCommonErrorMessage("Device service is not ready, may busying or stop");
@@ -138,20 +129,20 @@ class DeviceService implements IDeviceService {
     _connection = null;
 
     var device = _devices.firstWhereOrNull((f) => f.id == id);
+    Logger.debug('[DeviceService] device lookup result: ${device?.name ?? "NULL"} (locator: ${device?.locator?.kind})');
 
     // If device not in discovered list, try to get it from SharedPreferences
     // This allows background reconnection without scanning
     if (device == null) {
-      Logger.debug("Device not in discovered list, checking stored device");
+      Logger.debug('[DeviceService] Device not in discovered list, checking stored device');
       device = _getStoredDevice(id);
       if (device != null) {
-        Logger.debug("Using stored device for direct reconnection: ${device.name}");
-        // Add to devices list so it's available for future connections
+        Logger.debug('[DeviceService] Using stored device: ${device.name}');
         if (!_devices.any((d) => d.id == device!.id)) {
           _devices.add(device);
         }
       } else {
-        Logger.debug("No stored device available for $id");
+        Logger.debug('[DeviceService] No stored device available for $id, returning');
         return;
       }
     }
@@ -160,7 +151,7 @@ class DeviceService implements IDeviceService {
     if (_connection != null) {
       await _connection!.connect(onConnectionStateChanged: onDeviceConnectionStateChanged);
     } else {
-      Logger.debug("Failed to create device connection for ${device.id}");
+      Logger.debug('[DeviceService] Failed to create device connection for ${device.id}');
     }
   }
 
@@ -208,10 +199,7 @@ class DeviceService implements IDeviceService {
 
   void onDeviceConnectionStateChanged(String deviceId, DeviceConnectionState state) {
     Logger.debug("device connection state changed...$deviceId...$state");
-    DebugLogManager.logEvent('device_connection_state', {
-      'device_id': deviceId,
-      'state': state.name,
-    });
+    DebugLogManager.logEvent('device_connection_state', {'device_id': deviceId, 'state': state.name});
     for (var s in _subscriptions.values) {
       s.onDeviceConnectionStateChanged(deviceId, state);
     }

@@ -17,10 +17,7 @@ class OnDeviceWhisperProvider implements ISttProvider {
   Whisper? _whisper;
   bool _isInitialized = false;
 
-  OnDeviceWhisperProvider({
-    required this.modelPath,
-    this.language = 'en',
-  });
+  OnDeviceWhisperProvider({required this.modelPath, this.language = 'en'});
 
   Future<void> _ensureInitialized() async {
     if (_isInitialized) return;
@@ -47,14 +44,13 @@ class OnDeviceWhisperProvider implements ISttProvider {
       else if (filename.contains('large-v2'))
         targetModel = WhisperModel.largeV2;
       else {
-        CustomSttLogService.instance
-            .warning('OnDeviceWhisper', 'Unknown model filename "$filename", defaulting to tiny.');
+        CustomSttLogService.instance.warning(
+          'OnDeviceWhisper',
+          'Unknown model filename "$filename", defaulting to tiny.',
+        );
       }
 
-      _whisper = Whisper(
-        model: targetModel,
-        modelDir: dir,
-      );
+      _whisper = Whisper(model: targetModel, modelDir: dir);
       _isInitialized = true;
       CustomSttLogService.instance.info('OnDeviceWhisper', 'Initialized with model: $filename in $dir');
     } catch (e) {
@@ -88,9 +84,7 @@ class OnDeviceWhisperProvider implements ISttProvider {
           splitOnWord: false,
         );
 
-        final res = await _whisper!.transcribe(
-          transcribeRequest: req,
-        );
+        final res = await _whisper!.transcribe(transcribeRequest: req);
 
         if (res.text == null || res.text!.isEmpty) {
           return null;
@@ -105,17 +99,14 @@ class OnDeviceWhisperProvider implements ISttProvider {
         // Calculate duration: 16kHz * 2 bytes/sample * 1 channel = 32000 bytes/sec
         final duration = audioData.lengthInBytes / 32000.0;
         final speedFactor = sw.elapsedMilliseconds / 1000 / duration;
-        CustomSttLogService.instance.info('OnDeviceWhisper',
-            'Transcribed ${duration.toStringAsFixed(1)}s in ${sw.elapsedMilliseconds}ms (${speedFactor.toStringAsFixed(2)}x real-time). Text: $cleanText');
+        CustomSttLogService.instance.info(
+          'OnDeviceWhisper',
+          'Transcribed ${duration.toStringAsFixed(1)}s in ${sw.elapsedMilliseconds}ms (${speedFactor.toStringAsFixed(2)}x real-time). Text: $cleanText',
+        );
 
         return SttTranscriptionResult(
           segments: [
-            SttSegment(
-              text: cleanText,
-              start: audioOffsetSeconds,
-              end: audioOffsetSeconds + duration,
-              speakerId: 0,
-            )
+            SttSegment(text: cleanText, start: audioOffsetSeconds, end: audioOffsetSeconds + duration, speakerId: 0),
           ],
           rawText: cleanText,
         );

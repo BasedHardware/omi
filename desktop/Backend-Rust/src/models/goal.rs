@@ -59,6 +59,9 @@ pub struct GoalDB {
     /// When the goal was completed (None if not completed)
     #[serde(default)]
     pub completed_at: Option<DateTime<Utc>>,
+    /// Source of the goal: "user" for manually created, "ai" for auto-generated
+    #[serde(default)]
+    pub source: Option<String>,
 }
 
 fn default_max_value() -> f64 {
@@ -89,6 +92,8 @@ pub struct CreateGoalRequest {
     pub max_value: Option<f64>,
     /// Unit of measurement (optional)
     pub unit: Option<String>,
+    /// Source: "user" for manually created, "ai" for auto-generated
+    pub source: Option<String>,
 }
 
 /// Request body for updating an existing goal

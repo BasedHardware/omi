@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "flow": "memories",
+  "flowHash": "e873e671754c20a5",
+  "device": {
+    "model": "unknown",
+    "resolution": "unknown"
+  },
+  "createdAt": "2026-03-17T10:39:24.515Z",
+  "runId": "3LmpeMU",
+  "totalDurationMs": 0,
+  "verifySteps": [],
+  "steps": {}
+}

@@ -6,8 +6,8 @@ import 'package:app_links/app_links.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/backend/http/api/action_items.dart' as action_items_api;
+import 'package:omi/backend/http/clock_skew_detector.dart';
 import 'package:omi/backend/preferences.dart';
-import 'package:omi/desktop/desktop_app.dart';
 import 'package:omi/mobile/mobile_app.dart';
 import 'package:omi/pages/action_items/widgets/accept_shared_tasks_sheet.dart';
 import 'package:omi/pages/apps/app_detail/app_detail.dart';
@@ -45,6 +45,7 @@ class AppShell extends StatefulWidget {
 class _AppShellState extends State<AppShell> {
   late AppLinks _appLinks;
   StreamSubscription<Uri>? _linkSubscription;
+  StreamSubscription<ClockSkewEvent>? _clockSkewSubscription;
 
   Future<void> initDeepLinks() async {
     _appLinks = AppLinks();
@@ -333,6 +334,14 @@ class _AppShellState extends State<AppShell> {
   @override
   void initState() {
     super.initState();
+    _clockSkewSubscription = ClockSkewDetector.instance.onClockSkew.listen((event) {
+      if (mounted) {
+        AppSnackbar.showSnackbarError(
+          context.l10n.clockSkewWarning(event.skewMinutes),
+          duration: const Duration(seconds: 6),
+        );
+      }
+    });
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       await _initializeProviders();
       // Start deep link handling AFTER providers are ready,
@@ -376,21 +385,13 @@ class _AppShellState extends State<AppShell> {
 
   @override
   void dispose() {
+    _clockSkewSubscription?.cancel();
     _linkSubscription?.cancel();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        // Route to appropriate app tree based on screen width
-        if (constraints.maxWidth >= 1100) {
-          return const DesktopApp(); // Desktop app tree
-        } else {
-          return const MobileApp(); // Mobile app tree
-        }
-      },
-    );
+    return const MobileApp();
   }
 }

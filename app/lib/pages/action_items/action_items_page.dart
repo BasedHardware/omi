@@ -8,6 +8,7 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/schema.dart';
 import 'package:omi/providers/action_items_provider.dart';
 import 'package:omi/providers/goals_provider.dart';
+import 'package:omi/providers/task_integration_provider.dart';
 import 'package:omi/services/app_review_service.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/l10n_extensions.dart';
@@ -16,7 +17,7 @@ import 'widgets/action_item_form_sheet.dart';
 // Re-export Goal from goals.dart for use in this file
 export 'package:omi/backend/http/api/goals.dart' show Goal;
 
-enum TaskCategory { today, tomorrow, noDeadline, later }
+enum TaskCategory { today, tomorrow, later, noDeadline, overdue }
 
 class ActionItemsPage extends StatefulWidget {
   final VoidCallback? onAddGoal;
@@ -38,16 +39,15 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
   String? _hoveredItemId;
   bool _hoverAbove = false; // true = insert above, false = insert below
 
+  // Overdue section collapsed by default
+  bool _overdueExpanded = false;
+
   @override
   bool get wantKeepAlive => true;
 
   void scrollToTop() {
     if (_scrollController.hasClients) {
-      _scrollController.animateTo(
-        0,
-        duration: const Duration(milliseconds: 300),
-        curve: Curves.easeOut,
-      );
+      _scrollController.animateTo(0, duration: const Duration(milliseconds: 300), curve: Curves.easeOut);
     }
   }
 
@@ -62,6 +62,10 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
       final provider = Provider.of<ActionItemsProvider>(context, listen: false);
       if (provider.actionItems.isEmpty) {
         provider.fetchActionItems(showShimmer: true);
+      }
+      final taskIntegrationProvider = Provider.of<TaskIntegrationProvider>(context, listen: false);
+      if (!taskIntegrationProvider.hasLoaded && !taskIntegrationProvider.isLoading) {
+        taskIntegrationProvider.loadFromBackend();
       }
     });
   }
@@ -165,8 +169,12 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
             currentValue: current,
           );
           if (created != null) {
-            MixpanelManager()
-                .goalCreated(goalId: created.id, titleLength: title.length, targetValue: target, source: 'tasks_page');
+            MixpanelManager().goalCreated(
+              goalId: created.id,
+              titleLength: title.length,
+              targetValue: target,
+              source: 'tasks_page',
+            );
           }
         },
       ),
@@ -174,15 +182,14 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
   }
 
   Widget _buildFab() {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 48.0),
+    return Positioned(
+      right: 20,
+      bottom: 100,
       child: FloatingActionButton(
         heroTag: 'action_items_fab',
         onPressed: () {
           HapticFeedback.lightImpact();
-          _showCreateActionItemSheet(
-            defaultDueDate: _getDefaultDueDateForCategory(TaskCategory.today),
-          );
+          _showCreateActionItemSheet(defaultDueDate: _getDefaultDueDateForCategory(TaskCategory.today));
         },
         backgroundColor: Colors.deepPurple,
         child: const Icon(Icons.add, color: Colors.white),
@@ -192,12 +199,13 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
 
   // Categorize items by deadline
   Map<TaskCategory, List<ActionItemWithMetadata>> _categorizeItems(
-      List<ActionItemWithMetadata> items, bool showCompleted) {
+    List<ActionItemWithMetadata> items,
+    bool showCompleted,
+  ) {
     final now = DateTime.now();
+    final startOfToday = DateTime(now.year, now.month, now.day);
     final startOfTomorrow = DateTime(now.year, now.month, now.day + 1);
     final startOfDayAfterTomorrow = DateTime(now.year, now.month, now.day + 2);
-
-    // Filter out old tasks without a future due date (older than 7 days)
     final sevenDaysAgo = now.subtract(const Duration(days: 7));
 
     final Map<TaskCategory, List<ActionItemWithMetadata>> categorized = {
@@ -205,6 +213,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
       TaskCategory.tomorrow: [],
       TaskCategory.noDeadline: [],
       TaskCategory.later: [],
+      TaskCategory.overdue: [],
     };
 
     for (var item in items) {
@@ -212,20 +221,19 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
       if (item.completed && !showCompleted) continue;
       if (!item.completed && showCompleted) continue;
 
-      // Skip old tasks without a future due date (only for non-completed)
-      if (!showCompleted) {
-        if (item.dueAt != null) {
-          if (item.dueAt!.isBefore(sevenDaysAgo)) continue;
-        } else {
-          if (item.createdAt != null && item.createdAt!.isBefore(sevenDaysAgo)) continue;
-        }
-      }
-
       if (item.dueAt == null) {
-        categorized[TaskCategory.noDeadline]!.add(item);
+        // No deadline tasks older than 7 days go to overdue
+        if (!showCompleted && item.createdAt != null && item.createdAt!.isBefore(sevenDaysAgo)) {
+          categorized[TaskCategory.overdue]!.add(item);
+        } else {
+          categorized[TaskCategory.noDeadline]!.add(item);
+        }
       } else {
         final dueDate = item.dueAt!;
-        if (dueDate.isBefore(startOfTomorrow)) {
+        if (!showCompleted && dueDate.isBefore(startOfToday)) {
+          // Due date in the past → overdue
+          categorized[TaskCategory.overdue]!.add(item);
+        } else if (dueDate.isBefore(startOfTomorrow)) {
           categorized[TaskCategory.today]!.add(item);
         } else if (dueDate.isBefore(startOfDayAfterTomorrow)) {
           categorized[TaskCategory.tomorrow]!.add(item);
@@ -248,6 +256,8 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
         return context.l10n.tasksNoDeadline;
       case TaskCategory.later:
         return context.l10n.tasksLater;
+      case TaskCategory.overdue:
+        return context.l10n.tasksOverdue;
     }
   }
 
@@ -263,6 +273,9 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
       case TaskCategory.later:
         // Day after tomorrow
         return DateTime(now.year, now.month, now.day + 2, 23, 59);
+      case TaskCategory.overdue:
+        // Yesterday, so the task stays in overdue after rebuild
+        return DateTime(now.year, now.month, now.day - 1, 23, 59);
     }
   }
 
@@ -270,6 +283,35 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
     final provider = Provider.of<ActionItemsProvider>(context, listen: false);
     final newDueDate = _getDefaultDueDateForCategory(newCategory);
     provider.updateActionItemDueDate(item, newDueDate);
+  }
+
+  Future<void> _confirmCleanTodayTasks(ActionItemsProvider provider) async {
+    HapticFeedback.lightImpact();
+    final shouldClean = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: const Color(0xFF1F1F22),
+        title: Text(
+          context.l10n.tasksCleanTodayTitle,
+          style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
+        ),
+        content: Text(context.l10n.tasksCleanTodayMessage, style: TextStyle(color: Colors.grey[300], fontSize: 14)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: Text(context.l10n.cancel, style: TextStyle(color: Colors.grey[400])),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: Text(context.l10n.confirm, style: const TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+
+    if (shouldClean != true) return;
+
+    await provider.clearTodayDeadlinesForIncompleteTasks();
   }
 
   int _getIndentLevel(ActionItemWithMetadata item) {
@@ -299,10 +341,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
   }
 
   // Get ordered items for a category, respecting sort_order from model
-  List<ActionItemWithMetadata> _getOrderedItems(
-    TaskCategory category,
-    List<ActionItemWithMetadata> items,
-  ) {
+  List<ActionItemWithMetadata> _getOrderedItems(TaskCategory category, List<ActionItemWithMetadata> items) {
     final sorted = List<ActionItemWithMetadata>.from(items);
     sorted.sort((a, b) {
       // Items with sortOrder > 0 come first, sorted ascending
@@ -358,10 +397,10 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
   }
 
   // Delete task with swipe
-  Future<void> _deleteTask(ActionItemWithMetadata item) async {
+  void _deleteTask(ActionItemWithMetadata item) {
     HapticFeedback.mediumImpact();
     final provider = Provider.of<ActionItemsProvider>(context, listen: false);
-    await provider.deleteActionItem(item);
+    provider.deleteActionItem(item);
   }
 
   @override
@@ -375,22 +414,26 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
 
         return Scaffold(
           backgroundColor: Theme.of(context).colorScheme.primary,
-          floatingActionButton: _buildFab(),
-          body: GestureDetector(
-            onTap: () {},
-            child: RefreshIndicator(
-              onRefresh: () async {
-                HapticFeedback.mediumImpact();
-                return provider.forceRefreshActionItems();
-              },
-              color: Colors.deepPurple,
-              backgroundColor: Colors.white,
-              child: provider.isLoading && provider.actionItems.isEmpty
-                  ? _buildLoadingState()
-                  : categorizedItems.values.every((l) => l.isEmpty)
+          body: Stack(
+            children: [
+              GestureDetector(
+                onTap: () {},
+                child: RefreshIndicator(
+                  onRefresh: () async {
+                    HapticFeedback.mediumImpact();
+                    return provider.forceRefreshActionItems();
+                  },
+                  color: Colors.deepPurple,
+                  backgroundColor: Colors.white,
+                  child: provider.isLoading && provider.actionItems.isEmpty
+                      ? _buildLoadingState()
+                      : categorizedItems.values.every((l) => l.isEmpty)
                       ? _buildEmptyTasksList()
                       : _buildTasksList(categorizedItems, provider),
-            ),
+                ),
+              ),
+              _buildFab(),
+            ],
           ),
         );
       },
@@ -398,9 +441,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
   }
 
   Widget _buildLoadingState() {
-    return const Center(
-      child: CircularProgressIndicator(color: Colors.deepPurple),
-    );
+    return const Center(child: CircularProgressIndicator(color: Colors.deepPurple));
   }
 
   Widget _buildEmptyTasksList() {
@@ -409,9 +450,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
       physics: const AlwaysScrollableScrollPhysics(),
       slivers: [
         const SliverPadding(padding: EdgeInsets.only(top: 12)),
-        SliverToBoxAdapter(
-          child: _buildGoalsRow(),
-        ),
+        SliverToBoxAdapter(child: _buildGoalsRow()),
         const SliverPadding(padding: EdgeInsets.only(top: 24)),
         SliverToBoxAdapter(
           child: Center(
@@ -427,30 +466,18 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                       color: Colors.deepPurple.withOpacity(0.1),
                       borderRadius: BorderRadius.circular(24),
                     ),
-                    child: Icon(
-                      Icons.check_circle_outline,
-                      size: 40,
-                      color: Colors.deepPurple.withOpacity(0.6),
-                    ),
+                    child: Icon(Icons.check_circle_outline, size: 40, color: Colors.deepPurple.withOpacity(0.6)),
                   ),
                   const SizedBox(height: 24),
                   Text(
                     context.l10n.noTasksYet,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 24,
-                      fontWeight: FontWeight.w600,
-                    ),
+                    style: const TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.w600),
                   ),
                   const SizedBox(height: 12),
                   Text(
                     context.l10n.tasksEmptyStateMessage,
                     textAlign: TextAlign.center,
-                    style: TextStyle(
-                      color: Colors.grey[400],
-                      fontSize: 16,
-                      height: 1.5,
-                    ),
+                    style: TextStyle(color: Colors.grey[400], fontSize: 16, height: 1.5),
                   ),
                 ],
               ),
@@ -471,14 +498,12 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
       physics: const AlwaysScrollableScrollPhysics(),
       slivers: [
         const SliverPadding(padding: EdgeInsets.only(top: 12)),
-        SliverToBoxAdapter(
-          child: _buildGoalsRow(),
-        ),
+        SliverToBoxAdapter(child: _buildGoalsRow()),
         const SliverPadding(padding: EdgeInsets.only(top: 6)),
 
-        // Build each category section (skip empty ones)
+        // Build each category section (skip empty ones, skip overdue — rendered separately below)
         for (final category in TaskCategory.values)
-          if ((categorizedItems[category] ?? []).isNotEmpty)
+          if (category != TaskCategory.overdue && (categorizedItems[category] ?? []).isNotEmpty)
             SliverToBoxAdapter(
               child: _buildCategorySection(
                 category: category,
@@ -486,6 +511,12 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                 provider: provider,
               ),
             ),
+
+        // Overdue section — collapsible, collapsed by default
+        if ((categorizedItems[TaskCategory.overdue] ?? []).isNotEmpty)
+          SliverToBoxAdapter(
+            child: _buildOverdueSection(items: categorizedItems[TaskCategory.overdue]!, provider: provider),
+          ),
 
         // Bottom padding
         const SliverPadding(padding: EdgeInsets.only(bottom: 100)),
@@ -519,14 +550,10 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                   children: [
                     Text(
                       context.l10n.goals,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                      ),
+                      style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
                     ),
                     const Spacer(),
-                    if (goals.length < 3)
+                    if (goals.length < 4)
                       GestureDetector(
                         onTap: () {
                           HapticFeedback.lightImpact();
@@ -536,15 +563,8 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                         child: Container(
                           width: 32,
                           height: 32,
-                          decoration: BoxDecoration(
-                            color: Colors.grey.withValues(alpha: 0.12),
-                            shape: BoxShape.circle,
-                          ),
-                          child: Icon(
-                            Icons.add,
-                            size: 18,
-                            color: Colors.grey[400],
-                          ),
+                          decoration: BoxDecoration(color: Colors.grey.withValues(alpha: 0.12), shape: BoxShape.circle),
+                          child: Icon(Icons.add, size: 18, color: Colors.grey[400]),
                         ),
                       ),
                   ],
@@ -637,21 +657,23 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                     children: [
                       Text(
                         title,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                        ),
+                        style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
                       ),
                       const Spacer(),
-                      if (orderedItems.isNotEmpty)
-                        Text(
-                          '${orderedItems.length}',
-                          style: TextStyle(
-                            color: Colors.grey[600],
-                            fontSize: 14,
+                      if (category == TaskCategory.today && !provider.showCompletedView)
+                        SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: IconButton(
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(),
+                            splashRadius: 10,
+                            onPressed: () => _confirmCleanTodayTasks(provider),
+                            icon: Icon(Icons.close, size: 12, color: Colors.grey[600]),
                           ),
-                        ),
+                        )
+                      else if (orderedItems.isNotEmpty)
+                        Text('${orderedItems.length}', style: TextStyle(color: Colors.grey[600], fontSize: 14)),
                     ],
                   ),
                 ),
@@ -661,12 +683,9 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                   _buildFirstPositionDropZone(category, orderedItems, candidateData.isNotEmpty),
 
                 // Task items
-                ...orderedItems.map((item) => _buildTaskItem(
-                      item,
-                      provider,
-                      category: category,
-                      categoryItems: orderedItems,
-                    )),
+                ...orderedItems.map(
+                  (item) => _buildTaskItem(item, provider, category: category, categoryItems: orderedItems),
+                ),
 
                 // Spacing after section
                 const SizedBox(height: 8),
@@ -674,6 +693,47 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
             ),
           );
         },
+      ),
+    );
+  }
+
+  Widget _buildOverdueSection({required List<ActionItemWithMetadata> items, required ActionItemsProvider provider}) {
+    final orderedItems = _getOrderedItems(TaskCategory.overdue, items);
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          GestureDetector(
+            onTap: () {
+              setState(() {
+                _overdueExpanded = !_overdueExpanded;
+              });
+            },
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(4, 12, 4, 8),
+              child: Row(
+                children: [
+                  Icon(_overdueExpanded ? Icons.expand_less : Icons.expand_more, color: Colors.grey[500], size: 20),
+                  const SizedBox(width: 4),
+                  Text(
+                    context.l10n.tasksOverdue,
+                    style: TextStyle(color: Colors.grey[500], fontSize: 16, fontWeight: FontWeight.w600),
+                  ),
+                  const SizedBox(width: 8),
+                  Text('${orderedItems.length}', style: TextStyle(color: Colors.grey[600], fontSize: 14)),
+                ],
+              ),
+            ),
+          ),
+          if (_overdueExpanded) ...[
+            _buildFirstPositionDropZone(TaskCategory.overdue, orderedItems, false),
+            ...orderedItems.map(
+              (item) => _buildTaskItem(item, provider, category: TaskCategory.overdue, categoryItems: orderedItems),
+            ),
+          ],
+          const SizedBox(height: 8),
+        ],
       ),
     );
   }
@@ -775,13 +835,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
         final draggedItem = details.data;
 
         // Reorder within category
-        _reorderItemInCategory(
-          draggedItem,
-          item.id,
-          _hoverAbove,
-          category,
-          categoryItems,
-        );
+        _reorderItemInCategory(draggedItem, item.id, _hoverAbove, category, categoryItems);
 
         // Also update category if different
         final draggedCategory = _getCategoryForItem(draggedItem);
@@ -818,10 +872,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
               Container(
                 height: 2,
                 margin: const EdgeInsets.symmetric(horizontal: 4),
-                decoration: BoxDecoration(
-                  color: Colors.deepPurple,
-                  borderRadius: BorderRadius.circular(1),
-                ),
+                decoration: BoxDecoration(color: Colors.deepPurple, borderRadius: BorderRadius.circular(1)),
               ),
             _buildDraggableTaskItem(item, provider, indentLevel, indentWidth),
             // Drop indicator below
@@ -829,10 +880,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
               Container(
                 height: 2,
                 margin: const EdgeInsets.symmetric(horizontal: 4),
-                decoration: BoxDecoration(
-                  color: Colors.deepPurple,
-                  borderRadius: BorderRadius.circular(1),
-                ),
+                decoration: BoxDecoration(color: Colors.deepPurple, borderRadius: BorderRadius.circular(1)),
               ),
           ],
         );
@@ -853,10 +901,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
       return Dismissible(
         key: Key('dismiss_${item.id}'),
         direction: DismissDirection.horizontal,
-        dismissThresholds: const {
-          DismissDirection.startToEnd: 0.25,
-          DismissDirection.endToStart: 0.3,
-        },
+        dismissThresholds: const {DismissDirection.startToEnd: 0.25, DismissDirection.endToStart: 0.3},
         confirmDismiss: (direction) async {
           if (direction == DismissDirection.startToEnd) {
             _incrementIndent(item.id);
@@ -868,10 +913,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
         secondaryBackground: Container(
           alignment: Alignment.centerRight,
           padding: const EdgeInsets.only(right: 20.0),
-          decoration: BoxDecoration(
-            color: Colors.red,
-            borderRadius: BorderRadius.circular(8),
-          ),
+          decoration: BoxDecoration(color: Colors.red, borderRadius: BorderRadius.circular(8)),
           child: const Icon(Icons.delete, color: Colors.white),
         ),
         onDismissed: (direction) {
@@ -900,11 +942,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                 color: const Color(0xFF2C2C2E),
                 borderRadius: BorderRadius.circular(12),
                 boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.3),
-                    blurRadius: 10,
-                    offset: const Offset(0, 4),
-                  ),
+                  BoxShadow(color: Colors.black.withOpacity(0.3), blurRadius: 10, offset: const Offset(0, 4)),
                 ],
               ),
               child: Row(
@@ -923,10 +961,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
               ),
             ),
           ),
-          childWhenDragging: Opacity(
-            opacity: 0.3,
-            child: taskContent,
-          ),
+          childWhenDragging: Opacity(opacity: 0.3, child: taskContent),
           child: taskContent,
         ),
       );
@@ -963,13 +998,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
             decoration: BoxDecoration(
               color: const Color(0xFF2C2C2E),
               borderRadius: BorderRadius.circular(12),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.3),
-                  blurRadius: 10,
-                  offset: const Offset(0, 4),
-                ),
-              ],
+              boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.3), blurRadius: 10, offset: const Offset(0, 4))],
             ),
             child: Row(
               children: [
@@ -987,10 +1016,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
             ),
           ),
         ),
-        childWhenDragging: Opacity(
-          opacity: 0.3,
-          child: taskContent,
-        ),
+        childWhenDragging: Opacity(opacity: 0.3, child: taskContent),
         child: taskContent,
       ),
     );
@@ -998,14 +1024,21 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
 
   TaskCategory _getCategoryForItem(ActionItemWithMetadata item) {
     final now = DateTime.now();
+    final startOfToday = DateTime(now.year, now.month, now.day);
     final startOfTomorrow = DateTime(now.year, now.month, now.day + 1);
     final startOfDayAfterTomorrow = DateTime(now.year, now.month, now.day + 2);
 
     if (item.dueAt == null) {
+      final sevenDaysAgo = now.subtract(const Duration(days: 7));
+      if (item.createdAt != null && item.createdAt!.isBefore(sevenDaysAgo)) {
+        return TaskCategory.overdue;
+      }
       return TaskCategory.noDeadline;
     }
     final dueDate = item.dueAt!;
-    if (dueDate.isBefore(startOfTomorrow)) {
+    if (dueDate.isBefore(startOfToday)) {
+      return TaskCategory.overdue;
+    } else if (dueDate.isBefore(startOfTomorrow)) {
       return TaskCategory.today;
     } else if (dueDate.isBefore(startOfDayAfterTomorrow)) {
       return TaskCategory.tomorrow;
@@ -1014,11 +1047,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
     }
   }
 
-  Widget _buildTaskItemContent(
-    ActionItemWithMetadata item,
-    ActionItemsProvider provider,
-    double indentWidth,
-  ) {
+  Widget _buildTaskItemContent(ActionItemWithMetadata item, ActionItemsProvider provider, double indentWidth) {
     final indentLevel = _getIndentLevel(item);
     final goalTitle = _getGoalTitleForTask(item);
 
@@ -1026,65 +1055,52 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
       onTap: () => _showEditSheet(item),
       child: Container(
         margin: const EdgeInsets.symmetric(vertical: 1),
-        child: Dismissible(
-          key: Key('${item.id}_dismiss'),
-          direction: DismissDirection.none, // Disable dismiss, use swipe for indent
-          child: Padding(
-            padding: EdgeInsets.only(left: 4 + indentWidth, right: 4, top: 6, bottom: 6),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                // Indent line
-                if (indentLevel > 0)
-                  Padding(
-                    padding: const EdgeInsets.only(right: 10),
-                    child: Container(
-                      width: 1.5,
-                      height: 20,
-                      decoration: BoxDecoration(
-                        color: Colors.grey[700],
-                        borderRadius: BorderRadius.circular(1),
+        child: Padding(
+          padding: EdgeInsets.only(left: 4 + indentWidth, right: 4, top: 6, bottom: 6),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              // Indent line
+              if (indentLevel > 0)
+                Padding(
+                  padding: const EdgeInsets.only(right: 10),
+                  child: Container(
+                    width: 1.5,
+                    height: 20,
+                    decoration: BoxDecoration(color: Colors.grey[700], borderRadius: BorderRadius.circular(1)),
+                  ),
+                ),
+              // Checkbox
+              GestureDetector(
+                onTap: () async {
+                  HapticFeedback.lightImpact();
+                  await provider.updateActionItemState(item, !item.completed);
+                  if (!item.completed) _onActionItemCompleted();
+                },
+                child: _buildCheckbox(item.completed),
+              ),
+              const SizedBox(width: 12),
+              // Task text
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      item.description,
+                      style: TextStyle(
+                        color: item.completed ? Colors.grey[600] : Colors.white,
+                        fontSize: 15,
+                        decoration: item.completed ? TextDecoration.lineThrough : null,
                       ),
                     ),
-                  ),
-                // Checkbox
-                GestureDetector(
-                  onTap: () async {
-                    HapticFeedback.lightImpact();
-                    await provider.updateActionItemState(item, !item.completed);
-                    if (!item.completed) _onActionItemCompleted();
-                  },
-                  child: _buildCheckbox(item.completed),
-                ),
-                const SizedBox(width: 12),
-                // Task text
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        item.description,
-                        style: TextStyle(
-                          color: item.completed ? Colors.grey[600] : Colors.white,
-                          fontSize: 15,
-                          decoration: item.completed ? TextDecoration.lineThrough : null,
-                        ),
-                      ),
-                      if (goalTitle != null) ...[
-                        const SizedBox(height: 4),
-                        Text(
-                          goalTitle,
-                          style: TextStyle(
-                            color: Colors.grey[600],
-                            fontSize: 12,
-                          ),
-                        ),
-                      ],
+                    if (goalTitle != null) ...[
+                      const SizedBox(height: 4),
+                      Text(goalTitle, style: TextStyle(color: Colors.grey[600], fontSize: 12)),
                     ],
-                  ),
+                  ],
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ),
@@ -1097,10 +1113,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
       height: 22,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        border: Border.all(
-          color: isCompleted ? Colors.amber : Colors.grey[600]!,
-          width: 2,
-        ),
+        border: Border.all(color: isCompleted ? Colors.amber : Colors.grey[600]!, width: 2),
         color: isCompleted ? Colors.amber : Colors.transparent,
       ),
       child: isCompleted ? const Icon(Icons.check, size: 14, color: Colors.black) : null,
@@ -1138,10 +1151,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                 title: Text(context.l10n.deleteGoal, style: const TextStyle(color: Colors.white)),
                 content: Text('Delete "${goal.title}"?', style: const TextStyle(color: Colors.white70)),
                 actions: [
-                  TextButton(
-                    onPressed: () => Navigator.pop(context, false),
-                    child: Text(context.l10n.cancel),
-                  ),
+                  TextButton(onPressed: () => Navigator.pop(context, false), child: Text(context.l10n.cancel)),
                   TextButton(
                     onPressed: () => Navigator.pop(context, true),
                     style: TextButton.styleFrom(foregroundColor: Colors.red),
@@ -1158,10 +1168,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
       },
       background: Container(
         margin: const EdgeInsets.symmetric(vertical: 6),
-        decoration: BoxDecoration(
-          color: Colors.red,
-          borderRadius: BorderRadius.circular(8),
-        ),
+        decoration: BoxDecoration(color: Colors.red, borderRadius: BorderRadius.circular(8)),
         alignment: Alignment.centerRight,
         padding: const EdgeInsets.only(right: 20),
         child: const Icon(Icons.delete_outline, color: Colors.white),
@@ -1222,12 +1229,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
         onSave: (title, current, target) async {
           // Update goal via provider
           final goalsProvider = Provider.of<GoalsProvider>(context, listen: false);
-          await goalsProvider.updateGoal(
-            goal.id,
-            title: title,
-            currentValue: current,
-            targetValue: target,
-          );
+          await goalsProvider.updateGoal(goal.id, title: title, currentValue: current, targetValue: target);
           MixpanelManager().goalUpdated(goalId: goal.id, source: 'tasks_page');
         },
         onDelete: () {
@@ -1273,9 +1275,7 @@ class _GoalCreateSheetState extends State<_GoalCreateSheet> {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: EdgeInsets.only(
-        bottom: MediaQuery.of(context).viewInsets.bottom,
-      ),
+      padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
       child: Container(
         decoration: const BoxDecoration(
           color: Color(0xFF1A1A1A),
@@ -1290,31 +1290,18 @@ class _GoalCreateSheetState extends State<_GoalCreateSheet> {
                 width: 40,
                 height: 4,
                 margin: const EdgeInsets.only(bottom: 20),
-                decoration: BoxDecoration(
-                  color: Colors.grey.shade700,
-                  borderRadius: BorderRadius.circular(2),
-                ),
+                decoration: BoxDecoration(color: Colors.grey.shade700, borderRadius: BorderRadius.circular(2)),
               ),
               Text(
                 context.l10n.addGoal,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 18,
-                  fontWeight: FontWeight.w600,
-                ),
+                style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
               ),
               const SizedBox(height: 24),
               // Title field
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    context.l10n.goalTitle,
-                    style: TextStyle(
-                      color: Colors.white.withOpacity(0.5),
-                      fontSize: 12,
-                    ),
-                  ),
+                  Text(context.l10n.goalTitle, style: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 12)),
                   const SizedBox(height: 8),
                   TextField(
                     controller: titleController,
@@ -1324,10 +1311,7 @@ class _GoalCreateSheetState extends State<_GoalCreateSheet> {
                       filled: true,
                       fillColor: Colors.white.withOpacity(0.08),
                       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: BorderSide.none,
-                      ),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
                     ),
                   ),
                 ],
@@ -1343,10 +1327,7 @@ class _GoalCreateSheetState extends State<_GoalCreateSheet> {
                       children: [
                         Text(
                           context.l10n.current,
-                          style: TextStyle(
-                            color: Colors.white.withOpacity(0.5),
-                            fontSize: 12,
-                          ),
+                          style: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 12),
                         ),
                         const SizedBox(height: 8),
                         TextField(
@@ -1371,13 +1352,7 @@ class _GoalCreateSheetState extends State<_GoalCreateSheet> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          context.l10n.target,
-                          style: TextStyle(
-                            color: Colors.white.withOpacity(0.5),
-                            fontSize: 12,
-                          ),
-                        ),
+                        Text(context.l10n.target, style: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 12)),
                         const SizedBox(height: 8),
                         TextField(
                           controller: targetController,
@@ -1421,9 +1396,7 @@ class _GoalCreateSheetState extends State<_GoalCreateSheet> {
                     backgroundColor: const Color(0xFF22C55E),
                     foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   ),
                   child: Text(context.l10n.addGoal),
                 ),
@@ -1442,11 +1415,7 @@ class _GoalEditSheet extends StatefulWidget {
   final Function(String title, double current, double target) onSave;
   final Function() onDelete;
 
-  const _GoalEditSheet({
-    required this.goal,
-    required this.onSave,
-    required this.onDelete,
-  });
+  const _GoalEditSheet({required this.goal, required this.onSave, required this.onDelete});
 
   @override
   State<_GoalEditSheet> createState() => _GoalEditSheetState();
@@ -1476,9 +1445,7 @@ class _GoalEditSheetState extends State<_GoalEditSheet> {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: EdgeInsets.only(
-        bottom: MediaQuery.of(context).viewInsets.bottom,
-      ),
+      padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
       child: Container(
         decoration: const BoxDecoration(
           color: Color(0xFF1A1A1A),
@@ -1493,31 +1460,18 @@ class _GoalEditSheetState extends State<_GoalEditSheet> {
                 width: 40,
                 height: 4,
                 margin: const EdgeInsets.only(bottom: 20),
-                decoration: BoxDecoration(
-                  color: Colors.grey.shade700,
-                  borderRadius: BorderRadius.circular(2),
-                ),
+                decoration: BoxDecoration(color: Colors.grey.shade700, borderRadius: BorderRadius.circular(2)),
               ),
               Text(
                 context.l10n.editGoal,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 18,
-                  fontWeight: FontWeight.w600,
-                ),
+                style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
               ),
               const SizedBox(height: 24),
               // Title field
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    context.l10n.goalTitle,
-                    style: TextStyle(
-                      color: Colors.white.withOpacity(0.5),
-                      fontSize: 12,
-                    ),
-                  ),
+                  Text(context.l10n.goalTitle, style: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 12)),
                   const SizedBox(height: 8),
                   TextField(
                     controller: titleController,
@@ -1527,10 +1481,7 @@ class _GoalEditSheetState extends State<_GoalEditSheet> {
                       filled: true,
                       fillColor: Colors.white.withOpacity(0.08),
                       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: BorderSide.none,
-                      ),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
                     ),
                   ),
                 ],
@@ -1546,10 +1497,7 @@ class _GoalEditSheetState extends State<_GoalEditSheet> {
                       children: [
                         Text(
                           context.l10n.current,
-                          style: TextStyle(
-                            color: Colors.white.withOpacity(0.5),
-                            fontSize: 12,
-                          ),
+                          style: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 12),
                         ),
                         const SizedBox(height: 8),
                         TextField(
@@ -1574,13 +1522,7 @@ class _GoalEditSheetState extends State<_GoalEditSheet> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          context.l10n.target,
-                          style: TextStyle(
-                            color: Colors.white.withOpacity(0.5),
-                            fontSize: 12,
-                          ),
-                        ),
+                        Text(context.l10n.target, style: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 12)),
                         const SizedBox(height: 8),
                         TextField(
                           controller: targetController,
@@ -1615,8 +1557,10 @@ class _GoalEditSheetState extends State<_GoalEditSheet> {
                           builder: (context) => AlertDialog(
                             backgroundColor: const Color(0xFF1F1F25),
                             title: Text(context.l10n.deleteGoal, style: const TextStyle(color: Colors.white)),
-                            content:
-                                Text('Delete "${widget.goal.title}"?', style: const TextStyle(color: Colors.white70)),
+                            content: Text(
+                              'Delete "${widget.goal.title}"?',
+                              style: const TextStyle(color: Colors.white70),
+                            ),
                             actions: [
                               TextButton(
                                 onPressed: () => Navigator.pop(context, false),
@@ -1665,9 +1609,7 @@ class _GoalEditSheetState extends State<_GoalEditSheet> {
                         backgroundColor: const Color(0xFF22C55E),
                         foregroundColor: Colors.white,
                         padding: const EdgeInsets.symmetric(vertical: 14),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                       ),
                       child: Text(context.l10n.save),
                     ),

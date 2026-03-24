@@ -1,9 +1,13 @@
-from typing import Optional
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from firebase_admin import auth
 import os
 import requests
+import logging
+
+from utils.other.endpoints import rate_limit_dependency
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -11,23 +15,12 @@ router = APIRouter()
 class UserCredentials(BaseModel):
     email: str
     password: str
-    name: Optional[str] = None
 
 
-@router.post("/v1/signup")
-def sign_up(credentials: UserCredentials):
-    try:
-        user = auth.create_user(
-            email=credentials.email,
-            password=credentials.password,
-            display_name=credentials.name,
-        )
-        return {"status": "ok", "message": "User created successfully", "uid": user.uid}
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
-
-@router.post("/v1/signin")
+@router.post(
+    "/v1/signin",
+    dependencies=[Depends(rate_limit_dependency(endpoint="signin", requests_per_window=5, window_seconds=60))],
+)
 def sign_in(credentials: UserCredentials):
     try:
         api_key = os.getenv("CUSTOM_AUTH_FIREBASE_API_KEY")
@@ -53,5 +46,5 @@ def sign_in(credentials: UserCredentials):
             "exp": decoded_token["exp"],
         }
     except Exception as e:
-        print("error authenticating", e)
+        logger.error(f"error authenticating {e}")
         raise HTTPException(status_code=400, detail=str(e))

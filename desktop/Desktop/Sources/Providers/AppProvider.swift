@@ -55,45 +55,52 @@ class AppProvider: ObservableObject {
                 capabilitiesTask
             )
 
-            // Parse groups from v2 response
-            var allApps: [OmiApp] = []
-            popularApps = []
-            integrationApps = []
-            chatApps = []
-            summaryApps = []
-            notificationApps = []
+            // Process groups off main thread
+            let processed = await Task.detached(priority: .utility) {
+                var dedupedApps: [OmiApp] = []
+                var popular: [OmiApp] = []
+                var integration: [OmiApp] = []
+                var chat: [OmiApp] = []
+                var summary: [OmiApp] = []
+                var notification: [OmiApp] = []
+                var allApps: [OmiApp] = []
 
-            for group in v2Response.groups {
-                // Add all apps to the main list
-                allApps.append(contentsOf: group.data)
-
-                // Also assign to specific lists based on capability
-                switch group.capability.id {
-                case "popular":
-                    popularApps = group.data
-                case "external_integration":
-                    integrationApps = group.data
-                case "chat":
-                    chatApps = group.data
-                case "memories":
-                    summaryApps = group.data
-                case "proactive_notification":
-                    notificationApps = group.data
-                default:
-                    break
+                for group in v2Response.groups {
+                    allApps.append(contentsOf: group.data)
+                    switch group.capability.id {
+                    case "popular":
+                        popular = group.data
+                    case "external_integration":
+                        integration = group.data
+                    case "chat":
+                        chat = group.data
+                    case "memories":
+                        summary = group.data
+                    case "proactive_notification":
+                        notification = group.data
+                    default:
+                        break
+                    }
                 }
-            }
 
-            // Remove duplicates from allApps (same app may appear in multiple groups)
-            var seenIds = Set<String>()
-            apps = allApps.filter { app in
-                if seenIds.contains(app.id) {
-                    return false
+                // Remove duplicates
+                var seenIds = Set<String>()
+                dedupedApps = allApps.filter { app in
+                    if seenIds.contains(app.id) { return false }
+                    seenIds.insert(app.id)
+                    return true
                 }
-                seenIds.insert(app.id)
-                return true
-            }
 
+                return (dedupedApps, popular, integration, chat, summary, notification)
+            }.value
+
+            // Batch-assign all @Published properties on main actor
+            apps = processed.0
+            popularApps = processed.1
+            integrationApps = processed.2
+            chatApps = processed.3
+            summaryApps = processed.4
+            notificationApps = processed.5
             categories = fetchedCategories
             capabilities = fetchedCapabilities
 

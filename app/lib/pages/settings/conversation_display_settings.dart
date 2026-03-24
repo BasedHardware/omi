@@ -23,13 +23,8 @@ class _ConversationDisplaySettingsState extends State<ConversationDisplaySetting
 
   Widget _buildSectionContainer({required List<Widget> children}) {
     return Container(
-      decoration: BoxDecoration(
-        color: const Color(0xFF1C1C1E),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Column(
-        children: children,
-      ),
+      decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(12)),
+      child: Column(children: children),
     );
   }
 
@@ -41,21 +36,11 @@ class _ConversationDisplaySettingsState extends State<ConversationDisplaySetting
         children: [
           Text(
             title,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 20,
-              fontWeight: FontWeight.w600,
-            ),
+            style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w600),
           ),
           if (subtitle != null) ...[
             const SizedBox(height: 6),
-            Text(
-              subtitle,
-              style: TextStyle(
-                color: Colors.grey.shade400,
-                fontSize: 14,
-              ),
-            ),
+            Text(subtitle, style: TextStyle(color: Colors.grey.shade400, fontSize: 14)),
           ],
         ],
       ),
@@ -76,13 +61,8 @@ class _ConversationDisplaySettingsState extends State<ConversationDisplaySetting
           Container(
             width: 40,
             height: 40,
-            decoration: BoxDecoration(
-              color: const Color(0xFF2A2A2E),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Center(
-              child: FaIcon(icon, color: Colors.grey.shade400, size: 16),
-            ),
+            decoration: BoxDecoration(color: const Color(0xFF2A2A2E), borderRadius: BorderRadius.circular(10)),
+            child: Center(child: FaIcon(icon, color: Colors.grey.shade400, size: 16)),
           ),
           const SizedBox(width: 14),
           Expanded(
@@ -91,28 +71,14 @@ class _ConversationDisplaySettingsState extends State<ConversationDisplaySetting
               children: [
                 Text(
                   title,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 16,
-                    fontWeight: FontWeight.w500,
-                  ),
+                  style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w500),
                 ),
                 const SizedBox(height: 2),
-                Text(
-                  description,
-                  style: TextStyle(
-                    color: Colors.grey.shade500,
-                    fontSize: 12,
-                  ),
-                ),
+                Text(description, style: TextStyle(color: Colors.grey.shade500, fontSize: 12)),
               ],
             ),
           ),
-          Switch(
-            value: value,
-            onChanged: onChanged,
-            activeColor: const Color(0xFF22C55E),
-          ),
+          Switch(value: value, onChanged: onChanged, activeColor: const Color(0xFF22C55E)),
         ],
       ),
     );
@@ -142,17 +108,8 @@ class _ConversationDisplaySettingsState extends State<ConversationDisplaySetting
               Container(
                 width: 40,
                 height: 40,
-                decoration: BoxDecoration(
-                  color: const Color(0xFF2A2A2E),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Center(
-                  child: FaIcon(
-                    FontAwesomeIcons.clock,
-                    color: Colors.grey.shade400,
-                    size: 16,
-                  ),
-                ),
+                decoration: BoxDecoration(color: const Color(0xFF2A2A2E), borderRadius: BorderRadius.circular(10)),
+                child: Center(child: FaIcon(FontAwesomeIcons.clock, color: Colors.grey.shade400, size: 16)),
               ),
               const SizedBox(width: 14),
               Expanded(
@@ -161,36 +118,22 @@ class _ConversationDisplaySettingsState extends State<ConversationDisplaySetting
                   children: [
                     Text(
                       context.l10n.durationThreshold,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 16,
-                        fontWeight: FontWeight.w500,
-                      ),
+                      style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w500),
                     ),
                     const SizedBox(height: 2),
                     Text(
                       context.l10n.durationThresholdDesc,
-                      style: TextStyle(
-                        color: Colors.grey.shade500,
-                        fontSize: 12,
-                      ),
+                      style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
                     ),
                   ],
                 ),
               ),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF2A2A2E),
-                  borderRadius: BorderRadius.circular(8),
-                ),
+                decoration: BoxDecoration(color: const Color(0xFF2A2A2E), borderRadius: BorderRadius.circular(8)),
                 child: Text(
                   getThresholdLabel(provider.shortConversationThreshold),
-                  style: const TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.white,
-                  ),
+                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.white),
                 ),
               ),
             ],
@@ -207,9 +150,7 @@ class _ConversationDisplaySettingsState extends State<ConversationDisplaySetting
                     setState(() {});
                   },
                   child: Container(
-                    margin: EdgeInsets.only(
-                      right: threshold != thresholds.last ? 8 : 0,
-                    ),
+                    margin: EdgeInsets.only(right: threshold != thresholds.last ? 8 : 0),
                     padding: const EdgeInsets.symmetric(vertical: 12),
                     decoration: BoxDecoration(
                       color: isSelected ? const Color(0xFF22C55E).withValues(alpha: 0.2) : const Color(0xFF2A2A2E),
@@ -259,10 +200,7 @@ class _ConversationDisplaySettingsState extends State<ConversationDisplaySetting
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _buildSectionHeader(
-                  context.l10n.visibility,
-                  subtitle: context.l10n.visibilitySubtitle,
-                ),
+                _buildSectionHeader(context.l10n.visibility, subtitle: context.l10n.visibilitySubtitle),
                 _buildSectionContainer(
                   children: [
                     _buildToggleItem(
@@ -293,11 +231,7 @@ class _ConversationDisplaySettingsState extends State<ConversationDisplaySetting
                   context.l10n.shortConversationThreshold,
                   subtitle: context.l10n.shortConversationThresholdSubtitle,
                 ),
-                _buildSectionContainer(
-                  children: [
-                    _buildThresholdSelector(provider),
-                  ],
-                ),
+                _buildSectionContainer(children: [_buildThresholdSelector(provider)]),
                 const SizedBox(height: 32),
               ],
             ),

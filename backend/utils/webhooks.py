@@ -18,6 +18,9 @@ from models.users import WebhookType
 import database.notifications as notification_db
 import database.users as users_db
 from utils.notifications import send_notification
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 def _json_serialize_datetime(obj: Any) -> Any:
@@ -74,9 +77,9 @@ def conversation_created_webhook(uid, memory: Conversation):
                 headers={'Content-Type': 'application/json'},
                 timeout=30,
             )
-            print('memory_created_webhook:', webhook_url, response.status_code)
+            logger.info(f'memory_created_webhook: {webhook_url} {response.status_code}')
         except Exception as e:
-            print(f"Error sending memory created to developer webhook: {e}")
+            logger.error(f"Error sending memory created to developer webhook: {e}")
     else:
         return
 
@@ -95,15 +98,15 @@ def day_summary_webhook(uid, summary: str):
                 headers={'Content-Type': 'application/json'},
                 timeout=30,
             )
-            print('day_summary_webhook:', webhook_url, response.status_code)
+            logger.info(f'day_summary_webhook: {webhook_url} {response.status_code}')
         except Exception as e:
-            print(f"Error sending day summary to developer webhook: {e}")
+            logger.error(f"Error sending day summary to developer webhook: {e}")
     else:
         return
 
 
 async def realtime_transcript_webhook(uid, segments: List[dict]):
-    print("realtime_transcript_webhook", uid)
+    logger.info(f"realtime_transcript_webhook {uid}")
     toggled = user_webhook_status_db(uid, WebhookType.realtime_transcript)
 
     if toggled:
@@ -118,7 +121,7 @@ async def realtime_transcript_webhook(uid, segments: List[dict]):
                 headers={'Content-Type': 'application/json'},
                 timeout=15,
             )
-            print('realtime_transcript_webhook:', webhook_url, response.status_code)
+            logger.info(f'realtime_transcript_webhook: {webhook_url} {response.status_code}')
             if response.status_code == 200:
                 response_data = response.json()
                 if not response_data:
@@ -127,7 +130,7 @@ async def realtime_transcript_webhook(uid, segments: List[dict]):
                 if len(message) > 5:
                     send_webhook_notification(uid, message)
         except Exception as e:
-            print(f"Error sending realtime transcript to developer webhook: {e}")
+            logger.error(f"Error sending realtime transcript to developer webhook: {e}")
     else:
         return
 
@@ -150,7 +153,7 @@ def get_audio_bytes_webhook_seconds(uid: str):
 
 
 async def send_audio_bytes_developer_webhook(uid: str, sample_rate: int, data: bytearray):
-    print("send_audio_bytes_developer_webhook", uid)
+    logger.info(f"send_audio_bytes_developer_webhook {uid}")
     # TODO: add a lock, send shorter segments, validate regex.
     toggled = user_webhook_status_db(uid, WebhookType.audio_bytes)
     if toggled:
@@ -163,9 +166,9 @@ async def send_audio_bytes_developer_webhook(uid: str, sample_rate: int, data: b
             response = requests.post(
                 webhook_url, data=data, headers={'Content-Type': 'application/octet-stream'}, timeout=15
             )
-            print('send_audio_bytes_developer_webhook:', webhook_url, response.status_code)
+            logger.info(f'send_audio_bytes_developer_webhook: {webhook_url} {response.status_code}')
         except Exception as e:
-            print(f"Error sending audio bytes to developer webhook: {e}")
+            logger.error(f"Error sending audio bytes to developer webhook: {e}")
     else:
         return
 
@@ -183,18 +186,18 @@ async def connect_user_webhook_ws(sample_rate: int, language: str, preseconds: i
                 async for message in socket:
                     response = json.loads(message)
             except websockets.exceptions.ConnectionClosedOK:
-                print("Speechmatics connection closed normally.")
+                logger.info("Speechmatics connection closed normally.")
             except Exception as e:
-                print(f"Error receiving from Speechmatics: {e}")
+                logger.error(f"Error receiving from Speechmatics: {e}")
             finally:
                 if not socket.closed:
                     await socket.close()
-                    print("Speechmatics WebSocket closed in on_message.")
+                    logger.info("Speechmatics WebSocket closed in on_message.")
 
         asyncio.create_task(on_message())
         return socket
     except Exception as e:
-        print(f"Exception in process_audio_speechmatics: {e}")
+        logger.error(f"Exception in process_audio_speechmatics: {e}")
         raise
 
 

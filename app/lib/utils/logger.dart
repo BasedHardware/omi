@@ -12,20 +12,12 @@ class CrashlyticsTalkerObserver extends TalkerObserver {
 
   @override
   void onError(err) {
-    FirebaseCrashlytics.instance.recordError(
-      err.error,
-      err.stackTrace,
-      reason: err.message,
-    );
+    FirebaseCrashlytics.instance.recordError(err.error, err.stackTrace, reason: err.message);
   }
 
   @override
   void onException(err) {
-    FirebaseCrashlytics.instance.recordError(
-      err.exception,
-      err.stackTrace,
-      reason: err.message,
-    );
+    FirebaseCrashlytics.instance.recordError(err.exception, err.stackTrace, reason: err.message);
   }
 }
 
@@ -79,10 +71,7 @@ class LoggerSnackbar extends StatelessWidget {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: Colors.red,
-        borderRadius: BorderRadius.circular(10),
-      ),
+      decoration: BoxDecoration(color: Colors.red, borderRadius: BorderRadius.circular(10)),
       child: ListTile(
         contentPadding: const EdgeInsets.all(0),
         leading: const Icon(Icons.error_outline, color: Colors.white),

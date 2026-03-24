@@ -7,7 +7,6 @@ import 'package:visibility_detector/visibility_detector.dart';
 
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/pages/capture/widgets/widgets.dart';
-import 'package:omi/pages/conversations/widgets/daily_score_widget.dart';
 import 'package:omi/pages/conversations/widgets/daily_summaries_list.dart';
 import 'package:omi/pages/conversations/widgets/folder_tabs.dart';
 import 'package:omi/pages/conversations/widgets/goals_widget.dart';
@@ -39,11 +38,8 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
   final AppReviewService _appReviewService = AppReviewService();
   final ScrollController _scrollController = ScrollController();
   final GlobalKey<GoalsWidgetState> _goalsWidgetKey = GlobalKey<GoalsWidgetState>();
-  final GlobalKey<DailyScoreWidgetState> _dailyScoreWidgetKey = GlobalKey<DailyScoreWidgetState>();
 
-  void _refreshGoals() {
-    _dailyScoreWidgetKey.currentState?.reloadGoals();
-  }
+  void _refreshGoals() {}
 
   // Public method to trigger goal creation from outside
   void addGoal() {
@@ -83,11 +79,7 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
 
   void scrollToTop() {
     if (_scrollController.hasClients) {
-      _scrollController.animateTo(
-        0.0,
-        duration: const Duration(milliseconds: 500),
-        curve: Curves.easeOutCubic,
-      );
+      _scrollController.animateTo(0.0, duration: const Duration(milliseconds: 500), curve: Curves.easeOutCubic);
     }
   }
 
@@ -110,30 +102,28 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
             child: Container(
               width: 100,
               height: 16,
-              decoration: BoxDecoration(
-                color: AppStyles.backgroundSecondary,
-                borderRadius: BorderRadius.circular(8),
-              ),
+              decoration: BoxDecoration(color: AppStyles.backgroundSecondary, borderRadius: BorderRadius.circular(8)),
             ),
           ),
           const SizedBox(height: 12),
           // Conversation items shimmer
           ...List.generate(
-              3,
-              (index) => Padding(
-                    padding: const EdgeInsets.only(bottom: 16.0),
-                    child: ShimmerWithTimeout(
-                      baseColor: AppStyles.backgroundSecondary,
-                      highlightColor: AppStyles.backgroundTertiary,
-                      child: Container(
-                        height: 80,
-                        decoration: BoxDecoration(
-                          color: AppStyles.backgroundSecondary,
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
-                    ),
-                  )),
+            3,
+            (index) => Padding(
+              padding: const EdgeInsets.only(bottom: 16.0),
+              child: ShimmerWithTimeout(
+                baseColor: AppStyles.backgroundSecondary,
+                highlightColor: AppStyles.backgroundTertiary,
+                child: Container(
+                  height: 80,
+                  decoration: BoxDecoration(
+                    color: AppStyles.backgroundSecondary,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+              ),
+            ),
+          ),
         ],
       ),
     );
@@ -157,10 +147,7 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
         child: Container(
           height: 60,
           margin: const EdgeInsets.symmetric(horizontal: 16.0),
-          decoration: BoxDecoration(
-            color: AppStyles.backgroundSecondary,
-            borderRadius: BorderRadius.circular(12),
-          ),
+          decoration: BoxDecoration(color: AppStyles.backgroundSecondary, borderRadius: BorderRadius.circular(12)),
         ),
       ),
     );
@@ -170,138 +157,127 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
   Widget build(BuildContext context) {
     Logger.debug('building conversations page');
     super.build(context);
-    return Consumer<ConversationProvider>(builder: (context, convoProvider, child) {
-      return RefreshIndicator(
-        onRefresh: () async {
-          HapticFeedback.mediumImpact();
-          Provider.of<CaptureProvider>(context, listen: false).refreshInProgressConversations();
-          // Refresh goals widget
-          _goalsWidgetKey.currentState?.refresh();
-          _refreshGoals();
-          await Future.wait([
-            convoProvider.getInitialConversations(),
-            Provider.of<FolderProvider>(context, listen: false).loadFolders(),
-          ]);
-        },
-        color: Colors.deepPurpleAccent,
-        backgroundColor: Colors.white,
-        child: CustomScrollView(
-          controller: _scrollController,
-          physics: const AlwaysScrollableScrollPhysics(),
-          slivers: [
-            // Header widgets (unchanged)
-            const SliverToBoxAdapter(child: SpeechProfileCardWidget()),
-            const SliverToBoxAdapter(child: UpdateFirmwareCardWidget()),
-            const SliverToBoxAdapter(child: ConversationCaptureWidget()),
+    return Consumer<ConversationProvider>(
+      builder: (context, convoProvider, child) {
+        return RefreshIndicator(
+          onRefresh: () async {
+            HapticFeedback.mediumImpact();
+            Provider.of<CaptureProvider>(context, listen: false).refreshInProgressConversations();
+            // Refresh goals widget
+            _goalsWidgetKey.currentState?.refresh();
+            _refreshGoals();
+            await Future.wait([
+              convoProvider.getInitialConversations(),
+              Provider.of<FolderProvider>(context, listen: false).loadFolders(),
+            ]);
+          },
+          color: Colors.deepPurpleAccent,
+          backgroundColor: Colors.white,
+          child: CustomScrollView(
+            controller: _scrollController,
+            physics: const AlwaysScrollableScrollPhysics(),
+            slivers: [
+              // Header widgets (unchanged)
+              const SliverToBoxAdapter(child: SpeechProfileCardWidget()),
+              const SliverToBoxAdapter(child: UpdateFirmwareCardWidget()),
+              const SliverToBoxAdapter(child: ConversationCaptureWidget()),
 
-            // Search bar
-            Consumer2<HomeProvider, ConversationProvider>(
-              builder: (context, homeProvider, convoProvider, _) {
-                bool shouldShowSearchBar = homeProvider.showConvoSearchBar || convoProvider.previousQuery.isNotEmpty;
-                if (!shouldShowSearchBar) {
-                  return const SliverToBoxAdapter(child: SizedBox.shrink());
-                }
-                return const SliverToBoxAdapter(
-                  child: Column(
-                    children: [
-                      SizedBox(height: 12),
-                      SearchWidget(),
-                      SizedBox(height: 12),
-                    ],
-                  ),
-                );
-              },
-            ),
-            const SliverToBoxAdapter(child: SearchResultHeaderWidget()),
-            getProcessingConversationsWidget(convoProvider.processingConversations),
-
-            // Daily Score, Today's Tasks, and Goals Widgets - hide when showing daily recaps, search bar is active, or calendar filter is active
-            Consumer<HomeProvider>(
-              builder: (context, homeProvider, _) {
-                final isSearchActive = homeProvider.showConvoSearchBar || convoProvider.previousQuery.isNotEmpty;
-                final hasCalendarFilter = convoProvider.selectedDate != null;
-                if (!SharedPreferencesUtil().showGoalTrackerEnabled ||
-                    convoProvider.showDailySummaries ||
-                    isSearchActive ||
-                    hasCalendarFilter) {
-                  return const SliverToBoxAdapter(child: SizedBox.shrink());
-                }
-                return SliverToBoxAdapter(
-                  child: Column(
-                    children: [
-                      Padding(
-                        padding: const EdgeInsets.only(left: 16, right: 16, top: 16),
-                        child: DailyScoreWidget(key: _dailyScoreWidgetKey, goalsWidgetKey: _goalsWidgetKey),
-                      ),
-                      const TodayTasksWidget(),
-                      GoalsWidget(key: _goalsWidgetKey, onRefresh: _refreshGoals),
-                    ],
-                  ),
-                );
-              },
-            ),
-
-            // Section header - show "Daily Recaps" or "Conversations"
-            SliverToBoxAdapter(
-              child: Builder(
-                builder: (context) => Padding(
-                  padding: const EdgeInsets.only(left: 24, top: 16, bottom: 8),
-                  child: Text(
-                    convoProvider.showDailySummaries ? context.l10n.dailyRecaps : context.l10n.conversations,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 18,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
+              // Search bar
+              Consumer2<HomeProvider, ConversationProvider>(
+                builder: (context, homeProvider, convoProvider, _) {
+                  bool shouldShowSearchBar = homeProvider.showConvoSearchBar || convoProvider.previousQuery.isNotEmpty;
+                  if (!shouldShowSearchBar) {
+                    return const SliverToBoxAdapter(child: SizedBox.shrink());
+                  }
+                  return const SliverToBoxAdapter(
+                    child: Column(children: [SizedBox(height: 12), SearchWidget(), SizedBox(height: 12)]),
+                  );
+                },
               ),
-            ),
+              const SliverToBoxAdapter(child: SearchResultHeaderWidget()),
+              getProcessingConversationsWidget(convoProvider.processingConversations),
 
-            // Folder tabs - hide when showing daily recaps
-            if (!convoProvider.showDailySummaries)
-              Consumer2<FolderProvider, ConversationProvider>(
-                builder: (context, folderProvider, convoProvider, _) {
+              // Today's Tasks and Goals widgets - hide when showing daily recaps, search bar is active, or calendar filter is active
+              Consumer<HomeProvider>(
+                builder: (context, homeProvider, _) {
+                  final isSearchActive = homeProvider.showConvoSearchBar || convoProvider.previousQuery.isNotEmpty;
+                  final hasCalendarFilter = convoProvider.selectedDate != null;
+                  final prefs = SharedPreferencesUtil();
+                  if (convoProvider.showDailySummaries || isSearchActive || hasCalendarFilter) {
+                    return const SliverToBoxAdapter(child: SizedBox.shrink());
+                  }
+                  final showTasks = prefs.showTasksEnabled;
+                  final showGoals = prefs.showGoalTrackerEnabled;
+                  if (!showTasks && !showGoals) {
+                    return const SliverToBoxAdapter(child: SizedBox.shrink());
+                  }
                   return SliverToBoxAdapter(
-                    child: FolderTabs(
-                      folders: folderProvider.folders,
-                      selectedFolderId: convoProvider.selectedFolderId,
-                      onFolderSelected: (folderId) {
-                        convoProvider.filterByFolder(folderId);
-                      },
-                      showStarredOnly: convoProvider.showStarredOnly,
-                      onStarredToggle: convoProvider.toggleStarredFilter,
-                      showDailySummaries: convoProvider.showDailySummaries,
-                      onDailySummariesToggle: convoProvider.toggleDailySummaries,
-                      hasDailySummaries: convoProvider.hasDailySummaries,
+                    child: Column(
+                      children: [
+                        if (showTasks) const TodayTasksWidget(),
+                        if (showGoals) GoalsWidget(key: _goalsWidgetKey, onRefresh: _refreshGoals),
+                      ],
                     ),
                   );
                 },
               ),
-            // Show daily summaries list or conversations based on filter
-            if (convoProvider.showDailySummaries)
-              const DailySummariesList()
-            else if (convoProvider.groupedConversations.isEmpty &&
-                !convoProvider.isLoadingConversations &&
-                !convoProvider.isFetchingConversations)
+
+              // Section header - show "Daily Recaps" or "Conversations"
               SliverToBoxAdapter(
-                child: Center(
-                  child: Padding(
-                    padding: const EdgeInsets.only(top: 32.0),
-                    child: EmptyConversationsWidget(
-                      isStarredFilterActive: convoProvider.showStarredOnly,
+                child: Builder(
+                  builder: (context) => Padding(
+                    padding: const EdgeInsets.only(left: 24, top: 16, bottom: 8),
+                    child: Text(
+                      convoProvider.showDailySummaries ? context.l10n.dailyRecaps : context.l10n.conversations,
+                      style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
                     ),
                   ),
                 ),
-              )
-            else if (convoProvider.groupedConversations.isEmpty &&
-                (convoProvider.isLoadingConversations || convoProvider.isFetchingConversations))
-              _buildLoadingShimmer()
-            else
-              SliverList(
-                delegate: SliverChildBuilderDelegate(
-                  childCount: convoProvider.groupedConversations.length + 1,
-                  (context, index) {
+              ),
+
+              // Folder tabs - hide when showing daily recaps
+              if (!convoProvider.showDailySummaries)
+                Consumer2<FolderProvider, ConversationProvider>(
+                  builder: (context, folderProvider, convoProvider, _) {
+                    return SliverToBoxAdapter(
+                      child: FolderTabs(
+                        folders: folderProvider.folders,
+                        selectedFolderId: convoProvider.selectedFolderId,
+                        onFolderSelected: (folderId) {
+                          convoProvider.filterByFolder(folderId);
+                        },
+                        showStarredOnly: convoProvider.showStarredOnly,
+                        onStarredToggle: convoProvider.toggleStarredFilter,
+                        showDailySummaries: convoProvider.showDailySummaries,
+                        onDailySummariesToggle: convoProvider.toggleDailySummaries,
+                        hasDailySummaries: convoProvider.hasDailySummaries,
+                      ),
+                    );
+                  },
+                ),
+              // Show daily summaries list or conversations based on filter
+              if (convoProvider.showDailySummaries)
+                const DailySummariesList()
+              else if (convoProvider.groupedConversations.isEmpty &&
+                  !convoProvider.isLoadingConversations &&
+                  !convoProvider.isFetchingConversations)
+                SliverToBoxAdapter(
+                  child: Center(
+                    child: Padding(
+                      padding: const EdgeInsets.only(top: 32.0),
+                      child: EmptyConversationsWidget(isStarredFilterActive: convoProvider.showStarredOnly),
+                    ),
+                  ),
+                )
+              else if (convoProvider.groupedConversations.isEmpty &&
+                  (convoProvider.isLoadingConversations || convoProvider.isFetchingConversations))
+                _buildLoadingShimmer()
+              else
+                SliverList(
+                  delegate: SliverChildBuilderDelegate(childCount: convoProvider.groupedConversations.length + 1, (
+                    context,
+                    index,
+                  ) {
                     if (index == convoProvider.groupedConversations.length) {
                       Logger.debug('loading more conversations');
                       if (convoProvider.isLoadingConversations) {
@@ -334,6 +310,7 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                         children: [
                           if (index == 0) const SizedBox(height: 10),
                           ConversationsGroupWidget(
+                            key: ValueKey(date),
                             isFirst: index == 0,
                             conversations: memoriesForDate,
                             date: date,
@@ -341,15 +318,13 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                         ],
                       );
                     }
-                  },
+                  }),
                 ),
-              ),
-            SliverToBoxAdapter(
-              child: SizedBox(height: convoProvider.isSelectionModeActive ? 160 : 100),
-            ),
-          ],
-        ),
-      );
-    });
+              SliverToBoxAdapter(child: SizedBox(height: convoProvider.isSelectionModeActive ? 160 : 100)),
+            ],
+          ),
+        );
+      },
+    );
   }
 }

@@ -3,6 +3,8 @@ kind: BackendConfig
 metadata:
   name: {{ .Values.service.backendConfig }}
 spec:
+  # Long timeout required for persistent WebSocket connections between backend-listen and pusher
+  timeoutSec: 3600
   healthCheck:
     checkIntervalSec: 10
     timeoutSec: 5

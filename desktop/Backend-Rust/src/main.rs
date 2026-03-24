@@ -32,7 +32,7 @@ mod services;
 
 use auth::{firebase_auth_extension, FirebaseAuth};
 use config::Config;
-use routes::{action_items_routes, advice_routes, agent_routes, apps_routes, auth_routes, chat_routes, chat_sessions_routes, conversations_routes, daily_score_routes, focus_sessions_routes, folder_routes, goals_routes, health_routes, knowledge_graph_routes, memories_routes, messages_routes, people_routes, personas_routes, staged_tasks_routes, stats_routes, updates_routes, users_routes, webhook_routes};
+use routes::{action_items_routes, advice_routes, agent_routes, apps_routes, auth_routes, chat_routes, chat_sessions_routes, config_routes, conversations_routes, crisp_routes, daily_score_routes, focus_sessions_routes, folder_routes, goals_routes, health_routes, knowledge_graph_routes, llm_usage_routes, memories_routes, messages_routes, people_routes, personas_routes, proxy_routes, screen_activity_routes, staged_tasks_routes, stats_routes, updates_routes, users_routes, webhook_routes};
 use services::{FirestoreService, IntegrationService, RedisService};
 
 /// Application state shared across handlers
@@ -42,16 +42,17 @@ pub struct AppState {
     pub integrations: Arc<IntegrationService>,
     pub redis: Option<Arc<RedisService>>,
     pub config: Arc<Config>,
+    pub crisp_session_cache: routes::crisp::SessionCache,
 }
 
 #[tokio::main]
 async fn main() {
-    // Open log file (same as Swift app: /tmp/omi.log)
+    // Open log file (same as Swift dev app: /tmp/omi-dev.log)
     // Wrap in LineWriter to flush after each line (ensures logs appear immediately)
     let log_file = OpenOptions::new()
         .create(true)
         .append(true)
-        .open("/tmp/omi.log")
+        .open("/tmp/omi-dev.log")
         .expect("Failed to open log file");
     let line_writer = LineWriter::new(log_file);
 
@@ -94,24 +95,52 @@ async fn main() {
     }
 
     // Initialize Firebase Auth
-    let firebase_auth = Arc::new(FirebaseAuth::new(
-        config.firebase_project_id.clone().unwrap_or_else(|| "based-hardware".to_string()),
-    ));
+    // Auth token validation may use a different project than Firestore.
+    // Cloud Run OAuth issues tokens for "based-hardware" (prod), so local dev
+    // needs FIREBASE_AUTH_PROJECT_ID=based-hardware while keeping Firestore on dev.
+    let auth_project_id = config.firebase_auth_project_id.clone()
+        .or_else(|| config.firebase_project_id.clone())
+        .expect("FIREBASE_AUTH_PROJECT_ID or FIREBASE_PROJECT_ID must be set");
+    let firebase_auth = Arc::new(FirebaseAuth::new(auth_project_id));
 
-    // Refresh Firebase keys
-    if let Err(e) = firebase_auth.refresh_keys().await {
-        tracing::warn!("Failed to fetch Firebase keys: {} - auth may not work", e);
+    // Refresh Firebase keys with retry (transient network failures at startup)
+    {
+        let max_attempts = 3u32;
+        let mut last_err = None;
+        for attempt in 1..=max_attempts {
+            match firebase_auth.refresh_keys().await {
+                Ok(_) => {
+                    if attempt > 1 {
+                        tracing::info!("Firebase keys fetched on attempt {}", attempt);
+                    }
+                    last_err = None;
+                    break;
+                }
+                Err(e) => {
+                    tracing::warn!("Firebase key fetch attempt {}/{} failed: {}", attempt, max_attempts, e);
+                    last_err = Some(e);
+                    if attempt < max_attempts {
+                        tokio::time::sleep(std::time::Duration::from_secs(1 << (attempt - 1))).await;
+                    }
+                }
+            }
+        }
+        if let Some(e) = last_err {
+            tracing::warn!("All {} Firebase key fetch attempts failed: {} - auth may not work", max_attempts, e);
+        }
     }
 
     // Initialize Firestore
+    let firestore_project_id = config.firebase_project_id.clone()
+        .expect("FIREBASE_PROJECT_ID must be set for Firestore");
     let firestore = match FirestoreService::new(
-        config.firebase_project_id.clone().unwrap_or_else(|| "based-hardware".to_string()),
+        firestore_project_id.clone(),
         config.encryption_secret.clone(),
     ).await {
         Ok(fs) => Arc::new(fs),
         Err(e) => {
             tracing::warn!("Failed to initialize Firestore: {} - using placeholder", e);
-            Arc::new(FirestoreService::new("based-hardware".to_string(), config.encryption_secret.clone()).await.unwrap())
+            Arc::new(FirestoreService::new(firestore_project_id, config.encryption_secret.clone()).await.unwrap())
         }
     };
 
@@ -142,6 +171,7 @@ async fn main() {
         integrations,
         redis,
         config: Arc::new(config.clone()),
+        crisp_session_cache: routes::crisp::new_session_cache(),
     };
 
     // Build CORS layer
@@ -175,8 +205,13 @@ async fn main() {
         .merge(people_routes())
         .merge(personas_routes())
         .merge(knowledge_graph_routes())
+        .merge(llm_usage_routes())
         .merge(stats_routes())
         .merge(webhook_routes())
+        .merge(crisp_routes())
+        .merge(screen_activity_routes())
+        .merge(proxy_routes())
+        .merge(config_routes())
         .with_state(state);
 
     // Merge both (now both are Router<()>), then add layers

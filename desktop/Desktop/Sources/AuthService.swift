@@ -2,7 +2,13 @@ import Foundation
 @preconcurrency import FirebaseAuth
 import CryptoKit
 import AppKit
+import AuthenticationServices
 import Sentry
+
+extension Notification.Name {
+    /// Posted by AuthService.signOut() so views can reset @AppStorage-backed properties directly.
+    static let userDidSignOut = Notification.Name("com.omi.desktop.userDidSignOut")
+}
 
 @MainActor
 class AuthService {
@@ -32,11 +38,26 @@ class AuthService {
     private var pendingOAuthState: String?
     private var oauthContinuation: CheckedContinuation<(code: String, state: String), Error>?
 
+    // Native Apple Sign In
+    private var currentNonce: String?
+    private var appleSignInDelegate: AppleSignInDelegate?
+
     // API Configuration
-    // Production: Cloud Run backend
-    private let apiBaseURL: String = "https://omi-desktop-auth-208440318997.us-central1.run.app/"
+    // Auth backend URL — must be set via OMI_AUTH_URL env var (in .env)
+    private let apiBaseURL: String = {
+        if let envURL = getenv("OMI_AUTH_URL") {
+            let url = String(cString: envURL)
+            if !url.isEmpty { return url.hasSuffix("/") ? url : url + "/" }
+        }
+        NSLog("OMI AUTH: OMI_AUTH_URL not set — OAuth sign-in will fail")
+        return ""
+    }()
     private var redirectURI: String {
         return "\(urlScheme)://auth/callback"
+    }
+
+    private var currentBundleIdentifier: String {
+        Bundle.main.bundleIdentifier ?? "unknown.bundle"
     }
 
     private var urlScheme: String {
@@ -60,8 +81,16 @@ class AuthService {
     private let kAuthTokenExpiry = "auth_tokenExpiry"
     private let kAuthTokenUserId = "auth_tokenUserId"  // User ID that owns the stored token
 
-    // Firebase Web API key (from GoogleService-Info.plist)
-    private let firebaseApiKey = "AIzaSyD9dzBdglc7IO9pPDIOvqnCoTis_xKkkC8"
+    // Firebase Web API key — fetched from backend via APIKeyService, set as env var.
+    // No hardcoded fallback — if the key isn't available, auth operations will fail
+    // with a clear error instead of silently using a potentially wrong key.
+    private var firebaseApiKey: String {
+        if let envKey = getenv("FIREBASE_API_KEY"), let key = String(validatingUTF8: envKey), !key.isEmpty {
+            return key
+        }
+        log("AuthService: FIREBASE_API_KEY not set — auth operations will fail")
+        return ""
+    }
 
     // MARK: - User Name Properties
 
@@ -141,7 +170,7 @@ class AuthService {
                 self.isSignedIn = true
                 AuthState.shared.userEmail = currentUser.email ?? savedEmail
                 AuthState.shared.isRestoringAuth = false
-                self.loadNameFromFirebaseIfNeeded()
+                self.loadNameFromBackendIfNeeded()
             } else {
                 // Firebase doesn't have user, but we have saved state
                 // This can happen with ad-hoc signing where Keychain doesn't persist
@@ -179,8 +208,14 @@ class AuthService {
                     AuthState.shared.userEmail = user?.email
                     AuthState.shared.isRestoringAuth = false
                     self?.saveAuthState(isSignedIn: true, email: user?.email, userId: user?.uid)
-                    // Load name from Firebase Auth displayName if we don't have it locally
-                    self?.loadNameFromFirebaseIfNeeded()
+                    // Configure database for the signed-in user immediately so any code
+                    // that touches the DB during onboarding (e.g. save_knowledge_graph)
+                    // writes to the correct per-user path instead of "anonymous".
+                    if let uid = user?.uid {
+                        Task { await RewindDatabase.shared.configure(userId: uid) }
+                    }
+                    // Load name from backend profile (Firestore), then Firebase Auth as fallback
+                    self?.loadNameFromBackendIfNeeded()
                     // Sync assistant settings from backend (fire-and-forget)
                     Task { await SettingsSyncManager.shared.syncFromServer() }
                 } else {
@@ -201,11 +236,117 @@ class AuthService {
         }
     }
 
-    // MARK: - Sign in with Apple (Web OAuth Flow)
+    // MARK: - Sign in with Apple (Native with Web OAuth Fallback)
 
     @MainActor
     func signInWithApple() async throws {
+        // Use web OAuth directly — native Apple Sign In requires entitlements that
+        // don't work reliably across dev/release builds. Web OAuth works everywhere.
         try await signIn(provider: "apple")
+    }
+
+    // MARK: - Native Apple Sign In (requires com.apple.developer.applesignin entitlement)
+
+    @MainActor
+    private func signInWithAppleNative() async throws {
+        NSLog("OMI AUTH: Starting native Apple Sign In")
+        isLoading = true
+        error = nil
+        AnalyticsManager.shared.signInStarted(provider: "apple")
+        defer { isLoading = false }
+
+        // Step 1: Generate nonce for security
+        let nonce = generateNonce()
+        currentNonce = nonce
+        let hashedNonce = sha256(nonce)
+
+        // Step 2: Perform native Apple Sign In
+        let appleCredential = try await performAppleSignIn(hashedNonce: hashedNonce)
+        appleSignInDelegate = nil  // Clean up
+
+        // Step 3: Extract identity token
+        guard let identityTokenData = appleCredential.identityToken,
+              let identityToken = String(data: identityTokenData, encoding: .utf8) else {
+            throw AuthError.missingToken
+        }
+        NSLog("OMI AUTH: Got Apple identity token")
+
+        // Save user name if provided (Apple only sends name on first sign-in)
+        if let fullName = appleCredential.fullName {
+            let given = fullName.givenName ?? ""
+            let family = fullName.familyName ?? ""
+            if !given.isEmpty {
+                givenName = given
+                familyName = family
+                NSLog("OMI AUTH: Saved name from Apple: %@ %@", given, family)
+            }
+        }
+        if let email = appleCredential.email {
+            AuthState.shared.userEmail = email
+        }
+
+        // Step 4: Sign in with Firebase using Apple credential
+        // Use Firebase SDK first (handles native bundle ID audience correctly),
+        // fall back to REST API (for web OAuth audience 'me.omi.web')
+        NSLog("OMI AUTH: Signing in with Firebase using Apple identity token...")
+
+        let credential = OAuthProvider.credential(providerID: .apple, idToken: identityToken, rawNonce: nonce)
+        var userId = ""
+
+        do {
+            // Firebase SDK sign-in (works with native bundle ID as token audience)
+            let authResult = try await Auth.auth().signIn(with: credential)
+            NSLog("OMI AUTH: Firebase SDK sign-in SUCCESS - uid: %@", authResult.user.uid)
+            userId = authResult.user.uid
+
+            // Get ID token from Firebase SDK for API calls
+            let tokenResult = try await authResult.user.getIDTokenResult()
+            let idToken = tokenResult.token
+            let refreshToken = authResult.user.refreshToken ?? ""
+            let expiresIn = Int(tokenResult.expirationDate.timeIntervalSinceNow)
+
+            saveTokens(idToken: idToken, refreshToken: refreshToken, expiresIn: expiresIn, userId: userId)
+        } catch {
+            // Fall back to REST API (works when Firebase SDK has keychain issues)
+            let nsError = error as NSError
+            NSLog("OMI AUTH: Firebase SDK Apple sign-in failed (domain=%@ code=%d): %@", nsError.domain, nsError.code, error.localizedDescription)
+            logError("AUTH: Firebase SDK Apple sign-in failed (domain=\(nsError.domain) code=\(nsError.code))", error: error)
+            NSLog("OMI AUTH: Falling back to REST API for Apple sign-in...")
+            let firebaseTokens = try await signInWithAppleIdentityToken(identityToken: identityToken, nonce: nonce)
+            userId = firebaseTokens.localId
+            saveTokens(idToken: firebaseTokens.idToken, refreshToken: firebaseTokens.refreshToken, expiresIn: firebaseTokens.expiresIn, userId: userId)
+        }
+
+        isSignedIn = true
+
+        // Extract email from identity token if not provided by Apple
+        if AuthState.shared.userEmail == nil {
+            if let payload = decodeJWT(identityToken),
+               let email = payload["email"] as? String {
+                AuthState.shared.userEmail = email
+            }
+        }
+
+        saveAuthState(isSignedIn: true, email: AuthState.shared.userEmail, userId: userId)
+        Task { await RewindDatabase.shared.configure(userId: userId) }
+
+        if givenName.isEmpty {
+            loadNameFromBackendIfNeeded()
+        }
+
+        AnalyticsManager.shared.identify()
+        AnalyticsManager.shared.signInCompleted(provider: "apple")
+        APIKeyService.shared.startFetchingKeys()
+
+        if !AnalyticsManager.isDevBuild {
+            let sentryUser = User(userId: userId)
+            sentryUser.email = AuthState.shared.userEmail
+            sentryUser.username = displayName.isEmpty ? nil : displayName
+            SentrySDK.setUser(sentryUser)
+        }
+
+        NSLog("OMI AUTH: Apple Sign in complete!")
+        fetchConversations()
     }
 
     // MARK: - Sign in with Google (Web OAuth Flow)
@@ -300,16 +441,18 @@ class AuthService {
             // Save auth state immediately
             let userId = firebaseTokens.localId
             saveAuthState(isSignedIn: true, email: tokenResult.email, userId: userId)
+            await RewindDatabase.shared.configure(userId: userId)
 
-            // Try to load name from Firebase (as backup if OAuth didn't provide it)
+            // Try to load name from backend profile (Firestore), then Firebase Auth as fallback
             if givenName.isEmpty {
-                loadNameFromFirebaseIfNeeded()
+                loadNameFromBackendIfNeeded()
             }
 
             // Identify user first, then track sign-in completed
             // (identify must happen before events for PostHog person profiles to work)
             AnalyticsManager.shared.identify()
             AnalyticsManager.shared.signInCompleted(provider: provider)
+            APIKeyService.shared.startFetchingKeys()
 
             // Set Sentry user context for error tracking (skip in dev builds)
             if !AnalyticsManager.isDevBuild {
@@ -325,7 +468,9 @@ class AuthService {
             fetchConversations()
 
         } catch {
+            let nsError = error as NSError
             NSLog("OMI AUTH: Error during sign in: %@", error.localizedDescription)
+            logError("AUTH: \(provider) web OAuth sign-in failed (domain=\(nsError.domain) code=\(nsError.code))", error: error)
             AnalyticsManager.shared.signInFailed(provider: provider, error: error.localizedDescription)
             self.error = error.localizedDescription
             throw error
@@ -378,6 +523,16 @@ class AuthService {
         let code = queryItems.first(where: { $0.name == "code" })?.value
         let state = queryItems.first(where: { $0.name == "state" })?.value
         let error = queryItems.first(where: { $0.name == "error" })?.value
+
+        if let state, let targetBundleId = targetBundleIdentifier(from: state), targetBundleId != currentBundleIdentifier {
+            NSLog(
+                "OMI AUTH: Callback is for bundle %@, current bundle is %@. Forwarding...",
+                targetBundleId,
+                currentBundleIdentifier
+            )
+            forwardOAuthCallback(url: url, toBundleId: targetBundleId)
+            return
+        }
 
         if let error = error {
             NSLog("OMI AUTH: OAuth error: %@", error)
@@ -514,11 +669,12 @@ class AuthService {
 
     // MARK: - User Name Management
 
-    /// Update the user's given name (stores locally and optionally updates Firebase)
+    /// Update the user's given name (stores locally, updates Firebase Auth, and syncs to backend profile)
     @MainActor
     func updateGivenName(_ fullName: String) async {
-        let nameParts = fullName.trimmingCharacters(in: .whitespaces).split(separator: " ", maxSplits: 1)
-        let newGivenName = nameParts.first.map(String.init) ?? fullName.trimmingCharacters(in: .whitespaces)
+        let trimmedName = fullName.trimmingCharacters(in: .whitespaces)
+        let nameParts = trimmedName.split(separator: " ", maxSplits: 1)
+        let newGivenName = nameParts.first.map(String.init) ?? trimmedName
         let newFamilyName = nameParts.count > 1 ? String(nameParts[1]) : ""
 
         // Save locally
@@ -534,11 +690,21 @@ class AuthService {
         } else if let user = Auth.auth().currentUser {
             do {
                 let changeRequest = user.createProfileChangeRequest()
-                changeRequest.displayName = fullName.trimmingCharacters(in: .whitespaces)
+                changeRequest.displayName = trimmedName
                 try await changeRequest.commitChanges()
-                NSLog("OMI AUTH: Updated Firebase displayName to: %@", fullName)
+                NSLog("OMI AUTH: Updated Firebase displayName to: %@", trimmedName)
             } catch {
                 NSLog("OMI AUTH: Failed to update Firebase displayName (non-fatal): %@", error.localizedDescription)
+            }
+        }
+
+        // Also save to backend profile (Firestore) so it persists across sign-in methods
+        if !isImpersonating {
+            do {
+                try await APIClient.shared.updateUserProfile(name: trimmedName)
+                NSLog("OMI AUTH: Updated backend profile name to: %@", trimmedName)
+            } catch {
+                NSLog("OMI AUTH: Failed to update backend profile name (non-fatal): %@", error.localizedDescription)
             }
         }
     }
@@ -558,6 +724,33 @@ class AuthService {
             givenName = nameParts.first.map(String.init) ?? firebaseName
             familyName = nameParts.count > 1 ? String(nameParts[1]) : ""
             NSLog("OMI AUTH: Loaded name from Firebase - given: %@, family: %@", givenName, familyName)
+        }
+    }
+
+    /// Load name from backend profile (Firestore) first, then fall back to Firebase Auth.
+    /// This handles cases like Apple Sign-In where Firebase Auth displayName may be empty
+    /// but the user already has a name stored in Firestore from a previous sign-up.
+    func loadNameFromBackendIfNeeded() {
+        guard givenName.isEmpty else { return }
+        Task {
+            do {
+                let profile = try await APIClient.shared.getUserProfile()
+                if let name = profile.name, !name.trimmingCharacters(in: .whitespaces).isEmpty {
+                    let nameParts = name.trimmingCharacters(in: .whitespaces).split(separator: " ", maxSplits: 1)
+                    await MainActor.run {
+                        givenName = nameParts.first.map(String.init) ?? name.trimmingCharacters(in: .whitespaces)
+                        familyName = nameParts.count > 1 ? String(nameParts[1]) : ""
+                        NSLog("OMI AUTH: Loaded name from backend profile - given: %@, family: %@", givenName, familyName)
+                    }
+                    return
+                }
+            } catch {
+                NSLog("OMI AUTH: Failed to fetch backend profile for name (non-fatal): %@", error.localizedDescription)
+            }
+            // Fall back to Firebase Auth displayName
+            await MainActor.run {
+                loadNameFromFirebaseIfNeeded()
+            }
         }
     }
 
@@ -611,7 +804,9 @@ class AuthService {
 
     /// Exchange custom token for ID token using Firebase REST API
     private func exchangeCustomTokenForIdToken(customToken: String) async throws -> FirebaseTokenResult {
-        let url = URL(string: "https://identitytoolkit.googleapis.com/v1/accounts:signInWithCustomToken?key=\(firebaseApiKey)")!
+        guard let url = URL(string: "https://identitytoolkit.googleapis.com/v1/accounts:signInWithCustomToken?key=\(firebaseApiKey)") else {
+            throw AuthError.invalidURL
+        }
 
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
@@ -675,7 +870,9 @@ class AuthService {
             throw AuthError.notSignedIn
         }
 
-        let url = URL(string: "https://securetoken.googleapis.com/v1/token?key=\(firebaseApiKey)")!
+        guard let url = URL(string: "https://securetoken.googleapis.com/v1/token?key=\(firebaseApiKey)") else {
+            throw AuthError.invalidURL
+        }
 
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
@@ -699,8 +896,12 @@ class AuthService {
                 || errorBody.contains("USER_DISABLED")
                 || httpResponse.statusCode == 400
             if isDefinitiveAuthFailure {
-                NSLog("OMI AUTH: Definitive auth failure - clearing tokens")
+                NSLog("OMI AUTH: Definitive auth failure - clearing tokens and session")
                 clearTokens()
+                // Also clear auth state so the UI shows sign-in instead of a ghost session
+                // where auth_isSignedIn=true but no valid tokens exist.
+                isSignedIn = false
+                saveAuthState(isSignedIn: false, email: nil, userId: nil)
             }
             throw AuthError.notSignedIn
         }
@@ -834,14 +1035,24 @@ class AuthService {
 
         try Auth.auth().signOut()
         isSignedIn = false
+        APIKeyService.shared.clear()
         // Clear saved auth state and tokens
         saveAuthState(isSignedIn: false, email: nil, userId: nil)
         clearTokens()
 
-        // Close database and invalidate all storage caches so the next sign-in
-        // opens a fresh per-user database
+        // Stop background services that make API calls before clearing caches
         Task {
-            await RewindDatabase.shared.close()
+            await AgentSyncService.shared.stop()
+        }
+
+        // Close database and invalidate all storage caches so the next sign-in
+        // opens a fresh per-user database.
+        // Capture the current configureGeneration so closeIfStale() can detect if
+        // a new sign-in session has already called configure() by the time this runs.
+        let closeGeneration = RewindDatabase.configureGeneration
+        Task {
+            await RewindDatabase.shared.closeIfStale(generation: closeGeneration)
+            await RewindIndexer.shared.reset()
             await RewindStorage.shared.reset()
             await TranscriptionStorage.shared.invalidateCache()
             await MemoryStorage.shared.invalidateCache()
@@ -851,14 +1062,27 @@ class AuthService {
             await AIUserProfileService.shared.invalidateCache()
         }
 
-        // Clear onboarding step/trigger flags but keep hasCompletedOnboarding
-        // Permissions are per-app on macOS, so no need to re-show onboarding after logout
+        // Notify observers (DesktopHomeView) to reset @AppStorage-backed properties directly.
+        // Using removeObject() on @AppStorage properties doesn't work because the cached value
+        // in AppState (an ObservableObject, not a View) gets written back immediately.
+        NotificationCenter.default.post(name: .userDidSignOut, object: nil)
+
+        // Clear non-@AppStorage onboarding keys via UserDefaults (these work fine).
         UserDefaults.standard.removeObject(forKey: "onboardingStep")
         UserDefaults.standard.removeObject(forKey: "hasTriggeredNotification")
         UserDefaults.standard.removeObject(forKey: "hasTriggeredAutomation")
         UserDefaults.standard.removeObject(forKey: "hasTriggeredScreenRecording")
         UserDefaults.standard.removeObject(forKey: "hasTriggeredMicrophone")
         UserDefaults.standard.removeObject(forKey: "hasTriggeredSystemAudio")
+        UserDefaults.standard.removeObject(forKey: "onboardingChatMessages")
+        UserDefaults.standard.removeObject(forKey: "onboardingACPSessionId")
+        UserDefaults.standard.removeObject(forKey: "onboardingJustCompleted")
+
+        // screenAnalysisEnabled: Don't removeObject here — SettingsSyncManager overwrites
+        // it from the server within ~200ms of sign-in. Instead, onboarding force-starts
+        // monitoring regardless of this setting.
+        // transcriptionEnabled: removeObject works since nothing writes it back.
+        UserDefaults.standard.removeObject(forKey: "transcriptionEnabled")
 
         NSLog("OMI AUTH: Signed out and cleared saved state + onboarding")
     }
@@ -868,10 +1092,174 @@ class AuthService {
     private func generateState() -> String {
         var bytes = [UInt8](repeating: 0, count: 32)
         _ = SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes)
-        return Data(bytes).base64EncodedString()
+        let nonce = Data(bytes).base64EncodedString()
             .replacingOccurrences(of: "+", with: "-")
             .replacingOccurrences(of: "/", with: "_")
             .replacingOccurrences(of: "=", with: "")
+        // Encode source bundle in state so callbacks can be routed back to the
+        // originating app, even when multiple dev builds share URL schemes.
+        return "\(nonce)|\(currentBundleIdentifier)"
+    }
+
+    private func targetBundleIdentifier(from state: String) -> String? {
+        let parts = state.split(separator: "|", maxSplits: 1).map(String.init)
+        guard parts.count == 2 else { return nil }
+        let bundleId = parts[1].trimmingCharacters(in: .whitespacesAndNewlines)
+        return bundleId.isEmpty ? nil : bundleId
+    }
+
+    private func forwardOAuthCallback(url: URL, toBundleId bundleId: String) {
+        guard let appURL = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleId) else {
+            NSLog("OMI AUTH: Unable to forward callback. Bundle %@ not found.", bundleId)
+            return
+        }
+
+        let config = NSWorkspace.OpenConfiguration()
+        config.activates = true
+
+        NSWorkspace.shared.open([url], withApplicationAt: appURL, configuration: config) { _, error in
+            if let error {
+                NSLog("OMI AUTH: Failed to forward callback to %@: %@", bundleId, error.localizedDescription)
+            } else {
+                NSLog("OMI AUTH: Forwarded callback to %@", bundleId)
+            }
+        }
+    }
+
+    // MARK: - Native Apple Sign In Helpers
+
+    /// Show the native Apple Sign In dialog and return the credential
+    private func performAppleSignIn(hashedNonce: String) async throws -> ASAuthorizationAppleIDCredential {
+        try await withCheckedThrowingContinuation { continuation in
+            let provider = ASAuthorizationAppleIDProvider()
+            let request = provider.createRequest()
+            request.requestedScopes = [.fullName, .email]
+            request.nonce = hashedNonce
+
+            let controller = ASAuthorizationController(authorizationRequests: [request])
+            let delegate = AppleSignInDelegate(continuation: continuation)
+            self.appleSignInDelegate = delegate  // Keep delegate alive
+            controller.delegate = delegate
+            controller.presentationContextProvider = delegate
+            controller.performRequests()
+        }
+    }
+
+    /// Sign in with Firebase using an Apple identity token via REST API
+    /// This bypasses the backend entirely - Firebase verifies the Apple JWT directly
+    private func signInWithAppleIdentityToken(identityToken: String, nonce: String) async throws -> FirebaseTokenResult {
+        guard let url = URL(string: "https://identitytoolkit.googleapis.com/v1/accounts:signInWithIdp?key=\(firebaseApiKey)") else {
+            throw AuthError.invalidURL
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+
+        let postBody = "id_token=\(identityToken)&providerId=apple.com&nonce=\(nonce)"
+        let body: [String: Any] = [
+            "postBody": postBody,
+            "requestUri": "http://localhost",
+            "returnIdpCredential": true,
+            "returnSecureToken": true
+        ]
+
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw AuthError.invalidResponse
+        }
+
+        guard httpResponse.statusCode == 200 else {
+            let errorBody = String(data: data, encoding: .utf8) ?? "unknown"
+            NSLog("OMI AUTH: Firebase signInWithIdp error: %@", errorBody)
+            throw AuthError.tokenExchangeFailed(httpResponse.statusCode)
+        }
+
+        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let idToken = json["idToken"] as? String,
+              let refreshToken = json["refreshToken"] as? String else {
+            NSLog("OMI AUTH: Failed to parse Firebase signInWithIdp response")
+            throw AuthError.invalidResponse
+        }
+
+        let expiresIn: Int
+        if let expiresInStr = json["expiresIn"] as? String {
+            expiresIn = Int(expiresInStr) ?? 3600
+        } else if let expiresInInt = json["expiresIn"] as? Int {
+            expiresIn = expiresInInt
+        } else {
+            expiresIn = 3600
+        }
+
+        var localId = json["localId"] as? String ?? ""
+        if localId.isEmpty {
+            if let payload = decodeJWT(idToken),
+               let userId = payload["user_id"] as? String ?? payload["sub"] as? String {
+                localId = userId
+            }
+        }
+
+        // Get email from response if not already set
+        if AuthState.shared.userEmail == nil {
+            if let email = json["email"] as? String {
+                AuthState.shared.userEmail = email
+            }
+        }
+
+        return FirebaseTokenResult(
+            idToken: idToken,
+            refreshToken: refreshToken,
+            expiresIn: expiresIn,
+            localId: localId
+        )
+    }
+
+    /// Generate a random nonce string for Apple Sign In
+    private func generateNonce(length: Int = 32) -> String {
+        var bytes = [UInt8](repeating: 0, count: length)
+        _ = SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes)
+        let charset: [Character] = Array("0123456789ABCDEFGHIJKLMNOPQRSTUVXYZabcdefghijklmnopqrstuvwxyz-._")
+        return String(bytes.map { charset[Int($0) % charset.count] })
+    }
+
+    /// SHA-256 hash of a string (for Apple Sign In nonce)
+    private func sha256(_ input: String) -> String {
+        let data = Data(input.utf8)
+        let hash = SHA256.hash(data: data)
+        return hash.compactMap { String(format: "%02x", $0) }.joined()
+    }
+}
+
+// MARK: - Apple Sign In Delegate
+
+private class AppleSignInDelegate: NSObject, ASAuthorizationControllerDelegate, ASAuthorizationControllerPresentationContextProviding {
+    private var continuation: CheckedContinuation<ASAuthorizationAppleIDCredential, Error>?
+
+    init(continuation: CheckedContinuation<ASAuthorizationAppleIDCredential, Error>) {
+        self.continuation = continuation
+        super.init()
+    }
+
+    func authorizationController(controller: ASAuthorizationController, didCompleteWithAuthorization authorization: ASAuthorization) {
+        guard let credential = authorization.credential as? ASAuthorizationAppleIDCredential else {
+            continuation?.resume(throwing: AuthError.invalidCredential)
+            continuation = nil
+            return
+        }
+        continuation?.resume(returning: credential)
+        continuation = nil
+    }
+
+    func authorizationController(controller: ASAuthorizationController, didCompleteWithError error: Error) {
+        continuation?.resume(throwing: error)
+        continuation = nil
+    }
+
+    func presentationAnchor(for controller: ASAuthorizationController) -> ASPresentationAnchor {
+        return NSApp.keyWindow ?? NSApp.windows.first ?? NSWindow()
     }
 }
 

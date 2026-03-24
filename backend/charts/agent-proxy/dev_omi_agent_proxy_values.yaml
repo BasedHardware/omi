@@ -1,0 +1,93 @@
+replicaCount: 1
+
+image:
+  repository: gcr.io/based-hardware-dev/agent-proxy
+  pullPolicy: Always
+  tag: ""
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  create: true
+  automount: true
+  annotations: {}
+  name: ""
+
+podAnnotations: {}
+podLabels: {}
+
+service:
+  type: ClusterIP
+  backendConfig: dev-agent-proxy-backend-config
+  port: 8080
+  annotations:
+    cloud.google.com/neg: '{"ingress": true}'
+    cloud.google.com/backend-config: '{"default": "dev-agent-proxy-backend-config"}'
+
+ingress:
+  enabled: true
+  className: ""
+  annotations:
+    kubernetes.io/ingress.class: "gce"
+    kubernetes.io/ingress.global-static-ip-name: "dev-agent-proxy-ip-address"
+    kubernetes.io/ingress.allow-http: "true"
+  hosts:
+    - host: agent.omiapi.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+
+env:
+  - name: GOOGLE_APPLICATION_CREDENTIALS
+    value: "/secrets/google-credentials.json"
+  - name: GOOGLE_CLOUD_PROJECT
+    value: "based-hardware"
+
+volumes:
+  - name: gcp-credentials
+    secret:
+      secretName: dev-agent-proxy-gcp-credentials
+
+volumeMounts:
+  - name: gcp-credentials
+    mountPath: /secrets
+    readOnly: true
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    cpu: 200m
+    memory: 512Mi
+
+livenessProbe:
+  httpGet:
+    path: /health
+    port: 8080
+  initialDelaySeconds: 5
+  periodSeconds: 10
+
+readinessProbe:
+  httpGet:
+    path: /health
+    port: 8080
+  initialDelaySeconds: 5
+  periodSeconds: 10
+
+startupProbe:
+  httpGet:
+    path: /health
+    port: 8080
+  failureThreshold: 30
+  periodSeconds: 5
+
+autoscaling:
+  enabled: false
+
+nodeSelector: {}
+tolerations: []
+affinity: {}

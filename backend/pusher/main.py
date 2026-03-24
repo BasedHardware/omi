@@ -1,10 +1,13 @@
 import json
+import logging
 import os
+
+logging.basicConfig(level=logging.INFO)
 
 import firebase_admin
 from fastapi import FastAPI
 
-from routers import pusher
+from routers import pusher, metrics
 
 if os.environ.get('SERVICE_ACCOUNT_JSON'):
     service_account_info = json.loads(os.environ["SERVICE_ACCOUNT_JSON"])
@@ -15,6 +18,7 @@ else:
 
 app = FastAPI()
 app.include_router(pusher.router)
+app.include_router(metrics.router)
 
 paths = ['_temp', '_samples', '_segments', '_speech_profiles']
 for path in paths:

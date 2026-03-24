@@ -1741,10 +1741,20 @@ export async function deleteMcpApiKey(keyId: string): Promise<void> {
 // ============================================================================
 
 /**
- * Export all conversations as JSON
+ * Export all user data as a downloadable JSON blob (streamed from backend).
  */
-export async function exportAllData(): Promise<{ conversations: unknown[] }> {
-  return fetchWithAuth<{ conversations: unknown[] }>('/v1/conversations?limit=10000&offset=0');
+export async function exportAllData(): Promise<Blob> {
+  const token = await getIdToken();
+  if (!token) {
+    throw new Error('Not authenticated');
+  }
+  const response = await fetch(`${API_BASE_URL}/v1/users/export`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!response.ok) {
+    throw new Error(`Export failed: ${response.status} ${response.statusText}`);
+  }
+  return response.blob();
 }
 
 /**
@@ -2215,5 +2225,44 @@ export async function unregisterFCMToken(fcmToken: string): Promise<void> {
   } catch (error) {
     // Silently fail on logout - token cleanup is best-effort
     console.warn('Failed to unregister FCM token:', error);
+  }
+}
+
+// ============================================================================
+// Fair Use Status
+// ============================================================================
+
+export interface FairUseStatus {
+  stage: 'none' | 'warning' | 'throttle' | 'restrict';
+  case_ref: string;
+  speech_hours_today: number;
+  speech_hours_3day: number;
+  speech_hours_weekly: number;
+  limits: {
+    daily_hours: number;
+    three_day_hours: number;
+    weekly_hours: number;
+  };
+  usage_pct: {
+    daily: number;
+    three_day: number;
+    weekly: number;
+  };
+  message: string;
+  dg_budget?: {
+    daily_limit_ms: number;
+    used_ms: number;
+    remaining_ms: number;
+    exhausted: boolean;
+    resets_at: string;
+  };
+}
+
+export async function getFairUseStatus(): Promise<FairUseStatus | null> {
+  try {
+    return await fetchWithAuth<FairUseStatus>('/v1/fair-use/status');
+  } catch (error) {
+    console.error('getFairUseStatus error:', error);
+    return null;
   }
 }

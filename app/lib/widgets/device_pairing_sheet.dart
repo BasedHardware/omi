@@ -10,21 +10,14 @@ class DevicePairingSheet extends StatelessWidget {
   final DeviceGuideProduct product;
   final VoidCallback onDismissAll;
 
-  const DevicePairingSheet({
-    super.key,
-    required this.product,
-    required this.onDismissAll,
-  });
+  const DevicePairingSheet({super.key, required this.product, required this.onDismissAll});
 
   @override
   Widget build(BuildContext context) {
     return Container(
       decoration: const BoxDecoration(
         color: ResponsiveHelper.backgroundSecondary,
-        borderRadius: BorderRadius.only(
-          topLeft: Radius.circular(24),
-          topRight: Radius.circular(24),
-        ),
+        borderRadius: BorderRadius.only(topLeft: Radius.circular(24), topRight: Radius.circular(24)),
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -34,10 +27,7 @@ class DevicePairingSheet extends StatelessWidget {
             margin: const EdgeInsets.only(top: 12),
             width: 40,
             height: 4,
-            decoration: BoxDecoration(
-              color: ResponsiveHelper.textTertiary,
-              borderRadius: BorderRadius.circular(2),
-            ),
+            decoration: BoxDecoration(color: ResponsiveHelper.textTertiary, borderRadius: BorderRadius.circular(2)),
           ),
 
           Padding(
@@ -48,12 +38,7 @@ class DevicePairingSheet extends StatelessWidget {
                 if (product.localImagePath != null)
                   ClipRRect(
                     borderRadius: BorderRadius.circular(20),
-                    child: Image.asset(
-                      product.localImagePath!,
-                      height: 180,
-                      width: 180,
-                      fit: BoxFit.contain,
-                    ),
+                    child: Image.asset(product.localImagePath!, height: 180, width: 180, fit: BoxFit.contain),
                   )
                 else
                   const SizedBox(
@@ -79,11 +64,7 @@ class DevicePairingSheet extends StatelessWidget {
                 if (product.pairingDescription.isNotEmpty)
                   Text(
                     product.pairingDescription,
-                    style: const TextStyle(
-                      color: ResponsiveHelper.textTertiary,
-                      fontSize: 15,
-                      height: 1.4,
-                    ),
+                    style: const TextStyle(color: ResponsiveHelper.textTertiary, fontSize: 15, height: 1.4),
                     textAlign: TextAlign.center,
                   ),
                 const SizedBox(height: 32),
@@ -97,9 +78,7 @@ class DevicePairingSheet extends StatelessWidget {
                     style: ElevatedButton.styleFrom(
                       backgroundColor: ResponsiveHelper.purplePrimary,
                       foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(28),
-                      ),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
                       elevation: 0,
                     ),
                     child: Text(
@@ -119,10 +98,7 @@ class DevicePairingSheet extends StatelessWidget {
                   },
                   child: Text(
                     context.l10n.reportAnIssue,
-                    style: const TextStyle(
-                      color: ResponsiveHelper.textTertiary,
-                      fontSize: 14,
-                    ),
+                    style: const TextStyle(color: ResponsiveHelper.textTertiary, fontSize: 14),
                   ),
                 ),
 

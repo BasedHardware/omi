@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'package:awesome_notifications/awesome_notifications.dart';
 
-import 'package:omi/main.dart';
+import 'package:omi/app_globals.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 
@@ -21,9 +21,7 @@ class DailyReflectionNotification {
   static const int notificationId = 9021; // 9 PM + 21 = 9021
 
   /// Schedule the daily reflection notification at 9 PM local time
-  static Future<void> scheduleDailyNotification({
-    required String channelKey,
-  }) async {
+  static Future<void> scheduleDailyNotification({required String channelKey}) async {
     try {
       final allowed = await _awesomeNotifications.isNotificationAllowed();
       if (!allowed) {
@@ -35,7 +33,7 @@ class DailyReflectionNotification {
       await cancelNotification();
 
       // Schedule notification for 9 PM every day
-      final ctx = MyApp.navigatorKey.currentContext;
+      final ctx = globalNavigatorKey.currentContext;
       await _awesomeNotifications.createNotification(
         content: NotificationContent(
           id: notificationId,
@@ -43,10 +41,7 @@ class DailyReflectionNotification {
           title: '🌙 ${ctx?.l10n.dailyReflectionNotificationTitle ?? 'Time for Daily Reflection'}',
           body: ctx?.l10n.dailyReflectionNotificationBody ?? 'Tell me about your day',
           badge: 0,
-          payload: {
-            'navigate_to': '/chat/omi',
-            'auto_message': 'daily_reflection',
-          },
+          payload: {'navigate_to': '/chat/omi', 'auto_message': 'daily_reflection'},
           notificationLayout: NotificationLayout.Default,
           wakeUpScreen: true,
           category: NotificationCategory.Reminder,

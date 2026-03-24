@@ -5,7 +5,7 @@ import app_links
 import WatchConnectivity
 import AVFoundation
 import Speech
-import EventKit
+import WidgetKit
 
 extension FlutterError: Error {}
 
@@ -16,8 +16,6 @@ extension FlutterError: Error {}
   private var appleHealthChannel: FlutterMethodChannel?
   private let appleRemindersService = AppleRemindersService()
   private let appleHealthService = AppleHealthService()
-  private static let iso8601DateFormatter = ISO8601DateFormatter()
-
   private var notificationTitleOnKill: String?
   private var notificationBodyOnKill: String?
 
@@ -44,6 +42,19 @@ extension FlutterError: Error {}
             let api: WatchRecorderHostAPI = RecorderHostApiImpl(session: session!, flutterWatchAPI: flutterWatchAPI)
 
             WatchRecorderHostAPISetup.setUp(binaryMessenger: controller!.binaryMessenger, api: api)
+      }
+
+      // Native BLE module — register Pigeon APIs
+      NSLog("[OmiBle] Registering BLE Pigeon APIs")
+      let bleController = window?.rootViewController as? FlutterViewController
+      if let messenger = bleController?.binaryMessenger {
+          let bleFlutterApi = BleFlutterApi(binaryMessenger: messenger)
+          OmiBleManager.shared.setFlutterApi(bleFlutterApi)
+          let bleHostApi = BleHostApiImpl(bleManager: OmiBleManager.shared)
+          BleHostApiSetup.setUp(binaryMessenger: messenger, api: bleHostApi)
+          NSLog("[OmiBle] BLE Pigeon APIs registered successfully")
+      } else {
+          NSLog("[OmiBle] ERROR: Could not get FlutterBinaryMessenger")
       }
 
       // Retrieve the link from parameters
@@ -78,8 +89,76 @@ extension FlutterError: Error {}
         speechHandler.handle(call, result: result)
     }
 
+    // TestFlight environment detection
+    let envChannel = FlutterMethodChannel(name: "com.omi/environment", binaryMessenger: controller!.binaryMessenger)
+    envChannel.setMethodCallHandler { (call, result) in
+        if call.method == "isTestFlight" {
+            let isTestFlight = Bundle.main.appStoreReceiptURL?.lastPathComponent == "sandboxReceipt"
+            result(isTestFlight)
+        } else {
+            result(FlutterMethodNotImplemented)
+        }
+    }
+
+    // Audio session configuration for Bluetooth microphone support
+    let audioSessionChannel = FlutterMethodChannel(name: "com.omi.ios/audioSession", binaryMessenger: controller!.binaryMessenger)
+    audioSessionChannel.setMethodCallHandler { (call, result) in
+        if call.method == "configureForBluetooth" {
+            let audioSession = AVAudioSession.sharedInstance()
+            do {
+                try audioSession.setCategory(
+                    .playAndRecord,
+                    mode: .default,
+                    options: [.allowBluetooth, .allowBluetoothA2DP, .defaultToSpeaker]
+                )
+                try audioSession.setActive(true)
+                result(true)
+            } catch {
+                result(FlutterError(code: "AUDIO_SESSION_ERROR", message: error.localizedDescription, details: nil))
+            }
+        } else {
+            result(FlutterMethodNotImplemented)
+        }
+    }
+
     // Create WiFi Network plugin for device AP connection
     _ = WifiNetworkPlugin(messenger: controller!.binaryMessenger)
+
+    // Battery widget channel — writes Omi device battery to the shared App Group
+    // so the WidgetKit extension can read it.
+    let batteryWidgetChannel = FlutterMethodChannel(name: "com.omi.battery_widget", binaryMessenger: controller!.binaryMessenger)
+    batteryWidgetChannel.setMethodCallHandler { (call, result) in
+      let defaults = UserDefaults(suiteName: "group.com.friend-app-with-wearable.ios12")
+      guard let args = call.arguments as? [String: Any] else {
+        result(FlutterMethodNotImplemented)
+        return
+      }
+      switch call.method {
+      case "updateBatteryInfo":
+        defaults?.set(args["deviceName"] as? String ?? "Omi", forKey: "widget_device_name")
+        defaults?.set(args["batteryLevel"] as? Int ?? -1, forKey: "widget_battery_level")
+        defaults?.set(args["deviceType"] as? String ?? "omi", forKey: "widget_device_type")
+        defaults?.set(args["isConnected"] as? Bool ?? false, forKey: "widget_is_connected")
+        defaults?.set(Date(), forKey: "widget_last_updated")
+        // NOTE: isMuted is intentionally NOT written here — only updateMuteState controls it
+        if #available(iOS 14.0, *) {
+          WidgetCenter.shared.reloadTimelines(ofKind: "OmiBatteryWidget")
+        }
+      case "updateMuteState":
+        let isMuted = (args["isMuted"] as? Bool) ?? (args["isMuted"] as? NSNumber)?.boolValue ?? false
+        defaults?.set(isMuted, forKey: "widget_is_muted")
+        if #available(iOS 14.0, *) {
+          WidgetCenter.shared.reloadAllTimelines()
+        }
+      default:
+        result(FlutterMethodNotImplemented)
+        return
+      }
+      result(nil)
+    }
+
+    // Register Phone Calls plugin
+    PhoneCallsPlugin.register(with: self.registrar(forPlugin: "PhoneCallsPlugin")!)
 
     // here, Without this code the task will not work.
     SwiftFlutterForegroundTaskPlugin.setPluginRegistrantCallback { registry in
@@ -121,15 +200,11 @@ extension FlutterError: Error {}
 
   // MARK: - Silent Push for Apple Reminders Auto-Sync
 
-  private let syncEventStore = EKEventStore()
-
   override func application(
       _ application: UIApplication,
       didReceiveRemoteNotification userInfo: [AnyHashable: Any],
       fetchCompletionHandler completionHandler: @escaping (UIBackgroundFetchResult) -> Void
   ) {
-      print("AppDelegate: Received remote notification: \(userInfo)")
-
       // Check if it's Apple Reminders sync
       if let type = userInfo["type"] as? String, type == "apple_reminders_sync" {
           handleAppleRemindersSync(userInfo: userInfo, completionHandler: completionHandler)
@@ -151,63 +226,25 @@ extension FlutterError: Error {}
       userInfo: [AnyHashable: Any],
       completionHandler: @escaping (UIBackgroundFetchResult) -> Void
   ) {
-      guard let actionItemId = userInfo["action_item_id"] as? String,
-            let description = userInfo["description"] as? String else {
+      guard let itemsJson = userInfo["items"] as? String else {
           completionHandler(.failed)
           return
       }
 
-      // Check permission - handle iOS 17+ new authorization states
-      let status = EKEventStore.authorizationStatus(for: .reminder)
+      let exportedIds = appleRemindersService.syncBatchFromJSON(itemsJson)
 
-      // iOS 17+ uses .fullAccess and .writeOnly, older iOS uses .authorized
-      var hasAccess = false
-      if #available(iOS 17.0, *) {
-          hasAccess = status == .fullAccess || status == .writeOnly
-      } else {
-          hasAccess = status == .authorized
-      }
-
-      guard hasAccess else {
-          completionHandler(.failed)
-          return
-      }
-
-      // Parse due date
-      let dueDate: Date? = {
-          if let dueDateStr = userInfo["due_at"] as? String, !dueDateStr.isEmpty {
-              return AppDelegate.iso8601DateFormatter.date(from: dueDateStr)
-          }
-          return nil
-      }()
-
-      // Create reminder
-      let reminder = EKReminder(eventStore: syncEventStore)
-      reminder.title = description
-      reminder.notes = "From Omi"
-      reminder.calendar = syncEventStore.defaultCalendarForNewReminders()
-
-      if let due = dueDate {
-          reminder.dueDateComponents = Calendar.current.dateComponents(
-              [.year, .month, .day, .hour, .minute], from: due
-          )
-      }
-
-      do {
-          try syncEventStore.save(reminder, commit: true)
-
-          // Notify Flutter to mark as exported via API
+      if !exportedIds.isEmpty {
           DispatchQueue.main.async {
-              self.appleRemindersChannel?.invokeMethod("markExported", arguments: ["action_item_id": actionItemId])
+              self.appleRemindersChannel?.invokeMethod("markExportedBatch", arguments: ["action_item_ids": exportedIds])
           }
-
-          completionHandler(.newData)
-      } catch {
-          completionHandler(.failed)
       }
+
+      completionHandler(exportedIds.isEmpty ? .noData : .newData)
   }
 
   override func applicationWillTerminate(_ application: UIApplication) {
+    OmiBleManager.shared.disconnectAllPeripherals()
+
     // If title and body are nil, then we don't need to show notification.
     if notificationTitleOnKill == nil || notificationBodyOnKill == nil {
       return

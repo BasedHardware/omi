@@ -173,7 +173,7 @@ class GeminiStreamingSttSocket implements IPureSocket {
           'responseModalities': ['AUDIO'],
         },
         'inputAudioTranscription': {},
-      }
+      },
     };
 
     try {
@@ -300,12 +300,9 @@ class GeminiStreamingSttSocket implements IPureSocket {
     final realtimeInput = {
       'realtimeInput': {
         'mediaChunks': [
-          {
-            'mimeType': 'audio/pcm;rate=$sampleRate',
-            'data': base64Encode(pcmData),
-          }
-        ]
-      }
+          {'mimeType': 'audio/pcm;rate=$sampleRate', 'data': base64Encode(pcmData)},
+        ],
+      },
     };
 
     try {
@@ -337,12 +334,9 @@ class GeminiStreamingSttSocket implements IPureSocket {
       final realtimeInput = {
         'realtimeInput': {
           'mediaChunks': [
-            {
-              'mimeType': 'audio/pcm;rate=$sampleRate',
-              'data': base64Encode(pcmData),
-            }
-          ]
-        }
+            {'mimeType': 'audio/pcm;rate=$sampleRate', 'data': base64Encode(pcmData)},
+          ],
+        },
       };
 
       try {
@@ -383,9 +377,7 @@ class GeminiStreamingSttSocket implements IPureSocket {
   void onClosed([int? closeCode]) {
     _status = PureSocketStatus.disconnected;
     CustomSttLogService.instance.warning('GeminiStreaming', 'Closed with code: $closeCode');
-    DebugLogManager.logEvent('gemini_streaming_closed', {
-      'close_code': closeCode ?? -1,
-    });
+    DebugLogManager.logEvent('gemini_streaming_closed', {'close_code': closeCode ?? -1});
     _listener?.onClosed(closeCode);
   }
 
@@ -444,10 +436,7 @@ class PureStreamingSttSocket implements IPureSocket {
       await _channel!.ready;
 
       _status = PureSocketStatus.connected;
-      DebugLogManager.logEvent('streaming_stt_connected', {
-        'service_id': config.serviceId,
-        'url': config.url,
-      });
+      DebugLogManager.logEvent('streaming_stt_connected', {'service_id': config.serviceId, 'url': config.url});
       onConnected();
 
       _channel!.stream.listen(
@@ -470,10 +459,7 @@ class PureStreamingSttSocket implements IPureSocket {
       return false;
     } on SocketException catch (e) {
       CustomSttLogService.instance.error(config.serviceId, 'Socket error: $e');
-      DebugLogManager.logWarning('streaming_stt_socket_error', {
-        'service_id': config.serviceId,
-        'error': e.toString(),
-      });
+      DebugLogManager.logWarning('streaming_stt_socket_error', {'service_id': config.serviceId, 'error': e.toString()});
       _status = PureSocketStatus.notConnected;
       return false;
     } on WebSocketChannelException catch (e) {
@@ -532,11 +518,7 @@ class PureStreamingSttSocket implements IPureSocket {
       }
 
       // Parse using schema
-      final result = SttTranscriptionResult.fromJsonWithSchema(
-        json,
-        config.responseSchema,
-        audioOffsetSeconds: 0,
-      );
+      final result = SttTranscriptionResult.fromJsonWithSchema(json, config.responseSchema, audioOffsetSeconds: 0);
 
       if (result.isNotEmpty) {
         if (result.segments.isNotEmpty) {
@@ -672,9 +654,7 @@ class PureStreamingSttSocket implements IPureSocket {
 
   @override
   Future stop() async {
-    DebugLogManager.logEvent('streaming_stt_stopping', {
-      'service_id': config.serviceId,
-    });
+    DebugLogManager.logEvent('streaming_stt_stopping', {'service_id': config.serviceId});
     await disconnect();
     _keepAliveTimer?.cancel();
     _frameBuffer.clear();
@@ -697,19 +677,14 @@ class PureStreamingSttSocket implements IPureSocket {
   void onClosed([int? closeCode]) {
     _status = PureSocketStatus.disconnected;
     CustomSttLogService.instance.warning(config.serviceId, 'Closed with code: $closeCode');
-    DebugLogManager.logEvent('streaming_stt_closed', {
-      'service_id': config.serviceId,
-      'close_code': closeCode ?? -1,
-    });
+    DebugLogManager.logEvent('streaming_stt_closed', {'service_id': config.serviceId, 'close_code': closeCode ?? -1});
     _listener?.onClosed(closeCode);
   }
 
   @override
   void onError(Object err, StackTrace trace) {
     CustomSttLogService.instance.error(config.serviceId, 'Error: $err');
-    DebugLogManager.logError(err, trace, 'streaming_stt_error', {
-      'service_id': config.serviceId,
-    });
+    DebugLogManager.logError(err, trace, 'streaming_stt_error', {'service_id': config.serviceId});
     _listener?.onError(err, trace);
   }
 }

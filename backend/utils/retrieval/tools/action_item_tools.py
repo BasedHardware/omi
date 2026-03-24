@@ -2,7 +2,7 @@
 Tools for accessing and managing user action items.
 """
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 import contextvars
 
@@ -15,6 +15,9 @@ from utils.notifications import (
     send_action_item_created_notification,
     send_action_item_data_message,
 )
+import logging
+
+logger = logging.getLogger(__name__)
 
 # Import agent_config_context for fallback config access
 try:
@@ -87,8 +90,8 @@ def get_action_items_tool(
     Returns:
         Formatted list of action items with their details.
     """
-    print(f"🚀 get_action_items_tool START - limit: {limit}, offset: {offset}, completed: {completed}")
-    print(
+    logger.info(f"🚀 get_action_items_tool START - limit: {limit}, offset: {offset}, completed: {completed}")
+    logger.info(
         f"🔧 get_action_items_tool called - limit: {limit}, offset: {offset}, completed: {completed}, "
         f"conversation_id: {conversation_id}, start_date: {start_date}, end_date: {end_date}, "
         f"due_start_date: {due_start_date}, due_end_date: {due_end_date}"
@@ -99,33 +102,33 @@ def get_action_items_tool(
         try:
             config = agent_config_context.get()
             if config:
-                print(f"🔧 get_action_items_tool - got config from context variable")
+                logger.info(f"🔧 get_action_items_tool - got config from context variable")
         except LookupError:
-            print(f"❌ get_action_items_tool - config not found in context variable")
+            logger.warning(f"❌ get_action_items_tool - config not found in context variable")
             config = None
 
     # Safely access config
     try:
         if config is None:
-            print(f"❌ get_action_items_tool - config is None")
+            logger.info(f"❌ get_action_items_tool - config is None")
             return "Error: Configuration not available"
 
         if 'configurable' not in config:
-            print(
+            logger.info(
                 f"❌ get_action_items_tool - config['configurable'] not found. Config keys: {list(config.keys()) if config else 'None'}"
             )
             return "Error: Configuration format invalid"
 
         uid = config['configurable'].get('user_id')
         if not uid:
-            print(
+            logger.info(
                 f"❌ get_action_items_tool - no user_id in config. Configurable keys: {list(config['configurable'].keys()) if config.get('configurable') else 'None'}"
             )
             return "Error: User ID not found in configuration"
 
-        print(f"✅ get_action_items_tool - uid: {uid}, limit: {limit}")
+        logger.info(f"✅ get_action_items_tool - uid: {uid}, limit: {limit}")
     except Exception as config_error:
-        print(f"❌ get_action_items_tool - error accessing config: {config_error}")
+        logger.error(f"❌ get_action_items_tool - error accessing config: {config_error}")
         import traceback
 
         traceback.print_exc()
@@ -136,7 +139,7 @@ def get_action_items_tool(
 
     # Cap at 500 per call
     if limit > 500:
-        print(f"⚠️ get_action_items_tool - limit capped from {limit} to 500")
+        logger.info(f"⚠️ get_action_items_tool - limit capped from {limit} to 500")
         limit = 500
 
     # Parse created_at dates if provided (must be ISO format with timezone)
@@ -149,7 +152,7 @@ def get_action_items_tool(
             start_dt = datetime.fromisoformat(start_date.replace('Z', '+00:00'))
             if start_dt.tzinfo is None:
                 return f"Error: start_date must include timezone in user's timezone format YYYY-MM-DDTHH:MM:SS+HH:MM (e.g., '2024-01-19T15:00:00-08:00'): {start_date}"
-            print(f"📅 Parsed start_date '{start_date}' as {start_dt.strftime('%Y-%m-%d %H:%M:%S %Z')}")
+            logger.info(f"📅 Parsed start_date '{start_date}' as {start_dt.strftime('%Y-%m-%d %H:%M:%S %Z')}")
         except ValueError as e:
             return f"Error: Invalid start_date format. Expected YYYY-MM-DDTHH:MM:SS+HH:MM in user's timezone: {start_date} - {str(e)}"
 
@@ -159,7 +162,7 @@ def get_action_items_tool(
             end_dt = datetime.fromisoformat(end_date.replace('Z', '+00:00'))
             if end_dt.tzinfo is None:
                 return f"Error: end_date must include timezone in user's timezone format YYYY-MM-DDTHH:MM:SS+HH:MM (e.g., '2024-01-19T23:59:59-08:00'): {end_date}"
-            print(f"📅 Parsed end_date '{end_date}' as {end_dt.strftime('%Y-%m-%d %H:%M:%S %Z')}")
+            logger.info(f"📅 Parsed end_date '{end_date}' as {end_dt.strftime('%Y-%m-%d %H:%M:%S %Z')}")
         except ValueError as e:
             return f"Error: Invalid end_date format. Expected YYYY-MM-DDTHH:MM:SS+HH:MM in user's timezone: {end_date} - {str(e)}"
 
@@ -173,7 +176,9 @@ def get_action_items_tool(
             due_start_dt = datetime.fromisoformat(due_start_date.replace('Z', '+00:00'))
             if due_start_dt.tzinfo is None:
                 return f"Error: due_start_date must include timezone in user's timezone format YYYY-MM-DDTHH:MM:SS+HH:MM (e.g., '2024-01-19T15:00:00-08:00'): {due_start_date}"
-            print(f"📅 Parsed due_start_date '{due_start_date}' as {due_start_dt.strftime('%Y-%m-%d %H:%M:%S %Z')}")
+            logger.info(
+                f"📅 Parsed due_start_date '{due_start_date}' as {due_start_dt.strftime('%Y-%m-%d %H:%M:%S %Z')}"
+            )
         except ValueError as e:
             return f"Error: Invalid due_start_date format. Expected YYYY-MM-DDTHH:MM:SS+HH:MM in user's timezone: {due_start_date} - {str(e)}"
 
@@ -183,23 +188,23 @@ def get_action_items_tool(
             due_end_dt = datetime.fromisoformat(due_end_date.replace('Z', '+00:00'))
             if due_end_dt.tzinfo is None:
                 return f"Error: due_end_date must include timezone in user's timezone format YYYY-MM-DDTHH:MM:SS+HH:MM (e.g., '2024-01-19T23:59:59-08:00'): {due_end_date}"
-            print(f"📅 Parsed due_end_date '{due_end_date}' as {due_end_dt.strftime('%Y-%m-%d %H:%M:%S %Z')}")
+            logger.info(f"📅 Parsed due_end_date '{due_end_date}' as {due_end_dt.strftime('%Y-%m-%d %H:%M:%S %Z')}")
         except ValueError as e:
             return f"Error: Invalid due_end_date format. Expected YYYY-MM-DDTHH:MM:SS+HH:MM in user's timezone: {due_end_date} - {str(e)}"
 
     # Get action items
     action_items = []
     try:
-        print(f"🔍 Calling action_items_db.get_action_items with:")
-        print(f"   uid: {uid}")
-        print(f"   conversation_id: {conversation_id}")
-        print(f"   completed: {completed}")
-        print(f"   start_date: {start_dt}")
-        print(f"   end_date: {end_dt}")
-        print(f"   due_start_date: {due_start_dt}")
-        print(f"   due_end_date: {due_end_dt}")
-        print(f"   limit: {limit}")
-        print(f"   offset: {offset}")
+        logger.info(f"🔍 Calling action_items_db.get_action_items with:")
+        logger.info(f"   uid: {uid}")
+        logger.info(f"   conversation_id: {conversation_id}")
+        logger.info(f"   completed: {completed}")
+        logger.info(f"   start_date: {start_dt}")
+        logger.info(f"   end_date: {end_dt}")
+        logger.info(f"   due_start_date: {due_start_dt}")
+        logger.info(f"   due_end_date: {due_end_dt}")
+        logger.info(f"   limit: {limit}")
+        logger.info(f"   offset: {offset}")
 
         action_items = action_items_db.get_action_items(
             uid=uid,
@@ -213,16 +218,16 @@ def get_action_items_tool(
             offset=offset,
         )
 
-        print(f"🔍 Database call completed - received {len(action_items) if action_items else 0} items")
+        logger.info(f"🔍 Database call completed - received {len(action_items) if action_items else 0} items")
     except Exception as e:
-        print(f"❌ Error getting action items: {e}")
+        logger.error(f"❌ Error getting action items: {e}")
         import traceback
 
         traceback.print_exc()
         return f"Error retrieving action items: {str(e)}"
 
     action_items_count = len(action_items) if action_items else 0
-    print(f"📊 get_action_items_tool - found {action_items_count} action items")
+    logger.info(f"📊 get_action_items_tool - found {action_items_count} action items")
 
     if not action_items:
         date_info = ""
@@ -247,8 +252,8 @@ def get_action_items_tool(
             status_info = " pending"
 
         msg = f"No{status_info} action items found{date_info}."
-        print(f"⚠️ get_action_items_tool - {msg}")
-        print(f"✅ get_action_items_tool END - returning early (no items found)")
+        logger.info(f"⚠️ get_action_items_tool - {msg}")
+        logger.info(f"✅ get_action_items_tool END - returning early (no items found)")
         return msg
 
     # Format action items
@@ -279,7 +284,7 @@ def get_action_items_tool(
 
         result += "\n"
 
-    print(f"✅ get_action_items_tool END - returning {len(action_items)} items")
+    logger.info(f"✅ get_action_items_tool END - returning {len(action_items)} items")
     return result.strip()
 
 
@@ -318,7 +323,7 @@ def create_action_item_tool(
     Returns:
         Brief confirmation message.
     """
-    print(
+    logger.info(
         f"🔧 create_action_item_tool called - description: {description}, "
         f"due_at: {due_at}, conversation_id: {conversation_id}"
     )
@@ -328,23 +333,23 @@ def create_action_item_tool(
         try:
             config = agent_config_context.get()
             if config:
-                print(f"🔧 create_action_item_tool - got config from context variable")
+                logger.info(f"🔧 create_action_item_tool - got config from context variable")
         except LookupError:
-            print(f"❌ create_action_item_tool - config not found in context variable")
+            logger.warning(f"❌ create_action_item_tool - config not found in context variable")
             config = None
 
     if config is None:
-        print(f"❌ create_action_item_tool - config is None")
+        logger.info(f"❌ create_action_item_tool - config is None")
         return "Error: Configuration not available"
 
     try:
         uid = config['configurable'].get('user_id')
     except (KeyError, TypeError) as e:
-        print(f"❌ create_action_item_tool - error accessing config: {e}")
+        logger.error(f"❌ create_action_item_tool - error accessing config: {e}")
         return "Error: Configuration not available"
 
     if not uid:
-        print(f"❌ create_action_item_tool - no user_id in config")
+        logger.info(f"❌ create_action_item_tool - no user_id in config")
         return "Error: User ID not found in configuration"
 
     # Validate description
@@ -365,6 +370,17 @@ def create_action_item_tool(
             due_dt = datetime.fromisoformat(due_at.replace('Z', '+00:00'))
             if due_dt.tzinfo is None:
                 return f"Error: due_at must include timezone in user's timezone format YYYY-MM-DDTHH:MM:SS+HH:MM (e.g., '2024-01-20T14:30:00-08:00'): {due_at}"
+            # Reject due dates more than 1 day in the past (allow 1-day grace for timezone differences)
+            now_utc = datetime.now(timezone.utc)
+            if due_dt < now_utc - timedelta(days=1):
+                logger.warning(
+                    f"⚠️ create_action_item_tool - rejected past due_at: {due_at} (now: {now_utc.isoformat()})"
+                )
+                return (
+                    f"Error: due_at '{due_at}' is in the past. "
+                    f"The current time is {now_utc.strftime('%Y-%m-%dT%H:%M:%SZ')}. "
+                    "Please use a future date for the due date."
+                )
             action_item_data['due_at'] = due_dt
         except ValueError as e:
             return f"Error: Invalid due_at format. Expected YYYY-MM-DDTHH:MM:SS+HH:MM in user's timezone: {due_at} - {str(e)}"
@@ -373,7 +389,7 @@ def create_action_item_tool(
         now = datetime.now(datetime.now().astimezone().tzinfo)
         default_due = now + timedelta(hours=24)
         action_item_data['due_at'] = default_due
-        print(f"📅 No due date provided, setting default to 24h from now: {default_due}")
+        logger.info(f"📅 No due date provided, setting default to 24h from now: {default_due}")
 
     # Create the action item
     try:
@@ -381,7 +397,7 @@ def create_action_item_tool(
         if not action_item_id:
             return "Error: Failed to create action item."
 
-        print(f"✅ create_action_item_tool - successfully created action item {action_item_id}")
+        logger.info(f"✅ create_action_item_tool - successfully created action item {action_item_id}")
 
         # Get the created item for confirmation
         created_item = action_items_db.get_action_item(uid, action_item_id)
@@ -405,18 +421,18 @@ def create_action_item_tool(
                     due_at=due.isoformat(),
                 )
             except Exception as notif_error:
-                print(f"⚠️ Failed to send notification: {notif_error}")
+                logger.error(f"⚠️ Failed to send notification: {notif_error}")
 
         # Send immediate notification that task was created
         try:
             send_action_item_created_notification(uid, task_desc)
         except Exception as notif_error:
-            print(f"⚠️ Failed to send creation notification: {notif_error}")
+            logger.error(f"⚠️ Failed to send creation notification: {notif_error}")
 
         return result
 
     except Exception as e:
-        print(f"❌ Error creating action item: {e}")
+        logger.error(f"❌ Error creating action item: {e}")
         return f"Error creating action item: {str(e)}"
 
 
@@ -459,7 +475,7 @@ def update_action_item_tool(
     Returns:
         Confirmation message about the update.
     """
-    print(
+    logger.info(
         f"🔧 update_action_item_tool called - action_item_id: {action_item_id}, "
         f"completed: {completed}, description: {description}, due_at: {due_at}"
     )
@@ -469,23 +485,23 @@ def update_action_item_tool(
         try:
             config = agent_config_context.get()
             if config:
-                print(f"🔧 update_action_item_tool - got config from context variable")
+                logger.info(f"🔧 update_action_item_tool - got config from context variable")
         except LookupError:
-            print(f"❌ update_action_item_tool - config not found in context variable")
+            logger.warning(f"❌ update_action_item_tool - config not found in context variable")
             config = None
 
     if config is None:
-        print(f"❌ update_action_item_tool - config is None")
+        logger.info(f"❌ update_action_item_tool - config is None")
         return "Error: Configuration not available"
 
     try:
         uid = config['configurable'].get('user_id')
     except (KeyError, TypeError) as e:
-        print(f"❌ update_action_item_tool - error accessing config: {e}")
+        logger.error(f"❌ update_action_item_tool - error accessing config: {e}")
         return "Error: Configuration not available"
 
     if not uid:
-        print(f"❌ update_action_item_tool - no user_id in config")
+        logger.info(f"❌ update_action_item_tool - no user_id in config")
         return "Error: User ID not found in configuration"
 
     # Check if action item exists
@@ -516,6 +532,17 @@ def update_action_item_tool(
             due_dt = datetime.fromisoformat(due_at.replace('Z', '+00:00'))
             if due_dt.tzinfo is None:
                 return f"Error: due_at must include timezone in user's timezone format YYYY-MM-DDTHH:MM:SS+HH:MM (e.g., '2024-01-20T14:30:00-08:00'): {due_at}"
+            # Reject due dates more than 1 day in the past (allow 1-day grace for timezone differences)
+            now_utc = datetime.now(timezone.utc)
+            if due_dt < now_utc - timedelta(days=1):
+                logger.warning(
+                    f"⚠️ update_action_item_tool - rejected past due_at: {due_at} (now: {now_utc.isoformat()})"
+                )
+                return (
+                    f"Error: due_at '{due_at}' is in the past. "
+                    f"The current time is {now_utc.strftime('%Y-%m-%dT%H:%M:%SZ')}. "
+                    "Please use a future date for the due date."
+                )
 
             update_data['due_at'] = due_dt
             changes.append(f"due date set to {due_dt.strftime('%Y-%m-%d %H:%M:%S %Z')}")
@@ -531,7 +558,7 @@ def update_action_item_tool(
         if not success:
             return f"Error: Failed to update action item with ID '{action_item_id}'."
 
-        print(f"✅ update_action_item_tool - successfully updated action item {action_item_id}")
+        logger.info(f"✅ update_action_item_tool - successfully updated action item {action_item_id}")
 
         # Get updated item for confirmation
         updated_item = action_items_db.get_action_item(uid, action_item_id)
@@ -543,11 +570,11 @@ def update_action_item_tool(
             try:
                 send_action_item_completed_notification(uid, updated_item.get('description', 'Task'))
             except Exception as notif_error:
-                print(f"⚠️ Failed to send completion notification: {notif_error}")
+                logger.error(f"⚠️ Failed to send completion notification: {notif_error}")
                 # Don't fail the update if notification fails
 
         return result
 
     except Exception as e:
-        print(f"❌ Error updating action item: {e}")
+        logger.error(f"❌ Error updating action item: {e}")
         return f"Error updating action item: {str(e)}"

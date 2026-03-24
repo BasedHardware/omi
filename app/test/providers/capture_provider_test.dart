@@ -1,15 +1,20 @@
 import 'dart:async';
 
 import 'package:connectivity_plus_platform_interface/connectivity_plus_platform_interface.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/message_event.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
+import 'package:omi/l10n/app_localizations.dart';
+import 'package:omi/app_globals.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/people_provider.dart';
 import 'package:omi/services/services.dart';
+import 'package:omi/utils/enums.dart';
 
 /// Mock PeopleProvider that tracks setPeople calls
 class MockPeopleProvider extends PeopleProvider {
@@ -173,18 +178,22 @@ void main() {
       final initialVersion = provider.segmentsPhotosVersion;
 
       // Simulate translation event
-      provider.onMessageEventReceived(TranslationEvent(segments: [
-        TranscriptSegment(
-          id: 'a',
-          text: 'hello (translated)',
-          speaker: 'SPEAKER_00',
-          isUser: false,
-          personId: null,
-          start: 0.0,
-          end: 1.0,
-          translations: [],
+      provider.onMessageEventReceived(
+        TranslationEvent(
+          segments: [
+            TranscriptSegment(
+              id: 'a',
+              text: 'hello (translated)',
+              speaker: 'SPEAKER_00',
+              isUser: false,
+              personId: null,
+              start: 0.0,
+              end: 1.0,
+              translations: [],
+            ),
+          ],
         ),
-      ]));
+      );
 
       expect(provider.segmentsPhotosVersion, greaterThan(initialVersion));
     });
@@ -212,13 +221,7 @@ void main() {
 
     test('increments on photo processing event and updates id', () {
       final provider = CaptureProvider();
-      provider.photos = [
-        ConversationPhoto(
-          id: 'temp-photo',
-          base64: 'img',
-          createdAt: DateTime.now(),
-        ),
-      ];
+      provider.photos = [ConversationPhoto(id: 'temp-photo', base64: 'img', createdAt: DateTime.now())];
       final initialVersion = provider.segmentsPhotosVersion;
 
       provider.onMessageEventReceived(PhotoProcessingEvent(tempId: 'temp-photo', photoId: 'permanent-photo'));
@@ -229,18 +232,10 @@ void main() {
 
     test('increments on photo described event and updates description', () {
       final provider = CaptureProvider();
-      provider.photos = [
-        ConversationPhoto(
-          id: 'photo-1',
-          base64: 'img',
-          createdAt: DateTime.now(),
-        ),
-      ];
+      provider.photos = [ConversationPhoto(id: 'photo-1', base64: 'img', createdAt: DateTime.now())];
       final initialVersion = provider.segmentsPhotosVersion;
 
-      provider.onMessageEventReceived(
-        PhotoDescribedEvent(photoId: 'photo-1', description: 'desc', discarded: true),
-      );
+      provider.onMessageEventReceived(PhotoDescribedEvent(photoId: 'photo-1', description: 'desc', discarded: true));
 
       expect(provider.photos.first.description, 'desc');
       expect(provider.photos.first.discarded, true);
@@ -254,12 +249,7 @@ void main() {
       provider.segments = [_segment('seg1', 'hello')];
 
       // Empty personId: backend didn't assign, nothing happens
-      final event = SpeakerLabelSuggestionEvent(
-        speakerId: 0,
-        personId: '',
-        personName: 'Alice',
-        segmentId: 'seg1',
-      );
+      final event = SpeakerLabelSuggestionEvent(speakerId: 0, personId: '', personName: 'Alice', segmentId: 'seg1');
 
       provider.onMessageEventReceived(event);
 
@@ -429,6 +419,63 @@ void main() {
 
       // Should trigger a new call
       expect(mockPeopleProvider.setPeopleCallCount, 2);
+    });
+  });
+
+  group('onClosed warning snackbar', () {
+    Future<void> _pumpAppWithScaffold(WidgetTester tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          navigatorKey: globalNavigatorKey,
+          localizationsDelegates: const [
+            AppLocalizations.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: const Scaffold(body: SizedBox.shrink()),
+        ),
+      );
+      await tester.pump();
+    }
+
+    testWidgets('shows reconnecting warning when socket closes during phone mic recording', (tester) async {
+      final provider = CaptureProvider();
+      provider.onConnectionStateChanged(true);
+      provider.updateRecordingState(RecordingState.record);
+
+      await _pumpAppWithScaffold(tester);
+
+      provider.onClosed();
+      // Prevent keepalive reconnect branch from attempting websocket work in this test.
+      provider.updateRecordingState(RecordingState.stop);
+      await tester.pump();
+
+      final context = tester.element(find.byType(Scaffold));
+      final expectedText = AppLocalizations.of(context)!.transcriptionPausedReconnecting;
+
+      expect(find.byType(SnackBar), findsOneWidget);
+      expect(find.text(expectedText), findsOneWidget);
+      provider.dispose();
+    });
+
+    testWidgets('does not show reconnecting warning when not phone mic recording', (tester) async {
+      final provider = CaptureProvider();
+      provider.onConnectionStateChanged(true);
+      provider.updateRecordingState(RecordingState.stop);
+
+      await _pumpAppWithScaffold(tester);
+
+      provider.onClosed();
+      await tester.pump();
+
+      final context = tester.element(find.byType(Scaffold));
+      final expectedText = AppLocalizations.of(context)!.transcriptionPausedReconnecting;
+
+      expect(find.byType(SnackBar), findsNothing);
+      expect(find.text(expectedText), findsNothing);
+      provider.dispose();
     });
   });
 }

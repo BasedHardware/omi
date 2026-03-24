@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:collection/collection.dart';
 
@@ -296,12 +297,7 @@ Future<bool> setMessageResponseRating(String messageId, int value, {String? reas
     url += '&reason=$reason';
   }
 
-  var response = await makeApiCall(
-    url: url,
-    headers: {},
-    method: 'POST',
-    body: '',
-  );
+  var response = await makeApiCall(url: url, headers: {}, method: 'POST', body: '');
   if (response == null) return false;
   Logger.debug('setMessageResponseRating response: ${response.body}');
   return response.statusCode == 200;
@@ -327,12 +323,7 @@ Future<bool> getHasConversationSummaryRating(String conversationId) async {
 
 // User language preference API calls
 Future<String?> getUserPrimaryLanguage() async {
-  var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/users/language',
-    headers: {},
-    method: 'GET',
-    body: '',
-  );
+  var response = await makeApiCall(url: '${Env.apiBaseUrl}v1/users/language', headers: {}, method: 'GET', body: '');
   if (response == null) return null;
   Logger.debug('getUserPrimaryLanguage response: ${response.body}');
 
@@ -432,10 +423,7 @@ Future<Map<String, dynamic>?> getTranscriptionPreferences() async {
   return null;
 }
 
-Future<bool> setTranscriptionPreferences({
-  bool? singleLanguageMode,
-  List<String>? vocabulary,
-}) async {
+Future<bool> setTranscriptionPreferences({bool? singleLanguageMode, List<String>? vocabulary}) async {
   Map<String, dynamic> body = {};
   if (singleLanguageMode != null) {
     body['single_language_mode'] = singleLanguageMode;
@@ -594,12 +582,7 @@ Future<String?> generateDailySummary({String? date}) async {
 
 Future<Map<String, dynamic>?> getUserOnboardingState() async {
   print('DEBUG getUserOnboardingState: calling ${Env.apiBaseUrl}v1/users/onboarding');
-  var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/users/onboarding',
-    headers: {},
-    method: 'GET',
-    body: '',
-  );
+  var response = await makeApiCall(url: '${Env.apiBaseUrl}v1/users/onboarding', headers: {}, method: 'GET', body: '');
   print('DEBUG getUserOnboardingState: response=${response?.statusCode}, body=${response?.body}');
   if (response == null) return null;
   if (response.statusCode == 200) {
@@ -668,4 +651,37 @@ Future<bool> setMentorNotificationSettings(int frequency) async {
 
   Logger.debug('setMentorNotificationSettings response: ${response.body}');
   return response.statusCode == 200;
+}
+
+/// Streams the /v1/users/export endpoint directly to a file, avoiding loading
+/// the entire JSON into memory. Returns the file path on success, null on failure.
+Future<String?> exportUserDataToFile(String filePath) async {
+  try {
+    final response = await makeRawApiCall(url: '${Env.apiBaseUrl}v1/users/export', method: 'GET');
+    if (response.statusCode != 200) {
+      Logger.debug('exportUserDataToFile failed: ${response.statusCode}');
+      return null;
+    }
+    final file = File(filePath);
+    final sink = file.openWrite();
+    await for (final chunk in response.stream) {
+      sink.add(chunk);
+    }
+    await sink.flush();
+    await sink.close();
+    return filePath;
+  } catch (e) {
+    Logger.debug('exportUserDataToFile error: $e');
+    return null;
+  }
+}
+
+Future<Map<String, dynamic>?> getFairUseStatus() async {
+  var response = await makeApiCall(url: '${Env.apiBaseUrl}v1/fair-use/status', headers: {}, method: 'GET', body: '');
+  if (response == null) return null;
+  Logger.debug('getFairUseStatus response: ${response.statusCode}');
+  if (response.statusCode == 200) {
+    return jsonDecode(response.body);
+  }
+  return null;
 }

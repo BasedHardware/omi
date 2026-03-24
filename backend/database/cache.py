@@ -29,13 +29,9 @@ def _ensure_initialized():
 
     # Register callbacks: when invalidation message received, clear memory cache
     _pubsub_manager.register_callback(
-        'get_public_approved_apps_data*',
-        lambda keys: [_memory_cache.delete(k) for k in keys]
+        'get_public_approved_apps_data*', lambda keys: [_memory_cache.delete(k) for k in keys]
     )
-    _pubsub_manager.register_callback(
-        'get_popular_apps_data',
-        lambda keys: [_memory_cache.delete(k) for k in keys]
-    )
+    _pubsub_manager.register_callback('get_popular_apps_data', lambda keys: [_memory_cache.delete(k) for k in keys])
 
     # Start pub/sub subscription
     _pubsub_manager.start()

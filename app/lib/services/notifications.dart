@@ -5,7 +5,7 @@ import 'package:flutter/material.dart';
 
 import 'package:awesome_notifications/awesome_notifications.dart';
 
-import 'package:omi/main.dart';
+import 'package:omi/app_globals.dart';
 import 'package:omi/pages/home/page.dart';
 import 'package:omi/services/notifications/daily_reflection_notification.dart';
 import 'package:omi/utils/l10n_extensions.dart';
@@ -42,7 +42,8 @@ class NotificationUtil {
       await onActionReceivedMethodImpl(receivedAction);
     } else {
       print(
-          'onActionReceivedMethod was called inside a parallel dart isolate, where receivePort was never initialized.');
+        'onActionReceivedMethod was called inside a parallel dart isolate, where receivePort was never initialized.',
+      );
       SendPort? sendPort = IsolateNameServer.lookupPortByName('notification_action_port');
 
       if (sendPort != null) {
@@ -80,12 +81,9 @@ class NotificationUtil {
       autoMessage = DailyReflectionNotification.reflectionMessage;
     }
 
-    MyApp.navigatorKey.currentState?.pushReplacement(
+    globalNavigatorKey.currentState?.pushReplacement(
       MaterialPageRoute(
-        builder: (context) => HomePageWrapper(
-          navigateToRoute: navigateTo,
-          autoMessage: autoMessage,
-        ),
+        builder: (context) => HomePageWrapper(navigateToRoute: navigateTo, autoMessage: autoMessage),
       ),
     );
   }
@@ -94,7 +92,7 @@ class NotificationUtil {
     final allowed = await AwesomeNotifications().isNotificationAllowed();
     if (!allowed) return;
 
-    final ctx = MyApp.navigatorKey.currentContext;
+    final ctx = globalNavigatorKey.currentContext;
     await AwesomeNotifications().createNotification(
       content: NotificationContent(
         id: 6,

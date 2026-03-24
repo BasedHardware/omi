@@ -15,10 +15,13 @@ service:
 env:
   - name: PORT
     value: "8080"
+  # NOTE: intentionally points to prod Firestore (based-hardware), not dev
   - name: FIREBASE_PROJECT_ID
     value: "based-hardware"
   - name: RUST_LOG
     value: "debug"
+  - name: GOOGLE_APPLICATION_CREDENTIALS
+    value: "/app/google-credentials.json"
   - name: OPENAI_API_KEY
     valueFrom:
       secretKeyRef:
@@ -34,6 +37,41 @@ env:
       secretKeyRef:
         name: dev-omi-backend-secrets
         key: RESEND_API_KEY
+  - name: ENCRYPTION_SECRET
+    valueFrom:
+      secretKeyRef:
+        name: dev-omi-backend-secrets
+        key: ENCRYPTION_SECRET
+  - name: REDIS_DB_HOST
+    valueFrom:
+      secretKeyRef:
+        name: dev-omi-backend-secrets
+        key: REDIS_DB_HOST
+  - name: REDIS_DB_PORT
+    valueFrom:
+      secretKeyRef:
+        name: dev-omi-backend-secrets
+        key: REDIS_DB_PORT
+  - name: REDIS_DB_PASSWORD
+    valueFrom:
+      secretKeyRef:
+        name: dev-omi-backend-secrets
+        key: REDIS_DB_PASSWORD
+  - name: FIREBASE_API_KEY
+    valueFrom:
+      secretKeyRef:
+        name: dev-omi-backend-secrets
+        key: FIREBASE_API_KEY
+  - name: PINECONE_API_KEY
+    valueFrom:
+      secretKeyRef:
+        name: dev-omi-backend-secrets
+        key: PINECONE_API_KEY
+  - name: PINECONE_HOST
+    valueFrom:
+      secretKeyRef:
+        name: dev-omi-backend-secrets
+        key: PINECONE_HOST
 
 resources:
   requests:
@@ -43,6 +81,27 @@ resources:
     cpu: 500m
     memory: 512Mi
 
+livenessProbe:
+  httpGet:
+    path: /health
+    port: 8080
+  failureThreshold: 3
+  periodSeconds: 10
+
+readinessProbe:
+  httpGet:
+    path: /health
+    port: 8080
+  failureThreshold: 3
+  periodSeconds: 10
+
+startupProbe:
+  httpGet:
+    path: /health
+    port: 8080
+  failureThreshold: 30
+  periodSeconds: 10
+
 autoscaling:
   enabled: true
   minReplicas: 1
@@ -51,9 +110,10 @@ autoscaling:
 
 affinity:
   nodeAffinity:
-    requiredDuringSchedulingIgnoredDuringExecution:
-      nodeSelectorTerms:
-        - matchExpressions:
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        preference:
+          matchExpressions:
             - key: service
               operator: In
               values:

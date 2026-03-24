@@ -12,8 +12,9 @@ import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/gen/pigeon_communicator.g.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
-import 'package:omi/main.dart';
+import 'package:omi/app_globals.dart';
 import 'package:omi/providers/base_provider.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/services/devices.dart';
@@ -81,7 +82,8 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
         hasAccessibilityPermission = accessibilityStatus == 'granted';
 
         Logger.debug(
-            'Permissions update - Mic: $microphoneStatus, Screen: $screenCaptureStatus, Accessibility: $accessibilityStatus');
+          'Permissions update - Mic: $microphoneStatus, Screen: $screenCaptureStatus, Accessibility: $accessibilityStatus',
+        );
       } catch (e) {
         Logger.debug('Error updating permissions on macOS: $e');
         // Fallback to standard permission checking
@@ -171,23 +173,30 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
           bool granted = await _screenCaptureChannel.invokeMethod('requestBluetoothPermission');
           updateBluetoothPermission(granted);
           if (!granted) {
-            AppSnackbar.showSnackbarError(MyApp.navigatorKey.currentContext?.l10n.onboardingBluetoothRequired ??
-                'Bluetooth permission is required to connect to your device.');
+            AppSnackbar.showSnackbarError(
+              globalNavigatorKey.currentContext?.l10n.onboardingBluetoothRequired ??
+                  'Bluetooth permission is required to connect to your device.',
+            );
           }
         } else if (bluetoothStatus == 'denied' || bluetoothStatus == 'restricted') {
           updateBluetoothPermission(false);
-          AppSnackbar.showSnackbarError(MyApp.navigatorKey.currentContext?.l10n.onboardingBluetoothDeniedSystemPrefs ??
-              'Bluetooth permission denied. Please grant permission in System Preferences.');
+          AppSnackbar.showSnackbarError(
+            globalNavigatorKey.currentContext?.l10n.onboardingBluetoothDeniedSystemPrefs ??
+                'Bluetooth permission denied. Please grant permission in System Preferences.',
+          );
         } else {
           updateBluetoothPermission(false);
           AppSnackbar.showSnackbarError(
-              MyApp.navigatorKey.currentContext?.l10n.onboardingBluetoothStatusCheckPrefs(bluetoothStatus) ??
-                  'Bluetooth permission status: $bluetoothStatus. Please check System Preferences.');
+            globalNavigatorKey.currentContext?.l10n.onboardingBluetoothStatusCheckPrefs(bluetoothStatus) ??
+                'Bluetooth permission status: $bluetoothStatus. Please check System Preferences.',
+          );
         }
       } catch (e) {
         Logger.debug('Error checking/requesting Bluetooth permission on macOS: $e');
-        AppSnackbar.showSnackbarError(MyApp.navigatorKey.currentContext?.l10n.onboardingFailedCheckBluetooth('$e') ??
-            'Failed to check Bluetooth permission: $e');
+        AppSnackbar.showSnackbarError(
+          globalNavigatorKey.currentContext?.l10n.onboardingFailedCheckBluetooth('$e') ??
+              'Failed to check Bluetooth permission: $e',
+        );
         updateBluetoothPermission(false);
       }
     } else if (Platform.isIOS) {
@@ -232,29 +241,34 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
           updateNotificationPermission(granted);
           if (!granted) {
             AppSnackbar.showSnackbarError(
-                MyApp.navigatorKey.currentContext?.l10n.onboardingNotificationDeniedSystemPrefs ??
-                    'Notification permission denied. Please grant permission in System Preferences.');
+              globalNavigatorKey.currentContext?.l10n.onboardingNotificationDeniedSystemPrefs ??
+                  'Notification permission denied. Please grant permission in System Preferences.',
+            );
           }
         } else if (notificationStatus == 'denied') {
           updateNotificationPermission(false);
           // Request permission which will redirect to settings if denied
           await _screenCaptureChannel.invokeMethod('requestNotificationPermission');
           AppSnackbar.showSnackbarError(
-              MyApp.navigatorKey.currentContext?.l10n.onboardingNotificationDeniedNotifications ??
-                  'Notification permission denied. Please grant permission in System Preferences > Notifications.');
+            globalNavigatorKey.currentContext?.l10n.onboardingNotificationDeniedNotifications ??
+                'Notification permission denied. Please grant permission in System Preferences > Notifications.',
+          );
         } else if (notificationStatus == 'provisional') {
           updateNotificationPermission(true); // Provisional permissions are still functional
           Logger.debug('Notification permission is provisional - notifications will be delivered quietly');
         } else {
           updateNotificationPermission(false);
           AppSnackbar.showSnackbarError(
-              MyApp.navigatorKey.currentContext?.l10n.onboardingNotificationStatusCheckPrefs(notificationStatus) ??
-                  'Notification permission status: $notificationStatus. Please check System Preferences.');
+            globalNavigatorKey.currentContext?.l10n.onboardingNotificationStatusCheckPrefs(notificationStatus) ??
+                'Notification permission status: $notificationStatus. Please check System Preferences.',
+          );
         }
       } catch (e) {
         Logger.debug('Error checking/requesting Notification permission on macOS: $e');
-        AppSnackbar.showSnackbarError(MyApp.navigatorKey.currentContext?.l10n.onboardingFailedCheckNotification('$e') ??
-            'Failed to check Notification permission: $e');
+        AppSnackbar.showSnackbarError(
+          globalNavigatorKey.currentContext?.l10n.onboardingFailedCheckNotification('$e') ??
+              'Failed to check Notification permission: $e',
+        );
         updateNotificationPermission(false);
       }
     } else {
@@ -289,8 +303,10 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
           return (true, granted ? PermissionStatus.granted : PermissionStatus.denied);
         } else if (locationStatus == 'denied' || locationStatus == 'restricted') {
           updateLocationPermission(false);
-          AppSnackbar.showSnackbarError(MyApp.navigatorKey.currentContext?.l10n.onboardingLocationGrantInSettings ??
-              'Please grant location permission in Settings > Privacy & Security > Location Services');
+          AppSnackbar.showSnackbarError(
+            globalNavigatorKey.currentContext?.l10n.onboardingLocationGrantInSettings ??
+                'Please grant location permission in Settings > Privacy & Security > Location Services',
+          );
           return (true, PermissionStatus.permanentlyDenied);
         } else {
           updateLocationPermission(false);
@@ -347,26 +363,33 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
           bool granted = await _screenCaptureChannel.invokeMethod('requestMicrophonePermission');
           updateMicrophonePermission(granted);
           if (!granted) {
-            AppSnackbar.showSnackbarError(MyApp.navigatorKey.currentContext?.l10n.onboardingMicrophoneRequired ??
-                'Microphone permission is required for recording.');
+            AppSnackbar.showSnackbarError(
+              globalNavigatorKey.currentContext?.l10n.onboardingMicrophoneRequired ??
+                  'Microphone permission is required for recording.',
+            );
           }
           return granted;
         } else if (microphoneStatus == 'denied' || microphoneStatus == 'restricted') {
           updateMicrophonePermission(false);
-          AppSnackbar.showSnackbarError(MyApp.navigatorKey.currentContext?.l10n.onboardingMicrophoneDenied ??
-              'Microphone permission denied. Please grant permission in System Preferences > Privacy & Security > Microphone.');
+          AppSnackbar.showSnackbarError(
+            globalNavigatorKey.currentContext?.l10n.onboardingMicrophoneDenied ??
+                'Microphone permission denied. Please grant permission in System Preferences > Privacy & Security > Microphone.',
+          );
           return false;
         } else {
           updateMicrophonePermission(false);
           AppSnackbar.showSnackbarError(
-              MyApp.navigatorKey.currentContext?.l10n.onboardingMicrophoneStatusCheckPrefs(microphoneStatus) ??
-                  'Microphone permission status: $microphoneStatus. Please check System Preferences.');
+            globalNavigatorKey.currentContext?.l10n.onboardingMicrophoneStatusCheckPrefs(microphoneStatus) ??
+                'Microphone permission status: $microphoneStatus. Please check System Preferences.',
+          );
           return false;
         }
       } catch (e) {
         Logger.debug('Error checking/requesting Microphone permission on macOS: $e');
-        AppSnackbar.showSnackbarError(MyApp.navigatorKey.currentContext?.l10n.onboardingFailedCheckMicrophone('$e') ??
-            'Failed to check Microphone permission: $e');
+        AppSnackbar.showSnackbarError(
+          globalNavigatorKey.currentContext?.l10n.onboardingFailedCheckMicrophone('$e') ??
+              'Failed to check Microphone permission: $e',
+        );
         updateMicrophonePermission(false);
         return false;
       }
@@ -393,27 +416,33 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
           bool granted = await _screenCaptureChannel.invokeMethod('requestScreenCapturePermission');
           updateScreenCapturePermission(granted);
           if (!granted) {
-            AppSnackbar.showSnackbarError(MyApp.navigatorKey.currentContext?.l10n.onboardingScreenCaptureRequired ??
-                'Screen capture permission is required for system audio recording.');
+            AppSnackbar.showSnackbarError(
+              globalNavigatorKey.currentContext?.l10n.onboardingScreenCaptureRequired ??
+                  'Screen capture permission is required for system audio recording.',
+            );
           }
           return granted;
         } else if (screenCaptureStatus == 'denied') {
           updateScreenCapturePermission(false);
-          AppSnackbar.showSnackbarError(MyApp.navigatorKey.currentContext?.l10n.onboardingScreenCaptureDenied ??
-              'Screen capture permission denied. Please grant permission in System Preferences > Privacy & Security > Screen Recording.');
+          AppSnackbar.showSnackbarError(
+            globalNavigatorKey.currentContext?.l10n.onboardingScreenCaptureDenied ??
+                'Screen capture permission denied. Please grant permission in System Preferences > Privacy & Security > Screen Recording.',
+          );
           return false;
         } else {
           updateScreenCapturePermission(false);
           AppSnackbar.showSnackbarError(
-              MyApp.navigatorKey.currentContext?.l10n.onboardingScreenCaptureStatusCheckPrefs(screenCaptureStatus) ??
-                  'Screen capture permission status: $screenCaptureStatus. Please check System Preferences.');
+            globalNavigatorKey.currentContext?.l10n.onboardingScreenCaptureStatusCheckPrefs(screenCaptureStatus) ??
+                'Screen capture permission status: $screenCaptureStatus. Please check System Preferences.',
+          );
           return false;
         }
       } catch (e) {
         Logger.debug('Error checking/requesting Screen Capture permission on macOS: $e');
         AppSnackbar.showSnackbarError(
-            MyApp.navigatorKey.currentContext?.l10n.onboardingFailedCheckScreenCapture('$e') ??
-                'Failed to check Screen Capture permission: $e');
+          globalNavigatorKey.currentContext?.l10n.onboardingFailedCheckScreenCapture('$e') ??
+              'Failed to check Screen Capture permission: $e',
+        );
         updateScreenCapturePermission(false);
         return false;
       }
@@ -438,22 +467,26 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
           bool granted = await _screenCaptureChannel.invokeMethod('requestAccessibilityPermission');
           updateAccessibilityPermission(granted);
           if (!granted) {
-            AppSnackbar.showSnackbarError(MyApp.navigatorKey.currentContext?.l10n.onboardingAccessibilityRequired ??
-                'Accessibility permission is required for detecting browser meetings.');
+            AppSnackbar.showSnackbarError(
+              globalNavigatorKey.currentContext?.l10n.onboardingAccessibilityRequired ??
+                  'Accessibility permission is required for detecting browser meetings.',
+            );
           }
           return granted;
         } else {
           updateAccessibilityPermission(false);
           AppSnackbar.showSnackbarError(
-              MyApp.navigatorKey.currentContext?.l10n.onboardingAccessibilityStatusCheckPrefs(accessibilityStatus) ??
-                  'Accessibility permission status: $accessibilityStatus. Please check System Preferences.');
+            globalNavigatorKey.currentContext?.l10n.onboardingAccessibilityStatusCheckPrefs(accessibilityStatus) ??
+                'Accessibility permission status: $accessibilityStatus. Please check System Preferences.',
+          );
           return false;
         }
       } catch (e) {
         Logger.debug('Error checking/requesting Accessibility permission on macOS: $e');
         AppSnackbar.showSnackbarError(
-            MyApp.navigatorKey.currentContext?.l10n.onboardingFailedCheckAccessibility('$e') ??
-                'Failed to check Accessibility permission: $e');
+          globalNavigatorKey.currentContext?.l10n.onboardingFailedCheckAccessibility('$e') ??
+              'Failed to check Accessibility permission: $e',
+        );
         updateAccessibilityPermission(false);
         return false;
       }
@@ -470,17 +503,27 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
   }
 
   // Method to handle taps on devices
-  Future<void> handleTap({
-    required BtDevice device,
-    required bool isFromOnboarding,
-    VoidCallback? goNext,
-  }) async {
+  Future<void> handleTap({required BtDevice device, required bool isFromOnboarding, VoidCallback? goNext}) async {
     try {
       if (isClicked) return;
       isClicked = true;
 
       connectingToDeviceId = device.id;
       notifyListeners();
+
+      // On Android, associate via CompanionDeviceManager BEFORE GATT connection.
+      // Device must still be advertising for the system chooser to find it.
+      // Stop our scan first so CompanionDeviceManager's scan doesn't conflict.
+      if (Platform.isAndroid) {
+        try {
+          BleHostApi().stopScan();
+          final associatedAddress = await BleHostApi().requestCompanionDeviceAssociation(device.id);
+          Logger.debug('CompanionDeviceManager association result: $associatedAddress');
+        } catch (e) {
+          Logger.debug('CompanionDeviceManager association failed (non-fatal): $e');
+        }
+      }
+
       await ServiceManager.instance().device.ensureConnection(device.id, force: true);
       Logger.debug('Connected to device: ${device.name}');
       deviceId = device.id;
@@ -503,6 +546,7 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
       await Future.delayed(const Duration(seconds: 2));
       SharedPreferencesUtil().btDevice = connectedDevice!;
       SharedPreferencesUtil().deviceName = connectedDevice.name;
+
       foundDevicesMap.clear();
       deviceList.clear();
       if (isFromOnboarding) {
@@ -541,9 +585,7 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
     return connection?.device;
   }
 
-  Future<void> scanDevices({
-    required VoidCallback onShowDialog,
-  }) async {
+  Future<void> scanDevices({required VoidCallback onShowDialog}) async {
     if (SharedPreferencesUtil().btDevice.id.isEmpty) {
       // it means the device has been unpaired
       deviceAlreadyUnpaired();

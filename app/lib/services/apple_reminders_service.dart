@@ -15,7 +15,10 @@ class AppleRemindersService {
 
   void _initBackgroundSyncHandler() {
     _channel.setMethodCallHandler((call) async {
-      if (call.method == 'markExported') {
+      if (call.method == 'markExportedBatch') {
+        final ids = (call.arguments['action_item_ids'] as List?)?.cast<String>() ?? [];
+        await Future.wait(ids.map(_markActionItemExported));
+      } else if (call.method == 'markExported') {
         final actionItemId = call.arguments['action_item_id'] as String?;
         if (actionItemId != null) {
           await _markActionItemExported(actionItemId);
@@ -27,13 +30,23 @@ class AppleRemindersService {
   /// Mark an action item as exported after successful Apple Reminders sync
   Future<void> _markActionItemExported(String actionItemId) async {
     try {
-      await updateActionItem(
-        actionItemId,
-        exported: true,
-        exportPlatform: 'apple_reminders',
-      );
+      await updateActionItem(actionItemId, exported: true, exportPlatform: 'apple_reminders');
     } catch (e) {
       Logger.debug('Error marking action item as exported: $e');
+    }
+  }
+
+  /// Trigger native sync from foreground when FCM data message is received.
+  /// Forwards the raw FCM data payload to the native side for processing,
+  /// then marks successfully created reminders as exported in the backend.
+  Future<void> triggerSyncFromFCM(Map<String, dynamic> data) async {
+    if (!isAvailable) return;
+    try {
+      final result = await _channel.invokeMethod('syncFromFCM', data);
+      final exportedIds = (result as List?)?.cast<String>() ?? [];
+      await Future.wait(exportedIds.map(_markActionItemExported));
+    } catch (e) {
+      Logger.debug('Error triggering sync from FCM: $e');
     }
   }
 
@@ -42,12 +55,7 @@ class AppleRemindersService {
 
   /// Add a task to Apple Reminders
   /// Returns true if successful, false if failed or permission denied
-  Future<bool> addReminder({
-    required String title,
-    String? notes,
-    DateTime? dueDate,
-    String? listName,
-  }) async {
+  Future<bool> addReminder({required String title, String? notes, DateTime? dueDate, String? listName}) async {
     if (!isAvailable) {
       throw UnsupportedError('Apple Reminders is only available on iOS and macOS');
     }
@@ -101,9 +109,7 @@ class AppleRemindersService {
     if (!isAvailable) return [];
 
     try {
-      final result = await _channel.invokeMethod('getReminders', {
-        'listName': listName ?? 'Reminders',
-      });
+      final result = await _channel.invokeMethod('getReminders', {'listName': listName ?? 'Reminders'});
 
       if (result is List) {
         return result.cast<String>();
@@ -154,22 +160,13 @@ class AppleRemindersService {
     }
 
     // Add the reminder
-    final success = await addReminder(
-      title: actionItemDescription,
-      notes: 'From Omi',
-      listName: 'Reminders',
-    );
+    final success = await addReminder(title: actionItemDescription, notes: 'From Omi', listName: 'Reminders');
 
     return success ? AppleRemindersResult.success : AppleRemindersResult.failed;
   }
 }
 
-enum AppleRemindersResult {
-  success,
-  failed,
-  permissionDenied,
-  unsupported,
-}
+enum AppleRemindersResult { success, failed, permissionDenied, unsupported }
 
 extension AppleRemindersResultExtension on AppleRemindersResult {
   String get message {

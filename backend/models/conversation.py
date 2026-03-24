@@ -245,6 +245,7 @@ class ConversationSource(str, Enum):
     friend_com = 'friend_com'
     apple_watch = 'apple_watch'
     phone = 'phone'
+    phone_call = 'phone_call'
     desktop = 'desktop'
     openglass = 'openglass'
     screenpipe = 'screenpipe'
@@ -253,6 +254,13 @@ class ConversationSource(str, Enum):
     external_integration = 'external_integration'
     limitless = 'limitless'
     onboarding = 'onboarding'
+    unknown = 'unknown'
+
+    @classmethod
+    def _missing_(cls, value):
+        if isinstance(value, str):
+            return cls.unknown
+        return None
 
 
 class ConversationVisibility(str, Enum):
@@ -326,6 +334,7 @@ class Conversation(BaseModel):
     is_locked: bool = False
     data_protection_level: Optional[str] = None
     folder_id: Optional[str] = Field(default=None, description="ID of the folder this conversation belongs to")
+    call_id: Optional[str] = Field(default=None, description="Twilio call SID for phone call conversations")
 
     def __init__(self, **data):
         super().__init__(**data)
@@ -339,6 +348,7 @@ class Conversation(BaseModel):
         use_transcript: bool = False,
         include_timestamps: bool = False,
         people: List[Person] = None,
+        user_name: str = None,
     ) -> str:
         result = []
         people_map = {p.id: p for p in people} if people else {}
@@ -394,7 +404,7 @@ class Conversation(BaseModel):
                     conversation_str += f"- {event.title} ({event.start} - {event.duration} minutes)\n"
 
             if use_transcript:
-                conversation_str += f"\nTranscript:\n{conversation.get_transcript(include_timestamps=include_timestamps, people=people)}\n"
+                conversation_str += f"\nTranscript:\n{conversation.get_transcript(include_timestamps=include_timestamps, people=people, user_name=user_name)}\n"
                 # photos
                 photo_descriptions = conversation.get_photos_descriptions(include_timestamps=include_timestamps)
                 if photo_descriptions != 'None':
@@ -404,10 +414,10 @@ class Conversation(BaseModel):
 
         return "\n\n---------------------\n\n".join(result).strip()
 
-    def get_transcript(self, include_timestamps: bool, people: List[Person] = None) -> str:
+    def get_transcript(self, include_timestamps: bool, people: List[Person] = None, user_name: str = None) -> str:
         # Warn: missing transcript for workflow source, external integration source
         return TranscriptSegment.segments_as_string(
-            self.transcript_segments, include_timestamps=include_timestamps, people=people
+            self.transcript_segments, include_timestamps=include_timestamps, user_name=user_name, people=people
         )
 
     def get_photos_descriptions(self, include_timestamps: bool = False) -> str:
@@ -449,10 +459,11 @@ class CreateConversation(BaseModel):
 
     processing_conversation_id: Optional[str] = None
     calendar_meeting_context: Optional[CalendarMeetingContext] = None
+    is_locked: bool = False
 
-    def get_transcript(self, include_timestamps: bool, people: List[Person] = None) -> str:
+    def get_transcript(self, include_timestamps: bool, people: List[Person] = None, user_name: str = None) -> str:
         return TranscriptSegment.segments_as_string(
-            self.transcript_segments, include_timestamps=include_timestamps, people=people
+            self.transcript_segments, include_timestamps=include_timestamps, user_name=user_name, people=people
         )
 
     def get_person_ids(self) -> List[str]:

@@ -58,18 +58,12 @@ class _WaveformSectionState extends State<WaveformSection> {
     });
   }
 
-  void _handleWaveformTap(
-    TapDownDetails details,
-    BoxConstraints constraints,
-    SyncProvider syncProvider,
-  ) {
+  void _handleWaveformTap(TapDownDetails details, BoxConstraints constraints, SyncProvider syncProvider) {
     if (widget.playbackState.canPlayOrShare && syncProvider.totalDuration.inMilliseconds > 0 && widget.isPlaying) {
       final localPosition = details.localPosition;
       final containerWidth = constraints.maxWidth;
       final progress = (localPosition.dx / containerWidth).clamp(0.0, 1.0);
-      final seekPosition = Duration(
-        milliseconds: (progress * syncProvider.totalDuration.inMilliseconds).round(),
-      );
+      final seekPosition = Duration(milliseconds: (progress * syncProvider.totalDuration.inMilliseconds).round());
 
       // Perform seek operation asynchronously to avoid blocking UI
       Future.microtask(() => syncProvider.seekToPosition(seekPosition));
@@ -82,9 +76,7 @@ class _WaveformSectionState extends State<WaveformSection> {
       margin: const EdgeInsets.symmetric(horizontal: 24),
       child: Column(
         children: [
-          Expanded(
-            child: _buildWaveformVisualization(context),
-          ),
+          Expanded(child: _buildWaveformVisualization(context)),
           const SizedBox(height: 16),
           _buildTimeIndicators(context),
         ],
@@ -98,18 +90,9 @@ class _WaveformSectionState extends State<WaveformSection> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const CircularProgressIndicator(
-              color: Colors.white70,
-              strokeWidth: 2,
-            ),
+            const CircularProgressIndicator(color: Colors.white70, strokeWidth: 2),
             const SizedBox(height: 12),
-            Text(
-              context.l10n.loadingYourRecording,
-              style: const TextStyle(
-                color: Colors.white70,
-                fontSize: 12,
-              ),
-            ),
+            Text(context.l10n.loadingYourRecording, style: const TextStyle(color: Colors.white70, fontSize: 12)),
           ],
         ),
       );
@@ -165,13 +148,14 @@ class _WaveformSectionState extends State<WaveformSection> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: timeMarkers
-            .map((marker) => Text(
-                  marker,
-                  style: Theme.of(context).textTheme.labelMedium!.copyWith(
-                        color: Colors.grey.shade500,
-                        fontWeight: FontWeight.w400,
-                      ),
-                ))
+            .map(
+              (marker) => Text(
+                marker,
+                style: Theme.of(
+                  context,
+                ).textTheme.labelMedium!.copyWith(color: Colors.grey.shade500, fontWeight: FontWeight.w400),
+              ),
+            )
             .toList(),
       ),
     );

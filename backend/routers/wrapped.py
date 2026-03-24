@@ -14,6 +14,9 @@ from pydantic import BaseModel
 import database.wrapped as wrapped_db
 from database.wrapped import WrappedStatus
 from utils.other import endpoints as auth
+import logging
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -40,7 +43,7 @@ def _run_wrapped_generation(uid: str, year: int):
 
         generate_wrapped_2025(uid, year)
     except Exception as e:
-        print(f"Error in wrapped generation for user {uid}: {e}")
+        logger.error(f"Error in wrapped generation for user {uid}: {e}")
         wrapped_db.update_wrapped_status(uid, year, WrappedStatus.ERROR, error=str(e))
 
 

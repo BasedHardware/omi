@@ -55,11 +55,11 @@ struct FocusDayStats {
     let distractedCount: Int
     let topDistractions: [(appOrSite: String, totalSeconds: Int, count: Int)]
 
-    /// Focus rate as a percentage (0-100)
+    /// Focus rate as a percentage (0-100), based on time spent
     var focusRate: Double {
-        let total = focusedCount + distractedCount
+        let total = focusedMinutes + distractedMinutes
         guard total > 0 else { return 0 }
-        return Double(focusedCount) / Double(total) * 100
+        return Double(focusedMinutes) / Double(total) * 100
     }
 }
 
@@ -157,21 +157,40 @@ class FocusStorage: ObservableObject {
         return sessions.filter { calendar.isDate($0.createdAt, inSameDayAs: today) }
     }
 
-    /// Get all-time statistics
-    var allTimeStats: FocusDayStats {
+    /// Compute duration for each session based on time until the next session.
+    /// Sessions array is newest-first; the most recent session's duration is `now - createdAt`.
+    private func computeStats(for sessionList: [StoredFocusSession]) -> FocusDayStats {
+        var focusedSeconds = 0
+        var distractedSeconds = 0
         var focusedCount = 0
         var distractedCount = 0
         var distractionMap: [String: (seconds: Int, count: Int)] = [:]
 
-        for session in sessions {
+        // Sessions are newest-first, so iterate and compute duration from each session
+        // to the next one (which is the one that came before it chronologically).
+        let now = Date()
+        for i in 0..<sessionList.count {
+            let session = sessionList[i]
+            // Duration = time from this session's start until the next session starts (or now)
+            let endTime: Date
+            if i == 0 {
+                // Most recent session — duration extends to now
+                endTime = now
+            } else {
+                // Ended when the next (more recent) session started
+                endTime = sessionList[i - 1].createdAt
+            }
+            let duration = max(0, Int(endTime.timeIntervalSince(session.createdAt)))
+
             switch session.status {
             case .focused:
                 focusedCount += 1
+                focusedSeconds += duration
             case .distracted:
                 distractedCount += 1
+                distractedSeconds += duration
                 let current = distractionMap[session.appOrSite] ?? (0, 0)
-                let seconds = session.durationSeconds ?? 60
-                distractionMap[session.appOrSite] = (current.seconds + seconds, current.count + 1)
+                distractionMap[session.appOrSite] = (current.seconds + duration, current.count + 1)
             }
         }
 
@@ -182,50 +201,23 @@ class FocusStorage: ObservableObject {
 
         return FocusDayStats(
             date: Date(),
-            focusedMinutes: focusedCount,
-            distractedMinutes: distractedCount,
-            sessionCount: sessions.count,
+            focusedMinutes: focusedSeconds / 60,
+            distractedMinutes: distractedSeconds / 60,
+            sessionCount: sessionList.count,
             focusedCount: focusedCount,
             distractedCount: distractedCount,
             topDistractions: Array(topDistractions)
         )
     }
 
+    /// Get all-time statistics
+    var allTimeStats: FocusDayStats {
+        computeStats(for: sessions)
+    }
+
     /// Get today's statistics
     var todayStats: FocusDayStats {
-        let todayList = todaySessions
-
-        var focusedCount = 0
-        var distractedCount = 0
-        var distractionMap: [String: (seconds: Int, count: Int)] = [:]
-
-        for session in todayList {
-            switch session.status {
-            case .focused:
-                focusedCount += 1
-            case .distracted:
-                distractedCount += 1
-                let current = distractionMap[session.appOrSite] ?? (0, 0)
-                let seconds = session.durationSeconds ?? 60
-                distractionMap[session.appOrSite] = (current.seconds + seconds, current.count + 1)
-            }
-        }
-
-        // Build top distractions
-        let topDistractions = distractionMap
-            .map { (appOrSite: $0.key, totalSeconds: $0.value.seconds, count: $0.value.count) }
-            .sorted { $0.totalSeconds > $1.totalSeconds }
-            .prefix(5)
-
-        return FocusDayStats(
-            date: Date(),
-            focusedMinutes: focusedCount,
-            distractedMinutes: distractedCount,
-            sessionCount: todayList.count,
-            focusedCount: focusedCount,
-            distractedCount: distractedCount,
-            topDistractions: Array(topDistractions)
-        )
+        computeStats(for: todaySessions)
     }
 
     /// Delete a session

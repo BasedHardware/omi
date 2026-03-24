@@ -17,10 +17,7 @@ class UserReviewCard extends StatelessWidget {
       width: MediaQuery.of(context).size.width * 0.78,
       padding: const EdgeInsets.all(16.0),
       margin: const EdgeInsets.only(left: 12.0, right: 12.0, top: 2, bottom: 6),
-      decoration: BoxDecoration(
-        color: const Color(0xFF1F1F25),
-        borderRadius: BorderRadius.circular(16.0),
-      ),
+      decoration: BoxDecoration(color: const Color(0xFF1F1F25), borderRadius: BorderRadius.circular(16.0)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
@@ -41,55 +38,32 @@ class UserReviewCard extends StatelessWidget {
                 maxRating: 5.0,
                 onRatingUpdate: (rating) {},
               ),
-              const SizedBox(
-                width: 8,
-              ),
-              Text(
-                timeago.format(review.ratedAt),
-                style: const TextStyle(
-                  color: Colors.grey,
-                  fontSize: 12,
-                ),
-              ),
+              const SizedBox(width: 8),
+              Text(timeago.format(review.ratedAt), style: const TextStyle(color: Colors.grey, fontSize: 12)),
             ],
           ),
-          const SizedBox(
-            height: 8,
-          ),
-          Text(
-            review.review.decodeString,
-            style: const TextStyle(
-              color: Colors.white,
-            ),
-          ),
-          const SizedBox(
-            height: 16,
-          ),
+          const SizedBox(height: 8),
+          Text(review.review.decodeString, style: const TextStyle(color: Colors.white)),
+          const SizedBox(height: 16),
           review.response.isNotEmpty
               ? Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Divider(
-                      color: Color.fromARGB(255, 208, 207, 207),
-                    ),
-                    const SizedBox(
-                      height: 8,
-                    ),
+                    const Divider(color: Color.fromARGB(255, 208, 207, 207)),
+                    const SizedBox(height: 8),
                     Row(
                       children: [
                         Text(ownerName, style: const TextStyle(color: Colors.white)),
-                        const SizedBox(
-                          width: 8,
-                        ),
+                        const SizedBox(width: 8),
                         review.respondedAt != null
-                            ? Text(timeago.format(review.respondedAt!),
-                                style: const TextStyle(color: Colors.grey, fontSize: 12))
+                            ? Text(
+                                timeago.format(review.respondedAt!),
+                                style: const TextStyle(color: Colors.grey, fontSize: 12),
+                              )
                             : const SizedBox(),
                       ],
                     ),
-                    const SizedBox(
-                      height: 6,
-                    ),
+                    const SizedBox(height: 6),
                     Text(review.response, style: const TextStyle(color: Colors.white)),
                   ],
                 )

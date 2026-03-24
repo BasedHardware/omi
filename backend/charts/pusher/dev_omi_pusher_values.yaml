@@ -33,7 +33,10 @@ serviceAccount:
 
 # This is for setting Kubernetes Annotations to a Pod.
 # For more information checkout: https://kubernetes.io/docs/concepts/overview/working-with-objects/annotations/
-podAnnotations: {}
+podAnnotations:
+  prometheus.io/scrape: "true"
+  prometheus.io/port: "8080"
+  prometheus.io/path: "/metrics"
 # This is for setting Kubernetes Labels to a Pod.
 # For more information checkout: https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/
 podLabels: {}
@@ -121,7 +124,7 @@ env:
         name: dev-omi-backend-secrets
         key: REDIS_DB_HOST
   - name: REDIS_DB_PORT
-    value: "10797"
+    value: "13151"
   - name: REDIS_DB_PASSWORD
     valueFrom:
       secretKeyRef:
@@ -242,6 +245,18 @@ env:
     value: "price_1RrxXL1F8wnoWYvw3kDbWmjs"
   - name: SUBSCRIPTION_LAUNCH_DATE
     value: "2025-08-21"
+  - name: SERVICE_ACCOUNT_JSON
+    valueFrom:
+      secretKeyRef:
+        name: dev-omi-backend-secrets
+        key: SERVICE_ACCOUNT_JSON
+  - name: GOOGLE_CLOUD_PROJECT
+    value: "based-hardware"
+  - name: METRICS_SECRET
+    valueFrom:
+      secretKeyRef:
+        name: dev-omi-backend-secrets
+        key: METRICS_SECRET
 
 resources:
   # We usually recommend not to specify default resources and to leave this as a conscious
@@ -278,7 +293,7 @@ startupProbe:
 autoscaling:
   enabled: true
   minReplicas: 1
-  maxReplicas: 10
+  maxReplicas: 3
   behavior:
     scaleDown:
       stabilizationWindowSeconds: 600
@@ -286,6 +301,10 @@ autoscaling:
       - type: Percent
         value: 25
         periodSeconds: 60
+      - type: Pods
+        value: 1
+        periodSeconds: 60
+      selectPolicy: Max
     scaleUp:
       stabilizationWindowSeconds: 0
       policies:
@@ -298,6 +317,22 @@ autoscaling:
       selectPolicy: Max
   targetCPUUtilizationPercentage: 70
   targetMemoryUtilizationPercentage: 70
+
+podDisruptionBudget:
+  minAvailable: "80%"
+  # maxUnavailable: "20%"
+
+strategy:
+  type: RollingUpdate
+  rollingUpdate:
+    maxUnavailable: 1
+    maxSurge: 2
+
+terminationGracePeriodSeconds: 120
+lifecycle:
+  preStop:
+    exec:
+      command: ["sh", "-c", "sleep 15"]
 
 # Additional volumes on the output Deployment definition.
 volumes: []

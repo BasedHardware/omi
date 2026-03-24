@@ -38,17 +38,10 @@ class OmiMessageInput extends AdaptiveWidget {
         focusNode: focusNode,
         maxLines: null,
         keyboardType: TextInputType.multiline,
-        style: const TextStyle(
-          fontSize: 14,
-          color: ResponsiveHelper.textPrimary,
-          height: 1.4,
-        ),
+        style: const TextStyle(fontSize: 14, color: ResponsiveHelper.textPrimary, height: 1.4),
         decoration: InputDecoration(
           hintText: hint,
-          hintStyle: const TextStyle(
-            fontSize: 14,
-            color: ResponsiveHelper.textTertiary,
-          ),
+          hintStyle: const TextStyle(fontSize: 14, color: ResponsiveHelper.textTertiary),
           border: InputBorder.none,
           contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         ),

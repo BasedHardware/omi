@@ -1,8 +1,8 @@
 import Foundation
 
-/// Service that periodically scans incomplete tasks and uses Gemini AI to detect
-/// and remove semantic duplicates. Deletions are logged to a local SQLite table
-/// so AI deletions can be reviewed separately from user deletions.
+/// Service that periodically scans staged tasks and uses Gemini AI to detect
+/// and remove semantic duplicates BEFORE they are promoted to action items.
+/// Only operates on staged_tasks — never touches action_items.
 actor TaskDeduplicationService {
     static let shared = TaskDeduplicationService()
 
@@ -17,12 +17,25 @@ actor TaskDeduplicationService {
     private let cooldownSeconds: TimeInterval = 1800    // 30-min cooldown
     private let minimumTaskCount = 3
 
+    private var geminiClientInitAttempted = false
+
     private init() {
+        // Don't eagerly init — API key may not be available yet (fetched by APIKeyService)
+    }
+
+    /// Lazy-initialize GeminiClient; retries if APIKeyService hasn't loaded yet.
+    private func getGeminiClient() -> GeminiClient? {
+        if let client = geminiClient { return client }
+        guard APIKeyService.keysAvailable || !geminiClientInitAttempted else { return nil }
+        geminiClientInitAttempted = true
         do {
-            self.geminiClient = try GeminiClient(model: "gemini-3-pro-preview")
+            let client = try GeminiClient(model: "gemini-pro-latest")
+            geminiClient = client
+            return client
         } catch {
+            if !APIKeyService.keysAvailable { geminiClientInitAttempted = false }
             log("TaskDedup: Failed to initialize GeminiClient: \(error)")
-            self.geminiClient = nil
+            return nil
         }
     }
 
@@ -31,7 +44,7 @@ actor TaskDeduplicationService {
     func start() {
         guard !isRunning else { return }
         isRunning = true
-        log("TaskDedup: Service started")
+        log("TaskDedup: Service started (staged tasks only)")
 
         timer = Task { [weak self] in
             // Startup delay
@@ -67,35 +80,35 @@ actor TaskDeduplicationService {
     // MARK: - Deduplication Logic
 
     private func runDeduplication() async {
-        guard let client = geminiClient else {
+        guard let client = getGeminiClient() else {
             log("TaskDedup: Skipping - Gemini client not initialized")
             return
         }
 
         lastRunTime = Date()
-        log("TaskDedup: Starting deduplication run")
+        log("TaskDedup: Starting deduplication run on staged tasks")
 
-        // 1. Fetch incomplete tasks
+        // 1. Fetch staged tasks (not yet promoted to action items)
         let tasks: [TaskActionItem]
         do {
-            let response = try await APIClient.shared.getActionItems(limit: 200, completed: false)
+            let response = try await APIClient.shared.getStagedTasks(limit: 200)
             tasks = response.items
         } catch {
-            log("TaskDedup: Failed to fetch tasks: \(error)")
+            log("TaskDedup: Failed to fetch staged tasks: \(error)")
             return
         }
 
         guard tasks.count >= minimumTaskCount else {
-            log("TaskDedup: Only \(tasks.count) tasks, skipping (minimum: \(minimumTaskCount))")
+            log("TaskDedup: Only \(tasks.count) staged tasks, skipping (minimum: \(minimumTaskCount))")
             return
         }
 
-        log("TaskDedup: Analyzing \(tasks.count) tasks for duplicates")
+        log("TaskDedup: Analyzing \(tasks.count) staged tasks for duplicates")
 
         // 2. Send all tasks to Gemini in a single call
         let totalDeleted = await analyzeAndDeleteDuplicates(tasks: tasks, client: client)
 
-        log("TaskDedup: Run complete. Soft-deleted \(totalDeleted) duplicate tasks.")
+        log("TaskDedup: Run complete. Hard-deleted \(totalDeleted) duplicate staged tasks.")
     }
 
     private func analyzeAndDeleteDuplicates(tasks: [TaskActionItem], client: GeminiClient) async -> Int {
@@ -112,7 +125,7 @@ actor TaskDeduplicationService {
                 parts.append("Source: \(source)")
             }
             parts.append("Created: \(ISO8601DateFormatter().string(from: task.createdAt))")
-            return parts.joined(separator: " | ")
+            return parts.joined(separator: "\n")
         }.joined(separator: "\n")
 
         let prompt = """
@@ -192,7 +205,7 @@ actor TaskDeduplicationService {
         }
 
         guard result.hasDuplicates, !result.duplicateGroups.isEmpty else {
-            log("TaskDedup: No duplicates found in batch of \(tasks.count) tasks")
+            log("TaskDedup: No duplicates found in batch of \(tasks.count) staged tasks")
             return 0
         }
 
@@ -236,29 +249,13 @@ actor TaskDeduplicationService {
                     log("TaskDedup: Failed to log deletion record: \(error)")
                 }
 
-                // Look up local record for relevance score (backend doesn't store scores)
-                let localTask = try? await ActionItemStorage.shared.getLocalActionItem(byBackendId: deleteId)
-
-                // Soft-delete locally first so task disappears from to-do list immediately
-                try? await ActionItemStorage.shared.deleteActionItemByBackendId(deleteId, deletedBy: "ai_dedup")
-
-                // Compact relevance scores to fill the gap
-                if let score = localTask?.relevanceScore {
-                    try? await ActionItemStorage.shared.compactScoresAfterRemoval(removedScore: score)
-                }
-
-                // Soft-delete from backend
+                // Hard-delete staged task from backend
                 do {
-                    _ = try await APIClient.shared.softDeleteActionItem(
-                        id: deleteId,
-                        deletedBy: "ai_dedup",
-                        reason: group.reason,
-                        keptTaskId: group.keepId
-                    )
+                    try await APIClient.shared.deleteStagedTask(id: deleteId)
                     deletedCount += 1
-                    log("TaskDedup: Soft-deleted '\(deletedTask?.description ?? deleteId)' (kept: '\(keptTask?.description ?? group.keepId)') - \(group.reason)")
+                    log("TaskDedup: Hard-deleted staged task '\(deletedTask?.description ?? deleteId)' (kept: '\(keptTask?.description ?? group.keepId)') - \(group.reason)")
                 } catch {
-                    log("TaskDedup: Failed to soft-delete task \(deleteId) on backend: \(error)")
+                    log("TaskDedup: Failed to delete staged task \(deleteId) on backend: \(error)")
                 }
             }
         }

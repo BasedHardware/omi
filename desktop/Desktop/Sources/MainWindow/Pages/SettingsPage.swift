@@ -1,52 +1,58 @@
 import SwiftUI
 import Sparkle
 import UniformTypeIdentifiers
+import WebKit
 
 /// Settings page that wraps SettingsView with proper dark theme styling for the main window
 struct SettingsPage: View {
     @ObservedObject var appState: AppState
     @Binding var selectedSection: SettingsContentView.SettingsSection
-    @Binding var selectedAdvancedSubsection: SettingsContentView.AdvancedSubsection?
+    @Binding var highlightedSettingId: String?
+    var chatProvider: ChatProvider? = nil
 
     var body: some View {
-        ScrollView {
-            VStack(spacing: 0) {
-                // Section header
-                HStack {
-                    Text(selectedSection == .advanced && selectedAdvancedSubsection != nil
-                         ? selectedAdvancedSubsection!.rawValue
-                         : selectedSection.rawValue)
-                        .scaledFont(size: 28, weight: .bold)
-                        .foregroundColor(OmiColors.textPrimary)
-                        .id(selectedSection)
-                        .transition(.opacity)
-                        .animation(.easeInOut(duration: 0.15), value: selectedSection)
+        ScrollViewReader { proxy in
+            ScrollView {
+                VStack(spacing: 0) {
+                    // Section header
+                    HStack {
+                        Text(selectedSection.rawValue)
+                            .scaledFont(size: 28, weight: .bold)
+                            .foregroundColor(OmiColors.textPrimary)
+                            .id(selectedSection)
+                            .transition(.opacity)
+                            .animation(.easeInOut(duration: 0.15), value: selectedSection)
+
+                        Spacer()
+                    }
+                    .padding(.horizontal, 32)
+                    .padding(.top, 32)
+                    .padding(.bottom, 24)
+
+                    // Settings content - embedded SettingsView with dark theme override
+                    SettingsContentView(
+                        appState: appState,
+                        selectedSection: $selectedSection,
+                        highlightedSettingId: $highlightedSettingId,
+                        chatProvider: chatProvider
+                    )
+                    .padding(.horizontal, 32)
 
                     Spacer()
                 }
-                .padding(.horizontal, 32)
-                .padding(.top, 32)
-                .padding(.bottom, 24)
-
-                // Settings content - embedded SettingsView with dark theme override
-                SettingsContentView(
-                    appState: appState,
-                    selectedSection: $selectedSection,
-                    selectedAdvancedSubsection: $selectedAdvancedSubsection
-                )
-                .padding(.horizontal, 32)
-
-                Spacer()
+            }
+            .onChange(of: highlightedSettingId) { _, newId in
+                guard let newId = newId else { return }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                    withAnimation(.easeInOut(duration: 0.3)) {
+                        proxy.scrollTo(newId, anchor: .center)
+                    }
+                }
             }
         }
         .background(OmiColors.backgroundSecondary.opacity(0.3))
         .onAppear {
             AnalyticsManager.shared.settingsPageOpened()
-        }
-        .onChange(of: selectedSection) { _, newValue in
-            if newValue == .advanced && selectedAdvancedSubsection == nil {
-                selectedAdvancedSubsection = .aiUserProfile
-            }
         }
     }
 }
@@ -55,6 +61,9 @@ struct SettingsPage: View {
 struct SettingsContentView: View {
     // AppState for transcription control
     @ObservedObject var appState: AppState
+
+    // ChatProvider for browser extension setup
+    var chatProvider: ChatProvider? = nil
 
     // Updater view model
     @ObservedObject private var updaterViewModel = UpdaterViewModel.shared
@@ -84,6 +93,8 @@ struct SettingsContentView: View {
 
     // Task Assistant states
     @State private var taskEnabled: Bool
+    @State private var taskChatAgentEnabled: Bool
+    @State private var taskAgentWorkingDirectory: String
     @State private var taskExtractionInterval: Double
     @State private var taskMinConfidence: Double
     @State private var taskNotificationsEnabled: Bool
@@ -105,8 +116,14 @@ struct SettingsContentView: View {
     @State private var memoryNotificationsEnabled: Bool
     @State private var memoryExcludedApps: Set<String>
 
+    // Goals states
+    @State private var goalsAutoGenerateEnabled: Bool = GoalGenerationService.shared.isAutoGenerationEnabled
+
     // Glow preview state
     @State private var isPreviewRunning: Bool = false
+
+    // Downgrade confirmation alert
+    @State private var showDowngradeAlert = false
 
     // Tier gating (0 = show all, 1-6 = sequential tiers)
     @AppStorage("currentTierLevel") private var currentTierLevel = 0
@@ -128,7 +145,7 @@ struct SettingsContentView: View {
 
     // Selected section (passed in from parent)
     @Binding var selectedSection: SettingsSection
-    @Binding var selectedAdvancedSubsection: AdvancedSubsection?
+    @Binding var highlightedSettingId: String?
 
     // Notification settings (from backend)
     @State private var dailySummaryEnabled: Bool = true
@@ -151,6 +168,15 @@ struct SettingsContentView: View {
 
     // Loading states
     @State private var isLoadingSettings: Bool = false
+    @State private var userSubscription: UserSubscriptionResponse?
+    @State private var isLoadingSubscription: Bool = false
+    @State private var subscriptionError: String?
+    @State private var activeCheckoutPriceId: String?
+    @State private var selectedPlanIdForCheckout: String?
+    @State private var isOpeningCustomerPortal: Bool = false
+    @State private var activeBillingWebFlow: BillingWebFlow?
+    @State private var pendingSubscriptionPriceId: String?
+    @State private var pendingCheckoutSessionId: String?
 
     private let cooldownOptions = [1, 2, 5, 10, 15, 30, 60]
     private let analysisDelayOptions = [0, 10, 20, 30, 60, 300] // seconds: instant, 10s, 20s, 30s, 1 min, 5 min
@@ -172,77 +198,130 @@ struct SettingsContentView: View {
     // Language auto-detect state (from local settings)
     @State private var transcriptionAutoDetect: Bool = true
     @State private var transcriptionLanguage: String = "en"
+    @State private var vadGateEnabled: Bool = false
+    @State private var batchTranscriptionEnabled: Bool = true
 
     // Multi-chat mode setting
     @AppStorage("multiChatEnabled") private var multiChatEnabled = false
     @AppStorage("conversationsCompactView") private var conversationsCompactView = true
 
     // AI Chat settings
+    @AppStorage("chatBridgeMode") private var chatBridgeMode: String = "agentSDK"
+    @AppStorage("askModeEnabled") private var askModeEnabled = false
     @AppStorage("claudeMdEnabled") private var claudeMdEnabled = true
+    @AppStorage("projectClaudeMdEnabled") private var projectClaudeMdEnabled = true
+    @AppStorage("aiChatWorkingDirectory") private var aiChatWorkingDirectory: String = ""
     @State private var aiChatClaudeMdContent: String?
     @State private var aiChatClaudeMdPath: String?
+    @State private var aiChatProjectClaudeMdContent: String?
+    @State private var aiChatProjectClaudeMdPath: String?
     @State private var aiChatDiscoveredSkills: [(name: String, description: String, path: String)] = []
-    @State private var aiChatEnabledSkills: Set<String> = []
+    @State private var aiChatProjectDiscoveredSkills: [(name: String, description: String, path: String)] = []
+    @State private var aiChatDisabledSkills: Set<String> = []
     @State private var showFileViewer = false
     @State private var fileViewerContent = ""
     @State private var fileViewerTitle = ""
     @State private var skillSearchQuery = ""
+
+    // Dev Mode setting
+    @AppStorage("devModeEnabled") private var devModeEnabled = false
+
+    // Browser Extension settings
+    @AppStorage("playwrightUseExtension") private var playwrightUseExtension = true
+    @State private var playwrightExtensionToken: String = ""
+    @State private var showBrowserSetup = false
 
     // Launch at login manager
     @ObservedObject private var launchAtLoginManager = LaunchAtLoginManager.shared
 
     enum SettingsSection: String, CaseIterable {
         case general = "General"
-        case device = "Device"
-        case focus = "Focus"
         case rewind = "Rewind"
         case transcription = "Transcription"
         case notifications = "Notifications"
         case privacy = "Privacy"
         case account = "Account"
+        case planUsage = "Plan and Usage"
         case aiChat = "AI Chat"
+        case floatingBar = "Floating Bar"
         case advanced = "Advanced"
         case about = "About"
     }
 
     enum AdvancedSubsection: String, CaseIterable {
+        case resetOnboarding = "Reset Onboarding"
         case aiUserProfile = "AI User Profile"
         case stats = "Your Stats"
-        case featureTiers = "Feature Tiers"
         case focusAssistant = "Focus Assistant"
         case taskAssistant = "Task Assistant"
         case adviceAssistant = "Advice Assistant"
         case memoryAssistant = "Memory Assistant"
         case analysisThrottle = "Analysis Throttle"
+        case goals = "Goals"
         case preferences = "Preferences"
         case troubleshooting = "Troubleshooting"
+        case gmailReader = "Gmail Reader"
+        case calendarSync = "Calendar Sync"
+        case developerKeys = "Developer API Keys"
 
         var icon: String {
             switch self {
+            case .resetOnboarding: return "arrow.counterclockwise"
             case .aiUserProfile: return "brain"
             case .stats: return "chart.bar"
-            case .featureTiers: return "lock.shield"
             case .focusAssistant: return "eye.fill"
             case .taskAssistant: return "checklist"
             case .adviceAssistant: return "lightbulb.fill"
             case .memoryAssistant: return "brain.head.profile"
             case .analysisThrottle: return "clock.arrow.2.circlepath"
+            case .goals: return "target"
             case .preferences: return "slider.horizontal.3"
             case .troubleshooting: return "wrench.and.screwdriver"
+            case .gmailReader: return "envelope.fill"
+            case .calendarSync: return "calendar"
+            case .developerKeys: return "key"
             }
         }
     }
 
     @State private var showResetOnboardingAlert: Bool = false
+    @State private var showRescanFilesAlert: Bool = false
+    @State private var showDeleteAccountAlert: Bool = false
+
+    // Gmail Reader states
+    @State private var gmailEmails: [GmailEmail] = []
+    @State private var isReadingGmail: Bool = false
+    @State private var isSavingGmailMemories: Bool = false
+    @State private var gmailMemoriesSaved: Int = 0
+    @State private var gmailReadError: String?
+    @State private var gmailLastFetched: Date?
+
+    // Calendar Sync states
+    @State private var calendarEvents: [CalendarEvent] = []
+    @State private var isReadingCalendar: Bool = false
+    @State private var calendarMemoriesCreated: Int = 0
+    @State private var calendarTasksCreated: Int = 0
+    @State private var calendarSyncError: String?
+    @State private var calendarLastSynced: Date?
+
+    @State private var isDeletingAccount: Bool = false
+    @State private var deleteAccountError: String?
+
+    // Developer API Key overrides
+    @AppStorage("dev_deepgram_api_key") private var devDeepgramKey: String = ""
+    @AppStorage("dev_gemini_api_key") private var devGeminiKey: String = ""
+    @AppStorage("dev_anthropic_api_key") private var devAnthropicKey: String = ""
 
     init(
         appState: AppState,
         selectedSection: Binding<SettingsSection>,
-        selectedAdvancedSubsection: Binding<AdvancedSubsection?>
+        highlightedSettingId: Binding<String?> = .constant(nil),
+        chatProvider: ChatProvider? = nil
     ) {
         self.appState = appState
         self._selectedSection = selectedSection
-        self._selectedAdvancedSubsection = selectedAdvancedSubsection
+        self._highlightedSettingId = highlightedSettingId
+        self.chatProvider = chatProvider
         let settings = AssistantSettings.shared
         _isMonitoring = State(initialValue: ProactiveAssistantsPlugin.shared.isMonitoring)
         _isTranscribing = State(initialValue: appState.isTranscribing)
@@ -253,6 +332,8 @@ struct SettingsContentView: View {
         _focusNotificationsEnabled = State(initialValue: FocusAssistantSettings.shared.notificationsEnabled)
         _focusExcludedApps = State(initialValue: FocusAssistantSettings.shared.excludedApps)
         _taskEnabled = State(initialValue: TaskAssistantSettings.shared.isEnabled)
+        _taskChatAgentEnabled = State(initialValue: TaskAgentSettings.shared.isChatEnabled)
+        _taskAgentWorkingDirectory = State(initialValue: TaskAgentSettings.shared.workingDirectory)
         _taskExtractionInterval = State(initialValue: TaskAssistantSettings.shared.extractionInterval)
         _taskMinConfidence = State(initialValue: TaskAssistantSettings.shared.minConfidence)
         _taskNotificationsEnabled = State(initialValue: TaskAssistantSettings.shared.notificationsEnabled)
@@ -268,6 +349,10 @@ struct SettingsContentView: View {
         _memoryMinConfidence = State(initialValue: MemoryAssistantSettings.shared.minConfidence)
         _memoryNotificationsEnabled = State(initialValue: MemoryAssistantSettings.shared.notificationsEnabled)
         _memoryExcludedApps = State(initialValue: MemoryAssistantSettings.shared.excludedApps)
+        _vadGateEnabled = State(initialValue: settings.vadGateEnabled)
+        _batchTranscriptionEnabled = State(initialValue: settings.batchTranscriptionEnabled)
+        _transcriptionLanguage = State(initialValue: settings.transcriptionLanguage)
+        _transcriptionAutoDetect = State(initialValue: settings.transcriptionAutoDetect)
     }
 
     /// Computed status text for notifications
@@ -288,10 +373,6 @@ struct SettingsContentView: View {
                 switch selectedSection {
                 case .general:
                     generalSection
-                case .device:
-                    DeviceSettingsPage()
-                case .focus:
-                    FocusPage()
                 case .rewind:
                     rewindSection
                 case .transcription:
@@ -302,8 +383,12 @@ struct SettingsContentView: View {
                     privacySection
                 case .account:
                     accountSection
+                case .planUsage:
+                    planUsageSection
                 case .aiChat:
                     aiChatSection
+                case .floatingBar:
+                    floatingBarSection
                 case .advanced:
                     advancedSection
                 case .about:
@@ -316,10 +401,11 @@ struct SettingsContentView: View {
         }
         .onAppear {
             loadBackendSettings()
+            loadSubscriptionInfo()
             // Sync transcription state with appState
             isTranscribing = appState.isTranscribing
-            // Sync floating bar state
-            showAskOmiBar = FloatingControlBarManager.shared.isVisible
+            // Sync floating bar state with persisted preference (not transient visibility)
+            showAskOmiBar = FloatingControlBarManager.shared.isEnabled
             // Refresh notification permission state
             appState.checkNotificationPermission()
         }
@@ -331,13 +417,29 @@ struct SettingsContentView: View {
         .onChange(of: appState.isTranscribing) { _, newValue in
             isTranscribing = newValue
         }
+        .onChange(of: selectedSection) { _, newValue in
+            if newValue == .planUsage {
+                loadSubscriptionInfo()
+            }
+        }
         .onReceive(NotificationCenter.default.publisher(for: .navigateToTaskSettings)) { _ in
             selectedSection = .advanced
-            selectedAdvancedSubsection = .taskAssistant
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+                highlightedSettingId = "advanced.taskassistant"
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .navigateToFloatingBarSettings)) { _ in
+            selectedSection = .floatingBar
         }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             // Refresh notification permission when app becomes active (user may have changed it in System Settings)
             appState.checkNotificationPermission()
+        }
+        .sheet(item: $activeBillingWebFlow) { flow in
+            BillingWebFlowSheet(flow: flow) { outcome in
+                activeBillingWebFlow = nil
+                handleBillingFlowCompletion(outcome)
+            }
         }
     }
 
@@ -345,20 +447,24 @@ struct SettingsContentView: View {
 
     private var generalSection: some View {
         VStack(spacing: 20) {
-            // Screen Analysis toggle
-            settingsCard {
+            // Screen Capture toggle
+            settingsCard(settingId: "general.screencapture") {
                 HStack(spacing: 16) {
                     Circle()
                         .fill(isMonitoring ? OmiColors.success : OmiColors.textTertiary.opacity(0.3))
                         .frame(width: 12, height: 12)
                         .shadow(color: isMonitoring ? OmiColors.success.opacity(0.5) : .clear, radius: 6)
 
+                    Image(systemName: "rectangle.dashed.badge.record")
+                        .scaledFont(size: 16)
+                        .foregroundColor(OmiColors.purplePrimary)
+
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("Screen Analysis")
+                        Text("Screen Capture")
                             .scaledFont(size: 16, weight: .semibold)
                             .foregroundColor(OmiColors.textPrimary)
 
-                        Text(permissionError ?? (isMonitoring ? "Analyzing your screen" : "Screen analysis is paused"))
+                        Text(permissionError ?? (isMonitoring ? "Capturing screen content" : "Screen capture is paused"))
                             .scaledFont(size: 13)
                             .foregroundColor(permissionError != nil ? OmiColors.warning : OmiColors.textTertiary)
                     }
@@ -369,30 +475,37 @@ struct SettingsContentView: View {
                         ProgressView()
                             .scaleEffect(0.8)
                     } else {
-                        Toggle("", isOn: $isMonitoring)
-                            .toggleStyle(.switch)
-                            .labelsHidden()
-                            .onChange(of: isMonitoring) { _, newValue in
+                        Toggle("", isOn: Binding(
+                            get: { isMonitoring },
+                            set: { newValue in
+                                isMonitoring = newValue
                                 toggleMonitoring(enabled: newValue)
                             }
+                        ))
+                            .toggleStyle(.switch)
+                            .labelsHidden()
                     }
                 }
             }
 
-            // Transcription toggle
-            settingsCard {
+            // Audio Recording toggle
+            settingsCard(settingId: "general.audiorecording") {
                 HStack(spacing: 16) {
                     Circle()
                         .fill(isTranscribing ? OmiColors.success : OmiColors.textTertiary.opacity(0.3))
                         .frame(width: 12, height: 12)
                         .shadow(color: isTranscribing ? OmiColors.success.opacity(0.5) : .clear, radius: 6)
 
+                    Image(systemName: "mic.fill")
+                        .scaledFont(size: 16)
+                        .foregroundColor(OmiColors.purplePrimary)
+
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("Transcription")
+                        Text("Audio Recording")
                             .scaledFont(size: 16, weight: .semibold)
                             .foregroundColor(OmiColors.textPrimary)
 
-                        Text(transcriptionError ?? (isTranscribing ? "Recording and transcribing audio" : "Transcription is paused"))
+                        Text(transcriptionError ?? (isTranscribing ? "Recording and transcribing audio" : "Audio recording is paused"))
                             .scaledFont(size: 13)
                             .foregroundColor(transcriptionError != nil ? OmiColors.warning : OmiColors.textTertiary)
                     }
@@ -403,18 +516,21 @@ struct SettingsContentView: View {
                         ProgressView()
                             .scaleEffect(0.8)
                     } else {
-                        Toggle("", isOn: $isTranscribing)
-                            .toggleStyle(.switch)
-                            .labelsHidden()
-                            .onChange(of: isTranscribing) { _, newValue in
+                        Toggle("", isOn: Binding(
+                            get: { isTranscribing },
+                            set: { newValue in
+                                isTranscribing = newValue
                                 toggleTranscription(enabled: newValue)
                             }
+                        ))
+                            .toggleStyle(.switch)
+                            .labelsHidden()
                     }
                 }
             }
 
             // Notifications toggle
-            settingsCard {
+            settingsCard(settingId: "general.notifications") {
                 VStack(spacing: 12) {
                     HStack(spacing: 16) {
                         Circle()
@@ -451,7 +567,18 @@ struct SettingsContentView: View {
                         } else {
                             // Show button to enable or fix
                             Button(action: {
-                                appState.openNotificationPreferences()
+                                if appState.isNotificationBannerDisabled {
+                                    // Banners off — user needs to change style in System Settings
+                                    appState.openNotificationPreferences()
+                                } else {
+                                    // Auth not granted — try lsregister repair first
+                                    AnalyticsManager.shared.notificationRepairTriggered(
+                                        reason: "settings_fix_button",
+                                        previousStatus: "not_authorized",
+                                        currentStatus: "not_authorized"
+                                    )
+                                    appState.repairNotificationAndFallback()
+                                }
                             }) {
                                 Text(appState.isNotificationBannerDisabled ? "Fix" : "Enable")
                                     .scaledFont(size: 12, weight: .semibold)
@@ -489,41 +616,8 @@ struct SettingsContentView: View {
                 }
             }
 
-            // Ask Omi floating bar toggle
-            settingsCard {
-                HStack(spacing: 16) {
-                    Circle()
-                        .fill(showAskOmiBar ? OmiColors.success : OmiColors.textTertiary.opacity(0.3))
-                        .frame(width: 12, height: 12)
-                        .shadow(color: showAskOmiBar ? OmiColors.success.opacity(0.5) : .clear, radius: 6)
-
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Ask Omi")
-                            .scaledFont(size: 16, weight: .semibold)
-                            .foregroundColor(OmiColors.textPrimary)
-
-                        Text(showAskOmiBar ? "Floating bar is visible (⌘\\)" : "Floating bar is hidden (⌘\\)")
-                            .scaledFont(size: 13)
-                            .foregroundColor(OmiColors.textTertiary)
-                    }
-
-                    Spacer()
-
-                    Toggle("", isOn: $showAskOmiBar)
-                        .toggleStyle(.switch)
-                        .labelsHidden()
-                        .onChange(of: showAskOmiBar) { _, newValue in
-                            if newValue {
-                                FloatingControlBarManager.shared.show()
-                            } else {
-                                FloatingControlBarManager.shared.hide()
-                            }
-                        }
-                }
-            }
-
             // Font Size
-            settingsCard {
+            settingsCard(settingId: "general.fontsize") {
                 VStack(spacing: 12) {
                     HStack(spacing: 16) {
                         Image(systemName: "textformat.size")
@@ -572,6 +666,14 @@ struct SettingsContentView: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.top, 4)
 
+                    // Keyboard shortcuts for font size
+                    VStack(spacing: 6) {
+                        fontShortcutRow(label: "Increase font size", keys: "\u{2318}+")
+                        fontShortcutRow(label: "Decrease font size", keys: "\u{2318}\u{2212}")
+                        fontShortcutRow(label: "Reset font size", keys: "\u{2318}0")
+                    }
+                    .padding(.top, 4)
+
                     HStack {
                         Spacer()
                         Button(action: {
@@ -604,10 +706,44 @@ struct SettingsContentView: View {
     @ObservedObject private var fontScaleSettings = FontScaleSettings.shared
     @ObservedObject private var rewindSettings = RewindSettings.shared
 
+    @State private var rewindStats: (total: Int, indexed: Int, storageSize: Int64)? = nil
+
     private var rewindSection: some View {
         VStack(spacing: 20) {
+            // Storage Stats
+            settingsCard(settingId: "rewind.storage") {
+                VStack(alignment: .leading, spacing: 16) {
+                    HStack {
+                        Image(systemName: "internaldrive.fill")
+                            .scaledFont(size: 16)
+                            .foregroundColor(OmiColors.purplePrimary)
+
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Storage")
+                                .scaledFont(size: 15, weight: .medium)
+                                .foregroundColor(OmiColors.textPrimary)
+
+                            if let stats = rewindStats {
+                                Text("\(stats.total) frames • \(RewindStorage.formatBytes(stats.storageSize))")
+                                    .scaledFont(size: 13)
+                                    .foregroundColor(OmiColors.textTertiary)
+                            } else {
+                                Text("Loading...")
+                                    .scaledFont(size: 13)
+                                    .foregroundColor(OmiColors.textTertiary)
+                            }
+                        }
+
+                        Spacer()
+                    }
+                }
+            }
+            .task {
+                rewindStats = await RewindIndexer.shared.getStats()
+            }
+
             // Excluded Apps
-            settingsCard {
+            settingsCard(settingId: "rewind.excludedapps") {
                 VStack(alignment: .leading, spacing: 16) {
                     HStack {
                         Image(systemName: "eye.slash.fill")
@@ -678,7 +814,7 @@ struct SettingsContentView: View {
             }
 
             // Battery Settings
-            settingsCard {
+            settingsCard(settingId: "rewind.battery") {
                 VStack(alignment: .leading, spacing: 16) {
                     HStack {
                         Image(systemName: "battery.75percent")
@@ -705,7 +841,7 @@ struct SettingsContentView: View {
             }
 
             // Retention Settings
-            settingsCard {
+            settingsCard(settingId: "rewind.retention") {
                 VStack(alignment: .leading, spacing: 16) {
                     HStack {
                         Image(systemName: "clock.fill")
@@ -743,7 +879,7 @@ struct SettingsContentView: View {
     private var transcriptionSection: some View {
         VStack(spacing: 20) {
             // Language Mode
-            settingsCard {
+            settingsCard(settingId: "transcription.languagemode") {
                 VStack(alignment: .leading, spacing: 16) {
                     HStack {
                         Image(systemName: "globe")
@@ -836,6 +972,10 @@ struct SettingsContentView: View {
                                         .frame(width: 180)
                                         .onChange(of: transcriptionLanguage) { _, newValue in
                                             AssistantSettings.shared.transcriptionLanguage = newValue
+                                            let supportsMulti = AssistantSettings.supportsAutoDetect(newValue)
+                                            transcriptionAutoDetect = supportsMulti
+                                            AssistantSettings.shared.transcriptionAutoDetect = supportsMulti
+                                            updateTranscriptionPreferences(singleLanguageMode: !supportsMulti)
                                             updateLanguage(newValue)
                                             restartTranscriptionIfNeeded()
                                         }
@@ -872,7 +1012,7 @@ struct SettingsContentView: View {
             }
 
             // Custom Vocabulary
-            settingsCard {
+            settingsCard(settingId: "transcription.vocabulary") {
                 VStack(alignment: .leading, spacing: 16) {
                     HStack {
                         Image(systemName: "text.book.closed")
@@ -953,6 +1093,68 @@ struct SettingsContentView: View {
                         .foregroundColor(OmiColors.textTertiary)
                 }
             }
+
+            // Local VAD Gate
+            settingsCard(settingId: "transcription.vadgate") {
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack {
+                        Image(systemName: "waveform.badge.minus")
+                            .scaledFont(size: 16)
+                            .foregroundColor(OmiColors.purplePrimary)
+
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Local VAD Gate")
+                                .scaledFont(size: 15, weight: .medium)
+                                .foregroundColor(OmiColors.textPrimary)
+
+                            Text("Uses on-device voice activity detection to skip silence, reducing Deepgram API usage. May save ~40% on transcription costs.")
+                                .scaledFont(size: 13)
+                                .foregroundColor(OmiColors.textTertiary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+
+                        Spacer()
+
+                        Toggle("", isOn: $vadGateEnabled)
+                            .toggleStyle(.switch)
+                            .onChange(of: vadGateEnabled) { _, newValue in
+                                AssistantSettings.shared.vadGateEnabled = newValue
+                                restartTranscriptionIfNeeded()
+                            }
+                    }
+                }
+            }
+
+            // Batch Transcription
+            settingsCard(settingId: "transcription.batch") {
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack {
+                        Image(systemName: "square.stack.3d.up")
+                            .scaledFont(size: 16)
+                            .foregroundColor(OmiColors.purplePrimary)
+
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Batch Transcription")
+                                .scaledFont(size: 15, weight: .medium)
+                                .foregroundColor(OmiColors.textPrimary)
+
+                            Text("Transcribes audio in chunks at silence boundaries. Better accuracy, but transcript appears with a few seconds delay.")
+                                .scaledFont(size: 13)
+                                .foregroundColor(OmiColors.textTertiary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+
+                        Spacer()
+
+                        Toggle("", isOn: $batchTranscriptionEnabled)
+                            .toggleStyle(.switch)
+                            .onChange(of: batchTranscriptionEnabled) { _, newValue in
+                                AssistantSettings.shared.batchTranscriptionEnabled = newValue
+                                restartTranscriptionIfNeeded()
+                            }
+                    }
+                }
+            }
         }
     }
 
@@ -1005,7 +1207,7 @@ struct SettingsContentView: View {
     private var notificationsSection: some View {
         VStack(spacing: 20) {
             // Notifications
-            settingsCard {
+            settingsCard(settingId: "notifications.settings") {
                 VStack(alignment: .leading, spacing: 16) {
                     HStack {
                         Image(systemName: "bell.badge.fill")
@@ -1034,7 +1236,7 @@ struct SettingsContentView: View {
                         Divider()
                             .background(OmiColors.backgroundQuaternary)
 
-                        settingRow(title: "Frequency", subtitle: "How often to receive notifications") {
+                        settingRow(title: "Frequency", subtitle: "How often to receive notifications", settingId: "notifications.frequency") {
                             Picker("", selection: $notificationFrequency) {
                                 ForEach(frequencyOptions, id: \.0) { option in
                                     Text(option.1).tag(option.0)
@@ -1047,7 +1249,7 @@ struct SettingsContentView: View {
                             }
                         }
 
-                        settingRow(title: "Focus Notifications", subtitle: "Show notification on focus changes") {
+                        settingRow(title: "Focus Notifications", subtitle: "Show notification on focus changes", settingId: "notifications.focus") {
                             Toggle("", isOn: $focusNotificationsEnabled)
                                 .toggleStyle(.switch)
                                 .labelsHidden()
@@ -1057,7 +1259,7 @@ struct SettingsContentView: View {
                                 }
                         }
 
-                        settingRow(title: "Task Notifications", subtitle: "Show notification when a task is extracted") {
+                        settingRow(title: "Task Notifications", subtitle: "Show notification when a task is extracted", settingId: "notifications.task") {
                             Toggle("", isOn: $taskNotificationsEnabled)
                                 .toggleStyle(.switch)
                                 .labelsHidden()
@@ -1067,7 +1269,7 @@ struct SettingsContentView: View {
                                 }
                         }
 
-                        settingRow(title: "Advice Notifications", subtitle: "Show notification when advice is generated") {
+                        settingRow(title: "Advice Notifications", subtitle: "Show notification when advice is generated", settingId: "notifications.advice") {
                             Toggle("", isOn: $adviceNotificationsEnabled)
                                 .toggleStyle(.switch)
                                 .labelsHidden()
@@ -1077,7 +1279,7 @@ struct SettingsContentView: View {
                                 }
                         }
 
-                        settingRow(title: "Memory Notifications", subtitle: "Show notification when a memory is extracted") {
+                        settingRow(title: "Memory Notifications", subtitle: "Show notification when a memory is extracted", settingId: "notifications.memory") {
                             Toggle("", isOn: $memoryNotificationsEnabled)
                                 .toggleStyle(.switch)
                                 .labelsHidden()
@@ -1091,7 +1293,7 @@ struct SettingsContentView: View {
             }
 
             // Daily Summary
-            settingsCard {
+            settingsCard(settingId: "notifications.dailysummary") {
                 VStack(alignment: .leading, spacing: 16) {
                     HStack {
                         Image(systemName: "text.badge.checkmark")
@@ -1120,7 +1322,7 @@ struct SettingsContentView: View {
                         Divider()
                             .background(OmiColors.backgroundQuaternary)
 
-                        settingRow(title: "Summary Time", subtitle: "When to send your daily summary") {
+                        settingRow(title: "Summary Time", subtitle: "When to send your daily summary", settingId: "notifications.summarytime") {
                             Picker("", selection: $dailySummaryHour) {
                                 ForEach(hourOptions, id: \.self) { hour in
                                     Text(formatHour(hour)).tag(hour)
@@ -1144,7 +1346,7 @@ struct SettingsContentView: View {
     private var privacySection: some View {
         VStack(spacing: 16) {
             // Data Controls
-            settingsCard {
+            settingsCard(settingId: "privacy.storerecordings") {
                 VStack(alignment: .leading, spacing: 0) {
                     HStack {
                         Image(systemName: "mic.fill")
@@ -1168,7 +1370,7 @@ struct SettingsContentView: View {
                     }
                     .padding(.bottom, 4)
 
-                    Text("Allow Omi to store audio recordings of your conversations")
+                    Text("Allow omi to store audio recordings of your conversations")
                         .scaledFont(size: 12)
                         .foregroundColor(OmiColors.textTertiary)
                         .padding(.leading, 34)
@@ -1206,7 +1408,7 @@ struct SettingsContentView: View {
             }
 
             // Encryption
-            settingsCard {
+            settingsCard(settingId: "privacy.encryption") {
                 VStack(alignment: .leading, spacing: 12) {
                     HStack(spacing: 10) {
                         Image(systemName: "shield.lefthalf.filled")
@@ -1239,26 +1441,6 @@ struct SettingsContentView: View {
                     }
                     .padding(.leading, 14)
 
-                    HStack(spacing: 10) {
-                        Image(systemName: "lock.fill")
-                            .scaledFont(size: 12)
-                            .foregroundColor(OmiColors.textTertiary)
-                            .frame(width: 20)
-
-                        Text("End-to-end encryption")
-                            .scaledFont(size: 13)
-                            .foregroundColor(OmiColors.textTertiary)
-
-                        Text("Coming Soon")
-                            .scaledFont(size: 10, weight: .semibold)
-                            .foregroundColor(OmiColors.textTertiary)
-                            .padding(.horizontal, 5)
-                            .padding(.vertical, 1)
-                            .background(OmiColors.backgroundQuaternary.opacity(0.5))
-                            .cornerRadius(3)
-                    }
-                    .padding(.leading, 14)
-
                     Text("Your data is encrypted and stored securely with Google Cloud infrastructure.")
                         .scaledFont(size: 12)
                         .foregroundColor(OmiColors.textTertiary)
@@ -1267,7 +1449,7 @@ struct SettingsContentView: View {
             }
 
             // What We Track
-            settingsCard {
+            settingsCard(settingId: "privacy.tracking") {
                 VStack(alignment: .leading, spacing: 0) {
                     Button(action: {
                         withAnimation(.easeInOut(duration: 0.2)) {
@@ -1316,7 +1498,7 @@ struct SettingsContentView: View {
             }
 
             // Privacy Guarantees
-            settingsCard {
+            settingsCard(settingId: "privacy.privacy") {
                 VStack(alignment: .leading, spacing: 10) {
                     HStack(spacing: 10) {
                         Image(systemName: "hand.raised.fill")
@@ -1345,32 +1527,85 @@ struct SettingsContentView: View {
 
     private var accountSection: some View {
         VStack(spacing: 20) {
-            settingsCard {
-                HStack(spacing: 16) {
-                    Image(systemName: "person.circle.fill")
-                        .scaledFont(size: 40)
-                        .foregroundColor(OmiColors.textTertiary)
+            settingsCard(settingId: "account.account") {
+                VStack(alignment: .leading, spacing: 14) {
+                    HStack(spacing: 16) {
+                        Image(systemName: "person.circle.fill")
+                            .scaledFont(size: 40)
+                            .foregroundColor(OmiColors.textTertiary)
 
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(AuthService.shared.displayName.isEmpty ? "User" : AuthService.shared.displayName)
-                            .scaledFont(size: 16, weight: .semibold)
-                            .foregroundColor(OmiColors.textPrimary)
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(AuthService.shared.displayName.isEmpty ? "User" : AuthService.shared.displayName)
+                                .scaledFont(size: 16, weight: .semibold)
+                                .foregroundColor(OmiColors.textPrimary)
 
-                        if let email = AuthState.shared.userEmail {
-                            Text(email)
+                            if let email = AuthState.shared.userEmail {
+                                Text(email)
+                                    .scaledFont(size: 13)
+                                    .foregroundColor(OmiColors.textTertiary)
+                            }
+                        }
+
+                        Spacer()
+
+                        Button("Sign Out") {
+                            appState.stopTranscription()
+                            ProactiveAssistantsPlugin.shared.stopMonitoring()
+                            try? AuthService.shared.signOut()
+                        }
+                        .buttonStyle(.bordered)
+                        .disabled(isDeletingAccount)
+                    }
+
+                    Divider()
+                        .overlay(OmiColors.backgroundQuaternary)
+
+                    HStack(alignment: .center, spacing: 16) {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Delete Account & Data")
+                                .scaledFont(size: 15, weight: .semibold)
+                                .foregroundColor(OmiColors.error)
+
+                            Text("Permanently deletes server data, clears local data for this account, resets onboarding, and signs you out.")
                                 .scaledFont(size: 13)
                                 .foregroundColor(OmiColors.textTertiary)
                         }
+
+                        Spacer()
+
+                        Button(action: {
+                            AnalyticsManager.shared.deleteAccountClicked()
+                            showDeleteAccountAlert = true
+                        }) {
+                            if isDeletingAccount {
+                                ProgressView()
+                                    .controlSize(.small)
+                            } else {
+                                Text("Delete")
+                                    .scaledFont(size: 13, weight: .semibold)
+                            }
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .tint(OmiColors.error)
+                        .disabled(isDeletingAccount)
                     }
 
-                    Spacer()
-
-                    Button("Sign Out") {
-                        ProactiveAssistantsPlugin.shared.stopMonitoring()
-                        try? AuthService.shared.signOut()
+                    if let deleteAccountError {
+                        Text(deleteAccountError)
+                            .scaledFont(size: 12)
+                            .foregroundColor(OmiColors.warning)
                     }
-                    .buttonStyle(.bordered)
                 }
+            }
+            .alert("Delete Account and Data?", isPresented: $showDeleteAccountAlert) {
+                Button("Cancel", role: .cancel) {
+                    AnalyticsManager.shared.deleteAccountCancelled()
+                }
+                Button("Delete Permanently", role: .destructive) {
+                    deleteAccountAndData()
+                }
+            } message: {
+                Text("This cannot be undone. Your account, chat history, and all server data will be permanently deleted. Local data for this account will be cleared and you'll return to onboarding.")
             }
 
 //            settingsCard {
@@ -1403,12 +1638,288 @@ struct SettingsContentView: View {
         }
     }
 
+    // MARK: - Plan and Usage Section
+
+    private var planUsageSection: some View {
+        VStack(spacing: 20) {
+            settingsCard(settingId: "planusage.current") {
+                VStack(alignment: .leading, spacing: 14) {
+                    HStack(spacing: 16) {
+                        Image(systemName: "creditcard.fill")
+                            .scaledFont(size: 28)
+                            .foregroundColor(OmiColors.purplePrimary)
+
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(currentPlanTitle)
+                                .scaledFont(size: 16, weight: .semibold)
+                                .foregroundColor(OmiColors.textPrimary)
+
+                            Text(currentPlanSubtitle)
+                                .scaledFont(size: 13)
+                                .foregroundColor(OmiColors.textTertiary)
+                        }
+
+                        Spacer()
+
+                        if isLoadingSubscription {
+                            ProgressView()
+                                .controlSize(.small)
+                        } else if hasPaidSubscription {
+                            Button(action: openCustomerPortal) {
+                                if isOpeningCustomerPortal {
+                                    ProgressView()
+                                        .controlSize(.small)
+                                } else {
+                                    Text("Manage")
+                                        .scaledFont(size: 13, weight: .semibold)
+                                }
+                            }
+                            .buttonStyle(.bordered)
+                            .disabled(isOpeningCustomerPortal)
+                        } else {
+                            Button("Refresh") {
+                                loadSubscriptionInfo()
+                            }
+                            .buttonStyle(.bordered)
+                            .disabled(isLoadingSubscription)
+                        }
+                    }
+
+                    if let periodText = currentPlanPeriodText {
+                        Divider()
+                            .overlay(OmiColors.backgroundQuaternary)
+
+                        Text(periodText)
+                            .scaledFont(size: 12)
+                            .foregroundColor(OmiColors.textSecondary)
+                    }
+
+                    if let error = subscriptionError {
+                        Text(error)
+                            .scaledFont(size: 12)
+                            .foregroundColor(OmiColors.warning)
+                    }
+                }
+            }
+
+            if shouldShowPlanPurchaseOptions {
+                settingsCard(settingId: "planusage.purchase") {
+                    VStack(alignment: .leading, spacing: 18) {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Choose a plan")
+                                .scaledFont(size: 15, weight: .semibold)
+                                .foregroundColor(OmiColors.textPrimary)
+
+                            Text("Pick one plan first. Billing options appear only after the card is selected.")
+                                .scaledFont(size: 12)
+                                .foregroundColor(OmiColors.textTertiary)
+                        }
+
+                        HStack(alignment: .top, spacing: 14) {
+                            ForEach(subscriptionPlansForDisplay) { plan in
+                                subscriptionPlanCard(plan)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     // MARK: - AI Chat Section
+
+    private var floatingBarSection: some View {
+        VStack(spacing: 20) {
+            // Show floating bar toggle
+            settingsCard(settingId: "floatingbar.show") {
+                HStack(spacing: 16) {
+                    Circle()
+                        .fill(showAskOmiBar ? OmiColors.success : OmiColors.textTertiary.opacity(0.3))
+                        .frame(width: 12, height: 12)
+                        .shadow(color: showAskOmiBar ? OmiColors.success.opacity(0.5) : .clear, radius: 6)
+
+                    Text("Show floating bar")
+                        .scaledFont(size: 16, weight: .semibold)
+                        .foregroundColor(OmiColors.textPrimary)
+
+                    Spacer()
+
+                    Toggle("", isOn: $showAskOmiBar)
+                        .toggleStyle(.switch)
+                        .labelsHidden()
+                        .onChange(of: showAskOmiBar) { _, newValue in
+                            if newValue {
+                                FloatingControlBarManager.shared.show()
+                            } else {
+                                FloatingControlBarManager.shared.hide()
+                            }
+                        }
+                }
+            }
+
+            ShortcutsSettingsSection(highlightedSettingId: $highlightedSettingId)
+        }
+    }
 
     private var aiChatSection: some View {
         VStack(spacing: 20) {
+            // AI Provider card
+            settingsCard(settingId: "aichat.provider") {
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack {
+                        Image(systemName: "cpu")
+                            .scaledFont(size: 16)
+                            .foregroundColor(OmiColors.textTertiary)
+
+                        Text("AI Provider")
+                            .scaledFont(size: 15, weight: .semibold)
+                            .foregroundColor(OmiColors.textPrimary)
+
+                        Spacer()
+
+                        Picker("", selection: $chatBridgeMode) {
+                            Text("omi account").tag("agentSDK")
+                            Text("Your Claude Account").tag("claudeCode")
+                        }
+                        .pickerStyle(.menu)
+                        .frame(width: 200)
+                        .onChange(of: chatBridgeMode) { _, newMode in
+                            if let mode = ChatProvider.BridgeMode(rawValue: newMode) {
+                                Task {
+                                    await chatProvider?.switchBridgeMode(to: mode)
+                                }
+                            }
+                        }
+                    }
+
+                    Text(chatBridgeMode == "claudeCode"
+                         ? "Using your Claude Pro/Max subscription. You'll be prompted to sign in with your Claude account."
+                         : "Using your omi account.")
+                        .scaledFont(size: 12)
+                        .foregroundColor(OmiColors.textTertiary)
+
+                    if chatBridgeMode == "claudeCode" && chatProvider?.isClaudeConnected == true {
+                        Divider()
+
+                        HStack {
+                            Image(systemName: "checkmark.circle.fill")
+                                .foregroundColor(.green)
+                                .scaledFont(size: 12)
+                            Text("Connected to Claude")
+                                .scaledFont(size: 12)
+                                .foregroundColor(OmiColors.textSecondary)
+
+                            Spacer()
+
+                            Button("Disconnect") {
+                                Task {
+                                    await chatProvider?.disconnectClaude()
+                                }
+                            }
+                            .buttonStyle(.plain)
+                            .scaledFont(size: 12, weight: .medium)
+                            .foregroundColor(.red)
+                        }
+                    }
+                }
+            }
+            .onAppear {
+                chatProvider?.checkClaudeConnectionStatus()
+            }
+
+            // Ask Mode card
+            settingsCard(settingId: "aichat.askmode") {
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack {
+                        Image(systemName: "bubble.left.and.bubble.right")
+                            .scaledFont(size: 16)
+                            .foregroundColor(OmiColors.textTertiary)
+
+                        Text("Ask Mode")
+                            .scaledFont(size: 15, weight: .semibold)
+                            .foregroundColor(OmiColors.textPrimary)
+
+                        Spacer()
+
+                        Toggle("", isOn: $askModeEnabled)
+                            .toggleStyle(.switch)
+                            .controlSize(.small)
+                            .labelsHidden()
+                    }
+
+                    Text("When enabled, shows an Ask/Act toggle in the chat. Ask mode restricts the AI to read-only actions. When disabled, the AI always runs in Act mode.")
+                        .scaledFont(size: 12)
+                        .foregroundColor(OmiColors.textTertiary)
+                }
+            }
+
+            // Workspace card
+            settingsCard(settingId: "aichat.workspace") {
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack {
+                        Image(systemName: "folder")
+                            .scaledFont(size: 16)
+                            .foregroundColor(OmiColors.textTertiary)
+
+                        Text("Workspace")
+                            .scaledFont(size: 15, weight: .semibold)
+                            .foregroundColor(OmiColors.textPrimary)
+
+                        Spacer()
+
+                        Button("Browse...") {
+                            let panel = NSOpenPanel()
+                            panel.canChooseFiles = false
+                            panel.canChooseDirectories = true
+                            panel.allowsMultipleSelection = false
+                            panel.message = "Select a project directory"
+                            if panel.runModal() == .OK, let url = panel.url {
+                                aiChatWorkingDirectory = url.path
+                                refreshAIChatConfig()
+                                // Update ChatProvider
+                                chatProvider?.aiChatWorkingDirectory = url.path
+                                Task { await chatProvider?.discoverClaudeConfig() }
+                                if chatProvider?.workingDirectory == nil {
+                                    chatProvider?.workingDirectory = url.path
+                                }
+                            }
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+
+                        if !aiChatWorkingDirectory.isEmpty {
+                            Button("Clear") {
+                                aiChatWorkingDirectory = ""
+                                refreshAIChatConfig()
+                                chatProvider?.aiChatWorkingDirectory = ""
+                                Task { await chatProvider?.discoverClaudeConfig() }
+                                chatProvider?.workingDirectory = nil
+                            }
+                            .buttonStyle(.bordered)
+                            .controlSize(.small)
+                        }
+                    }
+
+                    if !aiChatWorkingDirectory.isEmpty {
+                        Text(aiChatWorkingDirectory)
+                            .scaledFont(size: 12)
+                            .foregroundColor(OmiColors.textTertiary)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+
+                        Text("Project-level CLAUDE.md and skills will be discovered from this directory")
+                            .scaledFont(size: 12)
+                            .foregroundColor(OmiColors.textTertiary)
+                    } else {
+                        Text("No workspace set. Set a project directory to discover project-level CLAUDE.md and skills.")
+                            .scaledFont(size: 12)
+                            .foregroundColor(OmiColors.textTertiary)
+                    }
+                }
+            }
+
             // CLAUDE.md card
-            settingsCard {
+            settingsCard(settingId: "aichat.claudemd") {
                 VStack(alignment: .leading, spacing: 12) {
                     HStack {
                         Image(systemName: "doc.text")
@@ -1420,53 +1931,121 @@ struct SettingsContentView: View {
                             .foregroundColor(OmiColors.textPrimary)
 
                         Spacer()
+                    }
 
-                        if aiChatClaudeMdContent != nil {
-                            Button("View") {
-                                fileViewerTitle = "CLAUDE.md"
-                                fileViewerContent = aiChatClaudeMdContent ?? ""
-                                showFileViewer = true
-                            }
-                            .buttonStyle(.bordered)
-                            .controlSize(.small)
+                    // Global CLAUDE.md
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack {
+                            Text("Global")
+                                .scaledFont(size: 11, weight: .medium)
+                                .foregroundColor(OmiColors.textTertiary)
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 2)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 4)
+                                        .fill(OmiColors.backgroundPrimary.opacity(0.5))
+                                )
 
-                            Toggle("", isOn: $claudeMdEnabled)
-                                .toggleStyle(.switch)
+                            Spacer()
+
+                            if aiChatClaudeMdContent != nil {
+                                Button("View") {
+                                    fileViewerTitle = "Global CLAUDE.md"
+                                    fileViewerContent = aiChatClaudeMdContent ?? ""
+                                    showFileViewer = true
+                                }
+                                .buttonStyle(.bordered)
                                 .controlSize(.small)
-                                .labelsHidden()
+
+                                Toggle("", isOn: $claudeMdEnabled)
+                                    .toggleStyle(.switch)
+                                    .controlSize(.small)
+                                    .labelsHidden()
+                            }
+                        }
+
+                        if let path = aiChatClaudeMdPath, let content = aiChatClaudeMdContent {
+                            let sizeKB = Double(content.utf8.count) / 1024.0
+                            Text("\(path) (\(String(format: "%.1f", sizeKB)) KB)")
+                                .scaledFont(size: 12)
+                                .foregroundColor(OmiColors.textTertiary)
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                        } else {
+                            Text("No CLAUDE.md found at ~/.claude/CLAUDE.md")
+                                .scaledFont(size: 12)
+                                .foregroundColor(OmiColors.textTertiary)
                         }
                     }
 
-                    if let path = aiChatClaudeMdPath, let content = aiChatClaudeMdContent {
-                        let sizeKB = Double(content.utf8.count) / 1024.0
-                        Text("\(path) (\(String(format: "%.1f", sizeKB)) KB)")
-                            .scaledFont(size: 12)
-                            .foregroundColor(OmiColors.textTertiary)
-                            .lineLimit(1)
-                            .truncationMode(.middle)
+                    // Project CLAUDE.md (only show if workspace is set)
+                    if !aiChatWorkingDirectory.isEmpty {
+                        Divider().opacity(0.3)
 
-                        Text("Personal instructions loaded into AI chat")
-                            .scaledFont(size: 12)
-                            .foregroundColor(OmiColors.textTertiary)
-                    } else {
-                        Text("No CLAUDE.md found at ~/.claude/CLAUDE.md")
-                            .scaledFont(size: 12)
-                            .foregroundColor(OmiColors.textTertiary)
+                        VStack(alignment: .leading, spacing: 8) {
+                            HStack {
+                                Text("Project")
+                                    .scaledFont(size: 11, weight: .medium)
+                                    .foregroundColor(OmiColors.purplePrimary)
+                                    .padding(.horizontal, 6)
+                                    .padding(.vertical, 2)
+                                    .background(
+                                        RoundedRectangle(cornerRadius: 4)
+                                            .fill(OmiColors.purplePrimary.opacity(0.1))
+                                    )
+
+                                Spacer()
+
+                                if aiChatProjectClaudeMdContent != nil {
+                                    Button("View") {
+                                        fileViewerTitle = "Project CLAUDE.md"
+                                        fileViewerContent = aiChatProjectClaudeMdContent ?? ""
+                                        showFileViewer = true
+                                    }
+                                    .buttonStyle(.bordered)
+                                    .controlSize(.small)
+
+                                    Toggle("", isOn: $projectClaudeMdEnabled)
+                                        .toggleStyle(.switch)
+                                        .controlSize(.small)
+                                        .labelsHidden()
+                                }
+                            }
+
+                            if let path = aiChatProjectClaudeMdPath, let content = aiChatProjectClaudeMdContent {
+                                let sizeKB = Double(content.utf8.count) / 1024.0
+                                Text("\(path) (\(String(format: "%.1f", sizeKB)) KB)")
+                                    .scaledFont(size: 12)
+                                    .foregroundColor(OmiColors.textTertiary)
+                                    .lineLimit(1)
+                                    .truncationMode(.middle)
+                            } else {
+                                Text("No CLAUDE.md found at \(aiChatWorkingDirectory)/CLAUDE.md")
+                                    .scaledFont(size: 12)
+                                    .foregroundColor(OmiColors.textTertiary)
+                            }
+                        }
                     }
                 }
             }
 
             // Skills card
-            settingsCard {
+            settingsCard(settingId: "aichat.skills") {
                 VStack(alignment: .leading, spacing: 12) {
                     HStack {
                         Image(systemName: "sparkles")
                             .scaledFont(size: 16)
                             .foregroundColor(OmiColors.textTertiary)
 
-                        Text("Skills (\(aiChatDiscoveredSkills.count) discovered)")
-                            .scaledFont(size: 15, weight: .semibold)
-                            .foregroundColor(OmiColors.textPrimary)
+                        if aiChatProjectDiscoveredSkills.isEmpty {
+                            Text("Skills (\(aiChatDiscoveredSkills.count) discovered)")
+                                .scaledFont(size: 15, weight: .semibold)
+                                .foregroundColor(OmiColors.textPrimary)
+                        } else {
+                            Text("Skills (\(aiChatDiscoveredSkills.count) global + \(aiChatProjectDiscoveredSkills.count) project)")
+                                .scaledFont(size: 15, weight: .semibold)
+                                .foregroundColor(OmiColors.textPrimary)
+                        }
 
                         Spacer()
 
@@ -1478,7 +2057,11 @@ struct SettingsContentView: View {
                         .controlSize(.small)
                     }
 
-                    if aiChatDiscoveredSkills.isEmpty {
+                    let allSkills: [(skill: (name: String, description: String, path: String), origin: String)] =
+                        aiChatDiscoveredSkills.map { ($0, "Global") } +
+                        aiChatProjectDiscoveredSkills.map { ($0, "Project") }
+
+                    if allSkills.isEmpty {
                         Text("No skills found in ~/.claude/skills/")
                             .scaledFont(size: 12)
                             .foregroundColor(OmiColors.textTertiary)
@@ -1514,34 +2097,47 @@ struct SettingsContentView: View {
                         )
 
                         ScrollView {
-                            let filteredSkills = aiChatDiscoveredSkills.enumerated().filter { _, skill in
+                            let filteredSkills = allSkills.enumerated().filter { _, item in
                                 skillSearchQuery.isEmpty ||
-                                skill.name.localizedCaseInsensitiveContains(skillSearchQuery) ||
-                                skill.description.localizedCaseInsensitiveContains(skillSearchQuery)
+                                item.skill.name.localizedCaseInsensitiveContains(skillSearchQuery) ||
+                                item.skill.description.localizedCaseInsensitiveContains(skillSearchQuery)
                             }
 
                             VStack(spacing: 0) {
                                 ForEach(Array(filteredSkills.enumerated()), id: \.offset) { filteredIndex, item in
-                                    let skill = item.element
+                                    let skill = item.element.skill
+                                    let origin = item.element.origin
                                     HStack(spacing: 10) {
                                         Toggle("", isOn: Binding(
-                                            get: { aiChatEnabledSkills.contains(skill.name) },
+                                            get: { !aiChatDisabledSkills.contains(skill.name) },
                                             set: { enabled in
                                                 if enabled {
-                                                    aiChatEnabledSkills.insert(skill.name)
+                                                    aiChatDisabledSkills.remove(skill.name)
                                                 } else {
-                                                    aiChatEnabledSkills.remove(skill.name)
+                                                    aiChatDisabledSkills.insert(skill.name)
                                                 }
-                                                saveEnabledSkills()
+                                                saveDisabledSkills()
                                             }
                                         ))
                                         .toggleStyle(.checkbox)
                                         .labelsHidden()
 
                                         VStack(alignment: .leading, spacing: 2) {
-                                            Text(skill.name)
-                                                .scaledFont(size: 13, weight: .medium)
-                                                .foregroundColor(OmiColors.textPrimary)
+                                            HStack(spacing: 6) {
+                                                Text(skill.name)
+                                                    .scaledFont(size: 13, weight: .medium)
+                                                    .foregroundColor(OmiColors.textPrimary)
+
+                                                Text(origin)
+                                                    .scaledFont(size: 9, weight: .medium)
+                                                    .foregroundColor(origin == "Project" ? OmiColors.purplePrimary : OmiColors.textTertiary)
+                                                    .padding(.horizontal, 4)
+                                                    .padding(.vertical, 1)
+                                                    .background(
+                                                        RoundedRectangle(cornerRadius: 3)
+                                                            .fill(origin == "Project" ? OmiColors.purplePrimary.opacity(0.1) : OmiColors.backgroundPrimary.opacity(0.5))
+                                                    )
+                                            }
 
                                             if !skill.description.isEmpty {
                                                 Text(skill.description)
@@ -1576,12 +2172,175 @@ struct SettingsContentView: View {
                     }
                 }
             }
+
+            // Browser Extension card
+            settingsCard(settingId: "aichat.browserextension") {
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack {
+                        Image(systemName: "globe")
+                            .scaledFont(size: 16)
+                            .foregroundColor(OmiColors.textTertiary)
+
+                        Text("Browser Extension")
+                            .scaledFont(size: 15, weight: .semibold)
+                            .foregroundColor(OmiColors.textPrimary)
+
+                        Spacer()
+
+                        if !playwrightExtensionToken.isEmpty {
+                            HStack(spacing: 4) {
+                                Circle()
+                                    .fill(Color.green)
+                                    .frame(width: 6, height: 6)
+                                Text("Connected")
+                                    .scaledFont(size: 11)
+                                    .foregroundColor(OmiColors.textTertiary)
+                            }
+                        }
+
+                        Toggle("", isOn: $playwrightUseExtension)
+                            .toggleStyle(.switch)
+                            .controlSize(.small)
+                            .labelsHidden()
+                            .onChange(of: playwrightUseExtension) { _, _ in
+                            }
+                    }
+
+                    Text("Lets the AI use your Chrome browser with all your logged-in sessions.")
+                        .scaledFont(size: 12)
+                        .foregroundColor(OmiColors.textTertiary)
+
+                    if playwrightUseExtension {
+                        if playwrightExtensionToken.isEmpty {
+                            // No token — show "Set Up" button
+                            Button(action: {
+                                showBrowserSetup = true
+                            }) {
+                                HStack(spacing: 6) {
+                                    Image(systemName: "wrench.and.screwdriver")
+                                        .scaledFont(size: 12)
+                                    Text("Set Up")
+                                        .scaledFont(size: 13, weight: .medium)
+                                }
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .controlSize(.small)
+                        } else {
+                            // Token is set — show compact view
+                            HStack(spacing: 8) {
+                                Text("Token")
+                                    .scaledFont(size: 12)
+                                    .foregroundColor(OmiColors.textTertiary)
+
+                                Text(String(playwrightExtensionToken.prefix(8)) + "...")
+                                    .scaledFont(size: 12, weight: .medium)
+                                    .foregroundColor(OmiColors.textPrimary)
+                                    .font(.system(.body, design: .monospaced))
+
+                                Spacer()
+
+                                Button(action: {
+                                    showBrowserSetup = true
+                                }) {
+                                    HStack(spacing: 4) {
+                                        Image(systemName: "arrow.clockwise")
+                                            .scaledFont(size: 11)
+                                        Text("Reconfigure")
+                                            .scaledFont(size: 12)
+                                    }
+                                }
+                                .buttonStyle(.bordered)
+                                .controlSize(.small)
+
+                                Button(action: {
+                                    playwrightExtensionToken = ""
+                                    UserDefaults.standard.set("", forKey: "playwrightExtensionToken")
+                                }) {
+                                    HStack(spacing: 4) {
+                                        Image(systemName: "xmark")
+                                            .scaledFont(size: 11)
+                                        Text("Reset")
+                                            .scaledFont(size: 12)
+                                    }
+                                }
+                                .buttonStyle(.bordered)
+                                .controlSize(.small)
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Dev Mode card
+            settingsCard(settingId: "aichat.devmode") {
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack {
+                        Image(systemName: "hammer")
+                            .scaledFont(size: 16)
+                            .foregroundColor(OmiColors.textTertiary)
+
+                        Text("Dev Mode")
+                            .scaledFont(size: 15, weight: .semibold)
+                            .foregroundColor(OmiColors.textPrimary)
+
+                        Spacer()
+
+                        Toggle("", isOn: $devModeEnabled)
+                            .toggleStyle(.switch)
+                            .controlSize(.small)
+                            .labelsHidden()
+                            .onChange(of: devModeEnabled) { _, newValue in
+                                AnalyticsManager.shared.settingToggled(setting: "dev_mode", enabled: newValue)
+                            }
+                    }
+
+                    Text("Let the AI modify the app's source code, rebuild it, and add custom features.")
+                        .scaledFont(size: 12)
+                        .foregroundColor(OmiColors.textTertiary)
+
+                    if devModeEnabled {
+                        VStack(alignment: .leading, spacing: 8) {
+                            HStack(spacing: 6) {
+                                Image(systemName: "checkmark.circle.fill")
+                                    .foregroundColor(.green)
+                                    .scaledFont(size: 12)
+                                Text("AI can modify UI, add features, create custom SQLite tables")
+                                    .scaledFont(size: 12)
+                                    .foregroundColor(OmiColors.textSecondary)
+                            }
+                            HStack(spacing: 6) {
+                                Image(systemName: "lock.fill")
+                                    .foregroundColor(.orange)
+                                    .scaledFont(size: 12)
+                                Text("Backend API, auth, and sync logic are read-only")
+                                    .scaledFont(size: 12)
+                                    .foregroundColor(OmiColors.textSecondary)
+                            }
+                        }
+                    }
+                }
+            }
         }
         .onAppear {
             refreshAIChatConfig()
+            playwrightExtensionToken = UserDefaults.standard.string(forKey: "playwrightExtensionToken") ?? ""
         }
         .sheet(isPresented: $showFileViewer) {
             fileViewerSheet
+        }
+        .sheet(isPresented: $showBrowserSetup) {
+            BrowserExtensionSetup(
+                onComplete: {
+                    showBrowserSetup = false
+                    playwrightExtensionToken = UserDefaults.standard.string(forKey: "playwrightExtensionToken") ?? ""
+                },
+                onDismiss: {
+                    showBrowserSetup = false
+                    playwrightExtensionToken = UserDefaults.standard.string(forKey: "playwrightExtensionToken") ?? ""
+                },
+                chatProvider: chatProvider
+            )
+            .fixedSize()
         }
     }
 
@@ -1621,10 +2380,23 @@ struct SettingsContentView: View {
     }
 
     private func refreshAIChatConfig() {
+        // Pull skill and CLAUDE.md data directly from ChatProvider (already discovered at startup).
+        // Fall back to reading from disk only when ChatProvider is unavailable.
+        if let provider = chatProvider {
+            aiChatClaudeMdContent = provider.claudeMdContent
+            aiChatClaudeMdPath = provider.claudeMdPath
+            aiChatDiscoveredSkills = provider.discoveredSkills
+            aiChatProjectClaudeMdContent = provider.projectClaudeMdContent
+            aiChatProjectClaudeMdPath = provider.projectClaudeMdPath
+            aiChatProjectDiscoveredSkills = provider.projectDiscoveredSkills
+            loadDisabledSkills()
+            return
+        }
+
+        // Fallback: read from disk (used when Settings is shown before ChatProvider initializes)
         let home = FileManager.default.homeDirectoryForCurrentUser.path
         let claudeDir = "\(home)/.claude"
 
-        // Discover CLAUDE.md
         let mdPath = "\(claudeDir)/CLAUDE.md"
         if FileManager.default.fileExists(atPath: mdPath),
            let content = try? String(contentsOfFile: mdPath, encoding: .utf8) {
@@ -1635,7 +2407,6 @@ struct SettingsContentView: View {
             aiChatClaudeMdPath = nil
         }
 
-        // Discover skills
         var skills: [(name: String, description: String, path: String)] = []
         let skillsDir = "\(claudeDir)/skills"
         if let skillDirs = try? FileManager.default.contentsOfDirectory(atPath: skillsDir) {
@@ -1643,53 +2414,61 @@ struct SettingsContentView: View {
                 let skillPath = "\(skillsDir)/\(dir)/SKILL.md"
                 if FileManager.default.fileExists(atPath: skillPath),
                    let content = try? String(contentsOfFile: skillPath, encoding: .utf8) {
-                    let desc = extractSkillDescription(from: content)
+                    let desc = ChatProvider.extractSkillDescription(from: content)
                     skills.append((name: dir, description: desc, path: skillPath))
                 }
             }
         }
         aiChatDiscoveredSkills = skills
 
-        // Load enabled skills from UserDefaults
-        loadEnabledSkills()
-    }
-
-    private func extractSkillDescription(from content: String) -> String {
-        guard content.hasPrefix("---") else {
-            let lines = content.components(separatedBy: "\n")
-            return lines.first(where: { !$0.trimmingCharacters(in: .whitespaces).isEmpty })?.trimmingCharacters(in: .whitespaces) ?? ""
-        }
-        let lines = content.components(separatedBy: "\n")
-        for line in lines.dropFirst() {
-            if line.trimmingCharacters(in: .whitespaces).hasPrefix("---") { break }
-            if line.trimmingCharacters(in: .whitespaces).hasPrefix("description:") {
-                var value = String(line.trimmingCharacters(in: .whitespaces).dropFirst("description:".count))
-                value = value.trimmingCharacters(in: .whitespaces)
-                if (value.hasPrefix("\"") && value.hasSuffix("\"")) ||
-                   (value.hasPrefix("'") && value.hasSuffix("'")) {
-                    value = String(value.dropFirst().dropLast())
-                }
-                return value
+        let workspace = aiChatWorkingDirectory
+        if !workspace.isEmpty, FileManager.default.fileExists(atPath: workspace) {
+            let projectMdPath = "\(workspace)/CLAUDE.md"
+            if FileManager.default.fileExists(atPath: projectMdPath),
+               let content = try? String(contentsOfFile: projectMdPath, encoding: .utf8) {
+                aiChatProjectClaudeMdContent = content
+                aiChatProjectClaudeMdPath = projectMdPath
+            } else {
+                aiChatProjectClaudeMdContent = nil
+                aiChatProjectClaudeMdPath = nil
             }
+
+            var projectSkills: [(name: String, description: String, path: String)] = []
+            let projectSkillsDir = "\(workspace)/.claude/skills"
+            if let skillDirs = try? FileManager.default.contentsOfDirectory(atPath: projectSkillsDir) {
+                for dir in skillDirs.sorted() {
+                    let skillPath = "\(projectSkillsDir)/\(dir)/SKILL.md"
+                    if FileManager.default.fileExists(atPath: skillPath),
+                       let content = try? String(contentsOfFile: skillPath, encoding: .utf8) {
+                        let desc = ChatProvider.extractSkillDescription(from: content)
+                        projectSkills.append((name: dir, description: desc, path: skillPath))
+                    }
+                }
+            }
+            aiChatProjectDiscoveredSkills = projectSkills
+        } else {
+            aiChatProjectClaudeMdContent = nil
+            aiChatProjectClaudeMdPath = nil
+            aiChatProjectDiscoveredSkills = []
         }
-        return ""
+
+        loadDisabledSkills()
     }
 
-    private func loadEnabledSkills() {
-        let json = UserDefaults.standard.string(forKey: "enabledSkillsJSON") ?? "[]"
+    private func loadDisabledSkills() {
+        let json = UserDefaults.standard.string(forKey: "disabledSkillsJSON") ?? ""
         guard let data = json.data(using: .utf8),
               let names = try? JSONDecoder().decode([String].self, from: data) else {
-            // Default: all enabled
-            aiChatEnabledSkills = Set(aiChatDiscoveredSkills.map { $0.name })
+            aiChatDisabledSkills = [] // Default: nothing disabled = all enabled
             return
         }
-        aiChatEnabledSkills = Set(names)
+        aiChatDisabledSkills = Set(names)
     }
 
-    private func saveEnabledSkills() {
-        if let data = try? JSONEncoder().encode(Array(aiChatEnabledSkills)),
+    private func saveDisabledSkills() {
+        if let data = try? JSONEncoder().encode(Array(aiChatDisabledSkills)),
            let json = String(data: data, encoding: .utf8) {
-            UserDefaults.standard.set(json, forKey: "enabledSkillsJSON")
+            UserDefaults.standard.set(json, forKey: "disabledSkillsJSON")
         }
     }
 
@@ -1709,30 +2488,49 @@ struct SettingsContentView: View {
         let memoriesTotal: Int
     }
 
+    private func advancedCategoryHeader(title: String, icon: String) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: icon)
+                .scaledFont(size: 16)
+                .foregroundColor(OmiColors.purplePrimary)
+            Text(title)
+                .scaledFont(size: 18, weight: .semibold)
+                .foregroundColor(OmiColors.textPrimary)
+            Spacer()
+        }
+        .padding(.top, 16)
+    }
+
     private var advancedSection: some View {
-        Group {
-            switch selectedAdvancedSubsection {
-            case .aiUserProfile, .none:
-                aiUserProfileSubsection
-            case .stats:
-                statsSubsection
-            case .featureTiers:
-                featureTiersSubsection
-            case .focusAssistant:
-                focusAssistantSubsection
-            case .taskAssistant:
-                taskAssistantSubsection
-            case .adviceAssistant:
-                adviceAssistantSubsection
-            case .memoryAssistant:
-                memoryAssistantSubsection
-            case .analysisThrottle:
-                analysisThrottleSubsection
-            case .preferences:
-                preferencesSubsection
-            case .troubleshooting:
-                troubleshootingSubsection
-            }
+        VStack(spacing: 24) {
+            advancedCategoryHeader(title: "Reset Onboarding", icon: "arrow.counterclockwise")
+            resetOnboardingSubsection
+            advancedCategoryHeader(title: "AI User Profile", icon: "brain")
+            aiUserProfileSubsection
+            advancedCategoryHeader(title: "Your Stats", icon: "chart.bar")
+            statsSubsection
+            advancedCategoryHeader(title: "Focus Assistant", icon: "eye.fill")
+            focusAssistantSubsection
+            advancedCategoryHeader(title: "Task Assistant", icon: "checklist")
+            taskAssistantSubsection
+            advancedCategoryHeader(title: "Advice Assistant", icon: "lightbulb.fill")
+            adviceAssistantSubsection
+            advancedCategoryHeader(title: "Memory Assistant", icon: "brain.head.profile")
+            memoryAssistantSubsection
+            advancedCategoryHeader(title: "Analysis Throttle", icon: "clock.arrow.2.circlepath")
+            analysisThrottleSubsection
+            advancedCategoryHeader(title: "Goals", icon: "target")
+            goalsSubsection
+            advancedCategoryHeader(title: "Preferences", icon: "slider.horizontal.3")
+            preferencesSubsection
+            advancedCategoryHeader(title: "Troubleshooting", icon: "wrench.and.screwdriver")
+            troubleshootingSubsection
+            advancedCategoryHeader(title: "Gmail Reader", icon: "envelope.fill")
+            gmailReaderSubsection
+            advancedCategoryHeader(title: "Calendar Sync", icon: "calendar")
+            calendarSyncSubsection
+            advancedCategoryHeader(title: "Developer API Keys", icon: "key")
+            developerKeysSubsection
         }
     }
 
@@ -1740,7 +2538,7 @@ struct SettingsContentView: View {
 
     private var aiUserProfileSubsection: some View {
         VStack(spacing: 20) {
-            settingsCard {
+            settingsCard(settingId: "advanced.aiuserprofile") {
                 VStack(alignment: .leading, spacing: 16) {
                     HStack(spacing: 10) {
                         Image(systemName: "brain")
@@ -1896,7 +2694,7 @@ struct SettingsContentView: View {
 
     private var statsSubsection: some View {
         VStack(spacing: 20) {
-            settingsCard {
+            settingsCard(settingId: "advanced.stats") {
                 VStack(alignment: .leading, spacing: 16) {
                     HStack(spacing: 10) {
                         Image(systemName: "chart.bar")
@@ -1964,7 +2762,7 @@ struct SettingsContentView: View {
 
     private var featureTiersSubsection: some View {
         VStack(spacing: 20) {
-            settingsCard {
+            settingsCard(settingId: "advanced.featuretiers") {
                 VStack(alignment: .leading, spacing: 16) {
                     HStack(spacing: 10) {
                         Image(systemName: "lock.shield")
@@ -2054,7 +2852,7 @@ struct SettingsContentView: View {
 
     private var focusAssistantSubsection: some View {
         VStack(spacing: 20) {
-            settingsCard {
+            settingsCard(settingId: "advanced.focusassistant") {
                 VStack(alignment: .leading, spacing: 16) {
                     HStack {
                         Image(systemName: "eye.fill")
@@ -2084,7 +2882,7 @@ struct SettingsContentView: View {
                     Divider()
                         .background(OmiColors.backgroundQuaternary)
 
-                    settingRow(title: "Visual Glow Effect", subtitle: "Show colored border when focus changes") {
+                    settingRow(title: "Visual Glow Effect", subtitle: "Show colored border when focus changes", settingId: "advanced.focusassistant.glow") {
                         Toggle("", isOn: $glowOverlayEnabled)
                             .toggleStyle(.switch)
                             .labelsHidden()
@@ -2098,7 +2896,7 @@ struct SettingsContentView: View {
                             }
                     }
 
-                    settingRow(title: "Focus Cooldown", subtitle: "Minimum time between distraction alerts") {
+                    settingRow(title: "Focus Cooldown", subtitle: "Minimum time between distraction alerts", settingId: "advanced.focusassistant.cooldown") {
                         Picker("", selection: $cooldownInterval) {
                             ForEach(cooldownOptions, id: \.self) { minutes in
                                 Text(formatMinutes(minutes)).tag(minutes)
@@ -2112,19 +2910,34 @@ struct SettingsContentView: View {
                         }
                     }
 
-                    settingRow(title: "Focus Analysis Prompt", subtitle: "Customize AI instructions for focus analysis") {
-                        Button(action: {
-                            PromptEditorWindow.show()
-                        }) {
-                            HStack(spacing: 4) {
-                                Text("Edit")
-                                    .scaledFont(size: 12)
-                                Image(systemName: "arrow.up.right.square")
-                                    .scaledFont(size: 11)
+                    settingRow(title: "Focus Analysis Prompt", subtitle: "Customize AI instructions for focus analysis", settingId: "advanced.focusassistant.prompt") {
+                        HStack(spacing: 8) {
+                            Button(action: {
+                                FocusTestRunnerWindow.show()
+                            }) {
+                                HStack(spacing: 4) {
+                                    Image(systemName: "play.circle")
+                                        .scaledFont(size: 11)
+                                    Text("Test Run")
+                                        .scaledFont(size: 12)
+                                }
                             }
+                            .buttonStyle(.bordered)
+                            .controlSize(.small)
+
+                            Button(action: {
+                                PromptEditorWindow.show()
+                            }) {
+                                HStack(spacing: 4) {
+                                    Text("Edit")
+                                        .scaledFont(size: 12)
+                                    Image(systemName: "arrow.up.right.square")
+                                        .scaledFont(size: 11)
+                                }
+                            }
+                            .buttonStyle(.bordered)
+                            .controlSize(.small)
                         }
-                        .buttonStyle(.bordered)
-                        .controlSize(.small)
                     }
 
                     Divider()
@@ -2195,7 +3008,7 @@ struct SettingsContentView: View {
 
     private var taskAssistantSubsection: some View {
         VStack(spacing: 20) {
-            settingsCard {
+            settingsCard(settingId: "advanced.taskassistant") {
                 VStack(alignment: .leading, spacing: 16) {
                     HStack {
                         Image(systemName: "checklist")
@@ -2222,6 +3035,71 @@ struct SettingsContentView: View {
                         .foregroundColor(OmiColors.textTertiary)
 
                     if taskEnabled {
+                    Divider()
+                        .background(OmiColors.backgroundQuaternary)
+
+                    // Task Agent (chat / investigate) toggle
+                    HStack {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Task Agent")
+                                .scaledFont(size: 14)
+                                .foregroundColor(OmiColors.textSecondary)
+                            Text("Investigate button and sidebar chat for tasks")
+                                .scaledFont(size: 12)
+                                .foregroundColor(OmiColors.textTertiary)
+                        }
+
+                        Spacer()
+
+                        Toggle("", isOn: $taskChatAgentEnabled)
+                            .toggleStyle(.switch)
+                            .labelsHidden()
+                            .onChange(of: taskChatAgentEnabled) { _, newValue in
+                                TaskAgentSettings.shared.isChatEnabled = newValue
+                            }
+                    }
+
+                    // Working Directory (shared by chat agent and terminal agent)
+                    HStack(spacing: 8) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Working Directory")
+                                .scaledFont(size: 14)
+                                .foregroundColor(OmiColors.textSecondary)
+                            Text(taskAgentWorkingDirectory.isEmpty ? "Not set — chat agent defaults to ~" : taskAgentWorkingDirectory)
+                                .scaledFont(size: 11)
+                                .foregroundColor(OmiColors.textTertiary)
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                        }
+
+                        Spacer()
+
+                        Button("Browse...") {
+                            let panel = NSOpenPanel()
+                            panel.canChooseFiles = false
+                            panel.canChooseDirectories = true
+                            panel.allowsMultipleSelection = false
+                            panel.canCreateDirectories = true
+                            if !taskAgentWorkingDirectory.isEmpty {
+                                panel.directoryURL = URL(fileURLWithPath: taskAgentWorkingDirectory)
+                            }
+                            if panel.runModal() == .OK, let url = panel.url {
+                                taskAgentWorkingDirectory = url.path
+                                TaskAgentSettings.shared.workingDirectory = url.path
+                            }
+                        }
+                        .scaledFont(size: 13)
+
+                        if !taskAgentWorkingDirectory.isEmpty {
+                            Button("Clear") {
+                                taskAgentWorkingDirectory = ""
+                                TaskAgentSettings.shared.workingDirectory = ""
+                            }
+                            .scaledFont(size: 13)
+                            .foregroundColor(OmiColors.textTertiary)
+                        }
+                    }
+
                     Divider()
                         .background(OmiColors.backgroundQuaternary)
 
@@ -2284,7 +3162,7 @@ struct SettingsContentView: View {
                             }
                     }
 
-                    settingRow(title: "Task Extraction Prompt", subtitle: "Customize AI instructions for task extraction") {
+                    settingRow(title: "Task Extraction Prompt", subtitle: "Customize AI instructions for task extraction", settingId: "advanced.taskassistant.prompt") {
                         HStack(spacing: 8) {
                             Button(action: {
                                 TaskTestRunnerWindow.show()
@@ -2406,7 +3284,7 @@ struct SettingsContentView: View {
                         .background(OmiColors.backgroundQuaternary)
 
                     // Task Prioritization Re-score
-                    settingRow(title: "Task Prioritization", subtitle: "Re-score all tasks by relevance to your profile and goals") {
+                    settingRow(title: "Task Prioritization", subtitle: "Re-score all tasks by relevance to your profile and goals", settingId: "advanced.taskassistant.prioritization") {
                         if isRescoringTasks {
                             ProgressView()
                                 .controlSize(.small)
@@ -2435,7 +3313,7 @@ struct SettingsContentView: View {
 
 
             // Task Agent Settings (merged into Task Assistant subsection)
-            settingsCard {
+            settingsCard(settingId: "advanced.taskassistant.agent") {
                 TaskAgentSettingsView()
             }
         }
@@ -2443,7 +3321,7 @@ struct SettingsContentView: View {
 
     private var adviceAssistantSubsection: some View {
         VStack(spacing: 20) {
-            settingsCard {
+            settingsCard(settingId: "advanced.adviceassistant") {
                 VStack(alignment: .leading, spacing: 16) {
                     HStack {
                         Image(systemName: "lightbulb.fill")
@@ -2532,19 +3410,34 @@ struct SettingsContentView: View {
                             }
                     }
 
-                    settingRow(title: "Advice Prompt", subtitle: "Customize AI instructions for advice") {
-                        Button(action: {
-                            AdvicePromptEditorWindow.show()
-                        }) {
-                            HStack(spacing: 4) {
-                                Text("Edit")
-                                    .scaledFont(size: 12)
-                                Image(systemName: "arrow.up.right.square")
-                                    .scaledFont(size: 11)
+                    settingRow(title: "Advice Prompt", subtitle: "Customize AI instructions for advice", settingId: "advanced.adviceassistant.prompt") {
+                        HStack(spacing: 8) {
+                            Button(action: {
+                                AdviceTestRunnerWindow.show()
+                            }) {
+                                HStack(spacing: 4) {
+                                    Image(systemName: "play.circle")
+                                        .scaledFont(size: 11)
+                                    Text("Test Run")
+                                        .scaledFont(size: 12)
+                                }
                             }
+                            .buttonStyle(.bordered)
+                            .controlSize(.small)
+
+                            Button(action: {
+                                AdvicePromptEditorWindow.show()
+                            }) {
+                                HStack(spacing: 4) {
+                                    Text("Edit")
+                                        .scaledFont(size: 12)
+                                    Image(systemName: "arrow.up.right.square")
+                                        .scaledFont(size: 11)
+                                }
+                            }
+                            .buttonStyle(.bordered)
+                            .controlSize(.small)
                         }
-                        .buttonStyle(.bordered)
-                        .controlSize(.small)
                     }
 
                     Divider()
@@ -2615,7 +3508,7 @@ struct SettingsContentView: View {
 
     private var memoryAssistantSubsection: some View {
         VStack(spacing: 20) {
-            settingsCard {
+            settingsCard(settingId: "advanced.memoryassistant") {
                 VStack(alignment: .leading, spacing: 16) {
                     HStack {
                         Image(systemName: "brain.head.profile")
@@ -2704,7 +3597,7 @@ struct SettingsContentView: View {
                             }
                     }
 
-                    settingRow(title: "Memory Extraction Prompt", subtitle: "Customize AI instructions for memory extraction") {
+                    settingRow(title: "Memory Extraction Prompt", subtitle: "Customize AI instructions for memory extraction", settingId: "advanced.memoryassistant.prompt") {
                         Button(action: {
                             MemoryPromptEditorWindow.show()
                         }) {
@@ -2787,7 +3680,7 @@ struct SettingsContentView: View {
 
     private var analysisThrottleSubsection: some View {
         VStack(spacing: 20) {
-            settingsCard {
+            settingsCard(settingId: "advanced.analysisthrottle") {
                 VStack(alignment: .leading, spacing: 8) {
                     HStack {
                         VStack(alignment: .leading, spacing: 2) {
@@ -2821,10 +3714,46 @@ struct SettingsContentView: View {
         }
     }
 
+    private var goalsSubsection: some View {
+        VStack(spacing: 20) {
+            settingsCard(settingId: "advanced.goals") {
+                VStack(alignment: .leading, spacing: 16) {
+                    HStack {
+                        Image(systemName: "target")
+                            .scaledFont(size: 16)
+                            .foregroundColor(OmiColors.purplePrimary)
+
+                        Text("Goals")
+                            .scaledFont(size: 15, weight: .medium)
+                            .foregroundColor(OmiColors.textPrimary)
+
+                        Spacer()
+                    }
+
+                    Text("Track personal goals with AI-powered progress detection from your conversations")
+                        .scaledFont(size: 13)
+                        .foregroundColor(OmiColors.textTertiary)
+
+                    Divider()
+                        .background(OmiColors.backgroundQuaternary)
+
+                    settingRow(title: "Auto-Generate Goals", subtitle: "Automatically suggest new goals daily based on your conversations and tasks", settingId: "advanced.goals.autogenerate") {
+                        Toggle("", isOn: $goalsAutoGenerateEnabled)
+                            .toggleStyle(.switch)
+                            .labelsHidden()
+                            .onChange(of: goalsAutoGenerateEnabled) { _, newValue in
+                                GoalGenerationService.shared.isAutoGenerationEnabled = newValue
+                            }
+                    }
+                }
+            }
+        }
+    }
+
     private var preferencesSubsection: some View {
         VStack(spacing: 20) {
             // Multiple Chat Sessions toggle
-            settingsCard {
+            settingsCard(settingId: "advanced.preferences.multichat") {
                 HStack(spacing: 16) {
                     Image(systemName: "bubble.left.and.bubble.right")
                         .scaledFont(size: 16)
@@ -2852,7 +3781,7 @@ struct SettingsContentView: View {
             }
 
             // Conversation View toggle
-            settingsCard {
+            settingsCard(settingId: "advanced.preferences.compact") {
                 HStack(spacing: 16) {
                     Image(systemName: conversationsCompactView ? "list.bullet" : "list.bullet.rectangle")
                         .scaledFont(size: 16)
@@ -2880,7 +3809,7 @@ struct SettingsContentView: View {
             }
 
             // Launch at Login toggle
-            settingsCard {
+            settingsCard(settingId: "advanced.preferences.launchatlogin") {
                 HStack(spacing: 16) {
                     Image(systemName: "power")
                         .scaledFont(size: 16)
@@ -2917,7 +3846,7 @@ struct SettingsContentView: View {
     private var troubleshootingSubsection: some View {
         VStack(spacing: 20) {
             // Report Issue
-            settingsCard {
+            settingsCard(settingId: "advanced.troubleshooting.reportissue") {
                 HStack(spacing: 16) {
                     Image(systemName: "exclamationmark.bubble")
                         .scaledFont(size: 16)
@@ -2953,8 +3882,57 @@ struct SettingsContentView: View {
                 }
             }
 
-            // Reset Onboarding
-            settingsCard {
+            // Rescan Files
+            settingsCard(settingId: "advanced.troubleshooting.rescanfiles") {
+                HStack(spacing: 16) {
+                    Image(systemName: "folder.badge.gearshape")
+                        .scaledFont(size: 16)
+                        .foregroundColor(OmiColors.textSecondary)
+                        .frame(width: 24, height: 24)
+
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Rescan Files")
+                            .scaledFont(size: 16, weight: .semibold)
+                            .foregroundColor(OmiColors.textPrimary)
+
+                        Text("Re-index your files and update your AI profile")
+                            .scaledFont(size: 13)
+                            .foregroundColor(OmiColors.textTertiary)
+                    }
+
+                    Spacer()
+
+                    Button(action: { showRescanFilesAlert = true }) {
+                        Text("Rescan")
+                            .scaledFont(size: 13, weight: .medium)
+                            .foregroundColor(.white)
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 6)
+                            .background(
+                                RoundedRectangle(cornerRadius: 6)
+                                    .fill(OmiColors.purplePrimary)
+                            )
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .alert("Rescan Files?", isPresented: $showRescanFilesAlert) {
+                Button("Cancel", role: .cancel) { }
+                Button("Rescan") {
+                    NotificationCenter.default.post(name: .triggerFileIndexing, object: nil)
+                }
+            } message: {
+                Text("This will re-scan your files and update your AI profile with the latest information about your projects and interests.")
+            }
+
+        }
+    }
+
+    // MARK: - Reset Onboarding Subsection
+
+    private var resetOnboardingSubsection: some View {
+        VStack(spacing: 20) {
+            settingsCard(settingId: "advanced.resetonboarding") {
                 HStack(spacing: 16) {
                     Image(systemName: "arrow.counterclockwise")
                         .scaledFont(size: 16)
@@ -2966,7 +3944,7 @@ struct SettingsContentView: View {
                             .scaledFont(size: 16, weight: .semibold)
                             .foregroundColor(OmiColors.textPrimary)
 
-                        Text("Restart setup wizard and reset permissions")
+                        Text("Restart setup wizard for this app build only")
                             .scaledFont(size: 13)
                             .foregroundColor(OmiColors.textTertiary)
                     }
@@ -2993,7 +3971,323 @@ struct SettingsContentView: View {
                     appState.resetOnboardingAndRestart()
                 }
             } message: {
-                Text("This will reset all permissions and restart the app. You'll need to grant permissions again during setup.")
+                Text("This will reset onboarding for this app build only, clear onboarding chat history, and restart the app without affecting the other installed build.")
+            }
+        }
+    }
+
+    // MARK: - Gmail Reader Subsection
+
+    private var gmailReaderSubsection: some View {
+        VStack(spacing: 20) {
+            // Read Gmail button
+            settingsCard(settingId: "advanced.gmail.read") {
+                HStack(spacing: 16) {
+                    Image(systemName: "envelope.badge")
+                        .scaledFont(size: 16)
+                        .foregroundColor(OmiColors.textSecondary)
+                        .frame(width: 24, height: 24)
+
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Read Gmail")
+                            .scaledFont(size: 16, weight: .semibold)
+                            .foregroundColor(OmiColors.textPrimary)
+
+                        if let lastFetched = gmailLastFetched {
+                            Text("Last read \(lastFetched, formatter: relativeDateFormatter)")
+                                .scaledFont(size: 13)
+                                .foregroundColor(OmiColors.textTertiary)
+                        } else {
+                            Text("Reads recent emails using browser cookies — no OAuth needed")
+                                .scaledFont(size: 13)
+                                .foregroundColor(OmiColors.textTertiary)
+                        }
+                    }
+
+                    Spacer()
+
+                    Button(action: {
+                        Task { await readGmail() }
+                    }) {
+                        if isReadingGmail {
+                            ProgressView()
+                                .scaleEffect(0.7)
+                                .frame(width: 60, height: 22)
+                        } else {
+                            Text("Read Gmail")
+                                .scaledFont(size: 13, weight: .medium)
+                                .foregroundColor(.white)
+                                .padding(.horizontal, 14)
+                                .padding(.vertical, 6)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 6)
+                                        .fill(OmiColors.purplePrimary)
+                                )
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(isReadingGmail)
+                }
+            }
+
+            // Error card
+            if let error = gmailReadError {
+                settingsCard(settingId: "advanced.gmail.error") {
+                    HStack(spacing: 12) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .foregroundColor(.orange)
+                        Text(error)
+                            .scaledFont(size: 13)
+                            .foregroundColor(OmiColors.textSecondary)
+                            .lineLimit(3)
+                        Spacer()
+                    }
+                }
+            }
+
+            // Memory save status
+            if gmailMemoriesSaved > 0 {
+                settingsCard(settingId: "advanced.gmail.saved") {
+                    HStack(spacing: 12) {
+                        Image(systemName: "checkmark.circle.fill")
+                            .foregroundColor(.green)
+                        Text("\(gmailMemoriesSaved) emails saved as memories")
+                            .scaledFont(size: 13)
+                            .foregroundColor(OmiColors.textSecondary)
+                        Spacer()
+                    }
+                }
+            }
+
+            // Email list
+            if !gmailEmails.isEmpty {
+                VStack(spacing: 8) {
+                    ForEach(gmailEmails.prefix(20)) { email in
+                        settingsCard(settingId: "advanced.gmail.email.\(email.id)") {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(email.subject)
+                                    .scaledFont(size: 14, weight: .medium)
+                                    .foregroundColor(OmiColors.textPrimary)
+                                    .lineLimit(1)
+
+                                Text(email.from)
+                                    .scaledFont(size: 12)
+                                    .foregroundColor(OmiColors.textSecondary)
+                                    .lineLimit(1)
+
+                                if !email.snippet.isEmpty {
+                                    Text(email.snippet)
+                                        .scaledFont(size: 12)
+                                        .foregroundColor(OmiColors.textTertiary)
+                                        .lineLimit(2)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private func readGmail() async {
+        isReadingGmail = true
+        gmailReadError = nil
+        gmailMemoriesSaved = 0
+
+        do {
+            let emails = try await GmailReaderService.shared.readRecentEmails(maxResults: 50)
+            gmailEmails = emails
+            gmailLastFetched = Date()
+
+            if !emails.isEmpty {
+                isSavingGmailMemories = true
+                let result = await GmailReaderService.shared.saveAsMemories(emails: emails)
+                gmailMemoriesSaved = result.saved
+                isSavingGmailMemories = false
+            }
+        } catch {
+            gmailReadError = error.localizedDescription
+        }
+
+        isReadingGmail = false
+    }
+
+    // MARK: - Calendar Sync Subsection
+
+    private var calendarSyncSubsection: some View {
+        VStack(spacing: 20) {
+            settingsCard(settingId: "advanced.calendar.sync") {
+                HStack(spacing: 16) {
+                    Image(systemName: "calendar.badge.clock")
+                        .scaledFont(size: 16)
+                        .foregroundColor(OmiColors.textSecondary)
+                        .frame(width: 24, height: 24)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Sync Calendar")
+                            .scaledFont(size: 16, weight: .semibold)
+                            .foregroundColor(OmiColors.textPrimary)
+                        if let lastSynced = calendarLastSynced {
+                            Text("Last synced \(lastSynced, formatter: relativeDateFormatter)")
+                                .scaledFont(size: 13)
+                                .foregroundColor(OmiColors.textTertiary)
+                        } else {
+                            Text("Reads Google Calendar using browser cookies — no OAuth needed")
+                                .scaledFont(size: 13)
+                                .foregroundColor(OmiColors.textTertiary)
+                        }
+                    }
+                    Spacer()
+                    Button(action: { Task { await syncCalendar() } }) {
+                        if isReadingCalendar {
+                            ProgressView().scaleEffect(0.7).frame(width: 80, height: 22)
+                        } else {
+                            Text("Sync Calendar")
+                                .scaledFont(size: 13, weight: .medium)
+                                .foregroundColor(.white)
+                                .padding(.horizontal, 14)
+                                .padding(.vertical, 6)
+                                .background(RoundedRectangle(cornerRadius: 6).fill(OmiColors.purplePrimary))
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(isReadingCalendar)
+                    .accessibilityIdentifier("syncCalendarButton")
+                }
+            }
+            if let error = calendarSyncError {
+                settingsCard(settingId: "advanced.calendar.error") {
+                    HStack(spacing: 12) {
+                        Image(systemName: "exclamationmark.triangle.fill").foregroundColor(.orange)
+                        Text(error).scaledFont(size: 13).foregroundColor(OmiColors.textSecondary).lineLimit(3)
+                        Spacer()
+                    }
+                }
+            }
+            if calendarMemoriesCreated > 0 || calendarTasksCreated > 0 {
+                settingsCard(settingId: "advanced.calendar.saved") {
+                    HStack(spacing: 12) {
+                        Image(systemName: "checkmark.circle.fill").foregroundColor(.green)
+                        Text("\(calendarMemoriesCreated) memories and \(calendarTasksCreated) tasks created from \(calendarEvents.count) events")
+                            .scaledFont(size: 13).foregroundColor(OmiColors.textSecondary)
+                        Spacer()
+                    }
+                }
+            }
+            if !calendarEvents.isEmpty {
+                VStack(spacing: 8) {
+                    ForEach(calendarEvents.prefix(15)) { event in
+                        settingsCard(settingId: "advanced.calendar.event.\(event.id)") {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(event.summary).scaledFont(size: 14, weight: .medium).foregroundColor(OmiColors.textPrimary).lineLimit(1)
+                                Text(event.startTime).scaledFont(size: 12).foregroundColor(OmiColors.textSecondary).lineLimit(1)
+                                if !event.attendees.isEmpty {
+                                    Text("With: \(event.attendees.prefix(3).joined(separator: ", "))").scaledFont(size: 12).foregroundColor(OmiColors.textTertiary).lineLimit(1)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private func syncCalendar() async {
+        isReadingCalendar = true
+        calendarSyncError = nil
+        calendarMemoriesCreated = 0
+        calendarTasksCreated = 0
+        do {
+            let events = try await CalendarReaderService.shared.readEvents(daysBack: 30, daysForward: 14)
+            calendarEvents = events
+            calendarLastSynced = Date()
+            if !events.isEmpty {
+                let result = await CalendarReaderService.shared.synthesizeFromEvents(events: events)
+                calendarMemoriesCreated = result.memories
+                calendarTasksCreated = result.tasks
+            }
+        } catch {
+            calendarSyncError = error.localizedDescription
+        }
+        isReadingCalendar = false
+    }
+
+    private var relativeDateFormatter: DateFormatter {
+        let formatter = DateFormatter()
+        formatter.doesRelativeDateFormatting = true
+        formatter.dateStyle = .short
+        formatter.timeStyle = .short
+        return formatter
+    }
+
+    // MARK: - Developer API Keys Subsection
+
+    private var developerKeysSubsection: some View {
+        VStack(spacing: 20) {
+            settingsCard(settingId: "advanced.devkeys.info") {
+                HStack(spacing: 12) {
+                    Image(systemName: "info.circle")
+                        .foregroundColor(OmiColors.textTertiary)
+                    Text("Override backend-provided API keys with your own. Leave blank to use default keys.")
+                        .scaledFont(size: 13)
+                        .foregroundColor(OmiColors.textTertiary)
+                    Spacer()
+                }
+            }
+
+            developerKeyField(
+                title: "Deepgram API Key",
+                subtitle: "For transcription",
+                settingId: "advanced.devkeys.deepgram",
+                value: $devDeepgramKey
+            )
+
+            developerKeyField(
+                title: "Gemini API Key",
+                subtitle: "For proactive AI (memory, tasks, advice, focus)",
+                settingId: "advanced.devkeys.gemini",
+                value: $devGeminiKey
+            )
+
+            developerKeyField(
+                title: "Anthropic API Key",
+                subtitle: "For chat (Claude)",
+                settingId: "advanced.devkeys.anthropic",
+                value: $devAnthropicKey
+            )
+
+            if !devDeepgramKey.isEmpty || !devGeminiKey.isEmpty || !devAnthropicKey.isEmpty {
+                settingsCard(settingId: "advanced.devkeys.clear") {
+                    HStack {
+                        Spacer()
+                        Button(action: {
+                            devDeepgramKey = ""
+                            devGeminiKey = ""
+                            devAnthropicKey = ""
+                        }) {
+                            Text("Clear All Custom Keys")
+                                .scaledFont(size: 13, weight: .medium)
+                                .foregroundColor(.red)
+                        }
+                        .buttonStyle(.plain)
+                        Spacer()
+                    }
+                }
+            }
+        }
+    }
+
+    private func developerKeyField(title: String, subtitle: String, settingId: String, value: Binding<String>) -> some View {
+        settingsCard(settingId: settingId) {
+            VStack(alignment: .leading, spacing: 8) {
+                Text(title)
+                    .scaledFont(size: 14, weight: .medium)
+                    .foregroundColor(OmiColors.textPrimary)
+                Text(subtitle)
+                    .scaledFont(size: 12)
+                    .foregroundColor(OmiColors.textTertiary)
+                SecureField("Leave blank for default", text: value)
+                    .textFieldStyle(.roundedBorder)
+                    .scaledFont(size: 13)
             }
         }
     }
@@ -3165,11 +4459,12 @@ struct SettingsContentView: View {
 
     private var aboutSection: some View {
         VStack(spacing: 20) {
-            settingsCard {
+            settingsCard(settingId: "about.version") {
                 VStack(spacing: 16) {
                     // App info
                     HStack(spacing: 16) {
-                        if let logoImage = NSImage(contentsOf: Bundle.resourceBundle.url(forResource: "herologo", withExtension: "png")!) {
+                        if let logoURL = Bundle.resourceBundle.url(forResource: "herologo", withExtension: "png"),
+                           let logoImage = NSImage(contentsOf: logoURL) {
                             Image(nsImage: logoImage)
                                 .resizable()
                                 .aspectRatio(contentMode: .fit)
@@ -3177,13 +4472,22 @@ struct SettingsContentView: View {
                         }
 
                         VStack(alignment: .leading, spacing: 4) {
-                            Text("Omi")
-                                .scaledFont(size: 18, weight: .bold)
-                                .foregroundColor(OmiColors.textPrimary)
+                            HStack(spacing: 6) {
+                                Text("omi")
+                                    .scaledFont(size: 18, weight: .bold)
+                                    .foregroundColor(OmiColors.textPrimary)
+
+                                if !updaterViewModel.activeChannelLabel.isEmpty {
+                                    Text("(\(updaterViewModel.activeChannelLabel))")
+                                        .scaledFont(size: 13, weight: .medium)
+                                        .foregroundColor(OmiColors.purplePrimary)
+                                }
+                            }
 
                             Text("Version \(updaterViewModel.currentVersion) (\(updaterViewModel.buildNumber))")
                                 .scaledFont(size: 13)
                                 .foregroundColor(OmiColors.textTertiary)
+                                .textSelection(.enabled)
                         }
 
                         Spacer()
@@ -3216,7 +4520,7 @@ struct SettingsContentView: View {
             }
 
             // Software Updates
-            settingsCard {
+            settingsCard(settingId: "about.updates") {
                 VStack(alignment: .leading, spacing: 16) {
                     HStack {
                         Image(systemName: "arrow.triangle.2.circlepath")
@@ -3234,6 +4538,7 @@ struct SettingsContentView: View {
                         }
                         .buttonStyle(.bordered)
                         .disabled(!updaterViewModel.canCheckForUpdates)
+                        .help(updaterViewModel.canCheckForUpdates ? "Check for app updates" : "Already checking for updates…")
                     }
 
                     if let lastCheck = updaterViewModel.lastUpdateCheckDate {
@@ -3245,15 +4550,71 @@ struct SettingsContentView: View {
                     Divider()
                         .background(OmiColors.backgroundQuaternary)
 
-                    settingRow(title: "Automatic Updates", subtitle: "Check for updates automatically in the background") {
+                    settingRow(title: "Automatic Updates", subtitle: "Check for updates automatically in the background", settingId: "about.autoupdates") {
                         Toggle("", isOn: $updaterViewModel.automaticallyChecksForUpdates)
                             .toggleStyle(.switch)
                             .labelsHidden()
+                            .disabled(updaterViewModel.usesManagedUpdatePolicy || AnalyticsManager.isDevBuild)
+                    }
+
+                    if updaterViewModel.automaticallyChecksForUpdates {
+                        settingRow(title: "Auto-Install Updates", subtitle: "Automatically download and install updates when available", settingId: "about.autoinstall") {
+                            Toggle("", isOn: $updaterViewModel.automaticallyDownloadsUpdates)
+                                .toggleStyle(.switch)
+                                .labelsHidden()
+                                .disabled(updaterViewModel.usesManagedUpdatePolicy || AnalyticsManager.isDevBuild)
+                        }
+                    }
+
+                    if updaterViewModel.usesManagedUpdatePolicy {
+                        Text("Release builds always auto-check and auto-install updates in the background.")
+                            .scaledFont(size: 12)
+                            .foregroundColor(OmiColors.textTertiary)
+                    } else if AnalyticsManager.isDevBuild {
+                        Text("Development builds keep automatic installation disabled to avoid replacing the local app.")
+                            .scaledFont(size: 12)
+                            .foregroundColor(OmiColors.textTertiary)
+                    }
+
+                    Divider()
+                        .background(OmiColors.backgroundQuaternary)
+
+                    settingRow(title: "Update Channel", subtitle: updaterViewModel.updateChannel.description, settingId: "about.channel") {
+                        Picker("", selection: Binding(
+                            get: { updaterViewModel.updateChannel },
+                            set: { newChannel in
+                                // Switching beta → stable with a newer build: confirm first
+                                if updaterViewModel.updateChannel == .beta && newChannel == .stable && updaterViewModel.isDowngradeToStable {
+                                    showDowngradeAlert = true
+                                } else {
+                                    updaterViewModel.updateChannel = newChannel
+                                }
+                            }
+                        )) {
+                            ForEach(UpdateChannel.allCases, id: \.self) { channel in
+                                Text(channel.displayName).tag(channel)
+                            }
+                        }
+                        .pickerStyle(.menu)
+                        .labelsHidden()
+                        .frame(width: 100)
                     }
                 }
             }
+            .alert("Switch to Stable Channel?", isPresented: $showDowngradeAlert) {
+                Button("Stay on Beta", role: .cancel) { }
+                Button("Switch to Stable") {
+                    updaterViewModel.updateChannel = .stable
+                    if let url = URL(string: "https://macos.omi.me") {
+                        NSWorkspace.shared.open(url)
+                    }
+                }
+            } message: {
+                let stableVersion = updaterViewModel.latestStableVersionString ?? "an older version"
+                Text("You're on a newer beta build (\(updaterViewModel.currentVersion)). The latest stable release is \(stableVersion).\n\nSwitching to Stable means you won't receive new updates until a stable release surpasses your current version. You can also download the stable version now.")
+            }
 
-            settingsCard {
+            settingsCard(settingId: "about.reportissue") {
                 HStack(spacing: 16) {
                     Image(systemName: "exclamationmark.bubble.fill")
                         .scaledFont(size: 16)
@@ -3264,7 +4625,7 @@ struct SettingsContentView: View {
                             .scaledFont(size: 15, weight: .medium)
                             .foregroundColor(OmiColors.textPrimary)
 
-                        Text("Help us improve Omi")
+                        Text("Help us improve omi")
                             .scaledFont(size: 13)
                             .foregroundColor(OmiColors.textTertiary)
                     }
@@ -3282,8 +4643,24 @@ struct SettingsContentView: View {
 
     // MARK: - Helper Views
 
-    private func settingsCard<Content: View>(@ViewBuilder content: () -> Content) -> some View {
-        content()
+    private func fontShortcutRow(label: String, keys: String) -> some View {
+        HStack {
+            Text(label)
+                .scaledFont(size: 13)
+                .foregroundColor(OmiColors.textTertiary)
+            Spacer()
+            Text(keys)
+                .scaledMonospacedFont(size: 13, weight: .medium)
+                .foregroundColor(OmiColors.textSecondary)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 3)
+                .background(OmiColors.backgroundTertiary.opacity(0.8))
+                .cornerRadius(5)
+        }
+    }
+
+    private func settingsCard<Content: View>(settingId: String? = nil, @ViewBuilder content: () -> Content) -> some View {
+        let card = content()
             .padding(20)
             .background(
                 RoundedRectangle(cornerRadius: 12)
@@ -3293,10 +4670,17 @@ struct SettingsContentView: View {
                             .stroke(OmiColors.backgroundQuaternary.opacity(0.3), lineWidth: 1)
                     )
             )
+        return Group {
+            if let settingId = settingId {
+                card.modifier(SettingHighlightModifier(settingId: settingId, highlightedSettingId: $highlightedSettingId))
+            } else {
+                card
+            }
+        }
     }
 
-    private func settingRow<Content: View>(title: String, subtitle: String, @ViewBuilder control: () -> Content) -> some View {
-        HStack {
+    private func settingRow<Content: View>(title: String, subtitle: String, settingId: String? = nil, @ViewBuilder control: () -> Content) -> some View {
+        let row = HStack {
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
                     .scaledFont(size: 14)
@@ -3309,6 +4693,13 @@ struct SettingsContentView: View {
             Spacer()
 
             control()
+        }
+        return Group {
+            if let settingId = settingId {
+                row.modifier(SettingHighlightModifier(settingId: settingId, highlightedSettingId: $highlightedSettingId))
+            } else {
+                row
+            }
         }
     }
 
@@ -3354,6 +4745,280 @@ struct SettingsContentView: View {
             Text(text)
                 .scaledFont(size: 12)
                 .foregroundColor(OmiColors.textSecondary)
+        }
+    }
+
+    private var hasPaidSubscription: Bool {
+        guard let subscription = userSubscription?.subscription else { return false }
+        return subscription.plan != .basic && subscription.status == .active
+    }
+
+    private var shouldShowPlanPurchaseOptions: Bool {
+        guard let subscription = userSubscription else { return false }
+        return subscription.showSubscriptionUI && !hasPaidSubscription && !subscriptionPlansForDisplay.isEmpty
+    }
+
+    private var subscriptionPlansForDisplay: [SubscriptionPlanOption] {
+        let order = ["unlimited": 0, "pro": 1]
+        return (userSubscription?.availablePlans ?? []).sorted { lhs, rhs in
+            let lhsOrder = order[lhs.id, default: Int.max]
+            let rhsOrder = order[rhs.id, default: Int.max]
+            if lhsOrder != rhsOrder {
+                return lhsOrder < rhsOrder
+            }
+            return lhs.title < rhs.title
+        }
+    }
+
+    private var currentPlanTitle: String {
+        guard let subscription = userSubscription?.subscription else {
+            return isLoadingSubscription ? "Loading plan..." : "Basic"
+        }
+        switch subscription.plan {
+        case .basic:
+            return "Basic"
+        case .unlimited:
+            return "Unlimited Plan"
+        case .pro:
+            return "Omi Pro"
+        }
+    }
+
+    private var currentPlanSubtitle: String {
+        if isLoadingSubscription {
+            return "Fetching subscription details from omi."
+        }
+        if let detail = currentPlanBillingDetail {
+            return detail
+        }
+        if hasPaidSubscription {
+            return "Your paid plan is active."
+        }
+        return "You are currently on the free tier."
+    }
+
+    private var currentPlanBillingDetail: String? {
+        guard hasPaidSubscription,
+              let subscription = userSubscription?.subscription,
+              let currentPriceId = subscription.currentPriceId
+        else {
+            return nil
+        }
+
+        for plan in subscriptionPlansForDisplay {
+            if let price = plan.prices.first(where: { $0.id == currentPriceId }) {
+                return "\(plan.title) \(price.title) • \(price.priceString)"
+            }
+        }
+
+        return nil
+    }
+
+    private var currentPlanPeriodText: String? {
+        guard let subscription = userSubscription?.subscription else { return nil }
+        guard hasPaidSubscription, let periodEnd = subscription.currentPeriodEnd else { return nil }
+        let date = Date(timeIntervalSince1970: TimeInterval(periodEnd))
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .none
+        let prefix = subscription.cancelAtPeriodEnd ? "Access ends" : "Renews"
+        return "\(prefix) on \(formatter.string(from: date))"
+    }
+
+    private func planSubtitle(for planId: String) -> String? {
+        switch planId {
+        case "unlimited":
+            return "Current mobile and web subscription"
+        case "pro":
+            return "Desktop power-user tier"
+        default:
+            return nil
+        }
+    }
+
+    private func planAccentColor(for planId: String) -> Color {
+        planId == "pro" ? OmiColors.purplePrimary : OmiColors.success
+    }
+
+    private func planSummaryText(for plan: SubscriptionPlanOption) -> String {
+        preferredStartingPrice(for: plan)?.priceString ?? ""
+    }
+
+    private func preferredStartingPrice(for plan: SubscriptionPlanOption) -> SubscriptionPriceOption? {
+        let prices = sortedPrices(for: plan)
+        if let monthly = prices.first(where: { price in
+            let title = price.title.lowercased()
+            return title.contains("month")
+        }) {
+            return monthly
+        }
+        return prices.first
+    }
+
+    private func planEyebrow(for planId: String) -> String {
+        switch planId {
+        case "unlimited":
+            return "Most popular"
+        case "pro":
+            return "Automation + coding"
+        default:
+            return "Plan"
+        }
+    }
+
+    private func planDescription(for planId: String) -> String {
+        switch planId {
+        case "unlimited":
+            return "Uses the existing Unlimited subscription from mobile and web."
+        case "pro":
+            return "Unlock automations, vibe coding, and unlimited actions on desktop."
+        default:
+            return ""
+        }
+    }
+
+    private func sortedPrices(for plan: SubscriptionPlanOption) -> [SubscriptionPriceOption] {
+        plan.prices.sorted { lhs, rhs in
+            let lhsIsMonthly = lhs.title.lowercased().contains("month")
+            let rhsIsMonthly = rhs.title.lowercased().contains("month")
+            if lhsIsMonthly != rhsIsMonthly {
+                return lhsIsMonthly && !rhsIsMonthly
+            }
+            return lhs.title < rhs.title
+        }
+    }
+
+    @ViewBuilder
+    private func subscriptionPlanCard(_ plan: SubscriptionPlanOption) -> some View {
+        let isSelected = selectedPlanIdForCheckout == plan.id
+        let accent = planAccentColor(for: plan.id)
+
+        VStack(alignment: .leading, spacing: 16) {
+            HStack(alignment: .top, spacing: 12) {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(planEyebrow(for: plan.id).uppercased())
+                        .scaledFont(size: 10, weight: .bold)
+                        .foregroundColor(accent)
+                        .tracking(0.8)
+
+                    Text(plan.title)
+                        .scaledFont(size: 18, weight: .bold)
+                        .foregroundColor(OmiColors.textPrimary)
+
+                    if let subtitle = planSubtitle(for: plan.id) {
+                        Text(subtitle)
+                            .scaledFont(size: 12)
+                            .foregroundColor(OmiColors.textTertiary)
+                    }
+                }
+
+                Spacer()
+
+                VStack(alignment: .trailing, spacing: 2) {
+                    Text(planSummaryText(for: plan))
+                        .scaledFont(size: 17, weight: .bold)
+                        .foregroundColor(isSelected ? accent : OmiColors.textPrimary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.72)
+
+                    Text("starting price")
+                        .scaledFont(size: 10, weight: .medium)
+                        .foregroundColor(isSelected ? accent.opacity(0.8) : OmiColors.textTertiary)
+                }
+                .fixedSize(horizontal: true, vertical: false)
+            }
+
+            Text(planDescription(for: plan.id))
+                .scaledFont(size: 13)
+                .foregroundColor(OmiColors.textSecondary)
+
+            VStack(alignment: .leading, spacing: 8) {
+                ForEach(plan.features.prefix(4), id: \.self) { feature in
+                    HStack(spacing: 8) {
+                        ZStack {
+                            Circle()
+                                .fill(accent.opacity(0.16))
+                                .frame(width: 18, height: 18)
+                            Image(systemName: "checkmark")
+                                .scaledFont(size: 9, weight: .bold)
+                                .foregroundColor(accent)
+                        }
+                        Text(feature)
+                            .scaledFont(size: 13, weight: .medium)
+                            .foregroundColor(OmiColors.textSecondary)
+                    }
+                }
+            }
+
+            if isSelected {
+                Divider()
+                    .overlay(OmiColors.backgroundQuaternary)
+
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("Choose billing")
+                        .scaledFont(size: 12, weight: .semibold)
+                        .foregroundColor(OmiColors.textTertiary)
+
+                    HStack(spacing: 10) {
+                        ForEach(sortedPrices(for: plan)) { price in
+                            Button(action: {
+                                startCheckout(for: price.id)
+                            }) {
+                                Group {
+                                    if activeCheckoutPriceId == price.id {
+                                        ProgressView()
+                                            .controlSize(.small)
+                                            .frame(maxWidth: .infinity)
+                                    } else {
+                                        VStack(spacing: 3) {
+                                            Text(price.title)
+                                                .scaledFont(size: 12, weight: .bold)
+                                            Text(price.priceString)
+                                                .scaledFont(size: 11)
+                                                .foregroundColor(Color.white.opacity(0.92))
+                                        }
+                                        .foregroundColor(.white)
+                                        .frame(maxWidth: .infinity)
+                                    }
+                                }
+                                .padding(.vertical, 10)
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .tint(accent)
+                            .disabled(activeCheckoutPriceId != nil)
+                        }
+                    }
+                }
+            } else {
+                Button(action: {
+                    selectedPlanIdForCheckout = plan.id
+                }) {
+                    HStack {
+                        Text("Select \(plan.title)")
+                            .scaledFont(size: 12, weight: .bold)
+                        Spacer()
+                        Image(systemName: "arrow.right")
+                            .scaledFont(size: 11, weight: .bold)
+                    }
+                    .padding(.vertical, 10)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(accent)
+            }
+        }
+        .padding(20)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 18)
+                .fill(isSelected ? accent.opacity(0.12) : OmiColors.backgroundPrimary.opacity(0.68))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 18)
+                        .stroke(isSelected ? accent.opacity(0.85) : OmiColors.backgroundQuaternary, lineWidth: isSelected ? 1.5 : 1)
+                )
+        )
+        .contentShape(RoundedRectangle(cornerRadius: 18))
+        .onTapGesture {
+            selectedPlanIdForCheckout = plan.id
         }
     }
 
@@ -3582,6 +5247,8 @@ struct SettingsContentView: View {
         transcriptionLanguage = AssistantSettings.shared.transcriptionLanguage
         transcriptionAutoDetect = AssistantSettings.shared.transcriptionAutoDetect
         vocabularyList = AssistantSettings.shared.transcriptionVocabulary
+        vadGateEnabled = AssistantSettings.shared.vadGateEnabled
+        batchTranscriptionEnabled = AssistantSettings.shared.batchTranscriptionEnabled
 
         Task {
             do {
@@ -3635,6 +5302,7 @@ struct SettingsContentView: View {
 
                     isLoadingSettings = false
                 }
+
             } catch {
                 logError("Failed to load backend settings", error: error)
                 await MainActor.run {
@@ -3642,6 +5310,217 @@ struct SettingsContentView: View {
                 }
             }
         }
+    }
+
+    private func loadSubscriptionInfo() {
+        guard !isLoadingSubscription else { return }
+        isLoadingSubscription = true
+        subscriptionError = nil
+
+        Task {
+            do {
+                let subscription = try await APIClient.shared.getUserSubscription()
+                await MainActor.run {
+                    userSubscription = subscription
+                    isLoadingSubscription = false
+                }
+            } catch {
+                logError("Failed to load subscription", error: error)
+                await MainActor.run {
+                    subscriptionError = "Failed to load plan information."
+                    isLoadingSubscription = false
+                }
+            }
+        }
+    }
+
+    private func startCheckout(for priceId: String) {
+        guard activeCheckoutPriceId == nil else { return }
+        activeCheckoutPriceId = priceId
+        pendingSubscriptionPriceId = priceId
+        subscriptionError = nil
+
+        Task {
+            do {
+                let response = try await APIClient.shared.createCheckoutSession(priceId: priceId)
+                let apiBaseURL = await APIClient.shared.baseURL
+                await MainActor.run {
+                    activeCheckoutPriceId = nil
+                    pendingCheckoutSessionId = response.sessionId
+                }
+
+                if response.status == "reactivated" {
+                    await MainActor.run {
+                        subscriptionError = nil
+                        pendingSubscriptionPriceId = nil
+                        pendingCheckoutSessionId = nil
+                        loadSubscriptionInfo()
+                    }
+                } else if let urlString = response.url, let url = URL(string: urlString) {
+                    let normalizedBaseURL = apiBaseURL.hasSuffix("/") ? apiBaseURL : apiBaseURL + "/"
+                    await MainActor.run {
+                        activeBillingWebFlow = BillingWebFlow(
+                            title: "Complete Your Upgrade",
+                            url: url,
+                            completionURLs: [
+                                normalizedBaseURL + "v1/payments/success",
+                                normalizedBaseURL + "v1/payments/cancel",
+                            ]
+                        )
+                    }
+                } else {
+                    await MainActor.run {
+                        subscriptionError = response.message ?? "Could not start checkout."
+                    }
+                }
+            } catch {
+                logError("Failed to create checkout session", error: error)
+                await MainActor.run {
+                    activeCheckoutPriceId = nil
+                    pendingSubscriptionPriceId = nil
+                    pendingCheckoutSessionId = nil
+                    subscriptionError = "Failed to open checkout."
+                }
+            }
+        }
+    }
+
+    private func openCustomerPortal() {
+        guard !isOpeningCustomerPortal else { return }
+        isOpeningCustomerPortal = true
+        subscriptionError = nil
+
+        Task {
+            do {
+                let response = try await APIClient.shared.createCustomerPortalSession()
+                await MainActor.run {
+                    isOpeningCustomerPortal = false
+                }
+
+                if let url = URL(string: response.url) {
+                    await MainActor.run {
+                        openURLInDefaultBrowser(url)
+                        subscriptionError = "Billing portal opened in your browser."
+                    }
+                } else {
+                    await MainActor.run {
+                        subscriptionError = "Could not open billing portal."
+                    }
+                }
+            } catch {
+                logError("Failed to open customer portal", error: error)
+                await MainActor.run {
+                    isOpeningCustomerPortal = false
+                    subscriptionError = "Failed to open billing portal."
+                }
+            }
+        }
+    }
+
+    private func handleBillingFlowCompletion(_ outcome: BillingWebFlowOutcome) {
+        switch outcome {
+        case .completed:
+            Task {
+                await completeLocalTestSubscriptionIfNeeded()
+                await MainActor.run {
+                    pollForUpdatedSubscription()
+                }
+            }
+        case .cancelled, .dismissed:
+            pendingSubscriptionPriceId = nil
+            pendingCheckoutSessionId = nil
+            loadSubscriptionInfo()
+        }
+    }
+
+    private func pollForUpdatedSubscription() {
+        let expectedPriceId = pendingSubscriptionPriceId
+
+        Task {
+            for attempt in 0..<8 {
+                do {
+                    let subscription = try await APIClient.shared.getUserSubscription()
+                    let matchedPrice = expectedPriceId == nil || subscription.subscription.currentPriceId == expectedPriceId
+                    let hasPaidPlan = subscription.subscription.plan != .basic && subscription.subscription.status == .active
+
+                    if matchedPrice && hasPaidPlan {
+                        await MainActor.run {
+                            userSubscription = subscription
+                            subscriptionError = nil
+                            pendingSubscriptionPriceId = nil
+                            pendingCheckoutSessionId = nil
+                        }
+                        return
+                    }
+
+                    if attempt == 7 {
+                        await MainActor.run {
+                            userSubscription = subscription
+                            subscriptionError = "Payment completed, but plan refresh is still catching up. Click Refresh in a moment."
+                            pendingSubscriptionPriceId = nil
+                            pendingCheckoutSessionId = nil
+                        }
+                        return
+                    }
+
+                    try await Task.sleep(nanoseconds: 1_000_000_000)
+                } catch {
+                    if attempt == 7 {
+                        await MainActor.run {
+                            subscriptionError = "Payment completed, but subscription refresh failed."
+                            pendingSubscriptionPriceId = nil
+                            pendingCheckoutSessionId = nil
+                        }
+                        return
+                    }
+
+                    try? await Task.sleep(nanoseconds: 1_000_000_000)
+                }
+            }
+        }
+    }
+
+    private func completeLocalTestSubscriptionIfNeeded() async {
+        guard let expectedPriceId = pendingSubscriptionPriceId else { return }
+        let checkoutSessionId = pendingCheckoutSessionId
+        let baseURL = await APIClient.shared.baseURL
+        guard baseURL.hasPrefix("http://127.0.0.1:8787/") || baseURL.hasPrefix("http://localhost:8787/") else {
+            return
+        }
+
+        guard let encodedPriceId = expectedPriceId.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) else {
+            return
+        }
+
+        var urlString = "\(baseURL)test/complete-subscription?price_id=\(encodedPriceId)"
+        if let checkoutSessionId,
+           let encodedSessionId = checkoutSessionId.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) {
+            urlString += "&session_id=\(encodedSessionId)"
+        }
+
+        guard let url = URL(string: urlString) else { return }
+
+        do {
+            _ = try await URLSession.shared.data(from: url)
+        } catch {
+            logError("Failed to complete local test subscription", error: error)
+        }
+    }
+
+    private func openURLInDefaultBrowser(_ url: URL) {
+        if let appURL = NSWorkspace.shared.urlForApplication(toOpen: url) {
+            let configuration = NSWorkspace.OpenConfiguration()
+            configuration.activates = true
+            NSWorkspace.shared.open([url], withApplicationAt: appURL, configuration: configuration) { _, error in
+                if let error {
+                    NSLog("OMI SETTINGS: Failed to open browser URL %@: %@", url.absoluteString, error.localizedDescription)
+                    NSWorkspace.shared.open(url)
+                }
+            }
+            return
+        }
+
+        NSWorkspace.shared.open(url)
     }
 
     private func updateDailySummarySettings(enabled: Bool? = nil, hour: Int? = nil) {
@@ -3665,10 +5544,9 @@ struct SettingsContentView: View {
     }
 
     private func updateLanguage(_ language: String) {
-        // Track language change
-        AnalyticsManager.shared.languageChanged(language: language)
-
         Task {
+            // Track language change
+            AnalyticsManager.shared.languageChanged(language: language)
             do {
                 let _ = try await APIClient.shared.updateUserLanguage(language)
             } catch {
@@ -3712,6 +5590,159 @@ struct SettingsContentView: View {
                 )
             } catch {
                 logError("Failed to update transcription preferences", error: error)
+            }
+        }
+    }
+
+    private func deleteAccountAndData() {
+        guard !isDeletingAccount else { return }
+
+        deleteAccountError = nil
+        isDeletingAccount = true
+        AnalyticsManager.shared.deleteAccountConfirmed()
+
+        Task {
+            do {
+                try await APIClient.shared.deleteAccount()
+                await MainActor.run {
+                    appState.stopTranscription()
+                    ProactiveAssistantsPlugin.shared.stopMonitoring()
+                    do {
+                        try AuthService.shared.signOut()
+                        isDeletingAccount = false
+                    } catch {
+                        deleteAccountError = "Account deleted, but sign out failed: \(error.localizedDescription)"
+                        isDeletingAccount = false
+                    }
+                }
+            } catch {
+                await MainActor.run {
+                    deleteAccountError = "Failed to delete account: \(error.localizedDescription)"
+                    isDeletingAccount = false
+                }
+            }
+        }
+    }
+
+}
+
+private struct BillingWebFlow: Identifiable {
+    let id = UUID()
+    let title: String
+    let url: URL
+    let completionURLs: [String]
+}
+
+private enum BillingWebFlowOutcome {
+    case completed
+    case cancelled
+    case dismissed
+}
+
+private struct BillingWebFlowSheet: View {
+    let flow: BillingWebFlow
+    let onComplete: (BillingWebFlowOutcome) -> Void
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 12) {
+                Text(flow.title)
+                    .scaledFont(size: 18, weight: .semibold)
+                    .foregroundColor(OmiColors.textPrimary)
+
+                Spacer()
+
+                Button("Close") {
+                    onComplete(.dismissed)
+                }
+                .buttonStyle(.plain)
+                .foregroundColor(OmiColors.textSecondary)
+            }
+            .padding(.horizontal, 20)
+            .padding(.vertical, 16)
+            .background(OmiColors.backgroundTertiary)
+
+            Divider()
+
+            BillingWebView(flow: flow, onComplete: onComplete)
+                .frame(minWidth: 860, minHeight: 680)
+        }
+        .background(OmiColors.backgroundPrimary)
+    }
+}
+
+private struct BillingWebView: NSViewRepresentable {
+    let flow: BillingWebFlow
+    let onComplete: (BillingWebFlowOutcome) -> Void
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(flow: flow, onComplete: onComplete)
+    }
+
+    func makeNSView(context: Context) -> WKWebView {
+        let configuration = WKWebViewConfiguration()
+        configuration.defaultWebpagePreferences.allowsContentJavaScript = true
+
+        let webView = WKWebView(frame: .zero, configuration: configuration)
+        webView.navigationDelegate = context.coordinator
+        webView.uiDelegate = context.coordinator
+        webView.setValue(false, forKey: "drawsBackground")
+        webView.load(URLRequest(url: flow.url))
+        return webView
+    }
+
+    func updateNSView(_ nsView: WKWebView, context: Context) {}
+
+    final class Coordinator: NSObject, WKNavigationDelegate, WKUIDelegate {
+        private let flow: BillingWebFlow
+        private let onComplete: (BillingWebFlowOutcome) -> Void
+        private var completionHandled = false
+
+        init(flow: BillingWebFlow, onComplete: @escaping (BillingWebFlowOutcome) -> Void) {
+            self.flow = flow
+            self.onComplete = onComplete
+        }
+
+        func webView(
+            _ webView: WKWebView,
+            decidePolicyFor navigationAction: WKNavigationAction,
+            decisionHandler: @escaping (WKNavigationActionPolicy) -> Void
+        ) {
+            guard let url = navigationAction.request.url?.absoluteString else {
+                decisionHandler(.allow)
+                return
+            }
+
+            if let matchedCompletionURL = flow.completionURLs.first(where: { url.hasPrefix($0) }) {
+                if matchedCompletionURL.hasSuffix("/cancel") {
+                    finish(.cancelled)
+                } else {
+                    finish(.completed)
+                }
+                decisionHandler(.cancel)
+                return
+            }
+
+            decisionHandler(.allow)
+        }
+
+        func webView(
+            _ webView: WKWebView,
+            createWebViewWith configuration: WKWebViewConfiguration,
+            for navigationAction: WKNavigationAction,
+            windowFeatures: WKWindowFeatures
+        ) -> WKWebView? {
+            if navigationAction.targetFrame == nil, let requestURL = navigationAction.request.url {
+                webView.load(URLRequest(url: requestURL))
+            }
+            return nil
+        }
+
+        private func finish(_ outcome: BillingWebFlowOutcome) {
+            guard !completionHandled else { return }
+            completionHandled = true
+            DispatchQueue.main.async {
+                self.onComplete(outcome)
             }
         }
     }
@@ -4060,6 +6091,6 @@ struct RunningAppChip: View {
     SettingsPage(
         appState: AppState(),
         selectedSection: .constant(.advanced),
-        selectedAdvancedSubsection: .constant(.aiUserProfile)
+        highlightedSettingId: .constant(nil)
     )
 }

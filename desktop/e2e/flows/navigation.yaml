@@ -1,0 +1,54 @@
+version: 2
+name: navigation
+description: Desktop sidebar navigation — verify all 7 sidebar sections load correctly via click navigation
+app: com.omi.computer-macos
+covers:
+  - desktop/Desktop/Sources/MainWindow/SidebarView.swift
+  - desktop/Desktop/Sources/MainWindow/DesktopHomeView.swift
+  - desktop/Desktop/Sources/MainWindow/OmiApp.swift
+preconditions:
+  - auth_ready
+
+steps:
+  - id: S1
+    name: Verify Dashboard loads
+    do: "Verify the app is on the Dashboard page. Sidebar should show all navigation icons (Dashboard, Chat, Memories, Tasks, Rewind, Apps, Settings). Dashboard content should include goals widget, conversations list, and Start Recording button."
+    expect:
+      interactive_count: { min: 10 }
+      text_visible:
+        - Dashboard
+
+  - id: S2
+    name: Navigate to Chat
+    do: "Click the Chat sidebar icon (identifier: sidebar_chat) to navigate to the Chat page. Verify chat interface loads with message input area."
+    expect:
+      text_visible:
+        - Chat
+
+  - id: S3
+    name: Navigate to Memories
+    do: "Click the Memories sidebar icon (identifier: sidebar_memories) to navigate to the Memories page. Verify memories list loads with search and filter controls."
+    expect:
+      text_visible:
+        - Memories
+
+  - id: S4
+    name: Navigate to Tasks
+    do: "Click the Tasks sidebar icon (identifier: sidebar_tasks) to navigate to the Tasks page. Verify tasks interface loads with category filters and task list."
+    expect:
+      text_visible:
+        - Tasks
+
+  - id: S5
+    name: Navigate to Apps
+    do: "Click the Apps sidebar icon (identifier: sidebar_apps) to navigate to the Apps/Integrations page. Verify integrations marketplace loads."
+    expect:
+      text_visible:
+        - Apps
+
+  - id: S6
+    name: Navigate to Settings
+    do: "Click the Settings sidebar icon (identifier: sidebar_settings) to navigate to Settings page. Verify settings sidebar shows sections (General, Rewind, Transcription, etc.)."
+    expect:
+      text_visible:
+        - Settings

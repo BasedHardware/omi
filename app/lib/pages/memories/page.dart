@@ -69,21 +69,12 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
               decoration: BoxDecoration(
                 color: Colors.black87,
                 borderRadius: BorderRadius.circular(8),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.2),
-                    blurRadius: 4,
-                    offset: const Offset(0, 2),
-                  ),
-                ],
+                boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.2), blurRadius: 4, offset: const Offset(0, 2))],
               ),
               child: Row(
                 children: [
                   Expanded(
-                    child: Text(
-                      context.l10n.memoryDeleted,
-                      style: const TextStyle(color: Colors.white, fontSize: 14),
-                    ),
+                    child: Text(context.l10n.memoryDeleted, style: const TextStyle(color: Colors.white, fontSize: 14)),
                   ),
                   TextButton(
                     onPressed: () async {
@@ -154,260 +145,247 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
           canPop: true,
           child: Scaffold(
             backgroundColor: Theme.of(context).colorScheme.primary,
-            floatingActionButton: Padding(
-              padding: const EdgeInsets.only(bottom: 48.0),
-              child: FloatingActionButton(
-                heroTag: 'memories_fab',
-                onPressed: () {
-                  showMemoryDialog(context, provider);
-                  MixpanelManager().memoriesPageCreateMemoryBtn();
-                },
-                backgroundColor: Colors.deepPurple,
-                tooltip: context.l10n.createMemoryTooltip,
-                child: const Icon(
-                  Icons.add,
-                  color: Colors.white,
-                ),
-              ),
-            ),
-            body: RefreshIndicator(
-              onRefresh: () async {
-                HapticFeedback.mediumImpact();
-                await provider.init();
-              },
-              color: Colors.deepPurpleAccent,
-              backgroundColor: Colors.white,
-              child: provider.loading && _isInitialLoad
-                  ? CustomScrollView(
-                      physics: const AlwaysScrollableScrollPhysics(),
-                      slivers: [
-                        SliverToBoxAdapter(
-                          child: Padding(
-                            padding: const EdgeInsets.fromLTRB(16, 12, 16, 10),
-                            child: Row(
-                              children: [
-                                Expanded(
-                                  child: SizedBox(
-                                    height: 44,
-                                    child: SearchBar(
-                                      hintText: context.l10n.searchMemories,
-                                      leading: const Padding(
-                                        padding: EdgeInsets.only(left: 6.0),
-                                        child: Icon(FontAwesomeIcons.magnifyingGlass, color: Colors.white70, size: 14),
-                                      ),
-                                      backgroundColor: WidgetStateProperty.all(AppStyles.backgroundSecondary),
-                                      elevation: WidgetStateProperty.all(0),
-                                      padding: WidgetStateProperty.all(
-                                        const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                                      ),
-                                      hintStyle: WidgetStateProperty.all(
-                                        TextStyle(color: AppStyles.textTertiary, fontSize: 14),
-                                      ),
-                                      textStyle: WidgetStateProperty.all(
-                                        const TextStyle(color: AppStyles.textPrimary, fontSize: 14),
-                                      ),
-                                      shape: WidgetStateProperty.all(
-                                        RoundedRectangleBorder(
-                                          borderRadius: BorderRadius.circular(AppStyles.radiusLarge),
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(width: 8),
-                                SizedBox(
-                                  width: 44,
-                                  height: 44,
-                                  child: _buildShimmerButton(),
-                                ),
-                                const SizedBox(width: 8),
-                                SizedBox(
-                                  width: 44,
-                                  height: 44,
-                                  child: _buildShimmerButton(),
-                                ),
-                                const SizedBox(width: 8),
-                                SizedBox(
-                                  width: 44,
-                                  height: 44,
-                                  child: _buildShimmerButton(),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                        SliverFillRemaining(
-                          child: _buildShimmerMemoryList(),
-                        ),
-                      ],
-                    )
-                  : CustomScrollView(
-                      controller: _scrollController,
-                      physics: const AlwaysScrollableScrollPhysics(),
-                      slivers: [
-                        SliverToBoxAdapter(
-                          child: Padding(
-                            padding: const EdgeInsets.fromLTRB(16, 12, 16, 10),
-                            child: Row(
-                              children: [
-                                Consumer<HomeProvider>(builder: (context, home, child) {
-                                  return Expanded(
-                                    child: SizedBox(
-                                      height: 44,
-                                      child: SearchBar(
-                                        hintText: context.l10n.searchMemories,
-                                        leading: const Padding(
-                                          padding: EdgeInsets.only(left: 6.0),
-                                          child:
-                                              Icon(FontAwesomeIcons.magnifyingGlass, color: Colors.white70, size: 14),
-                                        ),
-                                        backgroundColor: WidgetStateProperty.all(AppStyles.backgroundSecondary),
-                                        elevation: WidgetStateProperty.all(0),
-                                        padding: WidgetStateProperty.all(
-                                          const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                                        ),
-                                        focusNode: home.memoriesSearchFieldFocusNode,
-                                        controller: _searchController,
-                                        trailing: provider.searchQuery.isNotEmpty
-                                            ? [
-                                                IconButton(
-                                                  icon: const Icon(Icons.close, color: Colors.white70, size: 16),
-                                                  padding: EdgeInsets.zero,
-                                                  constraints: const BoxConstraints(
-                                                    minHeight: 36,
-                                                    minWidth: 36,
-                                                  ),
-                                                  onPressed: () {
-                                                    _searchController.clear();
-                                                    provider.setSearchQuery('');
-                                                    MixpanelManager().memorySearchCleared(provider.memories.length);
-                                                  },
-                                                )
-                                              ]
-                                            : null,
-                                        hintStyle: WidgetStateProperty.all(
-                                          TextStyle(color: AppStyles.textTertiary, fontSize: 14),
-                                        ),
-                                        textStyle: WidgetStateProperty.all(
-                                          const TextStyle(color: AppStyles.textPrimary, fontSize: 14),
-                                        ),
-                                        shape: WidgetStateProperty.all(
-                                          RoundedRectangleBorder(
-                                            borderRadius: BorderRadius.circular(AppStyles.radiusLarge),
+            body: Stack(
+              children: [
+                RefreshIndicator(
+                  onRefresh: () async {
+                    HapticFeedback.mediumImpact();
+                    await provider.init();
+                  },
+                  color: Colors.deepPurpleAccent,
+                  backgroundColor: Colors.white,
+                  child: provider.loading && _isInitialLoad
+                      ? CustomScrollView(
+                          physics: const AlwaysScrollableScrollPhysics(),
+                          slivers: [
+                            SliverToBoxAdapter(
+                              child: Padding(
+                                padding: const EdgeInsets.fromLTRB(16, 12, 16, 10),
+                                child: Row(
+                                  children: [
+                                    Expanded(
+                                      child: SizedBox(
+                                        height: 44,
+                                        child: SearchBar(
+                                          hintText: context.l10n.searchMemories,
+                                          leading: const Padding(
+                                            padding: EdgeInsets.only(left: 6.0),
+                                            child: Icon(
+                                              FontAwesomeIcons.magnifyingGlass,
+                                              color: Colors.white70,
+                                              size: 14,
+                                            ),
+                                          ),
+                                          backgroundColor: WidgetStateProperty.all(AppStyles.backgroundSecondary),
+                                          elevation: WidgetStateProperty.all(0),
+                                          padding: WidgetStateProperty.all(
+                                            const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                                          ),
+                                          hintStyle: WidgetStateProperty.all(
+                                            TextStyle(color: AppStyles.textTertiary, fontSize: 14),
+                                          ),
+                                          textStyle: WidgetStateProperty.all(
+                                            const TextStyle(color: AppStyles.textPrimary, fontSize: 14),
+                                          ),
+                                          shape: WidgetStateProperty.all(
+                                            RoundedRectangleBorder(
+                                              borderRadius: BorderRadius.circular(AppStyles.radiusLarge),
+                                            ),
                                           ),
                                         ),
-                                        onChanged: (value) => provider.setSearchQuery(value),
-                                        onSubmitted: (value) {
-                                          if (value.isNotEmpty) {
-                                            MixpanelManager().memorySearched(value, provider.filteredMemories.length);
-                                          }
-                                        },
                                       ),
                                     ),
-                                  );
-                                }),
-                                const SizedBox(width: 8),
-                                SizedBox(
-                                  width: 44,
-                                  height: 44,
-                                  child: ElevatedButton(
-                                    onPressed: () {
-                                      Navigator.of(context).push(
-                                        MaterialPageRoute(
-                                          builder: (context) => const MemoryGraphPage(),
-                                        ),
-                                      );
-                                    },
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor: AppStyles.backgroundSecondary,
-                                      foregroundColor: Colors.white,
-                                      padding: EdgeInsets.zero,
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(12),
-                                      ),
-                                    ),
-                                    child: const Icon(FontAwesomeIcons.brain, size: 16),
-                                  ),
+                                    const SizedBox(width: 8),
+                                    SizedBox(width: 44, height: 44, child: _buildShimmerButton()),
+                                    const SizedBox(width: 8),
+                                    SizedBox(width: 44, height: 44, child: _buildShimmerButton()),
+                                    const SizedBox(width: 8),
+                                    SizedBox(width: 44, height: 44, child: _buildShimmerButton()),
+                                  ],
                                 ),
-                                const SizedBox(width: 8),
-                                SizedBox(
-                                  width: 44,
-                                  height: 44,
-                                  child: ElevatedButton(
-                                    onPressed: () {
-                                      _showMemoryManagementSheet(context, provider);
-                                    },
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor: AppStyles.backgroundSecondary,
-                                      foregroundColor: Colors.white,
-                                      padding: EdgeInsets.zero,
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(12),
-                                      ),
-                                    ),
-                                    child: const Icon(FontAwesomeIcons.sliders, size: 16),
-                                  ),
-                                ),
-                              ],
+                              ),
                             ),
-                          ),
-                        ),
-                        if (provider.filteredMemories.isEmpty)
-                          SliverFillRemaining(
-                            child: Center(
-                              child: Column(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Icon(Icons.note_add, size: 48, color: Colors.grey.shade600),
-                                  const SizedBox(height: 16),
-                                  Text(
-                                    provider.searchQuery.isEmpty && provider.selectedCategories.isEmpty
-                                        ? context.l10n.noMemoriesYet
-                                        : provider.selectedCategories.isNotEmpty
-                                            ? provider.selectedCategories.contains(MemoryCategory.manual) &&
-                                                    provider.selectedCategories.length == 1
-                                                ? context.l10n.noManualMemories
-                                                : context.l10n.noMemoriesInCategories
-                                            : context.l10n.noMemoriesFound,
-                                    style: TextStyle(
-                                      color: Colors.grey.shade400,
-                                      fontSize: 18,
+                            SliverFillRemaining(child: _buildShimmerMemoryList()),
+                          ],
+                        )
+                      : CustomScrollView(
+                          controller: _scrollController,
+                          physics: const AlwaysScrollableScrollPhysics(),
+                          slivers: [
+                            SliverToBoxAdapter(
+                              child: Padding(
+                                padding: const EdgeInsets.fromLTRB(16, 12, 16, 10),
+                                child: Row(
+                                  children: [
+                                    Consumer<HomeProvider>(
+                                      builder: (context, home, child) {
+                                        return Expanded(
+                                          child: SizedBox(
+                                            height: 44,
+                                            child: SearchBar(
+                                              hintText: context.l10n.searchMemories,
+                                              leading: const Padding(
+                                                padding: EdgeInsets.only(left: 6.0),
+                                                child: Icon(
+                                                  FontAwesomeIcons.magnifyingGlass,
+                                                  color: Colors.white70,
+                                                  size: 14,
+                                                ),
+                                              ),
+                                              backgroundColor: WidgetStateProperty.all(AppStyles.backgroundSecondary),
+                                              elevation: WidgetStateProperty.all(0),
+                                              padding: WidgetStateProperty.all(
+                                                const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                                              ),
+                                              focusNode: home.memoriesSearchFieldFocusNode,
+                                              controller: _searchController,
+                                              trailing: provider.searchQuery.isNotEmpty
+                                                  ? [
+                                                      IconButton(
+                                                        icon: const Icon(Icons.close, color: Colors.white70, size: 16),
+                                                        padding: EdgeInsets.zero,
+                                                        constraints: const BoxConstraints(minHeight: 36, minWidth: 36),
+                                                        onPressed: () {
+                                                          _searchController.clear();
+                                                          provider.setSearchQuery('');
+                                                          MixpanelManager().memorySearchCleared(
+                                                            provider.memories.length,
+                                                          );
+                                                        },
+                                                      ),
+                                                    ]
+                                                  : null,
+                                              hintStyle: WidgetStateProperty.all(
+                                                TextStyle(color: AppStyles.textTertiary, fontSize: 14),
+                                              ),
+                                              textStyle: WidgetStateProperty.all(
+                                                const TextStyle(color: AppStyles.textPrimary, fontSize: 14),
+                                              ),
+                                              shape: WidgetStateProperty.all(
+                                                RoundedRectangleBorder(
+                                                  borderRadius: BorderRadius.circular(AppStyles.radiusLarge),
+                                                ),
+                                              ),
+                                              onChanged: (value) => provider.setSearchQuery(value),
+                                              onSubmitted: (value) {
+                                                if (value.isNotEmpty) {
+                                                  MixpanelManager().memorySearched(
+                                                    value,
+                                                    provider.filteredMemories.length,
+                                                  );
+                                                }
+                                              },
+                                            ),
+                                          ),
+                                        );
+                                      },
                                     ),
-                                  ),
-                                  if (provider.searchQuery.isEmpty && provider.selectedCategories.isEmpty) ...[
-                                    const SizedBox(height: 8),
-                                    TextButton(
-                                      onPressed: () => showMemoryDialog(context, provider),
-                                      child: Text(context.l10n.addFirstMemory),
+                                    const SizedBox(width: 8),
+                                    SizedBox(
+                                      width: 44,
+                                      height: 44,
+                                      child: ElevatedButton(
+                                        onPressed: () {
+                                          Navigator.of(
+                                            context,
+                                          ).push(MaterialPageRoute(builder: (context) => const MemoryGraphPage()));
+                                        },
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor: AppStyles.backgroundSecondary,
+                                          foregroundColor: Colors.white,
+                                          padding: EdgeInsets.zero,
+                                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                        ),
+                                        child: const Icon(FontAwesomeIcons.brain, size: 16),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    SizedBox(
+                                      width: 44,
+                                      height: 44,
+                                      child: ElevatedButton(
+                                        onPressed: () {
+                                          _showMemoryManagementSheet(context, provider);
+                                        },
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor: AppStyles.backgroundSecondary,
+                                          foregroundColor: Colors.white,
+                                          padding: EdgeInsets.zero,
+                                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                        ),
+                                        child: const Icon(FontAwesomeIcons.sliders, size: 16),
+                                      ),
                                     ),
                                   ],
-                                ],
+                                ),
                               ),
                             ),
-                          )
-                        else
-                          SliverPadding(
-                            padding: const EdgeInsets.only(top: 8, left: 16, right: 16, bottom: 120),
-                            sliver: SliverList(
-                              delegate: SliverChildBuilderDelegate(
-                                (context, index) {
-                                  final memory = provider.filteredMemories[index];
-                                  return MemoryItem(
-                                    memory: memory,
-                                    provider: provider,
-                                    onTap:
-                                        (BuildContext context, Memory tappedMemory, MemoriesProvider tappedProvider) {
-                                      MixpanelManager().memoryListItemClicked(tappedMemory);
-                                      _showQuickEditSheet(context, tappedMemory, tappedProvider);
-                                    },
-                                  );
-                                },
-                                childCount: provider.filteredMemories.length,
+                            if (provider.filteredMemories.isEmpty)
+                              SliverFillRemaining(
+                                child: Center(
+                                  child: Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Icon(Icons.note_add, size: 48, color: Colors.grey.shade600),
+                                      const SizedBox(height: 16),
+                                      Text(
+                                        provider.searchQuery.isEmpty && provider.selectedCategories.isEmpty
+                                            ? context.l10n.noMemoriesYet
+                                            : provider.selectedCategories.isNotEmpty
+                                            ? provider.selectedCategories.contains(MemoryCategory.manual) &&
+                                                      provider.selectedCategories.length == 1
+                                                  ? context.l10n.noManualMemories
+                                                  : context.l10n.noMemoriesInCategories
+                                            : context.l10n.noMemoriesFound,
+                                        style: TextStyle(color: Colors.grey.shade400, fontSize: 18),
+                                      ),
+                                      if (provider.searchQuery.isEmpty && provider.selectedCategories.isEmpty) ...[
+                                        const SizedBox(height: 8),
+                                        TextButton(
+                                          onPressed: () => showMemoryDialog(context, provider),
+                                          child: Text(context.l10n.addFirstMemory),
+                                        ),
+                                      ],
+                                    ],
+                                  ),
+                                ),
+                              )
+                            else
+                              SliverPadding(
+                                padding: const EdgeInsets.only(top: 8, left: 16, right: 16, bottom: 120),
+                                sliver: SliverList(
+                                  delegate: SliverChildBuilderDelegate((context, index) {
+                                    final memory = provider.filteredMemories[index];
+                                    return MemoryItem(
+                                      memory: memory,
+                                      provider: provider,
+                                      onTap:
+                                          (BuildContext context, Memory tappedMemory, MemoriesProvider tappedProvider) {
+                                            MixpanelManager().memoryListItemClicked(tappedMemory);
+                                            _showQuickEditSheet(context, tappedMemory, tappedProvider);
+                                          },
+                                    );
+                                  }, childCount: provider.filteredMemories.length),
+                                ),
                               ),
-                            ),
-                          ),
-                      ],
-                    ),
+                          ],
+                        ),
+                ),
+                Positioned(
+                  right: 20,
+                  bottom: 100,
+                  child: FloatingActionButton(
+                    heroTag: 'memories_fab',
+                    onPressed: () {
+                      showMemoryDialog(context, provider);
+                      MixpanelManager().memoriesPageCreateMemoryBtn();
+                    },
+                    backgroundColor: Colors.deepPurple,
+                    tooltip: context.l10n.createMemoryTooltip,
+                    child: const Icon(Icons.add, color: Colors.white),
+                  ),
+                ),
+              ],
             ),
           ),
         );
@@ -420,10 +398,7 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
       baseColor: AppStyles.backgroundSecondary,
       highlightColor: AppStyles.backgroundTertiary,
       child: Container(
-        decoration: BoxDecoration(
-          color: AppStyles.backgroundSecondary,
-          borderRadius: BorderRadius.circular(12),
-        ),
+        decoration: BoxDecoration(color: AppStyles.backgroundSecondary, borderRadius: BorderRadius.circular(12)),
       ),
     );
   }
@@ -456,23 +431,16 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
       context: context,
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
-      builder: (context) => MemoryEditSheet(
-        memory: memory,
-        provider: provider,
-        onDelete: (_, __, ___) {},
-      ),
+      builder: (context) => MemoryEditSheet(memory: memory, provider: provider, onDelete: (_, __, ___) {}),
     );
   }
 
   // ignore: unused_element
   void _showDeleteAllConfirmation(BuildContext context, MemoriesProvider provider) {
     if (provider.memories.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(context.l10n.noMemoriesToDelete),
-          duration: const Duration(seconds: 2),
-        ),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(context.l10n.noMemoriesToDelete), duration: const Duration(seconds: 2)));
       return;
     }
 
@@ -480,14 +448,8 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: const Color(0xFF1F1F25),
-        title: Text(
-          context.l10n.clearMemoryTitle,
-          style: const TextStyle(color: Colors.white),
-        ),
-        content: Text(
-          context.l10n.clearMemoryMessage,
-          style: TextStyle(color: Colors.grey.shade300),
-        ),
+        title: Text(context.l10n.clearMemoryTitle, style: const TextStyle(color: Colors.white)),
+        content: Text(context.l10n.clearMemoryMessage, style: TextStyle(color: Colors.grey.shade300)),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
@@ -501,16 +463,10 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
               provider.deleteAllMemories();
               Navigator.pop(context);
               ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text(context.l10n.memoryClearedSuccess),
-                  duration: const Duration(seconds: 2),
-                ),
+                SnackBar(content: Text(context.l10n.memoryClearedSuccess), duration: const Duration(seconds: 2)),
               );
             },
-            child: Text(
-              context.l10n.clearMemoryButton,
-              style: const TextStyle(color: Colors.red),
-            ),
+            child: Text(context.l10n.clearMemoryButton, style: const TextStyle(color: Colors.red)),
           ),
         ],
       ),
@@ -519,11 +475,7 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
 
   void scrollToTop() {
     if (_scrollController.hasClients) {
-      _scrollController.animateTo(
-        0.0,
-        duration: const Duration(milliseconds: 500),
-        curve: Curves.easeOutCubic,
-      );
+      _scrollController.animateTo(0.0, duration: const Duration(milliseconds: 500), curve: Curves.easeOutCubic);
     }
   }
 
@@ -544,11 +496,7 @@ class _SliverSearchBarDelegate extends SliverPersistentHeaderDelegate {
   final double maxHeight;
   final Widget child;
 
-  _SliverSearchBarDelegate({
-    required this.minHeight,
-    required this.maxHeight,
-    required this.child,
-  });
+  _SliverSearchBarDelegate({required this.minHeight, required this.maxHeight, required this.child});
 
   @override
   double get minExtent => minHeight;

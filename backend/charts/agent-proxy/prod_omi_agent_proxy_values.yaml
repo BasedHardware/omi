@@ -1,0 +1,108 @@
+replicaCount: 1
+
+image:
+  repository: gcr.io/based-hardware/agent-proxy
+  pullPolicy: Always
+  tag: ""
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  create: true
+  automount: true
+  annotations: {}
+  name: ""
+
+podAnnotations: {}
+podLabels: {}
+
+service:
+  type: ClusterIP
+  backendConfig: prod-agent-proxy-backend-config
+  port: 8080
+  annotations:
+    cloud.google.com/neg: '{"ingress": true}'
+    cloud.google.com/backend-config: '{"default": "prod-agent-proxy-backend-config"}'
+
+ingress:
+  enabled: true
+  className: ""
+  annotations:
+    kubernetes.io/ingress.class: "gce"
+    kubernetes.io/ingress.global-static-ip-name: "prod-agent-proxy-ip-address"
+    kubernetes.io/ingress.allow-http: "false"
+    networking.gke.io/managed-certificates: "agent-proxy-cert"
+  hosts:
+    - host: agent.omi.me
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - hosts:
+        - agent.omi.me
+
+env:
+  - name: GOOGLE_APPLICATION_CREDENTIALS
+    value: "/secrets/google-credentials.json"
+  - name: GOOGLE_CLOUD_PROJECT
+    value: "based-hardware"
+
+volumes:
+  - name: gcp-credentials
+    secret:
+      secretName: agent-proxy-gcp-credentials
+
+volumeMounts:
+  - name: gcp-credentials
+    mountPath: /secrets
+    readOnly: true
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    cpu: 200m
+    memory: 512Mi
+
+livenessProbe:
+  httpGet:
+    path: /health
+    port: 8080
+  initialDelaySeconds: 5
+  periodSeconds: 10
+
+readinessProbe:
+  httpGet:
+    path: /health
+    port: 8080
+  initialDelaySeconds: 5
+  periodSeconds: 10
+
+startupProbe:
+  httpGet:
+    path: /health
+    port: 8080
+  failureThreshold: 30
+  periodSeconds: 5
+
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 70
+  targetMemoryUtilizationPercentage: 70
+
+nodeSelector: {}
+tolerations: []
+affinity:
+  nodeAffinity:
+    requiredDuringSchedulingIgnoredDuringExecution:
+      nodeSelectorTerms:
+        - matchExpressions:
+            - key: env
+              operator: In
+              values:
+                - prod

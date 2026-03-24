@@ -24,7 +24,8 @@ class AppLocalizationsTr extends AppLocalizations {
   String get deleteConversationTitle => 'Konuşma Silinsin mi?';
 
   @override
-  String get deleteConversationMessage => 'Bu konuşmayı silmek istediğinizden emin misiniz? Bu işlem geri alınamaz.';
+  String get deleteConversationMessage =>
+      'Bu işlem ilişkili anıları, görevleri ve ses dosyalarını da silecektir. Bu işlem geri alınamaz.';
 
   @override
   String get confirm => 'Onayla';
@@ -1014,7 +1015,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String get vocabularyHint => 'Omi, Callie, OpenAI';
 
   @override
-  String get connect => 'Connect';
+  String get connect => 'Bağlan';
 
   @override
   String get comingSoon => 'Yakında';
@@ -1731,7 +1732,7 @@ class AppLocalizationsTr extends AppLocalizations {
   }
 
   @override
-  String get dontShowAgain => 'Bir daha gösterme';
+  String get dontShowAgain => 'Tekrar gösterme';
 
   @override
   String get iUnderstand => 'Anlıyorum';
@@ -2272,7 +2273,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String get folderName => 'Klasör adı';
 
   @override
-  String get descriptionOptional => 'Description (optional)';
+  String get descriptionOptional => 'Açıklama (isteğe bağlı)';
 
   @override
   String get failedToDeleteFolder => 'Klasör silinemedi';
@@ -2678,7 +2679,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String get showAll => 'Hepsini göster →';
 
   @override
-  String get noTasksForToday => 'Bugün için görev yok.\\nDaha fazla görev için Omi\'ye sorun veya manuel oluşturun.';
+  String get noTasksForToday => 'Bugün için görev yok.\nDaha fazla görev için Omi\'ye sorun veya manuel oluşturun.';
 
   @override
   String get dailyScore => 'GÜNLÜK SKOR';
@@ -8012,27 +8013,27 @@ class AppLocalizationsTr extends AppLocalizations {
   String get addTask => 'Görev ekle';
 
   @override
-  String get addMcpServer => 'Add MCP Server';
+  String get addMcpServer => 'MCP sunucusu ekle';
 
   @override
-  String get connectExternalAiTools => 'Connect external AI tools';
+  String get connectExternalAiTools => 'Harici yapay zeka araçlarını bağla';
 
   @override
   String get mcpServerUrl => 'MCP Server URL';
 
   @override
   String mcpServerConnected(int count) {
-    return '$count tools connected successfully';
+    return '$count araç başarıyla bağlandı';
   }
 
   @override
-  String get mcpConnectionFailed => 'Failed to connect to MCP server';
+  String get mcpConnectionFailed => 'MCP sunucusuna bağlanılamadı';
 
   @override
-  String get authorizingMcpServer => 'Authorizing...';
+  String get authorizingMcpServer => 'Yetkilendiriliyor...';
 
   @override
-  String get whereDidYouHearAboutOmi => 'How did you find us?';
+  String get whereDidYouHearAboutOmi => 'Bizi nasıl buldunuz?';
 
   @override
   String get tiktok => 'TikTok';
@@ -8050,19 +8051,19 @@ class AppLocalizationsTr extends AppLocalizations {
   String get reddit => 'Reddit';
 
   @override
-  String get friendWordOfMouth => 'Friend';
+  String get friendWordOfMouth => 'Arkadaş';
 
   @override
-  String get otherSource => 'Other';
+  String get otherSource => 'Diğer';
 
   @override
-  String get pleaseSpecify => 'Please specify';
+  String get pleaseSpecify => 'Lütfen belirtin';
 
   @override
-  String get event => 'Event';
+  String get event => 'Etkinlik';
 
   @override
-  String get coworker => 'Coworker';
+  String get coworker => 'İş arkadaşı';
 
   @override
   String get linkedIn => 'LinkedIn';
@@ -8159,6 +8160,45 @@ class AppLocalizationsTr extends AppLocalizations {
   String get pairingDescNeoOne => 'LED yanıp sönene kadar güç düğmesini basılı tutun. Cihaz keşfedilebilir olacaktır.';
 
   @override
+  String get downloadingFromDevice => 'Cihazdan indiriliyor';
+
+  @override
+  String get reconnectingToInternet => 'İnternete yeniden bağlanılıyor...';
+
+  @override
+  String uploadingToCloud(int current, int total) {
+    return '$current/$total yükleniyor';
+  }
+
+  @override
+  String get processedStatus => 'İşlendi';
+
+  @override
+  String get corruptedStatus => 'Bozuk';
+
+  @override
+  String nPending(int count) {
+    return '$count beklemede';
+  }
+
+  @override
+  String nProcessed(int count) {
+    return '$count işlendi';
+  }
+
+  @override
+  String get synced => 'Senkronize edildi';
+
+  @override
+  String get noPendingRecordings => 'Bekleyen kayıt yok';
+
+  @override
+  String get noProcessedRecordings => 'Henüz işlenmiş kayıt yok';
+
+  @override
+  String get pending => 'Beklemede';
+
+  @override
   String whatsNewInVersion(String version) {
     return '$version sürümündeki yenilikler';
   }
@@ -8190,4 +8230,433 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get enterWifiPassword => 'WiFi şifresini girin';
+
+  @override
+  String get appIconLabel => 'App Icon';
+
+  @override
+  String get onboardingWhatIKnowAboutYouTitle => 'Hakkında bildiklerim';
+
+  @override
+  String get onboardingWhatIKnowAboutYouDescription => 'Bu harita, Omi konuşmalarınızdan öğrendikçe güncellenir.';
+
+  @override
+  String get apiEnvironment => 'API Ortamı';
+
+  @override
+  String get apiEnvironmentDescription => 'Bağlanılacak sunucuyu seçin';
+
+  @override
+  String get production => 'Üretim';
+
+  @override
+  String get staging => 'Test ortamı';
+
+  @override
+  String get switchRequiresRestart => 'Değiştirme uygulama yeniden başlatma gerektirir';
+
+  @override
+  String get switchApiConfirmTitle => 'API Ortamını Değiştir';
+
+  @override
+  String switchApiConfirmBody(String environment) {
+    return '$environment ortamına geçilsin mi? Değişikliklerin geçerli olması için uygulamayı kapatıp yeniden açmanız gerekecek.';
+  }
+
+  @override
+  String get switchAndRestart => 'Değiştir';
+
+  @override
+  String get stagingDisclaimer =>
+      'Test ortamı kararsız olabilir, tutarsız performans gösterebilir ve veriler kaybolabilir. Yalnızca test için.';
+
+  @override
+  String get apiEnvSavedRestartRequired => 'Kaydedildi. Değişiklikleri uygulamak için uygulamayı kapatıp yeniden açın.';
+
+  @override
+  String get shared => 'Paylaşıldı';
+
+  @override
+  String get onlyYouCanSeeConversation => 'Bu konuşmayı yalnızca siz görebilirsiniz';
+
+  @override
+  String get anyoneWithLinkCanView => 'Bağlantıya sahip olan herkes görüntüleyebilir';
+
+  @override
+  String get tasksCleanTodayTitle => 'Bugünün görevleri temizlensin mi?';
+
+  @override
+  String get tasksCleanTodayMessage => 'Bu işlem yalnızca son tarihleri kaldırır';
+
+  @override
+  String get tasksOverdue => 'Gecikmiş';
+
+  @override
+  String get phoneCallsWithOmi => 'Omi ile aramalar';
+
+  @override
+  String get phoneCallsSubtitle => 'Gercek zamanli transkripsiyon ile arayin';
+
+  @override
+  String get phoneSetupStep1Title => 'Telefon numaranizi dogrulayin';
+
+  @override
+  String get phoneSetupStep1Subtitle => 'Onaylamak icin sizi arayacagiz';
+
+  @override
+  String get phoneSetupStep2Title => 'Dogrulama kodu girin';
+
+  @override
+  String get phoneSetupStep2Subtitle => 'Arama sirasinda gireceksiniz kisa bir kod';
+
+  @override
+  String get phoneSetupStep3Title => 'Kisilerinizi aramaya baslayin';
+
+  @override
+  String get phoneSetupStep3Subtitle => 'Yerlesik canli transkripsiyon ile';
+
+  @override
+  String get phoneGetStarted => 'Basla';
+
+  @override
+  String get callRecordingConsentDisclaimer => 'Arama kaydi, yargi bolgenizde onay gerektirebilir';
+
+  @override
+  String get enterYourNumber => 'Numaranizi girin';
+
+  @override
+  String get phoneNumberCallerIdHint => 'Dogrulamadan sonra bu arayan kimliginiz olur';
+
+  @override
+  String get phoneNumberHint => 'Telefon numarasi';
+
+  @override
+  String get failedToStartVerification => 'Dogrulama baslatılamadi';
+
+  @override
+  String get phoneContinue => 'Devam';
+
+  @override
+  String get verifyYourNumber => 'Numaranizi dogrulayin';
+
+  @override
+  String get answerTheCallFrom => 'Su numaradan gelen aramayi cevaplayin';
+
+  @override
+  String get onTheCallEnterThisCode => 'Arama sirasinda bu kodu girin';
+
+  @override
+  String get followTheVoiceInstructions => 'Sesli talimatlari izleyin';
+
+  @override
+  String get statusCalling => 'Araniyor...';
+
+  @override
+  String get statusCallInProgress => 'Arama devam ediyor';
+
+  @override
+  String get statusVerifiedLabel => 'Dogrulandi';
+
+  @override
+  String get statusCallMissed => 'Cevapsiz arama';
+
+  @override
+  String get statusTimedOut => 'Sure doldu';
+
+  @override
+  String get phoneTryAgain => 'Tekrar dene';
+
+  @override
+  String get phonePageTitle => 'Telefon';
+
+  @override
+  String get phoneContactsTab => 'Kisiler';
+
+  @override
+  String get phoneKeypadTab => 'Tus takimi';
+
+  @override
+  String get grantContactsAccess => 'Kisilerinize erisim izni verin';
+
+  @override
+  String get phoneAllow => 'Izin ver';
+
+  @override
+  String get phoneSearchHint => 'Ara';
+
+  @override
+  String get phoneNoContactsFound => 'Kisi bulunamadi';
+
+  @override
+  String get phoneEnterNumber => 'Numara girin';
+
+  @override
+  String get failedToStartCall => 'Arama baslatılamadi';
+
+  @override
+  String get callStateConnecting => 'Baglaniyor...';
+
+  @override
+  String get callStateRinging => 'Caliyor...';
+
+  @override
+  String get callStateEnded => 'Arama sona erdi';
+
+  @override
+  String get callStateFailed => 'Arama basarisiz';
+
+  @override
+  String get transcriptPlaceholder => 'Transkripsiyon burada gorunecek...';
+
+  @override
+  String get phoneUnmute => 'Sesi ac';
+
+  @override
+  String get phoneMute => 'Sessiz';
+
+  @override
+  String get phoneSpeaker => 'Hoparlor';
+
+  @override
+  String get phoneEndCall => 'Bitir';
+
+  @override
+  String get phoneCallSettingsTitle => 'Arama ayarlari';
+
+  @override
+  String get yourVerifiedNumbers => 'Dogrulanmis numaralariniz';
+
+  @override
+  String get verifiedNumbersDescription => 'Birini aradiginizda bu numarayi gorecekler';
+
+  @override
+  String get noVerifiedNumbers => 'Dogrulanmis numara yok';
+
+  @override
+  String deletePhoneNumberConfirm(String phoneNumber) {
+    return '$phoneNumber silinsin mi?';
+  }
+
+  @override
+  String get deletePhoneNumberWarning => 'Arama yapmak icin tekrar dogrulamaniz gerekecek';
+
+  @override
+  String get phoneDeleteButton => 'Sil';
+
+  @override
+  String verifiedMinutesAgo(int minutes) {
+    return '${minutes}dk once dogrulandi';
+  }
+
+  @override
+  String verifiedHoursAgo(int hours) {
+    return '${hours}sa once dogrulandi';
+  }
+
+  @override
+  String verifiedDaysAgo(int days) {
+    return '${days}g once dogrulandi';
+  }
+
+  @override
+  String verifiedOnDate(String date) {
+    return '$date tarihinde dogrulandi';
+  }
+
+  @override
+  String get verifiedFallback => 'Dogrulandi';
+
+  @override
+  String get callAlreadyInProgress => 'Bir arama zaten devam ediyor';
+
+  @override
+  String get failedToGetCallToken => 'Token alinamadi. Once numaranizi dogrulayin.';
+
+  @override
+  String get failedToInitializeCallService => 'Arama hizmeti baslatılamadi';
+
+  @override
+  String get speakerLabelYou => 'Siz';
+
+  @override
+  String get speakerLabelUnknown => 'Bilinmiyor';
+
+  @override
+  String get showDailyScoreOnHomepage => 'Ana sayfada günlük puanı göster';
+
+  @override
+  String get showTasksOnHomepage => 'Ana sayfada görevleri göster';
+
+  @override
+  String get phoneCallsUnlimitedOnly => 'Omi ile Telefon Aramaları';
+
+  @override
+  String get phoneCallsUpsellSubtitle =>
+      'Omi üzerinden arama yapın ve gerçek zamanlı transkripsiyon, otomatik özetler ve daha fazlasını alın.';
+
+  @override
+  String get phoneCallsUpsellFeature1 => 'Her aramanın gerçek zamanlı transkripsiyonu';
+
+  @override
+  String get phoneCallsUpsellFeature2 => 'Otomatik arama özetleri ve görevler';
+
+  @override
+  String get phoneCallsUpsellFeature3 => 'Alıcılar rastgele değil, gerçek numaranızı görür';
+
+  @override
+  String get phoneCallsUpsellFeature4 => 'Aramalarınız gizli ve güvenli kalır';
+
+  @override
+  String get phoneCallsUpgradeButton => 'Sınırsız\'a yükselt';
+
+  @override
+  String get phoneCallsMaybeLater => 'Belki daha sonra';
+
+  @override
+  String get deleteSynced => 'Senkronize edilenleri sil';
+
+  @override
+  String get deleteSyncedFiles => 'Senkronize kayıtları sil';
+
+  @override
+  String get deleteSyncedFilesMessage => 'Bu kayıtlar zaten telefonunuzla senkronize edildi. Bu geri alınamaz.';
+
+  @override
+  String get syncedFilesDeleted => 'Senkronize kayıtlar silindi';
+
+  @override
+  String get deletePending => 'Bekleyenleri sil';
+
+  @override
+  String get deletePendingFiles => 'Bekleyen kayıtları sil';
+
+  @override
+  String get deletePendingFilesWarning =>
+      'Bu kayıtlar telefonunuzla senkronize EDİLMEDİ ve kalıcı olarak kaybolacak. Bu geri alınamaz.';
+
+  @override
+  String get pendingFilesDeleted => 'Bekleyen kayıtlar silindi';
+
+  @override
+  String get deleteAllFiles => 'Tüm kayıtları sil';
+
+  @override
+  String get deleteAll => 'Tümünü sil';
+
+  @override
+  String get deleteAllFilesWarning =>
+      'Bu, senkronize ve bekleyen kayıtları silecek. Bekleyen kayıtlar senkronize EDİLMEDİ ve kalıcı olarak kaybolacak.';
+
+  @override
+  String get allFilesDeleted => 'Tüm kayıtlar silindi';
+
+  @override
+  String nFiles(int count) {
+    return '$count kayıt';
+  }
+
+  @override
+  String get manageStorage => 'Depolamayı yönet';
+
+  @override
+  String get safelyBackedUp => 'Telefonunuza güvenli şekilde yedeklendi';
+
+  @override
+  String get notYetSynced => 'Henüz telefonunuzla senkronize edilmedi';
+
+  @override
+  String get clearAll => 'Tümünü temizle';
+
+  @override
+  String get phoneKeypad => 'Tuş takımı';
+
+  @override
+  String get phoneHideKeypad => 'Tuş takımını gizle';
+
+  @override
+  String get fairUsePolicy => 'Adil Kullanım';
+
+  @override
+  String get fairUseLoadError => 'Adil kullanım durumu yüklenemedi. Lütfen tekrar deneyin.';
+
+  @override
+  String get fairUseStatusNormal => 'Kullanımınız normal sınırlar içinde.';
+
+  @override
+  String get fairUseStageNormal => 'Normal';
+
+  @override
+  String get fairUseStageWarning => 'Uyarı';
+
+  @override
+  String get fairUseStageThrottle => 'Kısıtlı';
+
+  @override
+  String get fairUseStageRestrict => 'Engelli';
+
+  @override
+  String get fairUseSpeechUsage => 'Konuşma Kullanımı';
+
+  @override
+  String get fairUseToday => 'Bugün';
+
+  @override
+  String get fairUse3Day => '3 günlük süre';
+
+  @override
+  String get fairUseWeekly => 'Haftalık süre';
+
+  @override
+  String get fairUseAboutTitle => 'Adil Kullanım Hakkında';
+
+  @override
+  String get fairUseAboutBody =>
+      'Omi kişisel konuşmalar, toplantılar ve canlı etkileşimler için tasarlanmıştır. Kullanım, bağlantı süresine değil, tespit edilen gerçek konuşma süresine göre ölçülür. Kullanım, kişisel olmayan içerik için normal kalıpları önemli ölçüde aşarsa, düzenlemeler uygulanabilir.';
+
+  @override
+  String fairUseCaseRefCopied(String caseRef) {
+    return '$caseRef kopyalandı';
+  }
+
+  @override
+  String get fairUseDailyTranscription => 'Günlük transkripsiyon';
+
+  @override
+  String fairUseBudgetUsed(String used, String limit) {
+    return '${used}dk / ${limit}dk';
+  }
+
+  @override
+  String get fairUseBudgetExhausted => 'Günlük transkripsiyon limiti doldu';
+
+  @override
+  String fairUseBudgetResetsAt(String time) {
+    return 'Sıfırlanma $time';
+  }
+
+  @override
+  String get transcriptionPaused => 'Kaydediyor, yeniden bağlanıyor';
+
+  @override
+  String get transcriptionPausedReconnecting => 'Hâlâ kaydediyor — transkripsiyona yeniden bağlanıyor...';
+
+  @override
+  String fairUseBannerStatus(String status) {
+    return 'Adil Kullanım: $status';
+  }
+
+  @override
+  String get improveConnectionTitle => 'Bağlantıyı İyileştir';
+
+  @override
+  String get improveConnectionContent =>
+      'Omi\'nin cihazınıza bağlı kalma şeklini iyileştirdik. Bunu etkinleştirmek için Cihaz Bilgileri sayfasına gidin, \"Cihazı Kes\" seçeneğine dokunun ve cihazınızı tekrar eşleştirin.';
+
+  @override
+  String get improveConnectionAction => 'Anladım';
+
+  @override
+  String clockSkewWarning(int minutes) {
+    return 'Cihazınızın saati ~$minutes dk. farklı. Tarih ve saat ayarlarınızı kontrol edin.';
+  }
 }

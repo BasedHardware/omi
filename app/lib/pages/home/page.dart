@@ -7,17 +7,19 @@ import 'package:flutter/services.dart';
 
 import 'package:calendar_date_picker2/calendar_date_picker2.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
 import 'package:upgrader/upgrader.dart';
 
+import 'package:omi/backend/http/api/agents.dart';
 import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/geolocation.dart';
-import 'package:omi/main.dart';
+import 'package:omi/app_globals.dart';
 import 'package:omi/pages/action_items/action_items_page.dart';
 import 'package:omi/pages/apps/app_detail/app_detail.dart';
 import 'package:omi/pages/apps/page.dart';
@@ -28,6 +30,10 @@ import 'package:omi/pages/conversations/conversations_page.dart';
 import 'package:omi/pages/conversations/sync_page.dart';
 import 'package:omi/pages/conversations/widgets/merge_action_bar.dart';
 import 'package:omi/pages/memories/page.dart';
+import 'package:omi/pages/phone_calls/phone_calls_page.dart';
+import 'package:omi/pages/phone_calls/phone_calls_upsell_sheet.dart';
+import 'package:omi/models/subscription.dart';
+import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/pages/settings/daily_summary_detail_page.dart';
 import 'package:omi/pages/settings/data_privacy_page.dart';
 import 'package:omi/pages/settings/settings_drawer.dart';
@@ -178,6 +184,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
     String event = '';
     if (state == AppLifecycleState.paused) {
       event = 'App is paused';
+      // Stop keepalive when app goes to background
+      if (mounted) {
+        Provider.of<MessageProvider>(context, listen: false).stopVmKeepalive();
+      }
     } else if (state == AppLifecycleState.resumed) {
       event = 'App is resumed';
 
@@ -185,6 +195,12 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
       if (mounted) {
         Provider.of<ConversationProvider>(context, listen: false).refreshConversations();
         Provider.of<CaptureProvider>(context, listen: false).refreshInProgressConversations();
+      }
+
+      // Ensure agent VM is running and restart keepalive
+      if (mounted && SharedPreferencesUtil().claudeAgentEnabled) {
+        ensureAgentVm();
+        Provider.of<MessageProvider>(context, listen: false).startVmKeepalive();
       }
     } else if (state == AppLifecycleState.hidden) {
       event = 'App is hidden';
@@ -198,9 +214,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
   }
 
   ///Screens with respect to subpage
-  final Map<String, Widget> screensWithRespectToPath = {
-    '/facts': const MemoriesPage(),
-  };
+  final Map<String, Widget> screensWithRespectToPath = {'/facts': const MemoriesPage()};
   bool? previousConnection;
 
   void _onReceiveTaskData(dynamic data) async {
@@ -263,20 +277,35 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
     context.read<HomeProvider>().selectedIndex = homePageIdx;
     WidgetsBinding.instance.addObserver(this);
 
+    // Pre-warm agent VM and WebSocket so session is ready by the time the user opens chat
+    if (SharedPreferencesUtil().claudeAgentEnabled) {
+      print('[HomePage] claudeAgentEnabled=true, calling ensureAgentVm + starting keepalive + preConnectAgent');
+      ensureAgentVm();
+      final messageProvider = Provider.of<MessageProvider>(context, listen: false);
+      messageProvider.startVmKeepalive();
+      messageProvider.preConnectAgent();
+    } else {
+      print('[HomePage] claudeAgentEnabled=false, skipping VM ensure');
+    }
+
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       _initiateApps();
 
-      // ForegroundUtil.requestPermissions();
       if (!PlatformService.isDesktop) {
-        await ForegroundUtil.initializeForegroundService();
-        await ForegroundUtil.startForegroundTask();
+        final permission = await Geolocator.checkPermission();
+        if (permission == LocationPermission.always || permission == LocationPermission.whileInUse) {
+          await ForegroundUtil.initializeForegroundService();
+          await ForegroundUtil.startForegroundTask();
+        }
       }
       if (mounted) {
         await Provider.of<HomeProvider>(context, listen: false).setUserPeople();
       }
       if (mounted) {
-        await Provider.of<CaptureProvider>(context, listen: false)
-            .streamDeviceRecording(device: Provider.of<DeviceProvider>(context, listen: false).connectedDevice);
+        await Provider.of<CaptureProvider>(
+          context,
+          listen: false,
+        ).streamDeviceRecording(device: Provider.of<DeviceProvider>(context, listen: false).connectedDevice);
       }
 
       // Navigate
@@ -287,12 +316,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
             final appProvider = context.read<AppProvider>();
             var app = await appProvider.getAppFromId(detailPageId);
             if (app != null && mounted) {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => AppDetailPage(app: app),
-                ),
-              );
+              Navigator.push(context, MaterialPageRoute(builder: (context) => AppDetailPage(app: app)));
             }
           }
           break;
@@ -325,12 +349,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
             if (mounted) {
               Navigator.push(
                 context,
-                MaterialPageRoute(
-                  builder: (context) => ChatPage(
-                    isPivotBottom: false,
-                    autoMessage: autoMessageToSend,
-                  ),
-                ),
+                MaterialPageRoute(builder: (context) => ChatPage(isPivotBottom: false, autoMessage: autoMessageToSend)),
               );
             }
           });
@@ -343,19 +362,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
             }
           });
           if (detailPageId == 'data-privacy') {
-            MyApp.navigatorKey.currentState?.push(
-              MaterialPageRoute(
-                builder: (context) => const DataPrivacyPage(),
-              ),
-            );
+            globalNavigatorKey.currentState?.push(MaterialPageRoute(builder: (context) => const DataPrivacyPage()));
           }
           break;
         case "facts":
-          MyApp.navigatorKey.currentState?.push(
-            MaterialPageRoute(
-              builder: (context) => const MemoriesPage(),
-            ),
-          );
+          globalNavigatorKey.currentState?.push(MaterialPageRoute(builder: (context) => const MemoriesPage()));
           break;
         case "conversation":
           // Handle conversation deep link: /conversation/{id}?share=1
@@ -373,10 +384,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                 Navigator.push(
                   context,
                   MaterialPageRoute(
-                    builder: (context) => ConversationDetailPage(
-                      conversation: conversation,
-                      openShareToContactsOnLoad: shouldOpenShare,
-                    ),
+                    builder: (context) =>
+                        ConversationDetailPage(conversation: conversation, openShareToContactsOnLoad: shouldOpenShare),
                   ),
                 );
               } else {
@@ -397,9 +406,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
               if (mounted) {
                 Navigator.push(
                   context,
-                  MaterialPageRoute(
-                    builder: (context) => DailySummaryDetailPage(summaryId: detailPageId!),
-                  ),
+                  MaterialPageRoute(builder: (context) => DailySummaryDetailPage(summaryId: detailPageId!)),
                 );
               }
             });
@@ -408,12 +415,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
         case "wrapped":
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (mounted) {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => const Wrapped2025Page(),
-                ),
-              );
+              Navigator.push(context, MaterialPageRoute(builder: (context) => const Wrapped2025Page()));
             }
           });
           break;
@@ -613,10 +615,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                       Column(
                         children: [
                           Expanded(
-                            child: IndexedStack(
-                              index: context.watch<HomeProvider>().selectedIndex,
-                              children: _pages,
-                            ),
+                            child: IndexedStack(index: context.watch<HomeProvider>().selectedIndex, children: _pages),
                           ),
                         ],
                       ),
@@ -639,6 +638,42 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                   }
                                 },
                               ),
+                              // Phone calls button - bottom left
+                              if (home.selectedIndex == 0)
+                                Positioned(
+                                  left: 20,
+                                  bottom: 100,
+                                  child: GestureDetector(
+                                    onTap: () async {
+                                      HapticFeedback.mediumImpact();
+                                      MixpanelManager().bottomNavigationTabClicked('Phone Calls');
+                                      var usageProvider = context.read<UsageProvider>();
+                                      if (usageProvider.subscription == null) {
+                                        await usageProvider.fetchSubscription();
+                                      }
+                                      var isUnlimited =
+                                          usageProvider.subscription?.subscription.plan == PlanType.unlimited;
+                                      if (!isUnlimited) {
+                                        MixpanelManager().phoneCallUpsellShown(source: 'home');
+                                        if (!context.mounted) return;
+                                        showPhoneCallsUpsell(context);
+                                        return;
+                                      }
+                                      if (!context.mounted) return;
+                                      Navigator.push(
+                                        context,
+                                        MaterialPageRoute(builder: (context) => const PhoneCallsPage()),
+                                      );
+                                    },
+                                    child: Container(
+                                      width: 56,
+                                      height: 56,
+                                      decoration: const BoxDecoration(shape: BoxShape.circle, color: Color(0xFF1F1F25)),
+                                      child: const Icon(FontAwesomeIcons.phone, size: 22, color: Colors.white70),
+                                    ),
+                                  ),
+                                ),
+                              // Ask Omi button - bottom right
                               if (home.selectedIndex == 0)
                                 Positioned(
                                   right: 20,
@@ -649,9 +684,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                       MixpanelManager().bottomNavigationTabClicked('Chat');
                                       Navigator.push(
                                         context,
-                                        MaterialPageRoute(
-                                          builder: (context) => const ChatPage(isPivotBottom: false),
-                                        ),
+                                        MaterialPageRoute(builder: (context) => const ChatPage(isPivotBottom: false)),
                                       );
                                     },
                                     child: Container(
@@ -663,11 +696,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                       child: Row(
                                         mainAxisSize: MainAxisSize.min,
                                         children: [
-                                          const Icon(
-                                            FontAwesomeIcons.solidComment,
-                                            size: 22,
-                                            color: Colors.white,
-                                          ),
+                                          const Icon(FontAwesomeIcons.solidComment, size: 22, color: Colors.white),
                                           const SizedBox(width: 10),
                                           Text(
                                             context.l10n.askOmi,
@@ -688,12 +717,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                       ),
                       // Merge action bar - floats above bottom nav when in selection mode
                       if (homeProvider.selectedIndex == 0)
-                        const Positioned(
-                          left: 0,
-                          right: 0,
-                          bottom: 0,
-                          child: MergeActionBar(),
-                        ),
+                        const Positioned(left: 0, right: 0, bottom: 0, child: MergeActionBar()),
                     ],
                   ),
                 ),
@@ -728,9 +752,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
             : null;
         Navigator.push(
           context,
-          MaterialPageRoute(
-            builder: (context) => ConversationCapturingPage(topConversationId: topConvoId),
-          ),
+          MaterialPageRoute(builder: (context) => ConversationCapturingPage(topConversationId: topConvoId)),
         );
       }
     }
@@ -762,10 +784,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                     return GestureDetector(
                       onTap: () {
                         HapticFeedback.mediumImpact();
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(builder: (context) => const SyncPage()),
-                        );
+                        Navigator.push(context, MaterialPageRoute(builder: (context) => const SyncPage()));
                       },
                       child: Container(
                         width: 36,
@@ -819,11 +838,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                           ),
                           child: IconButton(
                             padding: EdgeInsets.zero,
-                            icon: const Icon(
-                              Icons.search,
-                              size: 18,
-                              color: Colors.white70,
-                            ),
+                            icon: const Icon(Icons.search, size: 18, color: Colors.white70),
                             onPressed: () {
                               HapticFeedback.mediumImpact();
                               // Toggle search bar visibility
@@ -870,11 +885,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                           ),
                           child: IconButton(
                             padding: EdgeInsets.zero,
-                            icon: const Icon(
-                              FontAwesomeIcons.calendarDay,
-                              size: 16,
-                              color: Colors.white,
-                            ),
+                            icon: const Icon(FontAwesomeIcons.calendarDay, size: 16, color: Colors.white),
                             onPressed: () async {
                               HapticFeedback.mediumImpact();
                               // Open date picker to change date, cancel clears filter
@@ -885,9 +896,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                   return Container(
                                     height: 420,
                                     padding: const EdgeInsets.only(top: 6.0),
-                                    margin: EdgeInsets.only(
-                                      bottom: MediaQuery.of(context).viewInsets.bottom,
-                                    ),
+                                    margin: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
                                     color: const Color(0xFF1F1F25),
                                     child: SafeArea(
                                       top: false,
@@ -897,12 +906,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                             padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
                                             decoration: const BoxDecoration(
                                               color: Color(0xFF1F1F25),
-                                              border: Border(
-                                                bottom: BorderSide(
-                                                  color: Color(0xFF35343B),
-                                                  width: 0.5,
-                                                ),
-                                              ),
+                                              border: Border(bottom: BorderSide(color: Color(0xFF35343B), width: 0.5)),
                                             ),
                                             child: Row(
                                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -911,26 +915,27 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                                   padding: EdgeInsets.zero,
                                                   onPressed: () async {
                                                     // Get provider before pop to avoid using invalid context
-                                                    final provider =
-                                                        Provider.of<ConversationProvider>(context, listen: false);
+                                                    final provider = Provider.of<ConversationProvider>(
+                                                      context,
+                                                      listen: false,
+                                                    );
                                                     Navigator.of(context).pop();
                                                     await provider.clearDateFilter();
                                                     MixpanelManager().calendarFilterCleared();
                                                   },
                                                   child: Text(
                                                     context.l10n.removeFilter,
-                                                    style: const TextStyle(
-                                                      color: Colors.white,
-                                                      fontSize: 16,
-                                                    ),
+                                                    style: const TextStyle(color: Colors.white, fontSize: 16),
                                                   ),
                                                 ),
                                                 const Spacer(),
                                                 CupertinoButton(
                                                   padding: EdgeInsets.zero,
                                                   onPressed: () async {
-                                                    final provider =
-                                                        Provider.of<ConversationProvider>(context, listen: false);
+                                                    final provider = Provider.of<ConversationProvider>(
+                                                      context,
+                                                      listen: false,
+                                                    );
                                                     Navigator.of(context).pop();
                                                     await provider.filterConversationsByDate(selectedDate);
                                                     MixpanelManager().calendarFilterApplied(selectedDate);
@@ -993,25 +998,16 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                       Container(
                         width: 36,
                         height: 36,
-                        decoration: const BoxDecoration(
-                          color: Color(0xFF1F1F25),
-                          shape: BoxShape.circle,
-                        ),
+                        decoration: const BoxDecoration(color: Color(0xFF1F1F25), shape: BoxShape.circle),
                         child: IconButton(
                           padding: EdgeInsets.zero,
-                          icon: const Icon(
-                            FontAwesomeIcons.arrowUpFromBracket,
-                            size: 16,
-                            color: Colors.white70,
-                          ),
+                          icon: const Icon(FontAwesomeIcons.arrowUpFromBracket, size: 16, color: Colors.white70),
                           onPressed: () {
                             HapticFeedback.mediumImpact();
                             MixpanelManager().exportTasksBannerClicked();
-                            Navigator.of(context).push(
-                              MaterialPageRoute(
-                                builder: (context) => const TaskIntegrationsPage(),
-                              ),
-                            );
+                            Navigator.of(
+                              context,
+                            ).push(MaterialPageRoute(builder: (context) => const TaskIntegrationsPage()));
                           },
                         ),
                       ),
@@ -1046,17 +1042,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
               Container(
                 width: 36,
                 height: 36,
-                decoration: const BoxDecoration(
-                  color: Color(0xFF1F1F25),
-                  shape: BoxShape.circle,
-                ),
+                decoration: const BoxDecoration(color: Color(0xFF1F1F25), shape: BoxShape.circle),
                 child: IconButton(
                   padding: EdgeInsets.zero,
-                  icon: const Icon(
-                    FontAwesomeIcons.gear,
-                    size: 16,
-                    color: Colors.white70,
-                  ),
+                  icon: const Icon(FontAwesomeIcons.gear, size: 16, color: Colors.white70),
                   onPressed: () {
                     HapticFeedback.mediumImpact();
                     MixpanelManager().pageOpened('Settings');
@@ -1086,6 +1075,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    // Stop VM keepalive timer
+    try {
+      Provider.of<MessageProvider>(context, listen: false).stopVmKeepalive();
+    } catch (_) {}
     // Cancel stream subscription to prevent memory leak
     _notificationStreamSubscription?.cancel();
     // Remove capture provider listener using stored reference

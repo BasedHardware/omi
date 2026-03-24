@@ -70,6 +70,24 @@ class TranscriptionService {
     private let vocabulary: [String]
     private let sampleRate = 16000
     private let encoding = "linear16"
+
+    /// Backend proxy base URL (from OMI_API_URL env var).
+    /// Deepgram requests are proxied through the Rust backend to keep API keys server-side.
+    private static let proxyBaseURL: String = {
+        if let cString = getenv("OMI_API_URL"), let url = String(validatingUTF8: cString), !url.isEmpty {
+            return url.hasSuffix("/") ? url : url + "/"
+        }
+        return ""
+    }()
+
+    /// Legacy deepgramBaseURL for backward compatibility during transition.
+    /// Reads DEEPGRAM_API_URL if set (developer override), otherwise uses proxy.
+    private static let deepgramBaseURL: String = {
+        if let envURL = getenv("DEEPGRAM_API_URL"), let url = String(validatingUTF8: envURL), !url.isEmpty {
+            return url.hasSuffix("/") ? String(url.dropLast()) : url
+        }
+        return ""  // Empty means use proxy
+    }()
     private let channels: Int  // 2 = stereo (mic + system), 1 = mono (mic only for PTT)
 
     // Reconnection
@@ -84,6 +102,7 @@ class TranscriptionService {
     // Watchdog: detect stale connections where WebSocket dies silently
     private var watchdogTask: Task<Void, Never>?
     private var lastDataReceivedAt: Date?
+    private var lastKeepaliveSuccessAt: Date?
     private let watchdogInterval: TimeInterval = 30.0   // Check every 30 seconds
     private let staleThreshold: TimeInterval = 60.0     // Reconnect if no data for 60 seconds
 
@@ -94,20 +113,30 @@ class TranscriptionService {
 
     // MARK: - Initialization
 
+    /// Whether this instance uses the backend proxy (no direct Deepgram access)
+    private let useProxy: Bool
+
     /// Initialize the transcription service
     /// - Parameters:
-    ///   - apiKey: DeepGram API key (defaults to DEEPGRAM_API_KEY environment variable)
+    ///   - apiKey: DeepGram API key (ignored when backend proxy is available)
     ///   - language: Language code for transcription (e.g., "en", "uk", "ru", "multi" for auto-detect)
     ///   - vocabulary: Custom vocabulary/keyterms to improve transcription accuracy (Nova-3 limit: 500 tokens total)
     init(apiKey: String? = nil, language: String = "en", vocabulary: [String] = [], channels: Int = 2) throws {
-        guard let key = apiKey ?? ProcessInfo.processInfo.environment["DEEPGRAM_API_KEY"] else {
+        // Prefer direct Deepgram if DEEPGRAM_API_URL is explicitly set (developer override)
+        if !Self.deepgramBaseURL.isEmpty, let key = apiKey ?? APIKeyService.currentDeepgramKey {
+            self.apiKey = key
+            self.useProxy = false
+        } else if !Self.proxyBaseURL.isEmpty {
+            // Backend proxy mode: no client-side API key needed
+            self.apiKey = ""
+            self.useProxy = true
+        } else {
             throw TranscriptionError.missingAPIKey
         }
-        self.apiKey = key
         self.language = language
         self.vocabulary = vocabulary
         self.channels = channels
-        log("TranscriptionService: Initialized with language=\(language), vocabulary=\(self.vocabulary.count) terms, channels=\(channels)")
+        log("TranscriptionService: Initialized with language=\(language), vocabulary=\(self.vocabulary.count) terms, channels=\(channels), proxy=\(self.useProxy)")
     }
 
     // MARK: - Public Methods
@@ -212,6 +241,22 @@ class TranscriptionService {
         }
     }
 
+    /// Send Deepgram Finalize message to flush pending transcripts
+    func sendFinalize() {
+        guard isConnected, let webSocketTask = webSocketTask else { return }
+        let msg = "{\"type\": \"Finalize\"}"
+        webSocketTask.send(.string(msg)) { error in
+            if let error = error {
+                logError("TranscriptionService: Finalize error", error: error)
+            }
+        }
+    }
+
+    /// Public keepalive for VAD gate to call during extended silence
+    func sendKeepalivePublic() {
+        sendKeepalive()
+    }
+
     /// Check if connected
     var connected: Bool {
         return isConnected
@@ -220,8 +265,43 @@ class TranscriptionService {
     // MARK: - Private Methods
 
     private func connect() {
-        // Build DeepGram WebSocket URL with parameters
-        var components = URLComponents(string: "wss://api.deepgram.com/v1/listen")!
+        if useProxy {
+            // Proxy mode: get Firebase auth token async, then connect
+            Task { [weak self] in
+                guard let self = self else { return }
+                do {
+                    let authService = await MainActor.run { AuthService.shared }
+                    let authHeader = try await authService.getAuthHeader()
+                    self.connectWithAuth(authHeader: authHeader)
+                } catch {
+                    logError("TranscriptionService: Failed to get auth token for proxy", error: error)
+                    self.onError?(TranscriptionError.connectionFailed(error))
+                }
+            }
+        } else {
+            // Direct Deepgram mode (legacy/developer override)
+            connectWithAuth(authHeader: "Token \(apiKey)")
+        }
+    }
+
+    private func connectWithAuth(authHeader: String) {
+        // Build WebSocket URL with parameters
+        let wsBase: String
+        if useProxy {
+            // Route through backend proxy WS endpoint
+            let base = Self.proxyBaseURL.replacingOccurrences(of: "https://", with: "wss://")
+                                        .replacingOccurrences(of: "http://", with: "ws://")
+            wsBase = base.hasSuffix("/") ? String(base.dropLast()) : base
+        } else {
+            wsBase = Self.deepgramBaseURL.replacingOccurrences(of: "https://", with: "wss://")
+                                          .replacingOccurrences(of: "http://", with: "ws://")
+        }
+        let listenPath = useProxy ? "/v1/proxy/deepgram/ws/v1/listen" : "/v1/listen"
+        guard var components = URLComponents(string: "\(wsBase)\(listenPath)") else {
+            log("TranscriptionService: Invalid URL base: \(wsBase)")
+            onError?(TranscriptionError.connectionFailed(NSError(domain: "Invalid URL", code: -1)))
+            return
+        }
         var queryItems = [
             URLQueryItem(name: "model", value: model),
             URLQueryItem(name: "language", value: language),
@@ -255,7 +335,7 @@ class TranscriptionService {
 
         // Create URL request with authorization header
         var request = URLRequest(url: url)
-        request.setValue("Token \(apiKey)", forHTTPHeaderField: "Authorization")
+        request.setValue(authHeader, forHTTPHeaderField: "Authorization")
 
         // Create URLSession and WebSocket task
         let configuration = URLSessionConfiguration.default
@@ -276,6 +356,7 @@ class TranscriptionService {
             self.isConnected = true
             self.reconnectAttempts = 0
             self.lastDataReceivedAt = Date()
+            self.lastKeepaliveSuccessAt = Date()
             log("TranscriptionService: Connected")
             self.startKeepalive()
             self.startWatchdog()
@@ -306,6 +387,8 @@ class TranscriptionService {
             if let error = error {
                 logError("TranscriptionService: Keepalive error", error: error)
                 self?.handleDisconnection()
+            } else {
+                self?.lastKeepaliveSuccessAt = Date()
             }
         }
     }
@@ -320,7 +403,15 @@ class TranscriptionService {
 
                 if let lastData = self.lastDataReceivedAt,
                    Date().timeIntervalSince(lastData) > self.staleThreshold {
-                    log("TranscriptionService: Watchdog detected stale connection (no data for \(String(format: "%.0f", Date().timeIntervalSince(lastData)))s) - forcing reconnect")
+                    // Check if keepalives are still succeeding — if so, the connection
+                    // is alive and Deepgram just has nothing to return (silent room).
+                    // Only force reconnect when keepalives have also gone stale.
+                    if let lastKeepalive = self.lastKeepaliveSuccessAt,
+                       Date().timeIntervalSince(lastKeepalive) < self.staleThreshold {
+                        // Keepalives working — connection is alive, just no speech to transcribe
+                        continue
+                    }
+                    log("TranscriptionService: Watchdog detected stale connection (no data for \(String(format: "%.0f", Date().timeIntervalSince(lastData)))s, keepalives also failing) - forcing reconnect")
                     self.handleDisconnection()
                 }
             }
@@ -350,6 +441,8 @@ class TranscriptionService {
         watchdogTask?.cancel()
         watchdogTask = nil
         webSocketTask = nil
+        urlSession?.invalidateAndCancel()
+        urlSession = nil
         onDisconnected?()
 
         // Attempt reconnection if enabled
@@ -380,6 +473,7 @@ class TranscriptionService {
                 self.receiveMessage()
 
             case .failure(let error):
+                guard self.isConnected else { return }
                 logError("TranscriptionService: Receive error", error: error)
                 self.handleDisconnection()
             }
@@ -468,6 +562,206 @@ class TranscriptionService {
             words: words,
             channelIndex: channelIndex
         )
+    }
+}
+
+// MARK: - Batch (Pre-Recorded) Transcription
+
+extension TranscriptionService {
+    /// Transcribe a complete audio buffer using Deepgram's pre-recorded REST API.
+    /// Returns the transcript string, or nil if transcription failed.
+    static func batchTranscribe(
+        audioData: Data,
+        language: String = "en",
+        apiKey: String? = nil
+    ) async throws -> String? {
+        // Determine auth and base URL
+        let authHeader: String
+        let baseURLString: String
+        if !proxyBaseURL.isEmpty && deepgramBaseURL.isEmpty {
+            // Proxy mode: use Firebase auth, route through backend
+            let authService = await MainActor.run { AuthService.shared }
+            authHeader = try await authService.getAuthHeader()
+            baseURLString = "\(proxyBaseURL)v1/proxy/deepgram/v1/listen"
+        } else {
+            guard let key = apiKey ?? APIKeyService.currentDeepgramKey else {
+                throw TranscriptionError.missingAPIKey
+            }
+            authHeader = "Token \(key)"
+            baseURLString = "\(deepgramBaseURL)/v1/listen"
+        }
+
+        guard var components = URLComponents(string: baseURLString) else {
+            throw TranscriptionError.connectionFailed(NSError(domain: "Invalid Deepgram URL", code: -1))
+        }
+        components.queryItems = [
+            URLQueryItem(name: "model", value: "nova-3"),
+            URLQueryItem(name: "language", value: language),
+            URLQueryItem(name: "smart_format", value: "true"),
+            URLQueryItem(name: "punctuate", value: "true"),
+            URLQueryItem(name: "diarize", value: "true"),
+            // Raw PCM parameters (same as streaming API uses)
+            URLQueryItem(name: "encoding", value: "linear16"),
+            URLQueryItem(name: "sample_rate", value: "16000"),
+            URLQueryItem(name: "channels", value: "1"),
+        ]
+
+        guard let url = components.url else {
+            throw TranscriptionError.connectionFailed(NSError(domain: "Invalid URL", code: -1))
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue(authHeader, forHTTPHeaderField: "Authorization")
+        request.setValue("application/octet-stream", forHTTPHeaderField: "Content-Type")
+        request.httpBody = audioData
+
+        log("TranscriptionService: Batch transcribing \(audioData.count) bytes")
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+
+        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+            let statusCode = (response as? HTTPURLResponse)?.statusCode ?? -1
+            let body = String(data: data, encoding: .utf8) ?? "no body"
+            logError("TranscriptionService: Batch transcription failed with status \(statusCode): \(body)", error: nil)
+            throw TranscriptionError.invalidResponse
+        }
+
+        // Parse the response — same structure as streaming but wrapped in "results"
+        let json = try JSONDecoder().decode(BatchResponse.self, from: data)
+        let transcript = json.results?.channels.first?.alternatives.first?.transcript
+        log("TranscriptionService: Batch transcription result: \(transcript ?? "(empty)")")
+        return transcript
+    }
+
+    /// Transcribe a stereo audio buffer using Deepgram's pre-recorded REST API.
+    /// Returns full TranscriptSegment per channel with word-level timestamps.
+    static func batchTranscribeFull(
+        audioData: Data,
+        language: String = "en",
+        vocabulary: [String] = [],
+        apiKey: String? = nil
+    ) async throws -> [TranscriptSegment] {
+        // Determine auth and base URL
+        let authHeader: String
+        let baseURLString: String
+        if !proxyBaseURL.isEmpty && deepgramBaseURL.isEmpty {
+            let authService = await MainActor.run { AuthService.shared }
+            authHeader = try await authService.getAuthHeader()
+            baseURLString = "\(proxyBaseURL)v1/proxy/deepgram/v1/listen"
+        } else {
+            guard let key = apiKey ?? APIKeyService.currentDeepgramKey else {
+                throw TranscriptionError.missingAPIKey
+            }
+            authHeader = "Token \(key)"
+            baseURLString = "\(deepgramBaseURL)/v1/listen"
+        }
+
+        guard var components = URLComponents(string: baseURLString) else {
+            throw TranscriptionError.connectionFailed(NSError(domain: "Invalid Deepgram URL", code: -1))
+        }
+        var queryItems = [
+            URLQueryItem(name: "model", value: "nova-3"),
+            URLQueryItem(name: "language", value: language),
+            URLQueryItem(name: "channels", value: "2"),
+            URLQueryItem(name: "multichannel", value: "true"),
+            URLQueryItem(name: "diarize", value: "true"),
+            URLQueryItem(name: "smart_format", value: "true"),
+            URLQueryItem(name: "punctuate", value: "true"),
+            URLQueryItem(name: "utterances", value: "true"),
+            URLQueryItem(name: "utt_split", value: "0.8"),
+            URLQueryItem(name: "encoding", value: "linear16"),
+            URLQueryItem(name: "sample_rate", value: "16000"),
+        ]
+
+        for term in vocabulary {
+            queryItems.append(URLQueryItem(name: "keyterm", value: term))
+        }
+
+        components.queryItems = queryItems
+
+        guard let url = components.url else {
+            throw TranscriptionError.connectionFailed(NSError(domain: "Invalid URL", code: -1))
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue(authHeader, forHTTPHeaderField: "Authorization")
+        request.setValue("application/octet-stream", forHTTPHeaderField: "Content-Type")
+        request.httpBody = audioData
+
+        log("TranscriptionService: Batch transcribing (full) \(audioData.count) bytes (\(String(format: "%.1f", Double(audioData.count) / 64000.0))s stereo)")
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+
+        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+            let statusCode = (response as? HTTPURLResponse)?.statusCode ?? -1
+            let body = String(data: data, encoding: .utf8) ?? "no body"
+            logError("TranscriptionService: Batch full transcription failed with status \(statusCode): \(body)", error: nil)
+            throw TranscriptionError.invalidResponse
+        }
+
+        let json = try JSONDecoder().decode(BatchResponse.self, from: data)
+
+        var segments: [TranscriptSegment] = []
+        guard let channels = json.results?.channels else { return segments }
+
+        for (channelIndex, channel) in channels.enumerated() {
+            guard let alt = channel.alternatives.first,
+                  !alt.transcript.isEmpty else { continue }
+
+            let words = alt.words?.map { bw in
+                TranscriptSegment.Word(
+                    word: bw.word,
+                    start: bw.start,
+                    end: bw.end,
+                    confidence: bw.confidence,
+                    speaker: bw.speaker,
+                    punctuatedWord: bw.punctuated_word ?? bw.word
+                )
+            } ?? []
+
+            segments.append(TranscriptSegment(
+                text: alt.transcript,
+                isFinal: true,
+                speechFinal: true,
+                confidence: alt.confidence,
+                words: words,
+                channelIndex: channelIndex
+            ))
+
+            log("TranscriptionService: Batch ch\(channelIndex): \(words.count) words, \(alt.transcript.prefix(80))...")
+        }
+
+        return segments
+    }
+}
+
+/// Response model for Deepgram pre-recorded API
+private struct BatchResponse: Decodable {
+    let results: BatchResults?
+
+    struct BatchResults: Decodable {
+        let channels: [BatchChannel]
+    }
+
+    struct BatchChannel: Decodable {
+        let alternatives: [BatchAlternative]
+    }
+
+    struct BatchAlternative: Decodable {
+        let transcript: String
+        let confidence: Double
+        let words: [BatchWord]?
+    }
+
+    struct BatchWord: Decodable {
+        let word: String
+        let start: Double
+        let end: Double
+        let confidence: Double
+        let speaker: Int?
+        let punctuated_word: String?
     }
 }
 

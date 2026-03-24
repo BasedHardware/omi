@@ -6,8 +6,11 @@ import 'package:flutter/services.dart';
 import 'package:flutter_contacts/flutter_contacts.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import 'package:provider/provider.dart';
+
 import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
 import 'package:omi/widgets/extensions/string.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/l10n_extensions.dart';
@@ -19,12 +22,7 @@ class ShareableContact {
   final String phoneNumber;
   bool isSelected;
 
-  ShareableContact({
-    required this.id,
-    required this.displayName,
-    required this.phoneNumber,
-    this.isSelected = false,
-  });
+  ShareableContact({required this.id, required this.displayName, required this.phoneNumber, this.isSelected = false});
 }
 
 /// Show the share to contacts bottom sheet
@@ -92,21 +90,20 @@ class _ShareToContactsBottomSheetState extends State<ShareToContactsBottomSheet>
 
     try {
       // Fetch contacts with phone numbers
-      final contacts = await FlutterContacts.getContacts(
-        withProperties: true,
-        withPhoto: false,
-      );
+      final contacts = await FlutterContacts.getContacts(withProperties: true, withPhoto: false);
 
       // Filter contacts that have phone numbers and create ShareableContact list
       final shareableContacts = <ShareableContact>[];
       for (final contact in contacts) {
         for (final phone in contact.phones) {
           if (phone.number.isNotEmpty) {
-            shareableContacts.add(ShareableContact(
-              id: '${contact.id}_${phone.number}',
-              displayName: contact.displayName.isNotEmpty ? contact.displayName : phone.number,
-              phoneNumber: _cleanPhoneNumber(phone.number),
-            ));
+            shareableContacts.add(
+              ShareableContact(
+                id: '${contact.id}_${phone.number}',
+                displayName: contact.displayName.isNotEmpty ? contact.displayName : phone.number,
+                phoneNumber: _cleanPhoneNumber(phone.number),
+              ),
+            );
           }
         }
       }
@@ -182,6 +179,9 @@ class _ShareToContactsBottomSheetState extends State<ShareToContactsBottomSheet>
         });
         return;
       }
+      if (mounted) {
+        context.read<ConversationDetailProvider>().updateVisibilityLocally(ConversationVisibility.shared);
+      }
 
       // Build the share link and message
       final shareLink = 'https://h.omi.me/conversations/${widget.conversation.id}';
@@ -233,10 +233,7 @@ class _ShareToContactsBottomSheetState extends State<ShareToContactsBottomSheet>
         return Container(
           decoration: const BoxDecoration(
             color: Color(0xFF1A1A1A),
-            borderRadius: BorderRadius.only(
-              topLeft: Radius.circular(20),
-              topRight: Radius.circular(20),
-            ),
+            borderRadius: BorderRadius.only(topLeft: Radius.circular(20), topRight: Radius.circular(20)),
           ),
           child: Column(
             children: [
@@ -245,10 +242,7 @@ class _ShareToContactsBottomSheetState extends State<ShareToContactsBottomSheet>
                 margin: const EdgeInsets.only(top: 12),
                 width: 40,
                 height: 4,
-                decoration: BoxDecoration(
-                  color: Colors.grey.shade600,
-                  borderRadius: BorderRadius.circular(2),
-                ),
+                decoration: BoxDecoration(color: Colors.grey.shade600, borderRadius: BorderRadius.circular(2)),
               ),
               // Header
               Padding(
@@ -261,11 +255,7 @@ class _ShareToContactsBottomSheetState extends State<ShareToContactsBottomSheet>
                       children: [
                         Text(
                           context.l10n.shareViaSms,
-                          style: const TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white,
-                          ),
+                          style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white),
                         ),
                         IconButton(
                           icon: const Icon(Icons.close, color: Colors.grey),
@@ -276,10 +266,7 @@ class _ShareToContactsBottomSheetState extends State<ShareToContactsBottomSheet>
                     const SizedBox(height: 4),
                     Text(
                       context.l10n.selectContactsToShareSummary,
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: Colors.grey.shade400,
-                      ),
+                      style: TextStyle(fontSize: 14, color: Colors.grey.shade400),
                     ),
                   ],
                 ),
@@ -297,10 +284,7 @@ class _ShareToContactsBottomSheetState extends State<ShareToContactsBottomSheet>
                     prefixIcon: const Icon(Icons.search, color: Colors.grey),
                     filled: true,
                     fillColor: const Color(0xFF2A2A2A),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: BorderSide.none,
-                    ),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
                     contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                   ),
                 ),
@@ -320,10 +304,7 @@ class _ShareToContactsBottomSheetState extends State<ShareToContactsBottomSheet>
                         ),
                         child: Text(
                           context.l10n.contactsSelectedCount(_selectedContacts.length),
-                          style: const TextStyle(
-                            color: Colors.deepPurple,
-                            fontWeight: FontWeight.w600,
-                          ),
+                          style: const TextStyle(color: Colors.deepPurple, fontWeight: FontWeight.w600),
                         ),
                       ),
                       const Spacer(),
@@ -335,10 +316,7 @@ class _ShareToContactsBottomSheetState extends State<ShareToContactsBottomSheet>
                             }
                           });
                         },
-                        child: Text(
-                          context.l10n.clearAllSelection,
-                          style: const TextStyle(color: Colors.grey),
-                        ),
+                        child: Text(context.l10n.clearAllSelection, style: const TextStyle(color: Colors.grey)),
                       ),
                     ],
                   ),
@@ -358,19 +336,14 @@ class _ShareToContactsBottomSheetState extends State<ShareToContactsBottomSheet>
                         const Icon(Icons.error_outline, color: Colors.red, size: 20),
                         const SizedBox(width: 8),
                         Expanded(
-                          child: Text(
-                            _errorMessage!,
-                            style: const TextStyle(color: Colors.red, fontSize: 13),
-                          ),
+                          child: Text(_errorMessage!, style: const TextStyle(color: Colors.red, fontSize: 13)),
                         ),
                       ],
                     ),
                   ),
                 ),
               // Contacts list
-              Expanded(
-                child: _buildContactsList(scrollController),
-              ),
+              Expanded(child: _buildContactsList(scrollController)),
               // Send button
               if (!_permissionDenied)
                 SafeArea(
@@ -384,9 +357,7 @@ class _ShareToContactsBottomSheetState extends State<ShareToContactsBottomSheet>
                           backgroundColor: Colors.deepPurple,
                           disabledBackgroundColor: Colors.grey.shade800,
                           padding: const EdgeInsets.symmetric(vertical: 16),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                         ),
                         child: _isPreparingShare
                             ? const SizedBox(
@@ -401,13 +372,9 @@ class _ShareToContactsBottomSheetState extends State<ShareToContactsBottomSheet>
                                 _selectedContacts.isEmpty
                                     ? context.l10n.selectContactsToShare
                                     : _selectedContacts.length > 1
-                                        ? context.l10n.shareWithContactsCount(_selectedContacts.length)
-                                        : context.l10n.shareWithContactCount(_selectedContacts.length),
-                                style: const TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w600,
-                                  color: Colors.white,
-                                ),
+                                    ? context.l10n.shareWithContactsCount(_selectedContacts.length)
+                                    : context.l10n.shareWithContactCount(_selectedContacts.length),
+                                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: Colors.white),
                               ),
                       ),
                     ),
@@ -422,9 +389,7 @@ class _ShareToContactsBottomSheetState extends State<ShareToContactsBottomSheet>
 
   Widget _buildContactsList(ScrollController scrollController) {
     if (_isLoading) {
-      return const Center(
-        child: CircularProgressIndicator(color: Colors.deepPurple),
-      );
+      return const Center(child: CircularProgressIndicator(color: Colors.deepPurple));
     }
 
     if (_permissionDenied) {
@@ -436,11 +401,7 @@ class _ShareToContactsBottomSheetState extends State<ShareToContactsBottomSheet>
             const SizedBox(height: 16),
             Text(
               context.l10n.contactsPermissionRequired,
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: Colors.grey.shade400,
-              ),
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.grey.shade400),
             ),
             const SizedBox(height: 8),
             Text(
@@ -458,9 +419,7 @@ class _ShareToContactsBottomSheetState extends State<ShareToContactsBottomSheet>
                   await launchUrl(Uri.parse('package:com.friend.ios'));
                 }
               },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.deepPurple,
-              ),
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.deepPurple),
               child: Text(context.l10n.openSettings),
             ),
           ],
@@ -479,10 +438,7 @@ class _ShareToContactsBottomSheetState extends State<ShareToContactsBottomSheet>
               _searchController.text.isEmpty
                   ? context.l10n.noContactsWithPhoneNumbers
                   : context.l10n.noContactsMatchSearch,
-              style: TextStyle(
-                fontSize: 16,
-                color: Colors.grey.shade400,
-              ),
+              style: TextStyle(fontSize: 16, color: Colors.grey.shade400),
             ),
           ],
         ),
@@ -514,15 +470,9 @@ class _ShareToContactsBottomSheetState extends State<ShareToContactsBottomSheet>
       ),
       title: Text(
         contact.displayName,
-        style: TextStyle(
-          color: Colors.white,
-          fontWeight: contact.isSelected ? FontWeight.w600 : FontWeight.normal,
-        ),
+        style: TextStyle(color: Colors.white, fontWeight: contact.isSelected ? FontWeight.w600 : FontWeight.normal),
       ),
-      subtitle: Text(
-        contact.phoneNumber,
-        style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
-      ),
+      subtitle: Text(contact.phoneNumber, style: TextStyle(color: Colors.grey.shade500, fontSize: 12)),
       trailing: contact.isSelected
           ? const Icon(Icons.check_circle, color: Colors.deepPurple)
           : Icon(Icons.circle_outlined, color: Colors.grey.shade600),

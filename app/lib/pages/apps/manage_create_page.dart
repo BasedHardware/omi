@@ -15,157 +15,150 @@ class ManageCreatePage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<AppProvider>(builder: (context, provider, child) {
-      return CustomScrollView(
-        slivers: [
-          const SliverToBoxAdapter(child: SizedBox(height: 18)),
-          SliverToBoxAdapter(
-            child: Row(
-              children: [
-                const SizedBox(width: 16),
-                ChoiceChip(
-                  label: Text(context.l10n.installedApps),
-                  selected: provider.installedAppsOptionSelected,
-                  showCheckmark: true,
-                  backgroundColor: Colors.transparent,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
+    return Consumer<AppProvider>(
+      builder: (context, provider, child) {
+        return CustomScrollView(
+          slivers: [
+            const SliverToBoxAdapter(child: SizedBox(height: 18)),
+            SliverToBoxAdapter(
+              child: Row(
+                children: [
+                  const SizedBox(width: 16),
+                  ChoiceChip(
+                    label: Text(context.l10n.installedApps),
+                    selected: provider.installedAppsOptionSelected,
+                    showCheckmark: true,
+                    backgroundColor: Colors.transparent,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    onSelected: (bool selected) {
+                      provider.updateInstalledAppsOptionSelected(true);
+                    },
                   ),
-                  onSelected: (bool selected) {
-                    provider.updateInstalledAppsOptionSelected(true);
-                  },
-                ),
-                const SizedBox(width: 10),
-                ChoiceChip(
-                  label: Text(context.l10n.myApps),
-                  selected: !provider.installedAppsOptionSelected,
-                  showCheckmark: true,
-                  backgroundColor: Colors.transparent,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
+                  const SizedBox(width: 10),
+                  ChoiceChip(
+                    label: Text(context.l10n.myApps),
+                    selected: !provider.installedAppsOptionSelected,
+                    showCheckmark: true,
+                    backgroundColor: Colors.transparent,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    onSelected: (bool selected) {
+                      provider.updateInstalledAppsOptionSelected(false);
+                    },
                   ),
-                  onSelected: (bool selected) {
-                    provider.updateInstalledAppsOptionSelected(false);
-                  },
-                ),
-              ],
-            ),
-          ),
-          SliverToBoxAdapter(
-            child: AnimatedSwitcher(
-              transitionBuilder: (child, animation) => FadeTransition(
-                opacity: animation,
-                child: child,
+                ],
               ),
-              duration: const Duration(milliseconds: 500),
-              child: provider.installedAppsOptionSelected
-                  ? Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const SizedBox(height: 16),
-                        Padding(
-                          padding: const EdgeInsets.only(left: 16.0),
-                          child: Text(context.l10n.appsCount(provider.apps.where((a) => a.enabled).length.toString()),
-                              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w400)),
-                        ),
-                        Selector<AppProvider, List<App>>(
-                          selector: (context, provider) => provider.apps.where((p) => p.enabled).toList(),
-                          builder: (context, apps, child) {
-                            return ListView.builder(
-                              itemCount: apps.length,
-                              physics: const NeverScrollableScrollPhysics(),
-                              shrinkWrap: true,
-                              itemBuilder: (context, index) {
-                                return AppListItem(
-                                  app: apps[index],
-                                  index: index,
-                                );
-                              },
-                            );
-                          },
-                        ),
-                        const SizedBox(
-                          height: 50,
-                        ),
-                      ],
-                    )
-                  : Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const SizedBox(height: 16),
-                        GestureDetector(
-                          onTap: () {
-                            MixpanelManager().pageOpened('Submit App');
-                            routeToPage(context, const AddAppPage());
-                          },
-                          child: Container(
-                            padding: const EdgeInsets.all(12.0),
-                            margin: const EdgeInsets.only(left: 12.0, right: 12.0, top: 2, bottom: 24),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFF1F1F25),
-                              borderRadius: BorderRadius.circular(16.0),
+            ),
+            SliverToBoxAdapter(
+              child: AnimatedSwitcher(
+                transitionBuilder: (child, animation) => FadeTransition(opacity: animation, child: child),
+                duration: const Duration(milliseconds: 500),
+                child: provider.installedAppsOptionSelected
+                    ? Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const SizedBox(height: 16),
+                          Padding(
+                            padding: const EdgeInsets.only(left: 16.0),
+                            child: Text(
+                              context.l10n.appsCount(provider.apps.where((a) => a.enabled).length.toString()),
+                              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w400),
                             ),
-                            child: ListTile(
-                              title: Row(
-                                crossAxisAlignment: CrossAxisAlignment.center,
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  const Icon(Icons.add, color: Colors.white),
-                                  const SizedBox(width: 8),
-                                  Text(
-                                    context.l10n.createAndSubmitNewApp,
-                                    textAlign: TextAlign.center,
-                                  ),
-                                ],
+                          ),
+                          Selector<AppProvider, List<App>>(
+                            selector: (context, provider) => provider.apps.where((p) => p.enabled).toList(),
+                            builder: (context, apps, child) {
+                              return ListView.builder(
+                                itemCount: apps.length,
+                                physics: const NeverScrollableScrollPhysics(),
+                                shrinkWrap: true,
+                                itemBuilder: (context, index) {
+                                  return AppListItem(app: apps[index], index: index);
+                                },
+                              );
+                            },
+                          ),
+                          const SizedBox(height: 50),
+                        ],
+                      )
+                    : Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const SizedBox(height: 16),
+                          GestureDetector(
+                            onTap: () {
+                              MixpanelManager().pageOpened('Submit App');
+                              routeToPage(context, const AddAppPage());
+                            },
+                            child: Container(
+                              padding: const EdgeInsets.all(12.0),
+                              margin: const EdgeInsets.only(left: 12.0, right: 12.0, top: 2, bottom: 24),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF1F1F25),
+                                borderRadius: BorderRadius.circular(16.0),
+                              ),
+                              child: ListTile(
+                                title: Row(
+                                  crossAxisAlignment: CrossAxisAlignment.center,
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    const Icon(Icons.add, color: Colors.white),
+                                    const SizedBox(width: 8),
+                                    Text(context.l10n.createAndSubmitNewApp, textAlign: TextAlign.center),
+                                  ],
+                                ),
                               ),
                             ),
                           ),
-                        ),
-                        provider.userPrivateApps.isEmpty
-                            ? const SizedBox()
-                            : Padding(
-                                padding: const EdgeInsets.only(left: 16.0, bottom: 10),
-                                child: Text(context.l10n.privateAppsCount(provider.userPrivateApps.length.toString()),
-                                    style: const TextStyle(fontSize: 18)),
-                              ),
-                        provider.userPrivateApps.isEmpty
-                            ? const SizedBox()
-                            : ListView.builder(
-                                itemCount: provider.userPrivateApps.length,
-                                shrinkWrap: true,
-                                itemBuilder: (context, index) {
-                                  return AppListItem(
-                                    showPrivateIcon: false,
-                                    app: provider.userPrivateApps[index],
-                                    index: provider.apps.indexOf(provider.userPrivateApps[index]),
-                                  );
-                                },
-                              ),
-                        provider.userPublicApps.isEmpty
-                            ? const SizedBox()
-                            : Padding(
-                                padding: const EdgeInsets.only(left: 16.0, bottom: 10),
-                                child: Text(context.l10n.publicAppsCount(provider.userPublicApps.length.toString()),
-                                    style: const TextStyle(fontSize: 18)),
-                              ),
-                        provider.userPublicApps.isEmpty
-                            ? const SizedBox()
-                            : ListView.builder(
-                                itemCount: provider.userPublicApps.length,
-                                shrinkWrap: true,
-                                itemBuilder: (context, index) {
-                                  return AppListItem(
-                                    app: provider.userPublicApps[index],
-                                    index: provider.apps.indexOf(provider.userPublicApps[index]),
-                                  );
-                                },
-                              ),
-                      ],
-                    ),
+                          provider.userPrivateApps.isEmpty
+                              ? const SizedBox()
+                              : Padding(
+                                  padding: const EdgeInsets.only(left: 16.0, bottom: 10),
+                                  child: Text(
+                                    context.l10n.privateAppsCount(provider.userPrivateApps.length.toString()),
+                                    style: const TextStyle(fontSize: 18),
+                                  ),
+                                ),
+                          provider.userPrivateApps.isEmpty
+                              ? const SizedBox()
+                              : ListView.builder(
+                                  itemCount: provider.userPrivateApps.length,
+                                  shrinkWrap: true,
+                                  itemBuilder: (context, index) {
+                                    return AppListItem(
+                                      showPrivateIcon: false,
+                                      app: provider.userPrivateApps[index],
+                                      index: provider.apps.indexOf(provider.userPrivateApps[index]),
+                                    );
+                                  },
+                                ),
+                          provider.userPublicApps.isEmpty
+                              ? const SizedBox()
+                              : Padding(
+                                  padding: const EdgeInsets.only(left: 16.0, bottom: 10),
+                                  child: Text(
+                                    context.l10n.publicAppsCount(provider.userPublicApps.length.toString()),
+                                    style: const TextStyle(fontSize: 18),
+                                  ),
+                                ),
+                          provider.userPublicApps.isEmpty
+                              ? const SizedBox()
+                              : ListView.builder(
+                                  itemCount: provider.userPublicApps.length,
+                                  shrinkWrap: true,
+                                  itemBuilder: (context, index) {
+                                    return AppListItem(
+                                      app: provider.userPublicApps[index],
+                                      index: provider.apps.indexOf(provider.userPublicApps[index]),
+                                    );
+                                  },
+                                ),
+                        ],
+                      ),
+              ),
             ),
-          ),
-        ],
-      );
-    });
+          ],
+        );
+      },
+    );
   }
 }

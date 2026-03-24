@@ -4,10 +4,14 @@ from models.app import App
 from models.chat import Message, MessageSender
 from langchain.schema import SystemMessage, HumanMessage, AIMessage
 from .clients import llm_persona_mini_stream, llm_persona_medium_stream, llm_medium_experiment
+from .usage_tracker import track_usage, Features
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 def initial_persona_chat_message(uid: str, app: Optional[App] = None, messages: List[Message] = []) -> str:
-    print("initial_persona_chat_message")
+    logger.info("initial_persona_chat_message")
     chat_messages = [SystemMessage(content=app.persona_prompt)]
     for msg in messages:
         if msg.sender == MessageSender.ai:
@@ -22,11 +26,12 @@ def initial_persona_chat_message(uid: str, app: Optional[App] = None, messages: 
     llm_call = llm_persona_mini_stream
     if app.is_influencer:
         llm_call = llm_persona_medium_stream
-    return llm_call.invoke(chat_messages).content
+    with track_usage(uid, Features.PERSONA):
+        return llm_call.invoke(chat_messages).content
 
 
-def answer_persona_question_stream(app: App, messages: List[Message], callbacks: []) -> str:
-    print("answer_persona_question_stream")
+def answer_persona_question_stream(uid: str, app: App, messages: List[Message], callbacks: []) -> str:
+    logger.info("answer_persona_question_stream")
     chat_messages = [SystemMessage(content=app.persona_prompt)]
     for msg in messages:
         if msg.sender == MessageSender.ai:
@@ -36,7 +41,8 @@ def answer_persona_question_stream(app: App, messages: List[Message], callbacks:
     llm_call = llm_persona_mini_stream
     if app.is_influencer:
         llm_call = llm_persona_medium_stream
-    return llm_call.invoke(chat_messages, {'callbacks': callbacks}).content
+    with track_usage(uid, Features.PERSONA):
+        return llm_call.invoke(chat_messages, {'callbacks': callbacks}).content
 
 
 def condense_memories(memories, name):

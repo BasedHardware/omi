@@ -5,6 +5,9 @@ from typing import List, Union, Optional
 from datetime import datetime, timedelta, timezone
 
 import redis
+import logging
+
+logger = logging.getLogger(__name__)
 
 r = redis.Redis(
     host=os.getenv('REDIS_DB_HOST'),
@@ -20,7 +23,7 @@ def try_catch_decorator(func):
         try:
             return func(*args, **kwargs)
         except Exception as e:
-            print(f'Error calling {func.__name__}', e)
+            logger.error(f'Error calling {func.__name__} {e}')
             return None
 
     return wrapper
@@ -231,6 +234,10 @@ def enable_app(uid: str, app_id: str):
 
 def disable_app(uid: str, app_id: str):
     r.srem(f'users:{uid}:enabled_plugins', app_id)
+
+
+def is_app_enabled(uid: str, app_id: str) -> bool:
+    return r.sismember(f'users:{uid}:enabled_plugins', app_id)
 
 
 def get_enabled_apps(uid: str):
@@ -505,6 +512,29 @@ def get_proactive_noti_sent_at(uid: str, app_id: str):
 
 def get_proactive_noti_sent_at_ttl(uid: str, app_id: str):
     return r.ttl(f'{uid}:{app_id}:proactive_noti_sent_at')
+
+
+@try_catch_decorator
+def incr_daily_notification_count(uid: str) -> int:
+    """Atomically increment the daily mentor notification count for a user. Returns new count."""
+    from datetime import datetime, timezone
+
+    key = f'{uid}:daily_noti_count:{datetime.now(timezone.utc).strftime("%Y-%m-%d")}'
+    count = r.incr(key)
+    r.expire(key, 90000)  # 25 hours TTL
+    return count
+
+
+@try_catch_decorator
+def get_daily_notification_count(uid: str) -> int:
+    """Get the current daily mentor notification count for a user."""
+    from datetime import datetime, timezone
+
+    key = f'{uid}:daily_noti_count:{datetime.now(timezone.utc).strftime("%Y-%m-%d")}'
+    val = r.get(key)
+    if not val:
+        return 0
+    return int(val)
 
 
 def set_user_preferred_app(uid: str, app_id: str):
@@ -827,4 +857,45 @@ def try_accept_task_share(token: str, uid: str) -> bool:
 def try_acquire_daily_summary_lock(uid: str, date: str, ttl: int = 60 * 60 * 2) -> bool:
     """Atomically acquire lock BEFORE expensive LLM work. Returns True if acquired, False if another job instance already holds it."""
     result = r.set(f'users:{uid}:daily_summary_lock:{date}', '1', ex=ttl, nx=True)
+    return result is not None
+
+
+@try_catch_decorator
+def set_credits_invalidation_signal(uid: str, ttl: int = 120):
+    """Signal active WebSocket sessions to refresh credits immediately.
+
+    Called when subscription changes (Stripe webhook, upgrade, etc.).
+    Active transcribe loops check this on each 60s tick and force a Firestore refresh.
+    TTL is 2 min — long enough for all streams to see it on their next 60s tick.
+    Uses GET (not GETDEL) so multiple concurrent streams all see the signal.
+    """
+    r.set(f'credits_invalidated:{uid}', '1', ex=ttl)
+
+
+@try_catch_decorator
+def check_credits_invalidation(uid: str) -> bool:
+    """Check if credits need immediate refresh.
+
+    Returns True if invalidation signal is present (caller should refresh).
+    Uses GET (not GETDEL) so all concurrent streams for the same user see the signal.
+    The signal auto-expires via its TTL.
+    """
+    result = r.get(f'credits_invalidated:{uid}')
+    return result is not None
+
+
+# ******************************************************
+# *************** GOAL RATE LIMITING *******************
+# ******************************************************
+
+
+def try_acquire_goal_extraction_lock(uid: str, ttl: int = 300) -> bool:
+    """Per-user rate limit for goal extraction. Returns True if acquired (not rate limited)."""
+    result = r.set(f'users:{uid}:goal_extraction_lock', '1', ex=ttl, nx=True)
+    return result is not None
+
+
+def try_acquire_conversation_goal_lock(uid: str, conversation_id: str, ttl: int = 3600) -> bool:
+    """Idempotency lock: one goal extraction per conversation. Returns True if acquired."""
+    result = r.set(f'users:{uid}:conv_goal_lock:{conversation_id}', '1', ex=ttl, nx=True)
     return result is not None

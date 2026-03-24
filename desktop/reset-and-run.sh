@@ -107,13 +107,22 @@ BUNDLE_ID="com.omi.desktop-dev"
 BUILD_DIR="build"
 APP_BUNDLE="$BUILD_DIR/$APP_NAME.app"
 APP_PATH="/Applications/$APP_NAME.app"
-SIGN_IDENTITY="Developer ID Application: Matthew Diakonov (S6DP5HF77G)"
+# Auto-detect signing identity: prefer Apple Development (doesn't require notarization),
+# fall back to Developer ID Application
+SIGN_IDENTITY=$(security find-identity -v -p codesigning | grep "Apple Development" | head -1 | sed 's/.*"\(.*\)"/\1/')
+if [ -z "$SIGN_IDENTITY" ]; then
+    SIGN_IDENTITY=$(security find-identity -v -p codesigning | grep "Developer ID Application" | head -1 | sed 's/.*"\(.*\)"/\1/')
+fi
+if [ -z "$SIGN_IDENTITY" ]; then
+    echo "ERROR: No signing identity found"
+    exit 1
+fi
 
 # Backend configuration (Rust)
 BACKEND_DIR="$(dirname "$0")/Backend-Rust"
 BACKEND_PID=""
 TUNNEL_PID=""
-TUNNEL_URL="https://omi-dev.m13v.com"
+TUNNEL_URL="${TUNNEL_URL:-}"
 
 # Cleanup function to stop backend and tunnel on exit
 cleanup() {
@@ -131,7 +140,6 @@ trap cleanup EXIT
 # Kill existing instances
 echo "Killing existing instances..."
 pkill -f "$APP_NAME.app" 2>/dev/null || true
-pkill -f "cloudflared.*omi-computer-dev" 2>/dev/null || true
 lsof -ti:8080 | xargs kill -9 2>/dev/null || true
 
 # Clear log file for fresh run (must be before backend starts)
@@ -189,6 +197,13 @@ CONFLICTING_APPS=(
     "$(dirname "$0")/../omi-computer/build/macos/Build/Products/Debug/Omi.app"
     "$(dirname "$0")/../omi-computer/build/macos/Build/Products/Release/Omi.app"
 )
+# Kill stale "Omi Dev.app" bundles from other repo clones (e.g. ~/omi-desktop/)
+# These confuse LaunchServices and get launched instead of /Applications/Omi Dev.app
+echo "Scanning for stale Omi Dev.app in other locations..."
+find "$HOME" -maxdepth 4 -name "Omi Dev.app" -type d -not -path "$APP_BUNDLE" -not -path "$APP_PATH" 2>/dev/null | while read stale; do
+    echo "  Removing stale clone: $stale"
+    rm -rf "$stale"
+done
 # Xcode DerivedData can contain old builds with production bundle ID
 # These get registered in Launch Services and cause permission confusion
 echo "Cleaning Xcode DerivedData..."
@@ -250,11 +265,27 @@ done
 echo "Resetting Launch Services database..."
 /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -kill -r -domain local -domain user 2>/dev/null || true
 
-# Start Cloudflare tunnel
-echo "Starting Cloudflare tunnel..."
-cloudflared tunnel run omi-computer-dev &
-TUNNEL_PID=$!
-sleep 2
+# Start Cloudflare quick tunnel (auto-generates a *.trycloudflare.com URL)
+if command -v cloudflared >/dev/null 2>&1; then
+    echo "Starting Cloudflare quick tunnel..."
+    TUNNEL_LOG=$(mktemp /tmp/cloudflared-XXXXXX.log)
+    cloudflared tunnel --url http://localhost:8080 > "$TUNNEL_LOG" 2>&1 &
+    TUNNEL_PID=$!
+    for i in {1..20}; do
+        TUNNEL_URL=$(grep -o 'https://[a-z0-9-]*\.trycloudflare\.com' "$TUNNEL_LOG" 2>/dev/null | head -1)
+        if [ -n "$TUNNEL_URL" ]; then break; fi
+        sleep 0.5
+    done
+    if [ -n "$TUNNEL_URL" ]; then
+        rm -f "$TUNNEL_LOG"
+    else
+        echo "Warning: Could not get tunnel URL — using localhost (see $TUNNEL_LOG for details)"
+        TUNNEL_URL="http://localhost:8080"
+    fi
+else
+    echo "cloudflared not found — skipping tunnel"
+    TUNNEL_URL="http://localhost:8080"
+fi
 
 # Start Rust backend
 echo "Starting Rust backend..."
@@ -294,6 +325,18 @@ for i in {1..30}; do
     sleep 0.5
 done
 
+# Build acp-bridge
+echo "Building acp-bridge..."
+ACP_BRIDGE_DIR="$(dirname "$0")/acp-bridge"
+if [ -d "$ACP_BRIDGE_DIR" ]; then
+    cd "$ACP_BRIDGE_DIR"
+    if [ ! -d "node_modules" ] || [ "package.json" -nt "node_modules/.package-lock.json" ]; then
+        npm install --no-fund --no-audit 2>&1 | tail -1
+    fi
+    npx tsc
+    cd - > /dev/null
+fi
+
 # Build debug
 echo "Building app..."
 xcrun swift build -c debug --package-path Desktop
@@ -325,6 +368,24 @@ RESOURCE_BUNDLE="Desktop/.build/arm64-apple-macosx/debug/Omi Computer_Omi Comput
 if [ -d "$RESOURCE_BUNDLE" ]; then
     cp -Rf "$RESOURCE_BUNDLE" "$APP_BUNDLE/Contents/Resources/"
     echo "  Copied resource bundle"
+fi
+
+# Copy acp-bridge
+if [ -d "$ACP_BRIDGE_DIR/dist" ]; then
+    mkdir -p "$APP_BUNDLE/Contents/Resources/acp-bridge"
+    cp -Rf "$ACP_BRIDGE_DIR/dist" "$APP_BUNDLE/Contents/Resources/acp-bridge/"
+    cp -f "$ACP_BRIDGE_DIR/package.json" "$APP_BUNDLE/Contents/Resources/acp-bridge/"
+    cp -Rf "$ACP_BRIDGE_DIR/node_modules" "$APP_BUNDLE/Contents/Resources/acp-bridge/"
+    echo "  Copied acp-bridge to bundle"
+fi
+
+# Embed provisioning profile (required for Apple Development signing + restricted entitlements)
+if [ -f "Desktop/embedded-dev.provisionprofile" ]; then
+    cp "Desktop/embedded-dev.provisionprofile" "$APP_BUNDLE/Contents/embedded.provisionprofile"
+    echo "  Copied dev provisioning profile"
+elif [ -f "Desktop/embedded.provisionprofile" ]; then
+    cp "Desktop/embedded.provisionprofile" "$APP_BUNDLE/Contents/embedded.provisionprofile"
+    echo "  Copied provisioning profile"
 fi
 
 # Copy and fix Info.plist
@@ -405,6 +466,12 @@ echo "Tunnel:   $TUNNEL_URL (PID: $TUNNEL_PID)"
 echo "App:      $APP_PATH"
 echo "========================"
 echo ""
+
+# Re-register with LaunchServices (clear stale launch-disabled flags)
+echo "Re-registering with LaunchServices..."
+LSREGISTER="/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"
+$LSREGISTER -u "$APP_PATH" 2>/dev/null || true
+$LSREGISTER -f "$APP_PATH" 2>/dev/null || true
 
 # Remove quarantine and start app from /Applications
 echo "Starting app..."

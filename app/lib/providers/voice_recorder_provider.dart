@@ -1,26 +1,22 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import 'package:permission_handler/permission_handler.dart';
 
 import 'package:omi/backend/http/api/messages.dart';
-import 'package:omi/main.dart';
+import 'package:omi/app_globals.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/file.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
-enum VoiceRecorderState {
-  idle,
-  recording,
-  transcribing,
-  transcribeSuccess,
-  transcribeFailed,
-}
+enum VoiceRecorderState { idle, recording, transcribing, transcribeSuccess, transcribeFailed }
 
 class VoiceRecorderProvider extends ChangeNotifier {
   VoiceRecorderState _state = VoiceRecorderState.idle;
@@ -43,10 +39,7 @@ class VoiceRecorderProvider extends ChangeNotifier {
   bool get isRecording => _state == VoiceRecorderState.recording;
   bool get isActive => _state != VoiceRecorderState.idle;
 
-  void setCallbacks({
-    Function(String transcript)? onTranscriptReady,
-    VoidCallback? onClose,
-  }) {
+  void setCallbacks({Function(String transcript)? onTranscriptReady, VoidCallback? onClose}) {
     _onTranscriptReady = onTranscriptReady;
     _onClose = onClose;
   }
@@ -55,6 +48,8 @@ class VoiceRecorderProvider extends ChangeNotifier {
     _onTranscriptReady = null;
     _onClose = null;
   }
+
+  static const _audioSessionChannel = MethodChannel('com.omi.ios/audioSession');
 
   Future<void> startRecording() async {
     if (_state == VoiceRecorderState.recording) return;
@@ -70,6 +65,18 @@ class VoiceRecorderProvider extends ChangeNotifier {
     notifyListeners();
 
     await Permission.microphone.request();
+
+    // Configure audio session for Bluetooth before starting recorder.
+    // This must happen before flutter_sound's startRecorder() which sets
+    // AVAudioSessionCategoryPlayAndRecord without Bluetooth options —
+    // but skips if the category is already PlayAndRecord.
+    if (Platform.isIOS) {
+      try {
+        await _audioSessionChannel.invokeMethod('configureForBluetooth');
+      } catch (e) {
+        Logger.debug('VoiceRecorderProvider: Failed to configure audio session for Bluetooth: $e');
+      }
+    }
 
     // Setup timer to update the wave visualization every second
     _waveformTimer = Timer.periodic(const Duration(seconds: 1), (_) {
@@ -207,7 +214,8 @@ class VoiceRecorderProvider extends ChangeNotifier {
       _isProcessing = false;
       notifyListeners();
       AppSnackbar.showSnackbarError(
-          MyApp.navigatorKey.currentContext?.l10n.voiceFailedToTranscribe ?? 'Failed to transcribe audio');
+        globalNavigatorKey.currentContext?.l10n.voiceFailedToTranscribe ?? 'Failed to transcribe audio',
+      );
     }
   }
 

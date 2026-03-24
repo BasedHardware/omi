@@ -8,11 +8,7 @@ class FeatureScreen extends StatefulWidget {
   final Announcement feature;
   final VoidCallback? onComplete;
 
-  const FeatureScreen({
-    super.key,
-    required this.feature,
-    this.onComplete,
-  });
+  const FeatureScreen({super.key, required this.feature, this.onComplete});
 
   /// Show the feature screen as a full-screen modal.
   static Future<void> show(BuildContext context, Announcement feature) {
@@ -27,10 +23,7 @@ class FeatureScreen extends StatefulWidget {
               position: Tween<Offset>(
                 begin: const Offset(0, 0.1),
                 end: Offset.zero,
-              ).animate(CurvedAnimation(
-                parent: animation,
-                curve: Curves.easeOut,
-              )),
+              ).animate(CurvedAnimation(parent: animation, curve: Curves.easeOut)),
               child: child,
             ),
           );
@@ -73,10 +66,7 @@ class _FeatureScreenState extends State<FeatureScreen> with SingleTickerProvider
   void initState() {
     super.initState();
     _pageController = PageController();
-    _buttonAnimationController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 200),
-    );
+    _buttonAnimationController = AnimationController(vsync: this, duration: const Duration(milliseconds: 200));
   }
 
   @override
@@ -88,10 +78,7 @@ class _FeatureScreenState extends State<FeatureScreen> with SingleTickerProvider
 
   void _nextPage() {
     if (_usePagedMode && _currentPage < steps.length - 1) {
-      _pageController.nextPage(
-        duration: const Duration(milliseconds: 300),
-        curve: Curves.easeInOut,
-      );
+      _pageController.nextPage(duration: const Duration(milliseconds: 300), curve: Curves.easeInOut);
     } else {
       _complete();
     }
@@ -243,11 +230,7 @@ class _FeatureScreenState extends State<FeatureScreen> with SingleTickerProvider
           child: Center(
             child: Text(
               '$number',
-              style: const TextStyle(
-                color: ResponsiveHelper.purplePrimary,
-                fontSize: 15,
-                fontWeight: FontWeight.w700,
-              ),
+              style: const TextStyle(color: ResponsiveHelper.purplePrimary, fontSize: 15, fontWeight: FontWeight.w700),
             ),
           ),
         ),
@@ -283,11 +266,7 @@ class _FeatureScreenState extends State<FeatureScreen> with SingleTickerProvider
       final parts = description.split(highlightText);
       return RichText(
         text: TextSpan(
-          style: const TextStyle(
-            color: ResponsiveHelper.textSecondary,
-            fontSize: 15,
-            height: 1.5,
-          ),
+          style: const TextStyle(color: ResponsiveHelper.textSecondary, fontSize: 15, height: 1.5),
           children: [
             TextSpan(text: parts.first),
             TextSpan(
@@ -304,14 +283,7 @@ class _FeatureScreenState extends State<FeatureScreen> with SingleTickerProvider
       );
     }
 
-    return Text(
-      description,
-      style: const TextStyle(
-        color: ResponsiveHelper.textSecondary,
-        fontSize: 15,
-        height: 1.5,
-      ),
-    );
+    return Text(description, style: const TextStyle(color: ResponsiveHelper.textSecondary, fontSize: 15, height: 1.5));
   }
 
   Widget _buildHeader() {
@@ -324,11 +296,7 @@ class _FeatureScreenState extends State<FeatureScreen> with SingleTickerProvider
           Expanded(
             child: Text(
               content.title,
-              style: const TextStyle(
-                color: ResponsiveHelper.textTertiary,
-                fontSize: 14,
-                fontWeight: FontWeight.w500,
-              ),
+              style: const TextStyle(color: ResponsiveHelper.textTertiary, fontSize: 14, fontWeight: FontWeight.w500),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
@@ -341,11 +309,7 @@ class _FeatureScreenState extends State<FeatureScreen> with SingleTickerProvider
               borderRadius: BorderRadius.circular(20),
               child: Container(
                 padding: const EdgeInsets.all(8),
-                child: const Icon(
-                  Icons.close,
-                  color: ResponsiveHelper.textSecondary,
-                  size: 24,
-                ),
+                child: const Icon(Icons.close, color: ResponsiveHelper.textSecondary, size: 24),
               ),
             ),
           ),
@@ -403,13 +367,7 @@ class _FeatureScreenState extends State<FeatureScreen> with SingleTickerProvider
       width: double.infinity,
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.2),
-            blurRadius: 20,
-            offset: const Offset(0, 8),
-          ),
-        ],
+        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.2), blurRadius: 20, offset: const Offset(0, 8))],
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(20),
@@ -421,23 +379,14 @@ class _FeatureScreenState extends State<FeatureScreen> with SingleTickerProvider
               color: ResponsiveHelper.backgroundSecondary,
               borderRadius: BorderRadius.circular(20),
             ),
-            child: const Center(
-              child: CircularProgressIndicator(
-                color: Colors.white54,
-                strokeWidth: 2,
-              ),
-            ),
+            child: const Center(child: CircularProgressIndicator(color: Colors.white54, strokeWidth: 2)),
           ),
           errorWidget: (context, url, error) => Container(
             decoration: BoxDecoration(
               color: ResponsiveHelper.backgroundSecondary,
               borderRadius: BorderRadius.circular(20),
             ),
-            child: const Icon(
-              Icons.image_not_supported_outlined,
-              color: ResponsiveHelper.textQuaternary,
-              size: 48,
-            ),
+            child: const Icon(Icons.image_not_supported_outlined, color: ResponsiveHelper.textQuaternary, size: 48),
           ),
         ),
       ),
@@ -451,13 +400,7 @@ class _FeatureScreenState extends State<FeatureScreen> with SingleTickerProvider
       decoration: BoxDecoration(
         color: ResponsiveHelper.backgroundSecondary,
         borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.2),
-            blurRadius: 20,
-            offset: const Offset(0, 8),
-          ),
-        ],
+        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.2), blurRadius: 20, offset: const Offset(0, 8))],
       ),
       child: Stack(
         alignment: Alignment.center,
@@ -469,19 +412,9 @@ class _FeatureScreenState extends State<FeatureScreen> with SingleTickerProvider
             decoration: BoxDecoration(
               color: Colors.white,
               shape: BoxShape.circle,
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.2),
-                  blurRadius: 12,
-                  spreadRadius: 2,
-                ),
-              ],
+              boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.2), blurRadius: 12, spreadRadius: 2)],
             ),
-            child: const Icon(
-              Icons.play_arrow_rounded,
-              color: Colors.black,
-              size: 36,
-            ),
+            child: const Icon(Icons.play_arrow_rounded, color: Colors.black, size: 36),
           ),
         ],
       ),
@@ -497,12 +430,7 @@ class _FeatureScreenState extends State<FeatureScreen> with SingleTickerProvider
       return RichText(
         textAlign: TextAlign.center,
         text: TextSpan(
-          style: const TextStyle(
-            color: ResponsiveHelper.textSecondary,
-            fontSize: 16,
-            height: 1.6,
-            letterSpacing: 0.1,
-          ),
+          style: const TextStyle(color: ResponsiveHelper.textSecondary, fontSize: 16, height: 1.6, letterSpacing: 0.1),
           children: [
             TextSpan(text: parts.first),
             TextSpan(
@@ -521,12 +449,7 @@ class _FeatureScreenState extends State<FeatureScreen> with SingleTickerProvider
 
     return Text(
       description,
-      style: const TextStyle(
-        color: ResponsiveHelper.textSecondary,
-        fontSize: 16,
-        height: 1.6,
-        letterSpacing: 0.1,
-      ),
+      style: const TextStyle(color: ResponsiveHelper.textSecondary, fontSize: 16, height: 1.6, letterSpacing: 0.1),
       textAlign: TextAlign.center,
     );
   }
@@ -543,10 +466,7 @@ class _FeatureScreenState extends State<FeatureScreen> with SingleTickerProvider
           if (_showPageIndicators) ...[
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
-              children: List.generate(
-                steps.length,
-                (index) => _buildPageDot(index),
-              ),
+              children: List.generate(steps.length, (index) => _buildPageDot(index)),
             ),
             const SizedBox(height: 20),
           ],
@@ -578,11 +498,7 @@ class _FeatureScreenState extends State<FeatureScreen> with SingleTickerProvider
                 color: Colors.white,
                 borderRadius: BorderRadius.circular(16),
                 boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.15),
-                    blurRadius: 12,
-                    offset: const Offset(0, 4),
-                  ),
+                  BoxShadow(color: Colors.black.withValues(alpha: 0.15), blurRadius: 12, offset: const Offset(0, 4)),
                 ],
               ),
               child: Row(
@@ -599,11 +515,7 @@ class _FeatureScreenState extends State<FeatureScreen> with SingleTickerProvider
                   ),
                   if (!isLastStep) ...[
                     const SizedBox(width: 8),
-                    const Icon(
-                      Icons.arrow_forward_rounded,
-                      color: Colors.black,
-                      size: 20,
-                    ),
+                    const Icon(Icons.arrow_forward_rounded, color: Colors.black, size: 20),
                   ],
                 ],
               ),
@@ -627,8 +539,8 @@ class _FeatureScreenState extends State<FeatureScreen> with SingleTickerProvider
         color: isActive
             ? Colors.white
             : isPast
-                ? Colors.white54
-                : ResponsiveHelper.backgroundTertiary,
+            ? Colors.white54
+            : ResponsiveHelper.backgroundTertiary,
         borderRadius: BorderRadius.circular(4),
       ),
     );

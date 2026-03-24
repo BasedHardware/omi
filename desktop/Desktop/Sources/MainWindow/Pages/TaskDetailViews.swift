@@ -21,7 +21,6 @@ struct TaskDetailButton: View {
             Image(systemName: "info.circle")
                 .scaledFont(size: 10)
                 .foregroundColor(showTooltip ? OmiColors.textSecondary : OmiColors.textTertiary)
-                .frame(width: 20, height: 20)
         }
         .buttonStyle(.plain)
         .onHover { hovering in

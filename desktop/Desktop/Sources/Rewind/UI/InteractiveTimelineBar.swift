@@ -140,10 +140,7 @@ class TimeBasedTimelineNSView: NSView {
     private var lastLayoutBounds: NSRect = .zero  // Track bounds changes
     private var isRebuildingSegments = false  // Guard against re-entrant rebuilds
 
-    // Gap threshold: 2 minutes
-    private let gapThreshold: TimeInterval = 120
-    // Minimum gap width in pixels
-    private let minGapWidth: CGFloat = 30
+    // Gaps disabled — show continuous timeline across the full day
 
     private var trackingArea: NSTrackingArea?
     private var tooltipWindow: NSWindow?
@@ -219,44 +216,11 @@ class TimeBasedTimelineNSView: NSView {
             return
         }
 
-        // Build segments by detecting gaps
-        var currentSegmentStart = 0
-
-        for i in 1..<screenshots.count {
-            let prevTime = screenshots[i-1].timestamp
-            let currTime = screenshots[i].timestamp
-            let timeDiff = currTime.timeIntervalSince(prevTime)
-
-            if timeDiff > gapThreshold {
-                // End current segment
-                segments.append(TimelineSegment(
-                    startIndex: currentSegmentStart,
-                    endIndex: i - 1,
-                    startTime: screenshots[currentSegmentStart].timestamp,
-                    endTime: screenshots[i - 1].timestamp,
-                    isGap: false,
-                    gapDuration: 0
-                ))
-
-                // Add gap segment
-                segments.append(TimelineSegment(
-                    startIndex: -1,
-                    endIndex: -1,
-                    startTime: screenshots[i - 1].timestamp,
-                    endTime: screenshots[i].timestamp,
-                    isGap: true,
-                    gapDuration: timeDiff
-                ))
-
-                currentSegmentStart = i
-            }
-        }
-
-        // Add final segment
+        // Single continuous segment — no gaps
         segments.append(TimelineSegment(
-            startIndex: currentSegmentStart,
+            startIndex: 0,
             endIndex: screenshots.count - 1,
-            startTime: screenshots[currentSegmentStart].timestamp,
+            startTime: screenshots[0].timestamp,
             endTime: screenshots[screenshots.count - 1].timestamp,
             isGap: false,
             gapDuration: 0
@@ -273,52 +237,17 @@ class TimeBasedTimelineNSView: NSView {
 
         guard !segments.isEmpty else { return }
 
-        // Calculate total "visual width" needed
-        // - Frame segments: proportional to their duration
-        // - Gap segments: fixed minimum width
+        // Single continuous segment — use full width
+        let segment = segments[0]
+        let segmentRect = NSRect(x: rect.minX, y: rect.minY, width: rect.width, height: rect.height)
+        segmentRects.append(segmentRect)
 
-        var totalFrameDuration: TimeInterval = 0
-        var totalGapCount = 0
-
-        for segment in segments {
-            if segment.isGap {
-                totalGapCount += 1
-            } else {
-                totalFrameDuration += segment.endTime.timeIntervalSince(segment.startTime)
-            }
-        }
-
-        // Available width for frames (after subtracting gap widths)
-        let totalGapWidth = CGFloat(totalGapCount) * minGapWidth
-        let availableFrameWidth = max(rect.width - totalGapWidth, rect.width * 0.5)
-
-        // Calculate x positions for each segment
-        var currentX = rect.minX
-
-        for segment in segments {
-            if segment.isGap {
-                let segmentRect = NSRect(x: currentX, y: rect.minY, width: minGapWidth, height: rect.height)
-                segmentRects.append(segmentRect)
-                currentX += minGapWidth
-            } else {
-                // Width proportional to duration
-                let segmentDuration = segment.endTime.timeIntervalSince(segment.startTime)
-                let widthRatio = totalFrameDuration > 0 ? segmentDuration / totalFrameDuration : 1.0
-                let segmentWidth = max(20, availableFrameWidth * CGFloat(widthRatio))
-
-                let segmentRect = NSRect(x: currentX, y: rect.minY, width: segmentWidth, height: rect.height)
-                segmentRects.append(segmentRect)
-
-                // Calculate frame positions within this segment
-                let frameCount = segment.endIndex - segment.startIndex + 1
-                for i in 0..<frameCount {
-                    let frameIndex = segment.startIndex + i
-                    let ratio = frameCount > 1 ? CGFloat(i) / CGFloat(frameCount - 1) : 0.5
-                    frameXPositions[frameIndex] = currentX + ratio * segmentWidth
-                }
-
-                currentX += segmentWidth
-            }
+        // Calculate frame positions evenly across the full width
+        let frameCount = segment.endIndex - segment.startIndex + 1
+        for i in 0..<frameCount {
+            let frameIndex = segment.startIndex + i
+            let ratio = frameCount > 1 ? CGFloat(i) / CGFloat(frameCount - 1) : 0.5
+            frameXPositions[frameIndex] = rect.minX + ratio * rect.width
         }
     }
 
@@ -433,25 +362,36 @@ class TimeBasedTimelineNSView: NSView {
     private func showTooltip(for screenshot: Screenshot, at point: CGPoint) {
         hideTooltip()
 
-        let tooltipView = NSHostingView(rootView: TooltipView(screenshot: screenshot).withFontScaling())
-        tooltipView.frame.size = tooltipView.fittingSize
+        // CRITICAL: Wrap NSHostingView in a container NSView instead of setting it as contentView
+        // directly. When NSHostingView IS the contentView of a borderless window, it negotiates
+        // window sizing through updateAnimatedWindowSize, causing re-entrant constraint updates
+        // that crash in _postWindowNeedsUpdateConstraints on macOS 26+ (OMI-COMPUTER-1G / 1J).
+        let hostingView = NSHostingView(rootView: TooltipView(screenshot: screenshot).withFontScaling())
+        hostingView.sizingOptions = [.minSize, .maxSize]
+        let size = hostingView.fittingSize
+
+        let container = NSView(frame: NSRect(origin: .zero, size: size))
+        hostingView.frame = container.bounds
+        hostingView.autoresizingMask = [.width, .height]
+        container.addSubview(hostingView)
 
         let windowPoint = convert(point, to: nil)
         guard let screenPoint = window?.convertPoint(toScreen: windowPoint) else { return }
 
         let tooltipWindow = NSWindow(
-            contentRect: NSRect(x: screenPoint.x - tooltipView.frame.width / 2,
+            contentRect: NSRect(x: screenPoint.x - size.width / 2,
                               y: screenPoint.y + 20,
-                              width: tooltipView.frame.width,
-                              height: tooltipView.frame.height),
+                              width: size.width,
+                              height: size.height),
             styleMask: .borderless,
             backing: .buffered,
             defer: false
         )
+        tooltipWindow.animationBehavior = .none
         tooltipWindow.backgroundColor = .clear
         tooltipWindow.isOpaque = false
         tooltipWindow.level = .floating
-        tooltipWindow.contentView = tooltipView
+        tooltipWindow.contentView = container
         tooltipWindow.orderFront(nil)
         self.tooltipWindow = tooltipWindow
     }
@@ -459,25 +399,33 @@ class TimeBasedTimelineNSView: NSView {
     private func showGapTooltip(for segment: TimelineSegment, at point: CGPoint) {
         hideTooltip()
 
-        let tooltipView = NSHostingView(rootView: GapTooltipView(duration: segment.gapDuration).withFontScaling())
-        tooltipView.frame.size = tooltipView.fittingSize
+        // Same container-view pattern as showTooltip to prevent constraint crash (OMI-COMPUTER-1G / 1J)
+        let hostingView = NSHostingView(rootView: GapTooltipView(duration: segment.gapDuration).withFontScaling())
+        hostingView.sizingOptions = [.minSize, .maxSize]
+        let size = hostingView.fittingSize
+
+        let container = NSView(frame: NSRect(origin: .zero, size: size))
+        hostingView.frame = container.bounds
+        hostingView.autoresizingMask = [.width, .height]
+        container.addSubview(hostingView)
 
         let windowPoint = convert(point, to: nil)
         guard let screenPoint = window?.convertPoint(toScreen: windowPoint) else { return }
 
         let tooltipWindow = NSWindow(
-            contentRect: NSRect(x: screenPoint.x - tooltipView.frame.width / 2,
+            contentRect: NSRect(x: screenPoint.x - size.width / 2,
                               y: screenPoint.y + 20,
-                              width: tooltipView.frame.width,
-                              height: tooltipView.frame.height),
+                              width: size.width,
+                              height: size.height),
             styleMask: .borderless,
             backing: .buffered,
             defer: false
         )
+        tooltipWindow.animationBehavior = .none
         tooltipWindow.backgroundColor = .clear
         tooltipWindow.isOpaque = false
         tooltipWindow.level = .floating
-        tooltipWindow.contentView = tooltipView
+        tooltipWindow.contentView = container
         tooltipWindow.orderFront(nil)
         self.tooltipWindow = tooltipWindow
     }

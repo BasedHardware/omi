@@ -14,6 +14,7 @@ enum AdviceCategory: String, Codable {
 
 struct ExtractedAdvice: Codable {
     let advice: String
+    let headline: String?
     let reasoning: String?
     let category: AdviceCategory
     let sourceApp: String
@@ -21,6 +22,7 @@ struct ExtractedAdvice: Codable {
 
     enum CodingKeys: String, CodingKey {
         case advice
+        case headline
         case reasoning
         case category
         case sourceApp = "source_app"
@@ -35,6 +37,9 @@ struct ExtractedAdvice: Codable {
             "sourceApp": sourceApp,
             "confidence": confidence
         ]
+        if let headline = headline {
+            dict["headline"] = headline
+        }
         if let reasoning = reasoning {
             dict["reasoning"] = reasoning
         }

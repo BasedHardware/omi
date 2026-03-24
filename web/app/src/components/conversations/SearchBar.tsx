@@ -97,7 +97,7 @@ export function SearchBar({
     >
       <div
         className={cn(
-          'flex items-center gap-2 px-3 py-2 rounded-lg',
+          'flex items-center gap-2 px-3 py-2 rounded-lg overflow-hidden',
           'bg-bg-secondary border transition-all duration-150',
           isFocused
             ? 'border-purple-primary/40 ring-2 ring-purple-primary/20'

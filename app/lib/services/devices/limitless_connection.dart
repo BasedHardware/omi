@@ -6,6 +6,7 @@ import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/services/devices.dart';
 import 'package:omi/services/devices/device_connection.dart';
 import 'package:omi/services/devices/models.dart';
+import 'package:omi/utils/debug_log_manager.dart';
 import 'package:omi/utils/logger.dart';
 
 class LimitlessDeviceConnection extends DeviceConnection {
@@ -39,15 +40,14 @@ class LimitlessDeviceConnection extends DeviceConnection {
   LimitlessDeviceConnection(super.device, super.transport);
 
   @override
-  Future<void> connect({
-    Function(String deviceId, DeviceConnectionState state)? onConnectionStateChanged,
-  }) async {
+  Future<void> connect({Function(String deviceId, DeviceConnectionState state)? onConnectionStateChanged}) async {
     await super.connect(onConnectionStateChanged: onConnectionStateChanged);
 
     await Future.delayed(const Duration(seconds: 1));
 
-    _rxSubscription =
-        transport.getCharacteristicStream(limitlessServiceUuid, limitlessRxCharUuid).listen(_handleNotification);
+    _rxSubscription = transport
+        .getCharacteristicStream(limitlessServiceUuid, limitlessRxCharUuid)
+        .listen(_handleNotification);
 
     await Future.delayed(const Duration(seconds: 1));
 
@@ -82,8 +82,10 @@ class LimitlessDeviceConnection extends DeviceConnection {
       await Future.delayed(const Duration(seconds: 1));
 
       _isInitialized = true;
+      DebugLogManager.logInfo('Limitless device initialized successfully');
     } catch (e) {
       Logger.debug('Limitless: Initialization failed: $e');
+      DebugLogManager.logError(e, null, 'Limitless initialization failed');
       rethrow;
     }
   }
@@ -99,7 +101,8 @@ class LimitlessDeviceConnection extends DeviceConnection {
     if (packet == null) {
       if (_isBatchMode) {
         Logger.debug(
-            'Limitless: Batch mode - packet parse failed, data=${data.length}b, first bytes: ${data.take(10).toList()}');
+          'Limitless: Batch mode - packet parse failed, data=${data.length}b, first bytes: ${data.take(10).toList()}',
+        );
       }
       _rawDataBuffer.addAll(data);
       return;
@@ -193,6 +196,10 @@ class LimitlessDeviceConnection extends DeviceConnection {
       }
     } catch (e) {
       Logger.debug('Limitless: Error handling pendant message: $e');
+      DebugLogManager.logWarning('Limitless pendant message parse error', {
+        'payloadLength': payload.length,
+        'error': '$e',
+      });
     }
   }
 
@@ -244,6 +251,29 @@ class LimitlessDeviceConnection extends DeviceConnection {
         final opusFrames = _extractOpusFramesFromFlashPage(flashPageData);
 
         if (opusFrames.isNotEmpty) {
+          final avgFrameSize = opusFrames.fold<int>(0, (sum, f) => sum + f.length) ~/ opusFrames.length;
+          final timestampMs = pageInfo['timestamp_ms'] as int? ?? 0;
+          final validTimestamp = timestampMs > 1577836800000;
+
+          // Log data quality for every Nth page to avoid log spam, or always for anomalies
+          final isAnomaly = opusFrames.length < 4 || !validTimestamp || avgFrameSize < 10 || avgFrameSize > 200;
+          if (isAnomaly || (_completedFlashPages.length % 50 == 0)) {
+            DebugLogManager.logEvent('limitless_flash_page_received', {
+              'index': index,
+              'session': session,
+              'seq': seq,
+              'frameCount': opusFrames.length,
+              'avgFrameSize': avgFrameSize,
+              'timestampMs': timestampMs,
+              'validTimestamp': validTimestamp,
+              'didStartSession': pageInfo['did_start_session'] ?? false,
+              'didStopSession': pageInfo['did_stop_session'] ?? false,
+              'flashPageDataSize': flashPageData.length,
+              'totalCompletedPages': _completedFlashPages.length,
+              'isAnomaly': isAnomaly,
+            });
+          }
+
           final flashPage = {
             'opus_frames': opusFrames,
             'timestamp_ms': pageInfo['timestamp_ms'] ?? DateTime.now().millisecondsSinceEpoch,
@@ -267,10 +297,20 @@ class LimitlessDeviceConnection extends DeviceConnection {
           }
 
           _flashPageController.add(flashPage);
+        } else {
+          DebugLogManager.logWarning('Limitless flash page yielded zero Opus frames', {
+            'index': index,
+            'session': session,
+            'seq': seq,
+            'flashPageDataSize': flashPageData.length,
+          });
         }
       }
     } catch (e) {
       Logger.debug('Limitless: Error handling storage buffer: $e');
+      DebugLogManager.logError(e, null, 'Limitless storage buffer parse error', {
+        'storageDataLength': storageData.length,
+      });
     }
   }
 
@@ -448,6 +488,11 @@ class LimitlessDeviceConnection extends DeviceConnection {
       }
     } catch (e) {
       Logger.debug('Limitless: Error extracting Opus frames from flash page: $e');
+      DebugLogManager.logWarning('Limitless Opus frame extraction error', {
+        'flashPageDataSize': flashPageData.length,
+        'framesExtractedSoFar': frames.length,
+        'error': '$e',
+      });
     }
 
     return frames;
@@ -625,15 +670,11 @@ class LimitlessDeviceConnection extends DeviceConnection {
       }
 
       if (index != null && numFrags != null && payload != null) {
-        return {
-          'index': index,
-          'seq': seq,
-          'num_frags': numFrags,
-          'payload': payload,
-        };
+        return {'index': index, 'seq': seq, 'num_frags': numFrags, 'payload': payload};
       }
     } catch (e) {
       Logger.debug('Limitless: Error parsing BLE wrapper: $e');
+      DebugLogManager.logWarning('Limitless BLE packet parse error', {'dataLength': data.length, 'error': '$e'});
     }
     return null;
   }
@@ -711,8 +752,14 @@ class LimitlessDeviceConnection extends DeviceConnection {
       final ackCmd = _encodeAcknowledgeProcessedData(upToIndex);
       await transport.writeCharacteristic(limitlessServiceUuid, limitlessTxCharUuid, ackCmd);
       Logger.debug('Limitless: Acknowledged processed data up to index $upToIndex');
+      DebugLogManager.logInfo('Limitless ACK sent', {
+        'upToIndex': upToIndex,
+        'lastAcknowledgedIndex': _lastAcknowledgedIndex,
+      });
+      _lastAcknowledgedIndex = upToIndex;
     } catch (e) {
       Logger.debug('Limitless: Error sending acknowledgment: $e');
+      DebugLogManager.logError(e, null, 'Limitless ACK failed', {'upToIndex': upToIndex});
     }
   }
 
@@ -746,6 +793,7 @@ class LimitlessDeviceConnection extends DeviceConnection {
   Future<Map<String, int>?> getStorageStatus() async {
     if (!_isInitialized) {
       Logger.debug('Limitless: Device not initialized');
+      DebugLogManager.logWarning('Limitless getStorageStatus called before initialization');
       return null;
     }
 
@@ -763,9 +811,22 @@ class LimitlessDeviceConnection extends DeviceConnection {
       );
 
       _storageStateCompleter = null;
-      return result ?? _storageState;
+      final status = result ?? _storageState;
+      if (status != null) {
+        DebugLogManager.logEvent('limitless_storage_status', {
+          'oldestPage': status['oldest_flash_page'],
+          'newestPage': status['newest_flash_page'],
+          'currentSession': status['current_storage_session'],
+          'freePages': status['free_capture_pages'],
+          'totalPages': status['total_capture_pages'],
+        });
+      } else {
+        DebugLogManager.logWarning('Limitless storage status returned null');
+      }
+      return status;
     } catch (e) {
       Logger.debug('Limitless: Error getting storage status: $e');
+      DebugLogManager.logError(e, null, 'Limitless storage status error');
       _storageStateCompleter = null;
       return null;
     }
@@ -797,9 +858,11 @@ class LimitlessDeviceConnection extends DeviceConnection {
       _isBatchMode = true;
       final cmd = _encodeDownloadFlashPages(batchMode: true, realTime: false);
       await transport.writeCharacteristic(limitlessServiceUuid, limitlessTxCharUuid, cmd);
+      DebugLogManager.logInfo('Limitless batch mode enabled');
     } catch (e) {
       _isBatchMode = false;
       Logger.debug('Limitless: Error enabling batch mode: $e');
+      DebugLogManager.logError(e, null, 'Limitless failed to enable batch mode');
     }
   }
 
@@ -808,6 +871,9 @@ class LimitlessDeviceConnection extends DeviceConnection {
     if (!_isInitialized) return;
 
     try {
+      final pendingPages = _completedFlashPages.length;
+      final pendingFragments = _fragmentBuffer.length;
+
       // Clear all buffers before switching modes to prevent batch data from being processed as real-time
       _rawDataBuffer.clear();
       _fragmentBuffer.clear();
@@ -819,8 +885,13 @@ class LimitlessDeviceConnection extends DeviceConnection {
       await transport.writeCharacteristic(limitlessServiceUuid, limitlessTxCharUuid, cmd);
 
       _isBatchMode = false;
+      DebugLogManager.logInfo('Limitless batch mode disabled', {
+        'pendingPagesCleared': pendingPages,
+        'pendingFragmentsCleared': pendingFragments,
+      });
     } catch (e) {
       _isBatchMode = false;
+      DebugLogManager.logError(e, null, 'Limitless failed to disable batch mode');
     }
   }
 
@@ -923,10 +994,31 @@ class LimitlessDeviceConnection extends DeviceConnection {
         if (page['did_stop_recording'] == true) didStopRecording = true;
       }
 
+      final pageCount = _completedFlashPages.length;
       // Clear processed flash pages
       _completedFlashPages.clear();
 
-      if (allFrames.isEmpty) return null;
+      if (allFrames.isEmpty) {
+        DebugLogManager.logWarning('Limitless extractFramesWithSessionInfo: batch had pages but zero frames', {
+          'pageCount': pageCount,
+        });
+        return null;
+      }
+
+      final avgFrameSize = allFrames.fold<int>(0, (sum, f) => sum + f.length) ~/ allFrames.length;
+      final totalBytes = allFrames.fold<int>(0, (sum, f) => sum + f.length);
+      DebugLogManager.logEvent('limitless_batch_extraction', {
+        'pagesProcessed': pageCount,
+        'totalFrames': allFrames.length,
+        'totalBytes': totalBytes,
+        'avgFrameSize': avgFrameSize,
+        'timestampMs': timestampMs ?? _firstFlashPageTimestampMs,
+        'maxIndex': maxIndex,
+        'didStartSession': didStartSession,
+        'didStopSession': didStopSession,
+        'didStartRecording': didStartRecording,
+        'didStopRecording': didStopRecording,
+      });
 
       return {
         'opus_frames': allFrames,
@@ -1073,6 +1165,11 @@ class LimitlessDeviceConnection extends DeviceConnection {
       }
     } catch (e) {
       Logger.debug('Limitless: Error extracting opus frames from page: $e');
+      DebugLogManager.logWarning('Limitless extractOpusFramesFromPage error', {
+        'dataSize': flashPageData.length,
+        'framesExtractedSoFar': frames.length,
+        'error': '$e',
+      });
     }
 
     return frames;
@@ -1303,8 +1400,9 @@ class LimitlessDeviceConnection extends DeviceConnection {
 
                   result['flash_page_data'] = data.sublist(storagePos, storagePos + flashPageLength);
 
-                  final sessionInfo =
-                      _parseFlashPageSessionMarkers(data.sublist(storagePos, storagePos + flashPageLength));
+                  final sessionInfo = _parseFlashPageSessionMarkers(
+                    data.sublist(storagePos, storagePos + flashPageLength),
+                  );
                   result.addAll(sessionInfo);
 
                   return result;
@@ -1321,6 +1419,7 @@ class LimitlessDeviceConnection extends DeviceConnection {
       }
     } catch (e) {
       Logger.debug('Limitless: Error parsing StorageBufferMsg: $e');
+      DebugLogManager.logWarning('Limitless StorageBufferMsg parse error', {'dataLength': data.length, 'error': '$e'});
     }
     return null;
   }
@@ -1427,10 +1526,7 @@ class LimitlessDeviceConnection extends DeviceConnection {
   @override
   Future<int> performRetrieveBatteryLevel() async {
     try {
-      final batteryData = await transport.readCharacteristic(
-        batteryServiceUuid,
-        batteryLevelCharacteristicUuid,
-      );
+      final batteryData = await transport.readCharacteristic(batteryServiceUuid, batteryLevelCharacteristicUuid);
       if (batteryData.isNotEmpty) {
         return batteryData[0];
       }
@@ -1449,10 +1545,7 @@ class LimitlessDeviceConnection extends DeviceConnection {
     }
 
     try {
-      final stream = transport.getCharacteristicStream(
-        batteryServiceUuid,
-        batteryLevelCharacteristicUuid,
-      );
+      final stream = transport.getCharacteristicStream(batteryServiceUuid, batteryLevelCharacteristicUuid);
 
       return stream.listen((value) {
         if (value.isNotEmpty) {
@@ -1497,9 +1590,7 @@ class LimitlessDeviceConnection extends DeviceConnection {
   Future<List<int>> performGetButtonState() async => [];
 
   @override
-  Future<StreamSubscription?> performGetBleButtonListener({
-    required void Function(List<int>) onButtonReceived,
-  }) async {
+  Future<StreamSubscription?> performGetBleButtonListener({required void Function(List<int>) onButtonReceived}) async {
     return _buttonController.stream.listen((value) {
       if (value.isNotEmpty) {
         onButtonReceived(value);
@@ -1510,8 +1601,7 @@ class LimitlessDeviceConnection extends DeviceConnection {
   @override
   Future<StreamSubscription?> performGetBleStorageBytesListener({
     required void Function(List<int>) onStorageBytesReceived,
-  }) async =>
-      null;
+  }) async => null;
 
   @override
   Future performCameraStartPhotoController() async {}
@@ -1525,14 +1615,10 @@ class LimitlessDeviceConnection extends DeviceConnection {
   @override
   Future<StreamSubscription?> performGetImageListener({
     required void Function(OrientedImage orientedImage) onImageReceived,
-  }) async =>
-      null;
+  }) async => null;
 
   @override
-  Future<StreamSubscription<List<int>>?> performGetAccelListener({
-    void Function(int)? onAccelChange,
-  }) async =>
-      null;
+  Future<StreamSubscription<List<int>>?> performGetAccelListener({void Function(int)? onAccelChange}) async => null;
 
   @override
   Future<int> performGetFeatures() async => OmiFeatures.ledDimming;

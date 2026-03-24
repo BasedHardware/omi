@@ -6,7 +6,7 @@ import GRDB
 actor ProactiveStorage {
     static let shared = ProactiveStorage()
 
-    private var _dbQueue: DatabaseQueue?
+    private var _dbQueue: DatabasePool?
     private var isInitialized = false
 
     private init() {}
@@ -18,7 +18,7 @@ actor ProactiveStorage {
     }
 
     /// Ensure database is initialized before use
-    private func ensureInitialized() async throws -> DatabaseQueue {
+    private func ensureInitialized() async throws -> DatabasePool {
         if let db = _dbQueue {
             return db
         }
@@ -302,22 +302,35 @@ actor ProactiveStorage {
         let db = try await ensureInitialized()
 
         return try await db.read { database in
+            // Ordered by createdAt ascending so consecutive sessions are chronological
             let sessions = try FocusSessionRecord
                 .filter(Column("createdAt") >= startOfDay && Column("createdAt") < endOfDay)
+                .order(Column("createdAt").asc)
                 .fetchAll(database)
 
             var focusedCount = 0
             var distractedCount = 0
             var distractionMap: [String: (seconds: Int, count: Int)] = [:]
+            let now = Date()
 
-            for session in sessions {
+            for i in 0..<sessions.count {
+                let session = sessions[i]
+                // Duration = time from this session until the next one starts (or now/endOfDay)
+                let endTime: Date
+                if i < sessions.count - 1 {
+                    endTime = sessions[i + 1].createdAt
+                } else {
+                    // Last session — extends to now (capped at end of day)
+                    endTime = min(now, endOfDay)
+                }
+                let duration = max(0, Int(endTime.timeIntervalSince(session.createdAt)))
+
                 if session.isFocused {
                     focusedCount += 1
                 } else {
                     distractedCount += 1
                     let current = distractionMap[session.appOrSite] ?? (0, 0)
-                    let seconds = session.durationSeconds ?? 60
-                    distractionMap[session.appOrSite] = (current.seconds + seconds, current.count + 1)
+                    distractionMap[session.appOrSite] = (current.seconds + duration, current.count + 1)
                 }
             }
 

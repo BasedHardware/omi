@@ -35,8 +35,8 @@ class MixpanelManager {
 
     /// Get the MixPanel token from environment or .env file
     private func getToken() -> String? {
-        // Check environment variable first
-        if let token = ProcessInfo.processInfo.environment[tokenKey], !token.isEmpty {
+        // Check environment variable first (use getenv() to pick up setenv() from .env loading)
+        if let cString = getenv(tokenKey), let token = String(validatingUTF8: cString), !token.isEmpty {
             return token
         }
 
@@ -45,8 +45,6 @@ class MixpanelManager {
             Bundle.main.path(forResource: ".env", ofType: nil),
             FileManager.default.currentDirectoryPath + "/.env",
             NSHomeDirectory() + "/.omi.env",
-            "/Users/matthewdi/omi-computer-swift/.env",
-            "/Users/matthewdi/omi/backend/.env"
         ].compactMap { $0 }
 
         for path in envPaths {
@@ -326,6 +324,14 @@ extension MixpanelManager {
         ])
     }
 
+    func notificationRepairTriggered(reason: String, previousStatus: String, currentStatus: String) {
+        track("Notification Repair Triggered", properties: [
+            "reason": reason,
+            "previous_status": previousStatus,
+            "current_status": currentStatus
+        ])
+    }
+
     func notificationSettingsChecked(
         authStatus: String,
         alertStyle: String,
@@ -413,10 +419,11 @@ extension MixpanelManager {
 
     // MARK: - Chat Events
 
-    func chatMessageSent(messageLength: Int, hasContext: Bool = false) {
+    func chatMessageSent(messageLength: Int, hasContext: Bool = false, source: String) {
         track("Chat Message Sent", properties: [
             "message_length": messageLength,
-            "has_context": hasContext
+            "has_context": hasContext,
+            "source": source
         ])
     }
 
@@ -571,6 +578,28 @@ extension MixpanelManager {
         ])
     }
 
+    func taskPromoted(taskCount: Int) {
+        track("Task Promoted", properties: [
+            "task_count": taskCount
+        ])
+    }
+
+    func taskCompleted(source: String?) {
+        track("Task Completed", properties: [
+            "source": source ?? "unknown"
+        ])
+    }
+
+    func taskDeleted(source: String?) {
+        track("Task Deleted", properties: [
+            "source": source ?? "unknown"
+        ])
+    }
+
+    func taskAdded() {
+        track("Task Added")
+    }
+
     func memoryExtracted(memoryCount: Int) {
         track("Memory Extracted", properties: [
             "memory_count": memoryCount
@@ -628,10 +657,16 @@ extension MixpanelManager {
         track("Update Not Found")
     }
 
-    func updateCheckFailed(error: String) {
-        track("Update Check Failed", properties: [
-            "error": error
-        ])
+    func updateCheckFailed(error: String, errorDomain: String, errorCode: Int, underlyingError: String? = nil, underlyingDomain: String? = nil, underlyingCode: Int? = nil) {
+        var props: [String: MixpanelType] = [
+            "error": error,
+            "error_domain": errorDomain,
+            "error_code": errorCode
+        ]
+        if let underlyingError { props["underlying_error"] = underlyingError }
+        if let underlyingDomain { props["underlying_domain"] = underlyingDomain }
+        if let underlyingCode { props["underlying_code"] = underlyingCode }
+        track("Update Check Failed", properties: props)
     }
 
     // MARK: - Notification Events
@@ -689,6 +724,13 @@ extension MixpanelManager {
         track("Tier Changed", properties: [
             "tier": tier,
             "reason": reason
+        ])
+    }
+
+    func chatBridgeModeChanged(from oldMode: String, to newMode: String) {
+        track("Chat Bridge Mode Changed", properties: [
+            "from": oldMode,
+            "to": newMode
         ])
     }
 

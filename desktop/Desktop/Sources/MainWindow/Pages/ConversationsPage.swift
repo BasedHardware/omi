@@ -7,14 +7,14 @@ import Combine
 class SearchDebouncer: ObservableObject {
     /// The input query (set immediately when user types)
     @Published var inputQuery: String = ""
-    /// The debounced query (updated 500ms after user stops typing)
+    /// The debounced query (updated 250ms after user stops typing)
     @Published var debouncedQuery: String = ""
     private var cancellables = Set<AnyCancellable>()
 
     init() {
         // Observe input and debounce to output
         $inputQuery
-            .debounce(for: .milliseconds(500), scheduler: DispatchQueue.main)
+            .debounce(for: .milliseconds(250), scheduler: DispatchQueue.main)
             .removeDuplicates()
             .sink { [weak self] value in
                 self?.debouncedQuery = value
@@ -33,7 +33,7 @@ struct ConversationsPage: View {
     var embedded: Bool = false
 
     // Compact view mode - persisted preference
-    @AppStorage("conversationsCompactView") private var isCompactView = false
+    @AppStorage("conversationsCompactView") private var isCompactView = true
 
     // Search state
     @State private var searchQuery: String = ""
@@ -156,6 +156,8 @@ struct ConversationsPage: View {
 
                 Spacer()
 
+                quickNoteButton
+
                 if !appState.isTranscribing {
                     startRecordingButton
                 }
@@ -166,6 +168,27 @@ struct ConversationsPage: View {
             // Conversation list
             conversationListSection
         }
+    }
+
+    private var quickNoteButton: some View {
+        Button {
+            NotificationCenter.default.post(name: .navigateToRewindNotes, object: nil)
+        } label: {
+            HStack(spacing: 5) {
+                Image(systemName: "note.text")
+                    .scaledFont(size: 12)
+                Text("Quick Note")
+                    .scaledFont(size: 13, weight: .medium)
+            }
+            .foregroundColor(OmiColors.textSecondary)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .background(
+                Capsule()
+                    .fill(OmiColors.backgroundTertiary)
+            )
+        }
+        .buttonStyle(.plain)
     }
 
     // MARK: - Conversation List Section
@@ -622,7 +645,7 @@ struct ConversationsPage: View {
         )) {
             Button("OK", role: .cancel) { }
         } message: {
-            Text(mergeError ?? "Unknown error")
+            Text(mergeError ?? "Failed to merge conversations. Please try again.")
         }
     }
 

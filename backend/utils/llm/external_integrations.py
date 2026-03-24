@@ -8,6 +8,9 @@ from models.other import Person
 from utils.llm.clients import parser, llm_mini, llm_medium_experiment
 from utils.llm.usage_tracker import track_usage, Features
 from utils.llms.memory import get_prompt_memories
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 def get_message_structure(
@@ -79,6 +82,7 @@ def summarize_experience_text(text: str, text_source_spec: str = None) -> Struct
 
 def get_conversation_summary(uid: str, memories: List[Conversation]) -> str:
     user_name, memories_str = get_prompt_memories(uid)
+    user_language = users_db.get_user_language_preference(uid)
 
     all_person_ids = []
     for m in memories:
@@ -91,6 +95,10 @@ def get_conversation_summary(uid: str, memories: List[Conversation]) -> str:
 
     conversation_history = Conversation.conversations_to_string(memories, people=people)
 
+    language_instruction = ''
+    if user_language and user_language != 'en':
+        language_instruction = f'You MUST respond entirely in {user_language}. Do NOT respond in English.'
+
     prompt = f"""
     You are an experienced mentor, that helps people achieve their goals and improve their lives.
     You are advising {user_name} right now, {memories_str}
@@ -100,6 +108,7 @@ def get_conversation_summary(uid: str, memories: List[Conversation]) -> str:
 
     Remember {user_name} is busy so this has to be very efficient and concise.
     Respond in at most 50 words.
+    {language_instruction}
 
     Output your response in plain text, without markdown. No newline character and only use numbers for the action items.
     ```
@@ -132,6 +141,9 @@ def generate_comprehensive_daily_summary(
         user_tz = pytz.UTC
 
     user_name, memories_str = get_prompt_memories(uid)
+
+    # Get user's language preference for generating summary in their language
+    user_language = users_db.get_user_language_preference(uid)
 
     all_person_ids = []
     for m in conversations:
@@ -243,6 +255,7 @@ RULES:
 - conversation_number: Reference which conversation (1-{total_conversations}) it came from.
 - SKIP sections entirely if no quality content.
 - Be snappy. No fluff. No corporate speak. Only include sections that are genuinely useful and relevant.
+{f'- IMPORTANT: You MUST write the ENTIRE summary in {user_language}. All text including headline, overview, highlights, questions, decisions, and knowledge nuggets MUST be in {user_language}. Do NOT write in English.' if user_language and user_language != 'en' else ''}
 
 Respond with ONLY valid JSON. Do not include any other text or comments."""
 
@@ -328,8 +341,8 @@ Respond with ONLY valid JSON. Do not include any other text or comments."""
             "locations": locations,
         }
     except json.JSONDecodeError as e:
-        print(f"Failed to parse LLM response as JSON: {e}")
-        print(f"Response was: {response}")
+        logger.error(f"Failed to parse LLM response as JSON: {e}")
+        logger.info(f"Response was: {response}")
         # Return a basic summary on parse failure
         return {
             "id": str(uuid.uuid4()),

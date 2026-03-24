@@ -9,7 +9,7 @@ APP_BUNDLE="$BUILD_DIR/$APP_NAME.app"
 BACKEND_DIR="$(dirname "$0")/Backend"
 BACKEND_PID=""
 TUNNEL_PID=""
-TUNNEL_URL="https://omi-dev.m13v.com"
+TUNNEL_URL="${TUNNEL_URL:-}"
 
 # Cleanup function to stop backend and tunnel on exit
 cleanup() {
@@ -26,14 +26,29 @@ trap cleanup EXIT
 
 # Kill existing instances
 pkill "$BINARY_NAME" 2>/dev/null || true
-pkill -f "cloudflared.*omi-computer-dev" 2>/dev/null || true
 lsof -ti:8080 | xargs kill -9 2>/dev/null || true
 
-# Start Cloudflare tunnel
-echo "Starting Cloudflare tunnel..."
-cloudflared tunnel run omi-computer-dev &
-TUNNEL_PID=$!
-sleep 2
+# Start Cloudflare quick tunnel (auto-generates a *.trycloudflare.com URL)
+if command -v cloudflared >/dev/null 2>&1; then
+    echo "Starting Cloudflare quick tunnel..."
+    TUNNEL_LOG=$(mktemp /tmp/cloudflared-XXXXXX.log)
+    cloudflared tunnel --url http://localhost:8080 > "$TUNNEL_LOG" 2>&1 &
+    TUNNEL_PID=$!
+    for i in {1..20}; do
+        TUNNEL_URL=$(grep -o 'https://[a-z0-9-]*\.trycloudflare\.com' "$TUNNEL_LOG" 2>/dev/null | head -1)
+        if [ -n "$TUNNEL_URL" ]; then break; fi
+        sleep 0.5
+    done
+    if [ -n "$TUNNEL_URL" ]; then
+        rm -f "$TUNNEL_LOG"
+    else
+        echo "Warning: Could not get tunnel URL — using localhost (see $TUNNEL_LOG for details)"
+        TUNNEL_URL="http://localhost:8080"
+    fi
+else
+    echo "cloudflared not found — skipping tunnel"
+    TUNNEL_URL="http://localhost:8080"
+fi
 
 # Start backend
 echo "Starting backend..."
@@ -104,7 +119,11 @@ else
     touch "$APP_BUNDLE/Contents/Resources/.env"
 fi
 # Set API URL to tunnel for development (overrides production default)
-echo "OMI_API_URL=$TUNNEL_URL" >> "$APP_BUNDLE/Contents/Resources/.env"
+if grep -q "^OMI_API_URL=" "$APP_BUNDLE/Contents/Resources/.env"; then
+    sed -i '' "s|^OMI_API_URL=.*|OMI_API_URL=$TUNNEL_URL|" "$APP_BUNDLE/Contents/Resources/.env"
+else
+    echo "OMI_API_URL=$TUNNEL_URL" >> "$APP_BUNDLE/Contents/Resources/.env"
+fi
 echo "Using backend: $TUNNEL_URL"
 
 # Copy app icon
@@ -113,14 +132,38 @@ cp -f omi_icon.icns "$APP_BUNDLE/Contents/Resources/OmiIcon.icns"
 # Create PkgInfo
 echo -n "APPL????" > "$APP_BUNDLE/Contents/PkgInfo"
 
-# Sign app (using Developer ID for distribution-style signing)
-codesign --force --sign "Developer ID Application: Matthew Diakonov (S6DP5HF77G)" "$APP_BUNDLE"
+# Sign app with a stable identity so TCC permissions persist across rebuilds.
+# Auto-detect: Developer ID > Apple Development > ad-hoc fallback.
+SIGN_IDENTITY="${OMI_SIGN_IDENTITY:-}"
+if [ -z "$SIGN_IDENTITY" ]; then
+    SIGN_IDENTITY=$(security find-identity -v -p codesigning | grep "Developer ID Application" | head -1 | sed 's/.*"\(.*\)"/\1/')
+    if [ -z "$SIGN_IDENTITY" ]; then
+        SIGN_IDENTITY=$(security find-identity -v -p codesigning | grep "Apple Development" | head -1 | sed 's/.*"\(.*\)"/\1/')
+    fi
+fi
+if [ -n "$SIGN_IDENTITY" ]; then
+    echo "Signing with: $SIGN_IDENTITY"
+    codesign --force --options runtime --entitlements Desktop/Omi.entitlements --sign "$SIGN_IDENTITY" "$APP_BUNDLE"
+else
+    echo ""
+    echo "ERROR: No signing identity found. Ad-hoc signing causes macOS to reset"
+    echo "       Screen Recording permissions for ALL Omi apps (including prod/beta)."
+    echo ""
+    echo "  Fix: Install an Apple Development certificate in Keychain Access,"
+    echo "       or set OMI_SIGN_IDENTITY to a valid identity."
+    echo ""
+    exit 1
+fi
 
 echo "Dev build complete: $APP_BUNDLE"
 echo ""
 echo "=== Services Running ==="
 echo "Backend:  http://localhost:8080 (PID: $BACKEND_PID)"
+if [ -n "$TUNNEL_PID" ]; then
 echo "Tunnel:   $TUNNEL_URL (PID: $TUNNEL_PID)"
+else
+echo "Tunnel:   not running (using $TUNNEL_URL)"
+fi
 echo "========================"
 echo ""
 open "$APP_BUNDLE"

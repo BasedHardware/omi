@@ -33,26 +33,24 @@ class _BasicNotificationService implements NotificationInterface {
 
   Future<void> _initializeAwesomeNotifications() async {
     bool initialized = await _awesomeNotifications.initialize(
-        // set the icon to null if you want to use the default app icon
-        'resource://drawable/icon',
-        [
-          NotificationChannel(
-            channelGroupKey: 'channel_group_key',
-            channelKey: channel.channelKey,
-            channelName: channel.channelName,
-            channelDescription: channel.channelDescription,
-            defaultColor: const Color(0xFF9D50DD),
-            ledColor: Colors.white,
-          )
-        ],
-        // Channel groups are only visual and are not required
-        channelGroups: [
-          NotificationChannelGroup(
-            channelGroupKey: channel.channelKey!,
-            channelGroupName: channel.channelName!,
-          )
-        ],
-        debug: false);
+      // set the icon to null if you want to use the default app icon
+      'resource://drawable/icon',
+      [
+        NotificationChannel(
+          channelGroupKey: 'channel_group_key',
+          channelKey: channel.channelKey,
+          channelName: channel.channelName,
+          channelDescription: channel.channelDescription,
+          defaultColor: const Color(0xFF9D50DD),
+          ledColor: Colors.white,
+        ),
+      ],
+      // Channel groups are only visual and are not required
+      channelGroups: [
+        NotificationChannelGroup(channelGroupKey: channel.channelKey!, channelGroupName: channel.channelName!),
+      ],
+      debug: false,
+    );
 
     Logger.debug('initializeNotifications: $initialized');
   }

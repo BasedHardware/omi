@@ -21,6 +21,9 @@ pub struct SaveMessageRequest {
     /// Optional session ID for grouping messages
     #[serde(default)]
     pub session_id: Option<String>,
+    /// Optional JSON metadata (e.g. tool calls, screenshot context)
+    #[serde(default)]
+    pub metadata: Option<String>,
 }
 
 /// Query params for getting messages
@@ -106,6 +109,9 @@ pub struct MessageDB {
     /// Whether this message was reported as inappropriate
     #[serde(default)]
     pub reported: bool,
+    /// Optional JSON metadata (tool calls, screenshot context, etc.)
+    #[serde(default)]
+    pub metadata: Option<String>,
 }
 
 impl MessageDB {
@@ -125,6 +131,7 @@ impl MessageDB {
             session_id,
             rating: None,
             reported: false,
+            metadata: None,
         }
     }
 }

@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:awesome_notifications/awesome_notifications.dart';
 
-import 'package:omi/main.dart';
+import 'package:omi/app_globals.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
@@ -12,10 +12,7 @@ class ImportantConversationEvent {
   final String conversationId;
   final String navigateTo;
 
-  ImportantConversationEvent({
-    required this.conversationId,
-    required this.navigateTo,
-  });
+  ImportantConversationEvent({required this.conversationId, required this.navigateTo});
 }
 
 /// Handler for important conversation FCM notifications
@@ -55,10 +52,12 @@ class ImportantConversationNotificationHandler {
     MixpanelManager().importantConversationNotificationReceived(conversationId);
 
     // Broadcast the event so providers can update their state
-    _importantConversationController.add(ImportantConversationEvent(
-      conversationId: conversationId,
-      navigateTo: navigateTo ?? '/conversation/$conversationId?share=1',
-    ));
+    _importantConversationController.add(
+      ImportantConversationEvent(
+        conversationId: conversationId,
+        navigateTo: navigateTo ?? '/conversation/$conversationId?share=1',
+      ),
+    );
 
     // Always show notification (foreground and background) so user can tap to share
     await _showImportantConversationNotification(
@@ -77,7 +76,7 @@ class ImportantConversationNotificationHandler {
     try {
       final notificationId = conversationId.hashCode;
 
-      final ctx = MyApp.navigatorKey.currentContext;
+      final ctx = globalNavigatorKey.currentContext;
       await _awesomeNotifications.createNotification(
         content: NotificationContent(
           id: notificationId,
@@ -85,10 +84,7 @@ class ImportantConversationNotificationHandler {
           title: ctx?.l10n.importantConversationTitle ?? 'Important Conversation',
           body: ctx?.l10n.importantConversationBody ??
               'You just had an important convo. Tap to share the summary with others.',
-          payload: {
-            'conversation_id': conversationId,
-            'navigate_to': navigateTo,
-          },
+          payload: {'conversation_id': conversationId, 'navigate_to': navigateTo},
           notificationLayout: NotificationLayout.Default,
           category: NotificationCategory.Social,
         ),

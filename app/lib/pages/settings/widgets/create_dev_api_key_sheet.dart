@@ -15,10 +15,7 @@ class CreateDevApiKeySheet extends StatefulWidget {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (ctx) => ChangeNotifierProvider.value(
-        value: provider,
-        child: const CreateDevApiKeySheet(),
-      ),
+      builder: (ctx) => ChangeNotifierProvider.value(value: provider, child: const CreateDevApiKeySheet()),
     );
   }
 
@@ -38,6 +35,8 @@ class _CreateDevApiKeySheetState extends State<CreateDevApiKeySheet> {
     'memories:write': false,
     'action_items:read': false,
     'action_items:write': false,
+    'goals:read': false,
+    'goals:write': false,
   };
 
   List<String> get _selectedScopes {
@@ -56,6 +55,7 @@ class _CreateDevApiKeySheetState extends State<CreateDevApiKeySheet> {
       _scopes['conversations:read'] = true;
       _scopes['memories:read'] = true;
       _scopes['action_items:read'] = true;
+      _scopes['goals:read'] = true;
     });
   }
 
@@ -105,9 +105,11 @@ class _CreateDevApiKeySheetState extends State<CreateDevApiKeySheet> {
     return _scopes['conversations:read'] == true &&
         _scopes['memories:read'] == true &&
         _scopes['action_items:read'] == true &&
+        _scopes['goals:read'] == true &&
         _scopes['conversations:write'] == false &&
         _scopes['memories:write'] == false &&
-        _scopes['action_items:write'] == false;
+        _scopes['action_items:write'] == false &&
+        _scopes['goals:write'] == false;
   }
 
   bool get _isFullAccess {
@@ -142,31 +144,21 @@ class _CreateDevApiKeySheetState extends State<CreateDevApiKeySheet> {
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(16),
-        color: const Color(0xFF1A1A1A),
-      ),
+      decoration: BoxDecoration(borderRadius: BorderRadius.circular(16), color: const Color(0xFF1A1A1A)),
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Row(
           children: [
             Container(
               padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: const Color(0xFF252525),
-                borderRadius: BorderRadius.circular(10),
-              ),
+              decoration: BoxDecoration(color: const Color(0xFF252525), borderRadius: BorderRadius.circular(10)),
               child: Icon(icon, color: const Color(0xFF8B5CF6), size: 20),
             ),
             const SizedBox(width: 14),
             Expanded(
               child: Text(
                 resource,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 15,
-                  fontWeight: FontWeight.w500,
-                ),
+                style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w500),
               ),
             ),
             _buildTogglePill(
@@ -206,10 +198,7 @@ class _CreateDevApiKeySheetState extends State<CreateDevApiKeySheet> {
     );
 
     return Container(
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(8),
-        color: const Color(0xFF252525),
-      ),
+      decoration: BoxDecoration(borderRadius: BorderRadius.circular(8), color: const Color(0xFF252525)),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -280,10 +269,7 @@ class _CreateDevApiKeySheetState extends State<CreateDevApiKeySheet> {
                     margin: const EdgeInsets.only(top: 12, bottom: 8),
                     width: 40,
                     height: 4,
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF3C3C43),
-                      borderRadius: BorderRadius.circular(2),
-                    ),
+                    decoration: BoxDecoration(color: const Color(0xFF3C3C43), borderRadius: BorderRadius.circular(2)),
                   ),
                 ),
                 // Header
@@ -294,9 +280,7 @@ class _CreateDevApiKeySheetState extends State<CreateDevApiKeySheet> {
                       Container(
                         padding: const EdgeInsets.all(10),
                         decoration: BoxDecoration(
-                          gradient: const LinearGradient(
-                            colors: [Color(0xFF8B5CF6), Color(0xFF7C3AED)],
-                          ),
+                          gradient: const LinearGradient(colors: [Color(0xFF8B5CF6), Color(0xFF7C3AED)]),
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: const Icon(Icons.key, color: Colors.white, size: 22),
@@ -308,19 +292,12 @@ class _CreateDevApiKeySheetState extends State<CreateDevApiKeySheet> {
                           children: [
                             Text(
                               context.l10n.createApiKey,
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 20,
-                                fontWeight: FontWeight.w600,
-                              ),
+                              style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w600),
                             ),
                             const SizedBox(height: 2),
                             Text(
                               context.l10n.accessDataProgrammatically,
-                              style: const TextStyle(
-                                color: Color(0xFF8E8E93),
-                                fontSize: 13,
-                              ),
+                              style: const TextStyle(color: Color(0xFF8E8E93), fontSize: 13),
                             ),
                           ],
                         ),
@@ -422,10 +399,24 @@ class _CreateDevApiKeySheetState extends State<CreateDevApiKeySheet> {
                   child: Column(
                     children: [
                       _buildPermissionTile(
-                          context.l10n.conversations, 'conversations:read', 'conversations:write', Icons.chat_bubble_outline),
-                      _buildPermissionTile(context.l10n.memories, 'memories:read', 'memories:write', Icons.psychology_outlined),
+                        context.l10n.conversations,
+                        'conversations:read',
+                        'conversations:write',
+                        Icons.chat_bubble_outline,
+                      ),
                       _buildPermissionTile(
-                          context.l10n.actionItems, 'action_items:read', 'action_items:write', Icons.task_alt_outlined),
+                        context.l10n.memories,
+                        'memories:read',
+                        'memories:write',
+                        Icons.psychology_outlined,
+                      ),
+                      _buildPermissionTile(
+                        context.l10n.actionItems,
+                        'action_items:read',
+                        'action_items:write',
+                        Icons.task_alt_outlined,
+                      ),
+                      _buildPermissionTile(context.l10n.goals, 'goals:read', 'goals:write', Icons.flag_outlined),
                     ],
                   ),
                 ),
@@ -458,9 +449,7 @@ class _CreateDevApiKeySheetState extends State<CreateDevApiKeySheet> {
                         disabledBackgroundColor: const Color(0xFF8B5CF6).withOpacity(0.5),
                         foregroundColor: Colors.white,
                         padding: const EdgeInsets.symmetric(vertical: 16),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(14),
-                        ),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                         elevation: 0,
                       ),
                       child: _isCreating
@@ -474,10 +463,7 @@ class _CreateDevApiKeySheetState extends State<CreateDevApiKeySheet> {
                             )
                           : Text(
                               context.l10n.createKey,
-                              style: const TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w600,
-                              ),
+                              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
                             ),
                     ),
                   ),

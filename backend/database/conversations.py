@@ -5,6 +5,7 @@ import zlib
 from datetime import datetime, timedelta, timezone
 from typing import List, Tuple, Optional, Dict, Any
 
+from google.api_core.exceptions import NotFound
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
@@ -22,6 +23,9 @@ from utils import encryption
 from ._client import db
 from .helpers import set_data_protection_level, prepare_for_write, prepare_for_read, with_photos
 from utils.other.storage import list_audio_chunks
+import logging
+
+logger = logging.getLogger(__name__)
 
 conversations_collection = 'conversations'
 
@@ -58,7 +62,7 @@ def _decrypt_conversation_data(conversation_data: Dict[str, Any], uid: str) -> D
             else:
                 data['transcript_segments'] = json.loads(decrypted_payload)
         except (json.JSONDecodeError, TypeError, zlib.error, ValueError) as e:
-            print(e, uid)
+            logger.error(f"{e} {uid}")
             data['transcript_segments'] = []
     # backward compatibility, will be removed soon
     elif isinstance(data['transcript_segments'], bytes):
@@ -68,7 +72,7 @@ def _decrypt_conversation_data(conversation_data: Dict[str, Any], uid: str) -> D
                 decompressed_json = zlib.decompress(compressed_bytes).decode('utf-8')
                 data['transcript_segments'] = json.loads(decompressed_json)
         except (json.JSONDecodeError, TypeError, zlib.error, ValueError) as e:
-            print(e, uid)
+            logger.error(f"{e} {uid}")
             data['transcript_segments'] = []
 
     return data
@@ -106,7 +110,7 @@ def _prepare_conversation_for_read(conversation_data: Optional[Dict[str, Any]], 
                 decompressed_json = zlib.decompress(data['transcript_segments']).decode('utf-8')
                 data['transcript_segments'] = json.loads(decompressed_json)
             except (json.JSONDecodeError, TypeError, zlib.error) as e:
-                print(e)
+                logger.error(e)
                 pass
 
     return data
@@ -226,10 +230,12 @@ def get_conversations_without_photos(
     start_date: Optional[datetime] = None,
     end_date: Optional[datetime] = None,
     categories: Optional[List[str]] = None,
+    folder_id: Optional[str] = None,
+    starred: Optional[bool] = None,
 ):
     """
     Same as get_conversations but without loading photos.
-    Much faster for bulk operations like Wrapped where photos aren't needed.
+    Much faster for list endpoints and bulk operations where full photo base64 isn't needed.
     """
     conversations_ref = db.collection('users').document(uid).collection(conversations_collection)
     if not include_discarded:
@@ -239,6 +245,12 @@ def get_conversations_without_photos(
 
     if categories:
         conversations_ref = conversations_ref.where(filter=FieldFilter('structured.category', 'in', categories))
+
+    if folder_id:
+        conversations_ref = conversations_ref.where(filter=FieldFilter('folder_id', '==', folder_id))
+
+    if starred is not None:
+        conversations_ref = conversations_ref.where(filter=FieldFilter('starred', '==', starred))
 
     # Apply date range filters if provided
     if start_date:
@@ -254,6 +266,26 @@ def get_conversations_without_photos(
 
     conversations = [doc.to_dict() for doc in conversations_ref.stream()]
     return conversations
+
+
+def iter_all_conversations(uid: str, batch_size: int = 400, include_discarded: bool = True):
+    """Yield all conversations for a user, decrypted, in batches. Used for streaming data export."""
+    conversations_ref = db.collection('users').document(uid).collection(conversations_collection)
+    if not include_discarded:
+        conversations_ref = conversations_ref.where(filter=FieldFilter('discarded', '==', False))
+    conversations_ref = conversations_ref.order_by('created_at', direction=firestore.Query.DESCENDING)
+    offset = 0
+    while True:
+        batch_ref = conversations_ref.limit(batch_size).offset(offset)
+        batch = []
+        for doc in batch_ref.stream():
+            conv = doc.to_dict()
+            conv = _prepare_conversation_for_read(conv, uid) or conv
+            batch.append(conv)
+        yield from batch
+        if len(batch) < batch_size:
+            break
+        offset += batch_size
 
 
 def update_conversation(uid: str, conversation_id: str, update_data: dict):
@@ -287,18 +319,19 @@ def create_audio_files_from_chunks(
     if not chunks:
         return []
 
-    # Group chunks based on 30-second gap rule
+    # Group chunks based on gap rule (90s threshold accommodates both 5s and 60s chunk durations)
     audio_files = []
     current_group = []
+    gap_threshold = 90  # seconds — must exceed max chunk duration (60s) to avoid false splits
 
     for i, chunk in enumerate(chunks):
         if not current_group:
             current_group.append(chunk)
         else:
-            # Check if there's a gap > 30 seconds between chunks
+            # Check if there's a gap between chunks exceeding the threshold
             prev_chunk = current_group[-1]
             time_gap = chunk['timestamp'] - prev_chunk['timestamp']
-            if time_gap > 30:
+            if time_gap > gap_threshold:
                 # Gap detected, finalize current group
                 audio_file = _finalize_audio_file_group(uid, conversation_id, current_group, audio_files)
                 if audio_file:
@@ -340,11 +373,13 @@ def _finalize_audio_file_group(
     # Extract timestamps
     timestamps = [chunk['timestamp'] for chunk in chunk_group]
 
-    # Calculate started_at and duration from timestamps
+    # Calculate started_at and duration from timestamps and blob sizes
     started_at = datetime.fromtimestamp(chunk_group[0]['timestamp'], tz=timezone.utc)
     last_chunk_start = datetime.fromtimestamp(chunk_group[-1]['timestamp'], tz=timezone.utc)
-    # Add 5 seconds for the last chunk's duration
-    duration = (last_chunk_start - started_at).total_seconds() + 5.0
+    # Estimate last chunk duration from blob size (PCM16 mono at 8kHz = 16000 bytes/sec)
+    last_chunk_size = chunk_group[-1].get('size', 0)
+    last_chunk_duration = last_chunk_size / 16000.0 if last_chunk_size > 0 else 5.0
+    duration = (last_chunk_start - started_at).total_seconds() + last_chunk_duration
 
     return AudioFile(
         id=file_id,
@@ -600,7 +635,7 @@ def migrate_conversations_level_batch(uid: str, conversation_ids: List[str], tar
 
     for doc_snapshot in doc_snapshots:
         if not doc_snapshot.exists:
-            print(f"Conversation {doc_snapshot.id} not found, skipping.")
+            logger.warning(f"Conversation {doc_snapshot.id} not found, skipping.")
             continue
 
         conversation_data = doc_snapshot.to_dict()
@@ -858,18 +893,30 @@ def update_conversation_finished_at(uid: str, conversation_id: str, finished_at:
     conversation_ref.update({'finished_at': finished_at})
 
 
-def update_conversation_segments(uid: str, conversation_id: str, segments: List[dict], finished_at: datetime = None):
+def update_conversation_segments(
+    uid: str,
+    conversation_id: str,
+    segments: List[dict],
+    finished_at: datetime = None,
+    data_protection_level: str = None,
+):
     doc_ref = db.collection('users').document(uid).collection(conversations_collection).document(conversation_id)
-    doc_snapshot = doc_ref.get(field_paths=['data_protection_level'])
-    if not doc_snapshot.exists:
-        return
-
-    doc_level = doc_snapshot.to_dict().get('data_protection_level', 'standard')
+    if data_protection_level is not None:
+        doc_level = data_protection_level
+    else:
+        doc_snapshot = doc_ref.get(field_paths=['data_protection_level'])
+        if not doc_snapshot.exists:
+            return
+        doc_level = doc_snapshot.to_dict().get('data_protection_level', 'standard')
     update_payload = {'transcript_segments': segments}
     if finished_at:
         update_payload['finished_at'] = finished_at
     prepared_payload = _prepare_conversation_for_write(update_payload, uid, doc_level)
-    doc_ref.update(prepared_payload)
+    try:
+        doc_ref.update(prepared_payload)
+    except NotFound:
+        # Document was deleted between cache read and write — safe to skip
+        return
 
 
 # ***********************************
@@ -908,7 +955,7 @@ def unlock_all_conversations(uid: str):
             count = 0
     if count > 0:
         batch.commit()
-    print(f"Unlocked all conversations for user {uid}")
+    logger.info(f"Unlocked all conversations for user {uid}")
 
 
 def get_public_conversations(data: List[Tuple[str, str]]):
@@ -1050,13 +1097,13 @@ def get_closest_conversation_to_timestamps(uid: str, start_timestamp: int, end_t
     )
 
     conversations = [doc.to_dict() for doc in query.stream()]
-    print('get_closest_conversation_to_timestamps len(conversations)', len(conversations))
+    logger.info(f'get_closest_conversation_to_timestamps len(conversations) {len(conversations)}')
     if not conversations:
         return None
 
-    print('get_closest_conversation_to_timestamps found:')
+    logger.info('get_closest_conversation_to_timestamps found:')
     for conversation in conversations:
-        print('-', conversation['id'], conversation['started_at'], conversation['finished_at'])
+        logger.info(f"- {conversation['id']} {conversation['started_at']} {conversation['finished_at']}")
 
     # get the conversation that has the closest start timestamp or end timestamp
     closest_conversation = None
@@ -1070,7 +1117,7 @@ def get_closest_conversation_to_timestamps(uid: str, start_timestamp: int, end_t
             min_diff = min(diff1, diff2)
             closest_conversation = conversation
 
-    print('get_closest_conversation_to_timestamps closest_conversation:', closest_conversation['id'])
+    logger.info(f"get_closest_conversation_to_timestamps closest_conversation: {closest_conversation['id']}")
     return closest_conversation
 
 

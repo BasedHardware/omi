@@ -18,29 +18,19 @@ class TaskIntegrationsBanner extends StatelessWidget {
         // Track banner click
         MixpanelManager().exportTasksBannerClicked();
 
-        Navigator.of(context).push(
-          MaterialPageRoute(
-            builder: (context) => const TaskIntegrationsPage(),
-          ),
-        );
+        Navigator.of(context).push(MaterialPageRoute(builder: (context) => const TaskIntegrationsPage()));
       },
       child: Container(
         margin: const EdgeInsets.only(bottom: 16),
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         decoration: BoxDecoration(
           gradient: LinearGradient(
-            colors: [
-              Colors.deepPurple.withOpacity(0.3),
-              Colors.purple.withOpacity(0.3),
-            ],
+            colors: [Colors.deepPurple.withOpacity(0.3), Colors.purple.withOpacity(0.3)],
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
           ),
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-            color: Colors.deepPurpleAccent.withOpacity(0.2),
-            width: 1,
-          ),
+          border: Border.all(color: Colors.deepPurpleAccent.withOpacity(0.2), width: 1),
         ),
         child: Row(
           children: [
@@ -55,10 +45,7 @@ class TaskIntegrationsBanner extends StatelessWidget {
                     left: 0,
                     child: Hero(
                       tag: 'task_integration_todoist_icon',
-                      child: _buildOverlappingLogo(
-                        Assets.integrationAppLogos.todoistLogo.path,
-                        28,
-                      ),
+                      child: _buildOverlappingLogo(Assets.integrationAppLogos.todoistLogo.path, 28),
                     ),
                   ),
                   // Second logo - ClickUp
@@ -66,10 +53,7 @@ class TaskIntegrationsBanner extends StatelessWidget {
                     left: 22,
                     child: Hero(
                       tag: 'task_integration_clickup_icon',
-                      child: _buildOverlappingLogo(
-                        Assets.integrationAppLogos.clickupLogo.path,
-                        28,
-                      ),
+                      child: _buildOverlappingLogo(Assets.integrationAppLogos.clickupLogo.path, 28),
                     ),
                   ),
                   // Third logo - Asana
@@ -77,10 +61,7 @@ class TaskIntegrationsBanner extends StatelessWidget {
                     left: 44,
                     child: Hero(
                       tag: 'task_integration_asana_icon',
-                      child: _buildOverlappingLogo(
-                        Assets.integrationAppLogos.asanaLogo.path,
-                        28,
-                      ),
+                      child: _buildOverlappingLogo(Assets.integrationAppLogos.asanaLogo.path, 28),
                     ),
                   ),
                 ],
@@ -93,11 +74,7 @@ class TaskIntegrationsBanner extends StatelessWidget {
             Expanded(
               child: Text(
                 context.l10n.exportTasksWithOneTap,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 15,
-                  fontWeight: FontWeight.w500,
-                ),
+                style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w500),
               ),
             ),
 
@@ -130,12 +107,7 @@ class TaskIntegrationsBanner extends StatelessWidget {
       height: size,
       child: ClipRRect(
         borderRadius: BorderRadius.circular(16),
-        child: Image.asset(
-          path,
-          width: size,
-          height: size,
-          fit: BoxFit.contain,
-        ),
+        child: Image.asset(path, width: size, height: size, fit: BoxFit.contain),
       ),
     );
   }

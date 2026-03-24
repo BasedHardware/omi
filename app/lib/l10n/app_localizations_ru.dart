@@ -25,7 +25,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get deleteConversationMessage =>
-      'Вы уверены, что хотите удалить этот разговор? Это действие нельзя будет отменить.';
+      'Это также удалит связанные воспоминания, задачи и аудиофайлы. Это действие нельзя отменить.';
 
   @override
   String get confirm => 'Подтвердить';
@@ -1016,7 +1016,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get vocabularyHint => 'Omi, Callie, OpenAI';
 
   @override
-  String get connect => 'Connect';
+  String get connect => 'Подключить';
 
   @override
   String get comingSoon => 'Скоро';
@@ -2274,7 +2274,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get folderName => 'Имя папки';
 
   @override
-  String get descriptionOptional => 'Description (optional)';
+  String get descriptionOptional => 'Описание (необязательно)';
 
   @override
   String get failedToDeleteFolder => 'Не удалось удалить папку';
@@ -2681,7 +2681,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get showAll => 'Показать все →';
 
   @override
-  String get noTasksForToday => 'Нет задач на сегодня.\\nСпросите Omi о дополнительных задачах или создайте вручную.';
+  String get noTasksForToday => 'Нет задач на сегодня.\nСпросите Omi о дополнительных задачах или создайте вручную.';
 
   @override
   String get dailyScore => 'ДНЕВНОЙ СЧЁТ';
@@ -8024,27 +8024,27 @@ class AppLocalizationsRu extends AppLocalizations {
   String get addTask => 'Добавить задачу';
 
   @override
-  String get addMcpServer => 'Add MCP Server';
+  String get addMcpServer => 'Добавить сервер MCP';
 
   @override
-  String get connectExternalAiTools => 'Connect external AI tools';
+  String get connectExternalAiTools => 'Подключить внешние инструменты ИИ';
 
   @override
   String get mcpServerUrl => 'MCP Server URL';
 
   @override
   String mcpServerConnected(int count) {
-    return '$count tools connected successfully';
+    return 'Успешно подключено инструментов: $count';
   }
 
   @override
-  String get mcpConnectionFailed => 'Failed to connect to MCP server';
+  String get mcpConnectionFailed => 'Не удалось подключиться к серверу MCP';
 
   @override
-  String get authorizingMcpServer => 'Authorizing...';
+  String get authorizingMcpServer => 'Авторизация...';
 
   @override
-  String get whereDidYouHearAboutOmi => 'How did you find us?';
+  String get whereDidYouHearAboutOmi => 'Как вы о нас узнали?';
 
   @override
   String get tiktok => 'TikTok';
@@ -8062,19 +8062,19 @@ class AppLocalizationsRu extends AppLocalizations {
   String get reddit => 'Reddit';
 
   @override
-  String get friendWordOfMouth => 'Friend';
+  String get friendWordOfMouth => 'Друг';
 
   @override
-  String get otherSource => 'Other';
+  String get otherSource => 'Другое';
 
   @override
-  String get pleaseSpecify => 'Please specify';
+  String get pleaseSpecify => 'Уточните, пожалуйста';
 
   @override
-  String get event => 'Event';
+  String get event => 'Мероприятие';
 
   @override
-  String get coworker => 'Coworker';
+  String get coworker => 'Коллега';
 
   @override
   String get linkedIn => 'LinkedIn';
@@ -8173,6 +8173,45 @@ class AppLocalizationsRu extends AppLocalizations {
       'Нажмите и удерживайте кнопку питания, пока не замигает светодиод. Устройство станет обнаруживаемым.';
 
   @override
+  String get downloadingFromDevice => 'Загрузка с устройства';
+
+  @override
+  String get reconnectingToInternet => 'Повторное подключение к интернету...';
+
+  @override
+  String uploadingToCloud(int current, int total) {
+    return 'Загрузка $current из $total';
+  }
+
+  @override
+  String get processedStatus => 'Обработано';
+
+  @override
+  String get corruptedStatus => 'Повреждено';
+
+  @override
+  String nPending(int count) {
+    return '$count ожидающих';
+  }
+
+  @override
+  String nProcessed(int count) {
+    return '$count обработано';
+  }
+
+  @override
+  String get synced => 'Синхронизировано';
+
+  @override
+  String get noPendingRecordings => 'Нет ожидающих записей';
+
+  @override
+  String get noProcessedRecordings => 'Пока нет обработанных записей';
+
+  @override
+  String get pending => 'Ожидание';
+
+  @override
   String whatsNewInVersion(String version) {
     return 'Что нового в $version';
   }
@@ -8203,4 +8242,437 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get enterWifiPassword => 'Введите пароль WiFi';
+
+  @override
+  String get appIconLabel => 'App Icon';
+
+  @override
+  String get onboardingWhatIKnowAboutYouTitle => 'Вот что я знаю о тебе';
+
+  @override
+  String get onboardingWhatIKnowAboutYouDescription =>
+      'Эта карта обновляется по мере того, как Omi учится на ваших разговорах.';
+
+  @override
+  String get apiEnvironment => 'Среда API';
+
+  @override
+  String get apiEnvironmentDescription => 'Выберите сервер для подключения';
+
+  @override
+  String get production => 'Продакшн';
+
+  @override
+  String get staging => 'Тестовая среда';
+
+  @override
+  String get switchRequiresRestart => 'Переключение требует перезапуска приложения';
+
+  @override
+  String get switchApiConfirmTitle => 'Переключение среды API';
+
+  @override
+  String switchApiConfirmBody(String environment) {
+    return 'Переключиться на $environment? Вам нужно будет закрыть и снова открыть приложение, чтобы изменения вступили в силу.';
+  }
+
+  @override
+  String get switchAndRestart => 'Переключить';
+
+  @override
+  String get stagingDisclaimer =>
+      'Тестовая среда может быть нестабильной, с непостоянной производительностью, и данные могут быть потеряны. Только для тестирования.';
+
+  @override
+  String get apiEnvSavedRestartRequired =>
+      'Сохранено. Закройте и снова откройте приложение, чтобы применить изменения.';
+
+  @override
+  String get shared => 'Общий';
+
+  @override
+  String get onlyYouCanSeeConversation => 'Только вы можете видеть этот разговор';
+
+  @override
+  String get anyoneWithLinkCanView => 'Любой, у кого есть ссылка, может просматривать';
+
+  @override
+  String get tasksCleanTodayTitle => 'Очистить задачи на сегодня?';
+
+  @override
+  String get tasksCleanTodayMessage => 'Это удалит только сроки';
+
+  @override
+  String get tasksOverdue => 'Просроченные';
+
+  @override
+  String get phoneCallsWithOmi => 'Звонки с Omi';
+
+  @override
+  String get phoneCallsSubtitle => 'Звоните с транскрипцией в реальном времени';
+
+  @override
+  String get phoneSetupStep1Title => 'Подтвердите свой номер телефона';
+
+  @override
+  String get phoneSetupStep1Subtitle => 'Мы позвоним вам для подтверждения';
+
+  @override
+  String get phoneSetupStep2Title => 'Введите код верификации';
+
+  @override
+  String get phoneSetupStep2Subtitle => 'Короткий код, который вы введете во время звонка';
+
+  @override
+  String get phoneSetupStep3Title => 'Начните звонить своим контактам';
+
+  @override
+  String get phoneSetupStep3Subtitle => 'Со встроенной живой транскрипцией';
+
+  @override
+  String get phoneGetStarted => 'Начать';
+
+  @override
+  String get callRecordingConsentDisclaimer => 'Запись звонков может требовать согласия в вашей юрисдикции';
+
+  @override
+  String get enterYourNumber => 'Введите ваш номер';
+
+  @override
+  String get phoneNumberCallerIdHint => 'После верификации это станет вашим ID звонящего';
+
+  @override
+  String get phoneNumberHint => 'Номер телефона';
+
+  @override
+  String get failedToStartVerification => 'Не удалось начать верификацию';
+
+  @override
+  String get phoneContinue => 'Продолжить';
+
+  @override
+  String get verifyYourNumber => 'Подтвердите свой номер';
+
+  @override
+  String get answerTheCallFrom => 'Ответьте на звонок от';
+
+  @override
+  String get onTheCallEnterThisCode => 'Во время звонка введите этот код';
+
+  @override
+  String get followTheVoiceInstructions => 'Следуйте голосовым инструкциям';
+
+  @override
+  String get statusCalling => 'Звоним...';
+
+  @override
+  String get statusCallInProgress => 'Звонок идет';
+
+  @override
+  String get statusVerifiedLabel => 'Подтверждено';
+
+  @override
+  String get statusCallMissed => 'Пропущенный звонок';
+
+  @override
+  String get statusTimedOut => 'Время истекло';
+
+  @override
+  String get phoneTryAgain => 'Попробовать снова';
+
+  @override
+  String get phonePageTitle => 'Телефон';
+
+  @override
+  String get phoneContactsTab => 'Контакты';
+
+  @override
+  String get phoneKeypadTab => 'Клавиатура';
+
+  @override
+  String get grantContactsAccess => 'Предоставьте доступ к контактам';
+
+  @override
+  String get phoneAllow => 'Разрешить';
+
+  @override
+  String get phoneSearchHint => 'Поиск';
+
+  @override
+  String get phoneNoContactsFound => 'Контакты не найдены';
+
+  @override
+  String get phoneEnterNumber => 'Введите номер';
+
+  @override
+  String get failedToStartCall => 'Не удалось начать звонок';
+
+  @override
+  String get callStateConnecting => 'Подключение...';
+
+  @override
+  String get callStateRinging => 'Звонит...';
+
+  @override
+  String get callStateEnded => 'Звонок завершен';
+
+  @override
+  String get callStateFailed => 'Звонок не удался';
+
+  @override
+  String get transcriptPlaceholder => 'Транскрипция появится здесь...';
+
+  @override
+  String get phoneUnmute => 'Включить звук';
+
+  @override
+  String get phoneMute => 'Выключить звук';
+
+  @override
+  String get phoneSpeaker => 'Динамик';
+
+  @override
+  String get phoneEndCall => 'Завершить';
+
+  @override
+  String get phoneCallSettingsTitle => 'Настройки звонков';
+
+  @override
+  String get yourVerifiedNumbers => 'Ваши подтвержденные номера';
+
+  @override
+  String get verifiedNumbersDescription => 'Когда вы звоните, абонент увидит этот номер';
+
+  @override
+  String get noVerifiedNumbers => 'Нет подтвержденных номеров';
+
+  @override
+  String deletePhoneNumberConfirm(String phoneNumber) {
+    return 'Удалить $phoneNumber?';
+  }
+
+  @override
+  String get deletePhoneNumberWarning => 'Для звонков потребуется повторная верификация';
+
+  @override
+  String get phoneDeleteButton => 'Удалить';
+
+  @override
+  String verifiedMinutesAgo(int minutes) {
+    return 'Подтверждено $minutesмин назад';
+  }
+
+  @override
+  String verifiedHoursAgo(int hours) {
+    return 'Подтверждено $hoursч назад';
+  }
+
+  @override
+  String verifiedDaysAgo(int days) {
+    return 'Подтверждено $daysд назад';
+  }
+
+  @override
+  String verifiedOnDate(String date) {
+    return 'Подтверждено $date';
+  }
+
+  @override
+  String get verifiedFallback => 'Подтверждено';
+
+  @override
+  String get callAlreadyInProgress => 'Звонок уже идет';
+
+  @override
+  String get failedToGetCallToken => 'Не удалось получить токен. Сначала подтвердите номер.';
+
+  @override
+  String get failedToInitializeCallService => 'Не удалось инициализировать службу звонков';
+
+  @override
+  String get speakerLabelYou => 'Вы';
+
+  @override
+  String get speakerLabelUnknown => 'Неизвестный';
+
+  @override
+  String get showDailyScoreOnHomepage => 'Показать дневной счёт на главной странице';
+
+  @override
+  String get showTasksOnHomepage => 'Показать задачи на главной странице';
+
+  @override
+  String get phoneCallsUnlimitedOnly => 'Звонки через Omi';
+
+  @override
+  String get phoneCallsUpsellSubtitle =>
+      'Совершайте звонки через Omi и получайте транскрипцию в реальном времени, автоматические сводки и многое другое.';
+
+  @override
+  String get phoneCallsUpsellFeature1 => 'Транскрипция каждого звонка в реальном времени';
+
+  @override
+  String get phoneCallsUpsellFeature2 => 'Автоматические сводки звонков и задачи';
+
+  @override
+  String get phoneCallsUpsellFeature3 => 'Получатели видят ваш настоящий номер, а не случайный';
+
+  @override
+  String get phoneCallsUpsellFeature4 => 'Ваши звонки остаются конфиденциальными и защищёнными';
+
+  @override
+  String get phoneCallsUpgradeButton => 'Перейти на Безлимитный';
+
+  @override
+  String get phoneCallsMaybeLater => 'Может быть позже';
+
+  @override
+  String get deleteSynced => 'Удалить синхронизированные';
+
+  @override
+  String get deleteSyncedFiles => 'Удалить синхронизированные записи';
+
+  @override
+  String get deleteSyncedFilesMessage =>
+      'Эти записи уже синхронизированы с вашим телефоном. Это действие нельзя отменить.';
+
+  @override
+  String get syncedFilesDeleted => 'Синхронизированные записи удалены';
+
+  @override
+  String get deletePending => 'Удалить ожидающие';
+
+  @override
+  String get deletePendingFiles => 'Удалить ожидающие записи';
+
+  @override
+  String get deletePendingFilesWarning =>
+      'Эти записи НЕ синхронизированы с вашим телефоном и будут безвозвратно потеряны. Это действие нельзя отменить.';
+
+  @override
+  String get pendingFilesDeleted => 'Ожидающие записи удалены';
+
+  @override
+  String get deleteAllFiles => 'Удалить все записи';
+
+  @override
+  String get deleteAll => 'Удалить все';
+
+  @override
+  String get deleteAllFilesWarning =>
+      'Это удалит синхронизированные и ожидающие записи. Ожидающие записи НЕ синхронизированы и будут безвозвратно потеряны.';
+
+  @override
+  String get allFilesDeleted => 'Все записи удалены';
+
+  @override
+  String nFiles(int count) {
+    return '$count записей';
+  }
+
+  @override
+  String get manageStorage => 'Управление хранилищем';
+
+  @override
+  String get safelyBackedUp => 'Безопасно сохранено на вашем телефоне';
+
+  @override
+  String get notYetSynced => 'Ещё не синхронизировано с вашим телефоном';
+
+  @override
+  String get clearAll => 'Очистить всё';
+
+  @override
+  String get phoneKeypad => 'Клавиатура';
+
+  @override
+  String get phoneHideKeypad => 'Скрыть клавиатуру';
+
+  @override
+  String get fairUsePolicy => 'Добросовестное использование';
+
+  @override
+  String get fairUseLoadError =>
+      'Не удалось загрузить статус добросовестного использования. Пожалуйста, попробуйте снова.';
+
+  @override
+  String get fairUseStatusNormal => 'Ваше использование в пределах нормы.';
+
+  @override
+  String get fairUseStageNormal => 'Нормальное';
+
+  @override
+  String get fairUseStageWarning => 'Предупреждение';
+
+  @override
+  String get fairUseStageThrottle => 'Ограничено';
+
+  @override
+  String get fairUseStageRestrict => 'Заблокировано';
+
+  @override
+  String get fairUseSpeechUsage => 'Использование речи';
+
+  @override
+  String get fairUseToday => 'Сегодня';
+
+  @override
+  String get fairUse3Day => '3-дневный период';
+
+  @override
+  String get fairUseWeekly => 'Недельный период';
+
+  @override
+  String get fairUseAboutTitle => 'О добросовестном использовании';
+
+  @override
+  String get fairUseAboutBody =>
+      'Omi предназначен для личных разговоров, встреч и живого общения. Использование измеряется по фактическому обнаруженному времени речи, а не по времени подключения. Если использование значительно превышает обычные модели для неличного контента, могут применяться корректировки.';
+
+  @override
+  String fairUseCaseRefCopied(String caseRef) {
+    return '$caseRef скопировано';
+  }
+
+  @override
+  String get fairUseDailyTranscription => 'Ежедневная транскрипция';
+
+  @override
+  String fairUseBudgetUsed(String used, String limit) {
+    return '$usedм / $limitм';
+  }
+
+  @override
+  String get fairUseBudgetExhausted => 'Достигнут дневной лимит транскрипции';
+
+  @override
+  String fairUseBudgetResetsAt(String time) {
+    return 'Сброс $time';
+  }
+
+  @override
+  String get transcriptionPaused => 'Запись, переподключение';
+
+  @override
+  String get transcriptionPausedReconnecting => 'Запись продолжается — переподключение к транскрипции...';
+
+  @override
+  String fairUseBannerStatus(String status) {
+    return 'Добросовестное использование: $status';
+  }
+
+  @override
+  String get improveConnectionTitle => 'Улучшить соединение';
+
+  @override
+  String get improveConnectionContent =>
+      'Мы улучшили способ подключения Omi к вашему устройству. Чтобы активировать это, перейдите на страницу информации об устройстве, нажмите \"Отключить устройство\" и снова подключите ваше устройство.';
+
+  @override
+  String get improveConnectionAction => 'Понятно';
+
+  @override
+  String clockSkewWarning(int minutes) {
+    return 'Часы вашего устройства отличаются на ~$minutes мин. Проверьте настройки даты и времени.';
+  }
 }

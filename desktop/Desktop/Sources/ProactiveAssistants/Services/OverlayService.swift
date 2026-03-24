@@ -128,6 +128,9 @@ class OverlayService {
         let focusResult = AXUIElementCopyAttributeValue(appElement, kAXFocusedWindowAttribute as CFString, &focusedWindow)
 
         guard focusResult == .success, let windowElement = focusedWindow else {
+            if focusResult == .apiDisabled || focusResult == .cannotComplete {
+                log("ACCESSIBILITY_AX: getWindowFrameViaAccessibility failed with \(focusResult.rawValue) — permission may be stuck")
+            }
             return nil
         }
 

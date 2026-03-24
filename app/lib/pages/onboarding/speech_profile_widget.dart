@@ -5,8 +5,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
 import 'package:provider/provider.dart';
 
-import 'package:omi/backend/http/api/users.dart';
-import 'package:omi/backend/preferences.dart';
 import 'package:omi/pages/settings/language_selection_dialog.dart';
 import 'package:omi/pages/speech_profile/percentage_bar_progress.dart';
 import 'package:omi/providers/capture_provider.dart';
@@ -34,13 +32,11 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerPr
   @override
   void initState() {
     super.initState();
-    _questionAnimationController = AnimationController(
-      duration: const Duration(milliseconds: 500),
-      vsync: this,
-    );
-    _questionFadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(parent: _questionAnimationController, curve: Curves.easeInOut),
-    );
+    _questionAnimationController = AnimationController(duration: const Duration(milliseconds: 500), vsync: this);
+    _questionFadeAnimation = Tween<double>(
+      begin: 0.0,
+      end: 1.0,
+    ).animate(CurvedAnimation(parent: _questionAnimationController, curve: Curves.easeInOut));
 
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
@@ -72,14 +68,14 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerPr
   final ScrollController _scrollController = ScrollController();
 
   void scrollDown() async {
-    if (_scrollController.hasClients) {
-      await Future.delayed(const Duration(milliseconds: 250));
-      _scrollController.animateTo(
-        _scrollController.position.maxScrollExtent,
-        duration: const Duration(milliseconds: 200),
-        curve: Curves.easeOut,
-      );
-    }
+    if (!_scrollController.hasClients) return;
+    await Future.delayed(const Duration(milliseconds: 250));
+    if (!mounted || !_scrollController.hasClients) return;
+    _scrollController.animateTo(
+      _scrollController.position.maxScrollExtent,
+      duration: const Duration(milliseconds: 200),
+      curve: Curves.easeOut,
+    );
   }
 
   String _getLoadingText(BuildContext context, SpeechProfileLoadingState state) {
@@ -189,6 +185,22 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerPr
                   ),
                   barrierDismissible: false,
                 );
+              } else if (error == 'UPLOAD_FAILED') {
+                showDialog(
+                  context: context,
+                  builder: (c) => getDialog(
+                    context,
+                    () {
+                      Navigator.pop(context);
+                    },
+                    () {},
+                    context.l10n.connectionError,
+                    context.l10n.connectionErrorDesc,
+                    okButtonText: context.l10n.ok,
+                    singleButton: true,
+                  ),
+                  barrierDismissible: false,
+                );
               } else if (error == 'INVALID_RECORDING') {
                 showDialog(
                   context: context,
@@ -244,18 +256,13 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerPr
             },
             child: Column(
               children: [
-                Expanded(
-                  child: Container(),
-                ),
+                Expanded(child: Container()),
                 Container(
                   width: double.infinity,
                   padding: EdgeInsets.fromLTRB(32, 0, 32, MediaQuery.of(context).padding.bottom + 8),
                   decoration: const BoxDecoration(
                     color: Colors.black,
-                    borderRadius: BorderRadius.only(
-                      topLeft: Radius.circular(40),
-                      topRight: Radius.circular(40),
-                    ),
+                    borderRadius: BorderRadius.only(topLeft: Radius.circular(40), topRight: Radius.circular(40)),
                   ),
                   child: SafeArea(
                     top: false,
@@ -266,7 +273,9 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerPr
 
                         // Title
                         Text(
-                          context.l10n.speechProfile,
+                          provider.startedRecording && !provider.profileCompleted
+                              ? 'Answer with your voice:'
+                              : 'Please find a quiet place',
                           style: const TextStyle(
                             color: Colors.white,
                             fontSize: 28,
@@ -283,7 +292,7 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerPr
                         if (!provider.startedRecording) ...[
                           // Intro text
                           Text(
-                            context.l10n.speechProfileIntro,
+                            'Omi needs to learn your goals and your voice. Answer questions with your voice. You\'ll be able to modify it later.',
                             textAlign: TextAlign.center,
                             style: TextStyle(
                               color: Colors.white.withValues(alpha: 0.6),
@@ -297,9 +306,7 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerPr
 
                           // Get Started button
                           provider.isInitialising
-                              ? const CircularProgressIndicator(
-                                  color: Colors.white,
-                                )
+                              ? const CircularProgressIndicator(color: Colors.white)
                               : SizedBox(
                                   width: double.infinity,
                                   height: 56,
@@ -316,8 +323,10 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerPr
                                       bool success = await provider.initialise(
                                         usePhoneMic: true,
                                         processConversationCallback: () {
-                                          Provider.of<CaptureProvider>(context, listen: false)
-                                              .forceProcessingCurrentConversation();
+                                          Provider.of<CaptureProvider>(
+                                            context,
+                                            listen: false,
+                                          ).forceProcessingCurrentConversation();
                                         },
                                       );
 
@@ -325,10 +334,12 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerPr
                                         return;
                                       }
 
-                                      provider.forceCompletionTimer =
-                                          Timer(Duration(seconds: provider.maxDuration), () async {
-                                        provider.finalize();
-                                      });
+                                      provider.forceCompletionTimer = Timer(
+                                        Duration(seconds: provider.maxDuration),
+                                        () async {
+                                          provider.finalize();
+                                        },
+                                      );
 
                                       if (!mounted) return;
                                       _questionAnimationController.forward();
@@ -336,9 +347,7 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerPr
                                     style: ElevatedButton.styleFrom(
                                       backgroundColor: Colors.white,
                                       foregroundColor: Colors.black,
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(28),
-                                      ),
+                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
                                       elevation: 0,
                                     ),
                                     child: Text(
@@ -354,15 +363,10 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerPr
 
                           // Skip for now
                           TextButton(
-                            onPressed: () {
-                              widget.onSkip();
-                            },
+                            onPressed: () => widget.onSkip(),
                             child: Text(
                               context.l10n.skipForNow,
-                              style: const TextStyle(
-                                color: Colors.grey,
-                                fontSize: 16,
-                              ),
+                              style: const TextStyle(color: Colors.grey, fontSize: 16),
                             ),
                           ),
                         ] else if (provider.profileCompleted) ...[
@@ -372,15 +376,11 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerPr
                             width: double.infinity,
                             height: 56,
                             child: ElevatedButton(
-                              onPressed: () {
-                                widget.goNext();
-                              },
+                              onPressed: () => widget.goNext(),
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: Colors.white,
                                 foregroundColor: Colors.black,
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(28),
-                                ),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
                                 elevation: 0,
                               ),
                               child: Text(
@@ -411,11 +411,7 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerPr
                               const SizedBox(width: 16),
                               Text(
                                 _getLoadingText(context, provider.loadingState),
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 16,
-                                  fontFamily: 'Manrope',
-                                ),
+                                style: const TextStyle(color: Colors.white, fontSize: 16, fontFamily: 'Manrope'),
                               ),
                             ],
                           ),
@@ -467,10 +463,10 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerPr
                               provider.currentQuestion,
                               style: const TextStyle(
                                 color: Colors.white,
-                                fontSize: 18,
+                                fontSize: 24,
                                 height: 1.3,
                                 fontFamily: 'Manrope',
-                                fontWeight: FontWeight.w500,
+                                fontWeight: FontWeight.w600,
                               ),
                               textAlign: TextAlign.center,
                             ),
@@ -501,11 +497,7 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerPr
                             onPressed: () => provider.skipCurrentQuestion(),
                             child: Text(
                               context.l10n.skipThisQuestion,
-                              style: const TextStyle(
-                                color: Colors.grey,
-                                fontSize: 14,
-                                fontFamily: 'Manrope',
-                              ),
+                              style: const TextStyle(color: Colors.grey, fontSize: 14, fontFamily: 'Manrope'),
                             ),
                           ),
                         ],

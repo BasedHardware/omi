@@ -64,7 +64,8 @@ class WaveformUtils {
     }
 
     Logger.debug(
-        'WAV Info: ${wavInfo.sampleRate}Hz, ${wavInfo.channels} channels, ${wavInfo.bitsPerSample} bits, data size: ${wavInfo.dataSize}');
+      'WAV Info: ${wavInfo.sampleRate}Hz, ${wavInfo.channels} channels, ${wavInfo.bitsPerSample} bits, data size: ${wavInfo.dataSize}',
+    );
 
     final pcmData = wavData.sublist(wavInfo.dataOffset, wavInfo.dataOffset + wavInfo.dataSize);
     final samples = _extractSamples(pcmData, wavInfo);

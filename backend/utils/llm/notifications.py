@@ -3,6 +3,9 @@ from typing import Tuple, List
 from .clients import llm_medium
 from .usage_tracker import track_usage, Features
 from database.memories import get_memories
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 async def get_relevant_memories(uid: str, limit: int = 100) -> List[dict]:
@@ -69,7 +72,7 @@ async def generate_notification_message(uid: str, name: str, plan_type: str = "b
         return "omi", body.strip()
 
     except Exception as e:
-        print(f"Error generating notification message: {e}")
+        logger.error(f"Error generating notification message: {e}")
 
     # Improved fallback messages with more personality
     return ("omi", f"Hey {name}! 👋 Thanks for being part of the Omi family! ✨")
@@ -126,7 +129,7 @@ async def generate_credit_limit_notification(uid: str, name: str) -> Tuple[str, 
         return "omi", body.strip()
 
     except Exception as e:
-        print(f"Error generating credit limit notification: {e}")
+        logger.error(f"Error generating credit limit notification: {e}")
 
     # Fallback message
     return (

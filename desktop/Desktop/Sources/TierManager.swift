@@ -31,29 +31,9 @@ class TierManager {
 
     private init() {}
 
-    /// Called on app launch (after auth). Checks tier at most once per day.
+    /// Called on app launch (after auth). Currently a no-op — all features are unlocked for everyone.
     func checkTierIfNeeded() async {
-        // Skip if user manually set "Show All" (tier 0)
-        let userShowAll = UserDefaults.standard.bool(forKey: userShowAllKey)
-        if userShowAll { return }
-
-        // Skip if checked today
-        let lastCheck = UserDefaults.standard.object(forKey: lastTierCheckKey) as? Date ?? .distantPast
-        if Calendar.current.isDateInToday(lastCheck) { return }
-
-        // Mark checked
-        UserDefaults.standard.set(Date(), forKey: lastTierCheckKey)
-
-        // Compute and apply
-        let newTier = await computeTierLevel()
-        let currentTier = UserDefaults.standard.integer(forKey: currentTierKey)
-
-        // Only upgrade, never downgrade automatically
-        if newTier > currentTier {
-            UserDefaults.standard.set(newTier, forKey: currentTierKey)
-            AnalyticsManager.shared.tierChanged(tier: newTier, reason: "auto_upgrade")
-            log("TierManager: Auto-upgraded from tier \(currentTier) to tier \(newTier)")
-        }
+        // Tier gating is disabled — everyone gets all features (tier 0).
     }
 
     /// Compute the highest tier the user qualifies for based on sequential criteria.
@@ -165,6 +145,16 @@ class TierManager {
                 UserDefaults.standard.removeObject(forKey: "lastTierCheckDate")
                 log("TierManager: Migration V3 - cleared userShowAllFeatures, keeping tier 0 for seamless re-evaluation")
             }
+        }
+
+        // V4: Disable tier gating entirely — all users get all features.
+        let v4Key = "didMigrateTierGatingV4"
+        if !UserDefaults.standard.bool(forKey: v4Key) {
+            UserDefaults.standard.set(true, forKey: v4Key)
+            UserDefaults.standard.set(0, forKey: "currentTierLevel")
+            UserDefaults.standard.set(0, forKey: "lastSeenTierLevel")
+            UserDefaults.standard.set(true, forKey: "userShowAllFeatures")
+            log("TierManager: Migration V4 - all features unlocked for everyone (tier 0)")
         }
     }
 }

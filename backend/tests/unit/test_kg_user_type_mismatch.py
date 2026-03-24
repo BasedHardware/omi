@@ -53,6 +53,10 @@ for submodule in [
     mod = _stub_module(f"database.{submodule}")
     setattr(database_mod, submodule, mod)
 
+users_mod = sys.modules["database.users"]
+users_mod.get_user_language_preference = MagicMock(return_value='en')
+users_mod.get_people_by_ids = MagicMock(return_value=[])
+
 vector_db_mod = sys.modules["database.vector_db"]
 for attr in [
     "find_similar_memories",
@@ -334,3 +338,84 @@ class TestKnowledgeGraphUserLookup:
         assert calls[1].args == (uid, "Second memory", "mem-b", "Bob")
         # set_memory_kg_extracted called for the 2 extracted ones
         assert memories_mod.set_memory_kg_extracted.call_count == 2
+
+
+class TestKnowledgeGraphFailureHandling:
+    """Tests for #4929: kg_extracted must not be set when extraction fails."""
+
+    @patch("models.memories.MemoryDB.from_memory")
+    def test_kg_extracted_not_set_when_extractor_returns_none(self, mock_from_memory):
+        """When extract_knowledge_from_memory returns None (failure), kg_extracted must NOT be set."""
+        uid = "uid-fail"
+        conv = _make_conversation_mock()
+        mem_db = _make_memory_mock("mem-fail", "Failing memory")
+        mock_from_memory.return_value = mem_db
+
+        _setup_extract_memories(mem_db)
+        auth_mod.get_user_name.reset_mock()
+        auth_mod.get_user_name.return_value = "User"
+        llm_kg.extract_knowledge_from_memory.reset_mock()
+        llm_kg.extract_knowledge_from_memory.return_value = None
+        memories_mod.set_memory_kg_extracted.reset_mock()
+
+        process_conversation._extract_memories_inner(uid, conv)
+
+        llm_kg.extract_knowledge_from_memory.assert_called_once()
+        memories_mod.set_memory_kg_extracted.assert_not_called()
+
+    @patch("models.memories.MemoryDB.from_memory")
+    def test_kg_extracted_set_only_for_successful_memories_in_batch(self, mock_from_memory):
+        """In a batch, kg_extracted is set only for memories where extraction succeeds."""
+        uid = "uid-mixed"
+        conv = _make_conversation_mock()
+        mem1 = _make_memory_mock("mem-ok", "Good memory", kg_extracted=False)
+        mem2 = _make_memory_mock("mem-bad", "Bad memory", kg_extracted=False)
+        mem3 = _make_memory_mock("mem-ok2", "Another good", kg_extracted=False)
+
+        mock_from_memory.side_effect = [mem1, mem2, mem3]
+        llm_memories.new_memories_extractor.return_value = [MagicMock(), MagicMock(), MagicMock()]
+        vector_db_mod.find_similar_memories.return_value = []
+        memories_mod.get_memory_ids_for_conversation.return_value = []
+        memories_mod.save_memories.reset_mock()
+        utils_analytics.record_usage.reset_mock()
+
+        auth_mod.get_user_name.reset_mock()
+        auth_mod.get_user_name.return_value = "User"
+        llm_kg.extract_knowledge_from_memory.reset_mock()
+        # First succeeds, second fails (None), third succeeds
+        llm_kg.extract_knowledge_from_memory.side_effect = [
+            {'nodes': [], 'edges': []},
+            None,
+            {'nodes': [{'id': 'n1'}], 'edges': []},
+        ]
+        memories_mod.set_memory_kg_extracted.reset_mock()
+
+        process_conversation._extract_memories_inner(uid, conv)
+
+        assert llm_kg.extract_knowledge_from_memory.call_count == 3
+        # Only 2 should be marked as extracted (mem-ok and mem-ok2), not mem-bad
+        assert memories_mod.set_memory_kg_extracted.call_count == 2
+        calls = memories_mod.set_memory_kg_extracted.call_args_list
+        assert calls[0].args == (uid, "mem-ok")
+        assert calls[1].args == (uid, "mem-ok2")
+
+    @patch("models.memories.MemoryDB.from_memory")
+    def test_kg_extracted_set_on_empty_success(self, mock_from_memory):
+        """When extraction returns empty nodes/edges (success), kg_extracted should still be set."""
+        uid = "uid-empty"
+        conv = _make_conversation_mock()
+        mem_db = _make_memory_mock("mem-empty", "No entities here")
+        mock_from_memory.return_value = mem_db
+
+        _setup_extract_memories(mem_db)
+        auth_mod.get_user_name.reset_mock()
+        auth_mod.get_user_name.return_value = "User"
+        llm_kg.extract_knowledge_from_memory.reset_mock()
+        llm_kg.extract_knowledge_from_memory.side_effect = None
+        llm_kg.extract_knowledge_from_memory.return_value = {'nodes': [], 'edges': []}
+        memories_mod.set_memory_kg_extracted.reset_mock()
+
+        process_conversation._extract_memories_inner(uid, conv)
+
+        llm_kg.extract_knowledge_from_memory.assert_called_once()
+        memories_mod.set_memory_kg_extracted.assert_called_once_with(uid, "mem-empty")

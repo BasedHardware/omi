@@ -115,7 +115,8 @@ class DashboardViewModel: ObservableObject {
                 title: title,
                 goalType: goalType,
                 targetValue: targetValue,
-                unit: unit
+                unit: unit,
+                source: "user"
             )
             _ = try? await GoalStorage.shared.syncServerGoal(goal)
             goals = try await GoalStorage.shared.getLocalGoals()
@@ -154,6 +155,26 @@ class DashboardViewModel: ObservableObject {
             log("Goals: Updated '\(goal.title)' progress confirmed by API")
         } catch {
             logError("Failed to update goal progress", error: error)
+        }
+    }
+
+    func updateGoal(_ goal: Goal, title: String, currentValue: Double, targetValue: Double) async {
+        log("Goals: Updating goal '\(goal.title)' -> title='\(title)', current=\(currentValue), target=\(targetValue)")
+
+        do {
+            let updated = try await APIClient.shared.updateGoal(
+                goalId: goal.id,
+                title: title,
+                currentValue: currentValue,
+                targetValue: targetValue
+            )
+
+            _ = try? await GoalStorage.shared.syncServerGoal(updated)
+            goals = try await GoalStorage.shared.getLocalGoals()
+            log("Goals: Updated goal '\(updated.title)' confirmed by API")
+        } catch {
+            logError("Failed to update goal", error: error)
+            goals = (try? await GoalStorage.shared.getLocalGoals()) ?? goals
         }
     }
 
@@ -202,21 +223,8 @@ struct DashboardPage: View {
 
     private var dashboardWidgets: some View {
         VStack(alignment: .leading, spacing: 24) {
-            // 4 Widgets in 2x2 grid
             Grid(horizontalSpacing: 16, verticalSpacing: 16) {
-                // Top row: Score + Focus
-                GridRow {
-                    ScoreWidget(scoreResponse: viewModel.scoreResponse)
-                        .frame(minWidth: 0, maxWidth: .infinity)
-
-                    FocusSummaryWidget(
-                        todayStats: FocusStorage.shared.todayStats,
-                        totalStats: FocusStorage.shared.allTimeStats
-                    )
-                    .frame(minWidth: 0, maxWidth: .infinity)
-                }
-
-                // Bottom row: Tasks + Goals
+                // Top row: Tasks + Goals
                 GridRow {
                     TasksWidget(
                         overdueTasks: viewModel.overdueTasks,
@@ -228,7 +236,7 @@ struct DashboardPage: View {
                             }
                         }
                     )
-                    .frame(minWidth: 0, maxWidth: .infinity)
+                        .frame(minWidth: 0, maxWidth: .infinity)
 
                     GoalsWidget(
                         goals: viewModel.goals,
@@ -239,6 +247,16 @@ struct DashboardPage: View {
                                     goalType: .numeric,
                                     targetValue: target,
                                     unit: nil
+                                )
+                            }
+                        },
+                        onUpdateGoal: { goal, title, current, target in
+                            Task {
+                                await viewModel.updateGoal(
+                                    goal,
+                                    title: title,
+                                    currentValue: current,
+                                    targetValue: target
                                 )
                             }
                         },

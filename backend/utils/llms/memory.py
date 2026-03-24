@@ -3,6 +3,9 @@ from typing import List, Tuple, Optional
 import database.memories as memories_db
 from database.auth import get_user_name
 from models.memories import Memory, MemoryCategory
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 def get_prompt_memories(uid: str) -> str:
@@ -57,7 +60,7 @@ def get_prompt_data(uid: str) -> Tuple[str, List[Memory], List[Memory]]:
             try:
                 user_made.append(safe_create_memory(memory))
             except Exception as e:
-                print(f"Error creating memory from user-made memory: {e}")
+                logger.error(f"Error creating memory from user-made memory: {e}")
 
     # Similarly for generated memories
     generated = []
@@ -66,7 +69,7 @@ def get_prompt_data(uid: str) -> Tuple[str, List[Memory], List[Memory]]:
             try:
                 generated.append(safe_create_memory(memory))
             except Exception as e:
-                print(f"Error creating memory from generated memory: {e}")
+                logger.error(f"Error creating memory from generated memory: {e}")
 
     user_name = get_user_name(uid)
     # print('get_prompt_data', user_name, len(user_made), len(generated))

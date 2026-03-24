@@ -28,10 +28,7 @@ class _IndicatorState extends State<_Indicator> with SingleTickerProviderStateMi
   @override
   void initState() {
     super.initState();
-    _controller = AnimationController(
-      duration: const Duration(milliseconds: 600),
-      vsync: this,
-    )..repeat(reverse: true);
+    _controller = AnimationController(duration: const Duration(milliseconds: 600), vsync: this)..repeat(reverse: true);
 
     _anim1 = _tween(0.2);
     _anim2 = _tween(0.1);
@@ -50,9 +47,9 @@ class _IndicatorState extends State<_Indicator> with SingleTickerProviderStateMi
   }
 
   Animation<Offset> _tween(double delta) => Tween<Offset>(
-        begin: Offset(0, delta),
-        end: Offset(0, -delta),
-      ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeInOut));
+    begin: Offset(0, delta),
+    end: Offset(0, -delta),
+  ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeInOut));
 
   @override
   void dispose() {
@@ -64,35 +61,26 @@ class _IndicatorState extends State<_Indicator> with SingleTickerProviderStateMi
   Widget build(BuildContext context) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        _bubble(_anim1),
-        const SizedBox(width: 5),
-        _bubble(_anim2),
-        const SizedBox(width: 5),
-        _bubble(_anim3),
-      ],
+      children: [_bubble(_anim1), const SizedBox(width: 5), _bubble(_anim2), const SizedBox(width: 5), _bubble(_anim3)],
     );
   }
 
   // Optimized animation: keeps scale effect with RepaintBoundary isolation
   // Scale range reduced (0.85-1.0) for subtle bounce that's easy on battery
   Widget _bubble(Animation<Offset> anim) => RepaintBoundary(
-        child: SlideTransition(
-          position: anim,
-          child: ScaleTransition(
-            scale: _scale,
-            child: AnimatedBuilder(
-              animation: _color,
-              builder: (context, _) => Container(
-                width: 8,
-                height: 8,
-                decoration: BoxDecoration(
-                  color: _color.value,
-                  shape: BoxShape.circle,
-                ),
-              ),
-            ),
+    child: SlideTransition(
+      position: anim,
+      child: ScaleTransition(
+        scale: _scale,
+        child: AnimatedBuilder(
+          animation: _color,
+          builder: (context, _) => Container(
+            width: 8,
+            height: 8,
+            decoration: BoxDecoration(color: _color.value, shape: BoxShape.circle),
           ),
         ),
-      );
+      ),
+    ),
+  );
 }

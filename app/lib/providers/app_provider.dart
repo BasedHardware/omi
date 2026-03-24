@@ -5,7 +5,7 @@ import 'package:collection/collection.dart';
 import 'package:omi/backend/http/api/apps.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/app.dart';
-import 'package:omi/main.dart';
+import 'package:omi/app_globals.dart';
 import 'package:omi/providers/base_provider.dart';
 import 'package:omi/utils/alerts/app_dialog.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
@@ -274,10 +274,7 @@ class AppProvider extends BaseProvider {
 
         // Track search if there was a query
         if (queryBeingSearched.isNotEmpty) {
-          MixpanelManager().appsSearched(
-            searchTerm: queryBeingSearched,
-            resultCount: result.apps.length,
-          );
+          MixpanelManager().appsSearched(searchTerm: queryBeingSearched, resultCount: result.apps.length);
         }
       }
     } catch (e) {
@@ -537,17 +534,19 @@ class AppProvider extends BaseProvider {
         }
         filteredApps.removeWhere((app) => app.id == appId);
         updatePrefApps();
-        final context = MyApp.navigatorKey.currentState?.context;
+        final context = globalNavigatorKey.currentState?.context;
         AppSnackbar.showSnackbarSuccess(
-            context != null ? context.l10n.appDeletedSuccessfully : 'App deleted successfully');
+          context != null ? context.l10n.appDeletedSuccessfully : 'App deleted successfully',
+        );
         notifyListeners();
       } else {
         print("Warning: Tried to delete app $appId but it wasn't found in the 'apps' list.");
       }
     } else {
-      final context = MyApp.navigatorKey.currentState?.context;
+      final context = globalNavigatorKey.currentState?.context;
       AppSnackbar.showSnackbarError(
-          context != null ? context.l10n.appDeleteFailed : 'Failed to delete app. Please try again later.');
+        context != null ? context.l10n.appDeleteFailed : 'Failed to delete app. Please try again later.',
+      );
     }
   }
 
@@ -562,10 +561,12 @@ class AppProvider extends BaseProvider {
       if (filteredIdx != -1) {
         filteredApps[filteredIdx] = apps[appIndex];
       }
-      final context = MyApp.navigatorKey.currentState?.context;
-      AppSnackbar.showSnackbarSuccess(context != null
-          ? context.l10n.appVisibilityChangedSuccessfully
-          : 'App visibility changed successfully. It may take a few minutes to reflect.');
+      final context = globalNavigatorKey.currentState?.context;
+      AppSnackbar.showSnackbarSuccess(
+        context != null
+            ? context.l10n.appVisibilityChangedSuccessfully
+            : 'App visibility changed successfully. It may take a few minutes to reflect.',
+      );
       notifyListeners();
     }
     // Refresh apps after a delay to get server-confirmed state
@@ -782,7 +783,7 @@ class AppProvider extends BaseProvider {
     bool success = false;
     String? errorMessage;
 
-    final context = MyApp.navigatorKey.currentState?.context;
+    final context = globalNavigatorKey.currentState?.context;
 
     try {
       if (isEnabled) {
@@ -807,11 +808,7 @@ class AppProvider extends BaseProvider {
     }
 
     if (!success && errorMessage != null) {
-      AppDialog.show(
-        title: context != null ? context.l10n.error : 'Error',
-        content: errorMessage,
-        singleButton: true,
-      );
+      AppDialog.show(title: context != null ? context.l10n.error : 'Error', content: errorMessage, singleButton: true);
     }
 
     if (success) {

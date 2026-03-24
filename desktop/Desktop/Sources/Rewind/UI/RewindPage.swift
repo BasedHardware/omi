@@ -1,6 +1,5 @@
 import SwiftUI
 import AppKit
-import AVKit
 
 /// Main Rewind page - Timeline-first view with integrated search
 /// The timeline is the primary interface, with search results highlighted inline
@@ -8,9 +7,6 @@ struct RewindPage: View {
     var appState: AppState? = nil
 
     @StateObject private var viewModel = RewindViewModel()
-    @ObservedObject private var audioLevels = AudioLevelMonitor.shared
-    @ObservedObject private var recordingTimer = RecordingTimer.shared
-    @ObservedObject private var liveTranscript = LiveTranscriptMonitor.shared
 
     @State private var currentIndex: Int = 0
     @State private var currentImage: NSImage?
@@ -20,6 +16,7 @@ struct RewindPage: View {
     @State private var searchViewMode: SearchViewMode? = nil
     @State private var selectedGroupIndex: Int = 0
     @FocusState private var isSearchFocused: Bool
+    @FocusState private var isPageFocused: Bool
 
     // Monitoring toggle state
     @State private var isMonitoring = false
@@ -32,21 +29,17 @@ struct RewindPage: View {
 
     // Expanded transcript state
     @State private var isTranscriptExpanded = false
-    @State private var savedTranscriptSegments: [SpeakerSegment] = []
 
-    // Split finish/stop button state
+    // Finish conversation button state
     @State private var isFinishing = false
     @State private var showSavedSuccess = false
     @State private var showDiscarded = false
     @State private var showError = false
-    @AppStorage("recordingButtonMode") private var buttonMode: String = "finish"
 
     // Speaker naming state
     @State private var showNameSpeakerSheet = false
     @State private var selectedSpeakerSegment: SpeakerSegment? = nil
 
-    // Rewind intro video (first-time experience)
-    @AppStorage("hasSeenRewindIntro") private var hasSeenRewindIntro = false
 
     enum SearchViewMode {
         case results  // Full-screen search results
@@ -58,14 +51,12 @@ struct RewindPage: View {
         viewModel.activeSearchQuery != nil || !viewModel.searchQuery.isEmpty
     }
 
-    private var isFinishMode: Bool { buttonMode == "finish" }
-
     private var finishButtonText: String {
         if isFinishing { return "Saving..." }
         if showSavedSuccess { return "Saved!" }
         if showDiscarded { return "Too Short" }
         if showError { return "Failed" }
-        return isFinishMode ? "Finish Conversation" : "Stop Recording"
+        return "Finish Conversation"
     }
 
     private var finishButtonForeground: Color {
@@ -106,11 +97,6 @@ struct RewindPage: View {
             } else {
                 // Main content with persistent search field
                 VStack(spacing: 0) {
-                    // Recording bar (always visible when appState exists)
-                    if let appState = appState {
-                        rewindRecordingBar(appState: appState)
-                    }
-
                     if isTranscriptExpanded {
                         // Expanded transcript + notes view replaces timeline
                         expandedTranscriptView
@@ -140,21 +126,40 @@ struct RewindPage: View {
                         }
                     }
                 }
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             }
 
-            // Rewind intro video overlay (first-time experience)
-            if !hasSeenRewindIntro {
-                rewindIntroOverlay
-            }
         }
+        .focusable()
+        .focused($isPageFocused)
         .task {
             await viewModel.loadInitialData()
         }
         .onAppear {
             isMonitoring = ProactiveAssistantsPlugin.shared.isMonitoring
+            isPageFocused = true
         }
         .onReceive(NotificationCenter.default.publisher(for: .assistantMonitoringStateDidChange)) { _ in
-            isMonitoring = ProactiveAssistantsPlugin.shared.isMonitoring
+            let pluginState = ProactiveAssistantsPlugin.shared.isMonitoring
+            isMonitoring = pluginState
+            // Keep persistent setting in sync when monitoring stops due to errors
+            if !pluginState && screenAnalysisEnabled {
+                screenAnalysisEnabled = false
+                AssistantSettings.shared.screenAnalysisEnabled = false
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .expandRewindTranscript)) { _ in
+            withAnimation(.easeInOut(duration: 0.2)) {
+                isTranscriptExpanded = true
+            }
+        }
+        .onChange(of: isSearchFocused) { _, focused in
+            if !focused {
+                isPageFocused = true
+            }
+        }
+        .onChange(of: isTranscriptExpanded) { _, expanded in
+            viewModel.isTranscriptExpanded = expanded
         }
         .onChange(of: viewModel.screenshots) { oldScreenshots, newScreenshots in
             // Try to preserve position on the same screenshot the user was viewing
@@ -166,10 +171,8 @@ struct RewindPage: View {
                 currentIndex = newIndex
                 // No need to reload frame - it's the same screenshot
             } else if !newScreenshots.isEmpty {
-                // Can't find the current screenshot (first load, or it was deleted)
-                if currentIndex >= newScreenshots.count {
-                    currentIndex = 0
-                }
+                // First load or current screenshot deleted — start at newest (last index, ASC order)
+                currentIndex = newScreenshots.count - 1
                 selectedGroupIndex = 0
                 Task { await loadCurrentFrame() }
             }
@@ -186,18 +189,12 @@ struct RewindPage: View {
                 selectedGroupIndex = 0
             }
         }
-        .onChange(of: appState?.isTranscribing) { _, newValue in
-            // When recording stops, snapshot the transcript so it survives the clear
-            if newValue != true && isTranscriptExpanded && !liveTranscript.segments.isEmpty {
-                savedTranscriptSegments = liveTranscript.segments
-            }
-        }
         // Global keyboard handlers
         .onKeyPress(.escape) {
             // Expanded transcript → collapse
             if isTranscriptExpanded {
                 isTranscriptExpanded = false
-                savedTranscriptSegments = []
+                LiveTranscriptMonitor.shared.clearSaved()
                 return .handled
             }
             // Timeline mode → go back to results list
@@ -219,6 +216,7 @@ struct RewindPage: View {
         }
         .onKeyPress(.leftArrow) {
             // Arrow keys only work in timeline mode
+            // Left = older = lower index (ASC order: oldest first)
             if searchViewMode != .results {
                 previousFrame()
                 return .handled
@@ -226,6 +224,7 @@ struct RewindPage: View {
             return .ignored
         }
         .onKeyPress(.rightArrow) {
+            // Right = newer = higher index
             if searchViewMode != .results {
                 nextFrame()
                 return .handled
@@ -272,7 +271,7 @@ struct RewindPage: View {
         }
 
         let sensitivity: CGFloat = 0.5  // Reduced from 3.0 - was too fast
-        let framesToMove = Int(-delta * sensitivity)
+        let framesToMove = Int(delta * sensitivity) // Positive delta (scroll right/down) = newer = higher index
 
         if framesToMove != 0 {
             let newIndex = max(0, min(activeScreenshots.count - 1, currentIndex + framesToMove))
@@ -342,10 +341,18 @@ struct RewindPage: View {
     }
 
     private func toggleMonitoring(enabled: Bool) {
+        if enabled {
+            // Refresh permission cache before checking (may be stale after user granted access)
+            ProactiveAssistantsPlugin.shared.refreshScreenRecordingPermission()
+        }
+
         if enabled && !ProactiveAssistantsPlugin.shared.hasScreenRecordingPermission {
             isMonitoring = false
-            ScreenCaptureService.requestAllScreenCapturePermissions()
+            // Open Settings FIRST, then request permissions after a delay
             ProactiveAssistantsPlugin.shared.openScreenRecordingPreferences()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                ScreenCaptureService.requestAllScreenCapturePermissions()
+            }
             return
         }
 
@@ -363,6 +370,9 @@ struct RewindPage: View {
                     isTogglingMonitoring = false
                     if !success {
                         isMonitoring = false
+                        // Revert persistent setting so UI and auto-start stay in sync
+                        screenAnalysisEnabled = false
+                        AssistantSettings.shared.screenAnalysisEnabled = false
                     }
                 }
             }
@@ -393,9 +403,9 @@ struct RewindPage: View {
                 .buttonStyle(.plain)
                 .help("Back to results")
             } else {
-                // Screen title
+                // Rewind title
                 HStack(spacing: 8) {
-                    Text("Screen")
+                    Text("Rewind")
                         .scaledFont(size: 16, weight: .semibold)
                         .foregroundColor(.white)
 
@@ -460,14 +470,6 @@ struct RewindPage: View {
                 .padding(2)
                 .background(Color.white.opacity(0.1))
                 .cornerRadius(6)
-            } else {
-                // Timeline mode controls
-                // Stats
-                if let stats = viewModel.stats {
-                    Text("\(stats.total) frames • \(RewindStorage.formatBytes(stats.storageSize))")
-                        .scaledFont(size: 11)
-                        .foregroundColor(.white.opacity(0.5))
-                }
             }
 
             Spacer()
@@ -484,44 +486,10 @@ struct RewindPage: View {
                     .foregroundColor(.white.opacity(0.6))
             }
             .buttonStyle(.plain)
-            .help("Screen Settings")
+            .help("Rewind Settings")
 
-            // Screen recording start/stop
-            if isMonitoring {
-                Button {
-                    toggleMonitoring(enabled: false)
-                } label: {
-                    HStack(spacing: 6) {
-                        Image(systemName: "stop.circle.fill")
-                            .scaledFont(size: 12)
-                        Text("Stop Recording")
-                            .scaledFont(size: 13, weight: .medium)
-                    }
-                    .foregroundColor(.black)
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 6)
-                    .background(Capsule().fill(Color.white))
-                    .overlay(Capsule().stroke(OmiColors.border, lineWidth: 1))
-                }
-                .buttonStyle(.plain)
-            } else {
-                Button {
-                    toggleMonitoring(enabled: true)
-                } label: {
-                    HStack(spacing: 6) {
-                        Image(systemName: "record.circle")
-                            .scaledFont(size: 12)
-                        Text("Start Recording")
-                            .scaledFont(size: 13, weight: .medium)
-                    }
-                    .foregroundColor(.black)
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 6)
-                    .background(Capsule().fill(Color.white))
-                    .overlay(Capsule().stroke(OmiColors.border, lineWidth: 1))
-                }
-                .buttonStyle(.plain)
-            }
+            // Rewind on/off toggle (screen capture only)
+            rewindToggle
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
@@ -532,10 +500,10 @@ struct RewindPage: View {
 
     private var timelineContentBody: some View {
         VStack(spacing: 0) {
-            // Main frame display
-            Spacer()
+            // Main frame display - fills available space without Spacers to avoid SwiftUI layout loops
+            // (GeometryReader + Spacer inside VStack causes recursive StackLayout sizing)
             frameDisplay
-            Spacer()
+                .frame(maxHeight: .infinity)
 
             // Timeline and controls at bottom
             bottomControls
@@ -598,10 +566,9 @@ struct RewindPage: View {
 
     private var timelineWithSearch: some View {
         VStack(spacing: 0) {
-            // Frame display
-            Spacer()
+            // Frame display - fills available space (no Spacers to avoid layout loop)
             frameDisplay
-            Spacer()
+                .frame(maxHeight: .infinity)
 
             // Timeline and controls
             bottomControls
@@ -692,6 +659,9 @@ struct RewindPage: View {
                 selection: Binding(
                     get: { viewModel.selectedDate },
                     set: { newDate in
+                        // Only reload if the selected day actually changed
+                        let calendar = Calendar.current
+                        guard !calendar.isDate(newDate, inSameDayAs: viewModel.selectedDate) else { return }
                         Task { await viewModel.filterByDate(newDate) }
                     }
                 ),
@@ -791,30 +761,17 @@ struct RewindPage: View {
                 }
             )
 
-            // Compact control bar: legend | position/timestamp | scroll hint
+            // Compact control bar: position/timestamp | scroll hint
             HStack(spacing: 12) {
-                // Left: Legend indicators
-                HStack(spacing: 12) {
-                    // Current indicator
+                // Left: Legend indicators (only when searching)
+                if viewModel.activeSearchQuery != nil && !searchResultIndices.isEmpty {
                     HStack(spacing: 4) {
                         RoundedRectangle(cornerRadius: 1)
-                            .fill(Color.white)
+                            .fill(Color.yellow.opacity(0.8))
                             .frame(width: 8, height: 8)
-                        Text("current")
+                        Text("match")
                             .scaledFont(size: 9)
                             .foregroundColor(.white.opacity(0.4))
-                    }
-
-                    // Match indicator (only when searching)
-                    if viewModel.activeSearchQuery != nil && !searchResultIndices.isEmpty {
-                        HStack(spacing: 4) {
-                            RoundedRectangle(cornerRadius: 1)
-                                .fill(Color.yellow.opacity(0.8))
-                                .frame(width: 8, height: 8)
-                            Text("match")
-                                .scaledFont(size: 9)
-                                .foregroundColor(.white.opacity(0.4))
-                        }
                     }
                 }
 
@@ -934,92 +891,135 @@ struct RewindPage: View {
     }
 
     private func nextFrame() {
-        seekToIndex(currentIndex - 1) // Screenshots are newest first
+        seekToIndex(currentIndex + 1) // Screenshots are oldest first — right/next = newer = higher index
     }
 
     private func previousFrame() {
-        seekToIndex(currentIndex + 1)
+        seekToIndex(currentIndex - 1)
     }
 
-
-    // MARK: - Rewind Intro Video
-
-    private var rewindIntroOverlay: some View {
-        ZStack {
-            Color.black.opacity(0.85)
-                .ignoresSafeArea()
-
-            VStack(spacing: 20) {
-                RewindIntroVideoView()
-                    .frame(maxWidth: 700, maxHeight: 394) // 16:9 aspect
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
-                    .shadow(color: OmiColors.purplePrimary.opacity(0.3), radius: 20)
-
-                Button(action: {
-                    withAnimation(.easeOut(duration: 0.25)) {
-                        hasSeenRewindIntro = true
-                    }
-                }) {
-                    Text("Get Started")
-                        .scaledFont(size: 15, weight: .semibold)
-                        .foregroundColor(.white)
-                        .padding(.horizontal, 32)
-                        .padding(.vertical, 10)
-                        .background(OmiColors.purplePrimary)
-                        .clipShape(RoundedRectangle(cornerRadius: 10))
-                }
-                .buttonStyle(.plain)
-
-                Button(action: {
-                    withAnimation(.easeOut(duration: 0.25)) {
-                        hasSeenRewindIntro = true
-                    }
-                }) {
-                    Text("Skip")
-                        .scaledFont(size: 13)
-                        .foregroundColor(.white.opacity(0.5))
-                }
-                .buttonStyle(.plain)
-            }
-        }
-        .transition(.opacity)
-    }
 
     // MARK: - Empty States
 
     private var emptyState: some View {
-        VStack(spacing: 16) {
-            ZStack {
-                Circle()
-                    .fill(OmiColors.purplePrimary.opacity(0.1))
-                    .frame(width: 80, height: 80)
+        let isScreenCaptureKitBroken = appState?.isScreenCaptureKitBroken == true
+        let hasNoPermission = appState?.hasScreenRecordingPermission == false
 
-                Image(systemName: "clock.arrow.circlepath")
-                    .scaledFont(size: 36)
-                    .foregroundColor(OmiColors.purplePrimary.opacity(0.6))
+        return VStack(spacing: 16) {
+            Spacer()
+
+            if isScreenCaptureKitBroken {
+                ZStack {
+                    Circle()
+                        .fill(Color.red.opacity(0.1))
+                        .frame(width: 80, height: 80)
+
+                    Image(systemName: "rectangle.on.rectangle.slash")
+                        .scaledFont(size: 36)
+                        .foregroundColor(.red.opacity(0.7))
+                }
+
+                Text("Screen Recording Needs Reset")
+                    .scaledFont(size: 20, weight: .semibold)
+                    .foregroundColor(.white)
+
+                Text("macOS granted permission but ScreenCaptureKit is stuck.\nResetting fixes this — the app will restart automatically.")
+                    .scaledFont(size: 14)
+                    .foregroundColor(.white.opacity(0.6))
+                    .multilineTextAlignment(.center)
+
+                Button {
+                    AnalyticsManager.shared.screenCaptureResetClicked(source: "rewind_empty_state")
+                    // Re-enable screen analysis so it auto-starts after the restart
+                    screenAnalysisEnabled = true
+                    AssistantSettings.shared.screenAnalysisEnabled = true
+                    ScreenCaptureService.resetScreenCapturePermissionAndRestart()
+                } label: {
+                    Text("Reset & Restart")
+                        .scaledFont(size: 13, weight: .semibold)
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 20)
+                        .padding(.vertical, 8)
+                        .background(Color.red.opacity(0.8))
+                        .cornerRadius(8)
+                }
+                .buttonStyle(.plain)
+                .padding(.top, 4)
+            } else if hasNoPermission {
+                ZStack {
+                    Circle()
+                        .fill(Color.orange.opacity(0.1))
+                        .frame(width: 80, height: 80)
+
+                    Image(systemName: "lock.rectangle")
+                        .scaledFont(size: 36)
+                        .foregroundColor(.orange.opacity(0.7))
+                }
+
+                Text("Screen Recording Permission Required")
+                    .scaledFont(size: 20, weight: .semibold)
+                    .foregroundColor(.white)
+
+                Text("Rewind needs Screen Recording permission to capture your screen.")
+                    .scaledFont(size: 14)
+                    .foregroundColor(.white.opacity(0.6))
+                    .multilineTextAlignment(.center)
+
+                Button {
+                    // Re-enable screen analysis so it auto-starts after permission is granted and app restarts
+                    screenAnalysisEnabled = true
+                    AssistantSettings.shared.screenAnalysisEnabled = true
+                    // Open Settings FIRST, then request permissions after a delay
+                    ScreenCaptureService.openScreenRecordingPreferences()
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                        ScreenCaptureService.requestAllScreenCapturePermissions()
+                    }
+                } label: {
+                    Text("Grant Permission")
+                        .scaledFont(size: 13, weight: .semibold)
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 20)
+                        .padding(.vertical, 8)
+                        .background(Color.orange.opacity(0.8))
+                        .cornerRadius(8)
+                }
+                .buttonStyle(.plain)
+                .padding(.top, 4)
+            } else {
+                ZStack {
+                    Circle()
+                        .fill(OmiColors.purplePrimary.opacity(0.1))
+                        .frame(width: 80, height: 80)
+
+                    Image(systemName: "clock.arrow.circlepath")
+                        .scaledFont(size: 36)
+                        .foregroundColor(OmiColors.purplePrimary.opacity(0.6))
+                }
+
+                Text("No Screenshots Yet")
+                    .scaledFont(size: 20, weight: .semibold)
+                    .foregroundColor(.white)
+
+                Text("Screenshots will appear here as you use your Mac.\nRewind captures your screen every second.")
+                    .scaledFont(size: 14)
+                    .foregroundColor(.white.opacity(0.6))
+                    .multilineTextAlignment(.center)
+
+                HStack(spacing: 8) {
+                    Image(systemName: "lightbulb.fill")
+                        .foregroundColor(.yellow)
+                    Text("Tip: Use search to find anything you've seen on screen")
+                        .scaledFont(size: 12)
+                        .foregroundColor(.white.opacity(0.7))
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 10)
+                .background(Color.white.opacity(0.1))
+                .cornerRadius(8)
+                .padding(.top, 8)
             }
 
-            Text("No Screenshots Yet")
-                .scaledFont(size: 20, weight: .semibold)
-                .foregroundColor(.white)
-
-            Text("Screenshots will appear here as you use your Mac.\nRewind captures your screen every second.")
-                .scaledFont(size: 14)
-                .foregroundColor(.white.opacity(0.6))
-                .multilineTextAlignment(.center)
-
-            HStack(spacing: 8) {
-                Image(systemName: "lightbulb.fill")
-                    .foregroundColor(.yellow)
-                Text("Tip: Use search to find anything you've seen on screen")
-                    .scaledFont(size: 12)
-                    .foregroundColor(.white.opacity(0.7))
-            }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 10)
-            .background(Color.white.opacity(0.1))
-            .cornerRadius(8)
-            .padding(.top, 8)
+            Spacer()
         }
     }
 
@@ -1160,14 +1160,6 @@ struct RewindPage: View {
     @AppStorage("recordingNotesPanelRatio") private var panelRatio: Double = 0.65
     private let minPanelWidth: CGFloat = 200
 
-    /// The segments to display — live if available, otherwise the saved snapshot
-    private var displaySegments: [SpeakerSegment] {
-        if !liveTranscript.segments.isEmpty {
-            return liveTranscript.segments
-        }
-        return savedTranscriptSegments
-    }
-
     private var expandedTranscriptView: some View {
         VStack(spacing: 0) {
             // Show a back bar only when the recording bar is not visible
@@ -1176,7 +1168,7 @@ struct RewindPage: View {
                     Button {
                         withAnimation(.easeInOut(duration: 0.2)) {
                             isTranscriptExpanded = false
-                            savedTranscriptSegments = []
+                            LiveTranscriptMonitor.shared.clearSaved()
                         }
                     } label: {
                         HStack(spacing: 4) {
@@ -1209,32 +1201,13 @@ struct RewindPage: View {
                 HStack(spacing: 0) {
                     // Left: Live transcript
                     VStack(spacing: 0) {
-                        if displaySegments.isEmpty {
-                            VStack(spacing: 16) {
-                                Image(systemName: "waveform")
-                                    .scaledFont(size: 48)
-                                    .foregroundColor(OmiColors.textTertiary)
-                                    .opacity(0.5)
-                                Text("Listening...")
-                                    .scaledFont(size: 16, weight: .medium)
-                                    .foregroundColor(OmiColors.textSecondary)
-                                Text("Start speaking and your transcript will appear here")
-                                    .scaledFont(size: 14)
-                                    .foregroundColor(OmiColors.textTertiary)
-                                    .multilineTextAlignment(.center)
+                        LiveTranscriptPanel(
+                            speakerNames: speakerNames,
+                            onSpeakerTapped: { segment in
+                                selectedSpeakerSegment = segment
+                                showNameSpeakerSheet = true
                             }
-                            .frame(maxWidth: .infinity, maxHeight: .infinity)
-                            .padding(32)
-                        } else {
-                            LiveTranscriptView(
-                                segments: displaySegments,
-                                speakerNames: speakerNames,
-                                onSpeakerTapped: { segment in
-                                    selectedSpeakerSegment = segment
-                                    showNameSpeakerSheet = true
-                                }
-                            )
-                        }
+                        )
                     }
                     .frame(width: transcriptWidth)
                     .background(OmiColors.backgroundPrimary)
@@ -1280,35 +1253,19 @@ struct RewindPage: View {
 
     private func rewindRecordingBar(appState: AppState) -> some View {
         HStack(spacing: 12) {
-            // Left: always show "Audio" label
-            Text("Audio")
-                .scaledFont(size: 16, weight: .semibold)
-                .foregroundColor(.white)
-
-            // Middle content depends on state
+            // Content depends on state
             if appState.isTranscribing {
                 // Transcript text + chevron (clickable to expand/collapse)
                 Button {
                     withAnimation(.easeInOut(duration: 0.2)) {
                         isTranscriptExpanded.toggle()
                         if !isTranscriptExpanded {
-                            savedTranscriptSegments = []
+                            LiveTranscriptMonitor.shared.clearSaved()
                         }
                     }
                 } label: {
                     HStack(spacing: 6) {
-                        if let latestText = liveTranscript.latestText, !liveTranscript.isEmpty {
-                            Text(latestText)
-                                .scaledFont(size: 14)
-                                .foregroundColor(OmiColors.textSecondary)
-                                .lineLimit(1)
-                                .truncationMode(.head)
-                                .frame(maxWidth: 260, alignment: .leading)
-                        } else {
-                            Text("Listening")
-                                .scaledFont(size: 14, weight: .medium)
-                                .foregroundColor(OmiColors.textPrimary)
-                        }
+                        RecordingBarTranscriptText()
                         Image(systemName: isTranscriptExpanded ? "chevron.up" : "chevron.down")
                             .scaledFont(size: 10, weight: .semibold)
                             .foregroundColor(OmiColors.textTertiary)
@@ -1322,35 +1279,11 @@ struct RewindPage: View {
                 }
                 .buttonStyle(.plain)
 
-                // Audio level waveforms
-                HStack(spacing: 16) {
-                    HStack(spacing: 6) {
-                        Image(systemName: "mic.fill")
-                            .scaledFont(size: 12)
-                            .foregroundColor(OmiColors.textTertiary)
-                        AudioLevelWaveformView(
-                            level: audioLevels.microphoneLevel,
-                            barCount: 8,
-                            isActive: true
-                        )
-                    }
+                // Audio level waveforms (self-observing, won't re-render parent)
+                RecordingBarAudioLevels()
 
-                    HStack(spacing: 6) {
-                        Image(systemName: "speaker.wave.2.fill")
-                            .scaledFont(size: 12)
-                            .foregroundColor(OmiColors.textTertiary)
-                        AudioLevelWaveformView(
-                            level: audioLevels.systemLevel,
-                            barCount: 8,
-                            isActive: true
-                        )
-                    }
-                }
-
-                // Duration
-                Text(recordingTimer.formattedDuration)
-                    .scaledFont(size: 14, weight: .medium, design: .monospaced)
-                    .foregroundColor(OmiColors.textSecondary)
+                // Duration (self-observing, won't re-render parent)
+                RecordingBarDuration()
             } else if appState.isSavingConversation {
                 // Saving indicator
                 ZStack {
@@ -1383,108 +1316,69 @@ struct RewindPage: View {
 
             Spacer()
 
-            // Right: Split finish/stop button or start button
+            // Right: Finish Conversation button (when recording)
             if appState.isTranscribing {
-                HStack(spacing: 0) {
-                    // Main action button
-                    Button(action: {
-                        if isFinishMode {
-                            handleFinish(appState: appState)
-                        } else {
-                            appState.stopTranscription()
-                        }
-                    }) {
-                        HStack(spacing: 6) {
-                            if isFinishing {
-                                ProgressView()
-                                    .scaleEffect(0.5)
-                                    .frame(width: 12, height: 12)
-                            } else if showSavedSuccess {
-                                Image(systemName: "checkmark")
-                                    .scaledFont(size: 12, weight: .bold)
-                            } else if showDiscarded {
-                                Image(systemName: "xmark")
-                                    .scaledFont(size: 12, weight: .bold)
-                            } else if showError {
-                                Image(systemName: "exclamationmark.triangle.fill")
-                                    .scaledFont(size: 12)
-                            } else {
-                                Image(systemName: "stop.circle.fill")
-                                    .scaledFont(size: 12)
-                            }
-                            Text(finishButtonText)
-                                .scaledFont(size: 13, weight: .medium)
-                        }
-                        .foregroundColor(finishButtonForeground)
-                        .padding(.leading, 14)
-                        .padding(.trailing, 8)
-                        .padding(.vertical, 6)
-                    }
-                    .buttonStyle(.plain)
-                    .disabled(isFinishing || showSavedSuccess || showDiscarded || showError)
-
-                    // Divider line
-                    Rectangle()
-                        .fill(Color.black.opacity(0.15))
-                        .frame(width: 1, height: 20)
-
-                    // Dropdown chevron
-                    Menu {
-                        Button(action: { buttonMode = "finish" }) {
-                            HStack {
-                                Text("Finish Conversation")
-                                if buttonMode == "finish" {
-                                    Image(systemName: "checkmark")
-                                }
-                            }
-                        }
-                        Button(action: { buttonMode = "stop" }) {
-                            HStack {
-                                Text("Stop Recording")
-                                if buttonMode == "stop" {
-                                    Image(systemName: "checkmark")
-                                }
-                            }
-                        }
-                    } label: {
-                        Image(systemName: "chevron.down")
-                            .scaledFont(size: 9, weight: .bold)
-                            .foregroundColor(finishButtonForeground)
-                            .padding(.leading, 8)
-                            .padding(.trailing, 10)
-                            .padding(.vertical, 6)
-                    }
-                    .menuStyle(.borderlessButton)
-                    .fixedSize()
-                }
-                .background(
-                    Capsule()
-                        .fill(finishButtonBackground)
-                )
-                .overlay(Capsule().stroke(OmiColors.border, lineWidth: 1))
-                .help("Finish Conversation: saves current conversation and starts a new one.\nStop Recording: stops the microphone completely.")
-            } else if !appState.isSavingConversation {
                 Button(action: {
-                    appState.startTranscription()
+                    handleFinish(appState: appState)
                 }) {
                     HStack(spacing: 6) {
-                        Image(systemName: "record.circle")
-                            .scaledFont(size: 12)
-                        Text("Start Recording")
+                        if isFinishing {
+                            ProgressView()
+                                .scaleEffect(0.5)
+                                .frame(width: 12, height: 12)
+                        } else if showSavedSuccess {
+                            Image(systemName: "checkmark")
+                                .scaledFont(size: 12, weight: .bold)
+                        } else if showDiscarded {
+                            Image(systemName: "xmark")
+                                .scaledFont(size: 12, weight: .bold)
+                        } else if showError {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .scaledFont(size: 12)
+                        }
+                        Text(finishButtonText)
                             .scaledFont(size: 13, weight: .medium)
                     }
-                    .foregroundColor(.black)
+                    .foregroundColor(finishButtonForeground)
                     .padding(.horizontal, 14)
                     .padding(.vertical, 6)
-                    .background(Capsule().fill(Color.white))
+                    .background(Capsule().fill(finishButtonBackground))
                     .overlay(Capsule().stroke(OmiColors.border, lineWidth: 1))
                 }
                 .buttonStyle(.plain)
+                .disabled(isFinishing || showSavedSuccess || showDiscarded || showError)
+                .help("Saves current conversation and starts a new one")
             }
+
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
         .background(OmiColors.backgroundTertiary.opacity(0.8))
+    }
+
+    // MARK: - Audio Toggle
+
+    private func audioToggle(appState: AppState) -> some View {
+        ZStack {
+            Capsule()
+                .fill(appState.isTranscribing ? OmiColors.purplePrimary : Color.red)
+                .frame(width: 36, height: 20)
+
+            Circle()
+                .fill(Color.white)
+                .frame(width: 16, height: 16)
+                .shadow(color: .black.opacity(0.15), radius: 1, x: 0, y: 1)
+                .offset(x: appState.isTranscribing ? 8 : -8)
+                .animation(.easeInOut(duration: 0.15), value: appState.isTranscribing)
+        }
+        .onTapGesture {
+            if appState.isTranscribing {
+                appState.stopTranscription()
+            } else {
+                appState.startTranscription()
+            }
+        }
+        .help(appState.isTranscribing ? "Audio is on - click to stop" : "Audio is off - click to start")
     }
 
     // MARK: - Finish Conversation
@@ -1938,44 +1832,6 @@ extension View {
     }
 }
 
-// MARK: - Rewind Intro Video Player
-
-struct RewindIntroVideoView: NSViewRepresentable {
-    func makeCoordinator() -> Coordinator {
-        Coordinator()
-    }
-
-    func makeNSView(context: Context) -> AVPlayerView {
-        let playerView = AVPlayerView()
-        if let url = Bundle.resourceBundle.url(forResource: "rewind-demo", withExtension: "mp4") {
-            let player = AVPlayer(url: url)
-            playerView.player = player
-            playerView.controlsStyle = .inline
-            playerView.showsFullScreenToggleButton = false
-            player.play()
-
-            NotificationCenter.default.addObserver(
-                context.coordinator,
-                selector: #selector(Coordinator.playerDidFinishPlaying(_:)),
-                name: .AVPlayerItemDidPlayToEndTime,
-                object: player.currentItem
-            )
-            context.coordinator.player = player
-        }
-        return playerView
-    }
-
-    func updateNSView(_ nsView: AVPlayerView, context: Context) {}
-
-    class Coordinator: NSObject {
-        var player: AVPlayer?
-
-        @objc func playerDidFinishPlaying(_ notification: Notification) {
-            player?.seek(to: .zero)
-            player?.play()
-        }
-    }
-}
 
 #Preview {
     RewindPage()

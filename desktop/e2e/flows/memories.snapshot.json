@@ -1,0 +1,52 @@
+{
+  "version": 1,
+  "flow": "memories",
+  "flowHash": "a22c1889c13a17bd",
+  "device": {
+    "model": "unknown",
+    "resolution": "unknown"
+  },
+  "createdAt": "2026-03-20T07:07:55.999Z",
+  "runId": "uRprN-0",
+  "totalDurationMs": 246000,
+  "verifySteps": [
+    "S1",
+    "S2",
+    "S3",
+    "S4",
+    "S5",
+    "S6"
+  ],
+  "steps": {
+    "S1": {
+      "kind": "action",
+      "waitAfterMs": 200,
+      "durationMs": 39000
+    },
+    "S2": {
+      "kind": "verify",
+      "waitAfterMs": 200,
+      "durationMs": 29000
+    },
+    "S3": {
+      "kind": "action",
+      "waitAfterMs": 200,
+      "durationMs": 44000
+    },
+    "S4": {
+      "kind": "action",
+      "waitAfterMs": 200,
+      "durationMs": 44000
+    },
+    "S5": {
+      "kind": "action",
+      "waitAfterMs": 200,
+      "durationMs": 53000
+    },
+    "S6": {
+      "kind": "action",
+      "waitAfterMs": 500,
+      "durationMs": 37000
+    }
+  }
+}

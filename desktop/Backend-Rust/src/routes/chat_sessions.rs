@@ -46,7 +46,7 @@ async fn get_chat_sessions(
     State(state): State<AppState>,
     user: AuthUser,
     Query(query): Query<GetChatSessionsQuery>,
-) -> Json<Vec<ChatSessionDB>> {
+) -> Result<Json<Vec<ChatSessionDB>>, (StatusCode, String)> {
     tracing::info!(
         "Getting chat sessions for user {} with app_id={:?}, limit={}, offset={}, starred={:?}",
         user.uid,
@@ -67,10 +67,10 @@ async fn get_chat_sessions(
         )
         .await
     {
-        Ok(sessions) => Json(sessions),
+        Ok(sessions) => Ok(Json(sessions)),
         Err(e) => {
             tracing::error!("Failed to get chat sessions: {}", e);
-            Json(vec![])
+            Err((StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to get chat sessions: {}", e)))
         }
     }
 }

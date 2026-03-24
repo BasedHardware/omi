@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 
@@ -18,11 +19,12 @@ import 'package:omi/services/devices/omi_connection.dart';
 import 'package:omi/services/devices/omiglass_connection.dart';
 import 'package:omi/services/devices/plaud_connection.dart';
 import 'package:omi/services/devices/wifi_sync_error.dart';
-import 'package:omi/main.dart';
+import 'package:omi/app_globals.dart';
 import 'package:omi/services/notifications.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/services/devices/transports/device_transport.dart';
 import 'package:omi/services/devices/transports/ble_transport.dart';
+import 'package:omi/services/devices/transports/native_ble_transport.dart';
 import 'package:omi/services/devices/transports/frame_transport.dart';
 import 'package:omi/services/devices/transports/watch_transport.dart';
 import 'package:omi/utils/logger.dart';
@@ -39,8 +41,7 @@ class DeviceConnectionFactory {
       case TransportKind.bluetooth:
         final deviceId = locator.bluetoothId;
         if (deviceId == null) return null;
-        final bleDevice = BluetoothDevice.fromId(deviceId);
-        transport = BleTransport(bleDevice);
+        transport = NativeBleTransport(deviceId);
         break;
 
       case TransportKind.watchConnectivity:
@@ -118,10 +119,7 @@ abstract class DeviceConnection {
 
   StreamSubscription<DeviceTransportState>? _transportStateSubscription;
 
-  DeviceConnection(
-    this.device,
-    this.transport,
-  ) {
+  DeviceConnection(this.device, this.transport) {
     // Listen to transport state changes
     _transportStateSubscription = transport.connectionStateStream.listen((transportState) {
       final deviceState = _mapTransportStateToDeviceState(transportState);
@@ -143,9 +141,7 @@ abstract class DeviceConnection {
     }
   }
 
-  Future<void> connect({
-    void Function(String deviceId, DeviceConnectionState state)? onConnectionStateChanged,
-  }) async {
+  Future<void> connect({void Function(String deviceId, DeviceConnectionState state)? onConnectionStateChanged}) async {
     if (_connectionState == DeviceConnectionState.connected) {
       throw DeviceConnectionException("Connection already established, please disconnect before start new connection");
     }
@@ -212,9 +208,7 @@ abstract class DeviceConnection {
 
   Future<int> performRetrieveBatteryLevel();
 
-  Future<StreamSubscription<List<int>>?> getBleBatteryLevelListener({
-    void Function(int)? onBatteryLevelChange,
-  }) async {
+  Future<StreamSubscription<List<int>>?> getBleBatteryLevelListener({void Function(int)? onBatteryLevelChange}) async {
     if (await isConnected()) {
       return await performGetBleBatteryLevelListener(onBatteryLevelChange: onBatteryLevelChange);
     }
@@ -233,9 +227,7 @@ abstract class DeviceConnection {
     });
   }
 
-  Future<StreamSubscription?> getBleAudioBytesListener({
-    required void Function(List<int>) onAudioBytesReceived,
-  }) async {
+  Future<StreamSubscription?> getBleAudioBytesListener({required void Function(List<int>) onAudioBytesReceived}) async {
     if (await isConnected()) {
       return await performGetBleAudioBytesListener(onAudioBytesReceived: onAudioBytesReceived);
     }
@@ -254,9 +246,7 @@ abstract class DeviceConnection {
 
   Future<List<int>> performGetButtonState();
 
-  Future<StreamSubscription?> getBleButtonListener({
-    required void Function(List<int>) onButtonReceived,
-  }) async {
+  Future<StreamSubscription?> getBleButtonListener({required void Function(List<int>) onButtonReceived}) async {
     if (await isConnected()) {
       return await performGetBleButtonListener(onButtonReceived: onButtonReceived);
     }
@@ -270,9 +260,7 @@ abstract class DeviceConnection {
     return stream.listen(onAudioBytesReceived);
   }
 
-  Future<StreamSubscription?> performGetBleButtonListener({
-    required void Function(List<int>) onButtonReceived,
-  }) async {
+  Future<StreamSubscription?> performGetBleButtonListener({required void Function(List<int>) onButtonReceived}) async {
     final stream = transport.getCharacteristicStream(buttonServiceUuid, buttonTriggerCharacteristicUuid);
     return stream.listen(onButtonReceived);
   }
@@ -305,8 +293,9 @@ abstract class DeviceConnection {
 
   Future<bool> performPlayToSpeakerHaptic(int mode) async {
     try {
-      await transport
-          .writeCharacteristic(speakerDataStreamServiceUuid, speakerDataStreamCharacteristicUuid, [mode & 0xFF]);
+      await transport.writeCharacteristic(speakerDataStreamServiceUuid, speakerDataStreamCharacteristicUuid, [
+        mode & 0xFF,
+      ]);
       return true;
     } catch (e) {
       Logger.debug('Failed to play haptic: $e');
@@ -330,14 +319,15 @@ abstract class DeviceConnection {
 
   Future<bool> performWriteToStorage(int numFile, int command, int offset) async {
     try {
-      final offsetBytes = [
-        (offset >> 24) & 0xFF,
-        (offset >> 16) & 0xFF,
-        (offset >> 8) & 0xFF,
-        offset & 0xFF,
-      ];
-      await transport.writeCharacteristic(storageDataStreamServiceUuid, storageDataStreamCharacteristicUuid,
-          [command & 0xFF, numFile & 0xFF, offsetBytes[0], offsetBytes[1], offsetBytes[2], offsetBytes[3]]);
+      final offsetBytes = [(offset >> 24) & 0xFF, (offset >> 16) & 0xFF, (offset >> 8) & 0xFF, offset & 0xFF];
+      await transport.writeCharacteristic(storageDataStreamServiceUuid, storageDataStreamCharacteristicUuid, [
+        command & 0xFF,
+        numFile & 0xFF,
+        offsetBytes[0],
+        offsetBytes[1],
+        offsetBytes[2],
+        offsetBytes[3],
+      ]);
       return true;
     } catch (e) {
       Logger.debug('Failed to write to storage: $e');
@@ -411,9 +401,7 @@ abstract class DeviceConnection {
     required void Function(OrientedImage orientedImage) onImageReceived,
   });
 
-  Future<StreamSubscription<List<int>>?> getAccelListener({
-    void Function(int)? onAccelChange,
-  }) async {
+  Future<StreamSubscription<List<int>>?> getAccelListener({void Function(int)? onAccelChange}) async {
     if (await isConnected()) {
       return await performGetAccelListener(onAccelChange: onAccelChange);
     }
@@ -421,9 +409,7 @@ abstract class DeviceConnection {
     return null;
   }
 
-  Future<StreamSubscription<List<int>>?> performGetAccelListener({
-    void Function(int)? onAccelChange,
-  });
+  Future<StreamSubscription<List<int>>?> performGetAccelListener({void Function(int)? onAccelChange});
 
   Future<int> getFeatures() async {
     if (_features != null) return _features!;
@@ -531,9 +517,7 @@ abstract class DeviceConnection {
     return false;
   }
 
-  Future<StreamSubscription?> getWifiSyncStatusListener({
-    required void Function(int status) onStatusReceived,
-  }) async {
+  Future<StreamSubscription?> getWifiSyncStatusListener({required void Function(int status) onStatusReceived}) async {
     if (await isConnected()) {
       return await performGetWifiSyncStatusListener(onStatusReceived: onStatusReceived);
     }
@@ -547,7 +531,7 @@ abstract class DeviceConnection {
   }
 
   void _showDeviceDisconnectedNotification() {
-    final ctx = MyApp.navigatorKey.currentContext;
+    final ctx = globalNavigatorKey.currentContext;
     final deviceName = device.name;
     NotificationService.instance.createNotification(
       title: ctx?.l10n.deviceDisconnectedTitle(deviceName) ?? '$deviceName Disconnected',

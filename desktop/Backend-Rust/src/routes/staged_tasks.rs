@@ -68,7 +68,7 @@ async fn get_staged_tasks(
     State(state): State<AppState>,
     user: AuthUser,
     Query(query): Query<GetStagedTasksQuery>,
-) -> Json<ActionItemsListResponse> {
+) -> Result<Json<ActionItemsListResponse>, (StatusCode, String)> {
     tracing::info!(
         "Getting staged tasks for user {} with limit={}, offset={}",
         user.uid,
@@ -88,14 +88,11 @@ async fn get_staged_tasks(
             if has_more {
                 items.truncate(query.limit);
             }
-            Json(ActionItemsListResponse { items, has_more })
+            Ok(Json(ActionItemsListResponse { items, has_more }))
         }
         Err(e) => {
             tracing::error!("Failed to get staged tasks: {}", e);
-            Json(ActionItemsListResponse {
-                items: vec![],
-                has_more: false,
-            })
+            Err((StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to get staged tasks: {}", e)))
         }
     }
 }
@@ -158,11 +155,11 @@ async fn batch_update_staged_scores(
 
 /// POST /v1/staged-tasks/promote - Promote top staged task to action_items
 ///
-/// 1. Get active AI action_items (source contains "screenshot", !completed, !deleted)
+/// 1. Get active AI action_items (from_staged=true, !completed, !deleted)
 /// 2. If >= 5, return { promoted: false }
 /// 3. Get top-ranked staged tasks (batch of 10 for dedup)
 /// 4. Skip any whose description already exists in active action_items
-/// 5. Create in action_items with [screen] suffix
+/// 5. Create in action_items with from_staged=true
 /// 6. Hard-delete from staged_tasks (including skipped duplicates)
 /// 7. Return { promoted: true, promoted_task }
 async fn promote_staged_task(
@@ -285,31 +282,21 @@ async fn promote_staged_task(
         }
     };
 
-    // Step 4: Create in action_items with [screen] suffix
-    let tagged_description = if top_task.description.ends_with(" [screen]")
-        || top_task.description.starts_with("[screen] ")
-    {
-        // Already tagged — normalize to suffix form
-        let base = top_task
-            .description
-            .trim_start_matches("[screen] ")
-            .trim_end_matches(" [screen]");
-        format!("{} [screen]", base)
-    } else {
-        format!("{} [screen]", top_task.description)
-    };
-
+    // Step 4: Create in action_items (from_staged=true marks it as promoted)
     let promoted_item = match state
         .firestore
         .create_action_item(
             &user.uid,
-            &tagged_description,
+            &top_task.description,
             top_task.due_at,
             top_task.source.as_deref(),
             top_task.priority.as_deref(),
             top_task.metadata.as_deref(),
             top_task.category.as_deref(),
             top_task.relevance_score,
+            Some(true), // from_staged: promoted from staged_tasks
+            None, // recurrence_rule
+            None, // recurrence_parent_id
         )
         .await
     {
@@ -441,12 +428,14 @@ async fn migrate_ai_tasks(
                     None,
                     Some(&prefixed),
                     None,
+                    false,
                     None,
                     None,
                     None,
                     None,
                     None,
                     None,
+                    None, // recurrence_rule
                 )
                 .await
             {
