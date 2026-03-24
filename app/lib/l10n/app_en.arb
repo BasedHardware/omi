@@ -10358,5 +10358,86 @@
     },
     "improveConnectionTitle": "Improve Connection",
     "improveConnectionContent": "We've improved how Omi stays connected to your device. To activate this, please go to the Device Info page, tap \"Disconnect Device\", and then pair your device again.",
-    "improveConnectionAction": "Got it"
+    "improveConnectionAction": "Got it",
+    "omisStorage": "Omi's Storage",
+    "@omisStorage": {
+        "description": "Label for device storage tier in sync pipeline"
+    },
+    "phoneStorage": "Phone Storage",
+    "@phoneStorage": {
+        "description": "Label for phone storage tier in sync pipeline"
+    },
+    "cloudStorage": "Cloud Storage",
+    "@cloudStorage": {
+        "description": "Label for cloud storage tier in sync pipeline"
+    },
+    "howSyncingWorks": "How syncing works",
+    "@howSyncingWorks": {
+        "description": "Title for sync info bottom sheet"
+    },
+    "noSyncedRecordings": "No synced recordings yet",
+    "@noSyncedRecordings": {
+        "description": "Empty state for synced recordings list"
+    },
+    "recordingsSyncAutomatically": "Recordings sync automatically — no action needed.",
+    "@recordingsSyncAutomatically": {
+        "description": "Tip in sync info sheet"
+    },
+    "filesDownloadedUploadedNextTime": "Files already downloaded will be uploaded next time.",
+    "@filesDownloadedUploadedNextTime": {
+        "description": "Cancel sync confirmation message"
+    },
+    "nConversationsCreated": "{count} conversation{count, plural, =1{} other{s}} created",
+    "@nConversationsCreated": {
+        "description": "Shows number of conversations created after sync",
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    },
+    "tapToView": "Tap to view",
+    "@tapToView": {
+        "description": "Subtitle hint for tappable items"
+    },
+    "syncFailed": "Sync failed",
+    "@syncFailed": {
+        "description": "Error state text when sync fails"
+    },
+    "keepSyncing": "Keep syncing",
+    "@keepSyncing": {
+        "description": "Button label to dismiss cancel dialog and continue syncing"
+    },
+    "cancelSyncQuestion": "Cancel sync?",
+    "@cancelSyncQuestion": {
+        "description": "Title for cancel sync confirmation dialog"
+    },
+    "omisStorageDesc": "When your Omi is not connected to your phone, it stores audio locally on its built-in memory. You never lose a recording.",
+    "@omisStorageDesc": {
+        "description": "Description of device storage in sync info sheet"
+    },
+    "phoneStorageDesc": "When Omi reconnects, recordings are automatically transferred to your phone as a temporary holding area before uploading.",
+    "@phoneStorageDesc": {
+        "description": "Description of phone storage in sync info sheet"
+    },
+    "cloudStorageDesc": "Once uploaded, your recordings are processed and transcribed. Conversations will be available within a minute.",
+    "@cloudStorageDesc": {
+        "description": "Description of cloud storage in sync info sheet"
+    },
+    "tipKeepPhoneNearby": "Keep your phone nearby for faster syncing",
+    "@tipKeepPhoneNearby": {
+        "description": "Tip in sync info sheet"
+    },
+    "tipStableInternet": "Stable internet speeds up cloud uploads",
+    "@tipStableInternet": {
+        "description": "Tip in sync info sheet"
+    },
+    "tipAutoSync": "Recordings sync automatically",
+    "@tipAutoSync": {
+        "description": "Tip in sync info sheet"
+    },
+    "storageSection": "STORAGE",
+    "@storageSection": {
+        "description": "Section header for storage settings"
+    }
 }
