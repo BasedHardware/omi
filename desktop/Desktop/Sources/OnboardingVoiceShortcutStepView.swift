@@ -53,9 +53,8 @@ struct OnboardingVoiceShortcutStepView: View {
   }
 
   private var leftPane: some View {
-    VStack(alignment: .leading, spacing: 0) {
+    VStack(spacing: 0) {
       Spacer()
-        .frame(height: 18)
 
       VStack(alignment: .leading, spacing: 18) {
         Text("Hold the shortcut\nand ask a question")
@@ -104,7 +103,7 @@ struct OnboardingVoiceShortcutStepView: View {
         .padding(.bottom, -16)
 
         VStack(alignment: .leading, spacing: 18) {
-          Text("Hold the key, then ask omi something")
+          Text("Press this shortcut.\nDo the buttons light up?")
             .font(.system(size: 22, weight: .semibold))
             .foregroundColor(Color.black.opacity(0.86))
             .frame(maxWidth: .infinity, alignment: .leading)

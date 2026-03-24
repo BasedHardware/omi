@@ -194,7 +194,7 @@ struct OnboardingView: View {
           }
         )
       } else if currentStep == 3 {
-        // Step 3: Verify Push-to-Talk Shortcut + Voice Input
+        // Step 3: Verify Push-to-Talk Shortcut
         OnboardingVoiceShortcutStepView(
           appState: appState,
           chatProvider: chatProvider,
@@ -208,15 +208,30 @@ struct OnboardingView: View {
             currentStep = 4
           }
         )
+      } else if currentStep == 4 {
+        // Step 4: Voice Demo (hold shortcut and ask a question)
+        OnboardingVoiceDemoView(
+          appState: appState,
+          chatProvider: chatProvider,
+          onComplete: {
+            AnalyticsManager.shared.onboardingStepCompleted(step: 4, stepName: "VoiceDemo")
+            currentStep = 5
+          },
+          onSkip: {
+            AnalyticsManager.shared.onboardingStepCompleted(
+              step: 4, stepName: "VoiceDemo_Skipped")
+            currentStep = 5
+          }
+        )
       } else {
-        // Step 4: Tasks
+        // Step 5: Tasks
         OnboardingTasksStepView(
           onComplete: {
-            AnalyticsManager.shared.onboardingStepCompleted(step: 4, stepName: "Tasks")
+            AnalyticsManager.shared.onboardingStepCompleted(step: 5, stepName: "Tasks")
             handleOnboardingComplete()
           },
           onSkip: {
-            AnalyticsManager.shared.onboardingStepCompleted(step: 4, stepName: "Tasks_Skipped")
+            AnalyticsManager.shared.onboardingStepCompleted(step: 5, stepName: "Tasks_Skipped")
             handleOnboardingComplete()
           }
         )
