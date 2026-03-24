@@ -7,7 +7,7 @@ import time
 
 
 class TimeoutMiddleware(BaseHTTPMiddleware):
-    def __init__(self, app, methods_timeout: dict = None):
+    def __init__(self, app, methods_timeout: dict = None, paths_timeout: dict = None):
         super().__init__(app)
 
         self.default_timeout = self._get_timeout_from_env("HTTP_DEFAULT_TIMEOUT", default=2 * 60)
@@ -15,6 +15,8 @@ class TimeoutMiddleware(BaseHTTPMiddleware):
         self.clock_skew_allowance = self._get_timeout_from_env("HTTP_CLOCK_SKEW_ALLOWANCE", default=5 * 60)
 
         self.methods_timeout = self._parse_methods_timeout(methods_timeout or {})
+        # paths_timeout: dict of path prefix -> timeout (seconds), checked before methods_timeout
+        self.paths_timeout = paths_timeout or {}
 
     @staticmethod
     def _get_timeout_from_env(env_var: str, default: float) -> float:
@@ -61,7 +63,15 @@ class TimeoutMiddleware(BaseHTTPMiddleware):
             except (ValueError, TypeError):
                 pass
 
-        timeout = self.methods_timeout.get(request.method, self.default_timeout)
+        # Check path-specific timeout first, then fall back to method timeout
+        timeout = None
+        request_path = request.url.path
+        for path_prefix, path_timeout in self.paths_timeout.items():
+            if request_path.startswith(path_prefix):
+                timeout = path_timeout
+                break
+        if timeout is None:
+            timeout = self.methods_timeout.get(request.method, self.default_timeout)
         try:
             return await asyncio.wait_for(call_next(request), timeout=timeout)
         except asyncio.TimeoutError:
