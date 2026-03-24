@@ -1,5 +1,9 @@
 {
-  "unreleased": [],
+  "unreleased": [
+    "Fixed DMG installer to show drag-to-Applications arrow",
+    "App now comes to foreground after sign-in across Spaces",
+    "Screenshots start capturing earlier during onboarding"
+  ],
   "releases": [
     {
       "version": "0.11.155",
