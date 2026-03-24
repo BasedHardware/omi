@@ -1468,7 +1468,7 @@ class AppLocalizationsRo extends AppLocalizations {
   String get payYourSttProvider => 'Folosește Omi liber. Plătești doar furnizorul STT direct.';
 
   @override
-  String get freeMinutesMonth => '4.800 de minute gratuite/lună incluse. Nelimitat cu ';
+  String get freeMinutesMonth => '1.200 de minute gratuite/lună incluse. Nelimitat cu ';
 
   @override
   String get omiUnlimited => 'Omi Nelimitat';
@@ -1718,7 +1718,12 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'DISPOZITIVE', one: 'DISPOZITIV');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'DISPOZITIVE',
+      one: 'DISPOZITIV',
+    );
     return '$count $_temp0 GĂSIT(E) ÎN APROPIERE';
   }
 
@@ -4782,7 +4787,7 @@ class AppLocalizationsRo extends AppLocalizations {
   String get noSpecificDataAccessConfigured => 'Niciun acces specific la date configurat.';
 
   @override
-  String get basicPlanDescription => '4.800 minute premium + nelimitat pe dispozitiv';
+  String get basicPlanDescription => '1.200 minute premium + nelimitat pe dispozitiv';
 
   @override
   String get minutes => 'minute';
@@ -6114,7 +6119,7 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get premiumMinutesInfo =>
-      '4.800 minute premium/lună. Fila Pe dispozitiv oferă transcriere gratuită nelimitată.';
+      '1.200 minute premium/lună. Fila Pe dispozitiv oferă transcriere gratuită nelimitată.';
 
   @override
   String get viewUsage => 'Vizualizați utilizarea';
@@ -6197,7 +6202,7 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get premiumMinutesMonth =>
-      '4.800 minute premium/lună. Fila Pe dispozitiv oferă transcriere gratuită nelimitată. ';
+      '1.200 minute premium/lună. Fila Pe dispozitiv oferă transcriere gratuită nelimitată. ';
 
   @override
   String get audioProcessedLocally =>
@@ -8597,4 +8602,91 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get phoneHideKeypad => 'Ascunde tastatura';
+
+  @override
+  String get fairUsePolicy => 'Utilizare echitabilă';
+
+  @override
+  String get fairUseLoadError => 'Nu s-a putut încărca starea de utilizare echitabilă. Vă rugăm să încercați din nou.';
+
+  @override
+  String get fairUseStatusNormal => 'Utilizarea dvs. este în limitele normale.';
+
+  @override
+  String get fairUseStageNormal => 'Normal';
+
+  @override
+  String get fairUseStageWarning => 'Avertisment';
+
+  @override
+  String get fairUseStageThrottle => 'Limitat';
+
+  @override
+  String get fairUseStageRestrict => 'Blocat';
+
+  @override
+  String get fairUseSpeechUsage => 'Utilizare vocală';
+
+  @override
+  String get fairUseToday => 'Astăzi';
+
+  @override
+  String get fairUse3Day => '3 zile consecutive';
+
+  @override
+  String get fairUseWeekly => 'Săptămânal';
+
+  @override
+  String get fairUseAboutTitle => 'Despre utilizarea echitabilă';
+
+  @override
+  String get fairUseAboutBody =>
+      'Omi este conceput pentru conversații personale, întâlniri și interacțiuni în direct. Utilizarea este măsurată prin timpul real de vorbire detectat, nu prin timpul de conexiune. Dacă utilizarea depășește semnificativ tiparele normale pentru conținut non-personal, se pot aplica ajustări.';
+
+  @override
+  String fairUseCaseRefCopied(String caseRef) {
+    return '$caseRef copiat';
+  }
+
+  @override
+  String get fairUseDailyTranscription => 'Daily Transcription';
+
+  @override
+  String fairUseBudgetUsed(String used, String limit) {
+    return '${used}m / ${limit}m';
+  }
+
+  @override
+  String get fairUseBudgetExhausted => 'Daily transcription limit reached';
+
+  @override
+  String fairUseBudgetResetsAt(String time) {
+    return 'Resets $time';
+  }
+
+  @override
+  String get transcriptionPaused => 'Înregistrare, reconectare';
+
+  @override
+  String get transcriptionPausedReconnecting => 'Încă înregistrează — reconectare la transcriere...';
+
+  @override
+  String fairUseBannerStatus(String status) {
+    return 'Utilizare echitabilă: $status';
+  }
+
+  @override
+  String get improveConnectionTitle => 'Îmbunătățire conexiune';
+
+  @override
+  String get improveConnectionContent =>
+      'Am îmbunătățit modul în care Omi rămâne conectat la dispozitivul tău. Pentru a activa acest lucru, mergi la pagina Informații dispozitiv, apasă \"Deconectare dispozitiv\" și împerechează din nou dispozitivul.';
+
+  @override
+  String get improveConnectionAction => 'Am înțeles';
+
+  @override
+  String clockSkewWarning(int minutes) {
+    return 'Ceasul dispozitivului diferă cu ~$minutes min. Verificați setările de dată și oră.';
+  }
 }

@@ -45,8 +45,6 @@ class MixpanelManager {
             Bundle.main.path(forResource: ".env", ofType: nil),
             FileManager.default.currentDirectoryPath + "/.env",
             NSHomeDirectory() + "/.omi.env",
-            "/Users/matthewdi/omi-computer-swift/.env",
-            "/Users/matthewdi/omi/backend/.env"
         ].compactMap { $0 }
 
         for path in envPaths {

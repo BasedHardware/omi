@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:path/path.dart';
 
+import 'package:omi/backend/http/clock_skew_detector.dart';
 import 'package:omi/backend/http/http_pool_manager.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/env/env.dart';
@@ -25,13 +26,16 @@ Future<String> getAuthHeader() async {
   DateTime? expiry = DateTime.fromMillisecondsSinceEpoch(SharedPreferencesUtil().tokenExpirationTime);
   bool hasAuthToken = SharedPreferencesUtil().authToken.isNotEmpty;
 
-  bool isExpirationDateValid =
-      !(expiry.isBefore(DateTime.now()) ||
-          expiry.isAtSameMomentAs(DateTime.fromMillisecondsSinceEpoch(0)) ||
-          (expiry.isBefore(DateTime.now().add(const Duration(minutes: 5))) && expiry.isAfter(DateTime.now())));
+  bool isExpirationDateValid = !(expiry.isBefore(DateTime.now()) ||
+      expiry.isAtSameMomentAs(DateTime.fromMillisecondsSinceEpoch(0)) ||
+      (expiry.isBefore(DateTime.now().add(const Duration(minutes: 5))) && expiry.isAfter(DateTime.now())));
 
   if (!hasAuthToken || !isExpirationDateValid) {
-    SharedPreferencesUtil().authToken = await AuthService.instance.getIdToken() ?? '';
+    final refreshedToken = await AuthService.instance.getIdToken();
+    if (refreshedToken != null) {
+      SharedPreferencesUtil().authToken = refreshedToken;
+    }
+    hasAuthToken = SharedPreferencesUtil().authToken.isNotEmpty;
   }
 
   if (!hasAuthToken) {
@@ -86,6 +90,10 @@ Future<http.StreamedResponse> makeRawApiCall({
   return HttpPoolManager.instance.sendStreaming(request);
 }
 
+void _checkClockSkewResponse(http.Response response) {
+  ClockSkewDetector.instance.checkResponse(response);
+}
+
 Future<http.Response?> makeApiCall({
   required String url,
   required Map<String, String> headers,
@@ -137,6 +145,7 @@ Future<http.Response?> makeApiCall({
       }
     }
 
+    _checkClockSkewResponse(response);
     return response;
   } catch (e, stackTrace) {
     Logger.debug('HTTP request failed: $e, $stackTrace');
@@ -235,6 +244,7 @@ Future<http.Response> makeMultipartApiCall({
       }
     }
 
+    _checkClockSkewResponse(response);
     return response;
   } catch (e, stackTrace) {
     Logger.debug('Multipart HTTP request failed: $e, $stackTrace');

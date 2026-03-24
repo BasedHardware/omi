@@ -137,6 +137,53 @@ struct OMIApp: App {
           resetWindowToDefaultSize()
         }
       }
+
+      // Sidebar navigation shortcuts: Cmd+1..6 for main pages, Cmd+, for Settings
+      CommandGroup(after: .sidebar) {
+        Button("Dashboard") {
+          NotificationCenter.default.post(name: .navigateToSidebarItem, object: nil,
+            userInfo: ["rawValue": SidebarNavItem.dashboard.rawValue])
+        }
+        .keyboardShortcut("1", modifiers: .command)
+
+        Button("Chat") {
+          NotificationCenter.default.post(name: .navigateToSidebarItem, object: nil,
+            userInfo: ["rawValue": SidebarNavItem.chat.rawValue])
+        }
+        .keyboardShortcut("2", modifiers: .command)
+
+        Button("Memories") {
+          NotificationCenter.default.post(name: .navigateToSidebarItem, object: nil,
+            userInfo: ["rawValue": SidebarNavItem.memories.rawValue])
+        }
+        .keyboardShortcut("3", modifiers: .command)
+
+        Button("Tasks") {
+          NotificationCenter.default.post(name: .navigateToSidebarItem, object: nil,
+            userInfo: ["rawValue": SidebarNavItem.tasks.rawValue])
+        }
+        .keyboardShortcut("4", modifiers: .command)
+
+        Button("Rewind") {
+          NotificationCenter.default.post(name: .navigateToSidebarItem, object: nil,
+            userInfo: ["rawValue": SidebarNavItem.rewind.rawValue])
+        }
+        .keyboardShortcut("5", modifiers: .command)
+
+        Button("Apps") {
+          NotificationCenter.default.post(name: .navigateToSidebarItem, object: nil,
+            userInfo: ["rawValue": SidebarNavItem.apps.rawValue])
+        }
+        .keyboardShortcut("6", modifiers: .command)
+
+        Divider()
+
+        Button("Settings") {
+          NotificationCenter.default.post(name: .navigateToSidebarItem, object: nil,
+            userInfo: ["rawValue": SidebarNavItem.settings.rawValue])
+        }
+        .keyboardShortcut(",", modifiers: .command)
+      }
     }
 
     // Note: Menu bar is now handled by NSStatusBar in AppDelegate.setupMenuBar()
@@ -223,7 +270,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     let isDev = AnalyticsManager.isDevBuild
     SentrySDK.start { options in
       options.dsn =
-        "https://8f700584deda57b26041ff015539c8c1@o4507617161314304.ingest.us.sentry.io/4510790686277632"
+        "https://bbffa02d948c81ea4dccd36246c7bd20@o4511085999816704.ingest.us.sentry.io/4511086024851456"
       options.debug = false
       options.enableAutoSessionTracking = true
       options.environment = isDev ? "development" : "production"
@@ -237,8 +284,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if event.message?.formatted.hasPrefix("User Report") == true { return event }
         // Never send other events from dev builds — they pollute production Sentry data
         if isDev { return nil }
-        // Filter out HTTP errors targeting the dev tunnel — noise when the tunnel is down
-        if let urlTag = event.tags?["url"], urlTag.contains("m13v.com") {
+        // Filter out HTTP errors targeting dev/local URLs — noise when tunnels or local backends are down
+        if let urlTag = event.tags?["url"],
+          urlTag.contains("localhost") || urlTag.contains("127.0.0.1")
+            || urlTag.contains("trycloudflare.com")
+        {
           return nil
         }
         // Filter out NSURLErrorCancelled (-999) — these are intentional cancellations
@@ -403,7 +453,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     // Activate app and show main window after a brief delay
     DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
       log("AppDelegate: Checking windows after 0.2s delay, count=\(NSApp.windows.count)")
-      NSApp.activate(ignoringOtherApps: true)
+      NSApp.activate()
       var foundOmiWindow = false
       for window in NSApp.windows {
         log("AppDelegate: Window title='\(window.title)', isVisible=\(window.isVisible)")
@@ -548,7 +598,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         DispatchQueue.main.async {
           log("AppDelegate: [HOTKEY] Activating app and posting notification")
           // Bring app to front
-          NSApp.activate(ignoringOtherApps: true)
+          NSApp.activate()
           // Find and show main window
           for window in NSApp.windows {
             if window.title.hasPrefix("Omi") {
@@ -797,14 +847,14 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
   @MainActor @objc private func openOmiFromMenu() {
     AnalyticsManager.shared.menuBarActionClicked(action: "open_omi")
-    NSApp.activate(ignoringOtherApps: true)
+    NSApp.activate()
     var foundWindow = revealMainWindowIfAvailable()
     if !foundWindow {
       Self.openMainWindow?()
       foundWindow = revealMainWindowIfAvailable()
     }
     // Dock icon is always visible; just activate the app
-    NSApp.activate(ignoringOtherApps: true)
+    NSApp.activate()
     if !foundWindow {
       log("AppDelegate: [MENUBAR] WARNING - No Omi window found when opening from menu bar")
     }
@@ -1036,6 +1086,13 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     Task { @MainActor in
       AuthService.shared.handleOAuthCallback(url: url)
+      // Bring app to foreground after OAuth redirect — Safari stays in front otherwise.
+      // NSApp.activate() alone doesn't switch macOS Spaces; ordering a window front does.
+      NSApp.activate()
+      if let window = NSApp.windows.first(where: { $0.isVisible && !$0.isMiniaturized }) ?? NSApp.windows.first(where: { !$0.isMiniaturized }) {
+        window.makeKeyAndOrderFront(nil)
+        window.orderFrontRegardless()
+      }
     }
   }
 

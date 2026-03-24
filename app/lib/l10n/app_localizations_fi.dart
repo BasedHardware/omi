@@ -1459,7 +1459,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get payYourSttProvider => 'Käytä omia vapaasti. Maksat vain STT-palveluntarjoajallesi suoraan.';
 
   @override
-  String get freeMinutesMonth => '4 800 ilmaisminuuttia kuukaudessa mukana. Rajoittamaton ';
+  String get freeMinutesMonth => '1 200 ilmaisminuuttia kuukaudessa mukana. Rajoittamaton ';
 
   @override
   String get omiUnlimited => 'Omi Unlimited';
@@ -1708,7 +1708,12 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'LAITETTA', one: 'LAITE');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'LAITETTA',
+      one: 'LAITE',
+    );
     return '$count $_temp0 LÖYDETTY LÄHISTÖLTÄ';
   }
 
@@ -4758,7 +4763,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get noSpecificDataAccessConfigured => 'Ei määritettyä tietojen käyttöoikeutta.';
 
   @override
-  String get basicPlanDescription => '4 800 premium-minuuttia + rajoittamaton laitteella';
+  String get basicPlanDescription => '1 200 premium-minuuttia + rajoittamaton laitteella';
 
   @override
   String get minutes => 'minuuttia';
@@ -6086,7 +6091,7 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get premiumMinutesInfo =>
-      '4 800 premium-minuuttia/kk. Laitteella-välilehti tarjoaa rajattoman ilmaisen puheentunnistuksen.';
+      '1 200 premium-minuuttia/kk. Laitteella-välilehti tarjoaa rajattoman ilmaisen puheentunnistuksen.';
 
   @override
   String get viewUsage => 'Näytä käyttö';
@@ -6168,7 +6173,7 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get premiumMinutesMonth =>
-      '4 800 premium-minuuttia/kk. Laitteella-välilehti tarjoaa rajoittamattoman ilmaisen transkription. ';
+      '1 200 premium-minuuttia/kk. Laitteella-välilehti tarjoaa rajoittamattoman ilmaisen transkription. ';
 
   @override
   String get audioProcessedLocally =>
@@ -8553,4 +8558,91 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get phoneHideKeypad => 'Piilota näppäimistö';
+
+  @override
+  String get fairUsePolicy => 'Kohtuullinen käyttö';
+
+  @override
+  String get fairUseLoadError => 'Kohtuullisen käytön tilaa ei voitu ladata. Yritä uudelleen.';
+
+  @override
+  String get fairUseStatusNormal => 'Käyttösi on normaalien rajojen sisällä.';
+
+  @override
+  String get fairUseStageNormal => 'Normaali';
+
+  @override
+  String get fairUseStageWarning => 'Varoitus';
+
+  @override
+  String get fairUseStageThrottle => 'Rajoitettu';
+
+  @override
+  String get fairUseStageRestrict => 'Estetty';
+
+  @override
+  String get fairUseSpeechUsage => 'Puheen käyttö';
+
+  @override
+  String get fairUseToday => 'Tänään';
+
+  @override
+  String get fairUse3Day => '3 päivän jakso';
+
+  @override
+  String get fairUseWeekly => 'Viikkojakso';
+
+  @override
+  String get fairUseAboutTitle => 'Tietoa kohtuullisesta käytöstä';
+
+  @override
+  String get fairUseAboutBody =>
+      'Omi on suunniteltu henkilökohtaisiin keskusteluihin, kokouksiin ja reaaliaikaiseen vuorovaikutukseen. Käyttöä mitataan havaitun todellisen puheajan, ei yhteysajan perusteella. Jos käyttö ylittää merkittävästi normaalit mallit ei-henkilökohtaisen sisällön osalta, säätöjä voidaan soveltaa.';
+
+  @override
+  String fairUseCaseRefCopied(String caseRef) {
+    return '$caseRef kopioitu';
+  }
+
+  @override
+  String get fairUseDailyTranscription => 'Daily Transcription';
+
+  @override
+  String fairUseBudgetUsed(String used, String limit) {
+    return '${used}m / ${limit}m';
+  }
+
+  @override
+  String get fairUseBudgetExhausted => 'Daily transcription limit reached';
+
+  @override
+  String fairUseBudgetResetsAt(String time) {
+    return 'Resets $time';
+  }
+
+  @override
+  String get transcriptionPaused => 'Nauhoittaa, yhdistetään uudelleen';
+
+  @override
+  String get transcriptionPausedReconnecting => 'Nauhoittaa yhä — yhdistetään uudelleen puheentunnistukseen...';
+
+  @override
+  String fairUseBannerStatus(String status) {
+    return 'Reilu käyttö: $status';
+  }
+
+  @override
+  String get improveConnectionTitle => 'Paranna yhteyttä';
+
+  @override
+  String get improveConnectionContent =>
+      'Olemme parantaneet Omin yhteydenpitoa laitteeseesi. Aktivoidaksesi tämän, siirry Laitteen tiedot -sivulle, napauta \"Katkaise laitteen yhteys\" ja yhdistä laitteesi uudelleen.';
+
+  @override
+  String get improveConnectionAction => 'Selvä';
+
+  @override
+  String clockSkewWarning(int minutes) {
+    return 'Laitteesi kello on ~$minutes min. väärässä. Tarkista päivämäärä- ja aika-asetukset.';
+  }
 }

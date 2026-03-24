@@ -448,7 +448,7 @@
     "exportConfiguration": "Eksportuj konfigurację",
     "bringYourOwn": "Przynieś własny",
     "payYourSttProvider": "Swobodnie korzystaj z Omi. Płacisz tylko swojemu dostawcy STT bezpośrednio.",
-    "freeMinutesMonth": "4800 darmowych minut/miesiąc w zestawie. Nieograniczone z ",
+    "freeMinutesMonth": "1200 darmowych minut/miesiąc w zestawie. Nieograniczone z ",
     "omiUnlimited": "Omi Unlimited",
     "hostRequired": "Host jest wymagany",
     "validPortRequired": "Wymagany jest prawidłowy port",
@@ -1459,7 +1459,7 @@
     "accessesAndTriggeredBy": "{accessDescription} i jest {triggerDescription}.",
     "isTriggeredBy": "Jest {triggerDescription}.",
     "noSpecificDataAccessConfigured": "Nie skonfigurowano konkretnego dostępu do danych.",
-    "basicPlanDescription": "4800 minut premium + nieograniczone na urządzeniu",
+    "basicPlanDescription": "1200 minut premium + nieograniczone na urządzeniu",
     "minutes": "minut",
     "omiHas": "Omi ma:",
     "premiumMinutesUsed": "Minuty premium wykorzystane.",
@@ -1929,7 +1929,7 @@
     "deviceMayWarmUp": "Urządzenie może się nagrzać podczas dłuższego użytkowania.",
     "speedAccuracyLower": "Szybkość i dokładność mogą być niższe niż modeli chmurowych.",
     "cloudProvider": "Dostawca chmury",
-    "premiumMinutesMonth": "4800 minut premium/miesiąc. Karta Na urządzeniu oferuje nieograniczoną bezpłatną transkrypcję. ",
+    "premiumMinutesMonth": "1200 minut premium/miesiąc. Karta Na urządzeniu oferuje nieograniczoną bezpłatną transkrypcję. ",
     "viewUsage": "Zobacz wykorzystanie",
     "audioProcessedLocally": "Dźwięk jest przetwarzany lokalnie. Działa offline, bardziej prywatnie, ale zużywa więcej baterii.",
     "languageLabel": "Język",
@@ -2499,7 +2499,7 @@
     "noReviewsFound": "Nie znaleziono recenzji",
     "onDeviceIntensive": "Transkrypcja na urządzeniu jest wymagająca obliczeniowo.",
     "onDeviceSlower": "Transkrypcja na urządzeniu może być wolniejsza na tym urządzeniu.",
-    "premiumMinutesInfo": "4800 minut premium/miesiąc. Zakładka Na urządzeniu oferuje nieograniczoną darmową transkrypcję.",
+    "premiumMinutesInfo": "1200 minut premium/miesiąc. Zakładka Na urządzeniu oferuje nieograniczoną darmową transkrypcję.",
     "redownload": "Pobierz ponownie",
     "reply": "Odpowiedź",
     "replySentSuccessfully": "Odpowiedź wysłana pomyślnie",
@@ -2784,5 +2784,62 @@
     "notYetSynced": "Jeszcze nie zsynchronizowano z Twoim telefonem",
     "clearAll": "Wyczyść wszystko",
     "phoneKeypad": "Klawiatura",
-    "phoneHideKeypad": "Ukryj klawiaturę"
+    "phoneHideKeypad": "Ukryj klawiaturę",
+    "transcriptionPaused": "Nagrywanie, ponowne łączenie",
+    "transcriptionPausedReconnecting": "Nadal nagrywa — ponowne łączenie z transkrypcją...",
+    "fairUsePolicy": "Uczciwe korzystanie",
+    "fairUseLoadError": "Nie udało się załadować statusu uczciwego korzystania. Spróbuj ponownie.",
+    "fairUseStatusNormal": "Twoje użytkowanie mieści się w normalnych granicach.",
+    "fairUseStageNormal": "Normalne",
+    "fairUseStageWarning": "Ostrzeżenie",
+    "fairUseStageThrottle": "Ograniczone",
+    "fairUseStageRestrict": "Zablokowane",
+    "fairUseSpeechUsage": "Użycie mowy",
+    "fairUseToday": "Dzisiaj",
+    "fairUse3Day": "3-dniowy okres",
+    "fairUseWeekly": "Tygodniowy okres",
+    "fairUseAboutTitle": "O uczciwym korzystaniu",
+    "fairUseAboutBody": "Omi jest zaprojektowany do osobistych rozmów, spotkań i interakcji na żywo. Użytkowanie mierzone jest na podstawie wykrytego rzeczywistego czasu mowy, a nie czasu połączenia. Jeśli użytkowanie znacząco przekracza normalne wzorce dla treści nieosobistych, mogą zostać zastosowane korekty.",
+    "fairUseCaseRefCopied": "{caseRef} skopiowano",
+    "@fairUseCaseRefCopied": {
+        "description": "Snackbar message when case reference is copied",
+        "placeholders": {
+            "caseRef": {
+                "type": "String"
+            }
+        }
+    },
+    "fairUseDailyTranscription": "Dzienna transkrypcja",
+    "fairUseBudgetExhausted": "Osiągnięto dzienny limit transkrypcji",
+    "fairUseBudgetResetsAt": "Resetuje się {time}",
+    "fairUseBudgetUsed": "{used}m / {limit}m",
+    "@fairUseBudgetUsed": {
+        "placeholders": {
+            "used": {
+                "type": "String"
+            },
+            "limit": {
+                "type": "String"
+            }
+        }
+    },
+    "@fairUseBudgetResetsAt": {
+        "placeholders": {
+            "time": {
+                "type": "String"
+            }
+        }
+    },
+    "fairUseBannerStatus": "Uczciwe użytkowanie: {status}",
+    "@fairUseBannerStatus": {
+        "placeholders": {
+            "status": {
+                "type": "String"
+            }
+        }
+    },
+    "improveConnectionTitle": "Popraw połączenie",
+    "improveConnectionContent": "Poprawiliśmy sposób, w jaki Omi utrzymuje połączenie z Twoim urządzeniem. Aby to aktywować, przejdź na stronę Informacje o urządzeniu, dotknij \"Odłącz urządzenie\" i ponownie sparuj urządzenie.",
+    "improveConnectionAction": "Rozumiem",
+    "clockSkewWarning": "Zegar urządzenia różni się o ~{minutes} min. Sprawdź ustawienia daty i godziny."
 }

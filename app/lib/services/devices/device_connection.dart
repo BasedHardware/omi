@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 
@@ -18,11 +19,12 @@ import 'package:omi/services/devices/omi_connection.dart';
 import 'package:omi/services/devices/omiglass_connection.dart';
 import 'package:omi/services/devices/plaud_connection.dart';
 import 'package:omi/services/devices/wifi_sync_error.dart';
-import 'package:omi/main.dart';
+import 'package:omi/app_globals.dart';
 import 'package:omi/services/notifications.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/services/devices/transports/device_transport.dart';
 import 'package:omi/services/devices/transports/ble_transport.dart';
+import 'package:omi/services/devices/transports/native_ble_transport.dart';
 import 'package:omi/services/devices/transports/frame_transport.dart';
 import 'package:omi/services/devices/transports/watch_transport.dart';
 import 'package:omi/utils/logger.dart';
@@ -39,8 +41,7 @@ class DeviceConnectionFactory {
       case TransportKind.bluetooth:
         final deviceId = locator.bluetoothId;
         if (deviceId == null) return null;
-        final bleDevice = BluetoothDevice.fromId(deviceId);
-        transport = BleTransport(bleDevice);
+        transport = NativeBleTransport(deviceId);
         break;
 
       case TransportKind.watchConnectivity:
@@ -54,8 +55,7 @@ class DeviceConnectionFactory {
     // Create device connection with transport
     // Use name-based detection as fallback for OmiGlass devices
     final deviceName = device.name.toLowerCase();
-    final isOmiGlass =
-        device.type == DeviceType.openglass ||
+    final isOmiGlass = device.type == DeviceType.openglass ||
         deviceName.contains('openglass') ||
         deviceName.contains('omiglass') ||
         deviceName.contains('glass');
@@ -531,7 +531,7 @@ abstract class DeviceConnection {
   }
 
   void _showDeviceDisconnectedNotification() {
-    final ctx = MyApp.navigatorKey.currentContext;
+    final ctx = globalNavigatorKey.currentContext;
     final deviceName = device.name;
     NotificationService.instance.createNotification(
       title: ctx?.l10n.deviceDisconnectedTitle(deviceName) ?? '$deviceName Disconnected',

@@ -448,7 +448,7 @@
     "exportConfiguration": "Exportera konfiguration",
     "bringYourOwn": "Ta med din egen",
     "payYourSttProvider": "Använd Omi fritt. Du betalar bara din STT-leverantör direkt.",
-    "freeMinutesMonth": "4 800 gratis minuter/månad ingår. Obegränsat med ",
+    "freeMinutesMonth": "1 200 gratis minuter/månad ingår. Obegränsat med ",
     "omiUnlimited": "Omi Unlimited",
     "hostRequired": "Värd krävs",
     "validPortRequired": "Giltig port krävs",
@@ -1459,7 +1459,7 @@
     "accessesAndTriggeredBy": "{accessDescription} och är {triggerDescription}.",
     "isTriggeredBy": "Är {triggerDescription}.",
     "noSpecificDataAccessConfigured": "Ingen specifik dataåtkomst konfigurerad.",
-    "basicPlanDescription": "4 800 premium-minuter + obegränsat på enheten",
+    "basicPlanDescription": "1 200 premium-minuter + obegränsat på enheten",
     "minutes": "minuter",
     "omiHas": "Omi har:",
     "premiumMinutesUsed": "Premium-minuter använda.",
@@ -1929,7 +1929,7 @@
     "deviceMayWarmUp": "Enheten kan bli varm vid längre användning.",
     "speedAccuracyLower": "Hastighet och noggrannhet kan vara lägre än molnmodeller.",
     "cloudProvider": "Molnleverantör",
-    "premiumMinutesMonth": "4 800 premiumminuter/månad. Fliken På enheten erbjuder obegränsad gratis transkription. ",
+    "premiumMinutesMonth": "1 200 premiumminuter/månad. Fliken På enheten erbjuder obegränsad gratis transkription. ",
     "viewUsage": "Visa användning",
     "audioProcessedLocally": "Ljud behandlas lokalt. Fungerar offline, mer privat, men använder mer batteri.",
     "languageLabel": "Språk",
@@ -2471,7 +2471,7 @@
     "noReviewsFound": "Inga recensioner hittades",
     "onDeviceIntensive": "Transkription på enheten är beräkningsintensiv.",
     "onDeviceSlower": "Transkription på enheten kan vara långsammare på denna enhet.",
-    "premiumMinutesInfo": "4 800 premiumminuter/månad. Fliken På enheten erbjuder obegränsad gratis transkription.",
+    "premiumMinutesInfo": "1 200 premiumminuter/månad. Fliken På enheten erbjuder obegränsad gratis transkription.",
     "redownload": "Ladda ner igen",
     "reply": "Svar",
     "replySentSuccessfully": "Svaret skickades",
@@ -2749,5 +2749,62 @@
     "notYetSynced": "Inte synkroniserat med din telefon ännu",
     "clearAll": "Rensa allt",
     "phoneKeypad": "Knappsats",
-    "phoneHideKeypad": "Dölj knappsats"
+    "phoneHideKeypad": "Dölj knappsats",
+    "transcriptionPaused": "Spelar in, återansluter",
+    "transcriptionPausedReconnecting": "Spelar fortfarande in — återansluter till transkription...",
+    "fairUsePolicy": "Rimlig användning",
+    "fairUseLoadError": "Det gick inte att läsa in status för rimlig användning. Försök igen.",
+    "fairUseStatusNormal": "Din användning är inom normala gränser.",
+    "fairUseStageNormal": "Normal",
+    "fairUseStageWarning": "Varning",
+    "fairUseStageThrottle": "Begränsad",
+    "fairUseStageRestrict": "Blockerad",
+    "fairUseSpeechUsage": "Talanvändning",
+    "fairUseToday": "Idag",
+    "fairUse3Day": "3-dagars rullande",
+    "fairUseWeekly": "Veckovis rullande",
+    "fairUseAboutTitle": "Om rimlig användning",
+    "fairUseAboutBody": "Omi är utformat för personliga samtal, möten och liveinteraktioner. Användningen mäts efter faktisk detekterad taltid, inte anslutningstid. Om användningen avsevärt överstiger normala mönster för icke-personligt innehåll kan justeringar tillämpas.",
+    "fairUseCaseRefCopied": "{caseRef} kopierat",
+    "@fairUseCaseRefCopied": {
+        "description": "Snackbar message when case reference is copied",
+        "placeholders": {
+            "caseRef": {
+                "type": "String"
+            }
+        }
+    },
+    "fairUseDailyTranscription": "Daily Transcription",
+    "fairUseBudgetExhausted": "Daily transcription limit reached",
+    "fairUseBudgetResetsAt": "Resets {time}",
+    "fairUseBudgetUsed": "{used}m / {limit}m",
+    "@fairUseBudgetUsed": {
+        "placeholders": {
+            "used": {
+                "type": "String"
+            },
+            "limit": {
+                "type": "String"
+            }
+        }
+    },
+    "@fairUseBudgetResetsAt": {
+        "placeholders": {
+            "time": {
+                "type": "String"
+            }
+        }
+    },
+    "fairUseBannerStatus": "Rättvis användning: {status}",
+    "@fairUseBannerStatus": {
+        "placeholders": {
+            "status": {
+                "type": "String"
+            }
+        }
+    },
+    "improveConnectionTitle": "Förbättra anslutning",
+    "improveConnectionContent": "Vi har förbättrat hur Omi förblir ansluten till din enhet. För att aktivera detta, gå till sidan Enhetsinformation, tryck på \"Koppla från enhet\" och para ihop din enhet igen.",
+    "improveConnectionAction": "Förstått",
+    "clockSkewWarning": "Enhetens klocka avviker ~{minutes} min. Kontrollera dina datum- och tidsinställningar."
 }

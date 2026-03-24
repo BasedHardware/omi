@@ -1457,7 +1457,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get payYourSttProvider => 'Freely use omi. You only pay your STT provider directly.';
 
   @override
-  String get freeMinutesMonth => '4,800 free minutes/month included. Unlimited with ';
+  String get freeMinutesMonth => '1,200 free minutes/month included. Unlimited with ';
 
   @override
   String get omiUnlimited => 'Omi Unlimited';
@@ -1706,7 +1706,12 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'DEVICES', one: 'DEVICE');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'DEVICES',
+      one: 'DEVICE',
+    );
     return '$count $_temp0 FOUND NEARBY';
   }
 
@@ -4760,7 +4765,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get noSpecificDataAccessConfigured => 'No specific data access configured.';
 
   @override
-  String get basicPlanDescription => '4,800 premium mins + unlimited on-device';
+  String get basicPlanDescription => '1,200 premium mins + unlimited on-device';
 
   @override
   String get minutes => 'minutes';
@@ -6083,7 +6088,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get cloudProvider => 'Cloud Provider';
 
   @override
-  String get premiumMinutesInfo => '4,800 premium minutes/month. On-Device tab offers unlimited free transcription.';
+  String get premiumMinutesInfo => '1,200 premium minutes/month. On-Device tab offers unlimited free transcription.';
 
   @override
   String get viewUsage => 'View usage';
@@ -6162,7 +6167,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get batteryDrainSignificantly => 'Battery drain will increase significantly.';
 
   @override
-  String get premiumMinutesMonth => '4,800 premium minutes/month. On-Device tab offers unlimited free transcription. ';
+  String get premiumMinutesMonth => '1,200 premium minutes/month. On-Device tab offers unlimited free transcription. ';
 
   @override
   String get audioProcessedLocally => 'Audio is processed locally. Works offline, more private, but uses more battery.';
@@ -8551,4 +8556,91 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get phoneHideKeypad => 'Hide Keypad';
+
+  @override
+  String get fairUsePolicy => 'Fair Use';
+
+  @override
+  String get fairUseLoadError => 'Unable to load fair use status. Please try again.';
+
+  @override
+  String get fairUseStatusNormal => 'Your usage is within normal limits.';
+
+  @override
+  String get fairUseStageNormal => 'Normal';
+
+  @override
+  String get fairUseStageWarning => 'Warning';
+
+  @override
+  String get fairUseStageThrottle => 'Throttled';
+
+  @override
+  String get fairUseStageRestrict => 'Restricted';
+
+  @override
+  String get fairUseSpeechUsage => 'Speech Usage';
+
+  @override
+  String get fairUseToday => 'Today';
+
+  @override
+  String get fairUse3Day => '3-Day Rolling';
+
+  @override
+  String get fairUseWeekly => 'Weekly Rolling';
+
+  @override
+  String get fairUseAboutTitle => 'About Fair Use';
+
+  @override
+  String get fairUseAboutBody =>
+      'Omi is designed for personal conversations, meetings, and live interactions. Usage is measured by real speech time detected, not connection time. If usage significantly exceeds normal patterns for non-personal content, adjustments may apply.';
+
+  @override
+  String fairUseCaseRefCopied(String caseRef) {
+    return '$caseRef copied';
+  }
+
+  @override
+  String get fairUseDailyTranscription => 'Daily Transcription';
+
+  @override
+  String fairUseBudgetUsed(String used, String limit) {
+    return '${used}m / ${limit}m';
+  }
+
+  @override
+  String get fairUseBudgetExhausted => 'Daily transcription limit reached';
+
+  @override
+  String fairUseBudgetResetsAt(String time) {
+    return 'Resets $time';
+  }
+
+  @override
+  String get transcriptionPaused => 'Recording, reconnecting';
+
+  @override
+  String get transcriptionPausedReconnecting => 'Still recording — reconnecting to transcription...';
+
+  @override
+  String fairUseBannerStatus(String status) {
+    return 'Fair Use: $status';
+  }
+
+  @override
+  String get improveConnectionTitle => 'Improve Connection';
+
+  @override
+  String get improveConnectionContent =>
+      'We\'ve improved how Omi stays connected to your device. To activate this, please go to the Device Info page, tap \"Disconnect Device\", and then pair your device again.';
+
+  @override
+  String get improveConnectionAction => 'Got it';
+
+  @override
+  String clockSkewWarning(int minutes) {
+    return 'Your device clock is off by ~$minutes min. Check your date & time settings.';
+  }
 }

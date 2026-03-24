@@ -1453,7 +1453,7 @@ class AppLocalizationsPt extends AppLocalizations {
   String get payYourSttProvider => 'Use Omi de graça. Você paga apenas seu provedor STT.';
 
   @override
-  String get freeMinutesMonth => '4.800 minutos grátis/mês incluídos.';
+  String get freeMinutesMonth => '1.200 minutos grátis/mês incluídos.';
 
   @override
   String get omiUnlimited => 'Omi Ilimitado';
@@ -4748,7 +4748,7 @@ class AppLocalizationsPt extends AppLocalizations {
   String get noSpecificDataAccessConfigured => 'Nenhum acesso a dados específico configurado.';
 
   @override
-  String get basicPlanDescription => '4.800 minutos premium + ilimitado no dispositivo';
+  String get basicPlanDescription => '1.200 minutos premium + ilimitado no dispositivo';
 
   @override
   String get minutes => 'minutos';
@@ -6080,7 +6080,7 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get premiumMinutesInfo =>
-      '4.800 minutos premium/mês. A aba No Dispositivo oferece transcrição gratuita ilimitada.';
+      '1.200 minutos premium/mês. A aba No Dispositivo oferece transcrição gratuita ilimitada.';
 
   @override
   String get viewUsage => 'Ver uso';
@@ -6162,7 +6162,7 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get premiumMinutesMonth =>
-      '4.800 minutos premium/mês. A aba No dispositivo oferece transcrição gratuita ilimitada. ';
+      '1.200 minutos premium/mês. A aba No dispositivo oferece transcrição gratuita ilimitada. ';
 
   @override
   String get audioProcessedLocally =>
@@ -8562,4 +8562,91 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get phoneHideKeypad => 'Ocultar teclado';
+
+  @override
+  String get fairUsePolicy => 'Uso justo';
+
+  @override
+  String get fairUseLoadError => 'Não foi possível carregar o status de uso justo. Tente novamente.';
+
+  @override
+  String get fairUseStatusNormal => 'Seu uso está dentro dos limites normais.';
+
+  @override
+  String get fairUseStageNormal => 'Normal';
+
+  @override
+  String get fairUseStageWarning => 'Aviso';
+
+  @override
+  String get fairUseStageThrottle => 'Limitado';
+
+  @override
+  String get fairUseStageRestrict => 'Bloqueado';
+
+  @override
+  String get fairUseSpeechUsage => 'Uso de fala';
+
+  @override
+  String get fairUseToday => 'Hoje';
+
+  @override
+  String get fairUse3Day => '3 dias contínuos';
+
+  @override
+  String get fairUseWeekly => 'Semanal contínuo';
+
+  @override
+  String get fairUseAboutTitle => 'Sobre o uso justo';
+
+  @override
+  String get fairUseAboutBody =>
+      'O Omi é projetado para conversas pessoais, reuniões e interações ao vivo. O uso é medido pelo tempo real de fala detectado, não pelo tempo de conexão. Se o uso exceder significativamente os padrões normais para conteúdo não pessoal, ajustes podem ser aplicados.';
+
+  @override
+  String fairUseCaseRefCopied(String caseRef) {
+    return '$caseRef copiado';
+  }
+
+  @override
+  String get fairUseDailyTranscription => 'Transcrição diária';
+
+  @override
+  String fairUseBudgetUsed(String used, String limit) {
+    return '${used}m / ${limit}m';
+  }
+
+  @override
+  String get fairUseBudgetExhausted => 'Limite diário de transcrição atingido';
+
+  @override
+  String fairUseBudgetResetsAt(String time) {
+    return 'Reinicia $time';
+  }
+
+  @override
+  String get transcriptionPaused => 'Gravando, reconectando';
+
+  @override
+  String get transcriptionPausedReconnecting => 'Ainda gravando — reconectando à transcrição...';
+
+  @override
+  String fairUseBannerStatus(String status) {
+    return 'Uso justo: $status';
+  }
+
+  @override
+  String get improveConnectionTitle => 'Melhorar conexão';
+
+  @override
+  String get improveConnectionContent =>
+      'Melhorámos a forma como o Omi se mantém ligado ao seu dispositivo. Para ativar isto, vá à página de Informações do dispositivo, toque em \"Desligar dispositivo\" e emparelhe o seu dispositivo novamente.';
+
+  @override
+  String get improveConnectionAction => 'Entendi';
+
+  @override
+  String clockSkewWarning(int minutes) {
+    return 'O relógio do dispositivo está desajustado ~$minutes min. Verifique as configurações de data e hora.';
+  }
 }

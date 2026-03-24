@@ -448,7 +448,7 @@
     "exportConfiguration": "Exportovat konfiguraci",
     "bringYourOwn": "Přineste si vlastní",
     "payYourSttProvider": "Používejte Omi zdarma. Platíte pouze svému poskytovateli STT přímo.",
-    "freeMinutesMonth": "4 800 bezplatných minut měsíčně. Neomezené s ",
+    "freeMinutesMonth": "1 200 bezplatných minut měsíčně. Neomezené s ",
     "omiUnlimited": "Omi Unlimited",
     "hostRequired": "Host je povinný",
     "validPortRequired": "Je vyžadován platný port",
@@ -1461,7 +1461,7 @@
     "accessesAndTriggeredBy": "{accessDescription} a je {triggerDescription}.",
     "isTriggeredBy": "Je {triggerDescription}.",
     "noSpecificDataAccessConfigured": "Není nakonfigurován žádný specifický přístup k datům.",
-    "basicPlanDescription": "4 800 prémiových minut + neomezené na zařízení",
+    "basicPlanDescription": "1 200 prémiových minut + neomezené na zařízení",
     "minutes": "minut",
     "omiHas": "Omi má:",
     "premiumMinutesUsed": "Prémiové minuty vyčerpány.",
@@ -1889,7 +1889,7 @@
     "deviceMayWarmUp": "Zařízení se může při delším používání zahřát.",
     "speedAccuracyLower": "Rychlost a přesnost mohou být nižší než u cloudových modelů.",
     "cloudProvider": "Cloudový poskytovatel",
-    "premiumMinutesMonth": "4 800 prémiových minut/měsíc. Karta Na zařízení nabízí neomezený bezplatný přepis. ",
+    "premiumMinutesMonth": "1 200 prémiových minut/měsíc. Karta Na zařízení nabízí neomezený bezplatný přepis. ",
     "viewUsage": "Zobrazit využití",
     "audioProcessedLocally": "Zvuk je zpracováván lokálně. Funguje offline, je soukromější, ale spotřebovává více baterie.",
     "languageLabel": "Jazyk",
@@ -2440,7 +2440,7 @@
     "onDeviceIntensive": "Přepis na zařízení je výpočetně náročný.",
     "onDeviceSlower": "Přepis na zařízení může být na tomto zařízení pomalejší.",
     "performanceReduced": "Výkon snížen 5-10x. Použijte režim Release.",
-    "premiumMinutesInfo": "4 800 prémiových minut/měsíc. Karta Na zařízení nabízí neomezený bezplatný přepis.",
+    "premiumMinutesInfo": "1 200 prémiových minut/měsíc. Karta Na zařízení nabízí neomezený bezplatný přepis.",
     "redownload": "Stáhnout znovu",
     "reply": "Odpověď",
     "replySentSuccessfully": "Odpověď byla úspěšně odeslána",
@@ -2718,5 +2718,62 @@
     "notYetSynced": "Zatím nesynchronizováno s vaším telefonem",
     "clearAll": "Vymazat vše",
     "phoneKeypad": "Klávesnice",
-    "phoneHideKeypad": "Skrýt klávesnici"
+    "phoneHideKeypad": "Skrýt klávesnici",
+    "transcriptionPaused": "Nahrávání, připojování",
+    "transcriptionPausedReconnecting": "Stále se nahrává — připojování k přepisu...",
+    "fairUsePolicy": "Spravedlivé používání",
+    "fairUseLoadError": "Nepodařilo se načíst stav spravedlivého používání. Zkuste to prosím znovu.",
+    "fairUseStatusNormal": "Vaše používání je v normálních mezích.",
+    "fairUseStageNormal": "Normální",
+    "fairUseStageWarning": "Upozornění",
+    "fairUseStageThrottle": "Omezeno",
+    "fairUseStageRestrict": "Zakázáno",
+    "fairUseSpeechUsage": "Využití řeči",
+    "fairUseToday": "Dnes",
+    "fairUse3Day": "3denní období",
+    "fairUseWeekly": "Týdenní období",
+    "fairUseAboutTitle": "O spravedlivém používání",
+    "fairUseAboutBody": "Omi je navržen pro osobní konverzace, schůzky a živé interakce. Používání se měří skutečným detekovaným časem řeči, nikoli časem připojení. Pokud používání výrazně překročí běžné vzorce pro neosobní obsah, mohou být provedeny úpravy.",
+    "fairUseCaseRefCopied": "{caseRef} zkopírováno",
+    "@fairUseCaseRefCopied": {
+        "description": "Snackbar message when case reference is copied",
+        "placeholders": {
+            "caseRef": {
+                "type": "String"
+            }
+        }
+    },
+    "fairUseDailyTranscription": "Daily Transcription",
+    "fairUseBudgetExhausted": "Daily transcription limit reached",
+    "fairUseBudgetResetsAt": "Resets {time}",
+    "fairUseBudgetUsed": "{used}m / {limit}m",
+    "@fairUseBudgetUsed": {
+        "placeholders": {
+            "used": {
+                "type": "String"
+            },
+            "limit": {
+                "type": "String"
+            }
+        }
+    },
+    "@fairUseBudgetResetsAt": {
+        "placeholders": {
+            "time": {
+                "type": "String"
+            }
+        }
+    },
+    "fairUseBannerStatus": "Spravedlivé užívání: {status}",
+    "@fairUseBannerStatus": {
+        "placeholders": {
+            "status": {
+                "type": "String"
+            }
+        }
+    },
+    "improveConnectionTitle": "Zlepšit připojení",
+    "improveConnectionContent": "Vylepšili jsme způsob, jakým Omi zůstává připojeno k vašemu zařízení. Pro aktivaci přejděte na stránku Informace o zařízení, klepněte na \"Odpojit zařízení\" a poté zařízení znovu spárujte.",
+    "improveConnectionAction": "Rozumím",
+    "clockSkewWarning": "Hodiny vašeho zařízení se liší o ~{minutes} min. Zkontrolujte nastavení data a času."
 }

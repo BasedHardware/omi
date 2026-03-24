@@ -1464,7 +1464,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get payYourSttProvider => 'Voľne používajte omi. Platíte len svojmu poskytovateľovi STT priamo.';
 
   @override
-  String get freeMinutesMonth => '4 800 bezplatných minút/mesiac je zahrnutých. Neobmedzené s ';
+  String get freeMinutesMonth => '1 200 bezplatných minút/mesiac je zahrnutých. Neobmedzené s ';
 
   @override
   String get omiUnlimited => 'Omi Unlimited';
@@ -1713,7 +1713,12 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'ZARIADENIA', one: 'ZARIADENIE');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'ZARIADENIA',
+      one: 'ZARIADENIE',
+    );
     return '$count $_temp0 NÁJDENÉ V BLÍZKOSTI';
   }
 
@@ -4755,7 +4760,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get noSpecificDataAccessConfigured => 'Nie je nakonfigurovaný žiadny konkrétny prístup k údajom.';
 
   @override
-  String get basicPlanDescription => '4 800 prémiových minút + neobmedzené na zariadení';
+  String get basicPlanDescription => '1 200 prémiových minút + neobmedzené na zariadení';
 
   @override
   String get minutes => 'minút';
@@ -6083,7 +6088,7 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get premiumMinutesInfo =>
-      '4 800 prémiových minút/mesiac. Karta Na zariadení ponúka neobmedzený bezplatný prepis.';
+      '1 200 prémiových minút/mesiac. Karta Na zariadení ponúka neobmedzený bezplatný prepis.';
 
   @override
   String get viewUsage => 'Zobraziť využitie';
@@ -6165,7 +6170,7 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get premiumMinutesMonth =>
-      '4 800 prémiových minút/mesiac. Karta Na zariadení ponúka neobmedzený bezplatný prepis. ';
+      '1 200 prémiových minút/mesiac. Karta Na zariadení ponúka neobmedzený bezplatný prepis. ';
 
   @override
   String get audioProcessedLocally =>
@@ -8544,4 +8549,91 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get phoneHideKeypad => 'Skryť klávesnicu';
+
+  @override
+  String get fairUsePolicy => 'Spravodlivé používanie';
+
+  @override
+  String get fairUseLoadError => 'Nepodarilo sa načítať stav spravodlivého používania. Skúste to znova.';
+
+  @override
+  String get fairUseStatusNormal => 'Vaše používanie je v normálnych medziach.';
+
+  @override
+  String get fairUseStageNormal => 'Normálne';
+
+  @override
+  String get fairUseStageWarning => 'Upozornenie';
+
+  @override
+  String get fairUseStageThrottle => 'Obmedzené';
+
+  @override
+  String get fairUseStageRestrict => 'Zablokované';
+
+  @override
+  String get fairUseSpeechUsage => 'Používanie reči';
+
+  @override
+  String get fairUseToday => 'Dnes';
+
+  @override
+  String get fairUse3Day => '3-dňové obdobie';
+
+  @override
+  String get fairUseWeekly => 'Týždenné obdobie';
+
+  @override
+  String get fairUseAboutTitle => 'O spravodlivom používaní';
+
+  @override
+  String get fairUseAboutBody =>
+      'Omi je navrhnutý pre osobné konverzácie, stretnutia a živé interakcie. Používanie sa meria skutočným detegovaným časom reči, nie časom pripojenia. Ak používanie výrazne prekročí bežné vzory pre neosobný obsah, môžu sa uplatniť úpravy.';
+
+  @override
+  String fairUseCaseRefCopied(String caseRef) {
+    return '$caseRef skopírované';
+  }
+
+  @override
+  String get fairUseDailyTranscription => 'Daily Transcription';
+
+  @override
+  String fairUseBudgetUsed(String used, String limit) {
+    return '${used}m / ${limit}m';
+  }
+
+  @override
+  String get fairUseBudgetExhausted => 'Daily transcription limit reached';
+
+  @override
+  String fairUseBudgetResetsAt(String time) {
+    return 'Resets $time';
+  }
+
+  @override
+  String get transcriptionPaused => 'Nahrávanie, opätovné pripojenie';
+
+  @override
+  String get transcriptionPausedReconnecting => 'Stále nahráva — opätovné pripojenie k prepisu...';
+
+  @override
+  String fairUseBannerStatus(String status) {
+    return 'Spravodlivé používanie: $status';
+  }
+
+  @override
+  String get improveConnectionTitle => 'Zlepšiť pripojenie';
+
+  @override
+  String get improveConnectionContent =>
+      'Vylepšili sme spôsob, akým Omi zostáva pripojené k vášmu zariadeniu. Pre aktiváciu prejdite na stránku Informácie o zariadení, klepnite na \"Odpojiť zariadenie\" a znova spárujte zariadenie.';
+
+  @override
+  String get improveConnectionAction => 'Rozumiem';
+
+  @override
+  String clockSkewWarning(int minutes) {
+    return 'Hodiny zariadenia sa líšia o ~$minutes min. Skontrolujte nastavenia dátumu a času.';
+  }
 }

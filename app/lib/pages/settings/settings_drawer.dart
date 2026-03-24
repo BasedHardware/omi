@@ -630,9 +630,8 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
           Expanded(
             child: SingleChildScrollView(
               padding: const EdgeInsets.symmetric(horizontal: 20),
-              child: widget.mode == SettingsMode.omi
-                  ? _buildOmiModeContent(context)
-                  : _buildNoDeviceModeContent(context),
+              child:
+                  widget.mode == SettingsMode.omi ? _buildOmiModeContent(context) : _buildNoDeviceModeContent(context),
             ),
           ),
         ],

@@ -443,7 +443,7 @@
     "exportConfiguration": "Exportar configuração",
     "bringYourOwn": "Traga o seu",
     "payYourSttProvider": "Use Omi de graça. Você paga apenas seu provedor STT.",
-    "freeMinutesMonth": "4.800 minutos grátis/mês incluídos.",
+    "freeMinutesMonth": "1.200 minutos grátis/mês incluídos.",
     "omiUnlimited": "Omi Ilimitado",
     "hostRequired": "Host é obrigatório",
     "validPortRequired": "Porta válida obrigatória",
@@ -1460,7 +1460,7 @@
     "accessesAndTriggeredBy": "{accessDescription} e é {triggerDescription}.",
     "isTriggeredBy": "É {triggerDescription}.",
     "noSpecificDataAccessConfigured": "Nenhum acesso a dados específico configurado.",
-    "basicPlanDescription": "4.800 minutos premium + ilimitado no dispositivo",
+    "basicPlanDescription": "1.200 minutos premium + ilimitado no dispositivo",
     "minutes": "minutos",
     "omiHas": "Omi tem:",
     "premiumMinutesUsed": "Minutos premium utilizados.",
@@ -1930,7 +1930,7 @@
     "deviceMayWarmUp": "O dispositivo pode esquentar durante o uso prolongado.",
     "speedAccuracyLower": "Velocidade e precisão podem ser menores do que os modelos na nuvem.",
     "cloudProvider": "Provedor de nuvem",
-    "premiumMinutesMonth": "4.800 minutos premium/mês. A aba No dispositivo oferece transcrição gratuita ilimitada. ",
+    "premiumMinutesMonth": "1.200 minutos premium/mês. A aba No dispositivo oferece transcrição gratuita ilimitada. ",
     "viewUsage": "Ver uso",
     "audioProcessedLocally": "O áudio é processado localmente. Funciona offline, mais privado, mas usa mais bateria.",
     "languageLabel": "Idioma",
@@ -2500,7 +2500,7 @@
     "noReviewsFound": "Nenhuma Avaliação Encontrada",
     "onDeviceIntensive": "A transcrição no dispositivo é computacionalmente intensiva.",
     "onDeviceSlower": "A transcrição no dispositivo pode ser mais lenta neste dispositivo.",
-    "premiumMinutesInfo": "4.800 minutos premium/mês. A aba No Dispositivo oferece transcrição gratuita ilimitada.",
+    "premiumMinutesInfo": "1.200 minutos premium/mês. A aba No Dispositivo oferece transcrição gratuita ilimitada.",
     "redownload": "Baixar Novamente",
     "reply": "Responder",
     "replySentSuccessfully": "Resposta enviada com sucesso",
@@ -2785,5 +2785,62 @@
     "notYetSynced": "Ainda não sincronizado com seu telefone",
     "clearAll": "Limpar tudo",
     "phoneKeypad": "Teclado",
-    "phoneHideKeypad": "Ocultar teclado"
+    "phoneHideKeypad": "Ocultar teclado",
+    "transcriptionPaused": "Gravando, reconectando",
+    "transcriptionPausedReconnecting": "Ainda gravando — reconectando à transcrição...",
+    "fairUsePolicy": "Uso justo",
+    "fairUseLoadError": "Não foi possível carregar o status de uso justo. Tente novamente.",
+    "fairUseStatusNormal": "Seu uso está dentro dos limites normais.",
+    "fairUseStageNormal": "Normal",
+    "fairUseStageWarning": "Aviso",
+    "fairUseStageThrottle": "Limitado",
+    "fairUseStageRestrict": "Bloqueado",
+    "fairUseSpeechUsage": "Uso de fala",
+    "fairUseToday": "Hoje",
+    "fairUse3Day": "3 dias contínuos",
+    "fairUseWeekly": "Semanal contínuo",
+    "fairUseAboutTitle": "Sobre o uso justo",
+    "fairUseAboutBody": "O Omi é projetado para conversas pessoais, reuniões e interações ao vivo. O uso é medido pelo tempo real de fala detectado, não pelo tempo de conexão. Se o uso exceder significativamente os padrões normais para conteúdo não pessoal, ajustes podem ser aplicados.",
+    "fairUseCaseRefCopied": "{caseRef} copiado",
+    "@fairUseCaseRefCopied": {
+        "description": "Snackbar message when case reference is copied",
+        "placeholders": {
+            "caseRef": {
+                "type": "String"
+            }
+        }
+    },
+    "fairUseDailyTranscription": "Transcrição diária",
+    "fairUseBudgetExhausted": "Limite diário de transcrição atingido",
+    "fairUseBudgetResetsAt": "Reinicia {time}",
+    "fairUseBudgetUsed": "{used}m / {limit}m",
+    "@fairUseBudgetUsed": {
+        "placeholders": {
+            "used": {
+                "type": "String"
+            },
+            "limit": {
+                "type": "String"
+            }
+        }
+    },
+    "@fairUseBudgetResetsAt": {
+        "placeholders": {
+            "time": {
+                "type": "String"
+            }
+        }
+    },
+    "fairUseBannerStatus": "Uso justo: {status}",
+    "@fairUseBannerStatus": {
+        "placeholders": {
+            "status": {
+                "type": "String"
+            }
+        }
+    },
+    "improveConnectionTitle": "Melhorar conexão",
+    "improveConnectionContent": "Melhorámos a forma como o Omi se mantém ligado ao seu dispositivo. Para ativar isto, vá à página de Informações do dispositivo, toque em \"Desligar dispositivo\" e emparelhe o seu dispositivo novamente.",
+    "improveConnectionAction": "Entendi",
+    "clockSkewWarning": "O relógio do dispositivo está desajustado ~{minutes} min. Verifique as configurações de data e hora."
 }

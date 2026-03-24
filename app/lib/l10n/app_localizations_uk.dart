@@ -1462,7 +1462,7 @@ class AppLocalizationsUk extends AppLocalizations {
   String get payYourSttProvider => 'Вільно користуйтесь omi. Ви платите лише своєму STT-провайдеру безпосередньо.';
 
   @override
-  String get freeMinutesMonth => '4,800 безкоштовних хвилин/місяць включено. Необмежено з ';
+  String get freeMinutesMonth => '1,200 безкоштовних хвилин/місяць включено. Необмежено з ';
 
   @override
   String get omiUnlimited => 'Omi Безлімітний';
@@ -1711,7 +1711,12 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'ПРИСТРОЇВ', one: 'ПРИСТРІЙ');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'ПРИСТРОЇВ',
+      one: 'ПРИСТРІЙ',
+    );
     return '$count $_temp0 ЗНАЙДЕНО ПОБЛИЗУ';
   }
 
@@ -4763,7 +4768,7 @@ class AppLocalizationsUk extends AppLocalizations {
   String get noSpecificDataAccessConfigured => 'Конкретний доступ до даних не налаштовано.';
 
   @override
-  String get basicPlanDescription => '4 800 преміум хвилин + необмежено на пристрої';
+  String get basicPlanDescription => '1 200 преміум хвилин + необмежено на пристрої';
 
   @override
   String get minutes => 'хвилин';
@@ -6092,7 +6097,7 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get premiumMinutesInfo =>
-      '4800 преміум хвилин/місяць. Вкладка \"На пристрої\" пропонує необмежену транскрипцію.';
+      '1200 преміум хвилин/місяць. Вкладка \"На пристрої\" пропонує необмежену транскрипцію.';
 
   @override
   String get viewUsage => 'Переглянути використання';
@@ -6173,7 +6178,7 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get premiumMinutesMonth =>
-      '4800 преміум-хвилин/місяць. Вкладка На пристрої пропонує необмежену безкоштовну транскрипцію. ';
+      '1200 преміум-хвилин/місяць. Вкладка На пристрої пропонує необмежену безкоштовну транскрипцію. ';
 
   @override
   String get audioProcessedLocally =>
@@ -8567,4 +8572,92 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get phoneHideKeypad => 'Сховати клавіатуру';
+
+  @override
+  String get fairUsePolicy => 'Справедливе використання';
+
+  @override
+  String get fairUseLoadError =>
+      'Не вдалося завантажити статус справедливого використання. Будь ласка, спробуйте ще раз.';
+
+  @override
+  String get fairUseStatusNormal => 'Ваше використання в межах норми.';
+
+  @override
+  String get fairUseStageNormal => 'Нормальне';
+
+  @override
+  String get fairUseStageWarning => 'Попередження';
+
+  @override
+  String get fairUseStageThrottle => 'Обмежене';
+
+  @override
+  String get fairUseStageRestrict => 'Заблоковане';
+
+  @override
+  String get fairUseSpeechUsage => 'Використання мовлення';
+
+  @override
+  String get fairUseToday => 'Сьогодні';
+
+  @override
+  String get fairUse3Day => '3-денний період';
+
+  @override
+  String get fairUseWeekly => 'Тижневий період';
+
+  @override
+  String get fairUseAboutTitle => 'Про справедливе використання';
+
+  @override
+  String get fairUseAboutBody =>
+      'Omi призначений для особистих розмов, зустрічей та живої взаємодії. Використання вимірюється за фактичним виявленим часом мовлення, а не за часом підключення. Якщо використання значно перевищує звичайні шаблони для неособистого контенту, можуть бути застосовані коригування.';
+
+  @override
+  String fairUseCaseRefCopied(String caseRef) {
+    return '$caseRef скопійовано';
+  }
+
+  @override
+  String get fairUseDailyTranscription => 'Щоденна транскрипція';
+
+  @override
+  String fairUseBudgetUsed(String used, String limit) {
+    return '$usedхв / $limitхв';
+  }
+
+  @override
+  String get fairUseBudgetExhausted => 'Досягнуто денний ліміт транскрипції';
+
+  @override
+  String fairUseBudgetResetsAt(String time) {
+    return 'Скидання $time';
+  }
+
+  @override
+  String get transcriptionPaused => 'Запис, повторне підключення';
+
+  @override
+  String get transcriptionPausedReconnecting => 'Запис продовжується — повторне підключення до транскрипції...';
+
+  @override
+  String fairUseBannerStatus(String status) {
+    return 'Справедливе використання: $status';
+  }
+
+  @override
+  String get improveConnectionTitle => 'Покращити з\'єднання';
+
+  @override
+  String get improveConnectionContent =>
+      'Ми покращили спосіб підключення Omi до вашого пристрою. Щоб активувати це, перейдіть на сторінку інформації про пристрій, натисніть \"Від\'єднати пристрій\" і знову підключіть ваш пристрій.';
+
+  @override
+  String get improveConnectionAction => 'Зрозуміло';
+
+  @override
+  String clockSkewWarning(int minutes) {
+    return 'Годинник вашого пристрою відрізняється на ~$minutes хв. Перевірте налаштування дати та часу.';
+  }
 }

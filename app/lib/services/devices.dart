@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 
@@ -10,6 +11,7 @@ import 'package:omi/services/devices/device_connection.dart';
 import 'package:omi/services/devices/discovery/apple_watch_discoverer.dart';
 import 'package:omi/services/devices/discovery/bluetooth_discoverer.dart';
 import 'package:omi/services/devices/discovery/device_discoverer.dart';
+import 'package:omi/services/devices/discovery/native_bluetooth_discoverer.dart';
 import 'package:omi/services/devices/errors.dart';
 import 'package:omi/utils/debug_log_manager.dart';
 import 'package:omi/utils/logger.dart';
@@ -61,7 +63,10 @@ class DeviceService implements IDeviceService {
   DeviceServiceStatus _status = DeviceServiceStatus.init;
   List<BtDevice> _devices = [];
 
-  final List<DeviceDiscoverer> _discoverers = [BluetoothDeviceDiscoverer(), AppleWatchDiscoverer()];
+  final List<DeviceDiscoverer> _discoverers = [
+    NativeBluetoothDiscoverer(),
+    AppleWatchDiscoverer(),
+  ];
 
   final Map<Object, IDeviceServiceSubsciption> _subscriptions = {};
 
@@ -124,20 +129,20 @@ class DeviceService implements IDeviceService {
     _connection = null;
 
     var device = _devices.firstWhereOrNull((f) => f.id == id);
+    Logger.debug('[DeviceService] device lookup result: ${device?.name ?? "NULL"} (locator: ${device?.locator?.kind})');
 
     // If device not in discovered list, try to get it from SharedPreferences
     // This allows background reconnection without scanning
     if (device == null) {
-      Logger.debug("Device not in discovered list, checking stored device");
+      Logger.debug('[DeviceService] Device not in discovered list, checking stored device');
       device = _getStoredDevice(id);
       if (device != null) {
-        Logger.debug("Using stored device for direct reconnection: ${device.name}");
-        // Add to devices list so it's available for future connections
+        Logger.debug('[DeviceService] Using stored device: ${device.name}');
         if (!_devices.any((d) => d.id == device!.id)) {
           _devices.add(device);
         }
       } else {
-        Logger.debug("No stored device available for $id");
+        Logger.debug('[DeviceService] No stored device available for $id, returning');
         return;
       }
     }
@@ -146,7 +151,7 @@ class DeviceService implements IDeviceService {
     if (_connection != null) {
       await _connection!.connect(onConnectionStateChanged: onDeviceConnectionStateChanged);
     } else {
-      Logger.debug("Failed to create device connection for ${device.id}");
+      Logger.debug('[DeviceService] Failed to create device connection for ${device.id}');
     }
   }
 

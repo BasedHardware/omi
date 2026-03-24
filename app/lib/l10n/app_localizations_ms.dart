@@ -1466,7 +1466,7 @@ class AppLocalizationsMs extends AppLocalizations {
   String get payYourSttProvider => 'Gunakan omi secara bebas. Anda hanya membayar penyedia STT anda secara langsung.';
 
   @override
-  String get freeMinutesMonth => '4,800 minit percuma/bulan disertakan. Tanpa had dengan ';
+  String get freeMinutesMonth => '1,200 minit percuma/bulan disertakan. Tanpa had dengan ';
 
   @override
   String get omiUnlimited => 'Omi Tanpa Had';
@@ -1715,7 +1715,12 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'PERANTI', one: 'PERANTI');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'PERANTI',
+      one: 'PERANTI',
+    );
     return '$count $_temp0 DIJUMPAI BERDEKATAN';
   }
 
@@ -4775,7 +4780,7 @@ class AppLocalizationsMs extends AppLocalizations {
   String get noSpecificDataAccessConfigured => 'Tiada akses data khusus dikonfigurasi.';
 
   @override
-  String get basicPlanDescription => '4,800 minit premium + tanpa had pada peranti';
+  String get basicPlanDescription => '1,200 minit premium + tanpa had pada peranti';
 
   @override
   String get minutes => 'minit';
@@ -6105,7 +6110,7 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get premiumMinutesInfo =>
-      '4,800 minit premium/bulan. Tab Pada-Peranti menawarkan transkripsi percuma tanpa had.';
+      '1,200 minit premium/bulan. Tab Pada-Peranti menawarkan transkripsi percuma tanpa had.';
 
   @override
   String get viewUsage => 'Lihat penggunaan';
@@ -6187,7 +6192,7 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get premiumMinutesMonth =>
-      '4,800 minit premium/bulan. Tab Pada Peranti menawarkan transkripsi percuma tanpa had. ';
+      '1,200 minit premium/bulan. Tab Pada Peranti menawarkan transkripsi percuma tanpa had. ';
 
   @override
   String get audioProcessedLocally =>
@@ -8578,4 +8583,91 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get phoneHideKeypad => 'Sembunyikan pad kekunci';
+
+  @override
+  String get fairUsePolicy => 'Penggunaan Saksama';
+
+  @override
+  String get fairUseLoadError => 'Tidak dapat memuatkan status penggunaan saksama. Sila cuba lagi.';
+
+  @override
+  String get fairUseStatusNormal => 'Penggunaan anda dalam had biasa.';
+
+  @override
+  String get fairUseStageNormal => 'Normal';
+
+  @override
+  String get fairUseStageWarning => 'Amaran';
+
+  @override
+  String get fairUseStageThrottle => 'Dihadkan';
+
+  @override
+  String get fairUseStageRestrict => 'Disekat';
+
+  @override
+  String get fairUseSpeechUsage => 'Penggunaan Pertuturan';
+
+  @override
+  String get fairUseToday => 'Hari ini';
+
+  @override
+  String get fairUse3Day => '3 hari bergulir';
+
+  @override
+  String get fairUseWeekly => 'Mingguan bergulir';
+
+  @override
+  String get fairUseAboutTitle => 'Tentang Penggunaan Saksama';
+
+  @override
+  String get fairUseAboutBody =>
+      'Omi direka untuk perbualan peribadi, mesyuarat dan interaksi secara langsung. Penggunaan diukur berdasarkan masa pertuturan sebenar yang dikesan, bukan masa sambungan. Jika penggunaan melebihi corak biasa dengan ketara untuk kandungan bukan peribadi, pelarasan mungkin dikenakan.';
+
+  @override
+  String fairUseCaseRefCopied(String caseRef) {
+    return '$caseRef disalin';
+  }
+
+  @override
+  String get fairUseDailyTranscription => 'Daily Transcription';
+
+  @override
+  String fairUseBudgetUsed(String used, String limit) {
+    return '${used}m / ${limit}m';
+  }
+
+  @override
+  String get fairUseBudgetExhausted => 'Daily transcription limit reached';
+
+  @override
+  String fairUseBudgetResetsAt(String time) {
+    return 'Resets $time';
+  }
+
+  @override
+  String get transcriptionPaused => 'Merakam, menyambung semula';
+
+  @override
+  String get transcriptionPausedReconnecting => 'Masih merakam — menyambung semula ke transkripsi...';
+
+  @override
+  String fairUseBannerStatus(String status) {
+    return 'Penggunaan Saksama: $status';
+  }
+
+  @override
+  String get improveConnectionTitle => 'Tingkatkan Sambungan';
+
+  @override
+  String get improveConnectionContent =>
+      'Kami telah meningkatkan cara Omi kekal bersambung dengan peranti anda. Untuk mengaktifkan ini, pergi ke halaman Maklumat Peranti, ketik \"Putuskan Peranti\", dan gandingkan semula peranti anda.';
+
+  @override
+  String get improveConnectionAction => 'Faham';
+
+  @override
+  String clockSkewWarning(int minutes) {
+    return 'Jam peranti anda berbeza ~$minutes min. Semak tetapan tarikh & masa anda.';
+  }
 }

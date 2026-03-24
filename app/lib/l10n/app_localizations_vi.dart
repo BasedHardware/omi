@@ -1465,7 +1465,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get payYourSttProvider => 'Sử dụng omi tự do. Bạn chỉ trả tiền cho nhà cung cấp STT trực tiếp.';
 
   @override
-  String get freeMinutesMonth => '4.800 phút miễn phí/tháng được bao gồm. Không giới hạn với ';
+  String get freeMinutesMonth => '1.200 phút miễn phí/tháng được bao gồm. Không giới hạn với ';
 
   @override
   String get omiUnlimited => 'Omi Unlimited';
@@ -1714,7 +1714,12 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'THIẾT BỊ', one: 'THIẾT BỊ');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'THIẾT BỊ',
+      one: 'THIẾT BỊ',
+    );
     return 'ĐÃ TÌM THẤY $count $_temp0 GẦN ĐÂY';
   }
 
@@ -4766,7 +4771,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get noSpecificDataAccessConfigured => 'Không có quyền truy cập dữ liệu cụ thể nào được cấu hình.';
 
   @override
-  String get basicPlanDescription => '4.800 phút cao cấp + không giới hạn trên thiết bị';
+  String get basicPlanDescription => '1.200 phút cao cấp + không giới hạn trên thiết bị';
 
   @override
   String get minutes => 'phút';
@@ -6171,7 +6176,7 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get premiumMinutesMonth =>
-      '4.800 phút premium/tháng. Tab Trên thiết bị cung cấp phiên âm miễn phí không giới hạn. ';
+      '1.200 phút premium/tháng. Tab Trên thiết bị cung cấp phiên âm miễn phí không giới hạn. ';
 
   @override
   String get audioProcessedLocally =>
@@ -8557,4 +8562,91 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get phoneHideKeypad => 'Ẩn bàn phím';
+
+  @override
+  String get fairUsePolicy => 'Sử dụng hợp lý';
+
+  @override
+  String get fairUseLoadError => 'Không thể tải trạng thái sử dụng hợp lý. Vui lòng thử lại.';
+
+  @override
+  String get fairUseStatusNormal => 'Mức sử dụng của bạn trong giới hạn bình thường.';
+
+  @override
+  String get fairUseStageNormal => 'Bình thường';
+
+  @override
+  String get fairUseStageWarning => 'Cảnh báo';
+
+  @override
+  String get fairUseStageThrottle => 'Bị hạn chế';
+
+  @override
+  String get fairUseStageRestrict => 'Bị chặn';
+
+  @override
+  String get fairUseSpeechUsage => 'Sử dụng giọng nói';
+
+  @override
+  String get fairUseToday => 'Hôm nay';
+
+  @override
+  String get fairUse3Day => '3 ngày liên tục';
+
+  @override
+  String get fairUseWeekly => 'Hàng tuần liên tục';
+
+  @override
+  String get fairUseAboutTitle => 'Về sử dụng hợp lý';
+
+  @override
+  String get fairUseAboutBody =>
+      'Omi được thiết kế cho các cuộc trò chuyện cá nhân, cuộc họp và tương tác trực tiếp. Mức sử dụng được đo bằng thời gian nói thực tế được phát hiện, không phải thời gian kết nối. Nếu mức sử dụng vượt quá đáng kể các mẫu bình thường cho nội dung không cá nhân, có thể áp dụng các điều chỉnh.';
+
+  @override
+  String fairUseCaseRefCopied(String caseRef) {
+    return 'Đã sao chép $caseRef';
+  }
+
+  @override
+  String get fairUseDailyTranscription => 'Chuyển giọng hàng ngày';
+
+  @override
+  String fairUseBudgetUsed(String used, String limit) {
+    return '${used}p / ${limit}p';
+  }
+
+  @override
+  String get fairUseBudgetExhausted => 'Đã đạt giới hạn chuyển giọng hàng ngày';
+
+  @override
+  String fairUseBudgetResetsAt(String time) {
+    return 'Đặt lại $time';
+  }
+
+  @override
+  String get transcriptionPaused => 'Đang ghi, đang kết nối lại';
+
+  @override
+  String get transcriptionPausedReconnecting => 'Vẫn đang ghi — đang kết nối lại với phiên âm...';
+
+  @override
+  String fairUseBannerStatus(String status) {
+    return 'Sử dụng hợp lý: $status';
+  }
+
+  @override
+  String get improveConnectionTitle => 'Cải thiện kết nối';
+
+  @override
+  String get improveConnectionContent =>
+      'Chúng tôi đã cải thiện cách Omi duy trì kết nối với thiết bị của bạn. Để kích hoạt, hãy vào trang Thông tin thiết bị, nhấn \"Ngắt kết nối thiết bị\", rồi ghép nối lại thiết bị.';
+
+  @override
+  String get improveConnectionAction => 'Đã hiểu';
+
+  @override
+  String clockSkewWarning(int minutes) {
+    return 'Đồng hồ thiết bị của bạn lệch ~$minutes phút. Kiểm tra cài đặt ngày và giờ.';
+  }
 }

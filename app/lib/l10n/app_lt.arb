@@ -294,7 +294,7 @@
     "base": "Bazinis",
     "basicPlan": "Nemokamas planas",
     "basicPlanDesc": "Jūsų planas apima {limit} nemokamų minučių per mėnesį. Atnaujinkite, kad gautumėte neribotą.",
-    "basicPlanDescription": "4 800 premium minučių + neribota įrenginyje",
+    "basicPlanDescription": "1 200 premium minučių + neribota įrenginyje",
     "batteryDrainSignificantly": "Baterijos išsikrovimas žymiai padidės.",
     "batteryLevel": "Baterijos lygis",
     "batteryUsageHigher": "Baterijos naudojimas bus didesnis nei debesies transkripcijos.",
@@ -980,7 +980,7 @@
     "forgetDevice": "Pamiršti įrenginį",
     "free": "Nemokai",
     "freeForEveryone": "Nemokamai visiems",
-    "freeMinutesMonth": "4 800 nemokamų minučių per mėnesį įtraukta. Neribota su ",
+    "freeMinutesMonth": "1 200 nemokamų minučių per mėnesį įtraukta. Neribota su ",
     "freePlan": "Nemokamas planas",
     "frequencyBalanced": "Subalansuotas",
     "frequencyDescBalanced": "Reguliarūs naudingi priminimai",
@@ -1634,7 +1634,7 @@
     "port": "Prievadas",
     "preferences": "Nuostatos",
     "premiumMinsLeft": "Liko {count} premium minučių.",
-    "premiumMinutesMonth": "4800 premium minučių/mėn. Įrenginyje skirtukas siūlo neribotą nemokamą transkripciją. ",
+    "premiumMinutesMonth": "1200 premium minučių/mėn. Įrenginyje skirtukas siūlo neribotą nemokamą transkripciją. ",
     "premiumMinutesUsed": "Premium minutės išnaudotos.",
     "preparingAudioCapture": "Ruošiamas garso įrašymas",
     "preparingFormForYou": "Ruošiama forma jums...",
@@ -2471,7 +2471,7 @@
     "noReviewsFound": "Atsiliepimų nerasta",
     "onDeviceIntensive": "Transkripcija įrenginyje reikalauja daug skaičiavimo resursų.",
     "onDeviceSlower": "Transkripcija įrenginyje šiame įrenginyje gali būti lėtesnė.",
-    "premiumMinutesInfo": "4 800 premium minučių per mėnesį. Įrenginio skirtukas siūlo neribotą nemokamą transkripciją.",
+    "premiumMinutesInfo": "1 200 premium minučių per mėnesį. Įrenginio skirtukas siūlo neribotą nemokamą transkripciją.",
     "redownload": "Atsisiųsti iš naujo",
     "reply": "Atsakyti",
     "replySentSuccessfully": "Atsakymas sėkmingai išsiųstas",
@@ -2749,5 +2749,62 @@
     "notYetSynced": "Dar nesinchronizuota su jūsų telefonu",
     "clearAll": "Išvalyti viską",
     "phoneKeypad": "Klaviatūra",
-    "phoneHideKeypad": "Slėpti klaviatūrą"
+    "phoneHideKeypad": "Slėpti klaviatūrą",
+    "transcriptionPaused": "Įrašoma, jungiamasi iš naujo",
+    "transcriptionPausedReconnecting": "Vis dar įrašoma — jungiamasi prie transkripcijos...",
+    "fairUsePolicy": "Sąžiningas naudojimas",
+    "fairUseLoadError": "Nepavyko įkelti sąžiningo naudojimo būsenos. Bandykite dar kartą.",
+    "fairUseStatusNormal": "Jūsų naudojimas yra normaliose ribose.",
+    "fairUseStageNormal": "Normalus",
+    "fairUseStageWarning": "Įspėjimas",
+    "fairUseStageThrottle": "Apribotas",
+    "fairUseStageRestrict": "Užblokuotas",
+    "fairUseSpeechUsage": "Kalbos naudojimas",
+    "fairUseToday": "Šiandien",
+    "fairUse3Day": "3 dienų slankus",
+    "fairUseWeekly": "Savaitinis slankus",
+    "fairUseAboutTitle": "Apie sąžiningą naudojimą",
+    "fairUseAboutBody": "Omi sukurtas asmeniniams pokalbiams, susitikimams ir tiesioginei sąveikai. Naudojimas matuojamas pagal aptiktą tikrąjį kalbos laiką, o ne prisijungimo laiką. Jei naudojimas žymiai viršija įprastus modelius ne asmeniniam turiniui, gali būti taikomi koregavimai.",
+    "fairUseCaseRefCopied": "{caseRef} nukopijuota",
+    "@fairUseCaseRefCopied": {
+        "description": "Snackbar message when case reference is copied",
+        "placeholders": {
+            "caseRef": {
+                "type": "String"
+            }
+        }
+    },
+    "fairUseDailyTranscription": "Daily Transcription",
+    "fairUseBudgetExhausted": "Daily transcription limit reached",
+    "fairUseBudgetResetsAt": "Resets {time}",
+    "fairUseBudgetUsed": "{used}m / {limit}m",
+    "@fairUseBudgetUsed": {
+        "placeholders": {
+            "used": {
+                "type": "String"
+            },
+            "limit": {
+                "type": "String"
+            }
+        }
+    },
+    "@fairUseBudgetResetsAt": {
+        "placeholders": {
+            "time": {
+                "type": "String"
+            }
+        }
+    },
+    "fairUseBannerStatus": "Sąžiningas naudojimas: {status}",
+    "@fairUseBannerStatus": {
+        "placeholders": {
+            "status": {
+                "type": "String"
+            }
+        }
+    },
+    "improveConnectionTitle": "Pagerinti ryšį",
+    "improveConnectionContent": "Patobulinome, kaip Omi lieka prisijungęs prie jūsų įrenginio. Norėdami tai aktyvuoti, eikite į įrenginio informacijos puslapį, bakstelėkite \"Atjungti įrenginį\" ir vėl susiekite savo įrenginį.",
+    "improveConnectionAction": "Supratau",
+    "clockSkewWarning": "Jūsų įrenginio laikrodis skiriasi ~{minutes} min. Patikrinkite datos ir laiko nustatymus."
 }

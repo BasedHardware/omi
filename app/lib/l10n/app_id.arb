@@ -448,7 +448,7 @@
     "exportConfiguration": "Ekspor konfigurasi",
     "bringYourOwn": "Bawa sendiri",
     "payYourSttProvider": "Gunakan omi secara bebas. Anda hanya membayar penyedia STT Anda secara langsung.",
-    "freeMinutesMonth": "4.800 menit gratis/bulan termasuk. Tanpa batas dengan ",
+    "freeMinutesMonth": "1.200 menit gratis/bulan termasuk. Tanpa batas dengan ",
     "omiUnlimited": "Omi Unlimited",
     "hostRequired": "Host diperlukan",
     "validPortRequired": "Port yang valid diperlukan",
@@ -1459,7 +1459,7 @@
     "accessesAndTriggeredBy": "{accessDescription} dan {triggerDescription}.",
     "isTriggeredBy": "{triggerDescription}.",
     "noSpecificDataAccessConfigured": "Tidak ada akses data spesifik yang dikonfigurasi.",
-    "basicPlanDescription": "4.800 menit premium + tak terbatas di perangkat",
+    "basicPlanDescription": "1.200 menit premium + tak terbatas di perangkat",
     "minutes": "menit",
     "omiHas": "Omi memiliki:",
     "premiumMinutesUsed": "Menit premium digunakan.",
@@ -1929,7 +1929,7 @@
     "deviceMayWarmUp": "Perangkat mungkin menjadi panas selama penggunaan yang lama.",
     "speedAccuracyLower": "Kecepatan dan akurasi mungkin lebih rendah daripada model Cloud.",
     "cloudProvider": "Penyedia Cloud",
-    "premiumMinutesMonth": "4.800 menit premium/bulan. Tab Di Perangkat menawarkan transkripsi gratis tanpa batas. ",
+    "premiumMinutesMonth": "1.200 menit premium/bulan. Tab Di Perangkat menawarkan transkripsi gratis tanpa batas. ",
     "viewUsage": "Lihat penggunaan",
     "audioProcessedLocally": "Audio diproses secara lokal. Bekerja offline, lebih privat, tetapi menggunakan lebih banyak baterai.",
     "languageLabel": "Bahasa",
@@ -2506,7 +2506,7 @@
     "noReviewsFound": "Tidak Ada Ulasan Ditemukan",
     "onDeviceIntensive": "Transkripsi di perangkat membutuhkan komputasi intensif.",
     "onDeviceSlower": "Transkripsi di perangkat mungkin lebih lambat di perangkat ini.",
-    "premiumMinutesInfo": "4.800 menit premium/bulan. Tab Di Perangkat menawarkan transkripsi gratis tanpa batas.",
+    "premiumMinutesInfo": "1.200 menit premium/bulan. Tab Di Perangkat menawarkan transkripsi gratis tanpa batas.",
     "redownload": "Unduh Ulang",
     "reply": "Balas",
     "replySentSuccessfully": "Balasan berhasil dikirim",
@@ -2791,5 +2791,62 @@
     "notYetSynced": "Belum disinkronkan ke ponsel Anda",
     "clearAll": "Hapus semua",
     "phoneKeypad": "Keypad",
-    "phoneHideKeypad": "Sembunyikan keypad"
+    "phoneHideKeypad": "Sembunyikan keypad",
+    "transcriptionPaused": "Merekam, menghubungkan ulang",
+    "transcriptionPausedReconnecting": "Masih merekam — menghubungkan ulang ke transkripsi...",
+    "fairUsePolicy": "Penggunaan Wajar",
+    "fairUseLoadError": "Tidak dapat memuat status penggunaan wajar. Silakan coba lagi.",
+    "fairUseStatusNormal": "Penggunaan Anda dalam batas normal.",
+    "fairUseStageNormal": "Normal",
+    "fairUseStageWarning": "Peringatan",
+    "fairUseStageThrottle": "Dibatasi",
+    "fairUseStageRestrict": "Diblokir",
+    "fairUseSpeechUsage": "Penggunaan Ucapan",
+    "fairUseToday": "Hari ini",
+    "fairUse3Day": "3 hari bergulir",
+    "fairUseWeekly": "Mingguan bergulir",
+    "fairUseAboutTitle": "Tentang Penggunaan Wajar",
+    "fairUseAboutBody": "Omi dirancang untuk percakapan pribadi, rapat, dan interaksi langsung. Penggunaan diukur berdasarkan waktu bicara nyata yang terdeteksi, bukan waktu koneksi. Jika penggunaan secara signifikan melebihi pola normal untuk konten non-pribadi, penyesuaian dapat diterapkan.",
+    "fairUseCaseRefCopied": "{caseRef} disalin",
+    "@fairUseCaseRefCopied": {
+        "description": "Snackbar message when case reference is copied",
+        "placeholders": {
+            "caseRef": {
+                "type": "String"
+            }
+        }
+    },
+    "fairUseDailyTranscription": "Daily Transcription",
+    "fairUseBudgetExhausted": "Daily transcription limit reached",
+    "fairUseBudgetResetsAt": "Resets {time}",
+    "fairUseBudgetUsed": "{used}m / {limit}m",
+    "@fairUseBudgetUsed": {
+        "placeholders": {
+            "used": {
+                "type": "String"
+            },
+            "limit": {
+                "type": "String"
+            }
+        }
+    },
+    "@fairUseBudgetResetsAt": {
+        "placeholders": {
+            "time": {
+                "type": "String"
+            }
+        }
+    },
+    "fairUseBannerStatus": "Penggunaan Wajar: {status}",
+    "@fairUseBannerStatus": {
+        "placeholders": {
+            "status": {
+                "type": "String"
+            }
+        }
+    },
+    "improveConnectionTitle": "Tingkatkan Koneksi",
+    "improveConnectionContent": "Kami telah meningkatkan cara Omi tetap terhubung ke perangkat Anda. Untuk mengaktifkan ini, buka halaman Info Perangkat, ketuk \"Putuskan Perangkat\", lalu pasangkan perangkat Anda kembali.",
+    "improveConnectionAction": "Mengerti",
+    "clockSkewWarning": "Jam perangkat Anda melenceng ~{minutes} menit. Periksa pengaturan tanggal & waktu."
 }

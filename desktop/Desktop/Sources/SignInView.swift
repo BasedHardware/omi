@@ -16,7 +16,8 @@ struct SignInView: View {
                 // Logo/Title
                 VStack(spacing: 16) {
                     // Omi logo
-                    if let logoImage = NSImage(contentsOf: Bundle.resourceBundle.url(forResource: "herologo", withExtension: "png")!) {
+                    if let logoURL = Bundle.resourceBundle.url(forResource: "herologo", withExtension: "png"),
+                       let logoImage = NSImage(contentsOf: logoURL) {
                         Image(nsImage: logoImage)
                             .resizable()
                             .aspectRatio(contentMode: .fit)

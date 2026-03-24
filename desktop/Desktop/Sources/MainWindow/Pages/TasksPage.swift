@@ -3052,21 +3052,23 @@ struct TasksPage: View {
     // MARK: - Empty View
 
     private var emptyView: some View {
-        VStack(spacing: 16) {
-            Image(systemName: viewModel.hasActiveFilters ? "line.3.horizontal.decrease" : "tray.fill")
+        // Only show filter-related messaging when tasks exist but are all filtered out
+        let isFilteredEmpty = viewModel.hasActiveFilters && !viewModel.tasks.isEmpty
+        return VStack(spacing: 16) {
+            Image(systemName: isFilteredEmpty ? "line.3.horizontal.decrease" : "tray.fill")
                 .scaledFont(size: 48)
                 .foregroundColor(OmiColors.textTertiary)
 
-            Text(viewModel.hasActiveFilters ? "No Matching Tasks" : "All Caught Up!")
+            Text(isFilteredEmpty ? "No Matching Tasks" : "All Caught Up!")
                 .scaledFont(size: 24, weight: .semibold)
                 .foregroundColor(OmiColors.textPrimary)
 
-            Text(viewModel.hasActiveFilters ? "Try adjusting your filters" : "You have no tasks yet")
+            Text(isFilteredEmpty ? "Try adjusting your filters" : "You have no tasks yet")
                 .scaledFont(size: 14)
                 .foregroundColor(OmiColors.textTertiary)
                 .multilineTextAlignment(.center)
 
-            if viewModel.hasActiveFilters {
+            if isFilteredEmpty {
                 Button("Clear Filters") {
                     withAnimation {
                         viewModel.clearAllFilters()

@@ -448,7 +448,7 @@
     "exportConfiguration": "Експортирай конфигурация",
     "bringYourOwn": "Донесете свой собствен",
     "payYourSttProvider": "Използвайте omi свободно. Плащате само на вашия STT доставчик директно.",
-    "freeMinutesMonth": "4 800 безплатни минути/месец включени. Неограничено с ",
+    "freeMinutesMonth": "1 200 безплатни минути/месец включени. Неограничено с ",
     "omiUnlimited": "Omi Unlimited",
     "hostRequired": "Хостът е задължителен",
     "validPortRequired": "Валиден порт е задължителен",
@@ -1461,7 +1461,7 @@
     "accessesAndTriggeredBy": "{accessDescription} и е {triggerDescription}.",
     "isTriggeredBy": "Е {triggerDescription}.",
     "noSpecificDataAccessConfigured": "Няма конфигуриран специфичен достъп до данни.",
-    "basicPlanDescription": "4 800 премиум минути + неограничено на устройството",
+    "basicPlanDescription": "1 200 премиум минути + неограничено на устройството",
     "minutes": "минути",
     "omiHas": "Omi има:",
     "premiumMinutesUsed": "Използвани премиум минути.",
@@ -1894,7 +1894,7 @@
     "deviceMayWarmUp": "Устройството може да се нагрее при продължителна употреба.",
     "speedAccuracyLower": "Скоростта и точността може да бъдат по-ниски от облачните модели.",
     "cloudProvider": "Облачен доставчик",
-    "premiumMinutesInfo": "4800 премиум минути/месец. Разделът На устройството предлага неограничена безплатна транскрипция.",
+    "premiumMinutesInfo": "1200 премиум минути/месец. Разделът На устройството предлага неограничена безплатна транскрипция.",
     "viewUsage": "Преглед на използването",
     "localProcessingInfo": "Аудиото се обработва локално. Работи офлайн, по-поверително, но използва повече батерия.",
     "model": "Модел",
@@ -1918,7 +1918,7 @@
     "transcriptionSlowerOnDevice": "Транскрипцията на устройството може да бъде по-бавна на това устройство.",
     "computationallyIntensive": "Транскрипцията на устройството изисква интензивни изчисления.",
     "batteryDrainSignificantly": "Изтощаването на батерията ще се увеличи значително.",
-    "premiumMinutesMonth": "4800 премиум минути/месец. Разделът На устройството предлага неограничена безплатна транскрипция. ",
+    "premiumMinutesMonth": "1200 премиум минути/месец. Разделът На устройството предлага неограничена безплатна транскрипция. ",
     "audioProcessedLocally": "Аудиото се обработва локално. Работи офлайн, по-поверително, но консумира повече батерия.",
     "languageLabel": "Език",
     "modelLabel": "Модел",
@@ -2718,5 +2718,62 @@
     "notYetSynced": "Все още не е синхронизирано с телефона ви",
     "clearAll": "Изчисти всичко",
     "phoneKeypad": "Клавиатура",
-    "phoneHideKeypad": "Скрий клавиатурата"
+    "phoneHideKeypad": "Скрий клавиатурата",
+    "transcriptionPaused": "Записва се, свързване отново",
+    "transcriptionPausedReconnecting": "Все още се записва — свързване с транскрипцията...",
+    "fairUsePolicy": "Честна употреба",
+    "fairUseLoadError": "Неуспешно зареждане на статуса на честна употреба. Моля, опитайте отново.",
+    "fairUseStatusNormal": "Вашата употреба е в нормалните граници.",
+    "fairUseStageNormal": "Нормална",
+    "fairUseStageWarning": "Предупреждение",
+    "fairUseStageThrottle": "Ограничена",
+    "fairUseStageRestrict": "Забранена",
+    "fairUseSpeechUsage": "Употреба на реч",
+    "fairUseToday": "Днес",
+    "fairUse3Day": "3-дневен период",
+    "fairUseWeekly": "Седмичен период",
+    "fairUseAboutTitle": "Относно честната употреба",
+    "fairUseAboutBody": "Omi е проектиран за лични разговори, срещи и взаимодействия на живо. Употребата се измерва по реалното открито време на реч, а не по времето на връзка. Ако употребата значително надвишава нормалните модели за неличностно съдържание, може да се приложат корекции.",
+    "fairUseCaseRefCopied": "{caseRef} копирано",
+    "@fairUseCaseRefCopied": {
+        "description": "Snackbar message when case reference is copied",
+        "placeholders": {
+            "caseRef": {
+                "type": "String"
+            }
+        }
+    },
+    "fairUseDailyTranscription": "Daily Transcription",
+    "fairUseBudgetExhausted": "Daily transcription limit reached",
+    "fairUseBudgetResetsAt": "Resets {time}",
+    "fairUseBudgetUsed": "{used}m / {limit}m",
+    "@fairUseBudgetUsed": {
+        "placeholders": {
+            "used": {
+                "type": "String"
+            },
+            "limit": {
+                "type": "String"
+            }
+        }
+    },
+    "@fairUseBudgetResetsAt": {
+        "placeholders": {
+            "time": {
+                "type": "String"
+            }
+        }
+    },
+    "fairUseBannerStatus": "Добросъвестно ползване: {status}",
+    "@fairUseBannerStatus": {
+        "placeholders": {
+            "status": {
+                "type": "String"
+            }
+        }
+    },
+    "improveConnectionTitle": "Подобряване на връзката",
+    "improveConnectionContent": "Подобрихме начина, по който Omi остава свързан с вашето устройство. За да активирате това, моля, отидете на страницата с информация за устройството, натиснете \"Изключване на устройството\" и сдвоете устройството си отново.",
+    "improveConnectionAction": "Разбрах",
+    "clockSkewWarning": "Часовникът на устройството ви е разместен с ~{minutes} мин. Проверете настройките за дата и час."
 }

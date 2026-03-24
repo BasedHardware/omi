@@ -4749,7 +4749,7 @@ class AppLocalizationsDa extends AppLocalizations {
   String get noSpecificDataAccessConfigured => 'Ingen specifik dataadgang konfigureret.';
 
   @override
-  String get basicPlanDescription => '4.800 premium minutter + ubegrænset on-device';
+  String get basicPlanDescription => '1.200 premium minutter + ubegrænset on-device';
 
   @override
   String get minutes => 'minutter';
@@ -6075,7 +6075,7 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get premiumMinutesInfo =>
-      '4.800 premium minutter/måned. Lokal-fanen tilbyder ubegrænset gratis transskription.';
+      '1.200 premium minutter/måned. Lokal-fanen tilbyder ubegrænset gratis transskription.';
 
   @override
   String get viewUsage => 'Se forbrug';
@@ -6156,7 +6156,7 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get premiumMinutesMonth =>
-      '4.800 premium minutter/måned. Fanen På enheden tilbyder ubegrænset gratis transskription. ';
+      '1.200 premium minutter/måned. Fanen På enheden tilbyder ubegrænset gratis transskription. ';
 
   @override
   String get audioProcessedLocally => 'Lyd behandles lokalt. Fungerer offline, mere privat, men bruger mere batteri.';
@@ -8543,4 +8543,91 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get phoneHideKeypad => 'Skjul tastatur';
+
+  @override
+  String get fairUsePolicy => 'Rimelig brug';
+
+  @override
+  String get fairUseLoadError => 'Kunne ikke indlæse status for rimelig brug. Prøv venligst igen.';
+
+  @override
+  String get fairUseStatusNormal => 'Dit forbrug er inden for normale grænser.';
+
+  @override
+  String get fairUseStageNormal => 'Normal';
+
+  @override
+  String get fairUseStageWarning => 'Advarsel';
+
+  @override
+  String get fairUseStageThrottle => 'Begrænset';
+
+  @override
+  String get fairUseStageRestrict => 'Spærret';
+
+  @override
+  String get fairUseSpeechUsage => 'Taleforbrug';
+
+  @override
+  String get fairUseToday => 'I dag';
+
+  @override
+  String get fairUse3Day => '3-dages rullende';
+
+  @override
+  String get fairUseWeekly => 'Ugentlig rullende';
+
+  @override
+  String get fairUseAboutTitle => 'Om rimelig brug';
+
+  @override
+  String get fairUseAboutBody =>
+      'Omi er designet til personlige samtaler, møder og live-interaktioner. Forbruget måles ved den faktiske registrerede taletid, ikke forbindelsestid. Hvis forbruget væsentligt overstiger normale mønstre for ikke-personligt indhold, kan der foretages justeringer.';
+
+  @override
+  String fairUseCaseRefCopied(String caseRef) {
+    return '$caseRef kopieret';
+  }
+
+  @override
+  String get fairUseDailyTranscription => 'Daily Transcription';
+
+  @override
+  String fairUseBudgetUsed(String used, String limit) {
+    return '${used}m / ${limit}m';
+  }
+
+  @override
+  String get fairUseBudgetExhausted => 'Daily transcription limit reached';
+
+  @override
+  String fairUseBudgetResetsAt(String time) {
+    return 'Resets $time';
+  }
+
+  @override
+  String get transcriptionPaused => 'Optager, genopretter forbindelse';
+
+  @override
+  String get transcriptionPausedReconnecting => 'Optager stadig — genopretter forbindelse til transskription...';
+
+  @override
+  String fairUseBannerStatus(String status) {
+    return 'Fair brug: $status';
+  }
+
+  @override
+  String get improveConnectionTitle => 'Forbedre forbindelsen';
+
+  @override
+  String get improveConnectionContent =>
+      'Vi har forbedret, hvordan Omi forbliver forbundet til din enhed. For at aktivere dette, gå til enhedsinfosiden, tryk på \"Afbryd enhed\", og tilslut din enhed igen.';
+
+  @override
+  String get improveConnectionAction => 'Forstået';
+
+  @override
+  String clockSkewWarning(int minutes) {
+    return 'Dit enheds ur er forskudt ~$minutes min. Tjek dine dato- og tidsindstillinger.';
+  }
 }

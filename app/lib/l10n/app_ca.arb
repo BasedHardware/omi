@@ -448,7 +448,7 @@
     "exportConfiguration": "Exportar configuració",
     "bringYourOwn": "Utilitzeu el vostre propi",
     "payYourSttProvider": "Utilitzeu omi lliurement. Només pagueu directament al vostre proveïdor STT.",
-    "freeMinutesMonth": "4.800 minuts gratuïts/mes inclosos. Il·limitat amb ",
+    "freeMinutesMonth": "1.200 minuts gratuïts/mes inclosos. Il·limitat amb ",
     "omiUnlimited": "Omi Il·limitat",
     "hostRequired": "Cal un amfitrió",
     "validPortRequired": "Cal un port vàlid",
@@ -1461,7 +1461,7 @@
     "accessesAndTriggeredBy": "{accessDescription} i és {triggerDescription}.",
     "isTriggeredBy": "És {triggerDescription}.",
     "noSpecificDataAccessConfigured": "No hi ha accés a dades específic configurat.",
-    "basicPlanDescription": "4.800 minuts premium + il·limitat al dispositiu",
+    "basicPlanDescription": "1.200 minuts premium + il·limitat al dispositiu",
     "minutes": "minuts",
     "omiHas": "Omi té:",
     "premiumMinutesUsed": "Minuts premium utilitzats.",
@@ -1894,7 +1894,7 @@
     "deviceMayWarmUp": "El dispositiu pot escalfar-se durant lús prolongat.",
     "speedAccuracyLower": "La velocitat i la precisió poden ser inferiors als models al núvol.",
     "cloudProvider": "Proveïdor al núvol",
-    "premiumMinutesInfo": "4.800 minuts premium/mes. La pestanya Al dispositiu ofereix transcripció gratuïta il·limitada.",
+    "premiumMinutesInfo": "1.200 minuts premium/mes. La pestanya Al dispositiu ofereix transcripció gratuïta il·limitada.",
     "viewUsage": "Veure ús",
     "localProcessingInfo": "L'àudio es processa localment. Funciona sense connexió, més privat, però usa més bateria.",
     "model": "Model",
@@ -1918,7 +1918,7 @@
     "transcriptionSlowerOnDevice": "La transcripció al dispositiu pot ser més lenta en aquest dispositiu.",
     "computationallyIntensive": "La transcripció al dispositiu és computacionalment intensiva.",
     "batteryDrainSignificantly": "El consum de bateria augmentarà significativament.",
-    "premiumMinutesMonth": "4.800 minuts premium/mes. La pestanya Al dispositiu ofereix transcripció gratuïta il·limitada. ",
+    "premiumMinutesMonth": "1.200 minuts premium/mes. La pestanya Al dispositiu ofereix transcripció gratuïta il·limitada. ",
     "audioProcessedLocally": "Laudio es processa localment. Funciona sense connexió, més privat, però consumeix més bateria.",
     "languageLabel": "Idioma",
     "modelLabel": "Model",
@@ -2718,5 +2718,62 @@
     "notYetSynced": "Encara no sincronitzat amb el vostre telèfon",
     "clearAll": "Esborrar tot",
     "phoneKeypad": "Teclat",
-    "phoneHideKeypad": "Amaga el teclat"
+    "phoneHideKeypad": "Amaga el teclat",
+    "transcriptionPaused": "Gravant, reconnectant",
+    "transcriptionPausedReconnecting": "Encara gravant — reconnectant a la transcripció...",
+    "fairUsePolicy": "Ús raonable",
+    "fairUseLoadError": "No s'ha pogut carregar l'estat d'ús raonable. Si us plau, torneu-ho a provar.",
+    "fairUseStatusNormal": "El vostre ús està dins dels límits normals.",
+    "fairUseStageNormal": "Normal",
+    "fairUseStageWarning": "Avís",
+    "fairUseStageThrottle": "Limitat",
+    "fairUseStageRestrict": "Restringit",
+    "fairUseSpeechUsage": "Ús de la parla",
+    "fairUseToday": "Avui",
+    "fairUse3Day": "Últims 3 dies",
+    "fairUseWeekly": "Setmanal",
+    "fairUseAboutTitle": "Sobre l'ús raonable",
+    "fairUseAboutBody": "Omi està dissenyat per a converses personals, reunions i interaccions en directe. L'ús es mesura pel temps real de parla detectat, no pel temps de connexió. Si l'ús supera significativament els patrons normals per a contingut no personal, es podrien aplicar ajustos.",
+    "fairUseCaseRefCopied": "{caseRef} copiat",
+    "@fairUseCaseRefCopied": {
+        "description": "Snackbar message when case reference is copied",
+        "placeholders": {
+            "caseRef": {
+                "type": "String"
+            }
+        }
+    },
+    "fairUseDailyTranscription": "Daily Transcription",
+    "fairUseBudgetExhausted": "Daily transcription limit reached",
+    "fairUseBudgetResetsAt": "Resets {time}",
+    "fairUseBudgetUsed": "{used}m / {limit}m",
+    "@fairUseBudgetUsed": {
+        "placeholders": {
+            "used": {
+                "type": "String"
+            },
+            "limit": {
+                "type": "String"
+            }
+        }
+    },
+    "@fairUseBudgetResetsAt": {
+        "placeholders": {
+            "time": {
+                "type": "String"
+            }
+        }
+    },
+    "fairUseBannerStatus": "Ús raonable: {status}",
+    "@fairUseBannerStatus": {
+        "placeholders": {
+            "status": {
+                "type": "String"
+            }
+        }
+    },
+    "improveConnectionTitle": "Millorar la connexió",
+    "improveConnectionContent": "Hem millorat com Omi es manté connectat al teu dispositiu. Per activar-ho, ves a la pàgina d'informació del dispositiu, toca \"Desconnectar dispositiu\" i torna a vincular el teu dispositiu.",
+    "improveConnectionAction": "Entesos",
+    "clockSkewWarning": "El rellotge del dispositiu va desajustat ~{minutes} min. Comproveu la configuració de data i hora."
 }

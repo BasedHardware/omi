@@ -54,20 +54,8 @@ struct OnboardingVoiceShortcutStepView: View {
 
   private var leftPane: some View {
     VStack(alignment: .leading, spacing: 0) {
-      HStack {
-        Button(action: onSkip) {
-          Text("Skip")
-            .font(.system(size: 13))
-            .foregroundColor(OmiColors.textTertiary)
-        }
-        .buttonStyle(.plain)
-
-        Spacer()
-      }
-      .padding(.horizontal, 28)
-      .padding(.top, 18)
-
       Spacer()
+        .frame(height: 18)
 
       VStack(alignment: .leading, spacing: 18) {
         Text("Hold the shortcut\nand ask a question")
@@ -104,6 +92,17 @@ struct OnboardingVoiceShortcutStepView: View {
       .ignoresSafeArea()
 
       VStack(spacing: 28) {
+        HStack {
+          Spacer()
+          Button(action: onSkip) {
+            Text("Skip")
+              .font(.system(size: 13))
+              .foregroundColor(OmiColors.textTertiary)
+          }
+          .buttonStyle(.plain)
+        }
+        .padding(.bottom, -16)
+
         VStack(alignment: .leading, spacing: 18) {
           Text("Hold the key, then ask omi something")
             .font(.system(size: 22, weight: .semibold))

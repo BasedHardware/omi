@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 
 import 'package:calendar_date_picker2/calendar_date_picker2.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
 import 'package:upgrader/upgrader.dart';
@@ -18,7 +19,7 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/geolocation.dart';
-import 'package:omi/main.dart';
+import 'package:omi/app_globals.dart';
 import 'package:omi/pages/action_items/action_items_page.dart';
 import 'package:omi/pages/apps/app_detail/app_detail.dart';
 import 'package:omi/pages/apps/page.dart';
@@ -290,10 +291,12 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       _initiateApps();
 
-      // ForegroundUtil.requestPermissions();
       if (!PlatformService.isDesktop) {
-        await ForegroundUtil.initializeForegroundService();
-        await ForegroundUtil.startForegroundTask();
+        final permission = await Geolocator.checkPermission();
+        if (permission == LocationPermission.always || permission == LocationPermission.whileInUse) {
+          await ForegroundUtil.initializeForegroundService();
+          await ForegroundUtil.startForegroundTask();
+        }
       }
       if (mounted) {
         await Provider.of<HomeProvider>(context, listen: false).setUserPeople();
@@ -359,11 +362,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
             }
           });
           if (detailPageId == 'data-privacy') {
-            MyApp.navigatorKey.currentState?.push(MaterialPageRoute(builder: (context) => const DataPrivacyPage()));
+            globalNavigatorKey.currentState?.push(MaterialPageRoute(builder: (context) => const DataPrivacyPage()));
           }
           break;
         case "facts":
-          MyApp.navigatorKey.currentState?.push(MaterialPageRoute(builder: (context) => const MemoriesPage()));
+          globalNavigatorKey.currentState?.push(MaterialPageRoute(builder: (context) => const MemoriesPage()));
           break;
         case "conversation":
           // Handle conversation deep link: /conversation/{id}?share=1
@@ -791,8 +794,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                           color: isSyncing
                               ? Colors.deepPurple.withValues(alpha: 0.2)
                               : hasPendingOnDevice
-                              ? Colors.orange.withValues(alpha: 0.15)
-                              : const Color(0xFF1F1F25),
+                                  ? Colors.orange.withValues(alpha: 0.15)
+                                  : const Color(0xFF1F1F25),
                           shape: BoxShape.circle,
                         ),
                         child: Icon(
@@ -801,8 +804,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                           color: isSyncing
                               ? Colors.deepPurpleAccent
                               : hasPendingOnDevice
-                              ? Colors.orangeAccent
-                              : Colors.white70,
+                                  ? Colors.orangeAccent
+                                  : Colors.white70,
                         ),
                       ),
                     );

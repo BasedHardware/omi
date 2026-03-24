@@ -448,7 +448,7 @@
     "exportConfiguration": "設定をエクスポート",
     "bringYourOwn": "自分で用意",
     "payYourSttProvider": "omiを無料で使用。STTプロバイダーに直接支払います。",
-    "freeMinutesMonth": "月4,800分無料。無制限は",
+    "freeMinutesMonth": "月1,200分無料。無制限は",
     "omiUnlimited": "Omi Unlimited",
     "hostRequired": "ホストが必要です",
     "validPortRequired": "有効なポートが必要です",
@@ -1460,7 +1460,7 @@
     "accessesAndTriggeredBy": "{accessDescription}、{triggerDescription}。",
     "isTriggeredBy": "{triggerDescription}。",
     "noSpecificDataAccessConfigured": "特定のデータアクセスは設定されていません。",
-    "basicPlanDescription": "4,800プレミアム分 + デバイス無制限",
+    "basicPlanDescription": "1,200プレミアム分 + デバイス無制限",
     "minutes": "分",
     "omiHas": "Omiは:",
     "premiumMinutesUsed": "プレミアム分を使用済み。",
@@ -1930,7 +1930,7 @@
     "deviceMayWarmUp": "長時間の使用中にデバイスが熱くなる可能性があります。",
     "speedAccuracyLower": "速度と精度がクラウドモデルより低くなる可能性があります。",
     "cloudProvider": "クラウドプロバイダー",
-    "premiumMinutesMonth": "月間4,800プレミアム分。オンデバイスタブでは無制限の無料文字起こしを提供。",
+    "premiumMinutesMonth": "月間1,200プレミアム分。オンデバイスタブでは無制限の無料文字起こしを提供。",
     "viewUsage": "使用状況を表示",
     "audioProcessedLocally": "音声はローカルで処理されます。オフラインで動作し、よりプライベートですが、バッテリー消費が増えます。",
     "languageLabel": "言語",
@@ -2472,7 +2472,7 @@
     "noReviewsFound": "レビューが見つかりません",
     "onDeviceIntensive": "オンデバイス文字起こしは計算負荷が高い処理です。",
     "onDeviceSlower": "このデバイスではオンデバイス文字起こしが遅くなる場合があります。",
-    "premiumMinutesInfo": "月間4,800分のプレミアム利用可能。オンデバイスタブでは無制限の無料文字起こしが可能です。",
+    "premiumMinutesInfo": "月間1,200分のプレミアム利用可能。オンデバイスタブでは無制限の無料文字起こしが可能です。",
     "redownload": "再ダウンロード",
     "reply": "返信",
     "replySentSuccessfully": "返信を送信しました",
@@ -2750,5 +2750,62 @@
     "notYetSynced": "まだスマホに同期されていません",
     "clearAll": "すべて削除",
     "phoneKeypad": "キーパッド",
-    "phoneHideKeypad": "キーパッドを隠す"
+    "phoneHideKeypad": "キーパッドを隠す",
+    "transcriptionPaused": "録音中、再接続中",
+    "transcriptionPausedReconnecting": "録音は継続中 — 文字起こしに再接続しています...",
+    "fairUsePolicy": "フェアユース",
+    "fairUseLoadError": "フェアユースの状態を読み込めませんでした。もう一度お試しください。",
+    "fairUseStatusNormal": "ご利用は通常の範囲内です。",
+    "fairUseStageNormal": "通常",
+    "fairUseStageWarning": "警告",
+    "fairUseStageThrottle": "制限中",
+    "fairUseStageRestrict": "利用停止",
+    "fairUseSpeechUsage": "音声使用量",
+    "fairUseToday": "今日",
+    "fairUse3Day": "3日間",
+    "fairUseWeekly": "週間",
+    "fairUseAboutTitle": "フェアユースについて",
+    "fairUseAboutBody": "Omiは個人的な会話、会議、ライブのやり取りのために設計されています。使用量は接続時間ではなく、検出された実際の発話時間で測定されます。非個人的なコンテンツに対して通常のパターンを大幅に超える使用がある場合、調整が適用されることがあります。",
+    "fairUseCaseRefCopied": "{caseRef} をコピーしました",
+    "@fairUseCaseRefCopied": {
+        "description": "Snackbar message when case reference is copied",
+        "placeholders": {
+            "caseRef": {
+                "type": "String"
+            }
+        }
+    },
+    "fairUseDailyTranscription": "日次文字起こし",
+    "fairUseBudgetExhausted": "日次文字起こし上限に達しました",
+    "fairUseBudgetResetsAt": "リセット {time}",
+    "fairUseBudgetUsed": "{used}分 / {limit}分",
+    "@fairUseBudgetUsed": {
+        "placeholders": {
+            "used": {
+                "type": "String"
+            },
+            "limit": {
+                "type": "String"
+            }
+        }
+    },
+    "@fairUseBudgetResetsAt": {
+        "placeholders": {
+            "time": {
+                "type": "String"
+            }
+        }
+    },
+    "fairUseBannerStatus": "公正使用：{status}",
+    "@fairUseBannerStatus": {
+        "placeholders": {
+            "status": {
+                "type": "String"
+            }
+        }
+    },
+    "improveConnectionTitle": "接続を改善",
+    "improveConnectionContent": "Omiがデバイスとの接続を維持する方法を改善しました。これを有効にするには、デバイス情報ページに移動し、「デバイスを切断」をタップしてから、デバイスを再度ペアリングしてください。",
+    "improveConnectionAction": "了解",
+    "clockSkewWarning": "デバイスの時計が約{minutes}分ずれています。日付と時刻の設定を確認してください。"
 }

@@ -5,7 +5,7 @@ import 'package:collection/collection.dart';
 import 'package:omi/backend/http/api/apps.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/app.dart';
-import 'package:omi/main.dart';
+import 'package:omi/app_globals.dart';
 import 'package:omi/providers/base_provider.dart';
 import 'package:omi/utils/alerts/app_dialog.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
@@ -534,7 +534,7 @@ class AppProvider extends BaseProvider {
         }
         filteredApps.removeWhere((app) => app.id == appId);
         updatePrefApps();
-        final context = MyApp.navigatorKey.currentState?.context;
+        final context = globalNavigatorKey.currentState?.context;
         AppSnackbar.showSnackbarSuccess(
           context != null ? context.l10n.appDeletedSuccessfully : 'App deleted successfully',
         );
@@ -543,7 +543,7 @@ class AppProvider extends BaseProvider {
         print("Warning: Tried to delete app $appId but it wasn't found in the 'apps' list.");
       }
     } else {
-      final context = MyApp.navigatorKey.currentState?.context;
+      final context = globalNavigatorKey.currentState?.context;
       AppSnackbar.showSnackbarError(
         context != null ? context.l10n.appDeleteFailed : 'Failed to delete app. Please try again later.',
       );
@@ -561,7 +561,7 @@ class AppProvider extends BaseProvider {
       if (filteredIdx != -1) {
         filteredApps[filteredIdx] = apps[appIndex];
       }
-      final context = MyApp.navigatorKey.currentState?.context;
+      final context = globalNavigatorKey.currentState?.context;
       AppSnackbar.showSnackbarSuccess(
         context != null
             ? context.l10n.appVisibilityChangedSuccessfully
@@ -783,7 +783,7 @@ class AppProvider extends BaseProvider {
     bool success = false;
     String? errorMessage;
 
-    final context = MyApp.navigatorKey.currentState?.context;
+    final context = globalNavigatorKey.currentState?.context;
 
     try {
       if (isEnabled) {
@@ -803,9 +803,8 @@ class AppProvider extends BaseProvider {
     } catch (e) {
       print('Error toggling app $appId: $e');
       success = false;
-      errorMessage = context != null
-          ? context.l10n.errorUpdatingAppStatus
-          : 'An error occurred while updating the app status.';
+      errorMessage =
+          context != null ? context.l10n.errorUpdatingAppStatus : 'An error occurred while updating the app status.';
     }
 
     if (!success && errorMessage != null) {

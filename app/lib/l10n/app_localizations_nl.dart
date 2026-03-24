@@ -1464,7 +1464,7 @@ class AppLocalizationsNl extends AppLocalizations {
   String get payYourSttProvider => 'Gebruik Omi vrij. Je betaalt alleen je STT-provider rechtstreeks.';
 
   @override
-  String get freeMinutesMonth => '4.800 gratis minuten/maand inbegrepen. Onbeperkt met ';
+  String get freeMinutesMonth => '1.200 gratis minuten/maand inbegrepen. Onbeperkt met ';
 
   @override
   String get omiUnlimited => 'Omi Onbeperkt';
@@ -1713,7 +1713,12 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'APPARATEN', one: 'APPARAAT');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'APPARATEN',
+      one: 'APPARAAT',
+    );
     return '$count $_temp0 GEVONDEN IN DE BUURT';
   }
 
@@ -4772,7 +4777,7 @@ class AppLocalizationsNl extends AppLocalizations {
   String get noSpecificDataAccessConfigured => 'Geen specifieke gegevenstoegang geconfigureerd.';
 
   @override
-  String get basicPlanDescription => '4.800 premium minuten + onbeperkt op apparaat';
+  String get basicPlanDescription => '1.200 premium minuten + onbeperkt op apparaat';
 
   @override
   String get minutes => 'minuten';
@@ -6104,7 +6109,7 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get premiumMinutesInfo =>
-      '4.800 premium minuten/maand. Het On-Device tabblad biedt onbeperkte gratis transcriptie.';
+      '1.200 premium minuten/maand. Het On-Device tabblad biedt onbeperkte gratis transcriptie.';
 
   @override
   String get viewUsage => 'Bekijk gebruik';
@@ -6186,7 +6191,7 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get premiumMinutesMonth =>
-      '4.800 premium minuten/maand. Het tabblad On-device biedt onbeperkte gratis transcriptie. ';
+      '1.200 premium minuten/maand. Het tabblad On-device biedt onbeperkte gratis transcriptie. ';
 
   @override
   String get audioProcessedLocally =>
@@ -8582,4 +8587,91 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get phoneHideKeypad => 'Toetsenbord verbergen';
+
+  @override
+  String get fairUsePolicy => 'Redelijk gebruik';
+
+  @override
+  String get fairUseLoadError => 'Kan de status van redelijk gebruik niet laden. Probeer het opnieuw.';
+
+  @override
+  String get fairUseStatusNormal => 'Uw gebruik is binnen de normale grenzen.';
+
+  @override
+  String get fairUseStageNormal => 'Normaal';
+
+  @override
+  String get fairUseStageWarning => 'Waarschuwing';
+
+  @override
+  String get fairUseStageThrottle => 'Beperkt';
+
+  @override
+  String get fairUseStageRestrict => 'Geblokkeerd';
+
+  @override
+  String get fairUseSpeechUsage => 'Spraakgebruik';
+
+  @override
+  String get fairUseToday => 'Vandaag';
+
+  @override
+  String get fairUse3Day => '3-daags voortschrijdend';
+
+  @override
+  String get fairUseWeekly => 'Wekelijks voortschrijdend';
+
+  @override
+  String get fairUseAboutTitle => 'Over redelijk gebruik';
+
+  @override
+  String get fairUseAboutBody =>
+      'Omi is ontworpen voor persoonlijke gesprekken, vergaderingen en live interacties. Het gebruik wordt gemeten aan de hand van de werkelijke gedetecteerde spreektijd, niet de verbindingstijd. Als het gebruik de normale patronen voor niet-persoonlijke inhoud aanzienlijk overschrijdt, kunnen aanpassingen worden toegepast.';
+
+  @override
+  String fairUseCaseRefCopied(String caseRef) {
+    return '$caseRef gekopieerd';
+  }
+
+  @override
+  String get fairUseDailyTranscription => 'Daily Transcription';
+
+  @override
+  String fairUseBudgetUsed(String used, String limit) {
+    return '${used}m / ${limit}m';
+  }
+
+  @override
+  String get fairUseBudgetExhausted => 'Daily transcription limit reached';
+
+  @override
+  String fairUseBudgetResetsAt(String time) {
+    return 'Resets $time';
+  }
+
+  @override
+  String get transcriptionPaused => 'Opname, opnieuw verbinden';
+
+  @override
+  String get transcriptionPausedReconnecting => 'Neemt nog steeds op — opnieuw verbinden met transcriptie...';
+
+  @override
+  String fairUseBannerStatus(String status) {
+    return 'Eerlijk gebruik: $status';
+  }
+
+  @override
+  String get improveConnectionTitle => 'Verbinding verbeteren';
+
+  @override
+  String get improveConnectionContent =>
+      'We hebben verbeterd hoe Omi verbonden blijft met je apparaat. Om dit te activeren, ga naar de Apparaatinfo-pagina, tik op \"Apparaat loskoppelen\" en koppel je apparaat opnieuw.';
+
+  @override
+  String get improveConnectionAction => 'Begrepen';
+
+  @override
+  String clockSkewWarning(int minutes) {
+    return 'De klok van je apparaat wijkt ~$minutes min. af. Controleer je datum- en tijdinstellingen.';
+  }
 }

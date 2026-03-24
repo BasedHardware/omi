@@ -448,7 +448,7 @@
     "exportConfiguration": "구성 내보내기",
     "bringYourOwn": "직접 가져오기",
     "payYourSttProvider": "Omi를 자유롭게 사용하세요. STT 제공업체에 직접 비용을 지불하기만 하면 됩니다.",
-    "freeMinutesMonth": "월 4,800분 무료 포함. ",
+    "freeMinutesMonth": "월 1,200분 무료 포함. ",
     "omiUnlimited": "Omi Unlimited",
     "hostRequired": "호스트가 필요합니다",
     "validPortRequired": "유효한 포트가 필요합니다",
@@ -1459,7 +1459,7 @@
     "accessesAndTriggeredBy": "{accessDescription} 및 {triggerDescription}.",
     "isTriggeredBy": "{triggerDescription}.",
     "noSpecificDataAccessConfigured": "특정 데이터 액세스가 구성되지 않았습니다.",
-    "basicPlanDescription": "4,800 프리미엄 분 + 무제한 온디바이스",
+    "basicPlanDescription": "1,200 프리미엄 분 + 무제한 온디바이스",
     "minutes": "분",
     "omiHas": "Omi:",
     "premiumMinutesUsed": "프리미엄 분 사용됨.",
@@ -1929,7 +1929,7 @@
     "deviceMayWarmUp": "장시간 사용 시 기기가 뜨거워질 수 있습니다.",
     "speedAccuracyLower": "속도와 정확도가 클라우드 모델보다 낮을 수 있습니다.",
     "cloudProvider": "클라우드 제공자",
-    "premiumMinutesMonth": "월 4,800 프리미엄 분. 온디바이스 탭은 무제한 무료 전사를 제공합니다. ",
+    "premiumMinutesMonth": "월 1,200 프리미엄 분. 온디바이스 탭은 무제한 무료 전사를 제공합니다. ",
     "viewUsage": "사용량 보기",
     "audioProcessedLocally": "오디오가 로컬에서 처리됩니다. 오프라인 작동, 더 프라이빗하지만 배터리 사용량이 더 많습니다.",
     "languageLabel": "언어",
@@ -2471,7 +2471,7 @@
     "noReviewsFound": "리뷰를 찾을 수 없습니다",
     "onDeviceIntensive": "온디바이스 음성 인식은 많은 컴퓨팅 자원을 사용합니다.",
     "onDeviceSlower": "이 기기에서는 온디바이스 음성 인식이 느릴 수 있습니다.",
-    "premiumMinutesInfo": "월 4,800분의 프리미엄 사용 시간. 온디바이스 탭에서 무제한 무료 음성 인식을 제공합니다.",
+    "premiumMinutesInfo": "월 1,200분의 프리미엄 사용 시간. 온디바이스 탭에서 무제한 무료 음성 인식을 제공합니다.",
     "redownload": "다시 다운로드",
     "reply": "답글",
     "replySentSuccessfully": "답글이 성공적으로 전송되었습니다",
@@ -2749,5 +2749,62 @@
     "notYetSynced": "아직 휴대폰에 동기화되지 않음",
     "clearAll": "모두 지우기",
     "phoneKeypad": "키패드",
-    "phoneHideKeypad": "키패드 숨기기"
+    "phoneHideKeypad": "키패드 숨기기",
+    "transcriptionPaused": "녹음 중, 재연결 중",
+    "transcriptionPausedReconnecting": "계속 녹음 중 — 음성 인식에 재연결하는 중...",
+    "fairUsePolicy": "공정 사용",
+    "fairUseLoadError": "공정 사용 상태를 불러올 수 없습니다. 다시 시도해 주세요.",
+    "fairUseStatusNormal": "사용량이 정상 범위 내에 있습니다.",
+    "fairUseStageNormal": "정상",
+    "fairUseStageWarning": "경고",
+    "fairUseStageThrottle": "제한됨",
+    "fairUseStageRestrict": "차단됨",
+    "fairUseSpeechUsage": "음성 사용량",
+    "fairUseToday": "오늘",
+    "fairUse3Day": "3일 누적",
+    "fairUseWeekly": "주간 누적",
+    "fairUseAboutTitle": "공정 사용에 대하여",
+    "fairUseAboutBody": "Omi는 개인 대화, 회의 및 실시간 상호작용을 위해 설계되었습니다. 사용량은 연결 시간이 아닌 감지된 실제 발화 시간으로 측정됩니다. 비개인적 콘텐츠에 대해 정상 패턴을 크게 초과하는 사용이 있을 경우 조정이 적용될 수 있습니다.",
+    "fairUseCaseRefCopied": "{caseRef} 복사됨",
+    "@fairUseCaseRefCopied": {
+        "description": "Snackbar message when case reference is copied",
+        "placeholders": {
+            "caseRef": {
+                "type": "String"
+            }
+        }
+    },
+    "fairUseDailyTranscription": "일일 음성 인식",
+    "fairUseBudgetExhausted": "일일 음성 인식 한도에 도달했습니다",
+    "fairUseBudgetResetsAt": "재설정 {time}",
+    "fairUseBudgetUsed": "{used}분 / {limit}분",
+    "@fairUseBudgetUsed": {
+        "placeholders": {
+            "used": {
+                "type": "String"
+            },
+            "limit": {
+                "type": "String"
+            }
+        }
+    },
+    "@fairUseBudgetResetsAt": {
+        "placeholders": {
+            "time": {
+                "type": "String"
+            }
+        }
+    },
+    "fairUseBannerStatus": "공정 사용: {status}",
+    "@fairUseBannerStatus": {
+        "placeholders": {
+            "status": {
+                "type": "String"
+            }
+        }
+    },
+    "improveConnectionTitle": "연결 개선",
+    "improveConnectionContent": "Omi가 기기와 연결을 유지하는 방식을 개선했습니다. 이를 활성화하려면 기기 정보 페이지로 이동하여 \"기기 연결 해제\"를 탭한 다음 기기를 다시 페어링하세요.",
+    "improveConnectionAction": "알겠습니다",
+    "clockSkewWarning": "기기 시계가 ~{minutes}분 차이납니다. 날짜 및 시간 설정을 확인하세요."
 }

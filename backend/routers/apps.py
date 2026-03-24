@@ -106,6 +106,7 @@ from database.memories import migrate_memories
 
 from utils.llm.persona import generate_persona_intro_message
 from utils.llm.app_generator import generate_description
+from utils.llm.usage_tracker import track_usage, Features
 from utils.notifications import send_notification, send_app_review_reply_notification, send_new_app_review_notification
 from utils.other import endpoints as auth
 from models.app import App, ActionType, AppCreate, AppUpdate, AppBaseModel
@@ -1117,7 +1118,8 @@ def generate_description_endpoint(data: dict, uid: str = Depends(auth.get_curren
         raise HTTPException(status_code=422, detail='App Name is required')
     if data['description'] == '':
         raise HTTPException(status_code=422, detail='App Description is required')
-    desc = generate_description(data['name'], data['description'])
+    with track_usage(uid, Features.APP_GENERATOR):
+        desc = generate_description(data['name'], data['description'])
     return {
         'description': desc,
     }
@@ -1136,7 +1138,8 @@ def generate_description_and_emoji_endpoint(data: dict, uid: str = Depends(auth.
     if not data.get('prompt'):
         raise HTTPException(status_code=422, detail='App Prompt is required')
 
-    result = generate_description_and_emoji(data['name'], data['prompt'])
+    with track_usage(uid, Features.APP_GENERATOR):
+        result = generate_description_and_emoji(data['name'], data['prompt'])
     return result
 
 
@@ -1171,12 +1174,13 @@ First 3 should be conversation-based, last 2 should be chat-based.
 Be creative, fun, and varied. No generic ideas."""
 
     try:
-        response = await llm_mini.ainvoke(
-            [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": "Generate 5 creative app ideas now"},
-            ]
-        )
+        with track_usage(uid, Features.APP_GENERATOR):
+            response = await llm_mini.ainvoke(
+                [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": "Generate 5 creative app ideas now"},
+                ]
+            )
 
         content = response.content.strip()
 
@@ -1233,7 +1237,8 @@ async def generate_app_endpoint(data: dict, uid: str = Depends(auth.get_current_
 
     try:
         # Generate app configuration using LLM
-        generated_app = await generate_app_from_prompt(prompt)
+        with track_usage(uid, Features.APP_GENERATOR):
+            generated_app = await generate_app_from_prompt(prompt)
 
         return {
             'status': 'ok',
@@ -1272,7 +1277,8 @@ async def generate_app_icon_endpoint(data: dict, uid: str = Depends(auth.get_cur
 
     try:
         # Generate icon using DALL-E
-        icon_bytes = await generate_app_icon(app_name, app_description, category)
+        with track_usage(uid, Features.APP_GENERATOR):
+            icon_bytes = await generate_app_icon(app_name, app_description, category)
 
         # Return as base64
         icon_base64 = base64.b64encode(icon_bytes).decode('utf-8')
@@ -1358,7 +1364,8 @@ async def verify_twitter_ownership_tweet(
 async def get_twitter_initial_message(username: str, uid: str = Depends(auth.get_current_user_uid)):
     persona = get_persona_by_username_db(username)
     if persona:
-        message = generate_persona_intro_message(persona['persona_prompt'], persona['name'])
+        with track_usage(uid, Features.PERSONA):
+            message = generate_persona_intro_message(persona['persona_prompt'], persona['name'])
         return {'message': message}
     return {'message': ''}
 

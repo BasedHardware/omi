@@ -1469,7 +1469,7 @@ class AppLocalizationsCa extends AppLocalizations {
   String get payYourSttProvider => 'Utilitzeu omi lliurement. Només pagueu directament al vostre proveïdor STT.';
 
   @override
-  String get freeMinutesMonth => '4.800 minuts gratuïts/mes inclosos. Il·limitat amb ';
+  String get freeMinutesMonth => '1.200 minuts gratuïts/mes inclosos. Il·limitat amb ';
 
   @override
   String get omiUnlimited => 'Omi Il·limitat';
@@ -1719,7 +1719,12 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'DISPOSITIUS', one: 'DISPOSITIU');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'DISPOSITIUS',
+      one: 'DISPOSITIU',
+    );
     return '$count $_temp0 TROBATS A PROP';
   }
 
@@ -4786,7 +4791,7 @@ class AppLocalizationsCa extends AppLocalizations {
   String get noSpecificDataAccessConfigured => 'No hi ha accés a dades específic configurat.';
 
   @override
-  String get basicPlanDescription => '4.800 minuts premium + il·limitat al dispositiu';
+  String get basicPlanDescription => '1.200 minuts premium + il·limitat al dispositiu';
 
   @override
   String get minutes => 'minuts';
@@ -6120,7 +6125,7 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get premiumMinutesInfo =>
-      '4.800 minuts premium/mes. La pestanya Al dispositiu ofereix transcripció gratuïta il·limitada.';
+      '1.200 minuts premium/mes. La pestanya Al dispositiu ofereix transcripció gratuïta il·limitada.';
 
   @override
   String get viewUsage => 'Veure ús';
@@ -6202,7 +6207,7 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get premiumMinutesMonth =>
-      '4.800 minuts premium/mes. La pestanya Al dispositiu ofereix transcripció gratuïta il·limitada. ';
+      '1.200 minuts premium/mes. La pestanya Al dispositiu ofereix transcripció gratuïta il·limitada. ';
 
   @override
   String get audioProcessedLocally =>
@@ -8606,4 +8611,91 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get phoneHideKeypad => 'Amaga el teclat';
+
+  @override
+  String get fairUsePolicy => 'Ús raonable';
+
+  @override
+  String get fairUseLoadError => 'No s\'ha pogut carregar l\'estat d\'ús raonable. Si us plau, torneu-ho a provar.';
+
+  @override
+  String get fairUseStatusNormal => 'El vostre ús està dins dels límits normals.';
+
+  @override
+  String get fairUseStageNormal => 'Normal';
+
+  @override
+  String get fairUseStageWarning => 'Avís';
+
+  @override
+  String get fairUseStageThrottle => 'Limitat';
+
+  @override
+  String get fairUseStageRestrict => 'Restringit';
+
+  @override
+  String get fairUseSpeechUsage => 'Ús de la parla';
+
+  @override
+  String get fairUseToday => 'Avui';
+
+  @override
+  String get fairUse3Day => 'Últims 3 dies';
+
+  @override
+  String get fairUseWeekly => 'Setmanal';
+
+  @override
+  String get fairUseAboutTitle => 'Sobre l\'ús raonable';
+
+  @override
+  String get fairUseAboutBody =>
+      'Omi està dissenyat per a converses personals, reunions i interaccions en directe. L\'ús es mesura pel temps real de parla detectat, no pel temps de connexió. Si l\'ús supera significativament els patrons normals per a contingut no personal, es podrien aplicar ajustos.';
+
+  @override
+  String fairUseCaseRefCopied(String caseRef) {
+    return '$caseRef copiat';
+  }
+
+  @override
+  String get fairUseDailyTranscription => 'Daily Transcription';
+
+  @override
+  String fairUseBudgetUsed(String used, String limit) {
+    return '${used}m / ${limit}m';
+  }
+
+  @override
+  String get fairUseBudgetExhausted => 'Daily transcription limit reached';
+
+  @override
+  String fairUseBudgetResetsAt(String time) {
+    return 'Resets $time';
+  }
+
+  @override
+  String get transcriptionPaused => 'Gravant, reconnectant';
+
+  @override
+  String get transcriptionPausedReconnecting => 'Encara gravant — reconnectant a la transcripció...';
+
+  @override
+  String fairUseBannerStatus(String status) {
+    return 'Ús raonable: $status';
+  }
+
+  @override
+  String get improveConnectionTitle => 'Millorar la connexió';
+
+  @override
+  String get improveConnectionContent =>
+      'Hem millorat com Omi es manté connectat al teu dispositiu. Per activar-ho, ves a la pàgina d\'informació del dispositiu, toca \"Desconnectar dispositiu\" i torna a vincular el teu dispositiu.';
+
+  @override
+  String get improveConnectionAction => 'Entesos';
+
+  @override
+  String clockSkewWarning(int minutes) {
+    return 'El rellotge del dispositiu va desajustat ~$minutes min. Comproveu la configuració de data i hora.';
+  }
 }

@@ -448,7 +448,7 @@
     "exportConfiguration": "Konfiguráció exportálása",
     "bringYourOwn": "Hozd a sajátod",
     "payYourSttProvider": "Szabadon használd az omi-t. Csak az STT szolgáltatódnak fizetsz közvetlenül.",
-    "freeMinutesMonth": "4800 ingyenes perc/hónap tartalmazza. Korlátlan a következővel: ",
+    "freeMinutesMonth": "1200 ingyenes perc/hónap tartalmazza. Korlátlan a következővel: ",
     "omiUnlimited": "Omi Unlimited",
     "hostRequired": "Host szükséges",
     "validPortRequired": "Érvényes port szükséges",
@@ -1459,7 +1459,7 @@
     "accessesAndTriggeredBy": "{accessDescription} és {triggerDescription}.",
     "isTriggeredBy": "{triggerDescription}.",
     "noSpecificDataAccessConfigured": "Nincs beállítva specifikus adathozzáférés.",
-    "basicPlanDescription": "4800 prémium perc + korlátlan eszközön",
+    "basicPlanDescription": "1200 prémium perc + korlátlan eszközön",
     "minutes": "perc",
     "omiHas": "Omi:",
     "premiumMinutesUsed": "Prémium percek elhasználva.",
@@ -1929,7 +1929,7 @@
     "deviceMayWarmUp": "Az eszköz felmelegedhet hosszabb használat során.",
     "speedAccuracyLower": "A sebesség és pontosság alacsonyabb lehet, mint a felhőmodellekkel.",
     "cloudProvider": "Felhő szolgáltató",
-    "premiumMinutesMonth": "4800 prémium perc/hónap. Az Eszközön fül korlátlan ingyenes átírást kínál. ",
+    "premiumMinutesMonth": "1200 prémium perc/hónap. Az Eszközön fül korlátlan ingyenes átírást kínál. ",
     "viewUsage": "Használat megtekintése",
     "audioProcessedLocally": "A hang helyileg kerül feldolgozásra. Offline működik, privátabb, de több akkumulátort használ.",
     "languageLabel": "Nyelv",
@@ -2540,7 +2540,7 @@
     "@onDeviceSlower": {
         "description": "Warning about slower transcription"
     },
-    "premiumMinutesInfo": "4800 prémium perc/hónap. Az Eszközön fül korlátlan ingyenes átírást kínál.",
+    "premiumMinutesInfo": "1200 prémium perc/hónap. Az Eszközön fül korlátlan ingyenes átírást kínál.",
     "@premiumMinutesInfo": {
         "description": "Information about premium minutes"
     },
@@ -2845,5 +2845,62 @@
     "notYetSynced": "Még nincs szinkronizálva a telefonjával",
     "clearAll": "Összes törlése",
     "phoneKeypad": "Billentyűzet",
-    "phoneHideKeypad": "Billentyűzet elrejtése"
+    "phoneHideKeypad": "Billentyűzet elrejtése",
+    "transcriptionPaused": "Felvétel, újrakapcsolódás",
+    "transcriptionPausedReconnecting": "A felvétel folytatódik — újrakapcsolódás az átíráshoz...",
+    "fairUsePolicy": "Méltányos használat",
+    "fairUseLoadError": "Nem sikerült betölteni a méltányos használat állapotát. Kérjük, próbálja újra.",
+    "fairUseStatusNormal": "Használata a normális határokon belül van.",
+    "fairUseStageNormal": "Normál",
+    "fairUseStageWarning": "Figyelmeztetés",
+    "fairUseStageThrottle": "Korlátozott",
+    "fairUseStageRestrict": "Letiltva",
+    "fairUseSpeechUsage": "Beszédhasználat",
+    "fairUseToday": "Ma",
+    "fairUse3Day": "3 napos gördülő",
+    "fairUseWeekly": "Heti gördülő",
+    "fairUseAboutTitle": "A méltányos használatról",
+    "fairUseAboutBody": "Az Omi személyes beszélgetésekhez, megbeszélésekhez és élő interakciókhoz készült. A használatot a ténylegesen észlelt beszédidő alapján mérik, nem a csatlakozási idő alapján. Ha a használat jelentősen meghaladja a nem személyes tartalom normális mintáit, módosítások alkalmazhatók.",
+    "fairUseCaseRefCopied": "{caseRef} másolva",
+    "@fairUseCaseRefCopied": {
+        "description": "Snackbar message when case reference is copied",
+        "placeholders": {
+            "caseRef": {
+                "type": "String"
+            }
+        }
+    },
+    "fairUseDailyTranscription": "Daily Transcription",
+    "fairUseBudgetExhausted": "Daily transcription limit reached",
+    "fairUseBudgetResetsAt": "Resets {time}",
+    "fairUseBudgetUsed": "{used}m / {limit}m",
+    "@fairUseBudgetUsed": {
+        "placeholders": {
+            "used": {
+                "type": "String"
+            },
+            "limit": {
+                "type": "String"
+            }
+        }
+    },
+    "@fairUseBudgetResetsAt": {
+        "placeholders": {
+            "time": {
+                "type": "String"
+            }
+        }
+    },
+    "fairUseBannerStatus": "Méltányos használat: {status}",
+    "@fairUseBannerStatus": {
+        "placeholders": {
+            "status": {
+                "type": "String"
+            }
+        }
+    },
+    "improveConnectionTitle": "Kapcsolat javítása",
+    "improveConnectionContent": "Javítottuk, hogyan marad az Omi csatlakozva az eszközödhöz. Az aktiváláshoz menj az Eszközinfo oldalra, koppints az \"Eszköz leválasztása\" gombra, majd párosítsd újra az eszközödet.",
+    "improveConnectionAction": "Értem",
+    "clockSkewWarning": "Az eszköz órája ~{minutes} perccel eltér. Ellenőrizze a dátum- és időbeállításokat."
 }

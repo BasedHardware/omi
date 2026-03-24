@@ -1462,7 +1462,7 @@ class AppLocalizationsPl extends AppLocalizations {
   String get payYourSttProvider => 'Swobodnie korzystaj z Omi. Płacisz tylko swojemu dostawcy STT bezpośrednio.';
 
   @override
-  String get freeMinutesMonth => '4800 darmowych minut/miesiąc w zestawie. Nieograniczone z ';
+  String get freeMinutesMonth => '1200 darmowych minut/miesiąc w zestawie. Nieograniczone z ';
 
   @override
   String get omiUnlimited => 'Omi Unlimited';
@@ -4772,7 +4772,7 @@ class AppLocalizationsPl extends AppLocalizations {
   String get noSpecificDataAccessConfigured => 'Nie skonfigurowano konkretnego dostępu do danych.';
 
   @override
-  String get basicPlanDescription => '4800 minut premium + nieograniczone na urządzeniu';
+  String get basicPlanDescription => '1200 minut premium + nieograniczone na urządzeniu';
 
   @override
   String get minutes => 'minut';
@@ -6101,7 +6101,7 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get premiumMinutesInfo =>
-      '4800 minut premium/miesiąc. Zakładka Na urządzeniu oferuje nieograniczoną darmową transkrypcję.';
+      '1200 minut premium/miesiąc. Zakładka Na urządzeniu oferuje nieograniczoną darmową transkrypcję.';
 
   @override
   String get viewUsage => 'Zobacz wykorzystanie';
@@ -6183,7 +6183,7 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get premiumMinutesMonth =>
-      '4800 minut premium/miesiąc. Karta Na urządzeniu oferuje nieograniczoną bezpłatną transkrypcję. ';
+      '1200 minut premium/miesiąc. Karta Na urządzeniu oferuje nieograniczoną bezpłatną transkrypcję. ';
 
   @override
   String get audioProcessedLocally =>
@@ -8578,4 +8578,91 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get phoneHideKeypad => 'Ukryj klawiaturę';
+
+  @override
+  String get fairUsePolicy => 'Uczciwe korzystanie';
+
+  @override
+  String get fairUseLoadError => 'Nie udało się załadować statusu uczciwego korzystania. Spróbuj ponownie.';
+
+  @override
+  String get fairUseStatusNormal => 'Twoje użytkowanie mieści się w normalnych granicach.';
+
+  @override
+  String get fairUseStageNormal => 'Normalne';
+
+  @override
+  String get fairUseStageWarning => 'Ostrzeżenie';
+
+  @override
+  String get fairUseStageThrottle => 'Ograniczone';
+
+  @override
+  String get fairUseStageRestrict => 'Zablokowane';
+
+  @override
+  String get fairUseSpeechUsage => 'Użycie mowy';
+
+  @override
+  String get fairUseToday => 'Dzisiaj';
+
+  @override
+  String get fairUse3Day => '3-dniowy okres';
+
+  @override
+  String get fairUseWeekly => 'Tygodniowy okres';
+
+  @override
+  String get fairUseAboutTitle => 'O uczciwym korzystaniu';
+
+  @override
+  String get fairUseAboutBody =>
+      'Omi jest zaprojektowany do osobistych rozmów, spotkań i interakcji na żywo. Użytkowanie mierzone jest na podstawie wykrytego rzeczywistego czasu mowy, a nie czasu połączenia. Jeśli użytkowanie znacząco przekracza normalne wzorce dla treści nieosobistych, mogą zostać zastosowane korekty.';
+
+  @override
+  String fairUseCaseRefCopied(String caseRef) {
+    return '$caseRef skopiowano';
+  }
+
+  @override
+  String get fairUseDailyTranscription => 'Dzienna transkrypcja';
+
+  @override
+  String fairUseBudgetUsed(String used, String limit) {
+    return '${used}m / ${limit}m';
+  }
+
+  @override
+  String get fairUseBudgetExhausted => 'Osiągnięto dzienny limit transkrypcji';
+
+  @override
+  String fairUseBudgetResetsAt(String time) {
+    return 'Resetuje się $time';
+  }
+
+  @override
+  String get transcriptionPaused => 'Nagrywanie, ponowne łączenie';
+
+  @override
+  String get transcriptionPausedReconnecting => 'Nadal nagrywa — ponowne łączenie z transkrypcją...';
+
+  @override
+  String fairUseBannerStatus(String status) {
+    return 'Uczciwe użytkowanie: $status';
+  }
+
+  @override
+  String get improveConnectionTitle => 'Popraw połączenie';
+
+  @override
+  String get improveConnectionContent =>
+      'Poprawiliśmy sposób, w jaki Omi utrzymuje połączenie z Twoim urządzeniem. Aby to aktywować, przejdź na stronę Informacje o urządzeniu, dotknij \"Odłącz urządzenie\" i ponownie sparuj urządzenie.';
+
+  @override
+  String get improveConnectionAction => 'Rozumiem';
+
+  @override
+  String clockSkewWarning(int minutes) {
+    return 'Zegar urządzenia różni się o ~$minutes min. Sprawdź ustawienia daty i godziny.';
+  }
 }

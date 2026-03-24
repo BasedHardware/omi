@@ -1463,7 +1463,7 @@ class AppLocalizationsBg extends AppLocalizations {
   String get payYourSttProvider => 'Използвайте omi свободно. Плащате само на вашия STT доставчик директно.';
 
   @override
-  String get freeMinutesMonth => '4 800 безплатни минути/месец включени. Неограничено с ';
+  String get freeMinutesMonth => '1 200 безплатни минути/месец включени. Неограничено с ';
 
   @override
   String get omiUnlimited => 'Omi Unlimited';
@@ -1713,7 +1713,12 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'УСТРОЙСТВА', one: 'УСТРОЙСТВО');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'УСТРОЙСТВА',
+      one: 'УСТРОЙСТВО',
+    );
     return '$count $_temp0 НАМЕРЕНИ НАБЛИЗО';
   }
 
@@ -4772,7 +4777,7 @@ class AppLocalizationsBg extends AppLocalizations {
   String get noSpecificDataAccessConfigured => 'Няма конфигуриран специфичен достъп до данни.';
 
   @override
-  String get basicPlanDescription => '4 800 премиум минути + неограничено на устройството';
+  String get basicPlanDescription => '1 200 премиум минути + неограничено на устройството';
 
   @override
   String get minutes => 'минути';
@@ -6106,7 +6111,7 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get premiumMinutesInfo =>
-      '4800 премиум минути/месец. Разделът На устройството предлага неограничена безплатна транскрипция.';
+      '1200 премиум минути/месец. Разделът На устройството предлага неограничена безплатна транскрипция.';
 
   @override
   String get viewUsage => 'Преглед на използването';
@@ -6189,7 +6194,7 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get premiumMinutesMonth =>
-      '4800 премиум минути/месец. Разделът На устройството предлага неограничена безплатна транскрипция. ';
+      '1200 премиум минути/месец. Разделът На устройството предлага неограничена безплатна транскрипция. ';
 
   @override
   String get audioProcessedLocally =>
@@ -8590,4 +8595,91 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get phoneHideKeypad => 'Скрий клавиатурата';
+
+  @override
+  String get fairUsePolicy => 'Честна употреба';
+
+  @override
+  String get fairUseLoadError => 'Неуспешно зареждане на статуса на честна употреба. Моля, опитайте отново.';
+
+  @override
+  String get fairUseStatusNormal => 'Вашата употреба е в нормалните граници.';
+
+  @override
+  String get fairUseStageNormal => 'Нормална';
+
+  @override
+  String get fairUseStageWarning => 'Предупреждение';
+
+  @override
+  String get fairUseStageThrottle => 'Ограничена';
+
+  @override
+  String get fairUseStageRestrict => 'Забранена';
+
+  @override
+  String get fairUseSpeechUsage => 'Употреба на реч';
+
+  @override
+  String get fairUseToday => 'Днес';
+
+  @override
+  String get fairUse3Day => '3-дневен период';
+
+  @override
+  String get fairUseWeekly => 'Седмичен период';
+
+  @override
+  String get fairUseAboutTitle => 'Относно честната употреба';
+
+  @override
+  String get fairUseAboutBody =>
+      'Omi е проектиран за лични разговори, срещи и взаимодействия на живо. Употребата се измерва по реалното открито време на реч, а не по времето на връзка. Ако употребата значително надвишава нормалните модели за неличностно съдържание, може да се приложат корекции.';
+
+  @override
+  String fairUseCaseRefCopied(String caseRef) {
+    return '$caseRef копирано';
+  }
+
+  @override
+  String get fairUseDailyTranscription => 'Daily Transcription';
+
+  @override
+  String fairUseBudgetUsed(String used, String limit) {
+    return '${used}m / ${limit}m';
+  }
+
+  @override
+  String get fairUseBudgetExhausted => 'Daily transcription limit reached';
+
+  @override
+  String fairUseBudgetResetsAt(String time) {
+    return 'Resets $time';
+  }
+
+  @override
+  String get transcriptionPaused => 'Записва се, свързване отново';
+
+  @override
+  String get transcriptionPausedReconnecting => 'Все още се записва — свързване с транскрипцията...';
+
+  @override
+  String fairUseBannerStatus(String status) {
+    return 'Добросъвестно ползване: $status';
+  }
+
+  @override
+  String get improveConnectionTitle => 'Подобряване на връзката';
+
+  @override
+  String get improveConnectionContent =>
+      'Подобрихме начина, по който Omi остава свързан с вашето устройство. За да активирате това, моля, отидете на страницата с информация за устройството, натиснете \"Изключване на устройството\" и сдвоете устройството си отново.';
+
+  @override
+  String get improveConnectionAction => 'Разбрах';
+
+  @override
+  String clockSkewWarning(int minutes) {
+    return 'Часовникът на устройството ви е разместен с ~$minutes мин. Проверете настройките за дата и час.';
+  }
 }
