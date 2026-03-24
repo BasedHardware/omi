@@ -77,7 +77,6 @@ class NotificationUtil {
 
   static void _handleAppLinkOrDeepLink(Map<String, dynamic> payload) async {
     // Always ensure that all plugins was initialized
-    // TODO: for what?
     WidgetsFlutterBinding.ensureInitialized();
 
     String? navigateTo;
@@ -95,11 +94,24 @@ class NotificationUtil {
       autoMessage = DailyReflectionNotification.reflectionMessage;
     }
 
-    globalNavigatorKey.currentState?.pushReplacement(
-      MaterialPageRoute(
-        builder: (context) => HomePageWrapper(navigateToRoute: navigateTo, autoMessage: autoMessage),
-      ),
-    );
+    // Use addPostFrameCallback to ensure the navigator is ready and the widget tree is built
+    // This fixes the issue where notification tap doesn't navigate when another screen is open
+    // because the navigation needs to happen after the current frame is rendered
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final navigatorState = globalNavigatorKey.currentState;
+      if (navigatorState != null) {
+        // Use pushAndRemoveUntil to clear the navigation stack and go to HomePageWrapper
+        // This ensures notification tap navigates correctly regardless of current screen
+        navigatorState.pushAndRemoveUntil(
+          MaterialPageRoute(
+            builder: (context) => HomePageWrapper(navigateToRoute: navigateTo, autoMessage: autoMessage),
+          ),
+          (route) => false, // Remove all routes below the new one
+        );
+      } else {
+        Logger.debug("globalNavigatorKey.currentState is null, cannot navigate");
+      }
+    });
   }
 
   static Future<void> triggerFallNotification() async {

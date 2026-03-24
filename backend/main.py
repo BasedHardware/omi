@@ -123,7 +123,12 @@ methods_timeout = {
     "DELETE": os.environ.get('HTTP_DELETE_TIMEOUT'),
 }
 
-app.add_middleware(TimeoutMiddleware, methods_timeout=methods_timeout)
+# Path-specific timeouts (seconds) — applied before method-level timeouts
+paths_timeout = {
+    "/v1/sync-local-files": 300,  # Large file uploads can take >120s for transcription+LLM
+}
+
+app.add_middleware(TimeoutMiddleware, methods_timeout=methods_timeout, paths_timeout=paths_timeout)
 
 
 modal_app = App(
