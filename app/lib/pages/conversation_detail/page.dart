@@ -767,39 +767,6 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                           icon: const FaIcon(FontAwesomeIcons.magnifyingGlass, size: 16.0, color: Colors.white),
                         ),
                       // Developer Tools button (third) - iOS style pull-down menu
-                      Container(
-                        width: 44,
-                        height: 44,
-                        margin: const EdgeInsets.only(right: 8),
-                        child: PullDownButton(
-                          itemBuilder: (context) => [
-                            PullDownMenuItem(
-                              title: context.l10n.copyTranscript,
-                              iconWidget: FaIcon(FontAwesomeIcons.copy, size: 16),
-                              onTap: () => _handleMenuSelection(context, 'copy_transcript', provider),
-                            ),
-                            child: IconButton(
-                              padding: EdgeInsets.zero,
-                              onPressed: () {
-                                setState(() {
-                                  _isSearching = !_isSearching;
-                                  if (!_isSearching) {
-                                    _searchQuery = '';
-                                    _searchController.clear();
-                                    _searchFocusNode.unfocus();
-                                  } else {
-                                    _searchFocusNode.requestFocus();
-                                    MixpanelManager().conversationDetailSearchClicked(
-                                      conversationId: provider.conversation.id,
-                                    );
-                                  }
-                                });
-                                HapticFeedback.mediumImpact();
-                              },
-                              icon: const FaIcon(FontAwesomeIcons.magnifyingGlass, size: 16.0, color: Colors.white),
-                            ),
-                          ),
-                        // Developer Tools button (third) - iOS style pull-down menu
                         Container(
                           width: 36,
                           height: 36,
