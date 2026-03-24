@@ -231,5 +231,18 @@
       "linkedin": "https://www.linkedin.com/company/omi-ai/",
       "instagram": "https://www.instagram.com/based_hardware/"
     }
+  },
+  "navbar": {
+    "links": [
+      {
+        "label": "Support",
+        "href": "https://discord.omi.me"
+      }
+    ],
+    "primary": {
+      "type": "button",
+      "label": "Buy Now",
+      "href": "https://www.omi.me/products/friend-dev-2"
+    }
   }
 }
