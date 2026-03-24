@@ -189,11 +189,17 @@ class AuthService {
         SharedPreferencesUtil().tokenExpirationTime = newToken?.expirationTime?.millisecondsSinceEpoch ?? 0;
         SharedPreferencesUtil().authToken = newToken?.token ?? '';
 
-        // Save token to file for local development
-        final token = newToken?.token ?? '';
-        final tokenFile = File('/tmp/omi_auth_token.txt');
-        await tokenFile.writeAsString(token);
-        debugPrint('🔑 Auth token saved to /tmp/omi_auth_token.txt');
+        // Save token to file for local development (desktop/iOS only, not Android)
+        if (!Platform.isAndroid) {
+          try {
+            final token = newToken?.token ?? '';
+            final tokenFile = File('/tmp/omi_auth_token.txt');
+            await tokenFile.writeAsString(token);
+            debugPrint('Auth token saved to /tmp/omi_auth_token.txt');
+          } catch (_) {
+            // Ignore file write failures — this is a dev convenience only
+          }
+        }
 
         if (SharedPreferencesUtil().email.isEmpty) {
           SharedPreferencesUtil().email = user.email ?? '';
