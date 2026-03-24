@@ -23,8 +23,13 @@ final class APIKeyService: ObservableObject {
     private(set) var fetchTask: Task<Void, Never>?
 
     /// Wait for keys to be loaded. Returns immediately if already loaded.
+    /// If no fetch is in-flight, starts one (handles app-restart-while-signed-in case).
     func waitForKeys() async {
         if isLoaded { return }
+        if fetchTask == nil {
+            log("APIKeyService: waitForKeys called but no fetch in-flight, starting one")
+            fetchTask = Task { await fetchKeys() }
+        }
         await fetchTask?.value
     }
 

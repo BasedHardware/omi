@@ -597,6 +597,8 @@ A screenshot may be attached — use it silently only if relevant. Never mention
             return true
         } catch {
             logError("Failed to start ACP bridge", error: error)
+            let rawError = String(describing: error)
+            AnalyticsManager.shared.chatAgentError(error: "AI not available: bridge failed to start", rawError: rawError)
             errorMessage = "AI not available: \(error.localizedDescription)"
             return false
         }
