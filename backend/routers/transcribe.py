@@ -839,6 +839,24 @@ async def _stream_handler(
 
             # Continue with the existing conversation
             current_conversation_id = existing_conversation['id']
+
+            # Rehydrate current_session_segments from persisted transcript segments so that
+            # speaker sample extraction (can_assign check) works after WS reconnect (#5949)
+            existing_segments = existing_conversation.get('transcript_segments', [])
+            for seg in existing_segments:
+                sid = seg.get('id') if isinstance(seg, dict) else getattr(seg, 'id', None)
+                if sid:
+                    spp = (
+                        seg.get('speech_profile_processed', True)
+                        if isinstance(seg, dict)
+                        else getattr(seg, 'speech_profile_processed', True)
+                    )
+                    current_session_segments[sid] = spp
+            if existing_segments:
+                logger.info(
+                    f"Rehydrated {len(current_session_segments)} segments for resumed conversation {current_conversation_id} {uid} {session_id}"
+                )
+
             logger.info(
                 f"Resuming conversation {current_conversation_id}. Will timeout in {conversation_creation_timeout - seconds_since_last_segment:.1f}s {uid} {session_id}"
             )
