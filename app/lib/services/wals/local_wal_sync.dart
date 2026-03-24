@@ -234,8 +234,11 @@ class LocalWalSyncImpl implements LocalWalSync {
         }
 
         List<int> data = [];
+        // BLE device frames have a 3-byte header (sequence number) that must be stripped.
+        // Phone mic PCM frames have no header — use raw bytes directly.
+        final headerSize = wal.codec.isOpusSupported() ? 3 : 0;
         for (int i = 0; i < wal.data.length; i++) {
-          var frame = wal.data[i].sublist(3);
+          var frame = headerSize > 0 && wal.data[i].length > headerSize ? wal.data[i].sublist(headerSize) : wal.data[i];
 
           final byteFrame = ByteData(frame.length);
           for (int i = 0; i < frame.length; i++) {
@@ -332,11 +335,20 @@ class LocalWalSyncImpl implements LocalWalSync {
 
   @override
   void onBytesSync(List<int> value) {
+    // BLE frames have a 3-byte header (sequence number) used for matching.
+    // PCM frames have no header — match on first 4 bytes of audio content.
+    final matchBytes = _codec.isOpusSupported() ? 3 : 4;
+    if (value.length < matchBytes) return;
     for (int i = _frames.length - 1; i >= 0; i--) {
-      if (_frames[i].length >= 3 &&
-          _frames[i][0] == value[0] &&
-          _frames[i][1] == value[1] &&
-          _frames[i][2] == value[2]) {
+      if (_frames[i].length < matchBytes) continue;
+      bool match = true;
+      for (int j = 0; j < matchBytes; j++) {
+        if (_frames[i][j] != value[j]) {
+          match = false;
+          break;
+        }
+      }
+      if (match) {
         _frameSynced[i] = true;
         break;
       }
