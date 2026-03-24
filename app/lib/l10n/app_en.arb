@@ -1493,7 +1493,7 @@
     "exportConfiguration": "Export configuration",
     "bringYourOwn": "Bring your own",
     "payYourSttProvider": "Freely use omi. You only pay your STT provider directly.",
-    "freeMinutesMonth": "4,800 free minutes/month included. Unlimited with ",
+    "freeMinutesMonth": "1,200 free minutes/month included. Unlimited with ",
     "omiUnlimited": "Omi Unlimited",
     "hostRequired": "Host is required",
     "validPortRequired": "Valid port is required",
@@ -5590,7 +5590,7 @@
     "@noSpecificDataAccessConfigured": {
         "description": "Message shown when app has no specific data access"
     },
-    "basicPlanDescription": "4,800 premium mins + unlimited on-device",
+    "basicPlanDescription": "1,200 premium mins + unlimited on-device",
     "@basicPlanDescription": {
         "description": "Description of basic plan features in usage page"
     },
@@ -7416,7 +7416,7 @@
     "@cloudProvider": {
         "description": "Tab label for cloud provider option"
     },
-    "premiumMinutesInfo": "4,800 premium minutes/month. On-Device tab offers unlimited free transcription.",
+    "premiumMinutesInfo": "1,200 premium minutes/month. On-Device tab offers unlimited free transcription.",
     "@premiumMinutesInfo": {
         "description": "Info about premium minutes"
     },
@@ -7527,7 +7527,7 @@
     "@batteryDrainSignificantly": {
         "description": "Warning about battery drain"
     },
-    "premiumMinutesMonth": "4,800 premium minutes/month. On-Device tab offers unlimited free transcription. ",
+    "premiumMinutesMonth": "1,200 premium minutes/month. On-Device tab offers unlimited free transcription. ",
     "@premiumMinutesMonth": {
         "description": "Description of premium minutes quota"
     },
