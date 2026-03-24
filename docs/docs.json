@@ -16,7 +16,6 @@
         "groups": [
           {
             "group": "Get Started",
-            "icon": "rocket",
             "pages": [
               "doc/get_started/introduction",
               "getstartedwithomi",
@@ -25,7 +24,6 @@
           },
           {
             "group": "Core Development",
-            "icon": "code",
             "pages": [
               "doc/developer/AppSetup",
               "doc/developer/Cursor",
@@ -38,13 +36,15 @@
                   "doc/developer/backend/StoringConversations",
                   "doc/developer/backend/transcription",
                   "doc/developer/backend/listen_pusher_pipeline"
-                ]
+                ],
+                "icon": "server"
               },
               {
                 "group": "Firmware",
                 "pages": [
                   "doc/developer/firmware/Compile_firmware"
-                ]
+                ],
+                "icon": "microchip"
               },
               {
                 "group": "SDK",
@@ -53,7 +53,8 @@
                   "doc/developer/sdk/python",
                   "doc/developer/sdk/ReactNative",
                   "doc/developer/sdk/swift"
-                ]
+                ],
+                "icon": "cube"
               },
               "doc/developer/Protocol",
               "doc/developer/Contribution",
@@ -64,13 +65,13 @@
                   "doc/developer/savingaudio",
                   "doc/developer/AudioStreaming",
                   "doc/developer/DevKit2Testing"
-                ]
+                ],
+                "icon": "headphones"
               }
             ]
           },
           {
             "group": "DIY Guide",
-            "icon": "screwdriver-wrench",
             "pages": [
               "doc/assembly/introduction",
               "doc/assembly/Buying_Guide",
@@ -80,7 +81,6 @@
           },
           {
             "group": "Info",
-            "icon": "circle-info",
             "pages": [
               "doc/info/Support",
               "doc/info/License",
@@ -97,7 +97,6 @@
         "groups": [
           {
             "group": "Overview",
-            "icon": "book-open",
             "pages": [
               "api-reference/introduction",
               "doc/developer/api/overview"
@@ -105,7 +104,6 @@
           },
           {
             "group": "Memories",
-            "icon": "brain",
             "pages": [
               "doc/developer/api/memories",
               "api-reference/endpoint/memories/list",
@@ -117,7 +115,6 @@
           },
           {
             "group": "Conversations",
-            "icon": "message",
             "pages": [
               "doc/developer/api/conversations",
               "api-reference/endpoint/conversations/list",
@@ -130,7 +127,6 @@
           },
           {
             "group": "Action Items",
-            "icon": "list-check",
             "pages": [
               "doc/developer/api/action-items",
               "api-reference/endpoint/action-items/list",
@@ -142,7 +138,6 @@
           },
           {
             "group": "Authentication",
-            "icon": "key",
             "pages": [
               "doc/developer/api/keys",
               "api-reference/endpoint/keys/list",
@@ -158,7 +153,6 @@
         "groups": [
           {
             "group": "Getting Started",
-            "icon": "play",
             "pages": [
               "doc/developer/apps/Introduction",
               "doc/developer/apps/PromptBased",
@@ -174,7 +168,6 @@
           },
           {
             "group": "Examples",
-            "icon": "lightbulb",
             "pages": [
               "doc/developer/apps/examples/Github",
               "doc/developer/apps/examples/Slack",
@@ -189,7 +182,6 @@
         "groups": [
           {
             "group": "Devices",
-            "icon": "circle-dot",
             "pages": [
               "doc/hardware/OmiConsumer",
               "doc/hardware/DevKit2",
@@ -199,7 +191,6 @@
           },
           {
             "group": "OmiGlass",
-            "icon": "glasses",
             "pages": [
               "doc/hardware/omiGlass",
               "doc/hardware/omiglass/flash-firmware",
@@ -208,7 +199,6 @@
           },
           {
             "group": "Open Source",
-            "icon": "code-branch",
             "pages": [
               "doc/hardware/consumer/index",
               "doc/hardware/consumer/electronics",
@@ -225,7 +215,6 @@
         "groups": [
           {
             "group": "MCP Integration",
-            "icon": "plug",
             "pages": [
               "doc/developer/MCP"
             ]
