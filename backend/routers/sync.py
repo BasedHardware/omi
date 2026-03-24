@@ -682,8 +682,25 @@ def process_segment(
             for segment in closest_memory['transcript_segments']:
                 segment['timestamp'] = closest_memory['started_at'].timestamp() + segment['start']
 
+            # Deduplicate: skip new segments whose timestamp range already exists in the conversation
+            # (protects against retry after partial failure returning 207)
+            existing_timestamps = {
+                (round(s['timestamp'], 2), round(s['timestamp'] + (s['end'] - s['start']), 2))
+                for s in closest_memory['transcript_segments']
+            }
+            deduped_segments = []
+            for seg in transcript_segments:
+                seg_key = (round(seg['timestamp'], 2), round(seg['timestamp'] + (seg['end'] - seg['start']), 2))
+                if seg_key not in existing_timestamps:
+                    deduped_segments.append(seg)
+            if not deduped_segments:
+                logger.info(f'All segments already exist in conversation {closest_memory["id"]}, skipping merge')
+                with lock:
+                    response['updated_memories'].add(closest_memory['id'])
+                return
+
             # merge and sort segments by start timestamp
-            segments = closest_memory['transcript_segments'] + transcript_segments
+            segments = closest_memory['transcript_segments'] + deduped_segments
             segments.sort(key=lambda x: x['timestamp'])
 
             # fix segment.start .end to be relative to the memory
