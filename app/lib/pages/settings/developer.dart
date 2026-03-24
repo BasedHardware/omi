@@ -1900,8 +1900,8 @@ class _ManualFirmwareFlashPage extends StatefulWidget {
     required this.device,
   });
 
-  @override 
-  State<_ManualFirmwareFlashPage> createState() => _ManualFirmwareFlashPageState();
+  @override
+  State<_ManualFirmwareFlashPage> createState() => _ManualFirmwareFlashPageState(); 
 }
 
 class _ManualFirmwareFlashPageState extends State<_ManualFirmwareFlashPage> with FirmwareMixin {
