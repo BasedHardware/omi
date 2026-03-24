@@ -13,6 +13,7 @@ enum OnboardingChatPersistence {
   private static let explorationTextKey = "onboardingExplorationText"
   private static let explorationCompletedKey = "onboardingExplorationCompleted"
   private static let toolCompletedKey = "onboardingToolCompleted"
+  private static let goalCompletedKey = "onboardingGoalCompleted"
 
   /// Save the ACP session ID for resume after restart
   static func saveSessionId(_ sessionId: String) {
@@ -67,6 +68,16 @@ enum OnboardingChatPersistence {
     UserDefaults.standard.bool(forKey: toolCompletedKey)
   }
 
+  /// Mark that the user answered the monthly goal question
+  static func markGoalCompleted() {
+    UserDefaults.standard.set(true, forKey: goalCompletedKey)
+  }
+
+  /// Whether the user already answered the monthly goal question
+  static var isGoalCompleted: Bool {
+    UserDefaults.standard.bool(forKey: goalCompletedKey)
+  }
+
   /// Clear all persisted onboarding data
   static func clear() {
     UserDefaults.standard.removeObject(forKey: sessionIdKey)
@@ -74,6 +85,7 @@ enum OnboardingChatPersistence {
     UserDefaults.standard.removeObject(forKey: explorationTextKey)
     UserDefaults.standard.removeObject(forKey: explorationCompletedKey)
     UserDefaults.standard.removeObject(forKey: toolCompletedKey)
+    UserDefaults.standard.removeObject(forKey: goalCompletedKey)
     // Clean up legacy messages key if present
     UserDefaults.standard.removeObject(forKey: "onboardingChatMessages")
   }
@@ -310,7 +322,7 @@ struct OnboardingChatView: View {
                   HStack(spacing: 6) {
                     Image(systemName: "gear")
                       .font(.system(size: 12))
-                    Text("Open System Settings")
+                    Text("Open \(permissionLabel(pending)) Settings")
                       .font(.system(size: 13, weight: .medium))
                   }
                   .foregroundColor(.white)
@@ -503,6 +515,19 @@ struct OnboardingChatView: View {
     }
   }
 
+  /// Human-readable label for a permission type
+  private func permissionLabel(_ type: String) -> String {
+    switch type {
+    case "screen_recording": return "Screen Recording"
+    case "microphone": return "Microphone"
+    case "accessibility": return "Accessibility"
+    case "automation": return "Automation"
+    case "notifications": return "Notification"
+    case "full_disk_access": return "Full Disk Access"
+    default: return "System"
+    }
+  }
+
   /// Open System Settings to the correct pane for a permission type
   private func openSettingsForPermission(_ type: String) {
     let urlString: String? = {
@@ -662,8 +687,14 @@ struct OnboardingChatView: View {
         await bridgeWarmup
 
         // Resume the conversation — tell the AI the app was restarted
+        let resumeMessage: String
+        if OnboardingChatPersistence.isGoalCompleted {
+          resumeMessage = "I'm back — the app just restarted after granting a permission. Let's continue where we left off."
+        } else {
+          resumeMessage = "I'm back — the app just restarted after granting a permission. I haven't set my monthly goal yet — can you help me pick one?"
+        }
         await chatProvider.sendMessage(
-          "I'm back — the app just restarted after granting a permission. Let's continue where we left off.",
+          resumeMessage,
           systemPromptPrefix: resumeSystemPrompt,
           resume: savedSessionId
         )
@@ -1124,6 +1155,7 @@ struct OnboardingChatView: View {
       _ = try? await GoalStorage.shared.syncServerGoal(goal)
       createdGoalTitles.insert(dedupeKey)
       awaitingGoalInput = false
+      OnboardingChatPersistence.markGoalCompleted()
       log(
         "OnboardingChat: Created goal from onboarding input: \(title) (\(config.goalType.rawValue), target: \(config.targetValue))"
       )
