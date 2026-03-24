@@ -10,6 +10,7 @@ duplicated local helper).
 """
 
 import pytest
+from models.transcript_segment import TranscriptSegment
 from utils.speaker_assignment import rehydrate_session_segments
 
 
@@ -97,3 +98,26 @@ class TestRehydrateSessionSegments:
         assert result['seg-0'] is True
         assert result['seg-1'] is False
         assert result['seg-999'] is False
+
+    def test_rehydrate_from_transcript_segment_objects(self):
+        """TranscriptSegment objects (getattr branch) should also be rehydrated."""
+        seg1 = TranscriptSegment(
+            id='obj-1',
+            text='hello',
+            speaker='SPEAKER_00',
+            start=0.0,
+            end=1.0,
+            is_user=False,
+            speech_profile_processed=True,
+        )
+        seg2 = TranscriptSegment(
+            id='obj-2',
+            text='world',
+            speaker='SPEAKER_01',
+            start=1.0,
+            end=2.0,
+            is_user=False,
+            speech_profile_processed=False,
+        )
+        result = rehydrate_session_segments([seg1, seg2])
+        assert result == {'obj-1': True, 'obj-2': False}
