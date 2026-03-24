@@ -8679,4 +8679,72 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get improveConnectionAction => 'Értem';
+
+  @override
+  String get omisStorage => 'Omi tárhelye';
+
+  @override
+  String get phoneStorage => 'Telefon tárhelye';
+
+  @override
+  String get cloudStorage => 'Felhő tárhely';
+
+  @override
+  String get howSyncingWorks => 'Hogyan működik a szinkronizálás';
+
+  @override
+  String get noSyncedRecordings => 'Még nincsenek szinkronizált felvételek';
+
+  @override
+  String get recordingsSyncAutomatically => 'A felvételek automatikusan szinkronizálódnak — nincs teendő.';
+
+  @override
+  String get filesDownloadedUploadedNextTime => 'A már letöltött fájlok legközelebb feltöltődnek.';
+
+  @override
+  String nConversationsCreated(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count beszélgetés létrehozva',
+      one: '1 beszélgetés létrehozva',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get tapToView => 'Koppintson a megtekintéshez';
+
+  @override
+  String get syncFailed => 'Szinkronizálás sikertelen';
+
+  @override
+  String get keepSyncing => 'Szinkronizálás folytatása';
+
+  @override
+  String get cancelSyncQuestion => 'Szinkronizálás megszakítása?';
+
+  @override
+  String get omisStorageDesc =>
+      'Amikor az Omi nincs csatlakoztatva a telefonjához, a hangot helyileg tárolja a beépített memóriájában. Soha nem veszít el egy felvételt sem.';
+
+  @override
+  String get phoneStorageDesc =>
+      'Amikor az Omi újra csatlakozik, a felvételek automatikusan átkerülnek a telefonjára feltöltés előtt.';
+
+  @override
+  String get cloudStorageDesc =>
+      'Feltöltés után a felvételei feldolgozásra és átírásra kerülnek. A beszélgetések egy percen belül elérhetők lesznek.';
+
+  @override
+  String get tipKeepPhoneNearby => 'Tartsa a telefonját a közelben a gyorsabb szinkronizáláshoz';
+
+  @override
+  String get tipStableInternet => 'Stabil internet gyorsítja a felhőbe feltöltést';
+
+  @override
+  String get tipAutoSync => 'A felvételek automatikusan szinkronizálódnak';
+
+  @override
+  String get storageSection => 'TÁRHELY';
 }

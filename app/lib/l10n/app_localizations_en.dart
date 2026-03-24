@@ -8638,4 +8638,72 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get improveConnectionAction => 'Got it';
+
+  @override
+  String get omisStorage => 'Omi\'s Storage';
+
+  @override
+  String get phoneStorage => 'Phone Storage';
+
+  @override
+  String get cloudStorage => 'Cloud Storage';
+
+  @override
+  String get howSyncingWorks => 'How syncing works';
+
+  @override
+  String get noSyncedRecordings => 'No synced recordings yet';
+
+  @override
+  String get recordingsSyncAutomatically => 'Recordings sync automatically — no action needed.';
+
+  @override
+  String get filesDownloadedUploadedNextTime => 'Files already downloaded will be uploaded next time.';
+
+  @override
+  String nConversationsCreated(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 's',
+      one: '',
+    );
+    return '$count conversation$_temp0 created';
+  }
+
+  @override
+  String get tapToView => 'Tap to view';
+
+  @override
+  String get syncFailed => 'Sync failed';
+
+  @override
+  String get keepSyncing => 'Keep syncing';
+
+  @override
+  String get cancelSyncQuestion => 'Cancel sync?';
+
+  @override
+  String get omisStorageDesc =>
+      'When your Omi is not connected to your phone, it stores audio locally on its built-in memory. You never lose a recording.';
+
+  @override
+  String get phoneStorageDesc =>
+      'When Omi reconnects, recordings are automatically transferred to your phone as a temporary holding area before uploading.';
+
+  @override
+  String get cloudStorageDesc =>
+      'Once uploaded, your recordings are processed and transcribed. Conversations will be available within a minute.';
+
+  @override
+  String get tipKeepPhoneNearby => 'Keep your phone nearby for faster syncing';
+
+  @override
+  String get tipStableInternet => 'Stable internet speeds up cloud uploads';
+
+  @override
+  String get tipAutoSync => 'Recordings sync automatically';
+
+  @override
+  String get storageSection => 'STORAGE';
 }

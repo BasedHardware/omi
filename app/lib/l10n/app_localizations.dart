@@ -16136,6 +16136,120 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Got it'**
   String get improveConnectionAction;
+
+  /// Label for device storage tier in sync pipeline
+  ///
+  /// In en, this message translates to:
+  /// **'Omi\'s Storage'**
+  String get omisStorage;
+
+  /// Label for phone storage tier in sync pipeline
+  ///
+  /// In en, this message translates to:
+  /// **'Phone Storage'**
+  String get phoneStorage;
+
+  /// Label for cloud storage tier in sync pipeline
+  ///
+  /// In en, this message translates to:
+  /// **'Cloud Storage'**
+  String get cloudStorage;
+
+  /// Title for sync info bottom sheet
+  ///
+  /// In en, this message translates to:
+  /// **'How syncing works'**
+  String get howSyncingWorks;
+
+  /// Empty state for synced recordings list
+  ///
+  /// In en, this message translates to:
+  /// **'No synced recordings yet'**
+  String get noSyncedRecordings;
+
+  /// Tip in sync info sheet
+  ///
+  /// In en, this message translates to:
+  /// **'Recordings sync automatically — no action needed.'**
+  String get recordingsSyncAutomatically;
+
+  /// Cancel sync confirmation message
+  ///
+  /// In en, this message translates to:
+  /// **'Files already downloaded will be uploaded next time.'**
+  String get filesDownloadedUploadedNextTime;
+
+  /// Shows number of conversations created after sync
+  ///
+  /// In en, this message translates to:
+  /// **'{count} conversation{count, plural, =1{} other{s}} created'**
+  String nConversationsCreated(int count);
+
+  /// Subtitle hint for tappable items
+  ///
+  /// In en, this message translates to:
+  /// **'Tap to view'**
+  String get tapToView;
+
+  /// Error state text when sync fails
+  ///
+  /// In en, this message translates to:
+  /// **'Sync failed'**
+  String get syncFailed;
+
+  /// Button label to dismiss cancel dialog and continue syncing
+  ///
+  /// In en, this message translates to:
+  /// **'Keep syncing'**
+  String get keepSyncing;
+
+  /// Title for cancel sync confirmation dialog
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel sync?'**
+  String get cancelSyncQuestion;
+
+  /// Description of device storage in sync info sheet
+  ///
+  /// In en, this message translates to:
+  /// **'When your Omi is not connected to your phone, it stores audio locally on its built-in memory. You never lose a recording.'**
+  String get omisStorageDesc;
+
+  /// Description of phone storage in sync info sheet
+  ///
+  /// In en, this message translates to:
+  /// **'When Omi reconnects, recordings are automatically transferred to your phone as a temporary holding area before uploading.'**
+  String get phoneStorageDesc;
+
+  /// Description of cloud storage in sync info sheet
+  ///
+  /// In en, this message translates to:
+  /// **'Once uploaded, your recordings are processed and transcribed. Conversations will be available within a minute.'**
+  String get cloudStorageDesc;
+
+  /// Tip in sync info sheet
+  ///
+  /// In en, this message translates to:
+  /// **'Keep your phone nearby for faster syncing'**
+  String get tipKeepPhoneNearby;
+
+  /// Tip in sync info sheet
+  ///
+  /// In en, this message translates to:
+  /// **'Stable internet speeds up cloud uploads'**
+  String get tipStableInternet;
+
+  /// Tip in sync info sheet
+  ///
+  /// In en, this message translates to:
+  /// **'Recordings sync automatically'**
+  String get tipAutoSync;
+
+  /// Section header for storage settings
+  ///
+  /// In en, this message translates to:
+  /// **'STORAGE'**
+  String get storageSection;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

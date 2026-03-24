@@ -8665,4 +8665,72 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get improveConnectionAction => 'Faham';
+
+  @override
+  String get omisStorage => 'Storan Omi';
+
+  @override
+  String get phoneStorage => 'Storan Telefon';
+
+  @override
+  String get cloudStorage => 'Storan Awan';
+
+  @override
+  String get howSyncingWorks => 'Cara penyegerakan berfungsi';
+
+  @override
+  String get noSyncedRecordings => 'Belum ada rakaman yang disegerakkan';
+
+  @override
+  String get recordingsSyncAutomatically => 'Rakaman disegerakkan secara automatik — tiada tindakan diperlukan.';
+
+  @override
+  String get filesDownloadedUploadedNextTime => 'Fail yang telah dimuat turun akan dimuat naik lain kali.';
+
+  @override
+  String nConversationsCreated(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count perbualan dicipta',
+      one: '1 perbualan dicipta',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get tapToView => 'Ketik untuk melihat';
+
+  @override
+  String get syncFailed => 'Penyegerakan gagal';
+
+  @override
+  String get keepSyncing => 'Teruskan penyegerakan';
+
+  @override
+  String get cancelSyncQuestion => 'Batalkan penyegerakan?';
+
+  @override
+  String get omisStorageDesc =>
+      'Apabila Omi anda tidak disambungkan ke telefon, ia menyimpan audio secara tempatan dalam memori terbina dalam. Anda tidak akan kehilangan rakaman.';
+
+  @override
+  String get phoneStorageDesc =>
+      'Apabila Omi menyambung semula, rakaman dipindahkan secara automatik ke telefon anda sebelum dimuat naik.';
+
+  @override
+  String get cloudStorageDesc =>
+      'Selepas dimuat naik, rakaman anda diproses dan ditranskrip. Perbualan akan tersedia dalam satu minit.';
+
+  @override
+  String get tipKeepPhoneNearby => 'Pastikan telefon berdekatan untuk penyegerakan lebih pantas';
+
+  @override
+  String get tipStableInternet => 'Internet stabil mempercepatkan muat naik awan';
+
+  @override
+  String get tipAutoSync => 'Rakaman disegerakkan secara automatik';
+
+  @override
+  String get storageSection => 'STORAN';
 }

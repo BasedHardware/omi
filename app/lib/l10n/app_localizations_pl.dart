@@ -8660,4 +8660,72 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get improveConnectionAction => 'Rozumiem';
+
+  @override
+  String get omisStorage => 'Pamięć Omi';
+
+  @override
+  String get phoneStorage => 'Pamięć telefonu';
+
+  @override
+  String get cloudStorage => 'Chmura';
+
+  @override
+  String get howSyncingWorks => 'Jak działa synchronizacja';
+
+  @override
+  String get noSyncedRecordings => 'Brak zsynchronizowanych nagrań';
+
+  @override
+  String get recordingsSyncAutomatically => 'Nagrania synchronizują się automatycznie — nie wymaga działania.';
+
+  @override
+  String get filesDownloadedUploadedNextTime => 'Już pobrane pliki zostaną przesłane następnym razem.';
+
+  @override
+  String nConversationsCreated(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count rozmów utworzonych',
+      one: '1 rozmowa utworzona',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get tapToView => 'Dotknij, aby wyświetlić';
+
+  @override
+  String get syncFailed => 'Synchronizacja nie powiodła się';
+
+  @override
+  String get keepSyncing => 'Kontynuuj synchronizację';
+
+  @override
+  String get cancelSyncQuestion => 'Anulować synchronizację?';
+
+  @override
+  String get omisStorageDesc =>
+      'Gdy Omi nie jest podłączony do telefonu, przechowuje dźwięk lokalnie we wbudowanej pamięci. Nigdy nie stracisz nagrania.';
+
+  @override
+  String get phoneStorageDesc =>
+      'Gdy Omi ponownie się połączy, nagrania są automatycznie przenoszone na telefon przed przesłaniem.';
+
+  @override
+  String get cloudStorageDesc =>
+      'Po przesłaniu nagrania są przetwarzane i transkrybowane. Rozmowy będą dostępne w ciągu minuty.';
+
+  @override
+  String get tipKeepPhoneNearby => 'Trzymaj telefon blisko dla szybszej synchronizacji';
+
+  @override
+  String get tipStableInternet => 'Stabilny internet przyspiesza przesyłanie do chmury';
+
+  @override
+  String get tipAutoSync => 'Nagrania synchronizują się automatycznie';
+
+  @override
+  String get storageSection => 'PAMIĘĆ';
 }

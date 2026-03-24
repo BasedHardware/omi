@@ -8499,4 +8499,69 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get improveConnectionAction => '알겠습니다';
+
+  @override
+  String get omisStorage => 'Omi 저장소';
+
+  @override
+  String get phoneStorage => '휴대폰 저장소';
+
+  @override
+  String get cloudStorage => '클라우드 저장소';
+
+  @override
+  String get howSyncingWorks => '동기화 작동 방식';
+
+  @override
+  String get noSyncedRecordings => '아직 동기화된 녹음이 없습니다';
+
+  @override
+  String get recordingsSyncAutomatically => '녹음이 자동으로 동기화됩니다 — 별도 작업이 필요 없습니다.';
+
+  @override
+  String get filesDownloadedUploadedNextTime => '이미 다운로드된 파일은 다음에 업로드됩니다.';
+
+  @override
+  String nConversationsCreated(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '대화 $count개 생성됨',
+      one: '대화 1개 생성됨',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get tapToView => '탭하여 보기';
+
+  @override
+  String get syncFailed => '동기화 실패';
+
+  @override
+  String get keepSyncing => '동기화 계속';
+
+  @override
+  String get cancelSyncQuestion => '동기화를 취소하시겠습니까?';
+
+  @override
+  String get omisStorageDesc => 'Omi가 휴대폰에 연결되지 않으면 내장 메모리에 오디오를 로컬 저장합니다. 녹음을 잃지 않습니다.';
+
+  @override
+  String get phoneStorageDesc => 'Omi가 다시 연결되면 녹음이 업로드 전에 자동으로 휴대폰으로 전송됩니다.';
+
+  @override
+  String get cloudStorageDesc => '업로드 후 녹음이 처리되고 텍스트로 변환됩니다. 대화는 1분 이내에 사용할 수 있습니다.';
+
+  @override
+  String get tipKeepPhoneNearby => '더 빠른 동기화를 위해 휴대폰을 가까이 두세요';
+
+  @override
+  String get tipStableInternet => '안정적인 인터넷으로 클라우드 업로드 속도 향상';
+
+  @override
+  String get tipAutoSync => '녹음이 자동으로 동기화됩니다';
+
+  @override
+  String get storageSection => '저장소';
 }

@@ -8597,4 +8597,71 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get improveConnectionAction => 'เข้าใจแล้ว';
+
+  @override
+  String get omisStorage => 'พื้นที่จัดเก็บของ Omi';
+
+  @override
+  String get phoneStorage => 'พื้นที่จัดเก็บโทรศัพท์';
+
+  @override
+  String get cloudStorage => 'พื้นที่จัดเก็บคลาวด์';
+
+  @override
+  String get howSyncingWorks => 'การซิงค์ทำงานอย่างไร';
+
+  @override
+  String get noSyncedRecordings => 'ยังไม่มีการบันทึกที่ซิงค์แล้ว';
+
+  @override
+  String get recordingsSyncAutomatically => 'การบันทึกจะซิงค์โดยอัตโนมัติ — ไม่ต้องดำเนินการใดๆ';
+
+  @override
+  String get filesDownloadedUploadedNextTime => 'ไฟล์ที่ดาวน์โหลดแล้วจะถูกอัปโหลดในครั้งถัดไป';
+
+  @override
+  String nConversationsCreated(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'สร้าง $count บทสนทนา',
+      one: 'สร้าง 1 บทสนทนา',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get tapToView => 'แตะเพื่อดู';
+
+  @override
+  String get syncFailed => 'การซิงค์ล้มเหลว';
+
+  @override
+  String get keepSyncing => 'ซิงค์ต่อ';
+
+  @override
+  String get cancelSyncQuestion => 'ยกเลิกการซิงค์?';
+
+  @override
+  String get omisStorageDesc =>
+      'เมื่อ Omi ของคุณไม่ได้เชื่อมต่อกับโทรศัพท์ มันจะเก็บเสียงไว้ในหน่วยความจำภายใน คุณจะไม่สูญเสียการบันทึกใดๆ';
+
+  @override
+  String get phoneStorageDesc => 'เมื่อ Omi เชื่อมต่ออีกครั้ง การบันทึกจะถูกโอนไปยังโทรศัพท์โดยอัตโนมัติก่อนอัปโหลด';
+
+  @override
+  String get cloudStorageDesc =>
+      'เมื่ออัปโหลดแล้ว การบันทึกของคุณจะถูกประมวลผลและถอดเสียง บทสนทนาจะพร้อมใช้งานภายในหนึ่งนาที';
+
+  @override
+  String get tipKeepPhoneNearby => 'ให้โทรศัพท์อยู่ใกล้เพื่อการซิงค์ที่เร็วขึ้น';
+
+  @override
+  String get tipStableInternet => 'อินเทอร์เน็ตที่เสถียรช่วยให้อัปโหลดคลาวด์เร็วขึ้น';
+
+  @override
+  String get tipAutoSync => 'การบันทึกจะซิงค์โดยอัตโนมัติ';
+
+  @override
+  String get storageSection => 'พื้นที่จัดเก็บ';
 }

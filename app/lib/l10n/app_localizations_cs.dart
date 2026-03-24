@@ -8638,4 +8638,72 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get improveConnectionAction => 'Rozumím';
+
+  @override
+  String get omisStorage => 'Úložiště Omi';
+
+  @override
+  String get phoneStorage => 'Úložiště telefonu';
+
+  @override
+  String get cloudStorage => 'Cloudové úložiště';
+
+  @override
+  String get howSyncingWorks => 'Jak synchronizace funguje';
+
+  @override
+  String get noSyncedRecordings => 'Zatím žádné synchronizované nahrávky';
+
+  @override
+  String get recordingsSyncAutomatically => 'Nahrávky se synchronizují automaticky — není nutná žádná akce.';
+
+  @override
+  String get filesDownloadedUploadedNextTime => 'Již stažené soubory budou nahrány příště.';
+
+  @override
+  String nConversationsCreated(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count konverzací vytvořeno',
+      one: '1 konverzace vytvořena',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get tapToView => 'Klepněte pro zobrazení';
+
+  @override
+  String get syncFailed => 'Synchronizace selhala';
+
+  @override
+  String get keepSyncing => 'Pokračovat v synchronizaci';
+
+  @override
+  String get cancelSyncQuestion => 'Zrušit synchronizaci?';
+
+  @override
+  String get omisStorageDesc =>
+      'Když váš Omi není připojen k telefonu, ukládá zvuk lokálně ve své vestavěné paměti. Nikdy neztratíte nahrávku.';
+
+  @override
+  String get phoneStorageDesc =>
+      'Když se Omi znovu připojí, nahrávky se automaticky přenesou do telefonu jako dočasné úložiště před nahráním.';
+
+  @override
+  String get cloudStorageDesc =>
+      'Po nahrání jsou vaše nahrávky zpracovány a přepsány. Konverzace budou dostupné během minuty.';
+
+  @override
+  String get tipKeepPhoneNearby => 'Mějte telefon poblíž pro rychlejší synchronizaci';
+
+  @override
+  String get tipStableInternet => 'Stabilní internet urychluje nahrávání do cloudu';
+
+  @override
+  String get tipAutoSync => 'Nahrávky se synchronizují automaticky';
+
+  @override
+  String get storageSection => 'ÚLOŽIŠTĚ';
 }

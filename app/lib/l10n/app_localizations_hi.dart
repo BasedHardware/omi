@@ -8621,4 +8621,72 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get improveConnectionAction => 'समझ गया';
+
+  @override
+  String get omisStorage => 'Omi का स्टोरेज';
+
+  @override
+  String get phoneStorage => 'फ़ोन स्टोरेज';
+
+  @override
+  String get cloudStorage => 'क्लाउड स्टोरेज';
+
+  @override
+  String get howSyncingWorks => 'सिंक कैसे काम करता है';
+
+  @override
+  String get noSyncedRecordings => 'अभी तक कोई सिंक की गई रिकॉर्डिंग नहीं';
+
+  @override
+  String get recordingsSyncAutomatically => 'रिकॉर्डिंग अपने आप सिंक होती हैं — कोई कार्रवाई ज़रूरी नहीं।';
+
+  @override
+  String get filesDownloadedUploadedNextTime => 'पहले से डाउनलोड की गई फ़ाइलें अगली बार अपलोड होंगी।';
+
+  @override
+  String nConversationsCreated(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count बातचीत बनाई गईं',
+      one: '1 बातचीत बनाई गई',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get tapToView => 'देखने के लिए टैप करें';
+
+  @override
+  String get syncFailed => 'सिंक विफल';
+
+  @override
+  String get keepSyncing => 'सिंक जारी रखें';
+
+  @override
+  String get cancelSyncQuestion => 'सिंक रद्द करें?';
+
+  @override
+  String get omisStorageDesc =>
+      'जब आपका Omi फ़ोन से कनेक्ट नहीं होता, तो यह ऑडियो को अपनी बिल्ट-इन मेमोरी में स्टोर करता है। आप कभी कोई रिकॉर्डिंग नहीं खोएंगे।';
+
+  @override
+  String get phoneStorageDesc =>
+      'जब Omi फिर से कनेक्ट होता है, रिकॉर्डिंग अपलोड से पहले आपके फ़ोन में ऑटो-ट्रांसफर होती हैं।';
+
+  @override
+  String get cloudStorageDesc =>
+      'अपलोड होने के बाद, आपकी रिकॉर्डिंग प्रोसेस और ट्रांसक्राइब होती हैं। बातचीत एक मिनट में उपलब्ध होंगी।';
+
+  @override
+  String get tipKeepPhoneNearby => 'तेज़ सिंक के लिए अपना फ़ोन पास रखें';
+
+  @override
+  String get tipStableInternet => 'स्थिर इंटरनेट क्लाउड अपलोड तेज़ करता है';
+
+  @override
+  String get tipAutoSync => 'रिकॉर्डिंग अपने आप सिंक होती हैं';
+
+  @override
+  String get storageSection => 'स्टोरेज';
 }

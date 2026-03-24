@@ -8649,4 +8649,72 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get improveConnectionAction => 'Supratau';
+
+  @override
+  String get omisStorage => 'Omi saugykla';
+
+  @override
+  String get phoneStorage => 'Telefono saugykla';
+
+  @override
+  String get cloudStorage => 'Debesų saugykla';
+
+  @override
+  String get howSyncingWorks => 'Kaip veikia sinchronizavimas';
+
+  @override
+  String get noSyncedRecordings => 'Dar nėra sinchronizuotų įrašų';
+
+  @override
+  String get recordingsSyncAutomatically => 'Įrašai sinchronizuojami automatiškai — jokių veiksmų nereikia.';
+
+  @override
+  String get filesDownloadedUploadedNextTime => 'Jau atsisiųsti failai bus įkelti kitą kartą.';
+
+  @override
+  String nConversationsCreated(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count pokalbių sukurta',
+      one: '1 pokalbis sukurtas',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get tapToView => 'Bakstelėkite, kad pamatytumėte';
+
+  @override
+  String get syncFailed => 'Sinchronizavimas nepavyko';
+
+  @override
+  String get keepSyncing => 'Tęsti sinchronizavimą';
+
+  @override
+  String get cancelSyncQuestion => 'Atšaukti sinchronizavimą?';
+
+  @override
+  String get omisStorageDesc =>
+      'Kai jūsų Omi nėra prijungtas prie telefono, jis saugo garsą vietoje savo integruotoje atmintyje. Niekada neprarasite įrašo.';
+
+  @override
+  String get phoneStorageDesc =>
+      'Kai Omi vėl prisijungia, įrašai automatiškai perkeliami į jūsų telefoną prieš įkėlimą.';
+
+  @override
+  String get cloudStorageDesc =>
+      'Įkėlus, jūsų įrašai apdorojami ir transkribuojami. Pokalbiai bus prieinami per minutę.';
+
+  @override
+  String get tipKeepPhoneNearby => 'Laikykite telefoną šalia greitesniam sinchronizavimui';
+
+  @override
+  String get tipStableInternet => 'Stabilus internetas pagreitina įkėlimą į debesį';
+
+  @override
+  String get tipAutoSync => 'Įrašai sinchronizuojami automatiškai';
+
+  @override
+  String get storageSection => 'SAUGYKLA';
 }

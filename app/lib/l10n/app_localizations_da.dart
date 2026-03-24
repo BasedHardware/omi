@@ -8625,4 +8625,72 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get improveConnectionAction => 'Forstået';
+
+  @override
+  String get omisStorage => 'Omis lager';
+
+  @override
+  String get phoneStorage => 'Telefonlager';
+
+  @override
+  String get cloudStorage => 'Skylager';
+
+  @override
+  String get howSyncingWorks => 'Sådan fungerer synkronisering';
+
+  @override
+  String get noSyncedRecordings => 'Ingen synkroniserede optagelser endnu';
+
+  @override
+  String get recordingsSyncAutomatically => 'Optagelser synkroniseres automatisk — ingen handling nødvendig.';
+
+  @override
+  String get filesDownloadedUploadedNextTime => 'Allerede downloadede filer vil blive uploadet næste gang.';
+
+  @override
+  String nConversationsCreated(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count samtaler oprettet',
+      one: '1 samtale oprettet',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get tapToView => 'Tryk for at se';
+
+  @override
+  String get syncFailed => 'Synkronisering mislykkedes';
+
+  @override
+  String get keepSyncing => 'Fortsæt synkronisering';
+
+  @override
+  String get cancelSyncQuestion => 'Annuller synkronisering?';
+
+  @override
+  String get omisStorageDesc =>
+      'Når din Omi ikke er forbundet til din telefon, gemmer den lyd lokalt i sin indbyggede hukommelse. Du mister aldrig en optagelse.';
+
+  @override
+  String get phoneStorageDesc =>
+      'Når Omi genopretter forbindelsen, overføres optagelser automatisk til din telefon som midlertidig opbevaring før upload.';
+
+  @override
+  String get cloudStorageDesc =>
+      'Når de er uploadet, behandles og transskriberes dine optagelser. Samtaler vil være tilgængelige inden for et minut.';
+
+  @override
+  String get tipKeepPhoneNearby => 'Hold din telefon i nærheden for hurtigere synkronisering';
+
+  @override
+  String get tipStableInternet => 'Stabilt internet fremskynder cloud-uploads';
+
+  @override
+  String get tipAutoSync => 'Optagelser synkroniseres automatisk';
+
+  @override
+  String get storageSection => 'LAGER';
 }

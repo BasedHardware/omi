@@ -8705,4 +8705,72 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get improveConnectionAction => 'Κατάλαβα';
+
+  @override
+  String get omisStorage => 'Αποθήκευση Omi';
+
+  @override
+  String get phoneStorage => 'Αποθήκευση τηλεφώνου';
+
+  @override
+  String get cloudStorage => 'Αποθήκευση στο cloud';
+
+  @override
+  String get howSyncingWorks => 'Πώς λειτουργεί ο συγχρονισμός';
+
+  @override
+  String get noSyncedRecordings => 'Δεν υπάρχουν συγχρονισμένες εγγραφές ακόμα';
+
+  @override
+  String get recordingsSyncAutomatically => 'Οι εγγραφές συγχρονίζονται αυτόματα — δεν απαιτείται ενέργεια.';
+
+  @override
+  String get filesDownloadedUploadedNextTime => 'Τα ήδη ληφθέντα αρχεία θα μεταφορτωθούν την επόμενη φορά.';
+
+  @override
+  String nConversationsCreated(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count συνομιλίες δημιουργήθηκαν',
+      one: '1 συνομιλία δημιουργήθηκε',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get tapToView => 'Πατήστε για προβολή';
+
+  @override
+  String get syncFailed => 'Ο συγχρονισμός απέτυχε';
+
+  @override
+  String get keepSyncing => 'Συνέχεια συγχρονισμού';
+
+  @override
+  String get cancelSyncQuestion => 'Ακύρωση συγχρονισμού;';
+
+  @override
+  String get omisStorageDesc =>
+      'Όταν το Omi σας δεν είναι συνδεδεμένο στο τηλέφωνό σας, αποθηκεύει ήχο τοπικά στην ενσωματωμένη μνήμη του. Δεν χάνετε ποτέ μια εγγραφή.';
+
+  @override
+  String get phoneStorageDesc =>
+      'Όταν το Omi επανασυνδεθεί, οι εγγραφές μεταφέρονται αυτόματα στο τηλέφωνό σας πριν τη μεταφόρτωση.';
+
+  @override
+  String get cloudStorageDesc =>
+      'Μετά τη μεταφόρτωση, οι εγγραφές σας επεξεργάζονται και μεταγράφονται. Οι συνομιλίες θα είναι διαθέσιμες σε ένα λεπτό.';
+
+  @override
+  String get tipKeepPhoneNearby => 'Κρατήστε το τηλέφωνό σας κοντά για ταχύτερο συγχρονισμό';
+
+  @override
+  String get tipStableInternet => 'Σταθερό διαδίκτυο επιταχύνει τις μεταφορτώσεις στο cloud';
+
+  @override
+  String get tipAutoSync => 'Οι εγγραφές συγχρονίζονται αυτόματα';
+
+  @override
+  String get storageSection => 'ΑΠΟΘΗΚΕΥΣΗ';
 }

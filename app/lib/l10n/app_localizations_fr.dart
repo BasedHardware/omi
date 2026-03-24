@@ -8720,4 +8720,73 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get improveConnectionAction => 'Compris';
+
+  @override
+  String get omisStorage => 'Stockage d\'Omi';
+
+  @override
+  String get phoneStorage => 'Stockage du téléphone';
+
+  @override
+  String get cloudStorage => 'Stockage cloud';
+
+  @override
+  String get howSyncingWorks => 'Comment fonctionne la synchronisation';
+
+  @override
+  String get noSyncedRecordings => 'Aucun enregistrement synchronisé pour le moment';
+
+  @override
+  String get recordingsSyncAutomatically =>
+      'Les enregistrements se synchronisent automatiquement — aucune action requise.';
+
+  @override
+  String get filesDownloadedUploadedNextTime => 'Les fichiers déjà téléchargés seront envoyés la prochaine fois.';
+
+  @override
+  String nConversationsCreated(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count conversations créées',
+      one: '1 conversation créée',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get tapToView => 'Appuyez pour voir';
+
+  @override
+  String get syncFailed => 'Échec de la synchronisation';
+
+  @override
+  String get keepSyncing => 'Continuer la synchronisation';
+
+  @override
+  String get cancelSyncQuestion => 'Annuler la synchronisation ?';
+
+  @override
+  String get omisStorageDesc =>
+      'Lorsque votre Omi n\'est pas connecté à votre téléphone, il stocke l\'audio localement dans sa mémoire intégrée. Vous ne perdez jamais un enregistrement.';
+
+  @override
+  String get phoneStorageDesc =>
+      'Lorsqu\'Omi se reconnecte, les enregistrements sont automatiquement transférés sur votre téléphone avant l\'envoi.';
+
+  @override
+  String get cloudStorageDesc =>
+      'Une fois envoyés, vos enregistrements sont traités et transcrits. Les conversations seront disponibles en une minute.';
+
+  @override
+  String get tipKeepPhoneNearby => 'Gardez votre téléphone à proximité pour une synchronisation plus rapide';
+
+  @override
+  String get tipStableInternet => 'Un internet stable accélère les envois vers le cloud';
+
+  @override
+  String get tipAutoSync => 'Les enregistrements se synchronisent automatiquement';
+
+  @override
+  String get storageSection => 'STOCKAGE';
 }

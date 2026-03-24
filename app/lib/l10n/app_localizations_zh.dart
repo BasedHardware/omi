@@ -8485,4 +8485,69 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get improveConnectionAction => '知道了';
+
+  @override
+  String get omisStorage => 'Omi 存储';
+
+  @override
+  String get phoneStorage => '手机存储';
+
+  @override
+  String get cloudStorage => '云存储';
+
+  @override
+  String get howSyncingWorks => '同步如何运作';
+
+  @override
+  String get noSyncedRecordings => '暂无已同步的录音';
+
+  @override
+  String get recordingsSyncAutomatically => '录音自动同步 — 无需任何操作。';
+
+  @override
+  String get filesDownloadedUploadedNextTime => '已下载的文件将在下次上传。';
+
+  @override
+  String nConversationsCreated(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '已创建 $count 个对话',
+      one: '已创建 1 个对话',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get tapToView => '点击查看';
+
+  @override
+  String get syncFailed => '同步失败';
+
+  @override
+  String get keepSyncing => '继续同步';
+
+  @override
+  String get cancelSyncQuestion => '取消同步？';
+
+  @override
+  String get omisStorageDesc => '当 Omi 未连接到手机时，它会将音频存储在内置存储器中。您永远不会丢失任何录音。';
+
+  @override
+  String get phoneStorageDesc => '当 Omi 重新连接时，录音会自动传输到手机，然后再上传。';
+
+  @override
+  String get cloudStorageDesc => '上传后，您的录音将被处理和转录。对话将在一分钟内可用。';
+
+  @override
+  String get tipKeepPhoneNearby => '将手机放在附近以加快同步速度';
+
+  @override
+  String get tipStableInternet => '稳定的网络可加快云上传速度';
+
+  @override
+  String get tipAutoSync => '录音自动同步';
+
+  @override
+  String get storageSection => '存储';
 }

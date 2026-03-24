@@ -8670,4 +8670,72 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get improveConnectionAction => 'Понятно';
+
+  @override
+  String get omisStorage => 'Хранилище Omi';
+
+  @override
+  String get phoneStorage => 'Хранилище телефона';
+
+  @override
+  String get cloudStorage => 'Облачное хранилище';
+
+  @override
+  String get howSyncingWorks => 'Как работает синхронизация';
+
+  @override
+  String get noSyncedRecordings => 'Синхронизированных записей пока нет';
+
+  @override
+  String get recordingsSyncAutomatically => 'Записи синхронизируются автоматически — никаких действий не требуется.';
+
+  @override
+  String get filesDownloadedUploadedNextTime => 'Уже загруженные файлы будут отправлены в следующий раз.';
+
+  @override
+  String nConversationsCreated(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count разговоров создано',
+      one: '1 разговор создан',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get tapToView => 'Нажмите для просмотра';
+
+  @override
+  String get syncFailed => 'Ошибка синхронизации';
+
+  @override
+  String get keepSyncing => 'Продолжить синхронизацию';
+
+  @override
+  String get cancelSyncQuestion => 'Отменить синхронизацию?';
+
+  @override
+  String get omisStorageDesc =>
+      'Когда ваш Omi не подключён к телефону, он сохраняет аудио локально во встроенной памяти. Вы никогда не потеряете запись.';
+
+  @override
+  String get phoneStorageDesc =>
+      'При повторном подключении Omi записи автоматически переносятся на телефон перед загрузкой.';
+
+  @override
+  String get cloudStorageDesc =>
+      'После загрузки ваши записи обрабатываются и расшифровываются. Разговоры будут доступны в течение минуты.';
+
+  @override
+  String get tipKeepPhoneNearby => 'Держите телефон рядом для быстрой синхронизации';
+
+  @override
+  String get tipStableInternet => 'Стабильный интернет ускоряет загрузку в облако';
+
+  @override
+  String get tipAutoSync => 'Записи синхронизируются автоматически';
+
+  @override
+  String get storageSection => 'ХРАНИЛИЩЕ';
 }

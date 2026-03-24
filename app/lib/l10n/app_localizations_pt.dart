@@ -8644,4 +8644,72 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get improveConnectionAction => 'Entendi';
+
+  @override
+  String get omisStorage => 'Armazenamento do Omi';
+
+  @override
+  String get phoneStorage => 'Armazenamento do telefone';
+
+  @override
+  String get cloudStorage => 'Armazenamento na nuvem';
+
+  @override
+  String get howSyncingWorks => 'Como a sincronização funciona';
+
+  @override
+  String get noSyncedRecordings => 'Nenhuma gravação sincronizada ainda';
+
+  @override
+  String get recordingsSyncAutomatically => 'As gravações são sincronizadas automaticamente — nenhuma ação necessária.';
+
+  @override
+  String get filesDownloadedUploadedNextTime => 'Os arquivos já baixados serão enviados na próxima vez.';
+
+  @override
+  String nConversationsCreated(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count conversas criadas',
+      one: '1 conversa criada',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get tapToView => 'Toque para ver';
+
+  @override
+  String get syncFailed => 'Falha na sincronização';
+
+  @override
+  String get keepSyncing => 'Continuar sincronizando';
+
+  @override
+  String get cancelSyncQuestion => 'Cancelar sincronização?';
+
+  @override
+  String get omisStorageDesc =>
+      'Quando seu Omi não está conectado ao telefone, ele armazena o áudio localmente na memória integrada. Você nunca perderá uma gravação.';
+
+  @override
+  String get phoneStorageDesc =>
+      'Quando o Omi reconecta, as gravações são transferidas automaticamente para o telefone antes do envio.';
+
+  @override
+  String get cloudStorageDesc =>
+      'Após o envio, suas gravações são processadas e transcritas. As conversas estarão disponíveis em um minuto.';
+
+  @override
+  String get tipKeepPhoneNearby => 'Mantenha o telefone por perto para sincronização mais rápida';
+
+  @override
+  String get tipStableInternet => 'Internet estável acelera uploads para a nuvem';
+
+  @override
+  String get tipAutoSync => 'As gravações são sincronizadas automaticamente';
+
+  @override
+  String get storageSection => 'ARMAZENAMENTO';
 }
