@@ -81,9 +81,17 @@ struct OnboardingView: View {
             graphViewModel: graphViewModel,
             onComplete: {
               AnalyticsManager.shared.onboardingStepCompleted(step: 0, stepName: "Chat")
+              // Start screen capture early so Rewind tab has screenshots by the time
+              // the user finishes onboarding (permissions are granted during chat step)
+              if !ProactiveAssistantsPlugin.shared.isMonitoring {
+                ProactiveAssistantsPlugin.shared.startMonitoring { _, _ in }
+              }
               currentStep = 1
             },
             onSkip: {
+              if !ProactiveAssistantsPlugin.shared.isMonitoring {
+                ProactiveAssistantsPlugin.shared.startMonitoring { _, _ in }
+              }
               currentStep = 1
             }
           )
