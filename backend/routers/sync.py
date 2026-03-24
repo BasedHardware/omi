@@ -514,6 +514,46 @@ def get_wav_duration(wav_path: str) -> float:
         return 0.0
 
 
+def decode_pcm_file_to_wav(pcm_file_path, wav_file_path, sample_rate=16000, channels=1):
+    """Decode a length-prefixed PCM16 .bin file to WAV.
+
+    The file format is: [4-byte uint32 frame_length][frame_bytes] repeated.
+    Each frame contains raw PCM16 samples (no encoding).
+    """
+    try:
+        pcm_data = bytearray()
+        with open(pcm_file_path, 'rb') as f:
+            while True:
+                length_bytes = f.read(4)
+                if not length_bytes or len(length_bytes) < 4:
+                    break
+                frame_length = struct.unpack('<I', length_bytes)[0]
+                if frame_length == 0 or frame_length > 65536:
+                    logger.warning(f"PCM decode: suspicious frame length {frame_length}, skipping rest")
+                    break
+                frame_data = f.read(frame_length)
+                if len(frame_data) < frame_length:
+                    break
+                pcm_data.extend(frame_data)
+
+        if not pcm_data:
+            logger.info(f"PCM decode: no data in {pcm_file_path}")
+            return False
+
+        wav_data = pcm_to_wav(bytes(pcm_data), sample_rate=sample_rate, channels=channels)
+        with open(wav_file_path, 'wb') as f:
+            f.write(wav_data)
+        return True
+    except Exception as e:
+        logger.error(f"PCM decode failed for {pcm_file_path}: {e}")
+        return False
+
+
+def _is_pcm_codec(filename: str) -> bool:
+    """Check if the filename indicates a PCM codec (pcm8 or pcm16)."""
+    return '_pcm16_' in filename or '_pcm8_' in filename
+
+
 def decode_files_to_wav(files_path: List[str]):
     wav_files = []
     for path in files_path:
@@ -528,7 +568,13 @@ def decode_files_to_wav(files_path: List[str]):
             except ValueError:
                 logger.error(f"Invalid frame size format in filename: {filename}, using default {frame_size}")
 
-        success = decode_opus_file_to_wav(path, wav_path, frame_size=frame_size)
+        # Detect codec from filename: PCM files need different decoding than Opus
+        if _is_pcm_codec(filename):
+            sample_rate = 16000 if '_pcm16_' in filename else 8000
+            success = decode_pcm_file_to_wav(path, wav_path, sample_rate=sample_rate)
+        else:
+            success = decode_opus_file_to_wav(path, wav_path, frame_size=frame_size)
+
         if not success:
             # Clean up .bin file even on decode failure
             if os.path.exists(path):
