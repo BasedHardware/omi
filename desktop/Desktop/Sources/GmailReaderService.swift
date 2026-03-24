@@ -49,14 +49,14 @@ private struct BrowserConfig {
     let home = FileManager.default.homeDirectoryForCurrentUser.path
     return [
       BrowserConfig(
-        name: "Arc",
-        keychainService: "Arc Safe Storage",
-        cookiePath: "\(home)/Library/Application Support/Arc/User Data/Default/Cookies"
-      ),
-      BrowserConfig(
         name: "Chrome",
         keychainService: "Chrome Safe Storage",
         cookiePath: "\(home)/Library/Application Support/Google/Chrome/Default/Cookies"
+      ),
+      BrowserConfig(
+        name: "Arc",
+        keychainService: "Arc Safe Storage",
+        cookiePath: "\(home)/Library/Application Support/Arc/User Data/Default/Cookies"
       ),
     ]
   }
@@ -292,6 +292,7 @@ actor GmailReaderService {
         "db_path": tmpPath,
         "password": password,
       ])
+      break  // Use first successful browser only — avoids extra keychain prompts
     }
 
     guard !browserConfigs.isEmpty else {

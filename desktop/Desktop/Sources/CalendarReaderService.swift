@@ -51,14 +51,14 @@ private struct CalBrowserConfig {
         let home = FileManager.default.homeDirectoryForCurrentUser.path
         return [
             CalBrowserConfig(
-                name: "Arc",
-                keychainService: "Arc Safe Storage",
-                cookiePath: "\(home)/Library/Application Support/Arc/User Data/Default/Cookies"
-            ),
-            CalBrowserConfig(
                 name: "Chrome",
                 keychainService: "Chrome Safe Storage",
                 cookiePath: "\(home)/Library/Application Support/Google/Chrome/Default/Cookies"
+            ),
+            CalBrowserConfig(
+                name: "Arc",
+                keychainService: "Arc Safe Storage",
+                cookiePath: "\(home)/Library/Application Support/Arc/User Data/Default/Cookies"
             ),
         ]
     }
@@ -241,6 +241,7 @@ actor CalendarReaderService {
                 "db_path": browser.cookiePath,
                 "password": password,
             ])
+            break  // Use first successful browser only — avoids extra keychain prompts
         }
 
         guard !browserConfigs.isEmpty else {

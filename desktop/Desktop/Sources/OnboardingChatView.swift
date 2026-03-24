@@ -1346,6 +1346,7 @@ struct OnboardingChatView: View {
       )
       explorationText = saved.text
       explorationCompleted = true
+      ChatToolExecutor.explorationProfileText = saved.text
       // Re-inject the discovery card (UI state was lost on restart)
       if !saved.text.isEmpty {
         await injectExplorationDiscoveryCard()
@@ -1427,6 +1428,7 @@ struct OnboardingChatView: View {
         let finalText = await MainActor.run {
           explorationCompleted = true
           explorationRunning = false
+          ChatToolExecutor.explorationProfileText = explorationText
           return explorationText
         }
 

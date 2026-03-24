@@ -27,6 +27,8 @@ class ChatToolExecutor {
     /// Email/calendar insights from background reading (set by OnboardingChatView)
     static var emailInsightsText: String?
     static var calendarInsightsText: String?
+    /// Exploration profile from background AI session (set by OnboardingChatView)
+    static var explorationProfileText: String?
 
     private static var fileScanFileCount = 0
     private static var followupContinuation: CheckedContinuation<String, Never>?
@@ -841,12 +843,40 @@ class ChatToolExecutor {
         if let calendar = calendarInsightsText, !calendar.isEmpty {
             sections.append("## Calendar Insights\n\(calendar)")
         }
+        if let exploration = explorationProfileText, !exploration.isEmpty {
+            // Extract only the profile summary (skip SQL/technical output)
+            let profile = extractProfileSummary(from: exploration)
+            if !profile.isEmpty {
+                sections.append("## User Profile (from file analysis)\n\(profile)")
+            }
+        }
 
         if sections.isEmpty {
-            return "No email insights available yet. The background reading may still be in progress, or no browser with a Gmail session was found."
+            return "No insights available yet. Background analysis may still be in progress."
         }
 
         return sections.joined(separator: "\n\n")
+    }
+
+    /// Extract human-readable profile summary from exploration output, skipping SQL/technical content
+    private static func extractProfileSummary(from text: String) -> String {
+        let lines = text.components(separatedBy: "\n")
+        var profileLines: [String] = []
+        for line in lines {
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            // Skip SQL, technical, and empty lines
+            if trimmed.isEmpty { continue }
+            if trimmed.uppercased().hasPrefix("SELECT ") || trimmed.uppercased().hasPrefix("INSERT ") { continue }
+            if trimmed.contains("FROM indexed_files") || trimmed.contains("FROM local_kg") { continue }
+            if trimmed.contains("FROM screenshots") || trimmed.contains("FROM observations") { continue }
+            if trimmed.hasPrefix("I'll start") || trimmed.hasPrefix("Let me run") { continue }
+            if trimmed.hasPrefix("Now let me") || trimmed.hasPrefix("Good, ") { continue }
+            // Keep substantive profile text (longer paragraphs about the user)
+            if trimmed.count > 80 && !trimmed.contains("execute_sql") && !trimmed.contains("mcp__") {
+                profileLines.append(trimmed)
+            }
+        }
+        return String(profileLines.joined(separator: "\n").prefix(2000))
     }
 
     /// Set user preferences (language, name)
