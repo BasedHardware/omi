@@ -52,6 +52,9 @@ class ChatToolExecutor {
         case "delete_task":
             return await executeDeleteTask(toolCall.arguments)
 
+        case "create_feedback_post":
+            return await executeCreateFeedbackPost(toolCall.arguments)
+
         // Onboarding tools
         case "request_permission":
             let result = await executeRequestPermission(toolCall.arguments)
@@ -489,6 +492,83 @@ class ChatToolExecutor {
             return "OK: task '\(task.description)' deleted"
         } catch {
             logError("Tool delete_task failed", error: error)
+            return "Error: \(error.localizedDescription)"
+        }
+    }
+
+    // MARK: - Feedback Post
+
+    /// Create a feedback post on feedback.omi.me (Featurebase)
+    private static func executeCreateFeedbackPost(_ args: [String: Any]) async -> String {
+        guard let title = args["title"] as? String, !title.isEmpty else {
+            return "Error: 'title' is required"
+        }
+        guard let content = args["content"] as? String, !content.isEmpty else {
+            return "Error: 'content' is required"
+        }
+
+        let category = args["category"] as? String ?? "feature_request"
+
+        // Map category string to Featurebase category type
+        let categoryMap: [String: String] = [
+            "bug": "bug",
+            "feature_request": "feature_request",
+            "app_request": "app_request",
+            "question": "question"
+        ]
+        let fbCategory = categoryMap[category] ?? "feature_request"
+
+        // Get API key from environment
+        let apiKey: String
+        if let cString = getenv("FEEDBACK_API_KEY"), let key = String(validatingUTF8: cString), !key.isEmpty {
+            apiKey = key
+        } else {
+            return "Error: FEEDBACK_API_KEY environment variable not set. Please configure your Featurebase API key."
+        }
+
+        let url = URL(string: "https://feedback.omi.me/api/v1/submissions")!
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+
+        let body: [String: Any] = [
+            "type": "post",
+            "data": [
+                "title": title,
+                "content": content,
+                "category": fbCategory
+            ]
+        ]
+
+        do {
+            request.httpBody = try JSONSerialization.data(withJSONObject: body)
+
+            let (data, response) = try await URLSession.shared.data(for: request)
+
+            guard let httpResponse = response as? HTTPURLResponse else {
+                return "Error: Invalid response from feedback server"
+            }
+
+            if httpResponse.statusCode == 200 || httpResponse.statusCode == 201 {
+                if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                   let postId = json["id"] as? String {
+                    let postUrl = "https://feedback.omi.me/p/\(postId)"
+                    log("Tool create_feedback_post: created post \(postId)")
+                    return "OK: Feedback post created successfully!\n\nView your post at: \(postUrl)"
+                }
+                return "OK: Feedback post created successfully!"
+            } else if httpResponse.statusCode == 401 {
+                return "Error: Invalid or expired FEEDBACK_API_KEY. Please check your API key configuration."
+            } else if httpResponse.statusCode == 429 {
+                return "Error: Rate limited. Please try again later."
+            } else {
+                let errorBody = String(data: data, encoding: .utf8) ?? "Unknown error"
+                logError("Tool create_feedback_post failed with status \(httpResponse.statusCode)", error: nil)
+                return "Error: Failed to create feedback post (HTTP \(httpResponse.statusCode)): \(errorBody)"
+            }
+        } catch {
+            logError("Tool create_feedback_post failed", error: error)
             return "Error: \(error.localizedDescription)"
         }
     }

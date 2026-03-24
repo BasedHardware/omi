@@ -765,7 +765,7 @@ class CaptureProvider extends ChangeNotifier
           _voiceNoteBytes.add(snapshot.sublist(3));
         }
 
-        // Local storage syncs
+        // Check WAL support for reliability syncing (Omi/OpenGlass with Opus only)
         var checkWalSupported = (_recordingDevice?.type == DeviceType.omi ||
                 _recordingDevice?.type == DeviceType.openglass) &&
             codec.isOpusSupported() &&
@@ -773,7 +773,12 @@ class CaptureProvider extends ChangeNotifier
         if (checkWalSupported != _isWalSupported) {
           setIsWalSupported(checkWalSupported);
         }
-        if (_isWalSupported) {
+
+        // Always buffer to WAL when socket is disconnected to prevent audio loss.
+        // This ensures offline recording actually saves audio for later sync.
+        final bool shouldBufferToWal = _socket?.state != SocketServiceState.connected ||
+            SharedPreferencesUtil().unlimitedLocalStorageEnabled;
+        if (shouldBufferToWal) {
           _wal.getSyncs().phone.onByteStream(snapshot);
         }
 
@@ -787,7 +792,7 @@ class CaptureProvider extends ChangeNotifier
           // Track bytes sent to websocket
           _wsSocketBytesSent += trimmedValue.length;
 
-          // Mark as synced
+          // Mark as synced (only for WAL-reliability devices, since we already buffered above)
           if (_isWalSupported) {
             _wal.getSyncs().phone.onBytesSync(value);
           }
@@ -1090,9 +1095,17 @@ class CaptureProvider extends ChangeNotifier
     // prepare
     await changeAudioRecordProfile(audioCodec: BleAudioCodec.pcm16, sampleRate: 16000);
 
+    // Initialize WAL for phone recording to enable offline buffering
+    await _wal.getSyncs().phone.onAudioCodecChanged(BleAudioCodec.pcm16);
+    _wal.getSyncs().phone.setDeviceInfo('phone', 'Phone');
+
     // record
     await ServiceManager.instance().mic.start(
       onByteReceived: (bytes) {
+        // Buffer to WAL when socket is disconnected to prevent audio loss during offline recording
+        if (_socket?.state != SocketServiceState.connected) {
+          _wal.getSyncs().phone.onByteStream(bytes);
+        }
         if (_socket?.state == SocketServiceState.connected) {
           _socket?.send(bytes);
         }
@@ -1318,6 +1331,14 @@ class CaptureProvider extends ChangeNotifier
   }
 
   void _flushSystemAudioBuffer() {
+    // Buffer to WAL when socket is disconnected to prevent audio loss
+    if (_socket?.state != SocketServiceState.connected) {
+      if (_systemAudioBuffer.isNotEmpty) {
+        _wal.getSyncs().phone.onByteStream(List<int>.from(_systemAudioBuffer));
+        _systemAudioBuffer.clear();
+      }
+      return;
+    }
     if (_socket?.state == SocketServiceState.connected) {
       while (_systemAudioBuffer.length >= 320) {
         final chunk = _systemAudioBuffer.sublist(0, 320);

@@ -136,6 +136,31 @@ Use after finding the task with execute_sql. Pass the backendId from the action_
       required: ["task_id"],
     },
   },
+  {
+    name: "create_feedback_post",
+    description: `Create a feedback post on the Omi feedback board (feedback.omi.me).
+Use when the user gives feedback, suggestions, or feature requests during chat.
+Posts to the community feedback board for the Omi team to review.
+Returns the URL of the created post.`,
+    inputSchema: {
+      type: "object",
+      properties: {
+        title: {
+          type: "string",
+          description: "Feedback post title - be specific and concise",
+        },
+        content: {
+          type: "string",
+          description: "Detailed feedback content - describe the issue, suggestion, or request",
+        },
+        category: {
+          type: "string",
+          description: "Category: bug (for bugs/errors), feature_request (for new features), app_request (for app-specific requests), question (for questions). Default: feature_request",
+        },
+      },
+      required: ["title", "content"],
+    },
+  },
 ];
 
 /** Handle a JSON-RPC request */
@@ -228,6 +253,20 @@ async function handleJsonRpc(
       if (toolName === "delete_task") {
         const taskId = args.task_id as string;
         const result = await requestSwiftTool("delete_task", { task_id: taskId });
+        return {
+          jsonrpc: "2.0",
+          id,
+          result: { content: [{ type: "text", text: result }] },
+        };
+      }
+
+      if (toolName === "create_feedback_post") {
+        const input: Record<string, unknown> = {
+          title: args.title,
+          content: args.content,
+        };
+        if (args.category) input.category = args.category;
+        const result = await requestSwiftTool("create_feedback_post", input);
         return {
           jsonrpc: "2.0",
           id,

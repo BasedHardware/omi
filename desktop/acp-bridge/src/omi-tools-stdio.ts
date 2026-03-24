@@ -205,6 +205,31 @@ Use after finding the task with execute_sql. Pass the backendId from the action_
     },
   },
   {
+    name: "create_feedback_post",
+    description: `Create a feedback post on the Omi feedback board (feedback.omi.me).
+Use when the user gives feedback, suggestions, or feature requests during chat.
+Posts to the community feedback board for the Omi team to review.
+Returns the URL of the created post.`,
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        title: {
+          type: "string" as const,
+          description: "Feedback post title - be specific and concise",
+        },
+        content: {
+          type: "string" as const,
+          description: "Detailed feedback content - describe the issue, suggestion, or request",
+        },
+        category: {
+          type: "string" as const,
+          description: "Category: bug (for bugs/errors), feature_request (for new features), app_request (for app-specific requests), question (for questions). Default: feature_request",
+        },
+      },
+      required: ["title", "content"],
+    },
+  },
+  {
     name: "load_skill",
     description: `Load the full instructions for a named skill. Call this when you decide to use a skill listed in <available_skills>. Returns the complete SKILL.md content with step-by-step instructions and workflows.`,
     inputSchema: {
@@ -470,6 +495,20 @@ async function handleJsonRpc(
       } else if (toolName === "delete_task") {
         const taskId = args.task_id as string;
         const result = await requestSwiftTool("delete_task", { task_id: taskId });
+        if (!isNotification) {
+          send({
+            jsonrpc: "2.0",
+            id,
+            result: { content: [{ type: "text", text: result }] },
+          });
+        }
+      } else if (toolName === "create_feedback_post") {
+        const input: Record<string, unknown> = {
+          title: args.title,
+          content: args.content,
+        };
+        if (args.category) input.category = args.category;
+        const result = await requestSwiftTool("create_feedback_post", input);
         if (!isNotification) {
           send({
             jsonrpc: "2.0",
