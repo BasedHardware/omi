@@ -100,8 +100,16 @@ self.addEventListener('notificationclick', (event) => {
       for (const client of clientList) {
         if (client.url.startsWith(self.location.origin) && 'focus' in client) {
           // Navigate the existing window to the target URL
-          client.navigate(targetUrl);
-          return client.focus();
+          // client.navigate() returns a Promise that resolves on success, throws on failure
+          // Chain focus() to ensure the tab is brought to foreground
+          return client.navigate(targetUrl)
+            .then(() => client.focus())
+            .catch((err) => {
+              // Navigation failed (e.g., cross-origin restriction or client was closed)
+              // Fall back to opening a new window
+              console.error('[firebase-messaging-sw.js] client.navigate failed:', err);
+              return clients.openWindow(targetUrl);
+            });
         }
       }
       // No existing window found, open a new one

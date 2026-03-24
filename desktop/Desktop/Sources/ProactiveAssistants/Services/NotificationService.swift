@@ -157,6 +157,10 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
                 // If this is a screen capture reset notification, trigger the reset
                 if title == Self.screenCaptureResetTitle {
                     self.handleScreenCaptureResetAction(source: "notification_click")
+                } else {
+                    // Navigate to the appropriate page based on assistantId or default to chat
+                    // This fixes the issue where notification tap doesn't navigate when another screen is open
+                    self.navigateFromNotificationTap(assistantId: assistantId)
                 }
 
             case UNNotificationDismissActionIdentifier:
@@ -195,6 +199,25 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
         log("Screen capture reset triggered from \(source)")
         AnalyticsManager.shared.screenCaptureResetClicked(source: source)
         ScreenCaptureService.resetScreenCapturePermissionAndRestart()
+    }
+
+    /// Navigate to the appropriate page when a notification is tapped.
+    /// Falls back to chat page if no specific navigation is configured.
+    private func navigateFromNotificationTap(assistantId: String) {
+        log("NotificationService: Navigating from notification tap, assistantId: \(assistantId)")
+
+        // Map assistant IDs to navigation targets
+        // In the future, this could read navigate_to from notification userInfo for more precise routing
+        let navigateToChat = Notification.Name("navigateToChat")
+        switch assistantId {
+        case "crisp":
+            // Crisp "Help from Founder" notifications should go to chat
+            NotificationCenter.default.post(name: navigateToChat, object: nil)
+        default:
+            // Default: navigate to chat for most notification types
+            // This ensures notification tap navigates correctly regardless of current screen
+            NotificationCenter.default.post(name: navigateToChat, object: nil)
+        }
     }
 
     func sendNotification(title: String, message: String, assistantId: String = "default", sound: NotificationSound = .default) {

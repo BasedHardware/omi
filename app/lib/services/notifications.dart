@@ -81,11 +81,39 @@ class NotificationUtil {
       autoMessage = DailyReflectionNotification.reflectionMessage;
     }
 
-    globalNavigatorKey.currentState?.pushReplacement(
-      MaterialPageRoute(
-        builder: (context) => HomePageWrapper(navigateToRoute: navigateTo, autoMessage: autoMessage),
-      ),
-    );
+    // Use addPostFrameCallback to ensure the navigator is ready.
+    // This fixes the issue where notification tap doesn't navigate when another screen is open
+    // because the navigation needs to happen after the current frame is rendered.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final navigatorState = globalNavigatorKey.currentState;
+      if (navigatorState != null) {
+        // Use pushAndRemoveUntil to clear the navigation stack and go to HomePageWrapper.
+        // This ensures notification tap navigates correctly regardless of current screen
+        // (e.g., when a modal or other screen is open).
+        navigatorState.pushAndRemoveUntil(
+          MaterialPageRoute(
+            builder: (context) => HomePageWrapper(navigateToRoute: navigateTo, autoMessage: autoMessage),
+          ),
+          (route) => false, // Remove all routes below the new one
+        );
+      } else {
+        Logger.debug("globalNavigatorKey.currentState is null, cannot navigate from notification tap");
+        // Retry once after a short delay in case the navigator was still initializing
+        Future.delayed(const Duration(milliseconds: 500), () {
+          final retryState = globalNavigatorKey.currentState;
+          if (retryState != null) {
+            retryState.pushAndRemoveUntil(
+              MaterialPageRoute(
+                builder: (context) => HomePageWrapper(navigateToRoute: navigateTo, autoMessage: autoMessage),
+              ),
+              (route) => false,
+            );
+          } else {
+            Logger.debug("globalNavigatorKey.currentState still null after retry, giving up");
+          }
+        });
+      }
+    });
   }
 
   static Future<void> triggerFallNotification() async {
