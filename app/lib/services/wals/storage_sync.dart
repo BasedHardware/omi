@@ -8,6 +8,7 @@ import 'package:path_provider/path_provider.dart';
 
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/services/devices/device_connection.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/services/wals/wal.dart';
 import 'package:omi/services/wals/wal_interfaces.dart';
@@ -15,11 +16,15 @@ import 'package:omi/services/wals/wal_interfaces.dart';
 /// Offline storage sync for new multi-file firmware protocol (CMD_LIST_FILES 0x10,
 /// CMD_READ_FILE 0x11, CMD_DELETE_FILE 0x12). Downloads individual files from
 /// device LittleFS storage to phone, then hands them to LocalWalSync for upload.
+///
+/// Closely follows the proven BLE sync pattern from PR #5905's sdcard_wal_sync changes.
 class StorageSyncImpl implements StorageSync {
   List<Wal> _wals = const [];
   BtDevice? _device;
 
   StreamSubscription? _storageStream;
+  String? _activeSyncDeviceId;
+  bool _firmwareStopRequested = false;
 
   IWalSyncListener listener;
   LocalWalSync? _localSync;
@@ -52,12 +57,37 @@ class StorageSyncImpl implements StorageSync {
     if (_isSyncing) {
       _isCancelled = true;
       Logger.debug("StorageSync: Cancel requested");
+
+      final storageSub = _storageStream;
+      if (storageSub != null) {
+        unawaited(storageSub.cancel());
+      }
+      unawaited(_requestFirmwareStopSync());
+    }
+  }
+
+  Future<void> _requestFirmwareStopSync() async {
+    if (_firmwareStopRequested) return;
+    _firmwareStopRequested = true;
+
+    final deviceId = _activeSyncDeviceId ?? _device?.id;
+    if (deviceId == null || deviceId.isEmpty) return;
+
+    try {
+      final connection = await ServiceManager.instance().device.ensureConnection(deviceId);
+      if (connection == null) return;
+      await connection.stopStorageSync();
+      Logger.debug("StorageSync: STOP command sent to firmware");
+    } catch (e) {
+      Logger.debug("StorageSync: Failed to send STOP command: $e");
     }
   }
 
   void _resetSyncState() {
     _isCancelled = false;
     _isSyncing = false;
+    _activeSyncDeviceId = null;
+    _firmwareStopRequested = false;
     _totalBytesDownloaded = 0;
     _downloadStartTime = null;
     _currentSpeedKBps = 0.0;
@@ -77,31 +107,71 @@ class StorageSyncImpl implements StorageSync {
   /// Returns false for old firmware (getStorageFileStats returns null).
   @override
   Future<bool> hasFilesToSync() async {
-    if (_device == null) return false;
+    if (_device == null) {
+      print('StorageSync.hasFilesToSync: _device is null');
+      return false;
+    }
     try {
       var connection = await ServiceManager.instance().device.ensureConnection(_device!.id);
-      if (connection == null) return false;
+      if (connection == null) {
+        print('StorageSync.hasFilesToSync: connection is null');
+        return false;
+      }
       final status = await connection.getStorageFileStats();
-      return status != null && status.fileCount > 0;
+      final result = status != null && status.fileCount > 0;
+      print('StorageSync.hasFilesToSync: status=$status result=$result');
+      return result;
     } catch (e) {
-      Logger.debug('StorageSync: hasFilesToSync error: $e');
+      print('StorageSync.hasFilesToSync: error: $e');
       return false;
     }
   }
 
+  /// Returns cached WAL list from memory. Safe to call during sync — never touches BLE.
+  /// Call refreshWalsFromDevice() first to populate the list via BLE.
   @override
   Future<List<Wal>> getMissingWals() async {
-    if (_device == null) return [];
+    return _wals.where((w) => w.status == WalStatus.miss && w.storage == WalStorage.sdcard).toList();
+  }
+
+  /// Discover files on device via BLE. Must be called BEFORE syncAll() to populate _wals.
+  /// Sends STOP command and subscribes to data characteristic — never call during an active sync.
+  Future<void> refreshWalsFromDevice() async {
+    if (_device == null) return;
+    if (_isSyncing) {
+      print('StorageSync.refreshWalsFromDevice: skipping — sync in progress');
+      return;
+    }
 
     try {
       var connection = await ServiceManager.instance().device.ensureConnection(_device!.id);
-      if (connection == null) return [];
+      if (connection == null) return;
 
       final status = await connection.getStorageFileStats();
-      if (status == null || status.fileCount == 0) return [];
+      print('StorageSync.refreshWalsFromDevice: status=$status');
+      if (status == null || status.fileCount == 0) {
+        _wals = [];
+        return;
+      }
 
-      final files = await connection.listStorageFiles();
-      if (files.isEmpty) return [];
+      // Stop any active auto-sync before listing (per PR #5905 pattern)
+      await connection.stopStorageSync();
+      await Future.delayed(const Duration(milliseconds: 500));
+
+      // Retry up to 3 times (per PR #5905 pattern)
+      List<StorageFileInfo> files = [];
+      for (int attempt = 0; attempt < 3 && files.isEmpty; attempt++) {
+        files = await connection.listStorageFiles();
+        print('StorageSync.refreshWalsFromDevice: listFiles attempt ${attempt + 1} returned ${files.length} files');
+        if (files.isEmpty && attempt < 2) {
+          await Future.delayed(const Duration(milliseconds: 700));
+        }
+      }
+
+      if (files.isEmpty) {
+        _wals = [];
+        return;
+      }
 
       BleAudioCodec codec = await connection.getAudioCodec();
       var pd = await _device!.getDeviceInfo(connection);
@@ -109,10 +179,12 @@ class StorageSyncImpl implements StorageSync {
 
       List<Wal> wals = [];
       for (final file in files) {
+        if (file.sizeBytes <= 0) continue;
+
         int fps = codec.getFramesPerSecond();
         int frameLen = codec.getFramesLengthInBytes();
         int seconds = fps > 0 && frameLen > 0 ? (file.sizeBytes / frameLen) ~/ fps : 0;
-        if (seconds < 1) continue;
+        if (seconds < 10) continue; // Skip very small files (<10s), same as PR #5905
 
         wals.add(
           Wal(
@@ -132,12 +204,13 @@ class StorageSyncImpl implements StorageSync {
         );
       }
 
+      // Deterministic sync order: oldest -> newest (per PR #5905)
+      wals.sort((a, b) => a.timerStart.compareTo(b.timerStart));
+
       _wals = wals;
-      Logger.debug('StorageSync: Found ${wals.length} files to sync');
-      return wals;
+      print('StorageSync.refreshWalsFromDevice: Found ${wals.length} files to sync');
     } catch (e) {
-      Logger.debug('StorageSync: Error getting missing wals: $e');
-      return [];
+      Logger.debug('StorageSync: Error refreshing wals from device: $e');
     }
   }
 
@@ -170,11 +243,25 @@ class StorageSyncImpl implements StorageSync {
     IWalSyncProgressListener? progress,
     IWifiConnectionListener? connectionListener,
   }) async {
-    if (_device == null) return null;
+    if (_device == null) {
+      print('StorageSync.syncAll: _device is null, returning');
+      return null;
+    }
 
-    final wals = await getMissingWals();
+    // Use already-populated _wals from getMissingWals() called earlier by WalSyncs.
+    // Do NOT call getMissingWals() here — it creates a BLE subscription on the same
+    // characteristic used for data transfer, causing subscription conflicts.
+    print('StorageSync.syncAll: _wals has ${_wals.length} entries');
+    for (var w in _wals) {
+      print('  WAL: fileNum=${w.fileNum} status=${w.status} storage=${w.storage} size=${w.storageTotalBytes}');
+    }
+    var wals = _wals.where((w) => w.status == WalStatus.miss && w.storage == WalStorage.sdcard).toList();
+    wals.sort((a, b) => a.timerStart.compareTo(b.timerStart));
+
+    print('StorageSync.syncAll: filtered to ${wals.length} wals to sync');
+
     if (wals.isEmpty) {
-      Logger.debug("StorageSync: No files to sync");
+      print("StorageSync.syncAll: No files to sync (wals empty after filter)");
       return null;
     }
 
@@ -183,18 +270,40 @@ class StorageSyncImpl implements StorageSync {
 
     DebugLogManager.logInfo('StorageSync: Starting sync of ${wals.length} files');
 
+    var resp = SyncLocalFilesResponse(newConversationIds: [], updatedConversationIds: []);
+
     try {
       for (int i = 0; i < wals.length; i++) {
         if (_isCancelled) break;
 
         final wal = wals[i];
-        double fileProgress = i / wals.length;
-        progress?.onWalSyncedProgress(fileProgress, speedKBps: _currentSpeedKBps);
-
         Logger.debug(
-          'StorageSync: Downloading file ${i + 1}/${wals.length} (index=${wal.fileNum}, size=${wal.storageTotalBytes})',
-        );
-        await _syncSingleFile(wal);
+            'StorageSync: Downloading file ${i + 1}/${wals.length} (index=${wal.fileNum}, size=${wal.storageTotalBytes})');
+        await _syncSingleFile(wal, progress: progress, fileIndex: i, totalFiles: wals.length);
+
+        wal.status = WalStatus.synced;
+
+        // Delete the file from device after successful BLE transfer (per PR #5905)
+        if (wal.fileNum >= 0) {
+          try {
+            var connection = await ServiceManager.instance().device.ensureConnection(_device!.id);
+            if (connection != null) {
+              Logger.debug("StorageSync: Deleting file index ${wal.fileNum} after successful BLE sync");
+              bool deleted = await connection.deleteStorageFile(wal.fileNum);
+              Logger.debug("StorageSync: Delete file ${wal.fileNum} result: $deleted");
+
+              // After deletion, firmware shifts indices — decrement remaining WALs (per PR #5905)
+              for (var j = 0; j < wals.length; j++) {
+                if (j == i) continue;
+                if (wals[j].fileNum > wal.fileNum) {
+                  wals[j].fileNum = wals[j].fileNum - 1;
+                }
+              }
+            }
+          } catch (e) {
+            Logger.debug("StorageSync: Failed to delete file ${wal.fileNum}: $e (data is safe on phone)");
+          }
+        }
 
         listener.onWalUpdated();
       }
@@ -206,7 +315,7 @@ class StorageSyncImpl implements StorageSync {
     }
 
     progress?.onWalSyncedProgress(1.0, speedKBps: _currentSpeedKBps);
-    return SyncLocalFilesResponse(newConversationIds: [], updatedConversationIds: []);
+    return resp;
   }
 
   @override
@@ -234,67 +343,142 @@ class StorageSyncImpl implements StorageSync {
 
   /// Download a single file from device storage to phone local disk,
   /// then register it with LocalWalSync for cloud upload.
-  Future<void> _syncSingleFile(Wal wal) async {
+  ///
+  /// Follows PR #5905's proven BLE transfer pattern:
+  /// - Data: [ts:4 BE][packed_opus:up to 440] per notification
+  /// - Packed opus: [size:1][frame:size]... within each notification
+  /// - Completion: single-byte [100] = end, [4] = empty, [0] = ack
+  /// - Also completes when offset >= storageTotalBytes
+  Future<void> _syncSingleFile(
+    Wal wal, {
+    IWalSyncProgressListener? progress,
+    int fileIndex = 0,
+    int totalFiles = 1,
+  }) async {
+    print(
+        'StorageSync._syncSingleFile: fileNum=${wal.fileNum} size=${wal.storageTotalBytes} offset=${wal.storageOffset}');
     if (_device == null) return;
 
     var connection = await ServiceManager.instance().device.ensureConnection(_device!.id);
     if (connection == null) throw Exception('Device not connected');
 
+    _activeSyncDeviceId = _device!.id;
     _downloadStartTime = DateTime.now();
     _totalBytesDownloaded = 0;
 
-    // Set up BLE listener for incoming data
-    final completer = Completer<void>();
-    List<List<int>> chunks = [];
-    int bytesReceived = 0;
-    Timer? inactivityTimer;
+    final completer = Completer<bool>();
+    List<List<int>> bytesData = [];
+    int offset = wal.storageOffset;
+    bool firstDataReceived = false;
+    bool hasError = false;
+    Timer? timeoutTimer;
+    int packetCount = 0;
 
-    void resetInactivityTimer() {
-      inactivityTimer?.cancel();
-      inactivityTimer = Timer(const Duration(seconds: 10), () {
-        if (!completer.isCompleted) {
-          Logger.debug('StorageSync: Inactivity timeout for file ${wal.fileNum}');
-          completer.complete();
-        }
-      });
-    }
+    // Throttle progress updates to every 200ms (per PR #5905)
+    DateTime lastProgressUpdate = DateTime.now();
+    const Duration progressInterval = Duration(milliseconds: 200);
+
+    await _storageStream?.cancel();
 
     _storageStream = await connection.getBleStorageBytesListener(
       onStorageBytesReceived: (List<int> value) {
-        if (_isCancelled || completer.isCompleted) return;
-
-        // Single-byte responses are control signals
-        if (value.length == 1) {
-          final code = value[0];
-          if (code == 100) {
-            // Transfer complete
-            Logger.debug('StorageSync: File ${wal.fileNum} transfer complete');
-            if (!completer.isCompleted) completer.complete();
-            return;
+        if (_isCancelled) {
+          unawaited(_requestFirmwareStopSync());
+          if (!completer.isCompleted) {
+            completer.completeError(Exception('Sync cancelled by user'));
           }
-          if (code != 0) {
-            Logger.debug('StorageSync: Error code $code for file ${wal.fileNum}');
-            if (!completer.isCompleted) completer.completeError(Exception('Storage error: $code'));
-            return;
+          return;
+        }
+        if (value.isEmpty || hasError || completer.isCompleted) return;
+
+        packetCount++;
+        if (packetCount <= 10 || packetCount % 100 == 0) {
+          final hex = value.take(20).map((b) => b.toRadixString(16).padLeft(2, '0')).join(' ');
+          print(
+              'StorageSync: PKT#$packetCount len=${value.length} hex=[$hex] offset=$offset frames=${bytesData.length}');
+        }
+
+        if (!firstDataReceived) {
+          firstDataReceived = true;
+          timeoutTimer?.cancel();
+          print('StorageSync: First data received for file ${wal.fileNum} (${value.length} bytes)');
+        }
+
+        // Single byte = status/end signal (matching existing sdcard_wal_sync pattern)
+        if (value.length == 1) {
+          print(
+              'StorageSync: Status byte: ${value[0]} for file ${wal.fileNum} offset=$offset frames=${bytesData.length}');
+          if (value[0] == 0) {
+            Logger.debug('StorageSync: Ack received (good to go)');
+          } else if (value[0] == 3) {
+            Logger.debug('StorageSync: Bad file size');
+          } else if (value[0] == 4) {
+            Logger.debug('StorageSync: File is empty');
+            if (!completer.isCompleted) {
+              completer.complete(true);
+            }
+          } else if (value[0] == 100) {
+            Logger.debug('StorageSync: Transfer end signal');
+            if (!completer.isCompleted) {
+              completer.complete(true);
+            }
+          } else {
+            Logger.debug('StorageSync: Error/status byte: ${value[0]}');
+            if (!completer.isCompleted) {
+              completer.complete(true);
+            }
           }
           return;
         }
 
-        // Data packets: [timestamp:4][audio_data:N]
-        // Strip the 4-byte timestamp prefix, keep raw audio data
-        if (value.length > 4) {
-          final audioData = value.sublist(4);
-          chunks.add(audioData);
-          bytesReceived += audioData.length;
-          _updateSpeed(audioData.length);
-          resetInactivityTimer();
+        int packetAudioBytes = 0;
 
-          // Check if we've received all expected bytes
-          if (wal.storageTotalBytes > 0 && bytesReceived >= wal.storageTotalBytes) {
-            Logger.debug(
-              'StorageSync: File ${wal.fileNum} all bytes received ($bytesReceived/${wal.storageTotalBytes})',
-            );
-            if (!completer.isCompleted) completer.complete();
+        // Data packet: [timestamp:4 BE][audio_data:440] per notification.
+        // Firmware writes 440-byte blocks with packed [size:1][frame:size]... and zero padding.
+        // Each BLE notification is one complete block — parse independently.
+        if (value.length > 4) {
+          var audioData = value.sublist(4);
+          var audioLen = audioData.length;
+
+          var packageOffset = 0;
+          while (packageOffset < audioLen - 1) {
+            var packageSize = audioData[packageOffset];
+            if (packageSize == 0) {
+              packageOffset += 1;
+              continue;
+            }
+            if (packageOffset + 1 + packageSize >= audioLen) {
+              break;
+            }
+            var frame = audioData.sublist(packageOffset + 1, packageOffset + 1 + packageSize);
+            bytesData.add(frame);
+            packageOffset += packageSize + 1;
+          }
+          packetAudioBytes = audioLen;
+          offset += audioLen;
+        }
+
+        // Update speed and fire throttled progress
+        if (packetAudioBytes > 0) {
+          _updateSpeed(packetAudioBytes);
+
+          final now = DateTime.now();
+          if (now.difference(lastProgressUpdate) >= progressInterval) {
+            lastProgressUpdate = now;
+            if (wal.storageTotalBytes > 0) {
+              double fileProgress = (offset / wal.storageTotalBytes).clamp(0.0, 1.0);
+              double overallProgress = (fileIndex + fileProgress) / totalFiles;
+              progress?.onWalSyncedProgress(overallProgress.clamp(0.0, 1.0), speedKBps: _currentSpeedKBps);
+            }
+          }
+        }
+
+        // Check if we've received all expected data (per PR #5905)
+        if (offset >= wal.storageTotalBytes) {
+          print(
+              'StorageSync: File transfer complete: offset=$offset >= totalBytes=${wal.storageTotalBytes}, frames=${bytesData.length} pkts=$packetCount');
+          if (!completer.isCompleted) {
+            completer.complete(true);
           }
         }
       },
@@ -304,81 +488,140 @@ class StorageSyncImpl implements StorageSync {
       throw Exception('Failed to set up storage listener');
     }
 
-    resetInactivityTimer();
+    timeoutTimer = Timer(const Duration(seconds: 5), () {
+      if (!firstDataReceived && !completer.isCompleted) {
+        hasError = true;
+        Logger.debug('StorageSync: No data received for file ${wal.fileNum} within 5s');
+        completer.completeError(TimeoutException('No data from device'));
+      }
+    });
 
-    // Send CMD_READ_FILE command: [0x11, file_index, offset_bytes]
-    await connection.writeToStorage(wal.fileNum, 0x11, 0);
+    // Send CMD_READ_FILE: writeToStorage(fileIndex, command=0x11, offset=0)
+    await connection.writeToStorage(wal.fileNum, 0x11, offset);
 
-    // Wait for transfer to complete
+    Logger.debug(
+        'StorageSync: Waiting for file ${wal.fileNum} transfer (expecting ${wal.storageTotalBytes} bytes from offset $offset)...');
+
     try {
-      await completer.future.timeout(const Duration(minutes: 5));
+      await completer.future.timeout(const Duration(minutes: 10));
     } on TimeoutException {
-      Logger.debug('StorageSync: File ${wal.fileNum} transfer timed out');
+      Logger.debug(
+          'StorageSync: File ${wal.fileNum} OVERALL TIMEOUT. offset=$offset/${wal.storageTotalBytes} frames=${bytesData.length}');
+    } catch (e) {
+      Logger.debug('StorageSync: File ${wal.fileNum} ERROR: $e. offset=$offset/${wal.storageTotalBytes}');
+    } finally {
+      if (_isCancelled) {
+        await _requestFirmwareStopSync();
+      }
+      await _storageStream?.cancel();
+      _storageStream = null;
+      timeoutTimer.cancel();
     }
 
-    inactivityTimer?.cancel();
-    await _storageStream?.cancel();
-    _storageStream = null;
-
-    if (chunks.isEmpty) {
-      Logger.debug('StorageSync: No data received for file ${wal.fileNum}');
+    if (bytesData.isEmpty) {
+      Logger.debug('StorageSync: No opus frames parsed for file ${wal.fileNum} ($offset raw bytes)');
       return;
     }
 
-    // Flush to local disk in WAL format: [frame_length_u32][frame_data]...
-    final file = await _flushToDisk(wal, chunks, wal.timerStart);
+    // Log frame size distribution for debugging opus decode issues
+    if (bytesData.isNotEmpty) {
+      var sizes = bytesData.map((f) => f.length).toList();
+      sizes.sort();
+      var minSize = sizes.first;
+      var maxSize = sizes.last;
+      var avgSize = sizes.reduce((a, b) => a + b) / sizes.length;
+      // Check first frame's TOC byte for opus validity
+      var firstToc = bytesData[0].isNotEmpty ? bytesData[0][0] : -1;
+      print('StorageSync: File ${wal.fileNum} downloaded: ${bytesData.length} frames, $offset raw bytes, '
+          'frameSizes min=$minSize avg=${avgSize.toStringAsFixed(1)} max=$maxSize, firstTOC=0x${firstToc.toRadixString(16)}');
+    }
 
-    // Register with LocalWalSync for cloud upload
-    await _registerWithLocalSync(wal, file, chunks.length);
+    // Chunk and flush — matches SDCardWalSync._readStorageBytesToFileLegacy exactly
+    var chunkSize = sdcardChunkSizeSecs * wal.codec.getFramesPerSecond();
+    int totalFrames = bytesData.length;
+    int accurateDuration = totalFrames ~/ wal.codec.getFramesPerSecond();
+    int timerStart =
+        wal.timerStart > 0 ? wal.timerStart : DateTime.now().millisecondsSinceEpoch ~/ 1000 - accurateDuration;
+    int bytesLeft = 0;
 
-    Logger.debug('StorageSync: File ${wal.fileNum} synced ($bytesReceived bytes, ${chunks.length} chunks)');
+    while (bytesData.length - bytesLeft >= chunkSize) {
+      var chunk = bytesData.sublist(bytesLeft, bytesLeft + chunkSize);
+      bytesLeft += chunkSize;
+      var file = await _flushToDisk(wal, chunk, timerStart);
+      await _registerWithLocalSync(wal, file, timerStart, chunk.length);
+      timerStart += chunk.length ~/ wal.codec.getFramesPerSecond();
+    }
+
+    if (bytesLeft < bytesData.length) {
+      var chunk = bytesData.sublist(bytesLeft);
+      var file = await _flushToDisk(wal, chunk, timerStart);
+      await _registerWithLocalSync(wal, file, timerStart, chunk.length);
+    }
+
+    Logger.debug('StorageSync: File ${wal.fileNum} synced ($offset bytes, ${bytesData.length} frames)');
   }
 
-  /// Write audio chunks to disk in WAL format compatible with /v1/sync-local-files.
-  Future<File> _flushToDisk(Wal wal, List<List<int>> chunks, int timerStart) async {
+  /// Write opus frames to disk in WAL format: [frame_length_u32_le][frame_data]...
+  /// This format is compatible with /v1/sync-local-files backend endpoint.
+  /// Uses same ByteData conversion as SDCardWalSync._flushToDisk for consistency.
+  Future<File> _flushToDisk(Wal wal, List<List<int>> frames, int timerStart) async {
     final directory = await getApplicationDocumentsDirectory();
     String filePath = '${directory.path}/${wal.getFileNameByTimeStarts(timerStart)}';
 
     List<int> data = [];
-    for (final chunk in chunks) {
-      // Each frame: [length_u32_le][frame_bytes]
-      data.addAll(Uint32List.fromList([chunk.length]).buffer.asUint8List());
-      data.addAll(chunk);
+    for (int i = 0; i < frames.length; i++) {
+      var frame = frames[i];
+
+      final byteFrame = ByteData(frame.length);
+      for (int j = 0; j < frame.length; j++) {
+        byteFrame.setUint8(j, frame[j]);
+      }
+      data.addAll(Uint32List.fromList([frame.length]).buffer.asUint8List());
+      data.addAll(byteFrame.buffer.asUint8List());
     }
 
     final file = File(filePath);
     await file.writeAsBytes(data);
-    Logger.debug('StorageSync: Wrote ${data.length} bytes to $filePath');
+
+    // Verify: dump first 20 bytes of file to check format [len:4 LE][opus_toc_byte]...
+    if (data.length >= 20) {
+      final hex = data.take(20).map((b) => b.toRadixString(16).padLeft(2, '0')).join(' ');
+      final firstLen = data[0] | (data[1] << 8) | (data[2] << 16) | (data[3] << 24);
+      final tocByte = data.length > 4 ? data[4] : -1;
+      print('StorageSync._flushToDisk: ${frames.length} frames, file=$filePath');
+      print('  first20hex=[$hex] firstFrameLen=$firstLen tocByte=0x${tocByte.toRadixString(16)}');
+    }
+    Logger.debug('StorageSync: Wrote ${data.length} bytes (${frames.length} frames) to $filePath');
     return file;
   }
 
-  /// Register a downloaded file with LocalWalSync so it gets uploaded to backend.
-  Future<void> _registerWithLocalSync(Wal wal, File file, int chunkCount) async {
+  /// Register a downloaded chunk with LocalWalSync so it gets uploaded to backend.
+  Future<void> _registerWithLocalSync(Wal wal, File file, int timerStart, int frameCount) async {
     if (_localSync == null) {
       Logger.debug("StorageSync: WARNING - Cannot register file, LocalWalSync not available");
       return;
     }
 
     int fps = wal.codec.getFramesPerSecond();
-    int chunkSeconds = fps > 0 ? chunkCount ~/ fps : wal.seconds;
+    int seconds = fps > 0 ? frameCount ~/ fps : 0;
 
     Wal localWal = Wal(
       codec: wal.codec,
       channel: wal.channel,
       sampleRate: wal.sampleRate,
-      timerStart: wal.timerStart,
+      timerStart: timerStart,
       filePath: file.path.split('/').last,
       storage: WalStorage.disk,
       status: WalStatus.miss,
       device: wal.device,
       deviceModel: wal.deviceModel,
-      seconds: chunkSeconds,
-      totalFrames: chunkCount,
+      seconds: seconds,
+      totalFrames: frameCount,
       syncedFrameOffset: 0,
       originalStorage: WalStorage.sdcard,
     );
 
     await _localSync!.addExternalWal(localWal);
-    Logger.debug('StorageSync: Registered file (ts=${wal.timerStart}) with LocalWalSync');
+    Logger.debug('StorageSync: Registered chunk (ts=$timerStart, ${seconds}s, $frameCount frames) with LocalWalSync');
   }
 }
