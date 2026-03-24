@@ -111,6 +111,11 @@ class TranscriptionService {
     private let audioBufferSize = 3200  // ~100ms of 16kHz 16-bit audio (16000 * 2 * 0.1)
     private let audioBufferLock = NSLock()
 
+    // Offline audio buffering (when WebSocket is disconnected)
+    private var offlineBufferFileURL: URL?
+    private let offlineBufferLock = NSLock()
+    private var hasOfflineBuffer = false
+
     // MARK: - Initialization
 
     /// Whether this instance uses the backend proxy (no direct Deepgram access)
@@ -200,7 +205,11 @@ class TranscriptionService {
 
     /// Send audio data to DeepGram (buffered for efficiency)
     func sendAudio(_ data: Data) {
-        guard isConnected else { return }
+        guard isConnected else {
+            // Buffer audio locally when disconnected for offline recording
+            bufferOfflineAudio(data)
+            return
+        }
 
         audioBufferLock.lock()
         audioBuffer.append(data)
@@ -213,6 +222,66 @@ class TranscriptionService {
             sendAudioChunk(chunk)
         } else {
             audioBufferLock.unlock()
+        }
+    }
+
+    /// Buffer audio locally when WebSocket is disconnected (offline recording)
+    private func bufferOfflineAudio(_ data: Data) {
+        offlineBufferLock.lock()
+        defer { offlineBufferLock.unlock() }
+
+        // Initialize offline buffer file if needed
+        if offlineBufferFileURL == nil {
+            let tempDir = FileManager.default.temporaryDirectory
+            let fileName = "offline_audio_\(Date().timeIntervalSince1970).bin"
+            offlineBufferFileURL = tempDir.appendingPathComponent(fileName)
+            hasOfflineBuffer = true
+            log("TranscriptionService: Started offline buffer at \(fileName)")
+        }
+
+        guard let url = offlineBufferFileURL else { return }
+
+        // Append audio data to file
+        do {
+            let handle = try FileHandle(forWritingTo: url)
+            handle.seekToEndOfFile()
+            handle.write(data)
+            try handle.close()
+        } catch {
+            logError("TranscriptionService: Failed to write offline buffer", error: error)
+        }
+    }
+
+    /// Flush offline buffer and send buffered audio when reconnected
+    private func flushOfflineBuffer() {
+        offlineBufferLock.lock()
+        guard hasOfflineBuffer, let url = offlineBufferFileURL else {
+            offlineBufferLock.unlock()
+            return
+        }
+        hasOfflineBuffer = false
+        offlineBufferFileURL = nil
+        offlineBufferLock.unlock()
+
+        guard FileManager.default.fileExists(atPath: url.path) else { return }
+
+        log("TranscriptionService: Flushing offline buffer...")
+
+        do {
+            let data = try Data(contentsOf: url)
+            // Send the buffered audio in chunks
+            var offset = 0
+            while offset < data.count {
+                let chunkEnd = min(offset + audioBufferSize, data.count)
+                let chunk = data.subdata(in: offset..<chunkEnd)
+                sendAudioChunk(chunk)
+                offset = chunkEnd
+            }
+            // Remove the offline buffer file after sending
+            try FileManager.default.removeItem(at: url)
+            log("TranscriptionService: Offline buffer flushed and deleted")
+        } catch {
+            logError("TranscriptionService: Failed to flush offline buffer", error: error)
         }
     }
 
@@ -360,6 +429,8 @@ class TranscriptionService {
             log("TranscriptionService: Connected")
             self.startKeepalive()
             self.startWatchdog()
+            // Flush any buffered offline audio before reconnection
+            self.flushOfflineBuffer()
             self.onConnected?()
         }
     }
