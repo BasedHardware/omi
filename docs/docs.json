@@ -9,104 +9,206 @@
   },
   "favicon": "/favicon.ico",
   "navigation": {
-    "groups": [
+    "tabs": [
       {
-        "group": "Get Started",
-        "pages": [
-          "doc/get_started/introduction",
-          "getstartedwithomi",
-          "doc/get_started/chat_tips"
-        ]
-      },
-      {
-        "group": "Core Development",
-        "pages": [
-          "doc/developer/AppSetup",
-          "doc/developer/Cursor",
+        "tab": "Documentation",
+        "icon": "book",
+        "groups": [
           {
-            "group": "Backend",
+            "group": "Get Started",
+            "icon": "rocket",
             "pages": [
-              "doc/developer/backend/Backend_Setup",
-              "doc/developer/backend/backend_deepdive",
-              "doc/developer/backend/chat_system",
-              "doc/developer/backend/StoringConversations",
-              "doc/developer/backend/transcription",
-              "doc/developer/backend/listen_pusher_pipeline"
+              "doc/get_started/introduction",
+              "getstartedwithomi",
+              "doc/get_started/chat_tips"
             ]
           },
           {
-            "group": "Firmware",
+            "group": "Core Development",
+            "icon": "code",
             "pages": [
-              "doc/developer/firmware/Compile_firmware"
+              "doc/developer/AppSetup",
+              "doc/developer/Cursor",
+              {
+                "group": "Backend",
+                "pages": [
+                  "doc/developer/backend/Backend_Setup",
+                  "doc/developer/backend/backend_deepdive",
+                  "doc/developer/backend/chat_system",
+                  "doc/developer/backend/StoringConversations",
+                  "doc/developer/backend/transcription",
+                  "doc/developer/backend/listen_pusher_pipeline"
+                ]
+              },
+              {
+                "group": "Firmware",
+                "pages": [
+                  "doc/developer/firmware/Compile_firmware"
+                ]
+              },
+              {
+                "group": "SDK",
+                "pages": [
+                  "doc/developer/sdk/sdk",
+                  "doc/developer/sdk/python",
+                  "doc/developer/sdk/ReactNative",
+                  "doc/developer/sdk/swift"
+                ]
+              },
+              "doc/developer/Protocol",
+              "doc/developer/Contribution",
+              "doc/integrations",
+              {
+                "group": "Audio & Testing",
+                "pages": [
+                  "doc/developer/savingaudio",
+                  "doc/developer/AudioStreaming",
+                  "doc/developer/DevKit2Testing"
+                ]
+              }
             ]
           },
           {
-            "group": "SDK",
+            "group": "DIY Guide",
+            "icon": "screwdriver-wrench",
             "pages": [
-              "doc/developer/sdk/sdk",
-              "doc/developer/sdk/python",
-              "doc/developer/sdk/ReactNative",
-              "doc/developer/sdk/swift"
+              "doc/assembly/introduction",
+              "doc/assembly/Buying_Guide",
+              "doc/assembly/Build_the_device",
+              "doc/get_started/Flash_device"
             ]
           },
-          "doc/developer/Protocol",
-          "doc/developer/Contribution",
-          "doc/integrations",
           {
-            "group": "Audio & Testing",
+            "group": "Info",
+            "icon": "circle-info",
             "pages": [
-              "doc/developer/savingaudio",
-              "doc/developer/AudioStreaming",
-              "doc/developer/DevKit2Testing"
+              "doc/info/Support",
+              "doc/info/License",
+              "doc/info/Disclaimer",
+              "doc/info/Privacy"
             ]
           }
         ]
       },
       {
-        "group": "Developer API",
-        "pages": [
-          "doc/developer/api/overview",
-          "doc/developer/api/memories",
-          "doc/developer/api/action-items",
-          "doc/developer/api/conversations",
-          "doc/developer/api/keys"
+        "tab": "API Reference",
+        "icon": "square-terminal",
+        "openapi": "api-reference/openapi.json",
+        "groups": [
+          {
+            "group": "Overview",
+            "icon": "book-open",
+            "pages": [
+              "api-reference/introduction",
+              "doc/developer/api/overview"
+            ]
+          },
+          {
+            "group": "Memories",
+            "icon": "brain",
+            "pages": [
+              "doc/developer/api/memories",
+              "api-reference/endpoint/memories/list",
+              "api-reference/endpoint/memories/create",
+              "api-reference/endpoint/memories/create-batch",
+              "api-reference/endpoint/memories/update",
+              "api-reference/endpoint/memories/delete"
+            ]
+          },
+          {
+            "group": "Conversations",
+            "icon": "message",
+            "pages": [
+              "doc/developer/api/conversations",
+              "api-reference/endpoint/conversations/list",
+              "api-reference/endpoint/conversations/create",
+              "api-reference/endpoint/conversations/create-from-segments",
+              "api-reference/endpoint/conversations/get",
+              "api-reference/endpoint/conversations/update",
+              "api-reference/endpoint/conversations/delete"
+            ]
+          },
+          {
+            "group": "Action Items",
+            "icon": "list-check",
+            "pages": [
+              "doc/developer/api/action-items",
+              "api-reference/endpoint/action-items/list",
+              "api-reference/endpoint/action-items/create",
+              "api-reference/endpoint/action-items/create-batch",
+              "api-reference/endpoint/action-items/update",
+              "api-reference/endpoint/action-items/delete"
+            ]
+          },
+          {
+            "group": "Authentication",
+            "icon": "key",
+            "pages": [
+              "doc/developer/api/keys",
+              "api-reference/endpoint/keys/list",
+              "api-reference/endpoint/keys/create",
+              "api-reference/endpoint/keys/revoke"
+            ]
+          }
         ]
       },
       {
-        "group": "MCP Integration",
-        "pages": [
-          "doc/developer/MCP"
-        ]
-      },
-      {
-        "group": "Build Apps",
-        "pages": [
-          "doc/developer/apps/Introduction",
-          "doc/developer/apps/PromptBased",
-          "doc/developer/apps/Integrations",
-          "doc/developer/apps/ChatTools",
+        "tab": "Build Apps",
+        "icon": "puzzle-piece",
+        "groups": [
+          {
+            "group": "Getting Started",
+            "icon": "play",
+            "pages": [
+              "doc/developer/apps/Introduction",
+              "doc/developer/apps/PromptBased",
+              "doc/developer/apps/Integrations",
+              "doc/developer/apps/ChatTools",
+              "doc/developer/apps/AudioStreaming",
+              "doc/developer/apps/Import",
+              "doc/developer/apps/Oauth",
+              "doc/developer/apps/Notifications",
+              "doc/developer/apps/Submitting",
+              "doc/developer/apps/OpenSource"
+            ]
+          },
           {
             "group": "Examples",
+            "icon": "lightbulb",
             "pages": [
               "doc/developer/apps/examples/Github",
               "doc/developer/apps/examples/Slack",
               "doc/developer/apps/examples/OmiMentor"
             ]
-          },
-          "doc/developer/apps/AudioStreaming",
-          "doc/developer/apps/Import",
-          "doc/developer/apps/Oauth",
-          "doc/developer/apps/Notifications",
-          "doc/developer/apps/Submitting",
-                    "doc/developer/apps/OpenSource"
+          }
         ]
       },
       {
-        "group": "Hardware",
-        "pages": [
-          "doc/hardware/OmiConsumer",
+        "tab": "Hardware",
+        "icon": "microchip",
+        "groups": [
           {
-            "group": "Open Source Hardware",
+            "group": "Devices",
+            "icon": "circle-dot",
+            "pages": [
+              "doc/hardware/OmiConsumer",
+              "doc/hardware/DevKit2",
+              "doc/hardware/DevKit1",
+              "doc/hardware/PaintingOMI"
+            ]
+          },
+          {
+            "group": "OmiGlass",
+            "icon": "glasses",
+            "pages": [
+              "doc/hardware/omiGlass",
+              "doc/hardware/omiglass/flash-firmware",
+              "doc/hardware/omiglass/monitoring"
+            ]
+          },
+          {
+            "group": "Open Source",
+            "icon": "code-branch",
             "pages": [
               "doc/hardware/consumer/index",
               "doc/hardware/consumer/electronics",
@@ -114,36 +216,20 @@
               "doc/hardware/consumer/assembly",
               "doc/hardware/consumer/license"
             ]
-          },
-          "doc/hardware/DevKit2",
-          "doc/hardware/DevKit1",
-          "doc/hardware/PaintingOMI"
+          }
         ]
       },
       {
-        "group": "OmiGlass",
-        "pages": [
-          "doc/hardware/omiGlass",
-          "doc/hardware/omiglass/flash-firmware",
-          "doc/hardware/omiglass/monitoring"
-        ]
-      },
-      {
-        "group": "DIY Guide",
-        "pages": [
-          "doc/assembly/introduction",
-          "doc/assembly/Buying_Guide",
-          "doc/assembly/Build_the_device",
-          "doc/get_started/Flash_device"
-        ]
-      },
-      {
-        "group": "Info",
-        "pages": [
-          "doc/info/Support",
-          "doc/info/License",
-          "doc/info/Disclaimer",
-          "doc/info/Privacy"
+        "tab": "MCP",
+        "icon": "robot",
+        "groups": [
+          {
+            "group": "MCP Integration",
+            "icon": "plug",
+            "pages": [
+              "doc/developer/MCP"
+            ]
+          }
         ]
       }
     ]
