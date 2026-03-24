@@ -111,10 +111,8 @@ class LocalWalSyncImpl implements LocalWalSync {
 
   @override
   Future onAudioCodecChanged(BleAudioCodec codec) async {
-    if (codec.getFramesPerSecond() == _framesPerSecond && codec == _codec) {
-      return;
-    }
-
+    // Always chunk+flush+clear to ensure clean session boundaries.
+    // This is safe when frames are empty (_chunk returns immediately).
     await _chunk();
     await _flush();
     _frames = [];
