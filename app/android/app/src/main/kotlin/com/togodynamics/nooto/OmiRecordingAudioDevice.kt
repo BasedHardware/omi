@@ -1,4 +1,4 @@
-package com.friend.ios
+package com.togodynamics.nooto
 
 import android.media.AudioManager
 import android.media.AudioRecord
