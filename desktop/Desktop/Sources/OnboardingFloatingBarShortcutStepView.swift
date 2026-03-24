@@ -2,6 +2,7 @@ import Combine
 import SwiftUI
 
 /// Onboarding step: configure and test the floating bar shortcut (Cmd+Enter by default).
+/// Only detects the keypress — does NOT open the floating bar, to avoid confusing the user.
 struct OnboardingFloatingBarShortcutStepView: View {
     @ObservedObject var appState: AppState
     @ObservedObject var chatProvider: ChatProvider
@@ -12,7 +13,7 @@ struct OnboardingFloatingBarShortcutStepView: View {
 
     @State private var shortcutDetected = false
     @State private var showContinue = false
-    @State private var pollCancellable: AnyCancellable?
+    @State private var keyMonitor: Any?
 
     var body: some View {
         HStack(spacing: 0) {
@@ -26,25 +27,26 @@ struct OnboardingFloatingBarShortcutStepView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(OmiColors.backgroundPrimary)
         .onAppear {
-            FloatingControlBarManager.shared.setup(appState: appState, chatProvider: chatProvider)
-            GlobalShortcutManager.shared.registerShortcuts()
-            startPolling()
+            // Unregister the global hotkey so the floating bar does NOT open.
+            // We detect the keypress ourselves via a local NSEvent monitor.
+            GlobalShortcutManager.shared.unregisterShortcuts()
+            installKeyMonitor()
         }
         .onDisappear {
-            pollCancellable?.cancel()
-            pollCancellable = nil
-            if FloatingControlBarManager.shared.barState?.showingAIConversation == true {
-                FloatingControlBarManager.shared.toggleAIInput()
+            if let monitor = keyMonitor {
+                NSEvent.removeMonitor(monitor)
+                keyMonitor = nil
             }
+            // Re-register the global hotkey for the next step.
+            GlobalShortcutManager.shared.registerShortcuts()
         }
     }
 
     // MARK: - Left Pane
 
     private var leftPane: some View {
-        VStack(alignment: .leading, spacing: 0) {
+        VStack(spacing: 0) {
             Spacer()
-                .frame(height: 18)
 
             VStack(alignment: .leading, spacing: 18) {
                 Text("Open the floating bar\nwith a shortcut")
@@ -95,7 +97,7 @@ struct OnboardingFloatingBarShortcutStepView: View {
                 .padding(.bottom, -16)
 
                 VStack(alignment: .leading, spacing: 18) {
-                    Text("Press the shortcut to open the floating bar")
+                    Text("Press this shortcut.\nDo the buttons light up?")
                         .font(.system(size: 22, weight: .semibold))
                         .foregroundColor(Color.black.opacity(0.86))
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -211,7 +213,6 @@ struct OnboardingFloatingBarShortcutStepView: View {
         let isSelected = shortcutSettings.askOmiKey == key
         return Button {
             shortcutSettings.askOmiKey = key
-            GlobalShortcutManager.shared.registerShortcuts()
             shortcutDetected = false
             showContinue = false
         } label: {
@@ -236,22 +237,20 @@ struct OnboardingFloatingBarShortcutStepView: View {
         .buttonStyle(.plain)
     }
 
-    // MARK: - Polling
+    // MARK: - Key Monitor
 
-    private func startPolling() {
-        pollCancellable = Timer.publish(every: 0.25, on: .main, in: .common)
-            .autoconnect()
-            .sink { _ in
-                guard !shortcutDetected else { return }
-                if FloatingControlBarManager.shared.barState?.showingAIConversation == true {
-                    shortcutDetected = true
-                    // Close the AI conversation panel so it does not stay open
-                    FloatingControlBarManager.shared.toggleAIInput()
-                    withAnimation(.easeInOut(duration: 0.3)) {
-                        showContinue = true
-                    }
+    private func installKeyMonitor() {
+        keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+            guard !shortcutDetected else { return event }
+            if shortcutSettings.askOmiKey.matches(event) {
+                shortcutDetected = true
+                withAnimation(.easeInOut(duration: 0.3)) {
+                    showContinue = true
                 }
+                return nil  // consume the event so the floating bar does not open
             }
+            return event
+        }
     }
 
     // MARK: - Cycle Shortcut
@@ -262,7 +261,6 @@ struct OnboardingFloatingBarShortcutStepView: View {
         let nextIndex = allKeys.index(after: currentIndex)
         shortcutSettings.askOmiKey =
             nextIndex == allKeys.endIndex ? allKeys[allKeys.startIndex] : allKeys[nextIndex]
-        GlobalShortcutManager.shared.registerShortcuts()
         shortcutDetected = false
         showContinue = false
     }

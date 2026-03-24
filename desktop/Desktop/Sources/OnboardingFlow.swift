@@ -1,7 +1,7 @@
 import Foundation
 
 enum OnboardingFlow {
-  static let steps = ["Chat", "FloatingBarShortcut", "FloatingBar", "VoiceShortcut", "Tasks"]
+  static let steps = ["Chat", "FloatingBarShortcut", "FloatingBar", "VoiceShortcut", "VoiceDemo", "Tasks"]
   static let lastStepIndex = steps.count - 1
 
   static func migratedStep(
