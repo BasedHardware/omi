@@ -378,9 +378,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
       AuthService.shared.fetchConversations()
 
       // Fetch API keys from backend (keys are not bundled in the app)
-      Task {
-        await APIKeyService.shared.fetchKeys()
-      }
+      APIKeyService.shared.fetchTask = Task { await APIKeyService.shared.fetchKeys() }
 
       // Check tier eligibility (at most once per day)
       Task {

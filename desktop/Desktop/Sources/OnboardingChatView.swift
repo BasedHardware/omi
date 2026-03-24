@@ -658,10 +658,8 @@ struct OnboardingChatView: View {
       }
 
       Task {
-        // Wait for API keys (fetchKeys() started during sign-in as a parallel Task)
-        await APIKeyService.shared.waitForKeys()
-
         // Start bridge eagerly so it's ready by the time we need to send
+        // (ensureBridgeStarted waits for API keys internally)
         async let bridgeWarmup: () = chatProvider.warmupBridge()
 
         // Load previous messages from backend (same default chat, sessionId=nil)
@@ -705,10 +703,6 @@ struct OnboardingChatView: View {
       OnboardingChatPersistence.saveMidOnboarding()
 
       Task {
-        // Wait for API keys (fetchKeys() started during sign-in as a parallel Task).
-        // The bridge needs ANTHROPIC_API_KEY in the environment before launching.
-        await APIKeyService.shared.waitForKeys()
-
         await chatProvider.sendMessage(
           "Hi, I just installed omi!",
           systemPromptPrefix: systemPrompt
