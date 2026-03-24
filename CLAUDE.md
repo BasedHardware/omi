@@ -349,6 +349,19 @@ If instructed by user to push, you should **create a PR and push your changes** 
 - Never push or create PRs unless explicitly asked
 — Commit locally by default
 
+### Upstream Merge — Always Keep Ours
+When merging from upstream (`upstream/main`), **always resolve conflicts by keeping our version** for these files. They contain Nooto branding, Togo Dynamics team config, or locale customizations that must never be overwritten by upstream:
+
+- `app/lib/l10n/**` — all ARB and generated localization files (Nooto-branded translations)
+- `desktop/Desktop/Info.plist` — Nooto app name, URL schemes, descriptions
+- `desktop/Desktop/Sources/**` — Nooto-rebranded Swift UI code
+- `desktop/Desktop/Omi.entitlements` — entitlements (upstream team's provisioning profile)
+- `desktop/Desktop/Omi-local.entitlements` — local dev entitlements (ours only)
+- `app/ios/Runner.xcodeproj/project.pbxproj` — DEVELOPMENT_TEAM must be `Z7TX8267J4` (Togo Dynamics), not `9536L8KLMP` (Based Hardware)
+- `codemagic.yaml` — CI config with upstream team ID `9536L8KLMP` (review carefully, keep ours for team/signing sections)
+
+Use: `git checkout --ours <path> && git add <path>` for bulk resolution.
+
 ### RELEASE command
 When the user says "RELEASE", perform the full release flow:
   1. Create a new branch from main
