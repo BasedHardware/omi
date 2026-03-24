@@ -570,7 +570,11 @@ def decode_files_to_wav(files_path: List[str]):
 
         # Detect codec from filename: PCM files need different decoding than Opus
         if _is_pcm_codec(filename):
-            sample_rate = 16000 if '_pcm16_' in filename else 8000
+            # Parse sample rate from filename: audio_{device}_{codec}_{sampleRate}_{channel}_...
+            sample_rate_match = re.search(r'_pcm(?:8|16)_(\d+)_', filename)
+            sample_rate = (
+                int(sample_rate_match.group(1)) if sample_rate_match else (16000 if '_pcm16_' in filename else 8000)
+            )
             success = decode_pcm_file_to_wav(path, wav_path, sample_rate=sample_rate)
         else:
             success = decode_opus_file_to_wav(path, wav_path, frame_size=frame_size)
