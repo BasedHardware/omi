@@ -153,6 +153,40 @@ class TestDecodePcmFileToWav:
             result = decode_pcm_file_to_wav(bin_path, wav_path)
             assert result is True  # First frame still valid
 
+    def test_zero_length_frame_stops(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            bin_path = os.path.join(tmpdir, 'test.bin')
+            wav_path = os.path.join(tmpdir, 'test.wav')
+            # Valid frame then zero-length frame
+            valid_frame = bytes([42] * 320)
+            with open(bin_path, 'wb') as f:
+                f.write(struct.pack('<I', len(valid_frame)))
+                f.write(valid_frame)
+                f.write(struct.pack('<I', 0))  # Zero-length frame
+
+            result = decode_pcm_file_to_wav(bin_path, wav_path)
+            assert result is True  # First frame still valid
+
+            with wave.open(wav_path, 'rb') as wf:
+                assert wf.getnframes() == 160  # Only the first valid frame
+
+    def test_truncated_length_header_handled(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            bin_path = os.path.join(tmpdir, 'test.bin')
+            wav_path = os.path.join(tmpdir, 'test.wav')
+            # Valid frame then incomplete length header (only 2 bytes instead of 4)
+            valid_frame = bytes([42] * 320)
+            with open(bin_path, 'wb') as f:
+                f.write(struct.pack('<I', len(valid_frame)))
+                f.write(valid_frame)
+                f.write(bytes([0x40, 0x01]))  # Truncated length header
+
+            result = decode_pcm_file_to_wav(bin_path, wav_path)
+            assert result is True  # First frame still valid
+
+            with wave.open(wav_path, 'rb') as wf:
+                assert wf.getnframes() == 160  # Only the first valid frame
+
     def test_nonexistent_file_returns_false(self):
         result = decode_pcm_file_to_wav('/nonexistent/path.bin', '/nonexistent/out.wav')
         assert result is False
@@ -210,6 +244,32 @@ class TestDecodeFilesToWavPcmRouting:
 
             with wave.open(wav_files[0], 'rb') as wf:
                 assert wf.getframerate() == 16000  # Should parse from filename, not default to 8000
+
+    def test_pcm16_fallback_sample_rate_when_no_match(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Filename with pcm16 but non-standard format (no sample rate token)
+            bin_path = os.path.join(tmpdir, 'audio_pcm16_custom_1710000000.bin')
+            frames = [bytes([i % 256] * 320) for i in range(100)]
+            self._make_pcm_bin(frames, bin_path)
+
+            wav_files = decode_files_to_wav([bin_path])
+            assert len(wav_files) == 1
+
+            with wave.open(wav_files[0], 'rb') as wf:
+                assert wf.getframerate() == 16000  # Should fallback to pcm16 default
+
+    def test_pcm8_fallback_sample_rate_when_no_match(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Filename with pcm8 but no parseable sample rate
+            bin_path = os.path.join(tmpdir, 'audio_pcm8_custom_1710000000.bin')
+            frames = [bytes([i % 256] * 160) for i in range(200)]
+            self._make_pcm_bin(frames, bin_path)
+
+            wav_files = decode_files_to_wav([bin_path])
+            assert len(wav_files) == 1
+
+            with wave.open(wav_files[0], 'rb') as wf:
+                assert wf.getframerate() == 8000  # Should fallback to pcm8 default
 
     def test_pcm16_short_file_skipped(self):
         with tempfile.TemporaryDirectory() as tmpdir:
