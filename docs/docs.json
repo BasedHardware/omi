@@ -9,82 +9,163 @@
   },
   "favicon": "/favicon.ico",
   "navigation": {
-    "groups": [
+    "tabs": [
       {
-        "group": "Get Started",
-        "pages": [
-          "doc/get_started/introduction",
-          "getstartedwithomi",
-          "doc/get_started/chat_tips"
-        ]
-      },
-      {
-        "group": "Core Development",
-        "pages": [
-          "doc/developer/AppSetup",
-          "doc/developer/Cursor",
+        "tab": "Documentation",
+        "icon": "book",
+        "groups": [
           {
-            "group": "Backend",
+            "group": "Get Started",
             "pages": [
-              "doc/developer/backend/Backend_Setup",
-              "doc/developer/backend/backend_deepdive",
-              "doc/developer/backend/chat_system",
-              "doc/developer/backend/StoringConversations",
-              "doc/developer/backend/transcription",
-              "doc/developer/backend/listen_pusher_pipeline"
+              "doc/get_started/introduction",
+              "getstartedwithomi",
+              "doc/get_started/chat_tips"
             ]
           },
           {
-            "group": "Firmware",
+            "group": "Core Development",
             "pages": [
-              "doc/developer/firmware/Compile_firmware"
+              "doc/developer/AppSetup",
+              "doc/developer/Cursor",
+              {
+                "group": "Backend",
+                "pages": [
+                  "doc/developer/backend/Backend_Setup",
+                  "doc/developer/backend/backend_deepdive",
+                  "doc/developer/backend/chat_system",
+                  "doc/developer/backend/StoringConversations",
+                  "doc/developer/backend/transcription",
+                  "doc/developer/backend/listen_pusher_pipeline"
+                ],
+                "icon": "server"
+              },
+              {
+                "group": "Firmware",
+                "pages": [
+                  "doc/developer/firmware/Compile_firmware"
+                ],
+                "icon": "microchip"
+              },
+              {
+                "group": "SDK",
+                "pages": [
+                  "doc/developer/sdk/sdk",
+                  "doc/developer/sdk/python",
+                  "doc/developer/sdk/ReactNative",
+                  "doc/developer/sdk/swift"
+                ],
+                "icon": "cube"
+              },
+              "doc/developer/Protocol",
+              "doc/developer/Contribution",
+              "doc/integrations",
+              {
+                "group": "Audio & Testing",
+                "pages": [
+                  "doc/developer/savingaudio",
+                  "doc/developer/AudioStreaming",
+                  "doc/developer/DevKit2Testing"
+                ],
+                "icon": "headphones"
+              }
             ]
           },
           {
-            "group": "SDK",
+            "group": "DIY Guide",
             "pages": [
-              "doc/developer/sdk/sdk",
-              "doc/developer/sdk/python",
-              "doc/developer/sdk/ReactNative",
-              "doc/developer/sdk/swift"
+              "doc/assembly/introduction",
+              "doc/assembly/Buying_Guide",
+              "doc/assembly/Build_the_device",
+              "doc/get_started/Flash_device"
             ]
           },
-          "doc/developer/Protocol",
-          "doc/developer/Contribution",
-          "doc/integrations",
           {
-            "group": "Audio & Testing",
+            "group": "Info",
             "pages": [
-              "doc/developer/savingaudio",
-              "doc/developer/AudioStreaming",
-              "doc/developer/DevKit2Testing"
+              "doc/info/Support",
+              "doc/info/License",
+              "doc/info/Disclaimer",
+              "doc/info/Privacy"
             ]
           }
         ]
       },
       {
-        "group": "Developer API",
-        "pages": [
-          "doc/developer/api/overview",
-          "doc/developer/api/memories",
-          "doc/developer/api/action-items",
-          "doc/developer/api/conversations",
-          "doc/developer/api/keys"
+        "tab": "API Reference",
+        "icon": "square-terminal",
+        "openapi": "api-reference/openapi.json",
+        "groups": [
+          {
+            "group": "Overview",
+            "pages": [
+              "api-reference/introduction",
+              "doc/developer/api/overview"
+            ]
+          },
+          {
+            "group": "Memories",
+            "pages": [
+              "doc/developer/api/memories",
+              "api-reference/endpoint/memories/list",
+              "api-reference/endpoint/memories/create",
+              "api-reference/endpoint/memories/create-batch",
+              "api-reference/endpoint/memories/update",
+              "api-reference/endpoint/memories/delete"
+            ]
+          },
+          {
+            "group": "Conversations",
+            "pages": [
+              "doc/developer/api/conversations",
+              "api-reference/endpoint/conversations/list",
+              "api-reference/endpoint/conversations/create",
+              "api-reference/endpoint/conversations/create-from-segments",
+              "api-reference/endpoint/conversations/get",
+              "api-reference/endpoint/conversations/update",
+              "api-reference/endpoint/conversations/delete"
+            ]
+          },
+          {
+            "group": "Action Items",
+            "pages": [
+              "doc/developer/api/action-items",
+              "api-reference/endpoint/action-items/list",
+              "api-reference/endpoint/action-items/create",
+              "api-reference/endpoint/action-items/create-batch",
+              "api-reference/endpoint/action-items/update",
+              "api-reference/endpoint/action-items/delete"
+            ]
+          },
+          {
+            "group": "Authentication",
+            "pages": [
+              "doc/developer/api/keys",
+              "api-reference/endpoint/keys/list",
+              "api-reference/endpoint/keys/create",
+              "api-reference/endpoint/keys/revoke"
+            ]
+          }
         ]
       },
       {
-        "group": "MCP Integration",
-        "pages": [
-          "doc/developer/MCP"
-        ]
-      },
-      {
-        "group": "Build Apps",
-        "pages": [
-          "doc/developer/apps/Introduction",
-          "doc/developer/apps/PromptBased",
-          "doc/developer/apps/Integrations",
-          "doc/developer/apps/ChatTools",
+        "tab": "Build Apps",
+        "icon": "puzzle-piece",
+        "groups": [
+          {
+            "group": "Getting Started",
+            "pages": [
+              "doc/developer/apps/Introduction",
+              "doc/developer/apps/PromptBased",
+              "doc/developer/apps/Integrations",
+              "doc/developer/apps/ChatTools",
+              "doc/developer/apps/AudioStreaming",
+              "doc/developer/apps/Import",
+              "doc/developer/apps/Oauth",
+              "doc/developer/apps/Notifications",
+              "doc/developer/apps/Submitting",
+              "doc/developer/apps/OpenSource"
+            ]
+          },
           {
             "group": "Examples",
             "pages": [
@@ -92,21 +173,32 @@
               "doc/developer/apps/examples/Slack",
               "doc/developer/apps/examples/OmiMentor"
             ]
-          },
-          "doc/developer/apps/AudioStreaming",
-          "doc/developer/apps/Import",
-          "doc/developer/apps/Oauth",
-          "doc/developer/apps/Notifications",
-          "doc/developer/apps/Submitting",
-                    "doc/developer/apps/OpenSource"
+          }
         ]
       },
       {
-        "group": "Hardware",
-        "pages": [
-          "doc/hardware/OmiConsumer",
+        "tab": "Hardware",
+        "icon": "microchip",
+        "groups": [
           {
-            "group": "Open Source Hardware",
+            "group": "Devices",
+            "pages": [
+              "doc/hardware/OmiConsumer",
+              "doc/hardware/DevKit2",
+              "doc/hardware/DevKit1",
+              "doc/hardware/PaintingOMI"
+            ]
+          },
+          {
+            "group": "OmiGlass",
+            "pages": [
+              "doc/hardware/omiGlass",
+              "doc/hardware/omiglass/flash-firmware",
+              "doc/hardware/omiglass/monitoring"
+            ]
+          },
+          {
+            "group": "Open Source",
             "pages": [
               "doc/hardware/consumer/index",
               "doc/hardware/consumer/electronics",
@@ -114,36 +206,19 @@
               "doc/hardware/consumer/assembly",
               "doc/hardware/consumer/license"
             ]
-          },
-          "doc/hardware/DevKit2",
-          "doc/hardware/DevKit1",
-          "doc/hardware/PaintingOMI"
+          }
         ]
       },
       {
-        "group": "OmiGlass",
-        "pages": [
-          "doc/hardware/omiGlass",
-          "doc/hardware/omiglass/flash-firmware",
-          "doc/hardware/omiglass/monitoring"
-        ]
-      },
-      {
-        "group": "DIY Guide",
-        "pages": [
-          "doc/assembly/introduction",
-          "doc/assembly/Buying_Guide",
-          "doc/assembly/Build_the_device",
-          "doc/get_started/Flash_device"
-        ]
-      },
-      {
-        "group": "Info",
-        "pages": [
-          "doc/info/Support",
-          "doc/info/License",
-          "doc/info/Disclaimer",
-          "doc/info/Privacy"
+        "tab": "MCP",
+        "icon": "robot",
+        "groups": [
+          {
+            "group": "MCP Integration",
+            "pages": [
+              "doc/developer/MCP"
+            ]
+          }
         ]
       }
     ]
@@ -155,6 +230,19 @@
       "x": "https://x.com/omedotme",
       "linkedin": "https://www.linkedin.com/company/omi-ai/",
       "instagram": "https://www.instagram.com/based_hardware/"
+    }
+  },
+  "navbar": {
+    "links": [
+      {
+        "label": "Support",
+        "href": "https://discord.omi.me"
+      }
+    ],
+    "primary": {
+      "type": "button",
+      "label": "Buy Now",
+      "href": "https://www.omi.me/products/friend-dev-2"
     }
   }
 }
