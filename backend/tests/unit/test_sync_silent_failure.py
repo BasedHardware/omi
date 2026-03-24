@@ -40,15 +40,16 @@ class TestProcessSegmentErrorHandling:
         assert 'try:' in func_body, "process_segment must have try/except"
         assert 'except Exception' in func_body, "process_segment must catch exceptions"
 
-    def test_process_segment_collects_errors_on_empty_transcript(self):
-        """When transcript is empty, error must be appended to shared errors list."""
+    def test_process_segment_warns_on_empty_transcript(self):
+        """When transcript is empty, log a warning and return (no error — silent segments are normal)."""
         source = self._read_sync_source()
         start = source.index('def process_segment(')
         next_def = source.index('\ndef ', start + 1)
         func_body = source[start:next_def]
 
-        assert 'errors.append(' in func_body, "Must append error on empty transcript"
-        assert 'Transcription returned empty' in func_body, "Must include descriptive error message"
+        assert 'Transcription returned empty' in func_body, "Must log a warning for empty transcript"
+        # Empty transcript should NOT append to errors — it's a normal condition for silent segments
+        # Only actual exceptions should be collected as errors
 
     def test_process_segment_collects_errors_on_exception(self):
         """When an exception occurs, it must be caught and appended to errors."""
@@ -449,12 +450,11 @@ class TestSegmentDeduplication:
 # 7. Behavioral test — real process_segment with mocked dependencies
 # ---------------------------------------------------------------------------
 
-# Stub heavy modules before importing process_segment
 import sys
 from types import ModuleType
 from unittest.mock import MagicMock, patch
 
-_stub_modules = [
+_STUB_MODULES = [
     'database._client',
     'database.redis_db',
     'database.fair_use',
@@ -474,61 +474,84 @@ _stub_modules = [
     'utils.subscription',
     'utils.conversations.process_conversation',
 ]
-for mod_name in _stub_modules:
-    if mod_name not in sys.modules:
-        sys.modules[mod_name] = ModuleType(mod_name)
-
-# Set up required module attributes
-sys.modules['database.redis_db'].r = MagicMock()
-sys.modules['database._client'].db = MagicMock()
-# database.conversations needs specific function stubs
-_mock_conversations_db = sys.modules['database.conversations']
-_mock_conversations_db.get_closest_conversation_to_timestamps = MagicMock()
-_mock_conversations_db.update_conversation_segments = MagicMock()
-_mock_conversations_db.update_conversation = MagicMock()
-_mock_conversations_db.get_conversation = MagicMock()
-sys.modules['opuslib'].Decoder = MagicMock()
-sys.modules['pydub'].AudioSegment = MagicMock()
-sys.modules['utils.other.endpoints'].get_current_user_uid = MagicMock()
-sys.modules['utils.other.storage'].get_syncing_file_temporal_signed_url = MagicMock(return_value='https://fake.url')
-sys.modules['utils.other.storage'].delete_syncing_temporal_file = MagicMock()
-sys.modules['utils.other.storage'].download_audio_chunks_and_merge = MagicMock()
-sys.modules['utils.other.storage'].get_or_create_merged_audio = MagicMock()
-sys.modules['utils.other.storage'].get_merged_audio_signed_url = MagicMock()
-sys.modules['utils.encryption'].encrypt = MagicMock()
-sys.modules['utils.stt.pre_recorded'].deepgram_prerecorded = MagicMock()
-sys.modules['utils.stt.pre_recorded'].postprocess_words = MagicMock()
-sys.modules['utils.stt.vad'].vad_is_empty = MagicMock()
-sys.modules['utils.fair_use'].FAIR_USE_ENABLED = False
-sys.modules['utils.fair_use'].record_speech_ms = MagicMock()
-sys.modules['utils.fair_use'].get_rolling_speech_ms = MagicMock()
-sys.modules['utils.fair_use'].check_soft_caps = MagicMock()
-sys.modules['utils.fair_use'].is_hard_restricted = MagicMock(return_value=False)
-sys.modules['utils.fair_use'].trigger_classifier_if_needed = MagicMock()
-sys.modules['utils.subscription'].has_transcription_credits = MagicMock(return_value=True)
-sys.modules['utils.conversations.process_conversation'].process_conversation = MagicMock()
 
 
 class TestProcessSegmentReal:
-    """Tests that call the real process_segment function with mocked deps."""
+    """Tests that call the real process_segment function with mocked deps.
 
-    def _import_process_segment(self):
-        """Import the real function (stubs already set up above)."""
+    Uses setup_class/teardown_class to install and remove sys.modules stubs
+    so other test files in the same pytest process are not contaminated.
+    """
+
+    _saved_modules = {}
+    _process_segment = None
+
+    @classmethod
+    def setup_class(cls):
+        # Save originals
+        cls._saved_modules = {name: sys.modules.get(name) for name in _STUB_MODULES}
+        # Also save routers.sync if already imported
+        cls._saved_modules['routers.sync'] = sys.modules.get('routers.sync')
+
+        # Install stubs
+        for mod_name in _STUB_MODULES:
+            sys.modules[mod_name] = ModuleType(mod_name)
+
+        sys.modules['database.redis_db'].r = MagicMock()
+        sys.modules['database._client'].db = MagicMock()
+        _mock_conv_db = sys.modules['database.conversations']
+        _mock_conv_db.get_closest_conversation_to_timestamps = MagicMock()
+        _mock_conv_db.update_conversation_segments = MagicMock()
+        _mock_conv_db.update_conversation = MagicMock()
+        _mock_conv_db.get_conversation = MagicMock()
+        sys.modules['opuslib'].Decoder = MagicMock()
+        sys.modules['pydub'].AudioSegment = MagicMock()
+        sys.modules['utils.other.endpoints'].get_current_user_uid = MagicMock()
+        sys.modules['utils.other.storage'].get_syncing_file_temporal_signed_url = MagicMock(return_value='https://fake')
+        sys.modules['utils.other.storage'].delete_syncing_temporal_file = MagicMock()
+        sys.modules['utils.other.storage'].download_audio_chunks_and_merge = MagicMock()
+        sys.modules['utils.other.storage'].get_or_create_merged_audio = MagicMock()
+        sys.modules['utils.other.storage'].get_merged_audio_signed_url = MagicMock()
+        sys.modules['utils.encryption'].encrypt = MagicMock()
+        sys.modules['utils.stt.pre_recorded'].deepgram_prerecorded = MagicMock()
+        sys.modules['utils.stt.pre_recorded'].postprocess_words = MagicMock()
+        sys.modules['utils.stt.vad'].vad_is_empty = MagicMock()
+        sys.modules['utils.fair_use'].FAIR_USE_ENABLED = False
+        sys.modules['utils.fair_use'].record_speech_ms = MagicMock()
+        sys.modules['utils.fair_use'].get_rolling_speech_ms = MagicMock()
+        sys.modules['utils.fair_use'].check_soft_caps = MagicMock()
+        sys.modules['utils.fair_use'].is_hard_restricted = MagicMock(return_value=False)
+        sys.modules['utils.fair_use'].trigger_classifier_if_needed = MagicMock()
+        sys.modules['utils.subscription'].has_transcription_credits = MagicMock(return_value=True)
+        sys.modules['utils.conversations.process_conversation'].process_conversation = MagicMock()
+
+        # Import under stubs
         from routers.sync import process_segment
 
-        return process_segment
+        cls._process_segment = staticmethod(process_segment)
 
-    def _common_patches(self):
-        """Common patches for all real process_segment tests.
-        Includes time.sleep patch to prevent 480s delay from delete_file thread."""
-        return [
-            patch('routers.sync.delete_syncing_temporal_file'),
-            patch('routers.sync.get_syncing_file_temporal_signed_url', return_value='https://fake'),
-            patch('routers.sync.time.sleep'),  # Prevent 480s sleep in delete_file thread
-        ]
+    @classmethod
+    def teardown_class(cls):
+        # Remove routers.sync so it can be re-imported cleanly
+        sys.modules.pop('routers.sync', None)
+        # Restore original modules
+        for name, orig in cls._saved_modules.items():
+            if orig is None:
+                sys.modules.pop(name, None)
+            else:
+                sys.modules[name] = orig
+        cls._saved_modules.clear()
 
-    def test_empty_transcript_appends_error(self):
-        """Real process_segment: empty Deepgram result → error collected, no memory."""
+    def _import_process_segment(self):
+        return self._process_segment
+
+    def test_empty_transcript_skips_without_error(self):
+        """Real process_segment: empty Deepgram result → silent skip (no error).
+
+        Empty transcripts are expected for silent/no-speech segments and must NOT
+        be treated as errors, otherwise silent WAL segments would trigger permanent
+        207 retry loops for old clients.
+        """
         process_segment = self._import_process_segment()
 
         response = {'updated_memories': set(), 'new_memories': set()}
@@ -546,8 +569,7 @@ class TestProcessSegmentReal:
 
             process_segment('/tmp/1700000000.wav', 'uid', response, lock, errors, ConversationSource.omi, False)
 
-        assert len(errors) == 1
-        assert 'Transcription returned empty' in errors[0]
+        assert len(errors) == 0, "Empty transcript must NOT be treated as an error"
         assert len(response['new_memories']) == 0
         assert len(response['updated_memories']) == 0
 
@@ -626,20 +648,15 @@ class TestProcessSegmentReal:
                 call_count[0] += 1
                 n = call_count[0]
             if n == 2:
-                return [], 'en'  # Segment 2 fails (empty transcript)
+                raise ConnectionError('Deepgram timeout')  # Segment 2 fails with exception
             return [{'text': 'hello'}], 'en'
 
         real_segment = self._make_real_segment()
         mock_conv = MagicMock()
         mock_conv.id = 'conv-success'
 
-        def mock_postprocess(words, offset):
-            if not words:
-                return []
-            return [real_segment]
-
         with patch('routers.sync.deepgram_prerecorded', side_effect=mock_deepgram_mixed), patch(
-            'routers.sync.postprocess_words', side_effect=mock_postprocess
+            'routers.sync.postprocess_words', return_value=[real_segment]
         ), patch('routers.sync.get_timestamp_from_path', return_value=1700000000.0), patch(
             'routers.sync.get_closest_conversation_to_timestamps', return_value=None
         ), patch(
@@ -665,9 +682,9 @@ class TestProcessSegmentReal:
             for t in threads:
                 t.join()
 
-        # 2 succeeded, 1 failed
+        # 2 succeeded, 1 failed (exception)
         assert len(errors) == 1, f"Expected 1 error, got {len(errors)}: {errors}"
-        assert 'Transcription returned empty' in errors[0]
+        assert 'Failed to process segment' in errors[0]
         assert len(response['new_memories']) >= 1  # At least 1 success
 
     def test_dedup_skips_existing_segments_on_retry(self):
