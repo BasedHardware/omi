@@ -122,9 +122,13 @@ class DeviceService implements IDeviceService {
   }
 
   Future<void> _connectToDevice(String id) async {
-    // Drop existing connection first
-    if (_connection?.status == DeviceConnectionState.connected) {
-      await _connection?.disconnect();
+    // Clean up existing connection — disconnect if active, then dispose transport
+    // to unregister from BleBridge and prevent leaked callbacks.
+    if (_connection != null) {
+      if (_connection!.status == DeviceConnectionState.connected) {
+        await _connection!.disconnect();
+      }
+      await _connection!.transport.dispose();
     }
     _connection = null;
 
