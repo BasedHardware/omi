@@ -30,6 +30,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   bool isConnecting = false;
   bool isConnected = false;
   bool isDeviceStorageSupport = false;
+  bool supportsMultiFileSync = false;
   BtDevice? connectedDevice;
   BtDevice? pairedDevice;
   StreamSubscription<List<int>>? _bleBatteryLevelListener;
@@ -497,7 +498,13 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
       if (connection == null) return;
 
       final status = await connection.getStorageFileStats();
-      if (status == null || status.fileCount == 0) return;
+      if (status == null) {
+        supportsMultiFileSync = false;
+        return;
+      }
+
+      supportsMultiFileSync = true;
+      if (status.fileCount == 0) return;
 
       Logger.debug('DeviceProvider: Auto-sync detected ${status.fileCount} files (${status.totalUsedBytes} bytes)');
       onOfflineDataDetected?.call(device, status.fileCount, status.totalUsedBytes);
