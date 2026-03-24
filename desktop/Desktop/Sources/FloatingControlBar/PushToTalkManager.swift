@@ -555,8 +555,10 @@ class PushToTalkManager: ObservableObject {
       barState.voiceTranscript = ""
     }
 
-    // Skip resize when in follow-up mode or expanded AI conversation (already at full size)
-    guard !skipResize && !barState.isVoiceFollowUp && !barState.showingAIConversation else { return }
+    // Skip resize when in follow-up mode, expanded AI conversation, or during onboarding
+    // (during onboarding the floating bar shouldn't appear as a separate window)
+    let isOnboarding = !UserDefaults.standard.bool(forKey: "hasCompletedOnboarding")
+    guard !skipResize && !barState.isVoiceFollowUp && !barState.showingAIConversation && !isOnboarding else { return }
     if barState.isVoiceListening && !wasListening {
       FloatingControlBarManager.shared.resizeForPTT(expanded: true)
     } else if !barState.isVoiceListening && wasListening {
