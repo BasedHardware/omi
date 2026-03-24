@@ -6,7 +6,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:omi/backend/http/api/apps.dart' as apps_api;
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/env/env.dart';
-import 'package:omi/main.dart';
+import 'package:omi/app_globals.dart';
 import 'package:omi/providers/base_provider.dart';
 import 'package:omi/services/auth_service.dart';
 import 'package:omi/services/notifications.dart';
@@ -97,7 +97,7 @@ class AuthenticationProvider extends BaseProvider {
           _signIn(onSignIn);
         } else {
           AppSnackbar.showSnackbarError(
-            MyApp.navigatorKey.currentContext?.l10n.authFailedToSignInWithGoogle ??
+            globalNavigatorKey.currentContext?.l10n.authFailedToSignInWithGoogle ??
                 'Failed to sign in with Google, please try again.',
           );
         }
@@ -106,7 +106,7 @@ class AuthenticationProvider extends BaseProvider {
         print('DEBUG_AUTH: Stack trace: $stackTrace');
         Logger.debug('OAuth Google sign in error: $e');
         AppSnackbar.showSnackbarError(
-          MyApp.navigatorKey.currentContext?.l10n.authenticationFailed ?? 'Authentication failed. Please try again.',
+          globalNavigatorKey.currentContext?.l10n.authenticationFailed ?? 'Authentication failed. Please try again.',
         );
       }
       setLoadingState(false);
@@ -128,14 +128,14 @@ class AuthenticationProvider extends BaseProvider {
           _signIn(onSignIn);
         } else {
           AppSnackbar.showSnackbarError(
-            MyApp.navigatorKey.currentContext?.l10n.authFailedToSignInWithApple ??
+            globalNavigatorKey.currentContext?.l10n.authFailedToSignInWithApple ??
                 'Failed to sign in with Apple, please try again.',
           );
         }
       } catch (e) {
         Logger.debug('OAuth Apple sign in error: $e');
         AppSnackbar.showSnackbarError(
-          MyApp.navigatorKey.currentContext?.l10n.authenticationFailed ?? 'Authentication failed. Please try again.',
+          globalNavigatorKey.currentContext?.l10n.authenticationFailed ?? 'Authentication failed. Please try again.',
         );
       }
       setLoadingState(false);
@@ -151,7 +151,7 @@ class AuthenticationProvider extends BaseProvider {
       return token;
     } catch (e, stackTrace) {
       AppSnackbar.showSnackbarError(
-        MyApp.navigatorKey.currentContext?.l10n.authFailedToRetrieveToken ??
+        globalNavigatorKey.currentContext?.l10n.authFailedToRetrieveToken ??
             'Failed to retrieve firebase token, please try again.',
       );
       PlatformManager.instance.crashReporter.reportCrash(e, stackTrace);
@@ -169,7 +169,7 @@ class AuthenticationProvider extends BaseProvider {
         user = FirebaseAuth.instance.currentUser!;
       } catch (e, stackTrace) {
         AppSnackbar.showSnackbarError(
-          MyApp.navigatorKey.currentContext?.l10n.authUnexpectedErrorFirebase ??
+          globalNavigatorKey.currentContext?.l10n.authUnexpectedErrorFirebase ??
               'Unexpected error signing in, Firebase error, please try again.',
         );
 
@@ -182,7 +182,7 @@ class AuthenticationProvider extends BaseProvider {
       onSignIn();
     } else {
       AppSnackbar.showSnackbarError(
-        MyApp.navigatorKey.currentContext?.l10n.authUnexpectedError ?? 'Unexpected error signing in, please try again',
+        globalNavigatorKey.currentContext?.l10n.authUnexpectedError ?? 'Unexpected error signing in, please try again',
       );
     }
   }
@@ -225,7 +225,7 @@ class AuthenticationProvider extends BaseProvider {
         return;
       }
       AppSnackbar.showSnackbarError(
-        MyApp.navigatorKey.currentContext?.l10n.authFailedToLinkGoogle ??
+        globalNavigatorKey.currentContext?.l10n.authFailedToLinkGoogle ??
             'Failed to link with Google, please try again.',
       );
       rethrow;
@@ -264,7 +264,7 @@ class AuthenticationProvider extends BaseProvider {
           return;
         }
         AppSnackbar.showSnackbarError(
-          MyApp.navigatorKey.currentContext?.l10n.authFailedToLinkApple ??
+          globalNavigatorKey.currentContext?.l10n.authFailedToLinkApple ??
               'Failed to link with Apple, please try again.',
         );
         rethrow;
@@ -272,7 +272,7 @@ class AuthenticationProvider extends BaseProvider {
     } catch (e) {
       print('Error linking with Apple: $e');
       AppSnackbar.showSnackbarError(
-        MyApp.navigatorKey.currentContext?.l10n.authFailedToLinkApple ?? 'Failed to link with Apple, please try again.',
+        globalNavigatorKey.currentContext?.l10n.authFailedToLinkApple ?? 'Failed to link with Apple, please try again.',
       );
       rethrow;
     } finally {

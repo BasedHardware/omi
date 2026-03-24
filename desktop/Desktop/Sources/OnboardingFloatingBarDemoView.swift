@@ -9,6 +9,7 @@ struct OnboardingFloatingBarDemoView: View {
     var onComplete: () -> Void
     var onSkip: () -> Void
 
+    @ObservedObject private var shortcutSettings = ShortcutSettings.shared
     @State private var barActivated = false
     @State private var showContinue = false
 
@@ -47,8 +48,8 @@ struct OnboardingFloatingBarDemoView: View {
                         .font(.system(size: 24, weight: .bold))
                         .foregroundColor(OmiColors.textPrimary)
 
-                    Text("Try asking: Which computer suits me best?")
-                        .font(.system(size: 14))
+                    Text("Type: Which computer suits me best?")
+                        .font(.system(size: 18, weight: .medium))
                         .foregroundColor(OmiColors.textSecondary)
                         .multilineTextAlignment(.center)
                         .lineSpacing(4)
@@ -63,11 +64,14 @@ struct OnboardingFloatingBarDemoView: View {
                             .foregroundColor(OmiColors.textTertiary)
 
                         HStack(spacing: 6) {
-                            keyCap("⌘")
-                            Text("+")
-                                .font(.system(size: 15, weight: .medium))
-                                .foregroundColor(OmiColors.textTertiary)
-                            keyCap("Enter")
+                            ForEach(Array(shortcutSettings.askOmiKey.hintKeys.enumerated()), id: \.offset) { index, symbol in
+                                if index > 0 {
+                                    Text("+")
+                                        .font(.system(size: 15, weight: .medium))
+                                        .foregroundColor(OmiColors.textTertiary)
+                                }
+                                keyCap(symbol)
+                            }
                         }
                     }
                     .padding(.top, 4)

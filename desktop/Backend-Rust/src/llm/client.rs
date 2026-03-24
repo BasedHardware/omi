@@ -4,9 +4,90 @@
 use chrono::{DateTime, Utc};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
+use serde::de::DeserializeOwned;
 
 use super::prompts::*;
 use crate::models::{ActionItem, Category, Event, ExtractedKnowledge, KnowledgeGraphNode, Memory, MemoryCategory, MemoryDB, Structured, TranscriptSegment};
+
+/// Attempt to repair truncated JSON from Gemini and deserialize it.
+/// Gemini sometimes hits max_output_tokens and returns incomplete JSON.
+/// This tries progressively more aggressive repairs:
+/// 1. Parse as-is
+/// 2. Close open strings and add missing braces/brackets
+fn parse_or_repair_json<T: DeserializeOwned>(response: &str, label: &str) -> Result<T, String> {
+    // 1. Try parsing as-is
+    if let Ok(result) = serde_json::from_str::<T>(response) {
+        return Ok(result);
+    }
+
+    // 2. Try closing truncated JSON by balancing braces/brackets
+    let trimmed = response.trim();
+    if !trimmed.is_empty() {
+        // Count open/close delimiters
+        let mut in_string = false;
+        let mut escape_next = false;
+        let mut stack: Vec<char> = Vec::new();
+        let mut last_was_string_content = false;
+
+        for ch in trimmed.chars() {
+            if escape_next {
+                escape_next = false;
+                continue;
+            }
+            if ch == '\\' && in_string {
+                escape_next = true;
+                continue;
+            }
+            if ch == '"' {
+                in_string = !in_string;
+                last_was_string_content = false;
+                continue;
+            }
+            if in_string {
+                last_was_string_content = true;
+                continue;
+            }
+            last_was_string_content = false;
+            match ch {
+                '{' => stack.push('}'),
+                '[' => stack.push(']'),
+                '}' | ']' => { stack.pop(); }
+                _ => {}
+            }
+        }
+
+        // Build repair suffix
+        let mut suffix = String::new();
+
+        // If we ended inside a string, close it
+        if in_string {
+            suffix.push('"');
+        }
+
+        // Close any open braces/brackets in reverse order
+        for closer in stack.iter().rev() {
+            suffix.push(*closer);
+        }
+
+        if !suffix.is_empty() {
+            let repaired = format!("{}{}", trimmed, suffix);
+            if let Ok(result) = serde_json::from_str::<T>(&repaired) {
+                tracing::info!("Repaired truncated {} JSON (added {:?})", label, suffix);
+                return Ok(result);
+            }
+        }
+    }
+
+    Err(format!(
+        "Failed to parse {} response: {} - {}",
+        label,
+        serde_json::from_str::<serde_json::Value>(response)
+            .err()
+            .map(|e| e.to_string())
+            .unwrap_or_else(|| "type mismatch".to_string()),
+        response
+    ))
+}
 
 /// Calendar participant for meeting context
 #[derive(Debug, Clone, Default)]
@@ -225,8 +306,7 @@ impl LlmClient {
             category: String,
         }
 
-        let result: BriefResponse = serde_json::from_str(&response)
-            .map_err(|e| format!("Failed to parse brief structure response: {} - {}", e, response))?;
+        let result: BriefResponse = parse_or_repair_json(&response, "brief structure")?;
 
         let category = serde_json::from_str(&format!("\"{}\"", result.category))
             .unwrap_or(Category::Other);
@@ -292,8 +372,6 @@ impl LlmClient {
             "required": ["title", "overview", "emoji", "category"]
         });
 
-        let response = self.call_with_schema(&prompt, Some(0.7), Some(1500), Some(schema)).await?;
-
         #[derive(Deserialize)]
         struct StructureResponse {
             title: String,
@@ -316,8 +394,17 @@ impl LlmClient {
 
         fn default_duration() -> i32 { 30 }
 
-        let result: StructureResponse = serde_json::from_str(&response)
-            .map_err(|e| format!("Failed to parse structure response: {} - {}", e, response))?;
+        let response = self.call_with_schema(&prompt, Some(0.7), Some(1500), Some(schema.clone())).await?;
+
+        // Try parsing, and if it fails (truncated JSON), retry with more tokens
+        let result: StructureResponse = match parse_or_repair_json(&response, "structure") {
+            Ok(r) => r,
+            Err(first_err) => {
+                tracing::warn!("Structure parse failed, retrying with 3000 tokens: {}", first_err);
+                let retry_response = self.call_with_schema(&prompt, Some(0.7), Some(3000), Some(schema)).await?;
+                parse_or_repair_json(&retry_response, "structure (retry)")?
+            }
+        };
 
         let events: Vec<Event> = result.events.into_iter().filter_map(|e| {
             chrono::DateTime::parse_from_rfc3339(&e.start).ok().map(|dt| Event {
@@ -429,8 +516,7 @@ impl LlmClient {
             priority: Option<String>,
         }
 
-        let result: ActionItemsResponse = serde_json::from_str(&response)
-            .map_err(|e| format!("Failed to parse action items response: {} - {}", e, response))?;
+        let result: ActionItemsResponse = parse_or_repair_json(&response, "action items")?;
 
         let items: Vec<ActionItem> = result.action_items.into_iter()
             .filter(|item| {
@@ -526,13 +612,7 @@ impl LlmClient {
             category: String,
         }
 
-        // Attempt to repair truncated JSON (Gemini sometimes omits trailing braces)
-        let result: MemoriesResponse = serde_json::from_str(&response)
-            .or_else(|_| {
-                let repaired = format!("{}}}", response.trim_end());
-                serde_json::from_str(&repaired)
-            })
-            .map_err(|e| format!("Failed to parse memories response: {} - {}", e, response))?;
+        let result: MemoriesResponse = parse_or_repair_json(&response, "memories")?;
 
         // Validate categories and enforce limits: max 2 interesting + max 2 system
         let mut valid_memories = Vec::new();
@@ -655,15 +735,21 @@ impl LlmClient {
         // Step 1: Extract structure (title, overview, emoji, category, events)
         let structured = self.extract_structure(&transcript, started_at, timezone, language, calendar_context).await?;
 
-        // Step 2: Extract action items
-        let action_items = self.extract_action_items(
+        // Step 2: Extract action items (non-fatal — conversation still saved if this fails)
+        let action_items = match self.extract_action_items(
             &transcript,
             started_at,
             timezone,
             language,
             existing_action_items,
             calendar_context,
-        ).await?;
+        ).await {
+            Ok(items) => items,
+            Err(e) => {
+                tracing::warn!("Action items extraction failed (non-fatal): {}", e);
+                vec![]
+            }
+        };
 
         // Step 3: Extract memories (non-fatal — conversation still saved if this fails)
         let memories = match self.extract_memories(&transcript, user_name, existing_memories).await {
@@ -807,8 +893,7 @@ impl LlmClient {
             requires_context: bool,
         }
 
-        let result: RequiresContextResponse = serde_json::from_str(&response)
-            .map_err(|e| format!("Failed to parse requires_context response: {} - {}", e, response))?;
+        let result: RequiresContextResponse = parse_or_repair_json(&response, "requires_context")?;
 
         Ok(result.requires_context)
     }
@@ -847,8 +932,7 @@ impl LlmClient {
             end_date: Option<String>,
         }
 
-        let result: DateRangeResponse = serde_json::from_str(&response)
-            .map_err(|e| format!("Failed to parse date range response: {} - {}", e, response))?;
+        let result: DateRangeResponse = parse_or_repair_json(&response, "date range")?;
 
         if !result.has_date_reference {
             return Ok(None);
@@ -1073,8 +1157,7 @@ Return relationships as source -> relationship -> target triples."#,
 
         let response = self.call_with_schema(&prompt, Some(0.3), Some(1000), Some(schema)).await?;
 
-        let result: ExtractedKnowledge = serde_json::from_str(&response)
-            .map_err(|e| format!("Failed to parse knowledge graph extraction: {} - {}", e, response))?;
+        let result: ExtractedKnowledge = parse_or_repair_json(&response, "knowledge graph extraction")?;
 
         Ok(result)
     }

@@ -51,7 +51,7 @@ class LiveNotesMonitor: ObservableObject {
     /// Cancellables for subscriptions
     private var cancellables = Set<AnyCancellable>()
 
-    /// AI prompt for note generation (from m13v/meeting)
+    /// AI prompt for note generation
     private let noteGenerationPrompt = """
         generate a single, concise note about what happened in this segment.
         be factual and specific.

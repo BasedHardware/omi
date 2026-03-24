@@ -95,14 +95,6 @@ struct OnboardingTasksStepView: View {
                 }
                 .buttonStyle(.plain)
 
-                if let onSkip = onSkip {
-                    Button(action: onSkip) {
-                        Text("Skip")
-                            .font(.system(size: 13))
-                            .foregroundColor(OmiColors.textTertiary)
-                    }
-                    .buttonStyle(.plain)
-                }
             }
             .padding(.bottom, 32)
         }

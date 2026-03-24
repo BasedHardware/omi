@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 
-/// Tests for the token refresh infinite retry loop fix (#5448).
+/// Tests for the token refresh death spiral fix (#5927, originally #5448).
 ///
 /// The production code uses singletons (FirebaseAuth, SharedPreferencesUtil,
 /// AuthService) that aren't injectable, so these tests exercise the exact
@@ -12,8 +12,17 @@ class MockTokenCache {
   int tokenExpirationTime = 0;
 }
 
-/// Simulates AuthService.getIdToken() logic after fix.
-/// Returns null (not cached expired token) when currentUser is null or refresh throws.
+/// Exception type mirroring FirebaseAuthException for test purposes.
+class MockFirebaseAuthException implements Exception {
+  final String code;
+  MockFirebaseAuthException(this.code);
+  @override
+  String toString() => 'MockFirebaseAuthException: $code';
+}
+
+/// Simulates AuthService.getIdToken() logic after fix (#5927).
+/// Only clears cached auth on auth-specific exceptions (user-not-found,
+/// user-disabled, user-token-expired). Preserves token on transient errors.
 Future<String?> getIdTokenFixed({
   required bool hasCurrentUser,
   required Future<String?> Function() refreshToken,
@@ -32,11 +41,43 @@ Future<String?> getIdTokenFixed({
       return token;
     }
     return null;
+  } on MockFirebaseAuthException catch (e) {
+    if (e.code == 'user-not-found' || e.code == 'user-disabled' || e.code == 'user-token-expired') {
+      cache.authToken = '';
+      cache.tokenExpirationTime = 0;
+    }
+    // Other FirebaseAuthException codes: preserve cached token
+    return null;
   } catch (e) {
-    cache.authToken = '';
-    cache.tokenExpirationTime = 0;
+    // Transient errors (network, timeout): preserve cached token
     return null;
   }
+}
+
+/// Simulates getAuthHeader() logic after fix (#5927).
+/// Re-reads hasAuthToken after refresh, only overwrites on non-null result.
+Future<String> getAuthHeaderFixed({
+  required MockTokenCache cache,
+  required bool isExpirationDateValid,
+  required Future<String?> Function() getIdToken,
+  required bool isSignedIn,
+}) async {
+  bool hasAuthToken = cache.authToken.isNotEmpty;
+
+  if (!hasAuthToken || !isExpirationDateValid) {
+    final refreshedToken = await getIdToken();
+    if (refreshedToken != null) {
+      cache.authToken = refreshedToken;
+    }
+    hasAuthToken = cache.authToken.isNotEmpty;
+  }
+
+  if (!hasAuthToken) {
+    if (isSignedIn) {
+      throw Exception('No auth token found');
+    }
+  }
+  return 'Bearer ${cache.authToken}';
 }
 
 /// Simulates the OLD getIdToken() behavior (before fix) — returns cached expired token.
@@ -101,12 +142,16 @@ void main() {
   group('Bug 1: getIdToken returns null (not cached token) on failure', () {
     test('fixed: returns null when currentUser is null', () async {
       final cache = MockTokenCache()..authToken = 'expired-token-abc';
-      final result = await getIdTokenFixed(hasCurrentUser: false, refreshToken: () async => 'new-token', cache: cache);
+      final result = await getIdTokenFixed(
+        hasCurrentUser: false,
+        refreshToken: () async => 'new-token',
+        cache: cache,
+      );
       expect(result, isNull);
       expect(cache.authToken, isEmpty, reason: 'cache must be cleared');
     });
 
-    test('fixed: returns null when refresh throws', () async {
+    test('fixed: returns null and preserves cached token when refresh throws transient error', () async {
       final cache = MockTokenCache()..authToken = 'expired-token-abc';
       final result = await getIdTokenFixed(
         hasCurrentUser: true,
@@ -114,7 +159,7 @@ void main() {
         cache: cache,
       );
       expect(result, isNull);
-      expect(cache.authToken, isEmpty, reason: 'cache must be cleared on refresh failure');
+      expect(cache.authToken, equals('expired-token-abc'), reason: 'transient errors must preserve cached token');
     });
 
     test('fixed: returns new token on successful refresh', () async {
@@ -130,7 +175,11 @@ void main() {
 
     test('old behavior: returns cached expired token when currentUser is null (BUG)', () async {
       final cache = MockTokenCache()..authToken = 'expired-token-abc';
-      final result = await getIdTokenOld(hasCurrentUser: false, refreshToken: () async => 'new-token', cache: cache);
+      final result = await getIdTokenOld(
+        hasCurrentUser: false,
+        refreshToken: () async => 'new-token',
+        cache: cache,
+      );
       expect(result, equals('expired-token-abc'), reason: 'OLD code returns cached expired token — this is the bug');
     });
 
@@ -222,30 +271,39 @@ void main() {
     test('rapid successive getIdToken failures all return null', () async {
       final cache = MockTokenCache()..authToken = 'stale-token';
 
-      final results = await Future.wait([
-        getIdTokenFixed(hasCurrentUser: false, refreshToken: () async => null, cache: cache),
-        getIdTokenFixed(hasCurrentUser: true, refreshToken: () async => throw Exception('err1'), cache: cache),
-        getIdTokenFixed(hasCurrentUser: true, refreshToken: () async => throw Exception('err2'), cache: cache),
-      ]);
+      // First call: no currentUser → clears cache
+      final r1 = await getIdTokenFixed(hasCurrentUser: false, refreshToken: () async => null, cache: cache);
+      expect(r1, isNull);
+      expect(cache.authToken, isEmpty, reason: 'no currentUser clears cache');
 
-      expect(results, everyElement(isNull), reason: 'all failed refreshes must return null');
-      expect(cache.authToken, isEmpty, reason: 'cache must be empty after all failures');
+      // Subsequent transient errors return null but don't further corrupt
+      final r2 =
+          await getIdTokenFixed(hasCurrentUser: true, refreshToken: () async => throw Exception('err1'), cache: cache);
+      expect(r2, isNull);
+
+      final r3 =
+          await getIdTokenFixed(hasCurrentUser: true, refreshToken: () async => throw Exception('err2'), cache: cache);
+      expect(r3, isNull);
     });
 
     test('successful refresh after failure restores cache correctly', () async {
       final cache = MockTokenCache()..authToken = 'old-expired';
 
-      // First call fails — clears cache
+      // First call fails transiently — preserves cached token
       final r1 = await getIdTokenFixed(
         hasCurrentUser: true,
         refreshToken: () async => throw Exception('network'),
         cache: cache,
       );
       expect(r1, isNull);
-      expect(cache.authToken, isEmpty);
+      expect(cache.authToken, equals('old-expired'), reason: 'transient error preserves token');
 
       // Second call succeeds — restores cache with fresh token
-      final r2 = await getIdTokenFixed(hasCurrentUser: true, refreshToken: () async => 'fresh-token', cache: cache);
+      final r2 = await getIdTokenFixed(
+        hasCurrentUser: true,
+        refreshToken: () async => 'fresh-token',
+        cache: cache,
+      );
       expect(r2, equals('fresh-token'));
       expect(cache.authToken, equals('fresh-token'));
       expect(cache.tokenExpirationTime, greaterThan(0));
@@ -278,43 +336,45 @@ void main() {
 
     test('getIdToken with null refresh result (not exception) returns null', () async {
       final cache = MockTokenCache()..authToken = 'stale';
-      final result = await getIdTokenFixed(hasCurrentUser: true, refreshToken: () async => null, cache: cache);
+      final result = await getIdTokenFixed(
+        hasCurrentUser: true,
+        refreshToken: () async => null,
+        cache: cache,
+      );
       expect(result, isNull, reason: 'null from refresh should propagate as null, not cached token');
     });
   });
 
   group('Full loop: token expiry no longer causes infinite retry', () {
-    test(
-      'fixed: expired token -> getIdToken null -> signOut clears cache -> isSignedIn false -> no reconnect',
-      () async {
-        final cache = MockTokenCache()
-          ..authToken = 'expired-token'
-          ..tokenExpirationTime = DateTime.now().subtract(const Duration(hours: 1)).millisecondsSinceEpoch;
+    test('fixed: expired token -> getIdToken null -> signOut clears cache -> isSignedIn false -> no reconnect',
+        () async {
+      final cache = MockTokenCache()
+        ..authToken = 'expired-token'
+        ..tokenExpirationTime = DateTime.now().subtract(const Duration(hours: 1)).millisecondsSinceEpoch;
 
-        // Step 1: API call gets 401, tries to refresh token
-        // currentUser is null (token expired, Firebase session ended)
-        final refreshedToken = await getIdTokenFixed(
-          hasCurrentUser: false,
-          refreshToken: () async => throw Exception('no user'),
-          cache: cache,
-        );
-        expect(refreshedToken, isNull);
-        expect(cache.authToken, isEmpty);
+      // Step 1: API call gets 401, tries to refresh token
+      // currentUser is null (token expired, Firebase session ended)
+      final refreshedToken = await getIdTokenFixed(
+        hasCurrentUser: false,
+        refreshToken: () async => throw Exception('no user'),
+        cache: cache,
+      );
+      expect(refreshedToken, isNull);
+      expect(cache.authToken, isEmpty);
 
-        // Step 2: signOut is called (clears cache)
-        await signOutFixed(cache);
-        expect(cache.authToken, isEmpty);
-        expect(cache.tokenExpirationTime, equals(0));
+      // Step 2: signOut is called (clears cache)
+      await signOutFixed(cache);
+      expect(cache.authToken, isEmpty);
+      expect(cache.tokenExpirationTime, equals(0));
 
-        // Step 3: isSignedIn returns false (no Firebase user, no cached fallback)
-        final signedIn = isSignedInFixed(hasFirebaseUser: false);
-        expect(signedIn, isFalse);
+      // Step 3: isSignedIn returns false (no Firebase user, no cached fallback)
+      final signedIn = isSignedInFixed(hasFirebaseUser: false);
+      expect(signedIn, isFalse);
 
-        // Step 4: keepAlive timer checks auth — does NOT reconnect
-        final shouldReconnect = shouldReconnectFixed(isSignedIn: signedIn, socketDisconnected: true);
-        expect(shouldReconnect, isFalse, reason: 'Loop is broken — no more reconnect attempts');
-      },
-    );
+      // Step 4: keepAlive timer checks auth — does NOT reconnect
+      final shouldReconnect = shouldReconnectFixed(isSignedIn: signedIn, socketDisconnected: true);
+      expect(shouldReconnect, isFalse, reason: 'Loop is broken — no more reconnect attempts');
+    });
 
     test('old behavior: expired token causes infinite loop', () async {
       final cache = MockTokenCache()
@@ -340,6 +400,130 @@ void main() {
       // Step 4: keepAlive reconnects unconditionally (BUG 4)
       final shouldReconnect = shouldReconnectOld(socketDisconnected: true);
       expect(shouldReconnect, isTrue, reason: 'BUG: reconnects with expired token — LOOP CONTINUES');
+    });
+  });
+
+  group('Bug 5 (#5927): FirebaseAuthException code-specific clearing', () {
+    test('clears cache on user-not-found', () async {
+      final cache = MockTokenCache()..authToken = 'valid-token';
+      final result = await getIdTokenFixed(
+        hasCurrentUser: true,
+        refreshToken: () async => throw MockFirebaseAuthException('user-not-found'),
+        cache: cache,
+      );
+      expect(result, isNull);
+      expect(cache.authToken, isEmpty, reason: 'user-not-found must clear cache');
+    });
+
+    test('clears cache on user-disabled', () async {
+      final cache = MockTokenCache()..authToken = 'valid-token';
+      final result = await getIdTokenFixed(
+        hasCurrentUser: true,
+        refreshToken: () async => throw MockFirebaseAuthException('user-disabled'),
+        cache: cache,
+      );
+      expect(result, isNull);
+      expect(cache.authToken, isEmpty, reason: 'user-disabled must clear cache');
+    });
+
+    test('clears cache on user-token-expired', () async {
+      final cache = MockTokenCache()..authToken = 'valid-token';
+      final result = await getIdTokenFixed(
+        hasCurrentUser: true,
+        refreshToken: () async => throw MockFirebaseAuthException('user-token-expired'),
+        cache: cache,
+      );
+      expect(result, isNull);
+      expect(cache.authToken, isEmpty, reason: 'user-token-expired must clear cache');
+    });
+
+    test('preserves cache on unknown FirebaseAuthException code', () async {
+      final cache = MockTokenCache()..authToken = 'valid-token';
+      final result = await getIdTokenFixed(
+        hasCurrentUser: true,
+        refreshToken: () async => throw MockFirebaseAuthException('network-request-failed'),
+        cache: cache,
+      );
+      expect(result, isNull);
+      expect(cache.authToken, equals('valid-token'), reason: 'non-terminal FirebaseAuthException must preserve token');
+    });
+
+    test('preserves cache on generic exception (network timeout)', () async {
+      final cache = MockTokenCache()..authToken = 'valid-token';
+      final result = await getIdTokenFixed(
+        hasCurrentUser: true,
+        refreshToken: () async => throw Exception('SocketException: Connection timed out'),
+        cache: cache,
+      );
+      expect(result, isNull);
+      expect(cache.authToken, equals('valid-token'), reason: 'transient errors must preserve cached token');
+    });
+  });
+
+  group('Bug 6 (#5927): getAuthHeader recomputes hasAuthToken and preserves token', () {
+    test('successful refresh: returns bearer header with new token', () async {
+      final cache = MockTokenCache();
+      final header = await getAuthHeaderFixed(
+        cache: cache,
+        isExpirationDateValid: false,
+        getIdToken: () async => 'fresh-token',
+        isSignedIn: true,
+      );
+      expect(header, equals('Bearer fresh-token'));
+      expect(cache.authToken, equals('fresh-token'));
+    });
+
+    test('refresh returns null with no cached token, signed in: throws', () async {
+      final cache = MockTokenCache();
+      expect(
+        () => getAuthHeaderFixed(
+          cache: cache,
+          isExpirationDateValid: false,
+          getIdToken: () async => null,
+          isSignedIn: true,
+        ),
+        throwsException,
+      );
+    });
+
+    test('refresh returns null with no cached token, not signed in: returns empty bearer', () async {
+      final cache = MockTokenCache();
+      final header = await getAuthHeaderFixed(
+        cache: cache,
+        isExpirationDateValid: false,
+        getIdToken: () async => null,
+        isSignedIn: false,
+      );
+      expect(header, equals('Bearer '));
+    });
+
+    test('refresh returns null but cached token exists: preserves and uses cached token', () async {
+      final cache = MockTokenCache()..authToken = 'near-expiry-token';
+      final header = await getAuthHeaderFixed(
+        cache: cache,
+        isExpirationDateValid: false,
+        getIdToken: () async => null,
+        isSignedIn: true,
+      );
+      expect(header, equals('Bearer near-expiry-token'),
+          reason: 'null refresh must not wipe near-expiry but still valid token');
+      expect(cache.authToken, equals('near-expiry-token'));
+    });
+
+    test('valid expiration: skips refresh entirely', () async {
+      final cache = MockTokenCache()..authToken = 'current-token';
+      var refreshCalled = false;
+      final header = await getAuthHeaderFixed(
+        cache: cache,
+        isExpirationDateValid: true,
+        getIdToken: () async {
+          refreshCalled = true;
+          return 'should-not-be-used';
+        },
+        isSignedIn: true,
+      );
+      expect(header, equals('Bearer current-token'));
+      expect(refreshCalled, isFalse, reason: 'should not call refresh when token is still valid');
     });
   });
 }

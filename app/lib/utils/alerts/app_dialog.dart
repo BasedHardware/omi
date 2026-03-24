@@ -3,7 +3,7 @@ import 'dart:io';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
-import 'package:omi/main.dart';
+import 'package:omi/app_globals.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
 class AppDialog {
@@ -49,9 +49,9 @@ class AppDialog {
     String? okButtonText,
   }) {
     showDialog(
-      context: MyApp.navigatorKey.currentState!.overlay!.context,
+      context: globalNavigatorKey.currentState!.overlay!.context,
       builder: (c) => _getDialog(
-        context: MyApp.navigatorKey.currentState!.context,
+        context: globalNavigatorKey.currentState!.context,
         onConfirm: onConfirm,
         title: title,
         content: content,

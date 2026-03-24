@@ -10,7 +10,7 @@ import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/message_event.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/l10n/app_localizations.dart';
-import 'package:omi/main.dart';
+import 'package:omi/app_globals.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/people_provider.dart';
 import 'package:omi/services/services.dart';
@@ -426,7 +426,7 @@ void main() {
     Future<void> _pumpAppWithScaffold(WidgetTester tester) async {
       await tester.pumpWidget(
         MaterialApp(
-          navigatorKey: MyApp.navigatorKey,
+          navigatorKey: globalNavigatorKey,
           localizationsDelegates: const [
             AppLocalizations.delegate,
             GlobalMaterialLocalizations.delegate,

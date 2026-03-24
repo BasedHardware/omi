@@ -140,7 +140,7 @@ AUTH_DIR="$(cd "$(dirname "$0")/Auth-Python" && pwd)"
 BACKEND_PID=""
 AUTH_PID=""
 TUNNEL_PID=""
-TUNNEL_URL="https://omi-dev.m13v.com"
+TUNNEL_URL="${TUNNEL_URL:-}"
 AUTH_PORT="${AUTH_PORT:-10200}"
 
 # Cleanup function to stop backend, auth, and tunnel on exit
@@ -170,7 +170,7 @@ auth_debug "BEFORE pkill: auth_isSignedIn=$(defaults read "$BUNDLE_ID" auth_isSi
 auth_debug "BEFORE pkill: ALL_KEYS=$(defaults read "$BUNDLE_ID" 2>&1 | grep -E 'auth_|hasCompleted|hasLaunched|currentTier|userShow' || true)"
 # Only kill the dev app — never touch Omi Beta (production)
 pkill -f "$APP_NAME.app" 2>/dev/null || true
-pkill -f "cloudflared.*omi-computer-dev" 2>/dev/null || true
+# Note: don't pkill cloudflared here — other agents may have tunnels running on this machine
 # Kill any old Rust backend by process name (port-agnostic)
 pgrep -f "omi-desktop-backend" 2>/dev/null | while read pid; do
     substep "Killing old backend (PID: $pid)"
@@ -210,11 +210,22 @@ find "$HOME" -maxdepth 4 -name "$APP_NAME.app" -type d -not -path "$APP_BUNDLE" 
 done
 
 if [ "${OMI_SKIP_TUNNEL:-0}" != "1" ]; then
-    step "Starting Cloudflare tunnel..."
+    step "Starting Cloudflare quick tunnel..."
     if command -v cloudflared >/dev/null 2>&1; then
-        cloudflared tunnel run omi-computer-dev &
+        TUNNEL_LOG=$(mktemp /tmp/cloudflared-XXXXXX.log)
+        cloudflared tunnel --url http://localhost:${BACKEND_PORT:-8080} > "$TUNNEL_LOG" 2>&1 &
         TUNNEL_PID=$!
-        sleep 2
+        for i in {1..20}; do
+            TUNNEL_URL=$(grep -o 'https://[a-z0-9-]*\.trycloudflare\.com' "$TUNNEL_LOG" 2>/dev/null | head -1)
+            if [ -n "$TUNNEL_URL" ]; then break; fi
+            sleep 0.5
+        done
+        if [ -n "$TUNNEL_URL" ]; then
+            rm -f "$TUNNEL_LOG"
+            substep "Tunnel URL: $TUNNEL_URL"
+        else
+            substep "Warning: Could not capture tunnel URL (see $TUNNEL_LOG for details)"
+        fi
     else
         substep "cloudflared not found — skipping tunnel (set OMI_API_URL in .env instead)"
     fi
@@ -480,8 +491,8 @@ elif [ -f ".env.app" ]; then
 else
     touch "$APP_BUNDLE/Contents/Resources/.env"
 fi
-# Set OMI_API_URL: tunnel URL if tunnel is running, otherwise from .env or local backend
-if [ -n "$TUNNEL_PID" ]; then
+# Set OMI_API_URL: tunnel URL if available, otherwise from .env or local backend
+if [ -n "$TUNNEL_URL" ]; then
     EFFECTIVE_API_URL="$TUNNEL_URL"
 elif [ -n "$OMI_API_URL" ]; then
     EFFECTIVE_API_URL="$OMI_API_URL"

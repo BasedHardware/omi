@@ -2191,7 +2191,14 @@ A screenshot may be attached — use it silently only if relevant. Never mention
             }
 
             logError("Failed to get AI response", error: error)
-            AnalyticsManager.shared.chatAgentError(error: error.localizedDescription)
+            // Send both user-friendly and raw error to analytics for remote debugging
+            let rawError: String
+            if let bridgeError = error as? BridgeError {
+                rawError = String(describing: bridgeError)
+            } else {
+                rawError = "\(error)"
+            }
+            AnalyticsManager.shared.chatAgentError(error: error.localizedDescription, rawError: rawError)
 
             // Show error to user (unless they intentionally stopped)
             if let bridgeError = error as? BridgeError, case .stopped = bridgeError {
