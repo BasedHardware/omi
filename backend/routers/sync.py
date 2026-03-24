@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 from typing import List
 
 from fastapi import APIRouter, UploadFile, File, Depends, HTTPException, Query, Header, Request, Response
-from fastapi.responses import StreamingResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from opuslib import Decoder
 from pydub import AudioSegment
 
@@ -629,84 +629,101 @@ def _reprocess_conversation_after_update(uid: str, conversation_id: str, languag
 
 
 def process_segment(
-    path: str, uid: str, response: dict, source: ConversationSource = ConversationSource.omi, is_locked: bool = False
+    path: str,
+    uid: str,
+    response: dict,
+    lock: threading.Lock,
+    errors: list,
+    source: ConversationSource = ConversationSource.omi,
+    is_locked: bool = False,
 ):
-    url = get_syncing_file_temporal_signed_url(path)
+    try:
+        url = get_syncing_file_temporal_signed_url(path)
 
-    def delete_file():
-        time.sleep(480)
-        delete_syncing_temporal_file(path)
+        def delete_file():
+            time.sleep(480)
+            delete_syncing_temporal_file(path)
 
-    threading.Thread(target=delete_file).start()
+        threading.Thread(target=delete_file).start()
 
-    words, language = deepgram_prerecorded(url, speakers_count=3, attempts=0, return_language=True)
-    transcript_segments: List[TranscriptSegment] = postprocess_words(words, 0)
-    if not transcript_segments:
-        logger.error('failed to get deepgram segments')
-        return
+        words, language = deepgram_prerecorded(url, speakers_count=3, attempts=0, return_language=True)
+        transcript_segments: List[TranscriptSegment] = postprocess_words(words, 0)
+        if not transcript_segments:
+            error_msg = f'Transcription returned empty for segment {path}'
+            logger.error(error_msg)
+            with lock:
+                errors.append(error_msg)
+            return
 
-    timestamp = get_timestamp_from_path(path)
-    segment_end_timestamp = timestamp + transcript_segments[-1].end
-    closest_memory = get_closest_conversation_to_timestamps(uid, timestamp, segment_end_timestamp)
+        timestamp = get_timestamp_from_path(path)
+        segment_end_timestamp = timestamp + transcript_segments[-1].end
+        closest_memory = get_closest_conversation_to_timestamps(uid, timestamp, segment_end_timestamp)
 
-    if not closest_memory:
-        started_at = datetime.fromtimestamp(timestamp, tz=timezone.utc)
-        finished_at = datetime.fromtimestamp(segment_end_timestamp, tz=timezone.utc)
-        create_memory = CreateConversation(
-            started_at=started_at,
-            finished_at=finished_at,
-            transcript_segments=transcript_segments,
-            source=source,
-            is_locked=is_locked,
-        )
-        created = process_conversation(uid, language, create_memory)
-        response['new_memories'].add(created.id)
-    else:
+        if not closest_memory:
+            started_at = datetime.fromtimestamp(timestamp, tz=timezone.utc)
+            finished_at = datetime.fromtimestamp(segment_end_timestamp, tz=timezone.utc)
+            create_memory = CreateConversation(
+                started_at=started_at,
+                finished_at=finished_at,
+                transcript_segments=transcript_segments,
+                source=source,
+                is_locked=is_locked,
+            )
+            created = process_conversation(uid, language, create_memory)
+            with lock:
+                response['new_memories'].add(created.id)
+        else:
 
-        transcript_segments = [s.dict() for s in transcript_segments]
+            transcript_segments = [s.dict() for s in transcript_segments]
 
-        # assign timestamps to each segment
-        for segment in transcript_segments:
-            segment['timestamp'] = timestamp + segment['start']
-        for segment in closest_memory['transcript_segments']:
-            segment['timestamp'] = closest_memory['started_at'].timestamp() + segment['start']
+            # assign timestamps to each segment
+            for segment in transcript_segments:
+                segment['timestamp'] = timestamp + segment['start']
+            for segment in closest_memory['transcript_segments']:
+                segment['timestamp'] = closest_memory['started_at'].timestamp() + segment['start']
 
-        # merge and sort segments by start timestamp
-        segments = closest_memory['transcript_segments'] + transcript_segments
-        segments.sort(key=lambda x: x['timestamp'])
+            # merge and sort segments by start timestamp
+            segments = closest_memory['transcript_segments'] + transcript_segments
+            segments.sort(key=lambda x: x['timestamp'])
 
-        # fix segment.start .end to be relative to the memory
-        for i, segment in enumerate(segments):
-            duration = segment['end'] - segment['start']
-            segment['start'] = segment['timestamp'] - closest_memory['started_at'].timestamp()
-            segment['end'] = segment['start'] + duration
+            # fix segment.start .end to be relative to the memory
+            for i, segment in enumerate(segments):
+                duration = segment['end'] - segment['start']
+                segment['start'] = segment['timestamp'] - closest_memory['started_at'].timestamp()
+                segment['end'] = segment['start'] + duration
 
-        # Calculate new finished_at based on the latest segment
-        last_segment_end = segments[-1]['end'] if segments else 0
-        new_finished_at = datetime.fromtimestamp(
-            closest_memory['started_at'].timestamp() + last_segment_end, tz=timezone.utc
-        )
+            # Calculate new finished_at based on the latest segment
+            last_segment_end = segments[-1]['end'] if segments else 0
+            new_finished_at = datetime.fromtimestamp(
+                closest_memory['started_at'].timestamp() + last_segment_end, tz=timezone.utc
+            )
 
-        # Ensure finished_at doesn't go backwards
-        if new_finished_at < closest_memory['finished_at']:
-            new_finished_at = closest_memory['finished_at']
+            # Ensure finished_at doesn't go backwards
+            if new_finished_at < closest_memory['finished_at']:
+                new_finished_at = closest_memory['finished_at']
 
-        # remove timestamp field
-        for segment in segments:
-            segment.pop('timestamp')
+            # remove timestamp field
+            for segment in segments:
+                segment.pop('timestamp')
 
-        # save with updated finished_at
-        response['updated_memories'].add(closest_memory['id'])
-        update_conversation_segments(uid, closest_memory['id'], segments, finished_at=new_finished_at)
+            # save with updated finished_at
+            with lock:
+                response['updated_memories'].add(closest_memory['id'])
+            update_conversation_segments(uid, closest_memory['id'], segments, finished_at=new_finished_at)
 
-        # Lock existing conversation if credits exhausted
-        if is_locked:
-            conversations_db.update_conversation(uid, closest_memory['id'], {'is_locked': True})
+            # Lock existing conversation if credits exhausted
+            if is_locked:
+                conversations_db.update_conversation(uid, closest_memory['id'], {'is_locked': True})
 
-        # If the conversation was previously discarded, reprocess it with the new segments
-        if closest_memory.get('discarded', False):
-            logger.info(f'Conversation {closest_memory["id"]} was discarded, checking if it should be reprocessed')
-            _reprocess_conversation_after_update(uid, closest_memory['id'], language)
+            # If the conversation was previously discarded, reprocess it with the new segments
+            if closest_memory.get('discarded', False):
+                logger.info(f'Conversation {closest_memory["id"]} was discarded, checking if it should be reprocessed')
+                _reprocess_conversation_after_update(uid, closest_memory['id'], language)
+    except Exception as e:
+        error_msg = f'Failed to process segment {path}: {e}'
+        logger.error(error_msg)
+        with lock:
+            errors.append(error_msg)
 
 
 def _cleanup_files(file_paths):
@@ -786,6 +803,10 @@ async def sync_local_files(files: List[UploadFile] = File(...), uid: str = Depen
         is_locked = should_lock
 
         response = {'updated_memories': set(), 'new_memories': set()}
+        segment_errors = []
+        segment_lock = threading.Lock()
+        total_segments = len(segmented_paths)
+
         threads = [
             threading.Thread(
                 target=process_segment,
@@ -793,6 +814,8 @@ async def sync_local_files(files: List[UploadFile] = File(...), uid: str = Depen
                     path,
                     uid,
                     response,
+                    segment_lock,
+                    segment_errors,
                     source,
                     is_locked,
                 ),
@@ -801,7 +824,36 @@ async def sync_local_files(files: List[UploadFile] = File(...), uid: str = Depen
         ]
         chunk_threads(threads)
 
-        return response
+        # Build JSON-serializable response
+        result = {
+            'new_memories': sorted(response['new_memories']),
+            'updated_memories': sorted(response['updated_memories']),
+        }
+
+        failed_segments = len(segment_errors)
+        successful_segments = total_segments - failed_segments
+
+        if failed_segments > 0:
+            result['failed_segments'] = failed_segments
+            result['total_segments'] = total_segments
+            result['errors'] = segment_errors[:10]  # Cap error details to avoid huge responses
+            logger.error(
+                f'sync_local_files partial failure uid={uid} '
+                f'success={successful_segments}/{total_segments} errors={segment_errors[:3]}'
+            )
+
+        if total_segments > 0 and successful_segments == 0:
+            # All segments failed — return 500 (consistent with VAD error behavior)
+            raise HTTPException(
+                status_code=500,
+                detail=f"All {total_segments} segment(s) failed processing: {'; '.join(segment_errors[:3])}",
+            )
+
+        if failed_segments > 0:
+            # Partial failure — return 207 Multi-Status so old clients retry the batch
+            return JSONResponse(status_code=207, content=result)
+
+        return result
     finally:
         # Clean up any remaining temporary files
         _cleanup_files(paths)  # .bin files (in case decode_files_to_wav didn't finish)
