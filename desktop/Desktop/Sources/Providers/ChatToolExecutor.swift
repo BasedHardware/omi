@@ -95,6 +95,9 @@ class ChatToolExecutor {
             return result
 
         case "complete_onboarding":
+            if !OnboardingChatPersistence.isGoalCompleted {
+                return "ERROR: Cannot complete onboarding yet. The user has NOT set their monthly goal. You MUST call ask_followup to ask about their top goal this month BEFORE calling complete_onboarding. Call get_email_insights first for context, then ask the goal question."
+            }
             let result = await executeCompleteOnboarding(toolCall.arguments)
             AnalyticsManager.shared.onboardingChatToolUsed(tool: "complete_onboarding")
             return result

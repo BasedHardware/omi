@@ -743,6 +743,10 @@ struct OnboardingChatView: View {
           !chatProvider.isSending
         else { return }
 
+        guard OnboardingChatPersistence.isGoalCompleted || OnboardingChatPersistence.isToolCompleted else {
+          log("OnboardingChatView: Skipping auto-unlock — goal not yet completed")
+          return
+        }
         log("OnboardingChatView: Auto-unlocking Continue after recovered onboarding went idle")
         onboardingCompleted = true
       }
@@ -907,9 +911,13 @@ struct OnboardingChatView: View {
       || lower.contains("#1 goal")
       || lower.contains("number 1 goal")
       || lower.contains("goal this month")
+      || lower.contains("monthly goal")
       || lower.contains("what's your #1 goal")
       || lower.contains("top priority")
       || lower.contains("priority right now")
+      || lower.contains("goal ideas")
+      || lower.contains("main goal")
+      || lower.contains("biggest goal")
   }
 
   private func isDailyTaskQuestion(_ text: String) -> Bool {
