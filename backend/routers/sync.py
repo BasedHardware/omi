@@ -649,10 +649,7 @@ def process_segment(
         words, language = deepgram_prerecorded(url, speakers_count=3, attempts=0, return_language=True)
         transcript_segments: List[TranscriptSegment] = postprocess_words(words, 0)
         if not transcript_segments:
-            error_msg = f'Transcription returned empty for segment {path}'
-            logger.error(error_msg)
-            with lock:
-                errors.append(error_msg)
+            logger.warning(f'Transcription returned empty for segment {path} (silent/no speech)')
             return
 
         timestamp = get_timestamp_from_path(path)
