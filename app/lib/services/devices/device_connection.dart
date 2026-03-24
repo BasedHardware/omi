@@ -370,6 +370,17 @@ abstract class DeviceConnection {
     return false;
   }
 
+  Future<bool> stopStorageSync() async {
+    if (await isConnected()) {
+      return await performStopStorageSync();
+    }
+    return false;
+  }
+
+  Future<bool> performStopStorageSync() async {
+    return false;
+  }
+
   // --- Legacy storage protocol ---
 
   Future<List<int>> getStorageList() async {
