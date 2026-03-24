@@ -565,6 +565,12 @@ A screenshot may be attached — use it silently only if relevant. Never mention
             }
         }
         guard !acpBridgeStarted else { return true }
+        // Wait for API keys before starting the bridge — the subprocess reads
+        // ANTHROPIC_API_KEY from environment on launch. Without this, Mode B
+        // (no key / OAuth) is used even when the user should be on Mode A.
+        if acpBridge.passApiKey {
+            await APIKeyService.shared.waitForKeys()
+        }
         do {
             try await acpBridge.start()
             acpBridgeStarted = true
