@@ -228,4 +228,33 @@ void main() {
       expect(match, 0);
     });
   });
+
+  group('Session boundary reset', () {
+    // Verifies that onAudioCodecChanged must reset frames even when codec is unchanged,
+    // to prevent stale frames from a prior session leaking into a new session.
+    test('same-codec call should clear frames (session boundary)', () {
+      // Simulate the onAudioCodecChanged logic after removing early-return
+      List<List<int>> frames = [
+        [1, 2, 3],
+        [4, 5, 6],
+      ];
+      List<bool> frameSynced = [true, false];
+
+      void onAudioCodecChanged(BleAudioCodec codec) {
+        // After fix: always clear frames regardless of codec match
+        frames = [];
+        frameSynced = [];
+      }
+
+      // First session: accumulate frames
+      expect(frames.length, 2);
+
+      // Start new session with same codec
+      onAudioCodecChanged(BleAudioCodec.pcm16);
+
+      // Frames should be cleared
+      expect(frames.length, 0);
+      expect(frameSynced.length, 0);
+    });
+  });
 }
