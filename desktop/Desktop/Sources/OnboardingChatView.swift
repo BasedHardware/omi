@@ -687,14 +687,8 @@ struct OnboardingChatView: View {
         await bridgeWarmup
 
         // Resume the conversation — tell the AI the app was restarted
-        let resumeMessage: String
-        if OnboardingChatPersistence.isGoalCompleted {
-          resumeMessage = "I'm back — the app just restarted after granting a permission. Let's continue where we left off."
-        } else {
-          resumeMessage = "I'm back — the app just restarted after granting a permission. I haven't set my monthly goal yet — can you help me pick one?"
-        }
         await chatProvider.sendMessage(
-          resumeMessage,
+          "I'm back — the app just restarted after granting a permission. Let's continue where we left off.",
           systemPromptPrefix: resumeSystemPrompt,
           resume: savedSessionId
         )
