@@ -206,29 +206,29 @@ class OmiDeviceConnection extends DeviceConnection {
   @override
   Future<StorageStatus?> performGetStorageFileStats() async {
     try {
-      final value = await transport.readCharacteristic(
-        storageDataStreamServiceUuid,
-        storageReadControlCharacteristicUuid,
-      );
+      // Reuse existing performGetStorageList() which reads storageReadControlCharacteristicUuid
+      // and parses as array of LE uint32s.
+      // New firmware format: [0]=totalBytes, [1]=fileCount (was offset in old firmware)
+      final storageFiles = await performGetStorageList();
+      if (storageFiles.isEmpty) return null;
 
-      // New firmware returns 16 bytes: [totalUsedBytes:4][fileCount:4][freeBytes:4][statusFlags:4] (LE)
-      if (value.length < 16) {
-        Logger.debug('OmiDeviceConnection: Storage status too short (${value.length} bytes), old firmware?');
+      final totalBytes = storageFiles[0];
+      final fileCount = storageFiles.length >= 2 ? storageFiles[1] : 0;
+
+      // Distinguish new firmware from old: old firmware has [totalBytes, offset],
+      // new firmware has [totalBytes, fileCount]. If fileCount > totalBytes it's
+      // clearly an offset (old firmware). Also if totalBytes is 0 and fileCount is 0
+      // we can't tell, but that's fine — no files to sync either way.
+      if (fileCount > totalBytes && totalBytes > 0) {
+        Logger.debug('OmiDeviceConnection: Looks like old firmware (field[1]=$fileCount > totalBytes=$totalBytes)');
         return null;
       }
 
-      int readU32LE(List<int> data, int offset) {
-        return (data[offset] & 0xFF) |
-            ((data[offset + 1] & 0xFF) << 8) |
-            ((data[offset + 2] & 0xFF) << 16) |
-            ((data[offset + 3] & 0xFF) << 24);
-      }
-
       final status = StorageStatus(
-        totalUsedBytes: readU32LE(value, 0),
-        fileCount: readU32LE(value, 4),
-        freeBytes: readU32LE(value, 8),
-        statusFlags: readU32LE(value, 12),
+        totalUsedBytes: totalBytes,
+        fileCount: fileCount,
+        freeBytes: 0,
+        statusFlags: 0,
       );
       Logger.debug('OmiDeviceConnection: $status');
       return status;
@@ -238,75 +238,60 @@ class OmiDeviceConnection extends DeviceConnection {
     }
   }
 
+  /// Send CMD_LIST_FILES (0x10) and wait for the file list notification response.
+  /// Response format: [count:1][ts1:4 BE][sz1:4 BE][ts2:4 BE][sz2:4 BE]...
+  /// Caller is responsible for sending STOP command beforehand and retries.
   @override
   Future<List<StorageFileInfo>> performListStorageFiles() async {
     try {
       final completer = Completer<List<StorageFileInfo>>();
+      StreamSubscription? sub;
 
-      // Subscribe to notifications first
       final stream = transport.getCharacteristicStream(
         storageDataStreamServiceUuid,
         storageDataStreamCharacteristicUuid,
       );
 
-      StreamSubscription? subscription;
-      Timer? timeout;
-
-      subscription = stream.listen((value) {
+      sub = stream.listen((value) {
         if (completer.isCompleted) return;
-        timeout?.cancel();
+        if (value.isEmpty) return;
 
-        // Response format: [count:1][ts:4][sz:4]... (big-endian per firmware protocol)
-        if (value.isEmpty) {
+        int count = value[0];
+        int expectedLen = 1 + count * 8;
+
+        // Empty file list
+        if (count == 0 && value.length == 1) {
           completer.complete([]);
           return;
         }
 
-        try {
-          final count = value[0] & 0xFF;
-          if (count == 0xFF) {
-            // Error response
-            Logger.debug('OmiDeviceConnection: listStorageFiles error response');
-            completer.complete([]);
-            return;
-          }
-
+        // Validate this looks like a file list response (not a data packet or status byte)
+        if (value.length >= expectedLen && count > 0 && count <= 128) {
           List<StorageFileInfo> files = [];
-          int offset = 1;
-          for (int i = 0; i < count && offset + 8 <= value.length; i++) {
-            final timestamp = ((value[offset] & 0xFF) << 24) |
-                ((value[offset + 1] & 0xFF) << 16) |
-                ((value[offset + 2] & 0xFF) << 8) |
-                (value[offset + 3] & 0xFF);
-            final size = ((value[offset + 4] & 0xFF) << 24) |
-                ((value[offset + 5] & 0xFF) << 16) |
-                ((value[offset + 6] & 0xFF) << 8) |
-                (value[offset + 7] & 0xFF);
+          for (int i = 0; i < count; i++) {
+            int base = 1 + i * 8;
+            if (base + 8 > value.length) break;
+            int timestamp = (value[base] << 24) | (value[base + 1] << 16) | (value[base + 2] << 8) | value[base + 3];
+            int size = (value[base + 4] << 24) | (value[base + 5] << 16) | (value[base + 6] << 8) | value[base + 7];
             files.add(StorageFileInfo(index: i, timestamp: timestamp, sizeBytes: size));
-            offset += 8;
           }
-
           Logger.debug('OmiDeviceConnection: Listed ${files.length} storage files');
           completer.complete(files);
-        } catch (e) {
-          Logger.debug('OmiDeviceConnection: Error parsing file list: $e');
-          completer.complete([]);
         }
       });
 
-      timeout = Timer(const Duration(seconds: 5), () {
-        if (!completer.isCompleted) {
-          Logger.debug('OmiDeviceConnection: listStorageFiles timeout');
-          completer.complete([]);
-        }
-      });
-
-      // Send CMD_LIST_FILES command
+      // Send CMD_LIST_FILES
       await transport.writeCharacteristic(storageDataStreamServiceUuid, storageDataStreamCharacteristicUuid, [0x10]);
 
-      final result = await completer.future;
-      await subscription.cancel();
-      timeout.cancel();
+      final result = await completer.future.timeout(
+        const Duration(seconds: 10),
+        onTimeout: () {
+          Logger.debug('OmiDeviceConnection: listFiles timeout');
+          return <StorageFileInfo>[];
+        },
+      );
+
+      await sub.cancel();
       return result;
     } catch (e) {
       Logger.debug('OmiDeviceConnection: Error listing storage files: $e');
@@ -355,6 +340,18 @@ class OmiDeviceConnection extends DeviceConnection {
       return result;
     } catch (e) {
       Logger.debug('OmiDeviceConnection: Error deleting storage file: $e');
+      return false;
+    }
+  }
+
+  @override
+  Future<bool> performStopStorageSync() async {
+    try {
+      await transport.writeCharacteristic(storageDataStreamServiceUuid, storageDataStreamCharacteristicUuid, [0x03]);
+      Logger.debug('OmiDeviceConnection: Sent STOP_SYNC command');
+      return true;
+    } catch (e) {
+      Logger.debug('OmiDeviceConnection: Error sending stop command: $e');
       return false;
     }
   }
