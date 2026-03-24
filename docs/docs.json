@@ -236,13 +236,16 @@
     "links": [
       {
         "label": "Support",
-        "href": "https://discord.omi.me"
+        "href": "https://help.omi.me"
       }
     ],
     "primary": {
       "type": "button",
       "label": "Buy Now",
-      "href": "https://www.omi.me/products/friend-dev-2"
+      "href": "https://www.omi.me/cart/50230946562340:1"
     }
+  },
+  "ai": {
+    "llmsTxt": true
   }
 }
