@@ -1892,6 +1892,13 @@ A screenshot may be attached — use it silently only if relevant. Never mention
                 sender: .user
             )
             messages.append(userMessage)
+
+            // Track onboarding user messages with full content
+            if isOnboarding {
+                AnalyticsManager.shared.onboardingChatMessageDetailed(
+                    role: "user", text: trimmedText, step: "chat"
+                )
+            }
         }
 
         // Create a placeholder AI message shown immediately in the UI while
@@ -2099,6 +2106,18 @@ A screenshot may be attached — use it silently only if relevant. Never mention
 
             log("Chat response complete")
 
+            // Track onboarding AI responses with full content and tool calls
+            if isOnboarding {
+                let aiText = messages.first(where: { $0.id == aiMessageId })?.text ?? queryResult.text
+                AnalyticsManager.shared.onboardingChatMessageDetailed(
+                    role: "assistant",
+                    text: aiText,
+                    step: "chat",
+                    toolCalls: toolNames.isEmpty ? nil : toolNames,
+                    model: model ?? modelOverride
+                )
+            }
+
             // Persist the ACP session ID during onboarding so we can resume after app restart
             if isOnboarding && !queryResult.sessionId.isEmpty {
                 OnboardingChatPersistence.saveSessionId(queryResult.sessionId)
@@ -2199,6 +2218,14 @@ A screenshot may be attached — use it silently only if relevant. Never mention
                 rawError = "\(error)"
             }
             AnalyticsManager.shared.chatAgentError(error: error.localizedDescription, rawError: rawError)
+
+            // Track onboarding errors with full context
+            if isOnboarding {
+                AnalyticsManager.shared.onboardingChatMessageDetailed(
+                    role: "error", text: trimmedText, step: "chat",
+                    error: rawError
+                )
+            }
 
             // Show error to user (unless they intentionally stopped)
             if let bridgeError = error as? BridgeError, case .stopped = bridgeError {
