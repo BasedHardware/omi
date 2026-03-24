@@ -8277,4 +8277,371 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get conversationsEmptyStateMessage => 'Mulai percakapan dengan Nooto atau rekam satu dengan perangkat Anda';
+
+  @override
+  String get tasksCleanTodayTitle => 'Bersihkan tugas hari ini?';
+
+  @override
+  String get tasksCleanTodayMessage => 'Ini hanya akan menghapus tenggat waktu';
+
+  @override
+  String get shared => 'Dibagikan';
+
+  @override
+  String get onlyYouCanSeeConversation => 'Hanya Anda yang dapat melihat percakapan ini';
+
+  @override
+  String get anyoneWithLinkCanView => 'Siapa pun yang memiliki tautan dapat melihat';
+
+  @override
+  String get tasksOverdue => 'Terlambat';
+
+  @override
+  String get phoneCallsWithOmi => 'Panggilan dengan Omi';
+
+  @override
+  String get phoneCallsSubtitle => 'Telepon dengan transkripsi real-time';
+
+  @override
+  String get phoneSetupStep1Title => 'Verifikasi nomor telepon Anda';
+
+  @override
+  String get phoneSetupStep1Subtitle => 'Kami akan menelepon untuk mengonfirmasi';
+
+  @override
+  String get phoneSetupStep2Title => 'Masukkan kode verifikasi';
+
+  @override
+  String get phoneSetupStep2Subtitle => 'Kode pendek yang Anda ketik saat panggilan';
+
+  @override
+  String get phoneSetupStep3Title => 'Mulai menelepon kontak Anda';
+
+  @override
+  String get phoneSetupStep3Subtitle => 'Dengan transkripsi langsung bawaan';
+
+  @override
+  String get phoneGetStarted => 'Mulai';
+
+  @override
+  String get callRecordingConsentDisclaimer => 'Rekaman panggilan mungkin memerlukan persetujuan di yurisdiksi Anda';
+
+  @override
+  String get enterYourNumber => 'Masukkan nomor Anda';
+
+  @override
+  String get phoneNumberCallerIdHint => 'Setelah diverifikasi, ini menjadi ID penelepon Anda';
+
+  @override
+  String get phoneNumberHint => 'Nomor telepon';
+
+  @override
+  String get failedToStartVerification => 'Gagal memulai verifikasi';
+
+  @override
+  String get phoneContinue => 'Lanjutkan';
+
+  @override
+  String get verifyYourNumber => 'Verifikasi nomor Anda';
+
+  @override
+  String get answerTheCallFrom => 'Jawab panggilan dari';
+
+  @override
+  String get onTheCallEnterThisCode => 'Saat panggilan, masukkan kode ini';
+
+  @override
+  String get followTheVoiceInstructions => 'Ikuti petunjuk suara';
+
+  @override
+  String get statusCalling => 'Memanggil...';
+
+  @override
+  String get statusCallInProgress => 'Panggilan berlangsung';
+
+  @override
+  String get statusVerifiedLabel => 'Terverifikasi';
+
+  @override
+  String get statusCallMissed => 'Panggilan tak terjawab';
+
+  @override
+  String get statusTimedOut => 'Waktu habis';
+
+  @override
+  String get phoneTryAgain => 'Coba lagi';
+
+  @override
+  String get phonePageTitle => 'Telepon';
+
+  @override
+  String get phoneContactsTab => 'Kontak';
+
+  @override
+  String get phoneKeypadTab => 'Keypad';
+
+  @override
+  String get grantContactsAccess => 'Berikan akses ke kontak Anda';
+
+  @override
+  String get phoneAllow => 'Izinkan';
+
+  @override
+  String get phoneSearchHint => 'Cari';
+
+  @override
+  String get phoneNoContactsFound => 'Tidak ada kontak ditemukan';
+
+  @override
+  String get phoneEnterNumber => 'Masukkan nomor';
+
+  @override
+  String get failedToStartCall => 'Gagal memulai panggilan';
+
+  @override
+  String get callStateConnecting => 'Menghubungkan...';
+
+  @override
+  String get callStateRinging => 'Berdering...';
+
+  @override
+  String get callStateEnded => 'Panggilan berakhir';
+
+  @override
+  String get callStateFailed => 'Panggilan gagal';
+
+  @override
+  String get transcriptPlaceholder => 'Transkripsi akan muncul di sini...';
+
+  @override
+  String get phoneUnmute => 'Bunyikan';
+
+  @override
+  String get phoneMute => 'Bisukan';
+
+  @override
+  String get phoneSpeaker => 'Speaker';
+
+  @override
+  String get phoneEndCall => 'Akhiri';
+
+  @override
+  String get phoneCallSettingsTitle => 'Pengaturan panggilan';
+
+  @override
+  String get yourVerifiedNumbers => 'Nomor terverifikasi Anda';
+
+  @override
+  String get verifiedNumbersDescription => 'Saat Anda menelepon seseorang, mereka akan melihat nomor ini';
+
+  @override
+  String get noVerifiedNumbers => 'Tidak ada nomor terverifikasi';
+
+  @override
+  String deletePhoneNumberConfirm(String phoneNumber) {
+    return 'Hapus $phoneNumber?';
+  }
+
+  @override
+  String get deletePhoneNumberWarning => 'Anda perlu memverifikasi lagi untuk menelepon';
+
+  @override
+  String get phoneDeleteButton => 'Hapus';
+
+  @override
+  String verifiedMinutesAgo(int minutes) {
+    return 'Diverifikasi ${minutes}m lalu';
+  }
+
+  @override
+  String verifiedHoursAgo(int hours) {
+    return 'Diverifikasi ${hours}j lalu';
+  }
+
+  @override
+  String verifiedDaysAgo(int days) {
+    return 'Diverifikasi ${days}h lalu';
+  }
+
+  @override
+  String verifiedOnDate(String date) {
+    return 'Diverifikasi pada $date';
+  }
+
+  @override
+  String get verifiedFallback => 'Terverifikasi';
+
+  @override
+  String get callAlreadyInProgress => 'Panggilan sedang berlangsung';
+
+  @override
+  String get failedToGetCallToken => 'Gagal mendapatkan token. Verifikasi nomor Anda terlebih dahulu.';
+
+  @override
+  String get failedToInitializeCallService => 'Gagal menginisialisasi layanan panggilan';
+
+  @override
+  String get speakerLabelYou => 'Anda';
+
+  @override
+  String get speakerLabelUnknown => 'Tidak dikenal';
+
+  @override
+  String get showDailyScoreOnHomepage => 'Tampilkan Skor Harian di beranda';
+
+  @override
+  String get showTasksOnHomepage => 'Tampilkan Tugas di beranda';
+
+  @override
+  String get phoneCallsUnlimitedOnly => 'Panggilan Telepon via Omi';
+
+  @override
+  String get phoneCallsUpsellSubtitle =>
+      'Lakukan panggilan melalui Omi dan dapatkan transkripsi real-time, ringkasan otomatis, dan lainnya.';
+
+  @override
+  String get phoneCallsUpsellFeature1 => 'Transkripsi real-time setiap panggilan';
+
+  @override
+  String get phoneCallsUpsellFeature2 => 'Ringkasan panggilan otomatis dan item tindakan';
+
+  @override
+  String get phoneCallsUpsellFeature3 => 'Penerima melihat nomor asli Anda, bukan nomor acak';
+
+  @override
+  String get phoneCallsUpsellFeature4 => 'Panggilan Anda tetap pribadi dan aman';
+
+  @override
+  String get phoneCallsUpgradeButton => 'Upgrade ke Unlimited';
+
+  @override
+  String get phoneCallsMaybeLater => 'Mungkin nanti';
+
+  @override
+  String get deleteSynced => 'Hapus yang disinkronkan';
+
+  @override
+  String get deleteSyncedFiles => 'Hapus rekaman tersinkronisasi';
+
+  @override
+  String get deleteSyncedFilesMessage => 'Rekaman ini sudah disinkronkan ke ponsel Anda. Ini tidak dapat dibatalkan.';
+
+  @override
+  String get syncedFilesDeleted => 'Rekaman tersinkronisasi dihapus';
+
+  @override
+  String get deletePending => 'Hapus yang tertunda';
+
+  @override
+  String get deletePendingFiles => 'Hapus rekaman tertunda';
+
+  @override
+  String get deletePendingFilesWarning =>
+      'Rekaman ini BELUM disinkronkan ke ponsel Anda dan akan hilang secara permanen. Ini tidak dapat dibatalkan.';
+
+  @override
+  String get pendingFilesDeleted => 'Rekaman tertunda dihapus';
+
+  @override
+  String get deleteAllFiles => 'Hapus semua rekaman';
+
+  @override
+  String get deleteAll => 'Hapus semua';
+
+  @override
+  String get deleteAllFilesWarning =>
+      'Ini akan menghapus rekaman tersinkronisasi dan tertunda. Rekaman tertunda BELUM disinkronkan dan akan hilang secara permanen.';
+
+  @override
+  String get allFilesDeleted => 'Semua rekaman dihapus';
+
+  @override
+  String nFiles(int count) {
+    return '$count rekaman';
+  }
+
+  @override
+  String get manageStorage => 'Kelola penyimpanan';
+
+  @override
+  String get safelyBackedUp => 'Dicadangkan dengan aman ke ponsel Anda';
+
+  @override
+  String get notYetSynced => 'Belum disinkronkan ke ponsel Anda';
+
+  @override
+  String get clearAll => 'Hapus semua';
+
+  @override
+  String get phoneKeypad => 'Keypad';
+
+  @override
+  String get phoneHideKeypad => 'Sembunyikan keypad';
+
+  @override
+  String get fairUsePolicy => 'Penggunaan Wajar';
+
+  @override
+  String get fairUseLoadError => 'Tidak dapat memuat status penggunaan wajar. Silakan coba lagi.';
+
+  @override
+  String get fairUseStatusNormal => 'Penggunaan Anda dalam batas normal.';
+
+  @override
+  String get fairUseStageNormal => 'Normal';
+
+  @override
+  String get fairUseStageWarning => 'Peringatan';
+
+  @override
+  String get fairUseStageThrottle => 'Dibatasi';
+
+  @override
+  String get fairUseStageRestrict => 'Diblokir';
+
+  @override
+  String get fairUseSpeechUsage => 'Penggunaan Ucapan';
+
+  @override
+  String get fairUseToday => 'Hari ini';
+
+  @override
+  String get fairUse3Day => '3 hari bergulir';
+
+  @override
+  String get fairUseWeekly => 'Mingguan bergulir';
+
+  @override
+  String get fairUseAboutTitle => 'Tentang Penggunaan Wajar';
+
+  @override
+  String get fairUseAboutBody =>
+      'Omi dirancang untuk percakapan pribadi, rapat, dan interaksi langsung. Penggunaan diukur berdasarkan waktu bicara nyata yang terdeteksi, bukan waktu koneksi. Jika penggunaan secara signifikan melebihi pola normal untuk konten non-pribadi, penyesuaian dapat diterapkan.';
+
+  @override
+  String fairUseCaseRefCopied(String caseRef) {
+    return '$caseRef disalin';
+  }
+
+  @override
+  String get fairUseDailyTranscription => 'Daily Transcription';
+
+  @override
+  String fairUseBudgetUsed(String used, String limit) {
+    return '${used}m / ${limit}m';
+  }
+
+  @override
+  String get fairUseBudgetExhausted => 'Daily transcription limit reached';
+
+  @override
+  String fairUseBudgetResetsAt(String time) {
+    return 'Resets $time';
+  }
+
+  @override
+  String get transcriptionPaused => 'Merekam, menghubungkan ulang';
+
+  @override
+  String get transcriptionPausedReconnecting => 'Masih merekam — menghubungkan ulang ke transkripsi...';
 }

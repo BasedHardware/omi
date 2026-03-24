@@ -8294,4 +8294,372 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get conversationsEmptyStateMessage => 'Begin een gesprek met Nooto of neem er een op met je apparaat';
+
+  @override
+  String get tasksCleanTodayTitle => 'Taken van vandaag opschonen?';
+
+  @override
+  String get tasksCleanTodayMessage => 'Hiermee worden alleen deadlines verwijderd';
+
+  @override
+  String get shared => 'Gedeeld';
+
+  @override
+  String get onlyYouCanSeeConversation => 'Alleen jij kunt dit gesprek zien';
+
+  @override
+  String get anyoneWithLinkCanView => 'Iedereen met de link kan bekijken';
+
+  @override
+  String get tasksOverdue => 'Achterstallig';
+
+  @override
+  String get phoneCallsWithOmi => 'Bellen met Omi';
+
+  @override
+  String get phoneCallsSubtitle => 'Bel met realtime transcriptie';
+
+  @override
+  String get phoneSetupStep1Title => 'Verifieer uw telefoonnummer';
+
+  @override
+  String get phoneSetupStep1Subtitle => 'We bellen u ter bevestiging';
+
+  @override
+  String get phoneSetupStep2Title => 'Voer een verificatiecode in';
+
+  @override
+  String get phoneSetupStep2Subtitle => 'Een korte code die u invoert tijdens het gesprek';
+
+  @override
+  String get phoneSetupStep3Title => 'Begin uw contacten te bellen';
+
+  @override
+  String get phoneSetupStep3Subtitle => 'Met ingebouwde live transcriptie';
+
+  @override
+  String get phoneGetStarted => 'Aan de slag';
+
+  @override
+  String get callRecordingConsentDisclaimer => 'Gespreksopname kan toestemming vereisen in uw rechtsgebied';
+
+  @override
+  String get enterYourNumber => 'Voer uw nummer in';
+
+  @override
+  String get phoneNumberCallerIdHint => 'Na verificatie wordt dit uw beller-ID';
+
+  @override
+  String get phoneNumberHint => 'Telefoonnummer';
+
+  @override
+  String get failedToStartVerification => 'Kan verificatie niet starten';
+
+  @override
+  String get phoneContinue => 'Doorgaan';
+
+  @override
+  String get verifyYourNumber => 'Verifieer uw nummer';
+
+  @override
+  String get answerTheCallFrom => 'Beantwoord het gesprek van';
+
+  @override
+  String get onTheCallEnterThisCode => 'Voer tijdens het gesprek deze code in';
+
+  @override
+  String get followTheVoiceInstructions => 'Volg de spraakinstructies';
+
+  @override
+  String get statusCalling => 'Bellen...';
+
+  @override
+  String get statusCallInProgress => 'Gesprek gaande';
+
+  @override
+  String get statusVerifiedLabel => 'Geverifieerd';
+
+  @override
+  String get statusCallMissed => 'Gemist gesprek';
+
+  @override
+  String get statusTimedOut => 'Tijd verstreken';
+
+  @override
+  String get phoneTryAgain => 'Opnieuw proberen';
+
+  @override
+  String get phonePageTitle => 'Telefoon';
+
+  @override
+  String get phoneContactsTab => 'Contacten';
+
+  @override
+  String get phoneKeypadTab => 'Toetsenbord';
+
+  @override
+  String get grantContactsAccess => 'Geef toegang tot uw contacten';
+
+  @override
+  String get phoneAllow => 'Toestaan';
+
+  @override
+  String get phoneSearchHint => 'Zoeken';
+
+  @override
+  String get phoneNoContactsFound => 'Geen contacten gevonden';
+
+  @override
+  String get phoneEnterNumber => 'Voer nummer in';
+
+  @override
+  String get failedToStartCall => 'Kan gesprek niet starten';
+
+  @override
+  String get callStateConnecting => 'Verbinden...';
+
+  @override
+  String get callStateRinging => 'Gaat over...';
+
+  @override
+  String get callStateEnded => 'Gesprek beeindigd';
+
+  @override
+  String get callStateFailed => 'Gesprek mislukt';
+
+  @override
+  String get transcriptPlaceholder => 'Transcriptie verschijnt hier...';
+
+  @override
+  String get phoneUnmute => 'Demping opheffen';
+
+  @override
+  String get phoneMute => 'Dempen';
+
+  @override
+  String get phoneSpeaker => 'Luidspreker';
+
+  @override
+  String get phoneEndCall => 'Einde';
+
+  @override
+  String get phoneCallSettingsTitle => 'Gespreksinstellingen';
+
+  @override
+  String get yourVerifiedNumbers => 'Uw geverifieerde nummers';
+
+  @override
+  String get verifiedNumbersDescription => 'Wanneer u iemand belt, zien zij dit nummer';
+
+  @override
+  String get noVerifiedNumbers => 'Geen geverifieerde nummers';
+
+  @override
+  String deletePhoneNumberConfirm(String phoneNumber) {
+    return '$phoneNumber verwijderen?';
+  }
+
+  @override
+  String get deletePhoneNumberWarning => 'U moet opnieuw verifieren om te bellen';
+
+  @override
+  String get phoneDeleteButton => 'Verwijderen';
+
+  @override
+  String verifiedMinutesAgo(int minutes) {
+    return '${minutes}min geleden geverifieerd';
+  }
+
+  @override
+  String verifiedHoursAgo(int hours) {
+    return '${hours}u geleden geverifieerd';
+  }
+
+  @override
+  String verifiedDaysAgo(int days) {
+    return '${days}d geleden geverifieerd';
+  }
+
+  @override
+  String verifiedOnDate(String date) {
+    return 'Geverifieerd op $date';
+  }
+
+  @override
+  String get verifiedFallback => 'Geverifieerd';
+
+  @override
+  String get callAlreadyInProgress => 'Er is al een gesprek gaande';
+
+  @override
+  String get failedToGetCallToken => 'Kan token niet ophalen. Verifieer eerst uw nummer.';
+
+  @override
+  String get failedToInitializeCallService => 'Kan belservice niet initialiseren';
+
+  @override
+  String get speakerLabelYou => 'U';
+
+  @override
+  String get speakerLabelUnknown => 'Onbekend';
+
+  @override
+  String get showDailyScoreOnHomepage => 'Dagelijkse score weergeven op startpagina';
+
+  @override
+  String get showTasksOnHomepage => 'Taken weergeven op startpagina';
+
+  @override
+  String get phoneCallsUnlimitedOnly => 'Telefoongesprekken via Omi';
+
+  @override
+  String get phoneCallsUpsellSubtitle =>
+      'Bel via Omi en krijg realtime transcriptie, automatische samenvattingen en meer.';
+
+  @override
+  String get phoneCallsUpsellFeature1 => 'Realtime transcriptie van elk gesprek';
+
+  @override
+  String get phoneCallsUpsellFeature2 => 'Automatische gesprekssamenvattingen en actiepunten';
+
+  @override
+  String get phoneCallsUpsellFeature3 => 'Ontvangers zien je echte nummer, niet een willekeurig';
+
+  @override
+  String get phoneCallsUpsellFeature4 => 'Je gesprekken blijven privé en veilig';
+
+  @override
+  String get phoneCallsUpgradeButton => 'Upgraden naar Onbeperkt';
+
+  @override
+  String get phoneCallsMaybeLater => 'Misschien later';
+
+  @override
+  String get deleteSynced => 'Gesynchroniseerde verwijderen';
+
+  @override
+  String get deleteSyncedFiles => 'Gesynchroniseerde opnames verwijderen';
+
+  @override
+  String get deleteSyncedFilesMessage =>
+      'Deze opnames zijn al gesynchroniseerd met uw telefoon. Dit kan niet ongedaan worden gemaakt.';
+
+  @override
+  String get syncedFilesDeleted => 'Gesynchroniseerde opnames verwijderd';
+
+  @override
+  String get deletePending => 'Wachtende verwijderen';
+
+  @override
+  String get deletePendingFiles => 'Wachtende opnames verwijderen';
+
+  @override
+  String get deletePendingFilesWarning =>
+      'Deze opnames zijn NIET gesynchroniseerd met uw telefoon en gaan permanent verloren. Dit kan niet ongedaan worden gemaakt.';
+
+  @override
+  String get pendingFilesDeleted => 'Wachtende opnames verwijderd';
+
+  @override
+  String get deleteAllFiles => 'Alle opnames verwijderen';
+
+  @override
+  String get deleteAll => 'Alles verwijderen';
+
+  @override
+  String get deleteAllFilesWarning =>
+      'Dit verwijdert gesynchroniseerde en wachtende opnames. Wachtende opnames zijn NIET gesynchroniseerd en gaan permanent verloren.';
+
+  @override
+  String get allFilesDeleted => 'Alle opnames verwijderd';
+
+  @override
+  String nFiles(int count) {
+    return '$count opnames';
+  }
+
+  @override
+  String get manageStorage => 'Opslag beheren';
+
+  @override
+  String get safelyBackedUp => 'Veilig opgeslagen op uw telefoon';
+
+  @override
+  String get notYetSynced => 'Nog niet gesynchroniseerd met uw telefoon';
+
+  @override
+  String get clearAll => 'Alles wissen';
+
+  @override
+  String get phoneKeypad => 'Toetsenbord';
+
+  @override
+  String get phoneHideKeypad => 'Toetsenbord verbergen';
+
+  @override
+  String get fairUsePolicy => 'Redelijk gebruik';
+
+  @override
+  String get fairUseLoadError => 'Kan de status van redelijk gebruik niet laden. Probeer het opnieuw.';
+
+  @override
+  String get fairUseStatusNormal => 'Uw gebruik is binnen de normale grenzen.';
+
+  @override
+  String get fairUseStageNormal => 'Normaal';
+
+  @override
+  String get fairUseStageWarning => 'Waarschuwing';
+
+  @override
+  String get fairUseStageThrottle => 'Beperkt';
+
+  @override
+  String get fairUseStageRestrict => 'Geblokkeerd';
+
+  @override
+  String get fairUseSpeechUsage => 'Spraakgebruik';
+
+  @override
+  String get fairUseToday => 'Vandaag';
+
+  @override
+  String get fairUse3Day => '3-daags voortschrijdend';
+
+  @override
+  String get fairUseWeekly => 'Wekelijks voortschrijdend';
+
+  @override
+  String get fairUseAboutTitle => 'Over redelijk gebruik';
+
+  @override
+  String get fairUseAboutBody =>
+      'Omi is ontworpen voor persoonlijke gesprekken, vergaderingen en live interacties. Het gebruik wordt gemeten aan de hand van de werkelijke gedetecteerde spreektijd, niet de verbindingstijd. Als het gebruik de normale patronen voor niet-persoonlijke inhoud aanzienlijk overschrijdt, kunnen aanpassingen worden toegepast.';
+
+  @override
+  String fairUseCaseRefCopied(String caseRef) {
+    return '$caseRef gekopieerd';
+  }
+
+  @override
+  String get fairUseDailyTranscription => 'Daily Transcription';
+
+  @override
+  String fairUseBudgetUsed(String used, String limit) {
+    return '${used}m / ${limit}m';
+  }
+
+  @override
+  String get fairUseBudgetExhausted => 'Daily transcription limit reached';
+
+  @override
+  String fairUseBudgetResetsAt(String time) {
+    return 'Resets $time';
+  }
+
+  @override
+  String get transcriptionPaused => 'Opname, opnieuw verbinden';
+
+  @override
+  String get transcriptionPausedReconnecting => 'Neemt nog steeds op — opnieuw verbinden met transcriptie...';
 }

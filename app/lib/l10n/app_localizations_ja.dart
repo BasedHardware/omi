@@ -8124,4 +8124,368 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get conversationsEmptyStateMessage => 'Nootoと会話を始めるか、デバイスで録音してください';
+
+  @override
+  String get tasksCleanTodayTitle => '今日のタスクを整理しますか？';
+
+  @override
+  String get tasksCleanTodayMessage => '期限のみ削除されます';
+
+  @override
+  String get shared => '共有済み';
+
+  @override
+  String get onlyYouCanSeeConversation => 'この会話を見ることができるのはあなただけです';
+
+  @override
+  String get anyoneWithLinkCanView => 'リンクを知っている人は誰でも閲覧できます';
+
+  @override
+  String get tasksOverdue => '期限切れ';
+
+  @override
+  String get phoneCallsWithOmi => 'Omiで通話';
+
+  @override
+  String get phoneCallsSubtitle => 'リアルタイム文字起こし付きで通話';
+
+  @override
+  String get phoneSetupStep1Title => '電話番号を認証';
+
+  @override
+  String get phoneSetupStep1Subtitle => '確認のためお電話します';
+
+  @override
+  String get phoneSetupStep2Title => '認証コードを入力';
+
+  @override
+  String get phoneSetupStep2Subtitle => '通話中に入力する短いコード';
+
+  @override
+  String get phoneSetupStep3Title => '連絡先に電話を開始';
+
+  @override
+  String get phoneSetupStep3Subtitle => 'ライブ文字起こし内蔵';
+
+  @override
+  String get phoneGetStarted => '始める';
+
+  @override
+  String get callRecordingConsentDisclaimer => '通話録音にはお住まいの地域で同意が必要な場合があります';
+
+  @override
+  String get enterYourNumber => '番号を入力';
+
+  @override
+  String get phoneNumberCallerIdHint => '認証後、これが発信者IDになります';
+
+  @override
+  String get phoneNumberHint => '電話番号';
+
+  @override
+  String get failedToStartVerification => '認証の開始に失敗しました';
+
+  @override
+  String get phoneContinue => '続ける';
+
+  @override
+  String get verifyYourNumber => '番号を認証';
+
+  @override
+  String get answerTheCallFrom => 'この番号からの着信に応答';
+
+  @override
+  String get onTheCallEnterThisCode => '通話中にこのコードを入力';
+
+  @override
+  String get followTheVoiceInstructions => '音声案内に従ってください';
+
+  @override
+  String get statusCalling => '発信中...';
+
+  @override
+  String get statusCallInProgress => '通話中';
+
+  @override
+  String get statusVerifiedLabel => '認証済み';
+
+  @override
+  String get statusCallMissed => '不在着信';
+
+  @override
+  String get statusTimedOut => 'タイムアウト';
+
+  @override
+  String get phoneTryAgain => '再試行';
+
+  @override
+  String get phonePageTitle => '電話';
+
+  @override
+  String get phoneContactsTab => '連絡先';
+
+  @override
+  String get phoneKeypadTab => 'キーパッド';
+
+  @override
+  String get grantContactsAccess => '連絡先へのアクセスを許可';
+
+  @override
+  String get phoneAllow => '許可';
+
+  @override
+  String get phoneSearchHint => '検索';
+
+  @override
+  String get phoneNoContactsFound => '連絡先が見つかりません';
+
+  @override
+  String get phoneEnterNumber => '番号を入力';
+
+  @override
+  String get failedToStartCall => '通話の開始に失敗しました';
+
+  @override
+  String get callStateConnecting => '接続中...';
+
+  @override
+  String get callStateRinging => '呼び出し中...';
+
+  @override
+  String get callStateEnded => '通話終了';
+
+  @override
+  String get callStateFailed => '通話失敗';
+
+  @override
+  String get transcriptPlaceholder => '文字起こしがここに表示されます...';
+
+  @override
+  String get phoneUnmute => 'ミュート解除';
+
+  @override
+  String get phoneMute => 'ミュート';
+
+  @override
+  String get phoneSpeaker => 'スピーカー';
+
+  @override
+  String get phoneEndCall => '終了';
+
+  @override
+  String get phoneCallSettingsTitle => '通話設定';
+
+  @override
+  String get yourVerifiedNumbers => '認証済みの番号';
+
+  @override
+  String get verifiedNumbersDescription => '電話をかけると、相手にこの番号が表示されます';
+
+  @override
+  String get noVerifiedNumbers => '認証済みの番号はありません';
+
+  @override
+  String deletePhoneNumberConfirm(String phoneNumber) {
+    return '$phoneNumberを削除しますか？';
+  }
+
+  @override
+  String get deletePhoneNumberWarning => '通話するには再度認証が必要です';
+
+  @override
+  String get phoneDeleteButton => '削除';
+
+  @override
+  String verifiedMinutesAgo(int minutes) {
+    return '$minutes分前に認証';
+  }
+
+  @override
+  String verifiedHoursAgo(int hours) {
+    return '$hours時間前に認証';
+  }
+
+  @override
+  String verifiedDaysAgo(int days) {
+    return '$days日前に認証';
+  }
+
+  @override
+  String verifiedOnDate(String date) {
+    return '$dateに認証';
+  }
+
+  @override
+  String get verifiedFallback => '認証済み';
+
+  @override
+  String get callAlreadyInProgress => '通話中です';
+
+  @override
+  String get failedToGetCallToken => 'トークンの取得に失敗しました。先に番号を認証してください。';
+
+  @override
+  String get failedToInitializeCallService => '通話サービスの初期化に失敗しました';
+
+  @override
+  String get speakerLabelYou => 'あなた';
+
+  @override
+  String get speakerLabelUnknown => '不明';
+
+  @override
+  String get showDailyScoreOnHomepage => 'ホームページにデイリースコアを表示';
+
+  @override
+  String get showTasksOnHomepage => 'ホームページにタスクを表示';
+
+  @override
+  String get phoneCallsUnlimitedOnly => 'Omiで電話をかける';
+
+  @override
+  String get phoneCallsUpsellSubtitle => 'Omiで通話し、リアルタイム文字起こし、自動要約などを取得。';
+
+  @override
+  String get phoneCallsUpsellFeature1 => 'すべての通話のリアルタイム文字起こし';
+
+  @override
+  String get phoneCallsUpsellFeature2 => '通話の自動要約とアクションアイテム';
+
+  @override
+  String get phoneCallsUpsellFeature3 => '受信者にはあなたの実際の番号が表示されます';
+
+  @override
+  String get phoneCallsUpsellFeature4 => '通話はプライベートで安全';
+
+  @override
+  String get phoneCallsUpgradeButton => 'Unlimitedにアップグレード';
+
+  @override
+  String get phoneCallsMaybeLater => 'また後で';
+
+  @override
+  String get deleteSynced => '同期済みを削除';
+
+  @override
+  String get deleteSyncedFiles => '同期済み録音を削除';
+
+  @override
+  String get deleteSyncedFilesMessage => 'これらの録音はすでにスマホに同期されています。この操作は取り消せません。';
+
+  @override
+  String get syncedFilesDeleted => '同期済み録音を削除しました';
+
+  @override
+  String get deletePending => '保留中を削除';
+
+  @override
+  String get deletePendingFiles => '保留中の録音を削除';
+
+  @override
+  String get deletePendingFilesWarning => 'これらの録音はスマホに同期されておらず、完全に失われます。この操作は取り消せません。';
+
+  @override
+  String get pendingFilesDeleted => '保留中の録音を削除しました';
+
+  @override
+  String get deleteAllFiles => 'すべての録音を削除';
+
+  @override
+  String get deleteAll => 'すべて削除';
+
+  @override
+  String get deleteAllFilesWarning => '同期済みと保留中の録音がすべて削除されます。保留中の録音は同期されておらず、完全に失われます。';
+
+  @override
+  String get allFilesDeleted => 'すべての録音を削除しました';
+
+  @override
+  String nFiles(int count) {
+    return '$count件の録音';
+  }
+
+  @override
+  String get manageStorage => 'ストレージを管理';
+
+  @override
+  String get safelyBackedUp => 'スマホに安全にバックアップ済み';
+
+  @override
+  String get notYetSynced => 'まだスマホに同期されていません';
+
+  @override
+  String get clearAll => 'すべて削除';
+
+  @override
+  String get phoneKeypad => 'キーパッド';
+
+  @override
+  String get phoneHideKeypad => 'キーパッドを隠す';
+
+  @override
+  String get fairUsePolicy => 'フェアユース';
+
+  @override
+  String get fairUseLoadError => 'フェアユースの状態を読み込めませんでした。もう一度お試しください。';
+
+  @override
+  String get fairUseStatusNormal => 'ご利用は通常の範囲内です。';
+
+  @override
+  String get fairUseStageNormal => '通常';
+
+  @override
+  String get fairUseStageWarning => '警告';
+
+  @override
+  String get fairUseStageThrottle => '制限中';
+
+  @override
+  String get fairUseStageRestrict => '利用停止';
+
+  @override
+  String get fairUseSpeechUsage => '音声使用量';
+
+  @override
+  String get fairUseToday => '今日';
+
+  @override
+  String get fairUse3Day => '3日間';
+
+  @override
+  String get fairUseWeekly => '週間';
+
+  @override
+  String get fairUseAboutTitle => 'フェアユースについて';
+
+  @override
+  String get fairUseAboutBody =>
+      'Omiは個人的な会話、会議、ライブのやり取りのために設計されています。使用量は接続時間ではなく、検出された実際の発話時間で測定されます。非個人的なコンテンツに対して通常のパターンを大幅に超える使用がある場合、調整が適用されることがあります。';
+
+  @override
+  String fairUseCaseRefCopied(String caseRef) {
+    return '$caseRef をコピーしました';
+  }
+
+  @override
+  String get fairUseDailyTranscription => '日次文字起こし';
+
+  @override
+  String fairUseBudgetUsed(String used, String limit) {
+    return '$used分 / $limit分';
+  }
+
+  @override
+  String get fairUseBudgetExhausted => '日次文字起こし上限に達しました';
+
+  @override
+  String fairUseBudgetResetsAt(String time) {
+    return 'リセット $time';
+  }
+
+  @override
+  String get transcriptionPaused => '録音中、再接続中';
+
+  @override
+  String get transcriptionPausedReconnecting => '録音は継続中 — 文字起こしに再接続しています...';
 }

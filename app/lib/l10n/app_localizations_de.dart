@@ -8337,4 +8337,375 @@ class AppLocalizationsDe extends AppLocalizations {
   @override
   String get conversationsEmptyStateMessage =>
       'Starten Sie ein Gespräch mit Nooto oder nehmen Sie eines mit Ihrem Gerät auf';
+
+  @override
+  String get tasksCleanTodayTitle => 'Heutige Aufgaben bereinigen?';
+
+  @override
+  String get tasksCleanTodayMessage => 'Dadurch werden nur Fristen entfernt';
+
+  @override
+  String get shared => 'Geteilt';
+
+  @override
+  String get onlyYouCanSeeConversation => 'Nur Sie können diese Unterhaltung sehen';
+
+  @override
+  String get anyoneWithLinkCanView => 'Jeder mit dem Link kann ansehen';
+
+  @override
+  String get tasksOverdue => 'Überfällig';
+
+  @override
+  String get phoneCallsWithOmi => 'Telefonate mit Omi';
+
+  @override
+  String get phoneCallsSubtitle => 'Telefonieren mit Echtzeit-Transkription';
+
+  @override
+  String get phoneSetupStep1Title => 'Verifizieren Sie Ihre Telefonnummer';
+
+  @override
+  String get phoneSetupStep1Subtitle => 'Wir rufen Sie an, um zu bestaetigen';
+
+  @override
+  String get phoneSetupStep2Title => 'Geben Sie einen Verifizierungscode ein';
+
+  @override
+  String get phoneSetupStep2Subtitle => 'Ein kurzer Code, den Sie beim Anruf eingeben';
+
+  @override
+  String get phoneSetupStep3Title => 'Beginnen Sie Ihre Kontakte anzurufen';
+
+  @override
+  String get phoneSetupStep3Subtitle => 'Mit integrierter Live-Transkription';
+
+  @override
+  String get phoneGetStarted => 'Loslegen';
+
+  @override
+  String get callRecordingConsentDisclaimer =>
+      'Anrufaufzeichnung kann in Ihrer Gerichtsbarkeit eine Einwilligung erfordern';
+
+  @override
+  String get enterYourNumber => 'Geben Sie Ihre Nummer ein';
+
+  @override
+  String get phoneNumberCallerIdHint => 'Nach der Verifizierung wird dies Ihre Anrufer-ID';
+
+  @override
+  String get phoneNumberHint => 'Telefonnummer';
+
+  @override
+  String get failedToStartVerification => 'Verifizierung konnte nicht gestartet werden';
+
+  @override
+  String get phoneContinue => 'Weiter';
+
+  @override
+  String get verifyYourNumber => 'Verifizieren Sie Ihre Nummer';
+
+  @override
+  String get answerTheCallFrom => 'Nehmen Sie den Anruf an von';
+
+  @override
+  String get onTheCallEnterThisCode => 'Geben Sie diesen Code waehrend des Anrufs ein';
+
+  @override
+  String get followTheVoiceInstructions => 'Folgen Sie den Sprachanweisungen';
+
+  @override
+  String get statusCalling => 'Anrufen...';
+
+  @override
+  String get statusCallInProgress => 'Anruf aktiv';
+
+  @override
+  String get statusVerifiedLabel => 'Verifiziert';
+
+  @override
+  String get statusCallMissed => 'Anruf verpasst';
+
+  @override
+  String get statusTimedOut => 'Zeit abgelaufen';
+
+  @override
+  String get phoneTryAgain => 'Erneut versuchen';
+
+  @override
+  String get phonePageTitle => 'Telefon';
+
+  @override
+  String get phoneContactsTab => 'Kontakte';
+
+  @override
+  String get phoneKeypadTab => 'Tastatur';
+
+  @override
+  String get grantContactsAccess => 'Zugriff auf Ihre Kontakte gewaehren';
+
+  @override
+  String get phoneAllow => 'Erlauben';
+
+  @override
+  String get phoneSearchHint => 'Suchen';
+
+  @override
+  String get phoneNoContactsFound => 'Keine Kontakte gefunden';
+
+  @override
+  String get phoneEnterNumber => 'Nummer eingeben';
+
+  @override
+  String get failedToStartCall => 'Anruf konnte nicht gestartet werden';
+
+  @override
+  String get callStateConnecting => 'Verbinden...';
+
+  @override
+  String get callStateRinging => 'Klingelt...';
+
+  @override
+  String get callStateEnded => 'Anruf beendet';
+
+  @override
+  String get callStateFailed => 'Anruf fehlgeschlagen';
+
+  @override
+  String get transcriptPlaceholder => 'Transkription erscheint hier...';
+
+  @override
+  String get phoneUnmute => 'Stummschaltung aufheben';
+
+  @override
+  String get phoneMute => 'Stumm';
+
+  @override
+  String get phoneSpeaker => 'Lautsprecher';
+
+  @override
+  String get phoneEndCall => 'Beenden';
+
+  @override
+  String get phoneCallSettingsTitle => 'Anrufeinstellungen';
+
+  @override
+  String get yourVerifiedNumbers => 'Ihre verifizierten Nummern';
+
+  @override
+  String get verifiedNumbersDescription => 'Wenn Sie jemanden anrufen, sieht er diese Nummer';
+
+  @override
+  String get noVerifiedNumbers => 'Keine verifizierten Nummern';
+
+  @override
+  String deletePhoneNumberConfirm(String phoneNumber) {
+    return '$phoneNumber loeschen?';
+  }
+
+  @override
+  String get deletePhoneNumberWarning => 'Sie muessen erneut verifizieren, um Anrufe zu taetigen';
+
+  @override
+  String get phoneDeleteButton => 'Loeschen';
+
+  @override
+  String verifiedMinutesAgo(int minutes) {
+    return 'Vor ${minutes}Min verifiziert';
+  }
+
+  @override
+  String verifiedHoursAgo(int hours) {
+    return 'Vor ${hours}Std verifiziert';
+  }
+
+  @override
+  String verifiedDaysAgo(int days) {
+    return 'Vor ${days}T verifiziert';
+  }
+
+  @override
+  String verifiedOnDate(String date) {
+    return 'Verifiziert am $date';
+  }
+
+  @override
+  String get verifiedFallback => 'Verifiziert';
+
+  @override
+  String get callAlreadyInProgress => 'Ein Anruf ist bereits aktiv';
+
+  @override
+  String get failedToGetCallToken => 'Token konnte nicht abgerufen werden. Verifizieren Sie zuerst Ihre Nummer.';
+
+  @override
+  String get failedToInitializeCallService => 'Anrufdienst konnte nicht initialisiert werden';
+
+  @override
+  String get speakerLabelYou => 'Sie';
+
+  @override
+  String get speakerLabelUnknown => 'Unbekannt';
+
+  @override
+  String get showDailyScoreOnHomepage => 'Tagespunktzahl auf der Startseite anzeigen';
+
+  @override
+  String get showTasksOnHomepage => 'Aufgaben auf der Startseite anzeigen';
+
+  @override
+  String get phoneCallsUnlimitedOnly => 'Telefonanrufe über Omi';
+
+  @override
+  String get phoneCallsUpsellSubtitle =>
+      'Telefoniere über Omi und erhalte Echtzeit-Transkription, automatische Zusammenfassungen und mehr.';
+
+  @override
+  String get phoneCallsUpsellFeature1 => 'Echtzeit-Transkription jedes Anrufs';
+
+  @override
+  String get phoneCallsUpsellFeature2 => 'Automatische Anrufzusammenfassungen und Aufgaben';
+
+  @override
+  String get phoneCallsUpsellFeature3 => 'Empfänger sehen deine echte Nummer, keine zufällige';
+
+  @override
+  String get phoneCallsUpsellFeature4 => 'Deine Anrufe bleiben privat und sicher';
+
+  @override
+  String get phoneCallsUpgradeButton => 'Auf Unlimited upgraden';
+
+  @override
+  String get phoneCallsMaybeLater => 'Vielleicht später';
+
+  @override
+  String get deleteSynced => 'Synchronisierte löschen';
+
+  @override
+  String get deleteSyncedFiles => 'Synchronisierte Aufnahmen löschen';
+
+  @override
+  String get deleteSyncedFilesMessage =>
+      'Diese Aufnahmen wurden bereits mit Ihrem Telefon synchronisiert. Dies kann nicht rückgängig gemacht werden.';
+
+  @override
+  String get syncedFilesDeleted => 'Synchronisierte Aufnahmen gelöscht';
+
+  @override
+  String get deletePending => 'Ausstehende löschen';
+
+  @override
+  String get deletePendingFiles => 'Ausstehende Aufnahmen löschen';
+
+  @override
+  String get deletePendingFilesWarning =>
+      'Diese Aufnahmen wurden NICHT mit Ihrem Telefon synchronisiert und gehen dauerhaft verloren. Dies kann nicht rückgängig gemacht werden.';
+
+  @override
+  String get pendingFilesDeleted => 'Ausstehende Aufnahmen gelöscht';
+
+  @override
+  String get deleteAllFiles => 'Alle Aufnahmen löschen';
+
+  @override
+  String get deleteAll => 'Alle löschen';
+
+  @override
+  String get deleteAllFilesWarning =>
+      'Dies löscht sowohl synchronisierte als auch ausstehende Aufnahmen. Ausstehende Aufnahmen wurden NICHT synchronisiert und gehen dauerhaft verloren.';
+
+  @override
+  String get allFilesDeleted => 'Alle Aufnahmen gelöscht';
+
+  @override
+  String nFiles(int count) {
+    return '$count Aufnahmen';
+  }
+
+  @override
+  String get manageStorage => 'Speicher verwalten';
+
+  @override
+  String get safelyBackedUp => 'Sicher auf Ihrem Telefon gesichert';
+
+  @override
+  String get notYetSynced => 'Noch nicht mit Ihrem Telefon synchronisiert';
+
+  @override
+  String get clearAll => 'Alles löschen';
+
+  @override
+  String get phoneKeypad => 'Tastatur';
+
+  @override
+  String get phoneHideKeypad => 'Tastatur ausblenden';
+
+  @override
+  String get fairUsePolicy => 'Faire Nutzung';
+
+  @override
+  String get fairUseLoadError =>
+      'Der Status der fairen Nutzung konnte nicht geladen werden. Bitte versuchen Sie es erneut.';
+
+  @override
+  String get fairUseStatusNormal => 'Ihre Nutzung liegt im normalen Bereich.';
+
+  @override
+  String get fairUseStageNormal => 'Normal';
+
+  @override
+  String get fairUseStageWarning => 'Warnung';
+
+  @override
+  String get fairUseStageThrottle => 'Gedrosselt';
+
+  @override
+  String get fairUseStageRestrict => 'Eingeschränkt';
+
+  @override
+  String get fairUseSpeechUsage => 'Sprachnutzung';
+
+  @override
+  String get fairUseToday => 'Heute';
+
+  @override
+  String get fairUse3Day => '3-Tage-Zeitraum';
+
+  @override
+  String get fairUseWeekly => 'Wöchentlich';
+
+  @override
+  String get fairUseAboutTitle => 'Über faire Nutzung';
+
+  @override
+  String get fairUseAboutBody =>
+      'Omi ist für persönliche Gespräche, Meetings und Live-Interaktionen konzipiert. Die Nutzung wird an der tatsächlich erkannten Sprechzeit gemessen, nicht an der Verbindungszeit. Wenn die Nutzung die normalen Muster für nicht-persönliche Inhalte erheblich überschreitet, können Anpassungen vorgenommen werden.';
+
+  @override
+  String fairUseCaseRefCopied(String caseRef) {
+    return '$caseRef kopiert';
+  }
+
+  @override
+  String get fairUseDailyTranscription => 'Tägliche Transkription';
+
+  @override
+  String fairUseBudgetUsed(String used, String limit) {
+    return '${used}m / ${limit}m';
+  }
+
+  @override
+  String get fairUseBudgetExhausted => 'Tägliches Transkriptionslimit erreicht';
+
+  @override
+  String fairUseBudgetResetsAt(String time) {
+    return 'Zurücksetzung $time';
+  }
+
+  @override
+  String get transcriptionPaused => 'Aufnahme läuft, verbinde neu';
+
+  @override
+  String get transcriptionPausedReconnecting =>
+      'Nimmt weiterhin auf — Verbindung zur Transkription wird wiederhergestellt...';
 }

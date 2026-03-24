@@ -8302,4 +8302,372 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get conversationsEmptyStateMessage => 'Kezdjen beszélgetést a Nootóval, vagy rögzítsen egyet az eszközével';
+
+  @override
+  String get tasksCleanTodayTitle => 'Törlöd a mai feladatokat?';
+
+  @override
+  String get tasksCleanTodayMessage => 'Ez csak a határidőket távolítja el';
+
+  @override
+  String get shared => 'Megosztott';
+
+  @override
+  String get onlyYouCanSeeConversation => 'Csak Ön láthatja ezt a beszélgetést';
+
+  @override
+  String get anyoneWithLinkCanView => 'Bárki megtekintheti, akinek megvan a link';
+
+  @override
+  String get tasksOverdue => 'Lejárt';
+
+  @override
+  String get phoneCallsWithOmi => 'Hivasok az Omival';
+
+  @override
+  String get phoneCallsSubtitle => 'Hivjon valos ideju atirassal';
+
+  @override
+  String get phoneSetupStep1Title => 'Ellenorizze telefonszamat';
+
+  @override
+  String get phoneSetupStep1Subtitle => 'Felhivjuk a megerositeshez';
+
+  @override
+  String get phoneSetupStep2Title => 'Adjon meg egy ellenorzo kodot';
+
+  @override
+  String get phoneSetupStep2Subtitle => 'Egy rovid kod, amit a hivas soran ad meg';
+
+  @override
+  String get phoneSetupStep3Title => 'Kezdjen el hivni nevjegyeit';
+
+  @override
+  String get phoneSetupStep3Subtitle => 'Beepitett elo atirassal';
+
+  @override
+  String get phoneGetStarted => 'Kezdes';
+
+  @override
+  String get callRecordingConsentDisclaimer => 'A hivasrogzites hozzajarulast igenyelhet az On joghatosagaban';
+
+  @override
+  String get enterYourNumber => 'Adja meg a szamat';
+
+  @override
+  String get phoneNumberCallerIdHint => 'Ellenorzes utan ez lesz a hivo azonositoja';
+
+  @override
+  String get phoneNumberHint => 'Telefonszam';
+
+  @override
+  String get failedToStartVerification => 'Nem sikerult elindatani az ellenorzest';
+
+  @override
+  String get phoneContinue => 'Folytatas';
+
+  @override
+  String get verifyYourNumber => 'Ellenorizze a szamat';
+
+  @override
+  String get answerTheCallFrom => 'Fogadja a hivast innen';
+
+  @override
+  String get onTheCallEnterThisCode => 'A hivas soran adja meg ezt a kodot';
+
+  @override
+  String get followTheVoiceInstructions => 'Kovesse a hangutasitasokat';
+
+  @override
+  String get statusCalling => 'Hivas...';
+
+  @override
+  String get statusCallInProgress => 'Hivas folyamatban';
+
+  @override
+  String get statusVerifiedLabel => 'Ellenorizve';
+
+  @override
+  String get statusCallMissed => 'Nem fogadott hivas';
+
+  @override
+  String get statusTimedOut => 'Idotullepes';
+
+  @override
+  String get phoneTryAgain => 'Ujraproba';
+
+  @override
+  String get phonePageTitle => 'Telefon';
+
+  @override
+  String get phoneContactsTab => 'Nevjegyek';
+
+  @override
+  String get phoneKeypadTab => 'Billentyuzet';
+
+  @override
+  String get grantContactsAccess => 'Adjon hozzaferest a nevjegyeihez';
+
+  @override
+  String get phoneAllow => 'Engedelyezes';
+
+  @override
+  String get phoneSearchHint => 'Kereses';
+
+  @override
+  String get phoneNoContactsFound => 'Nem talalhato nevjegy';
+
+  @override
+  String get phoneEnterNumber => 'Szam megadasa';
+
+  @override
+  String get failedToStartCall => 'Nem sikerult elindatani a hivast';
+
+  @override
+  String get callStateConnecting => 'Csatlakozas...';
+
+  @override
+  String get callStateRinging => 'Csenges...';
+
+  @override
+  String get callStateEnded => 'Hivas befejezve';
+
+  @override
+  String get callStateFailed => 'Hivas sikertelen';
+
+  @override
+  String get transcriptPlaceholder => 'Az atiras itt jelenik meg...';
+
+  @override
+  String get phoneUnmute => 'Nemitas feloldasa';
+
+  @override
+  String get phoneMute => 'Nemitas';
+
+  @override
+  String get phoneSpeaker => 'Hangszoro';
+
+  @override
+  String get phoneEndCall => 'Befejezes';
+
+  @override
+  String get phoneCallSettingsTitle => 'Hivasbeallitasok';
+
+  @override
+  String get yourVerifiedNumbers => 'Ellenorzott szamai';
+
+  @override
+  String get verifiedNumbersDescription => 'Amikor hivja valakit, ezt a szamot latjak';
+
+  @override
+  String get noVerifiedNumbers => 'Nincsenek ellenorzott szamok';
+
+  @override
+  String deletePhoneNumberConfirm(String phoneNumber) {
+    return '$phoneNumber torlese?';
+  }
+
+  @override
+  String get deletePhoneNumberWarning => 'Ujra ellenoriznie kell a hivasokhoz';
+
+  @override
+  String get phoneDeleteButton => 'Torles';
+
+  @override
+  String verifiedMinutesAgo(int minutes) {
+    return '$minutes perce ellenorizve';
+  }
+
+  @override
+  String verifiedHoursAgo(int hours) {
+    return '$hours oraja ellenorizve';
+  }
+
+  @override
+  String verifiedDaysAgo(int days) {
+    return '$days napja ellenorizve';
+  }
+
+  @override
+  String verifiedOnDate(String date) {
+    return 'Ellenorizve: $date';
+  }
+
+  @override
+  String get verifiedFallback => 'Ellenorizve';
+
+  @override
+  String get callAlreadyInProgress => 'Egy hivas mar folyamatban van';
+
+  @override
+  String get failedToGetCallToken => 'Nem sikerult megszerezni a tokent. Eloszor ellenorizze a szamat.';
+
+  @override
+  String get failedToInitializeCallService => 'Nem sikerult inicializalni a hivasszolgaltatast';
+
+  @override
+  String get speakerLabelYou => 'On';
+
+  @override
+  String get speakerLabelUnknown => 'Ismeretlen';
+
+  @override
+  String get showDailyScoreOnHomepage => 'Napi pontszám megjelenítése a főoldalon';
+
+  @override
+  String get showTasksOnHomepage => 'Feladatok megjelenítése a főoldalon';
+
+  @override
+  String get phoneCallsUnlimitedOnly => 'Telefonhívások az Omi-n keresztül';
+
+  @override
+  String get phoneCallsUpsellSubtitle =>
+      'Hívjon az Omi-n keresztül, és kapjon valós idejű átírást, automatikus összefoglalókat és még többet.';
+
+  @override
+  String get phoneCallsUpsellFeature1 => 'Minden hívás valós idejű átírása';
+
+  @override
+  String get phoneCallsUpsellFeature2 => 'Automatikus hívás-összefoglalók és tennivalók';
+
+  @override
+  String get phoneCallsUpsellFeature3 => 'A címzettek a valódi számodat látják, nem egy véletlent';
+
+  @override
+  String get phoneCallsUpsellFeature4 => 'Hívásai privátok és biztonságosak maradnak';
+
+  @override
+  String get phoneCallsUpgradeButton => 'Váltás Korlátlanra';
+
+  @override
+  String get phoneCallsMaybeLater => 'Talán később';
+
+  @override
+  String get deleteSynced => 'Szinkronizáltak törlése';
+
+  @override
+  String get deleteSyncedFiles => 'Szinkronizált felvételek törlése';
+
+  @override
+  String get deleteSyncedFilesMessage =>
+      'Ezek a felvételek már szinkronizálva vannak a telefonjával. Ez nem vonható vissza.';
+
+  @override
+  String get syncedFilesDeleted => 'Szinkronizált felvételek törölve';
+
+  @override
+  String get deletePending => 'Függőben lévők törlése';
+
+  @override
+  String get deletePendingFiles => 'Függő felvételek törlése';
+
+  @override
+  String get deletePendingFilesWarning =>
+      'Ezek a felvételek NINCSENEK szinkronizálva a telefonjával és véglegesen elvesznek. Ez nem vonható vissza.';
+
+  @override
+  String get pendingFilesDeleted => 'Függő felvételek törölve';
+
+  @override
+  String get deleteAllFiles => 'Összes felvétel törlése';
+
+  @override
+  String get deleteAll => 'Összes törlése';
+
+  @override
+  String get deleteAllFilesWarning =>
+      'Ez törli a szinkronizált és függő felvételeket. A függő felvételek NINCSENEK szinkronizálva és véglegesen elvesznek.';
+
+  @override
+  String get allFilesDeleted => 'Összes felvétel törölve';
+
+  @override
+  String nFiles(int count) {
+    return '$count felvétel';
+  }
+
+  @override
+  String get manageStorage => 'Tárhely kezelése';
+
+  @override
+  String get safelyBackedUp => 'Biztonságosan mentve a telefonjára';
+
+  @override
+  String get notYetSynced => 'Még nincs szinkronizálva a telefonjával';
+
+  @override
+  String get clearAll => 'Összes törlése';
+
+  @override
+  String get phoneKeypad => 'Billentyűzet';
+
+  @override
+  String get phoneHideKeypad => 'Billentyűzet elrejtése';
+
+  @override
+  String get fairUsePolicy => 'Méltányos használat';
+
+  @override
+  String get fairUseLoadError => 'Nem sikerült betölteni a méltányos használat állapotát. Kérjük, próbálja újra.';
+
+  @override
+  String get fairUseStatusNormal => 'Használata a normális határokon belül van.';
+
+  @override
+  String get fairUseStageNormal => 'Normál';
+
+  @override
+  String get fairUseStageWarning => 'Figyelmeztetés';
+
+  @override
+  String get fairUseStageThrottle => 'Korlátozott';
+
+  @override
+  String get fairUseStageRestrict => 'Letiltva';
+
+  @override
+  String get fairUseSpeechUsage => 'Beszédhasználat';
+
+  @override
+  String get fairUseToday => 'Ma';
+
+  @override
+  String get fairUse3Day => '3 napos gördülő';
+
+  @override
+  String get fairUseWeekly => 'Heti gördülő';
+
+  @override
+  String get fairUseAboutTitle => 'A méltányos használatról';
+
+  @override
+  String get fairUseAboutBody =>
+      'Az Omi személyes beszélgetésekhez, megbeszélésekhez és élő interakciókhoz készült. A használatot a ténylegesen észlelt beszédidő alapján mérik, nem a csatlakozási idő alapján. Ha a használat jelentősen meghaladja a nem személyes tartalom normális mintáit, módosítások alkalmazhatók.';
+
+  @override
+  String fairUseCaseRefCopied(String caseRef) {
+    return '$caseRef másolva';
+  }
+
+  @override
+  String get fairUseDailyTranscription => 'Daily Transcription';
+
+  @override
+  String fairUseBudgetUsed(String used, String limit) {
+    return '${used}m / ${limit}m';
+  }
+
+  @override
+  String get fairUseBudgetExhausted => 'Daily transcription limit reached';
+
+  @override
+  String fairUseBudgetResetsAt(String time) {
+    return 'Resets $time';
+  }
+
+  @override
+  String get transcriptionPaused => 'Felvétel, újrakapcsolódás';
+
+  @override
+  String get transcriptionPausedReconnecting => 'A felvétel folytatódik — újrakapcsolódás az átíráshoz...';
 }

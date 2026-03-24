@@ -8270,4 +8270,372 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get conversationsEmptyStateMessage => 'Starta en konversation med Nooto eller spela in en med din enhet';
+
+  @override
+  String get tasksCleanTodayTitle => 'Rensa dagens uppgifter?';
+
+  @override
+  String get tasksCleanTodayMessage => 'Detta tar bara bort deadlines';
+
+  @override
+  String get shared => 'Delad';
+
+  @override
+  String get onlyYouCanSeeConversation => 'Bara du kan se den här konversationen';
+
+  @override
+  String get anyoneWithLinkCanView => 'Alla med länken kan visa';
+
+  @override
+  String get tasksOverdue => 'Försenade';
+
+  @override
+  String get phoneCallsWithOmi => 'Samtal med Omi';
+
+  @override
+  String get phoneCallsSubtitle => 'Ring med realtidstranskription';
+
+  @override
+  String get phoneSetupStep1Title => 'Verifiera ditt telefonnummer';
+
+  @override
+  String get phoneSetupStep1Subtitle => 'Vi ringer dig for att bekrafta';
+
+  @override
+  String get phoneSetupStep2Title => 'Ange en verifieringskod';
+
+  @override
+  String get phoneSetupStep2Subtitle => 'En kort kod du anger under samtalet';
+
+  @override
+  String get phoneSetupStep3Title => 'Borja ringa dina kontakter';
+
+  @override
+  String get phoneSetupStep3Subtitle => 'Med inbyggd livetranskription';
+
+  @override
+  String get phoneGetStarted => 'Kom igang';
+
+  @override
+  String get callRecordingConsentDisclaimer => 'Samtalsinspelning kan krava samtycke i din jurisdiktion';
+
+  @override
+  String get enterYourNumber => 'Ange ditt nummer';
+
+  @override
+  String get phoneNumberCallerIdHint => 'Efter verifiering blir detta ditt nummervisnings-ID';
+
+  @override
+  String get phoneNumberHint => 'Telefonnummer';
+
+  @override
+  String get failedToStartVerification => 'Kunde inte starta verifieringen';
+
+  @override
+  String get phoneContinue => 'Fortsatt';
+
+  @override
+  String get verifyYourNumber => 'Verifiera ditt nummer';
+
+  @override
+  String get answerTheCallFrom => 'Svara pa samtalet fran';
+
+  @override
+  String get onTheCallEnterThisCode => 'Under samtalet, ange denna kod';
+
+  @override
+  String get followTheVoiceInstructions => 'Folj rostinstruktionerna';
+
+  @override
+  String get statusCalling => 'Ringer...';
+
+  @override
+  String get statusCallInProgress => 'Samtal pagar';
+
+  @override
+  String get statusVerifiedLabel => 'Verifierad';
+
+  @override
+  String get statusCallMissed => 'Missat samtal';
+
+  @override
+  String get statusTimedOut => 'Tidsgrans';
+
+  @override
+  String get phoneTryAgain => 'Forsok igen';
+
+  @override
+  String get phonePageTitle => 'Telefon';
+
+  @override
+  String get phoneContactsTab => 'Kontakter';
+
+  @override
+  String get phoneKeypadTab => 'Knappsats';
+
+  @override
+  String get grantContactsAccess => 'Ge tillgang till dina kontakter';
+
+  @override
+  String get phoneAllow => 'Tillat';
+
+  @override
+  String get phoneSearchHint => 'Sok';
+
+  @override
+  String get phoneNoContactsFound => 'Inga kontakter hittades';
+
+  @override
+  String get phoneEnterNumber => 'Ange nummer';
+
+  @override
+  String get failedToStartCall => 'Kunde inte starta samtalet';
+
+  @override
+  String get callStateConnecting => 'Ansluter...';
+
+  @override
+  String get callStateRinging => 'Ringer...';
+
+  @override
+  String get callStateEnded => 'Samtal avslutat';
+
+  @override
+  String get callStateFailed => 'Samtal misslyckades';
+
+  @override
+  String get transcriptPlaceholder => 'Transkription visas har...';
+
+  @override
+  String get phoneUnmute => 'Sla pa ljud';
+
+  @override
+  String get phoneMute => 'Ljud av';
+
+  @override
+  String get phoneSpeaker => 'Hogtalare';
+
+  @override
+  String get phoneEndCall => 'Avsluta';
+
+  @override
+  String get phoneCallSettingsTitle => 'Samtalsinstellningar';
+
+  @override
+  String get yourVerifiedNumbers => 'Dina verifierade nummer';
+
+  @override
+  String get verifiedNumbersDescription => 'Nar du ringer nagon ser de detta nummer';
+
+  @override
+  String get noVerifiedNumbers => 'Inga verifierade nummer';
+
+  @override
+  String deletePhoneNumberConfirm(String phoneNumber) {
+    return 'Ta bort $phoneNumber?';
+  }
+
+  @override
+  String get deletePhoneNumberWarning => 'Du maste verifiera igen for att ringa';
+
+  @override
+  String get phoneDeleteButton => 'Ta bort';
+
+  @override
+  String verifiedMinutesAgo(int minutes) {
+    return 'Verifierad for ${minutes}min sedan';
+  }
+
+  @override
+  String verifiedHoursAgo(int hours) {
+    return 'Verifierad for ${hours}t sedan';
+  }
+
+  @override
+  String verifiedDaysAgo(int days) {
+    return 'Verifierad for ${days}d sedan';
+  }
+
+  @override
+  String verifiedOnDate(String date) {
+    return 'Verifierad $date';
+  }
+
+  @override
+  String get verifiedFallback => 'Verifierad';
+
+  @override
+  String get callAlreadyInProgress => 'Ett samtal pagar redan';
+
+  @override
+  String get failedToGetCallToken => 'Kunde inte hamta token. Verifiera ditt nummer forst.';
+
+  @override
+  String get failedToInitializeCallService => 'Kunde inte initiera samtalstjansten';
+
+  @override
+  String get speakerLabelYou => 'Du';
+
+  @override
+  String get speakerLabelUnknown => 'Okand';
+
+  @override
+  String get showDailyScoreOnHomepage => 'Visa dagligt poäng på hemsidan';
+
+  @override
+  String get showTasksOnHomepage => 'Visa uppgifter på hemsidan';
+
+  @override
+  String get phoneCallsUnlimitedOnly => 'Telefonsamtal via Omi';
+
+  @override
+  String get phoneCallsUpsellSubtitle =>
+      'Ring via Omi och få transkription i realtid, automatiska sammanfattningar och mer.';
+
+  @override
+  String get phoneCallsUpsellFeature1 => 'Transkription i realtid av varje samtal';
+
+  @override
+  String get phoneCallsUpsellFeature2 => 'Automatiska samtalssammanfattningar och uppgifter';
+
+  @override
+  String get phoneCallsUpsellFeature3 => 'Mottagare ser ditt riktiga nummer, inte ett slumpmässigt';
+
+  @override
+  String get phoneCallsUpsellFeature4 => 'Dina samtal förblir privata och säkra';
+
+  @override
+  String get phoneCallsUpgradeButton => 'Uppgradera till Obegränsad';
+
+  @override
+  String get phoneCallsMaybeLater => 'Kanske senare';
+
+  @override
+  String get deleteSynced => 'Ta bort synkroniserade';
+
+  @override
+  String get deleteSyncedFiles => 'Radera synkroniserade inspelningar';
+
+  @override
+  String get deleteSyncedFilesMessage =>
+      'Dessa inspelningar har redan synkroniserats med din telefon. Detta kan inte ångras.';
+
+  @override
+  String get syncedFilesDeleted => 'Synkroniserade inspelningar raderade';
+
+  @override
+  String get deletePending => 'Ta bort väntande';
+
+  @override
+  String get deletePendingFiles => 'Radera väntande inspelningar';
+
+  @override
+  String get deletePendingFilesWarning =>
+      'Dessa inspelningar har INTE synkroniserats med din telefon och kommer att förloras permanent. Detta kan inte ångras.';
+
+  @override
+  String get pendingFilesDeleted => 'Väntande inspelningar raderade';
+
+  @override
+  String get deleteAllFiles => 'Radera alla inspelningar';
+
+  @override
+  String get deleteAll => 'Ta bort alla';
+
+  @override
+  String get deleteAllFilesWarning =>
+      'Detta raderar synkroniserade och väntande inspelningar. Väntande inspelningar har INTE synkroniserats och kommer att förloras permanent.';
+
+  @override
+  String get allFilesDeleted => 'Alla inspelningar raderade';
+
+  @override
+  String nFiles(int count) {
+    return '$count inspelningar';
+  }
+
+  @override
+  String get manageStorage => 'Hantera lagring';
+
+  @override
+  String get safelyBackedUp => 'Säkerhetskopierat till din telefon';
+
+  @override
+  String get notYetSynced => 'Inte synkroniserat med din telefon ännu';
+
+  @override
+  String get clearAll => 'Rensa allt';
+
+  @override
+  String get phoneKeypad => 'Knappsats';
+
+  @override
+  String get phoneHideKeypad => 'Dölj knappsats';
+
+  @override
+  String get fairUsePolicy => 'Rimlig användning';
+
+  @override
+  String get fairUseLoadError => 'Det gick inte att läsa in status för rimlig användning. Försök igen.';
+
+  @override
+  String get fairUseStatusNormal => 'Din användning är inom normala gränser.';
+
+  @override
+  String get fairUseStageNormal => 'Normal';
+
+  @override
+  String get fairUseStageWarning => 'Varning';
+
+  @override
+  String get fairUseStageThrottle => 'Begränsad';
+
+  @override
+  String get fairUseStageRestrict => 'Blockerad';
+
+  @override
+  String get fairUseSpeechUsage => 'Talanvändning';
+
+  @override
+  String get fairUseToday => 'Idag';
+
+  @override
+  String get fairUse3Day => '3-dagars rullande';
+
+  @override
+  String get fairUseWeekly => 'Veckovis rullande';
+
+  @override
+  String get fairUseAboutTitle => 'Om rimlig användning';
+
+  @override
+  String get fairUseAboutBody =>
+      'Omi är utformat för personliga samtal, möten och liveinteraktioner. Användningen mäts efter faktisk detekterad taltid, inte anslutningstid. Om användningen avsevärt överstiger normala mönster för icke-personligt innehåll kan justeringar tillämpas.';
+
+  @override
+  String fairUseCaseRefCopied(String caseRef) {
+    return '$caseRef kopierat';
+  }
+
+  @override
+  String get fairUseDailyTranscription => 'Daily Transcription';
+
+  @override
+  String fairUseBudgetUsed(String used, String limit) {
+    return '${used}m / ${limit}m';
+  }
+
+  @override
+  String get fairUseBudgetExhausted => 'Daily transcription limit reached';
+
+  @override
+  String fairUseBudgetResetsAt(String time) {
+    return 'Resets $time';
+  }
+
+  @override
+  String get transcriptionPaused => 'Spelar in, återansluter';
+
+  @override
+  String get transcriptionPausedReconnecting => 'Spelar fortfarande in — återansluter till transkription...';
 }

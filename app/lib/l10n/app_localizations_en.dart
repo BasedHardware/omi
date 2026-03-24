@@ -8263,4 +8263,372 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get conversationsEmptyStateMessage => 'Start a conversation with Nooto or record one with your device';
+
+  @override
+  String get tasksCleanTodayTitle => 'Clean today\'s tasks?';
+
+  @override
+  String get tasksCleanTodayMessage => 'This will only remove deadlines';
+
+  @override
+  String get shared => 'Shared';
+
+  @override
+  String get onlyYouCanSeeConversation => 'Only you can see this conversation';
+
+  @override
+  String get anyoneWithLinkCanView => 'Anyone with the link can view';
+
+  @override
+  String get tasksOverdue => 'Overdue';
+
+  @override
+  String get phoneCallsWithOmi => 'Phone Calls with Omi';
+
+  @override
+  String get phoneCallsSubtitle => 'Make calls with real-time transcription';
+
+  @override
+  String get phoneSetupStep1Title => 'Verify your phone number';
+
+  @override
+  String get phoneSetupStep1Subtitle => 'We\'ll call you to confirm it\'s yours';
+
+  @override
+  String get phoneSetupStep2Title => 'Enter a verification code';
+
+  @override
+  String get phoneSetupStep2Subtitle => 'A short code you\'ll type on the call';
+
+  @override
+  String get phoneSetupStep3Title => 'Start calling your contacts';
+
+  @override
+  String get phoneSetupStep3Subtitle => 'With live transcription built in';
+
+  @override
+  String get phoneGetStarted => 'Get Started';
+
+  @override
+  String get callRecordingConsentDisclaimer => 'Call recording may require consent in your jurisdiction';
+
+  @override
+  String get enterYourNumber => 'Enter your number';
+
+  @override
+  String get phoneNumberCallerIdHint => 'Once verified, this becomes your caller ID';
+
+  @override
+  String get phoneNumberHint => 'Phone number';
+
+  @override
+  String get failedToStartVerification => 'Failed to start verification';
+
+  @override
+  String get phoneContinue => 'Continue';
+
+  @override
+  String get verifyYourNumber => 'Verify your number';
+
+  @override
+  String get answerTheCallFrom => 'Answer the call from';
+
+  @override
+  String get onTheCallEnterThisCode => 'On the call, enter this code';
+
+  @override
+  String get followTheVoiceInstructions => 'Follow the voice instructions';
+
+  @override
+  String get statusCalling => 'Calling...';
+
+  @override
+  String get statusCallInProgress => 'Call in progress';
+
+  @override
+  String get statusVerifiedLabel => 'Verified';
+
+  @override
+  String get statusCallMissed => 'Call missed';
+
+  @override
+  String get statusTimedOut => 'Timed out';
+
+  @override
+  String get phoneTryAgain => 'Try Again';
+
+  @override
+  String get phonePageTitle => 'Phone';
+
+  @override
+  String get phoneContactsTab => 'Contacts';
+
+  @override
+  String get phoneKeypadTab => 'Keypad';
+
+  @override
+  String get grantContactsAccess => 'Grant access to your contacts';
+
+  @override
+  String get phoneAllow => 'Allow';
+
+  @override
+  String get phoneSearchHint => 'Search';
+
+  @override
+  String get phoneNoContactsFound => 'No contacts found';
+
+  @override
+  String get phoneEnterNumber => 'Enter number';
+
+  @override
+  String get failedToStartCall => 'Failed to start call';
+
+  @override
+  String get callStateConnecting => 'Connecting...';
+
+  @override
+  String get callStateRinging => 'Ringing...';
+
+  @override
+  String get callStateEnded => 'Call Ended';
+
+  @override
+  String get callStateFailed => 'Call Failed';
+
+  @override
+  String get transcriptPlaceholder => 'Transcript will appear here...';
+
+  @override
+  String get phoneUnmute => 'Unmute';
+
+  @override
+  String get phoneMute => 'Mute';
+
+  @override
+  String get phoneSpeaker => 'Speaker';
+
+  @override
+  String get phoneEndCall => 'End';
+
+  @override
+  String get phoneCallSettingsTitle => 'Phone Call Settings';
+
+  @override
+  String get yourVerifiedNumbers => 'Your Verified Numbers';
+
+  @override
+  String get verifiedNumbersDescription => 'When you call someone, they\'ll see this number on their phone';
+
+  @override
+  String get noVerifiedNumbers => 'No verified numbers';
+
+  @override
+  String deletePhoneNumberConfirm(String phoneNumber) {
+    return 'Delete $phoneNumber?';
+  }
+
+  @override
+  String get deletePhoneNumberWarning => 'You\'ll need to verify again to make calls';
+
+  @override
+  String get phoneDeleteButton => 'Delete';
+
+  @override
+  String verifiedMinutesAgo(int minutes) {
+    return 'Verified ${minutes}m ago';
+  }
+
+  @override
+  String verifiedHoursAgo(int hours) {
+    return 'Verified ${hours}h ago';
+  }
+
+  @override
+  String verifiedDaysAgo(int days) {
+    return 'Verified ${days}d ago';
+  }
+
+  @override
+  String verifiedOnDate(String date) {
+    return 'Verified on $date';
+  }
+
+  @override
+  String get verifiedFallback => 'Verified';
+
+  @override
+  String get callAlreadyInProgress => 'A call is already in progress';
+
+  @override
+  String get failedToGetCallToken => 'Failed to get call token. Verify your phone number first.';
+
+  @override
+  String get failedToInitializeCallService => 'Failed to initialize call service';
+
+  @override
+  String get speakerLabelYou => 'You';
+
+  @override
+  String get speakerLabelUnknown => 'Unknown';
+
+  @override
+  String get showDailyScoreOnHomepage => 'Show Daily Score on homepage';
+
+  @override
+  String get showTasksOnHomepage => 'Show Tasks on homepage';
+
+  @override
+  String get phoneCallsUnlimitedOnly => 'Phone Calls via Omi';
+
+  @override
+  String get phoneCallsUpsellSubtitle =>
+      'Make calls through Omi and get real-time transcription, automatic summaries, and more. Available exclusively for Unlimited plan subscribers.';
+
+  @override
+  String get phoneCallsUpsellFeature1 => 'Real-time transcription of every call';
+
+  @override
+  String get phoneCallsUpsellFeature2 => 'Automatic call summaries and action items';
+
+  @override
+  String get phoneCallsUpsellFeature3 => 'Recipients see your real number, not a random one';
+
+  @override
+  String get phoneCallsUpsellFeature4 => 'Your calls stay private and secure';
+
+  @override
+  String get phoneCallsUpgradeButton => 'Upgrade to Unlimited';
+
+  @override
+  String get phoneCallsMaybeLater => 'Maybe later';
+
+  @override
+  String get deleteSynced => 'Delete Synced';
+
+  @override
+  String get deleteSyncedFiles => 'Delete Synced Recordings';
+
+  @override
+  String get deleteSyncedFilesMessage =>
+      'These recordings have already been synced to your phone. This cannot be undone.';
+
+  @override
+  String get syncedFilesDeleted => 'Synced recordings deleted';
+
+  @override
+  String get deletePending => 'Delete Pending';
+
+  @override
+  String get deletePendingFiles => 'Delete Pending Recordings';
+
+  @override
+  String get deletePendingFilesWarning =>
+      'These recordings have NOT been synced to your phone and will be permanently lost. This cannot be undone.';
+
+  @override
+  String get pendingFilesDeleted => 'Pending recordings deleted';
+
+  @override
+  String get deleteAllFiles => 'Delete All Recordings';
+
+  @override
+  String get deleteAll => 'Delete All';
+
+  @override
+  String get deleteAllFilesWarning =>
+      'This will delete both synced and pending recordings. Pending recordings have NOT been synced and will be permanently lost. This cannot be undone.';
+
+  @override
+  String get allFilesDeleted => 'All recordings deleted';
+
+  @override
+  String nFiles(int count) {
+    return '$count recordings';
+  }
+
+  @override
+  String get manageStorage => 'Manage Storage';
+
+  @override
+  String get safelyBackedUp => 'Safely backed up to your phone';
+
+  @override
+  String get notYetSynced => 'Not yet synced to your phone';
+
+  @override
+  String get clearAll => 'Clear All';
+
+  @override
+  String get phoneKeypad => 'Keypad';
+
+  @override
+  String get phoneHideKeypad => 'Hide Keypad';
+
+  @override
+  String get fairUsePolicy => 'Fair Use';
+
+  @override
+  String get fairUseLoadError => 'Unable to load fair use status. Please try again.';
+
+  @override
+  String get fairUseStatusNormal => 'Your usage is within normal limits.';
+
+  @override
+  String get fairUseStageNormal => 'Normal';
+
+  @override
+  String get fairUseStageWarning => 'Warning';
+
+  @override
+  String get fairUseStageThrottle => 'Throttled';
+
+  @override
+  String get fairUseStageRestrict => 'Restricted';
+
+  @override
+  String get fairUseSpeechUsage => 'Speech Usage';
+
+  @override
+  String get fairUseToday => 'Today';
+
+  @override
+  String get fairUse3Day => '3-Day Rolling';
+
+  @override
+  String get fairUseWeekly => 'Weekly Rolling';
+
+  @override
+  String get fairUseAboutTitle => 'About Fair Use';
+
+  @override
+  String get fairUseAboutBody =>
+      'Omi is designed for personal conversations, meetings, and live interactions. Usage is measured by real speech time detected, not connection time. If usage significantly exceeds normal patterns for non-personal content, adjustments may apply.';
+
+  @override
+  String fairUseCaseRefCopied(String caseRef) {
+    return '$caseRef copied';
+  }
+
+  @override
+  String get fairUseDailyTranscription => 'Daily Transcription';
+
+  @override
+  String fairUseBudgetUsed(String used, String limit) {
+    return '${used}m / ${limit}m';
+  }
+
+  @override
+  String get fairUseBudgetExhausted => 'Daily transcription limit reached';
+
+  @override
+  String fairUseBudgetResetsAt(String time) {
+    return 'Resets $time';
+  }
+
+  @override
+  String get transcriptionPaused => 'Recording, reconnecting';
+
+  @override
+  String get transcriptionPausedReconnecting => 'Still recording — reconnecting to transcription...';
 }

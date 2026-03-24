@@ -15434,6 +15434,696 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Start a conversation with Nooto or record one with your device'**
   String get conversationsEmptyStateMessage;
+
+  /// Confirmation dialog title for cleaning today task deadlines
+  ///
+  /// In en, this message translates to:
+  /// **'Clean today\'s tasks?'**
+  String get tasksCleanTodayTitle;
+
+  /// Confirmation dialog message for cleaning today task deadlines
+  ///
+  /// In en, this message translates to:
+  /// **'This will only remove deadlines'**
+  String get tasksCleanTodayMessage;
+
+  /// No description provided for @shared.
+  ///
+  /// In en, this message translates to:
+  /// **'Shared'**
+  String get shared;
+
+  /// No description provided for @onlyYouCanSeeConversation.
+  ///
+  /// In en, this message translates to:
+  /// **'Only you can see this conversation'**
+  String get onlyYouCanSeeConversation;
+
+  /// No description provided for @anyoneWithLinkCanView.
+  ///
+  /// In en, this message translates to:
+  /// **'Anyone with the link can view'**
+  String get anyoneWithLinkCanView;
+
+  /// No description provided for @tasksOverdue.
+  ///
+  /// In en, this message translates to:
+  /// **'Overdue'**
+  String get tasksOverdue;
+
+  /// No description provided for @phoneCallsWithOmi.
+  ///
+  /// In en, this message translates to:
+  /// **'Phone Calls with Omi'**
+  String get phoneCallsWithOmi;
+
+  /// No description provided for @phoneCallsSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Make calls with real-time transcription'**
+  String get phoneCallsSubtitle;
+
+  /// No description provided for @phoneSetupStep1Title.
+  ///
+  /// In en, this message translates to:
+  /// **'Verify your phone number'**
+  String get phoneSetupStep1Title;
+
+  /// No description provided for @phoneSetupStep1Subtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'We\'ll call you to confirm it\'s yours'**
+  String get phoneSetupStep1Subtitle;
+
+  /// No description provided for @phoneSetupStep2Title.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter a verification code'**
+  String get phoneSetupStep2Title;
+
+  /// No description provided for @phoneSetupStep2Subtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'A short code you\'ll type on the call'**
+  String get phoneSetupStep2Subtitle;
+
+  /// No description provided for @phoneSetupStep3Title.
+  ///
+  /// In en, this message translates to:
+  /// **'Start calling your contacts'**
+  String get phoneSetupStep3Title;
+
+  /// No description provided for @phoneSetupStep3Subtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'With live transcription built in'**
+  String get phoneSetupStep3Subtitle;
+
+  /// No description provided for @phoneGetStarted.
+  ///
+  /// In en, this message translates to:
+  /// **'Get Started'**
+  String get phoneGetStarted;
+
+  /// No description provided for @callRecordingConsentDisclaimer.
+  ///
+  /// In en, this message translates to:
+  /// **'Call recording may require consent in your jurisdiction'**
+  String get callRecordingConsentDisclaimer;
+
+  /// No description provided for @enterYourNumber.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter your number'**
+  String get enterYourNumber;
+
+  /// No description provided for @phoneNumberCallerIdHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Once verified, this becomes your caller ID'**
+  String get phoneNumberCallerIdHint;
+
+  /// No description provided for @phoneNumberHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Phone number'**
+  String get phoneNumberHint;
+
+  /// No description provided for @failedToStartVerification.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to start verification'**
+  String get failedToStartVerification;
+
+  /// No description provided for @phoneContinue.
+  ///
+  /// In en, this message translates to:
+  /// **'Continue'**
+  String get phoneContinue;
+
+  /// No description provided for @verifyYourNumber.
+  ///
+  /// In en, this message translates to:
+  /// **'Verify your number'**
+  String get verifyYourNumber;
+
+  /// No description provided for @answerTheCallFrom.
+  ///
+  /// In en, this message translates to:
+  /// **'Answer the call from'**
+  String get answerTheCallFrom;
+
+  /// No description provided for @onTheCallEnterThisCode.
+  ///
+  /// In en, this message translates to:
+  /// **'On the call, enter this code'**
+  String get onTheCallEnterThisCode;
+
+  /// No description provided for @followTheVoiceInstructions.
+  ///
+  /// In en, this message translates to:
+  /// **'Follow the voice instructions'**
+  String get followTheVoiceInstructions;
+
+  /// No description provided for @statusCalling.
+  ///
+  /// In en, this message translates to:
+  /// **'Calling...'**
+  String get statusCalling;
+
+  /// No description provided for @statusCallInProgress.
+  ///
+  /// In en, this message translates to:
+  /// **'Call in progress'**
+  String get statusCallInProgress;
+
+  /// No description provided for @statusVerifiedLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Verified'**
+  String get statusVerifiedLabel;
+
+  /// No description provided for @statusCallMissed.
+  ///
+  /// In en, this message translates to:
+  /// **'Call missed'**
+  String get statusCallMissed;
+
+  /// No description provided for @statusTimedOut.
+  ///
+  /// In en, this message translates to:
+  /// **'Timed out'**
+  String get statusTimedOut;
+
+  /// No description provided for @phoneTryAgain.
+  ///
+  /// In en, this message translates to:
+  /// **'Try Again'**
+  String get phoneTryAgain;
+
+  /// No description provided for @phonePageTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Phone'**
+  String get phonePageTitle;
+
+  /// No description provided for @phoneContactsTab.
+  ///
+  /// In en, this message translates to:
+  /// **'Contacts'**
+  String get phoneContactsTab;
+
+  /// No description provided for @phoneKeypadTab.
+  ///
+  /// In en, this message translates to:
+  /// **'Keypad'**
+  String get phoneKeypadTab;
+
+  /// No description provided for @grantContactsAccess.
+  ///
+  /// In en, this message translates to:
+  /// **'Grant access to your contacts'**
+  String get grantContactsAccess;
+
+  /// No description provided for @phoneAllow.
+  ///
+  /// In en, this message translates to:
+  /// **'Allow'**
+  String get phoneAllow;
+
+  /// No description provided for @phoneSearchHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Search'**
+  String get phoneSearchHint;
+
+  /// No description provided for @phoneNoContactsFound.
+  ///
+  /// In en, this message translates to:
+  /// **'No contacts found'**
+  String get phoneNoContactsFound;
+
+  /// No description provided for @phoneEnterNumber.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter number'**
+  String get phoneEnterNumber;
+
+  /// No description provided for @failedToStartCall.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to start call'**
+  String get failedToStartCall;
+
+  /// No description provided for @callStateConnecting.
+  ///
+  /// In en, this message translates to:
+  /// **'Connecting...'**
+  String get callStateConnecting;
+
+  /// No description provided for @callStateRinging.
+  ///
+  /// In en, this message translates to:
+  /// **'Ringing...'**
+  String get callStateRinging;
+
+  /// No description provided for @callStateEnded.
+  ///
+  /// In en, this message translates to:
+  /// **'Call Ended'**
+  String get callStateEnded;
+
+  /// No description provided for @callStateFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Call Failed'**
+  String get callStateFailed;
+
+  /// No description provided for @transcriptPlaceholder.
+  ///
+  /// In en, this message translates to:
+  /// **'Transcript will appear here...'**
+  String get transcriptPlaceholder;
+
+  /// No description provided for @phoneUnmute.
+  ///
+  /// In en, this message translates to:
+  /// **'Unmute'**
+  String get phoneUnmute;
+
+  /// No description provided for @phoneMute.
+  ///
+  /// In en, this message translates to:
+  /// **'Mute'**
+  String get phoneMute;
+
+  /// No description provided for @phoneSpeaker.
+  ///
+  /// In en, this message translates to:
+  /// **'Speaker'**
+  String get phoneSpeaker;
+
+  /// No description provided for @phoneEndCall.
+  ///
+  /// In en, this message translates to:
+  /// **'End'**
+  String get phoneEndCall;
+
+  /// No description provided for @phoneCallSettingsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Phone Call Settings'**
+  String get phoneCallSettingsTitle;
+
+  /// No description provided for @yourVerifiedNumbers.
+  ///
+  /// In en, this message translates to:
+  /// **'Your Verified Numbers'**
+  String get yourVerifiedNumbers;
+
+  /// No description provided for @verifiedNumbersDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'When you call someone, they\'ll see this number on their phone'**
+  String get verifiedNumbersDescription;
+
+  /// No description provided for @noVerifiedNumbers.
+  ///
+  /// In en, this message translates to:
+  /// **'No verified numbers'**
+  String get noVerifiedNumbers;
+
+  /// No description provided for @deletePhoneNumberConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete {phoneNumber}?'**
+  String deletePhoneNumberConfirm(String phoneNumber);
+
+  /// No description provided for @deletePhoneNumberWarning.
+  ///
+  /// In en, this message translates to:
+  /// **'You\'ll need to verify again to make calls'**
+  String get deletePhoneNumberWarning;
+
+  /// No description provided for @phoneDeleteButton.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete'**
+  String get phoneDeleteButton;
+
+  /// No description provided for @verifiedMinutesAgo.
+  ///
+  /// In en, this message translates to:
+  /// **'Verified {minutes}m ago'**
+  String verifiedMinutesAgo(int minutes);
+
+  /// No description provided for @verifiedHoursAgo.
+  ///
+  /// In en, this message translates to:
+  /// **'Verified {hours}h ago'**
+  String verifiedHoursAgo(int hours);
+
+  /// No description provided for @verifiedDaysAgo.
+  ///
+  /// In en, this message translates to:
+  /// **'Verified {days}d ago'**
+  String verifiedDaysAgo(int days);
+
+  /// No description provided for @verifiedOnDate.
+  ///
+  /// In en, this message translates to:
+  /// **'Verified on {date}'**
+  String verifiedOnDate(String date);
+
+  /// No description provided for @verifiedFallback.
+  ///
+  /// In en, this message translates to:
+  /// **'Verified'**
+  String get verifiedFallback;
+
+  /// No description provided for @callAlreadyInProgress.
+  ///
+  /// In en, this message translates to:
+  /// **'A call is already in progress'**
+  String get callAlreadyInProgress;
+
+  /// No description provided for @failedToGetCallToken.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to get call token. Verify your phone number first.'**
+  String get failedToGetCallToken;
+
+  /// No description provided for @failedToInitializeCallService.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to initialize call service'**
+  String get failedToInitializeCallService;
+
+  /// No description provided for @speakerLabelYou.
+  ///
+  /// In en, this message translates to:
+  /// **'You'**
+  String get speakerLabelYou;
+
+  /// No description provided for @speakerLabelUnknown.
+  ///
+  /// In en, this message translates to:
+  /// **'Unknown'**
+  String get speakerLabelUnknown;
+
+  /// Description for show daily score toggle in developer settings
+  ///
+  /// In en, this message translates to:
+  /// **'Show Daily Score on homepage'**
+  String get showDailyScoreOnHomepage;
+
+  /// Description for show tasks toggle in developer settings
+  ///
+  /// In en, this message translates to:
+  /// **'Show Tasks on homepage'**
+  String get showTasksOnHomepage;
+
+  /// Title for the phone calls upsell sheet shown to non-unlimited users
+  ///
+  /// In en, this message translates to:
+  /// **'Phone Calls via Omi'**
+  String get phoneCallsUnlimitedOnly;
+
+  /// Subtitle explaining phone calls feature on upsell sheet
+  ///
+  /// In en, this message translates to:
+  /// **'Make calls through Omi and get real-time transcription, automatic summaries, and more. Available exclusively for Unlimited plan subscribers.'**
+  String get phoneCallsUpsellSubtitle;
+
+  /// Phone calls upsell feature 1
+  ///
+  /// In en, this message translates to:
+  /// **'Real-time transcription of every call'**
+  String get phoneCallsUpsellFeature1;
+
+  /// Phone calls upsell feature 2
+  ///
+  /// In en, this message translates to:
+  /// **'Automatic call summaries and action items'**
+  String get phoneCallsUpsellFeature2;
+
+  /// Phone calls upsell feature 3
+  ///
+  /// In en, this message translates to:
+  /// **'Recipients see your real number, not a random one'**
+  String get phoneCallsUpsellFeature3;
+
+  /// Phone calls upsell feature 4
+  ///
+  /// In en, this message translates to:
+  /// **'Your calls stay private and secure'**
+  String get phoneCallsUpsellFeature4;
+
+  /// Button text to upgrade to unlimited plan from phone calls upsell
+  ///
+  /// In en, this message translates to:
+  /// **'Upgrade to Unlimited'**
+  String get phoneCallsUpgradeButton;
+
+  /// Dismiss button text on phone calls upsell sheet
+  ///
+  /// In en, this message translates to:
+  /// **'Maybe later'**
+  String get phoneCallsMaybeLater;
+
+  /// Menu option to delete synced recordings
+  ///
+  /// In en, this message translates to:
+  /// **'Delete Synced'**
+  String get deleteSynced;
+
+  /// Dialog title for deleting synced files
+  ///
+  /// In en, this message translates to:
+  /// **'Delete Synced Recordings'**
+  String get deleteSyncedFiles;
+
+  /// Confirmation message for deleting synced files
+  ///
+  /// In en, this message translates to:
+  /// **'These recordings have already been synced to your phone. This cannot be undone.'**
+  String get deleteSyncedFilesMessage;
+
+  /// Snackbar message after synced files deleted
+  ///
+  /// In en, this message translates to:
+  /// **'Synced recordings deleted'**
+  String get syncedFilesDeleted;
+
+  /// Menu option to delete pending recordings
+  ///
+  /// In en, this message translates to:
+  /// **'Delete Pending'**
+  String get deletePending;
+
+  /// Dialog title for deleting pending files
+  ///
+  /// In en, this message translates to:
+  /// **'Delete Pending Recordings'**
+  String get deletePendingFiles;
+
+  /// Warning message for deleting pending files
+  ///
+  /// In en, this message translates to:
+  /// **'These recordings have NOT been synced to your phone and will be permanently lost. This cannot be undone.'**
+  String get deletePendingFilesWarning;
+
+  /// Snackbar message after pending files deleted
+  ///
+  /// In en, this message translates to:
+  /// **'Pending recordings deleted'**
+  String get pendingFilesDeleted;
+
+  /// Dialog title for deleting all files
+  ///
+  /// In en, this message translates to:
+  /// **'Delete All Recordings'**
+  String get deleteAllFiles;
+
+  /// Menu option to delete all recordings
+  ///
+  /// In en, this message translates to:
+  /// **'Delete All'**
+  String get deleteAll;
+
+  /// Warning message for deleting all files
+  ///
+  /// In en, this message translates to:
+  /// **'This will delete both synced and pending recordings. Pending recordings have NOT been synced and will be permanently lost. This cannot be undone.'**
+  String get deleteAllFilesWarning;
+
+  /// Snackbar message after all files deleted
+  ///
+  /// In en, this message translates to:
+  /// **'All recordings deleted'**
+  String get allFilesDeleted;
+
+  /// Count of files
+  ///
+  /// In en, this message translates to:
+  /// **'{count} recordings'**
+  String nFiles(int count);
+
+  /// Menu option and sheet title for managing recording storage
+  ///
+  /// In en, this message translates to:
+  /// **'Manage Storage'**
+  String get manageStorage;
+
+  /// Description for synced files in manage storage sheet
+  ///
+  /// In en, this message translates to:
+  /// **'Safely backed up to your phone'**
+  String get safelyBackedUp;
+
+  /// Description for pending files in manage storage sheet
+  ///
+  /// In en, this message translates to:
+  /// **'Not yet synced to your phone'**
+  String get notYetSynced;
+
+  /// Button label to clear all files
+  ///
+  /// In en, this message translates to:
+  /// **'Clear All'**
+  String get clearAll;
+
+  /// Label for the keypad/dialpad button during an active phone call
+  ///
+  /// In en, this message translates to:
+  /// **'Keypad'**
+  String get phoneKeypad;
+
+  /// Label for the button to dismiss the in-call keypad
+  ///
+  /// In en, this message translates to:
+  /// **'Hide Keypad'**
+  String get phoneHideKeypad;
+
+  /// No description provided for @fairUsePolicy.
+  ///
+  /// In en, this message translates to:
+  /// **'Fair Use'**
+  String get fairUsePolicy;
+
+  /// No description provided for @fairUseLoadError.
+  ///
+  /// In en, this message translates to:
+  /// **'Unable to load fair use status. Please try again.'**
+  String get fairUseLoadError;
+
+  /// No description provided for @fairUseStatusNormal.
+  ///
+  /// In en, this message translates to:
+  /// **'Your usage is within normal limits.'**
+  String get fairUseStatusNormal;
+
+  /// No description provided for @fairUseStageNormal.
+  ///
+  /// In en, this message translates to:
+  /// **'Normal'**
+  String get fairUseStageNormal;
+
+  /// No description provided for @fairUseStageWarning.
+  ///
+  /// In en, this message translates to:
+  /// **'Warning'**
+  String get fairUseStageWarning;
+
+  /// No description provided for @fairUseStageThrottle.
+  ///
+  /// In en, this message translates to:
+  /// **'Throttled'**
+  String get fairUseStageThrottle;
+
+  /// No description provided for @fairUseStageRestrict.
+  ///
+  /// In en, this message translates to:
+  /// **'Restricted'**
+  String get fairUseStageRestrict;
+
+  /// No description provided for @fairUseSpeechUsage.
+  ///
+  /// In en, this message translates to:
+  /// **'Speech Usage'**
+  String get fairUseSpeechUsage;
+
+  /// No description provided for @fairUseToday.
+  ///
+  /// In en, this message translates to:
+  /// **'Today'**
+  String get fairUseToday;
+
+  /// No description provided for @fairUse3Day.
+  ///
+  /// In en, this message translates to:
+  /// **'3-Day Rolling'**
+  String get fairUse3Day;
+
+  /// No description provided for @fairUseWeekly.
+  ///
+  /// In en, this message translates to:
+  /// **'Weekly Rolling'**
+  String get fairUseWeekly;
+
+  /// No description provided for @fairUseAboutTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'About Fair Use'**
+  String get fairUseAboutTitle;
+
+  /// No description provided for @fairUseAboutBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Omi is designed for personal conversations, meetings, and live interactions. Usage is measured by real speech time detected, not connection time. If usage significantly exceeds normal patterns for non-personal content, adjustments may apply.'**
+  String get fairUseAboutBody;
+
+  /// Snackbar message when case reference is copied to clipboard
+  ///
+  /// In en, this message translates to:
+  /// **'{caseRef} copied'**
+  String fairUseCaseRefCopied(String caseRef);
+
+  /// No description provided for @fairUseDailyTranscription.
+  ///
+  /// In en, this message translates to:
+  /// **'Daily Transcription'**
+  String get fairUseDailyTranscription;
+
+  /// No description provided for @fairUseBudgetUsed.
+  ///
+  /// In en, this message translates to:
+  /// **'{used}m / {limit}m'**
+  String fairUseBudgetUsed(String used, String limit);
+
+  /// No description provided for @fairUseBudgetExhausted.
+  ///
+  /// In en, this message translates to:
+  /// **'Daily transcription limit reached'**
+  String get fairUseBudgetExhausted;
+
+  /// No description provided for @fairUseBudgetResetsAt.
+  ///
+  /// In en, this message translates to:
+  /// **'Resets {time}'**
+  String fairUseBudgetResetsAt(String time);
+
+  /// No description provided for @transcriptionPaused.
+  ///
+  /// In en, this message translates to:
+  /// **'Recording, reconnecting'**
+  String get transcriptionPaused;
+
+  /// No description provided for @transcriptionPausedReconnecting.
+  ///
+  /// In en, this message translates to:
+  /// **'Still recording — reconnecting to transcription...'**
+  String get transcriptionPausedReconnecting;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

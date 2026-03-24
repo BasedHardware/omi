@@ -8317,4 +8317,373 @@ class AppLocalizationsIt extends AppLocalizations {
   @override
   String get conversationsEmptyStateMessage =>
       'Avvia una conversazione con Nooto o registrane una con il tuo dispositivo';
+
+  @override
+  String get tasksCleanTodayTitle => 'Pulire le attività di oggi?';
+
+  @override
+  String get tasksCleanTodayMessage => 'Questo rimuoverà solo le scadenze';
+
+  @override
+  String get shared => 'Condiviso';
+
+  @override
+  String get onlyYouCanSeeConversation => 'Solo tu puoi vedere questa conversazione';
+
+  @override
+  String get anyoneWithLinkCanView => 'Chiunque abbia il link può visualizzare';
+
+  @override
+  String get tasksOverdue => 'Scadute';
+
+  @override
+  String get phoneCallsWithOmi => 'Chiamate con Omi';
+
+  @override
+  String get phoneCallsSubtitle => 'Chiama con trascrizione in tempo reale';
+
+  @override
+  String get phoneSetupStep1Title => 'Verifica il tuo numero di telefono';
+
+  @override
+  String get phoneSetupStep1Subtitle => 'Ti chiameremo per confermare';
+
+  @override
+  String get phoneSetupStep2Title => 'Inserisci un codice di verifica';
+
+  @override
+  String get phoneSetupStep2Subtitle => 'Un codice breve che digiterai durante la chiamata';
+
+  @override
+  String get phoneSetupStep3Title => 'Inizia a chiamare i tuoi contatti';
+
+  @override
+  String get phoneSetupStep3Subtitle => 'Con trascrizione dal vivo integrata';
+
+  @override
+  String get phoneGetStarted => 'Inizia';
+
+  @override
+  String get callRecordingConsentDisclaimer =>
+      'La registrazione delle chiamate potrebbe richiedere il consenso nella tua giurisdizione';
+
+  @override
+  String get enterYourNumber => 'Inserisci il tuo numero';
+
+  @override
+  String get phoneNumberCallerIdHint => 'Dopo la verifica, questo diventa il tuo ID chiamante';
+
+  @override
+  String get phoneNumberHint => 'Numero di telefono';
+
+  @override
+  String get failedToStartVerification => 'Impossibile avviare la verifica';
+
+  @override
+  String get phoneContinue => 'Continua';
+
+  @override
+  String get verifyYourNumber => 'Verifica il tuo numero';
+
+  @override
+  String get answerTheCallFrom => 'Rispondi alla chiamata da';
+
+  @override
+  String get onTheCallEnterThisCode => 'Durante la chiamata, inserisci questo codice';
+
+  @override
+  String get followTheVoiceInstructions => 'Segui le istruzioni vocali';
+
+  @override
+  String get statusCalling => 'Chiamata...';
+
+  @override
+  String get statusCallInProgress => 'Chiamata in corso';
+
+  @override
+  String get statusVerifiedLabel => 'Verificato';
+
+  @override
+  String get statusCallMissed => 'Chiamata persa';
+
+  @override
+  String get statusTimedOut => 'Tempo scaduto';
+
+  @override
+  String get phoneTryAgain => 'Riprova';
+
+  @override
+  String get phonePageTitle => 'Telefono';
+
+  @override
+  String get phoneContactsTab => 'Contatti';
+
+  @override
+  String get phoneKeypadTab => 'Tastierino';
+
+  @override
+  String get grantContactsAccess => 'Concedi accesso ai tuoi contatti';
+
+  @override
+  String get phoneAllow => 'Consenti';
+
+  @override
+  String get phoneSearchHint => 'Cerca';
+
+  @override
+  String get phoneNoContactsFound => 'Nessun contatto trovato';
+
+  @override
+  String get phoneEnterNumber => 'Inserisci numero';
+
+  @override
+  String get failedToStartCall => 'Impossibile avviare la chiamata';
+
+  @override
+  String get callStateConnecting => 'Connessione...';
+
+  @override
+  String get callStateRinging => 'Squilla...';
+
+  @override
+  String get callStateEnded => 'Chiamata terminata';
+
+  @override
+  String get callStateFailed => 'Chiamata fallita';
+
+  @override
+  String get transcriptPlaceholder => 'La trascrizione apparira qui...';
+
+  @override
+  String get phoneUnmute => 'Riattiva audio';
+
+  @override
+  String get phoneMute => 'Muto';
+
+  @override
+  String get phoneSpeaker => 'Altoparlante';
+
+  @override
+  String get phoneEndCall => 'Fine';
+
+  @override
+  String get phoneCallSettingsTitle => 'Impostazioni chiamate';
+
+  @override
+  String get yourVerifiedNumbers => 'I tuoi numeri verificati';
+
+  @override
+  String get verifiedNumbersDescription => 'Quando chiami qualcuno, vedra questo numero';
+
+  @override
+  String get noVerifiedNumbers => 'Nessun numero verificato';
+
+  @override
+  String deletePhoneNumberConfirm(String phoneNumber) {
+    return 'Eliminare $phoneNumber?';
+  }
+
+  @override
+  String get deletePhoneNumberWarning => 'Dovrai verificare di nuovo per effettuare chiamate';
+
+  @override
+  String get phoneDeleteButton => 'Elimina';
+
+  @override
+  String verifiedMinutesAgo(int minutes) {
+    return 'Verificato ${minutes}min fa';
+  }
+
+  @override
+  String verifiedHoursAgo(int hours) {
+    return 'Verificato ${hours}h fa';
+  }
+
+  @override
+  String verifiedDaysAgo(int days) {
+    return 'Verificato ${days}g fa';
+  }
+
+  @override
+  String verifiedOnDate(String date) {
+    return 'Verificato il $date';
+  }
+
+  @override
+  String get verifiedFallback => 'Verificato';
+
+  @override
+  String get callAlreadyInProgress => 'Una chiamata e gia in corso';
+
+  @override
+  String get failedToGetCallToken => 'Impossibile ottenere il token. Verifica prima il tuo numero.';
+
+  @override
+  String get failedToInitializeCallService => 'Impossibile inizializzare il servizio chiamate';
+
+  @override
+  String get speakerLabelYou => 'Tu';
+
+  @override
+  String get speakerLabelUnknown => 'Sconosciuto';
+
+  @override
+  String get showDailyScoreOnHomepage => 'Mostra punteggio giornaliero nella homepage';
+
+  @override
+  String get showTasksOnHomepage => 'Mostra attività nella homepage';
+
+  @override
+  String get phoneCallsUnlimitedOnly => 'Chiamate telefoniche tramite Omi';
+
+  @override
+  String get phoneCallsUpsellSubtitle =>
+      'Effettua chiamate tramite Omi e ottieni trascrizione in tempo reale, riassunti automatici e altro.';
+
+  @override
+  String get phoneCallsUpsellFeature1 => 'Trascrizione in tempo reale di ogni chiamata';
+
+  @override
+  String get phoneCallsUpsellFeature2 => 'Riassunti automatici delle chiamate e azioni da fare';
+
+  @override
+  String get phoneCallsUpsellFeature3 => 'I destinatari vedono il tuo vero numero, non uno casuale';
+
+  @override
+  String get phoneCallsUpsellFeature4 => 'Le tue chiamate restano private e sicure';
+
+  @override
+  String get phoneCallsUpgradeButton => 'Passa a Illimitato';
+
+  @override
+  String get phoneCallsMaybeLater => 'Forse più tardi';
+
+  @override
+  String get deleteSynced => 'Elimina sincronizzati';
+
+  @override
+  String get deleteSyncedFiles => 'Elimina registrazioni sincronizzate';
+
+  @override
+  String get deleteSyncedFilesMessage =>
+      'Queste registrazioni sono già state sincronizzate con il tuo telefono. Questa azione non può essere annullata.';
+
+  @override
+  String get syncedFilesDeleted => 'Registrazioni sincronizzate eliminate';
+
+  @override
+  String get deletePending => 'Elimina in sospeso';
+
+  @override
+  String get deletePendingFiles => 'Elimina registrazioni in sospeso';
+
+  @override
+  String get deletePendingFilesWarning =>
+      'Queste registrazioni NON sono state sincronizzate con il tuo telefono e andranno perse permanentemente. Questa azione non può essere annullata.';
+
+  @override
+  String get pendingFilesDeleted => 'Registrazioni in sospeso eliminate';
+
+  @override
+  String get deleteAllFiles => 'Elimina tutte le registrazioni';
+
+  @override
+  String get deleteAll => 'Elimina tutto';
+
+  @override
+  String get deleteAllFilesWarning =>
+      'Questo eliminerà le registrazioni sincronizzate e in sospeso. Le registrazioni in sospeso NON sono state sincronizzate e andranno perse permanentemente.';
+
+  @override
+  String get allFilesDeleted => 'Tutte le registrazioni eliminate';
+
+  @override
+  String nFiles(int count) {
+    return '$count registrazioni';
+  }
+
+  @override
+  String get manageStorage => 'Gestisci archivio';
+
+  @override
+  String get safelyBackedUp => 'Salvato sul tuo telefono';
+
+  @override
+  String get notYetSynced => 'Non ancora sincronizzato con il tuo telefono';
+
+  @override
+  String get clearAll => 'Cancella tutto';
+
+  @override
+  String get phoneKeypad => 'Tastiera';
+
+  @override
+  String get phoneHideKeypad => 'Nascondi tastiera';
+
+  @override
+  String get fairUsePolicy => 'Uso corretto';
+
+  @override
+  String get fairUseLoadError => 'Impossibile caricare lo stato di uso corretto. Riprova.';
+
+  @override
+  String get fairUseStatusNormal => 'Il tuo utilizzo è entro i limiti normali.';
+
+  @override
+  String get fairUseStageNormal => 'Normale';
+
+  @override
+  String get fairUseStageWarning => 'Avviso';
+
+  @override
+  String get fairUseStageThrottle => 'Limitato';
+
+  @override
+  String get fairUseStageRestrict => 'Bloccato';
+
+  @override
+  String get fairUseSpeechUsage => 'Utilizzo vocale';
+
+  @override
+  String get fairUseToday => 'Oggi';
+
+  @override
+  String get fairUse3Day => '3 giorni consecutivi';
+
+  @override
+  String get fairUseWeekly => 'Settimanale';
+
+  @override
+  String get fairUseAboutTitle => 'Informazioni sull\'uso corretto';
+
+  @override
+  String get fairUseAboutBody =>
+      'Omi è progettato per conversazioni personali, riunioni e interazioni dal vivo. L\'utilizzo è misurato dal tempo reale di parlato rilevato, non dal tempo di connessione. Se l\'utilizzo supera significativamente i modelli normali per contenuti non personali, potrebbero essere applicate modifiche.';
+
+  @override
+  String fairUseCaseRefCopied(String caseRef) {
+    return '$caseRef copiato';
+  }
+
+  @override
+  String get fairUseDailyTranscription => 'Trascrizione giornaliera';
+
+  @override
+  String fairUseBudgetUsed(String used, String limit) {
+    return '${used}m / ${limit}m';
+  }
+
+  @override
+  String get fairUseBudgetExhausted => 'Limite di trascrizione giornaliero raggiunto';
+
+  @override
+  String fairUseBudgetResetsAt(String time) {
+    return 'Si reimposta $time';
+  }
+
+  @override
+  String get transcriptionPaused => 'Registrazione, riconnessione';
+
+  @override
+  String get transcriptionPausedReconnecting => 'Registrazione in corso — riconnessione alla trascrizione...';
 }

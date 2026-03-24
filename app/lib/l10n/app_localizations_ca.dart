@@ -8316,4 +8316,373 @@ class AppLocalizationsCa extends AppLocalizations {
   @override
   String get conversationsEmptyStateMessage =>
       'Inicia una conversa amb Nooto o enregistra-ne una amb el teu dispositiu';
+
+  @override
+  String get tasksCleanTodayTitle => 'Netejar les tasques d\'avui?';
+
+  @override
+  String get tasksCleanTodayMessage => 'Això només eliminarà els terminis';
+
+  @override
+  String get shared => 'Compartit';
+
+  @override
+  String get onlyYouCanSeeConversation => 'Només tu pots veure aquesta conversa';
+
+  @override
+  String get anyoneWithLinkCanView => 'Qualsevol persona amb l\'enllaç pot veure';
+
+  @override
+  String get tasksOverdue => 'Endarrerits';
+
+  @override
+  String get phoneCallsWithOmi => 'Trucades amb Omi';
+
+  @override
+  String get phoneCallsSubtitle => 'Fes trucades amb transcripcio en temps real';
+
+  @override
+  String get phoneSetupStep1Title => 'Verifica el teu numero de telefon';
+
+  @override
+  String get phoneSetupStep1Subtitle => 'Et trucarem per confirmar que es teu';
+
+  @override
+  String get phoneSetupStep2Title => 'Introdueix un codi de verificacio';
+
+  @override
+  String get phoneSetupStep2Subtitle => 'Un codi curt que escriuras a la trucada';
+
+  @override
+  String get phoneSetupStep3Title => 'Comenca a trucar als teus contactes';
+
+  @override
+  String get phoneSetupStep3Subtitle => 'Amb transcripcio en directe integrada';
+
+  @override
+  String get phoneGetStarted => 'Comenca';
+
+  @override
+  String get callRecordingConsentDisclaimer =>
+      'La gravacio de trucades pot requerir consentiment a la teva jurisdiccio';
+
+  @override
+  String get enterYourNumber => 'Introdueix el teu numero';
+
+  @override
+  String get phoneNumberCallerIdHint => 'Un cop verificat, aquest sera el teu identificador de trucada';
+
+  @override
+  String get phoneNumberHint => 'Numero de telefon';
+
+  @override
+  String get failedToStartVerification => 'No s\'ha pogut iniciar la verificacio';
+
+  @override
+  String get phoneContinue => 'Continuar';
+
+  @override
+  String get verifyYourNumber => 'Verifica el teu numero';
+
+  @override
+  String get answerTheCallFrom => 'Respon la trucada de';
+
+  @override
+  String get onTheCallEnterThisCode => 'A la trucada, introdueix aquest codi';
+
+  @override
+  String get followTheVoiceInstructions => 'Segueix les instruccions de veu';
+
+  @override
+  String get statusCalling => 'Trucant...';
+
+  @override
+  String get statusCallInProgress => 'Trucada en curs';
+
+  @override
+  String get statusVerifiedLabel => 'Verificat';
+
+  @override
+  String get statusCallMissed => 'Trucada perduda';
+
+  @override
+  String get statusTimedOut => 'Temps esgotat';
+
+  @override
+  String get phoneTryAgain => 'Torna-ho a provar';
+
+  @override
+  String get phonePageTitle => 'Telefon';
+
+  @override
+  String get phoneContactsTab => 'Contactes';
+
+  @override
+  String get phoneKeypadTab => 'Teclat';
+
+  @override
+  String get grantContactsAccess => 'Dona acces als teus contactes';
+
+  @override
+  String get phoneAllow => 'Permetre';
+
+  @override
+  String get phoneSearchHint => 'Cercar';
+
+  @override
+  String get phoneNoContactsFound => 'Cap contacte trobat';
+
+  @override
+  String get phoneEnterNumber => 'Introdueix numero';
+
+  @override
+  String get failedToStartCall => 'No s\'ha pogut iniciar la trucada';
+
+  @override
+  String get callStateConnecting => 'Connectant...';
+
+  @override
+  String get callStateRinging => 'Sonant...';
+
+  @override
+  String get callStateEnded => 'Trucada finalitzada';
+
+  @override
+  String get callStateFailed => 'Trucada fallida';
+
+  @override
+  String get transcriptPlaceholder => 'La transcripcio apareixera aqui...';
+
+  @override
+  String get phoneUnmute => 'Activar so';
+
+  @override
+  String get phoneMute => 'Silenciar';
+
+  @override
+  String get phoneSpeaker => 'Altaveu';
+
+  @override
+  String get phoneEndCall => 'Finalitzar';
+
+  @override
+  String get phoneCallSettingsTitle => 'Configuracio de trucades';
+
+  @override
+  String get yourVerifiedNumbers => 'Els teus numeros verificats';
+
+  @override
+  String get verifiedNumbersDescription => 'Quan truquis a algu, veuran aquest numero al seu telefon';
+
+  @override
+  String get noVerifiedNumbers => 'Cap numero verificat';
+
+  @override
+  String deletePhoneNumberConfirm(String phoneNumber) {
+    return 'Eliminar $phoneNumber?';
+  }
+
+  @override
+  String get deletePhoneNumberWarning => 'Hauras de verificar de nou per fer trucades';
+
+  @override
+  String get phoneDeleteButton => 'Eliminar';
+
+  @override
+  String verifiedMinutesAgo(int minutes) {
+    return 'Verificat fa ${minutes}m';
+  }
+
+  @override
+  String verifiedHoursAgo(int hours) {
+    return 'Verificat fa ${hours}h';
+  }
+
+  @override
+  String verifiedDaysAgo(int days) {
+    return 'Verificat fa ${days}d';
+  }
+
+  @override
+  String verifiedOnDate(String date) {
+    return 'Verificat el $date';
+  }
+
+  @override
+  String get verifiedFallback => 'Verificat';
+
+  @override
+  String get callAlreadyInProgress => 'Ja hi ha una trucada en curs';
+
+  @override
+  String get failedToGetCallToken => 'No s\'ha pogut obtenir el token. Verifica el teu numero primer.';
+
+  @override
+  String get failedToInitializeCallService => 'No s\'ha pogut inicialitzar el servei de trucades';
+
+  @override
+  String get speakerLabelYou => 'Tu';
+
+  @override
+  String get speakerLabelUnknown => 'Desconegut';
+
+  @override
+  String get showDailyScoreOnHomepage => 'Mostra la puntuació diària a la pàgina principal';
+
+  @override
+  String get showTasksOnHomepage => 'Mostra les tasques a la pàgina principal';
+
+  @override
+  String get phoneCallsUnlimitedOnly => 'Trucades telefòniques via Omi';
+
+  @override
+  String get phoneCallsUpsellSubtitle =>
+      'Fes trucades a través d\'Omi i obtin transcripció en temps real, resums automàtics i més.';
+
+  @override
+  String get phoneCallsUpsellFeature1 => 'Transcripció en temps real de cada trucada';
+
+  @override
+  String get phoneCallsUpsellFeature2 => 'Resums automàtics de trucades i accions a fer';
+
+  @override
+  String get phoneCallsUpsellFeature3 => 'Els destinataris veuen el teu número real, no un d\'aleatori';
+
+  @override
+  String get phoneCallsUpsellFeature4 => 'Les teves trucades es mantenen privades i segures';
+
+  @override
+  String get phoneCallsUpgradeButton => 'Actualitza a Il·limitat';
+
+  @override
+  String get phoneCallsMaybeLater => 'Potser més tard';
+
+  @override
+  String get deleteSynced => 'Eliminar sincronitzats';
+
+  @override
+  String get deleteSyncedFiles => 'Eliminar enregistraments sincronitzats';
+
+  @override
+  String get deleteSyncedFilesMessage =>
+      'Aquests enregistraments ja estan sincronitzats amb el vostre telèfon. Això no es pot desfer.';
+
+  @override
+  String get syncedFilesDeleted => 'Enregistraments sincronitzats eliminats';
+
+  @override
+  String get deletePending => 'Eliminar pendents';
+
+  @override
+  String get deletePendingFiles => 'Eliminar enregistraments pendents';
+
+  @override
+  String get deletePendingFilesWarning =>
+      'Aquests enregistraments NO estan sincronitzats amb el vostre telèfon i es perdran permanentment. Això no es pot desfer.';
+
+  @override
+  String get pendingFilesDeleted => 'Enregistraments pendents eliminats';
+
+  @override
+  String get deleteAllFiles => 'Eliminar tots els enregistraments';
+
+  @override
+  String get deleteAll => 'Eliminar tot';
+
+  @override
+  String get deleteAllFilesWarning =>
+      'Això eliminarà els enregistraments sincronitzats i pendents. Els enregistraments pendents NO estan sincronitzats i es perdran permanentment.';
+
+  @override
+  String get allFilesDeleted => 'Tots els enregistraments eliminats';
+
+  @override
+  String nFiles(int count) {
+    return '$count enregistraments';
+  }
+
+  @override
+  String get manageStorage => 'Gestionar emmagatzematge';
+
+  @override
+  String get safelyBackedUp => 'Còpia de seguretat al vostre telèfon';
+
+  @override
+  String get notYetSynced => 'Encara no sincronitzat amb el vostre telèfon';
+
+  @override
+  String get clearAll => 'Esborrar tot';
+
+  @override
+  String get phoneKeypad => 'Teclat';
+
+  @override
+  String get phoneHideKeypad => 'Amaga el teclat';
+
+  @override
+  String get fairUsePolicy => 'Ús raonable';
+
+  @override
+  String get fairUseLoadError => 'No s\'ha pogut carregar l\'estat d\'ús raonable. Si us plau, torneu-ho a provar.';
+
+  @override
+  String get fairUseStatusNormal => 'El vostre ús està dins dels límits normals.';
+
+  @override
+  String get fairUseStageNormal => 'Normal';
+
+  @override
+  String get fairUseStageWarning => 'Avís';
+
+  @override
+  String get fairUseStageThrottle => 'Limitat';
+
+  @override
+  String get fairUseStageRestrict => 'Restringit';
+
+  @override
+  String get fairUseSpeechUsage => 'Ús de la parla';
+
+  @override
+  String get fairUseToday => 'Avui';
+
+  @override
+  String get fairUse3Day => 'Últims 3 dies';
+
+  @override
+  String get fairUseWeekly => 'Setmanal';
+
+  @override
+  String get fairUseAboutTitle => 'Sobre l\'ús raonable';
+
+  @override
+  String get fairUseAboutBody =>
+      'Omi està dissenyat per a converses personals, reunions i interaccions en directe. L\'ús es mesura pel temps real de parla detectat, no pel temps de connexió. Si l\'ús supera significativament els patrons normals per a contingut no personal, es podrien aplicar ajustos.';
+
+  @override
+  String fairUseCaseRefCopied(String caseRef) {
+    return '$caseRef copiat';
+  }
+
+  @override
+  String get fairUseDailyTranscription => 'Daily Transcription';
+
+  @override
+  String fairUseBudgetUsed(String used, String limit) {
+    return '${used}m / ${limit}m';
+  }
+
+  @override
+  String get fairUseBudgetExhausted => 'Daily transcription limit reached';
+
+  @override
+  String fairUseBudgetResetsAt(String time) {
+    return 'Resets $time';
+  }
+
+  @override
+  String get transcriptionPaused => 'Gravant, reconnectant';
+
+  @override
+  String get transcriptionPausedReconnecting => 'Encara gravant — reconnectant a la transcripció...';
 }

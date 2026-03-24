@@ -8257,4 +8257,372 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get conversationsEmptyStateMessage => 'Začnite konverzáciu s Nooto alebo nahrajte jednu svojím zariadením';
+
+  @override
+  String get tasksCleanTodayTitle => 'Vyčistiť dnešné úlohy?';
+
+  @override
+  String get tasksCleanTodayMessage => 'Týmto sa odstránia iba termíny';
+
+  @override
+  String get shared => 'Zdieľané';
+
+  @override
+  String get onlyYouCanSeeConversation => 'Túto konverzáciu môžete vidieť iba vy';
+
+  @override
+  String get anyoneWithLinkCanView => 'Ktokoľvek s odkazom môže zobraziť';
+
+  @override
+  String get tasksOverdue => 'Po termíne';
+
+  @override
+  String get phoneCallsWithOmi => 'Hovory s Omi';
+
+  @override
+  String get phoneCallsSubtitle => 'Volajte s prepisom v realnom case';
+
+  @override
+  String get phoneSetupStep1Title => 'Overte svoje telefonne cislo';
+
+  @override
+  String get phoneSetupStep1Subtitle => 'Zavolame vam na potvrdenie';
+
+  @override
+  String get phoneSetupStep2Title => 'Zadajte overovaci kod';
+
+  @override
+  String get phoneSetupStep2Subtitle => 'Kratky kod, ktory zadate pocas hovoru';
+
+  @override
+  String get phoneSetupStep3Title => 'Zacnite volat svojim kontaktom';
+
+  @override
+  String get phoneSetupStep3Subtitle => 'So zabudovanym zivym prepisom';
+
+  @override
+  String get phoneGetStarted => 'Zacat';
+
+  @override
+  String get callRecordingConsentDisclaimer => 'Nahravanie hovorov moze vyzadovat suhlas vo vasej jurisdikcii';
+
+  @override
+  String get enterYourNumber => 'Zadajte svoje cislo';
+
+  @override
+  String get phoneNumberCallerIdHint => 'Po overeni sa toto stane vasim ID volajuceho';
+
+  @override
+  String get phoneNumberHint => 'Telefonne cislo';
+
+  @override
+  String get failedToStartVerification => 'Nepodarilo sa zacat overovanie';
+
+  @override
+  String get phoneContinue => 'Pokracovat';
+
+  @override
+  String get verifyYourNumber => 'Overte svoje cislo';
+
+  @override
+  String get answerTheCallFrom => 'Odpovedzte na hovor od';
+
+  @override
+  String get onTheCallEnterThisCode => 'Pocas hovoru zadajte tento kod';
+
+  @override
+  String get followTheVoiceInstructions => 'Postupujte podla hlasovych pokynov';
+
+  @override
+  String get statusCalling => 'Volanie...';
+
+  @override
+  String get statusCallInProgress => 'Hovor prebieha';
+
+  @override
+  String get statusVerifiedLabel => 'Overene';
+
+  @override
+  String get statusCallMissed => 'Zmeskany hovor';
+
+  @override
+  String get statusTimedOut => 'Cas vyprsal';
+
+  @override
+  String get phoneTryAgain => 'Skusit znova';
+
+  @override
+  String get phonePageTitle => 'Telefon';
+
+  @override
+  String get phoneContactsTab => 'Kontakty';
+
+  @override
+  String get phoneKeypadTab => 'Klavesnica';
+
+  @override
+  String get grantContactsAccess => 'Udelite pristup ku kontaktom';
+
+  @override
+  String get phoneAllow => 'Povolit';
+
+  @override
+  String get phoneSearchHint => 'Hladat';
+
+  @override
+  String get phoneNoContactsFound => 'Ziadne kontakty';
+
+  @override
+  String get phoneEnterNumber => 'Zadajte cislo';
+
+  @override
+  String get failedToStartCall => 'Nepodarilo sa zacat hovor';
+
+  @override
+  String get callStateConnecting => 'Pripajanie...';
+
+  @override
+  String get callStateRinging => 'Zvoni...';
+
+  @override
+  String get callStateEnded => 'Hovor ukonceny';
+
+  @override
+  String get callStateFailed => 'Hovor zlyhal';
+
+  @override
+  String get transcriptPlaceholder => 'Prepis sa zobrazi tu...';
+
+  @override
+  String get phoneUnmute => 'Zrusit stlmenie';
+
+  @override
+  String get phoneMute => 'Stlmit';
+
+  @override
+  String get phoneSpeaker => 'Reproduktor';
+
+  @override
+  String get phoneEndCall => 'Ukoncit';
+
+  @override
+  String get phoneCallSettingsTitle => 'Nastavenia hovorov';
+
+  @override
+  String get yourVerifiedNumbers => 'Vase overene cisla';
+
+  @override
+  String get verifiedNumbersDescription => 'Ked niekomu zavolate, uvidi toto cislo';
+
+  @override
+  String get noVerifiedNumbers => 'Ziadne overene cisla';
+
+  @override
+  String deletePhoneNumberConfirm(String phoneNumber) {
+    return 'Vymazat $phoneNumber?';
+  }
+
+  @override
+  String get deletePhoneNumberWarning => 'Na volanie budete musiet znovu overit';
+
+  @override
+  String get phoneDeleteButton => 'Vymazat';
+
+  @override
+  String verifiedMinutesAgo(int minutes) {
+    return 'Overene pred ${minutes}min';
+  }
+
+  @override
+  String verifiedHoursAgo(int hours) {
+    return 'Overene pred ${hours}h';
+  }
+
+  @override
+  String verifiedDaysAgo(int days) {
+    return 'Overene pred ${days}d';
+  }
+
+  @override
+  String verifiedOnDate(String date) {
+    return 'Overene $date';
+  }
+
+  @override
+  String get verifiedFallback => 'Overene';
+
+  @override
+  String get callAlreadyInProgress => 'Hovor uz prebieha';
+
+  @override
+  String get failedToGetCallToken => 'Nepodarilo sa ziskat token. Najprv overte svoje cislo.';
+
+  @override
+  String get failedToInitializeCallService => 'Nepodarilo sa inicializovat sluzbu hovorov';
+
+  @override
+  String get speakerLabelYou => 'Vy';
+
+  @override
+  String get speakerLabelUnknown => 'Neznamy';
+
+  @override
+  String get showDailyScoreOnHomepage => 'Zobraziť denné skóre na domovskej stránke';
+
+  @override
+  String get showTasksOnHomepage => 'Zobraziť úlohy na domovskej stránke';
+
+  @override
+  String get phoneCallsUnlimitedOnly => 'Telefonáty cez Omi';
+
+  @override
+  String get phoneCallsUpsellSubtitle =>
+      'Telefonujte cez Omi a získajte prepis v reálnom čase, automatické zhrnutia a ďalšie.';
+
+  @override
+  String get phoneCallsUpsellFeature1 => 'Prepis každého hovoru v reálnom čase';
+
+  @override
+  String get phoneCallsUpsellFeature2 => 'Automatické zhrnutia hovorov a úlohy';
+
+  @override
+  String get phoneCallsUpsellFeature3 => 'Príjemcovia vidia vaše skutočné číslo, nie náhodné';
+
+  @override
+  String get phoneCallsUpsellFeature4 => 'Vaše hovory zostávajú súkromné a bezpečné';
+
+  @override
+  String get phoneCallsUpgradeButton => 'Prejsť na Neobmedzený';
+
+  @override
+  String get phoneCallsMaybeLater => 'Možno neskôr';
+
+  @override
+  String get deleteSynced => 'Vymazať synchronizované';
+
+  @override
+  String get deleteSyncedFiles => 'Zmazať synchronizované nahrávky';
+
+  @override
+  String get deleteSyncedFilesMessage =>
+      'Tieto nahrávky sú už synchronizované s vaším telefónom. Toto sa nedá vrátiť späť.';
+
+  @override
+  String get syncedFilesDeleted => 'Synchronizované nahrávky zmazané';
+
+  @override
+  String get deletePending => 'Vymazať čakajúce';
+
+  @override
+  String get deletePendingFiles => 'Zmazať čakajúce nahrávky';
+
+  @override
+  String get deletePendingFilesWarning =>
+      'Tieto nahrávky NIE sú synchronizované s vaším telefónom a budú trvalo stratené. Toto sa nedá vrátiť späť.';
+
+  @override
+  String get pendingFilesDeleted => 'Čakajúce nahrávky zmazané';
+
+  @override
+  String get deleteAllFiles => 'Zmazať všetky nahrávky';
+
+  @override
+  String get deleteAll => 'Vymazať všetko';
+
+  @override
+  String get deleteAllFilesWarning =>
+      'Toto zmaže synchronizované aj čakajúce nahrávky. Čakajúce nahrávky NIE sú synchronizované a budú trvalo stratené.';
+
+  @override
+  String get allFilesDeleted => 'Všetky nahrávky zmazané';
+
+  @override
+  String nFiles(int count) {
+    return '$count nahrávok';
+  }
+
+  @override
+  String get manageStorage => 'Spravovať úložisko';
+
+  @override
+  String get safelyBackedUp => 'Bezpečne zálohované na vašom telefóne';
+
+  @override
+  String get notYetSynced => 'Zatiaľ nesynchronizované s vaším telefónom';
+
+  @override
+  String get clearAll => 'Vymazať všetko';
+
+  @override
+  String get phoneKeypad => 'Klávesnica';
+
+  @override
+  String get phoneHideKeypad => 'Skryť klávesnicu';
+
+  @override
+  String get fairUsePolicy => 'Spravodlivé používanie';
+
+  @override
+  String get fairUseLoadError => 'Nepodarilo sa načítať stav spravodlivého používania. Skúste to znova.';
+
+  @override
+  String get fairUseStatusNormal => 'Vaše používanie je v normálnych medziach.';
+
+  @override
+  String get fairUseStageNormal => 'Normálne';
+
+  @override
+  String get fairUseStageWarning => 'Upozornenie';
+
+  @override
+  String get fairUseStageThrottle => 'Obmedzené';
+
+  @override
+  String get fairUseStageRestrict => 'Zablokované';
+
+  @override
+  String get fairUseSpeechUsage => 'Používanie reči';
+
+  @override
+  String get fairUseToday => 'Dnes';
+
+  @override
+  String get fairUse3Day => '3-dňové obdobie';
+
+  @override
+  String get fairUseWeekly => 'Týždenné obdobie';
+
+  @override
+  String get fairUseAboutTitle => 'O spravodlivom používaní';
+
+  @override
+  String get fairUseAboutBody =>
+      'Omi je navrhnutý pre osobné konverzácie, stretnutia a živé interakcie. Používanie sa meria skutočným detegovaným časom reči, nie časom pripojenia. Ak používanie výrazne prekročí bežné vzory pre neosobný obsah, môžu sa uplatniť úpravy.';
+
+  @override
+  String fairUseCaseRefCopied(String caseRef) {
+    return '$caseRef skopírované';
+  }
+
+  @override
+  String get fairUseDailyTranscription => 'Daily Transcription';
+
+  @override
+  String fairUseBudgetUsed(String used, String limit) {
+    return '${used}m / ${limit}m';
+  }
+
+  @override
+  String get fairUseBudgetExhausted => 'Daily transcription limit reached';
+
+  @override
+  String fairUseBudgetResetsAt(String time) {
+    return 'Resets $time';
+  }
+
+  @override
+  String get transcriptionPaused => 'Nahrávanie, opätovné pripojenie';
+
+  @override
+  String get transcriptionPausedReconnecting => 'Stále nahráva — opätovné pripojenie k prepisu...';
 }

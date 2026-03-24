@@ -8264,4 +8264,371 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get conversationsEmptyStateMessage => 'Aloita keskustelu Nooton kanssa tai nauhoita yksi laitteellasi';
+
+  @override
+  String get tasksCleanTodayTitle => 'Siivota tämän päivän tehtävät?';
+
+  @override
+  String get tasksCleanTodayMessage => 'Tämä poistaa vain määräajat';
+
+  @override
+  String get shared => 'Jaettu';
+
+  @override
+  String get onlyYouCanSeeConversation => 'Vain sinä voit nähdä tämän keskustelun';
+
+  @override
+  String get anyoneWithLinkCanView => 'Kuka tahansa linkin haltija voi katsella';
+
+  @override
+  String get tasksOverdue => 'Myöhässä';
+
+  @override
+  String get phoneCallsWithOmi => 'Puhelut Omin kanssa';
+
+  @override
+  String get phoneCallsSubtitle => 'Soita reaaliaikaisella litteroinnilla';
+
+  @override
+  String get phoneSetupStep1Title => 'Vahvista puhelinnumerosi';
+
+  @override
+  String get phoneSetupStep1Subtitle => 'Soitamme sinulle vahvistusta varten';
+
+  @override
+  String get phoneSetupStep2Title => 'Syota vahvistuskoodi';
+
+  @override
+  String get phoneSetupStep2Subtitle => 'Lyhyt koodi, jonka syotat puhelun aikana';
+
+  @override
+  String get phoneSetupStep3Title => 'Aloita soittaminen yhteystiedoillesi';
+
+  @override
+  String get phoneSetupStep3Subtitle => 'Sisaanrakennetulla reaaliaikaisella litteroinnilla';
+
+  @override
+  String get phoneGetStarted => 'Aloita';
+
+  @override
+  String get callRecordingConsentDisclaimer => 'Puheluiden nauhoittaminen voi vaatia suostumuksen lainkaytoalueellasi';
+
+  @override
+  String get enterYourNumber => 'Syota numerosi';
+
+  @override
+  String get phoneNumberCallerIdHint => 'Vahvistuksen jalkeen tasta tulee soittajatunnuksesi';
+
+  @override
+  String get phoneNumberHint => 'Puhelinnumero';
+
+  @override
+  String get failedToStartVerification => 'Vahvistuksen aloitus epaonnistui';
+
+  @override
+  String get phoneContinue => 'Jatka';
+
+  @override
+  String get verifyYourNumber => 'Vahvista numerosi';
+
+  @override
+  String get answerTheCallFrom => 'Vastaa puheluun numerosta';
+
+  @override
+  String get onTheCallEnterThisCode => 'Syota tama koodi puhelun aikana';
+
+  @override
+  String get followTheVoiceInstructions => 'Seuraa aaniohjelta';
+
+  @override
+  String get statusCalling => 'Soitetaan...';
+
+  @override
+  String get statusCallInProgress => 'Puhelu kaynnissa';
+
+  @override
+  String get statusVerifiedLabel => 'Vahvistettu';
+
+  @override
+  String get statusCallMissed => 'Vastaamaton puhelu';
+
+  @override
+  String get statusTimedOut => 'Aikakatkaisu';
+
+  @override
+  String get phoneTryAgain => 'Yrita uudelleen';
+
+  @override
+  String get phonePageTitle => 'Puhelin';
+
+  @override
+  String get phoneContactsTab => 'Yhteystiedot';
+
+  @override
+  String get phoneKeypadTab => 'Nappaimisto';
+
+  @override
+  String get grantContactsAccess => 'Anna paasy yhteystietoihisi';
+
+  @override
+  String get phoneAllow => 'Salli';
+
+  @override
+  String get phoneSearchHint => 'Hae';
+
+  @override
+  String get phoneNoContactsFound => 'Yhteystietoja ei loydy';
+
+  @override
+  String get phoneEnterNumber => 'Syota numero';
+
+  @override
+  String get failedToStartCall => 'Puhelun aloitus epaonnistui';
+
+  @override
+  String get callStateConnecting => 'Yhdistetaan...';
+
+  @override
+  String get callStateRinging => 'Soi...';
+
+  @override
+  String get callStateEnded => 'Puhelu paattynyt';
+
+  @override
+  String get callStateFailed => 'Puhelu epaonnistui';
+
+  @override
+  String get transcriptPlaceholder => 'Litterointi nakyy taalla...';
+
+  @override
+  String get phoneUnmute => 'Poista mykistys';
+
+  @override
+  String get phoneMute => 'Mykista';
+
+  @override
+  String get phoneSpeaker => 'Kaiutin';
+
+  @override
+  String get phoneEndCall => 'Lopeta';
+
+  @override
+  String get phoneCallSettingsTitle => 'Puheluasetukset';
+
+  @override
+  String get yourVerifiedNumbers => 'Vahvistetut numerosi';
+
+  @override
+  String get verifiedNumbersDescription => 'Kun soitat jollekulle, he nakevat taman numeron';
+
+  @override
+  String get noVerifiedNumbers => 'Ei vahvistettuja numeroita';
+
+  @override
+  String deletePhoneNumberConfirm(String phoneNumber) {
+    return 'Poista $phoneNumber?';
+  }
+
+  @override
+  String get deletePhoneNumberWarning => 'Sinun taytyy vahvistaa uudelleen soittaaksesi';
+
+  @override
+  String get phoneDeleteButton => 'Poista';
+
+  @override
+  String verifiedMinutesAgo(int minutes) {
+    return 'Vahvistettu ${minutes}min sitten';
+  }
+
+  @override
+  String verifiedHoursAgo(int hours) {
+    return 'Vahvistettu ${hours}t sitten';
+  }
+
+  @override
+  String verifiedDaysAgo(int days) {
+    return 'Vahvistettu ${days}pv sitten';
+  }
+
+  @override
+  String verifiedOnDate(String date) {
+    return 'Vahvistettu $date';
+  }
+
+  @override
+  String get verifiedFallback => 'Vahvistettu';
+
+  @override
+  String get callAlreadyInProgress => 'Puhelu on jo kaynnissa';
+
+  @override
+  String get failedToGetCallToken => 'Tokenin haku epaonnistui. Vahvista numerosi ensin.';
+
+  @override
+  String get failedToInitializeCallService => 'Puhelupalvelun alustus epaonnistui';
+
+  @override
+  String get speakerLabelYou => 'Sina';
+
+  @override
+  String get speakerLabelUnknown => 'Tuntematon';
+
+  @override
+  String get showDailyScoreOnHomepage => 'Näytä päivittäinen pistemäärä etusivulla';
+
+  @override
+  String get showTasksOnHomepage => 'Näytä tehtävät etusivulla';
+
+  @override
+  String get phoneCallsUnlimitedOnly => 'Puhelut Omin kautta';
+
+  @override
+  String get phoneCallsUpsellSubtitle =>
+      'Soita puheluita Omin kautta ja saa reaaliaikainen litterointi, automaattiset yhteenvedot ja paljon muuta.';
+
+  @override
+  String get phoneCallsUpsellFeature1 => 'Jokaisen puhelun reaaliaikainen litterointi';
+
+  @override
+  String get phoneCallsUpsellFeature2 => 'Automaattiset puheluyhteenvedot ja toimenpiteet';
+
+  @override
+  String get phoneCallsUpsellFeature3 => 'Vastaanottajat näkevät oikean numerosi, eivät satunnaista';
+
+  @override
+  String get phoneCallsUpsellFeature4 => 'Puhelusi pysyvät yksityisinä ja turvallisina';
+
+  @override
+  String get phoneCallsUpgradeButton => 'Päivitä Rajattomaan';
+
+  @override
+  String get phoneCallsMaybeLater => 'Ehkä myöhemmin';
+
+  @override
+  String get deleteSynced => 'Poista synkronoidut';
+
+  @override
+  String get deleteSyncedFiles => 'Poista synkronoidut tallenteet';
+
+  @override
+  String get deleteSyncedFilesMessage => 'Nämä tallenteet on jo synkronoitu puhelimeesi. Tätä ei voi kumota.';
+
+  @override
+  String get syncedFilesDeleted => 'Synkronoidut tallenteet poistettu';
+
+  @override
+  String get deletePending => 'Poista odottavat';
+
+  @override
+  String get deletePendingFiles => 'Poista odottavat tallenteet';
+
+  @override
+  String get deletePendingFilesWarning =>
+      'Näitä tallenteita EI ole synkronoitu puhelimeesi ja ne menetetään pysyvästi. Tätä ei voi kumota.';
+
+  @override
+  String get pendingFilesDeleted => 'Odottavat tallenteet poistettu';
+
+  @override
+  String get deleteAllFiles => 'Poista kaikki tallenteet';
+
+  @override
+  String get deleteAll => 'Poista kaikki';
+
+  @override
+  String get deleteAllFilesWarning =>
+      'Tämä poistaa synkronoidut ja odottavat tallenteet. Odottavia tallenteita EI ole synkronoitu ja ne menetetään pysyvästi.';
+
+  @override
+  String get allFilesDeleted => 'Kaikki tallenteet poistettu';
+
+  @override
+  String nFiles(int count) {
+    return '$count tallennetta';
+  }
+
+  @override
+  String get manageStorage => 'Hallitse tallennustilaa';
+
+  @override
+  String get safelyBackedUp => 'Turvallisesti varmuuskopioitu puhelimeesi';
+
+  @override
+  String get notYetSynced => 'Ei vielä synkronoitu puhelimeesi';
+
+  @override
+  String get clearAll => 'Tyhjennä kaikki';
+
+  @override
+  String get phoneKeypad => 'Näppäimistö';
+
+  @override
+  String get phoneHideKeypad => 'Piilota näppäimistö';
+
+  @override
+  String get fairUsePolicy => 'Kohtuullinen käyttö';
+
+  @override
+  String get fairUseLoadError => 'Kohtuullisen käytön tilaa ei voitu ladata. Yritä uudelleen.';
+
+  @override
+  String get fairUseStatusNormal => 'Käyttösi on normaalien rajojen sisällä.';
+
+  @override
+  String get fairUseStageNormal => 'Normaali';
+
+  @override
+  String get fairUseStageWarning => 'Varoitus';
+
+  @override
+  String get fairUseStageThrottle => 'Rajoitettu';
+
+  @override
+  String get fairUseStageRestrict => 'Estetty';
+
+  @override
+  String get fairUseSpeechUsage => 'Puheen käyttö';
+
+  @override
+  String get fairUseToday => 'Tänään';
+
+  @override
+  String get fairUse3Day => '3 päivän jakso';
+
+  @override
+  String get fairUseWeekly => 'Viikkojakso';
+
+  @override
+  String get fairUseAboutTitle => 'Tietoa kohtuullisesta käytöstä';
+
+  @override
+  String get fairUseAboutBody =>
+      'Omi on suunniteltu henkilökohtaisiin keskusteluihin, kokouksiin ja reaaliaikaiseen vuorovaikutukseen. Käyttöä mitataan havaitun todellisen puheajan, ei yhteysajan perusteella. Jos käyttö ylittää merkittävästi normaalit mallit ei-henkilökohtaisen sisällön osalta, säätöjä voidaan soveltaa.';
+
+  @override
+  String fairUseCaseRefCopied(String caseRef) {
+    return '$caseRef kopioitu';
+  }
+
+  @override
+  String get fairUseDailyTranscription => 'Daily Transcription';
+
+  @override
+  String fairUseBudgetUsed(String used, String limit) {
+    return '${used}m / ${limit}m';
+  }
+
+  @override
+  String get fairUseBudgetExhausted => 'Daily transcription limit reached';
+
+  @override
+  String fairUseBudgetResetsAt(String time) {
+    return 'Resets $time';
+  }
+
+  @override
+  String get transcriptionPaused => 'Nauhoittaa, yhdistetään uudelleen';
+
+  @override
+  String get transcriptionPausedReconnecting => 'Nauhoittaa yhä — yhdistetään uudelleen puheentunnistukseen...';
 }

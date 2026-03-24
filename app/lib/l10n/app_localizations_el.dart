@@ -8332,4 +8332,372 @@ class AppLocalizationsEl extends AppLocalizations {
   @override
   String get conversationsEmptyStateMessage =>
       'Ξεκινήστε μια συνομιλία με το Nooto ή ηχογραφήστε μία με τη συσκευή σας';
+
+  @override
+  String get tasksCleanTodayTitle => 'Να καθαριστούν οι σημερινές εργασίες;';
+
+  @override
+  String get tasksCleanTodayMessage => 'Αυτό θα αφαιρέσει μόνο τις προθεσμίες';
+
+  @override
+  String get shared => 'Κοινόχρηστο';
+
+  @override
+  String get onlyYouCanSeeConversation => 'Μόνο εσείς μπορείτε να δείτε αυτή τη συνομιλία';
+
+  @override
+  String get anyoneWithLinkCanView => 'Οποιοσδήποτε έχει τον σύνδεσμο μπορεί να δει';
+
+  @override
+  String get tasksOverdue => 'Εκπρόθεσμα';
+
+  @override
+  String get phoneCallsWithOmi => 'Κλήσεις με Omi';
+
+  @override
+  String get phoneCallsSubtitle => 'Κάντε κλήσεις με μεταγραφή σε πραγματικό χρόνο';
+
+  @override
+  String get phoneSetupStep1Title => 'Επαληθεύστε τον αριθμό τηλεφώνου σας';
+
+  @override
+  String get phoneSetupStep1Subtitle => 'Θα σας καλέσουμε για επιβεβαίωση';
+
+  @override
+  String get phoneSetupStep2Title => 'Εισάγετε κωδικό επαλήθευσης';
+
+  @override
+  String get phoneSetupStep2Subtitle => 'Ένας σύντομος κωδικός που θα πληκτρολογήσετε στην κλήση';
+
+  @override
+  String get phoneSetupStep3Title => 'Ξεκινήστε να καλείτε τις επαφές σας';
+
+  @override
+  String get phoneSetupStep3Subtitle => 'Με ενσωματωμένη ζωντανή μεταγραφή';
+
+  @override
+  String get phoneGetStarted => 'Ξεκινήστε';
+
+  @override
+  String get callRecordingConsentDisclaimer => 'Η εγγραφή κλήσεων μπορεί να απαιτεί συγκατάθεση στη δικαιοδοσία σας';
+
+  @override
+  String get enterYourNumber => 'Εισάγετε τον αριθμό σας';
+
+  @override
+  String get phoneNumberCallerIdHint => 'Μετά την επαλήθευση, αυτό γίνεται η ταυτότητα κλήσης σας';
+
+  @override
+  String get phoneNumberHint => 'Αριθμός τηλεφώνου';
+
+  @override
+  String get failedToStartVerification => 'Αποτυχία έναρξης επαλήθευσης';
+
+  @override
+  String get phoneContinue => 'Συνέχεια';
+
+  @override
+  String get verifyYourNumber => 'Επαληθεύστε τον αριθμό σας';
+
+  @override
+  String get answerTheCallFrom => 'Απαντήστε στην κλήση από';
+
+  @override
+  String get onTheCallEnterThisCode => 'Στην κλήση, εισάγετε αυτόν τον κωδικό';
+
+  @override
+  String get followTheVoiceInstructions => 'Ακολουθήστε τις φωνητικές οδηγίες';
+
+  @override
+  String get statusCalling => 'Κλήση...';
+
+  @override
+  String get statusCallInProgress => 'Κλήση σε εξέλιξη';
+
+  @override
+  String get statusVerifiedLabel => 'Επαληθευμένο';
+
+  @override
+  String get statusCallMissed => 'Αναπάντητη κλήση';
+
+  @override
+  String get statusTimedOut => 'Λήξη χρόνου';
+
+  @override
+  String get phoneTryAgain => 'Δοκιμάστε ξανά';
+
+  @override
+  String get phonePageTitle => 'Τηλέφωνο';
+
+  @override
+  String get phoneContactsTab => 'Επαφές';
+
+  @override
+  String get phoneKeypadTab => 'Πληκτρολόγιο';
+
+  @override
+  String get grantContactsAccess => 'Δώστε πρόσβαση στις επαφές σας';
+
+  @override
+  String get phoneAllow => 'Επιτρέπω';
+
+  @override
+  String get phoneSearchHint => 'Αναζήτηση';
+
+  @override
+  String get phoneNoContactsFound => 'Δεν βρέθηκαν επαφές';
+
+  @override
+  String get phoneEnterNumber => 'Εισάγετε αριθμό';
+
+  @override
+  String get failedToStartCall => 'Αποτυχία έναρξης κλήσης';
+
+  @override
+  String get callStateConnecting => 'Σύνδεση...';
+
+  @override
+  String get callStateRinging => 'Κουδουνίζει...';
+
+  @override
+  String get callStateEnded => 'Κλήση τερματίστηκε';
+
+  @override
+  String get callStateFailed => 'Κλήση απέτυχε';
+
+  @override
+  String get transcriptPlaceholder => 'Η μεταγραφή θα εμφανιστεί εδώ...';
+
+  @override
+  String get phoneUnmute => 'Κατάργηση σίγασης';
+
+  @override
+  String get phoneMute => 'Σίγαση';
+
+  @override
+  String get phoneSpeaker => 'Ηχείο';
+
+  @override
+  String get phoneEndCall => 'Τέλος';
+
+  @override
+  String get phoneCallSettingsTitle => 'Ρυθμίσεις κλήσεων';
+
+  @override
+  String get yourVerifiedNumbers => 'Οι επαληθευμένοι αριθμοί σας';
+
+  @override
+  String get verifiedNumbersDescription => 'Όταν καλείτε κάποιον, θα βλέπει αυτόν τον αριθμό';
+
+  @override
+  String get noVerifiedNumbers => 'Κανένας επαληθευμένος αριθμός';
+
+  @override
+  String deletePhoneNumberConfirm(String phoneNumber) {
+    return 'Διαγραφή $phoneNumber;';
+  }
+
+  @override
+  String get deletePhoneNumberWarning => 'Θα χρειαστεί να επαληθεύσετε ξανά για κλήσεις';
+
+  @override
+  String get phoneDeleteButton => 'Διαγραφή';
+
+  @override
+  String verifiedMinutesAgo(int minutes) {
+    return 'Επαληθεύτηκε πριν $minutesλ';
+  }
+
+  @override
+  String verifiedHoursAgo(int hours) {
+    return 'Επαληθεύτηκε πριν $hoursω';
+  }
+
+  @override
+  String verifiedDaysAgo(int days) {
+    return 'Επαληθεύτηκε πριν $daysμ';
+  }
+
+  @override
+  String verifiedOnDate(String date) {
+    return 'Επαληθεύτηκε στις $date';
+  }
+
+  @override
+  String get verifiedFallback => 'Επαληθευμένο';
+
+  @override
+  String get callAlreadyInProgress => 'Μια κλήση είναι ήδη σε εξέλιξη';
+
+  @override
+  String get failedToGetCallToken => 'Αποτυχία λήψης token. Επαληθεύστε πρώτα τον αριθμό σας.';
+
+  @override
+  String get failedToInitializeCallService => 'Αποτυχία αρχικοποίησης υπηρεσίας κλήσεων';
+
+  @override
+  String get speakerLabelYou => 'Εσείς';
+
+  @override
+  String get speakerLabelUnknown => 'Άγνωστος';
+
+  @override
+  String get showDailyScoreOnHomepage => 'Εμφάνιση ημερήσιας βαθμολογίας στην αρχική σελίδα';
+
+  @override
+  String get showTasksOnHomepage => 'Εμφάνιση εργασιών στην αρχική σελίδα';
+
+  @override
+  String get phoneCallsUnlimitedOnly => 'Τηλεφωνικές κλήσεις μέσω Omi';
+
+  @override
+  String get phoneCallsUpsellSubtitle =>
+      'Κάντε κλήσεις μέσω Omi και λάβετε μεταγραφή σε πραγματικό χρόνο, αυτόματες περιλήψεις και πολλά άλλα.';
+
+  @override
+  String get phoneCallsUpsellFeature1 => 'Μεταγραφή σε πραγματικό χρόνο κάθε κλήσης';
+
+  @override
+  String get phoneCallsUpsellFeature2 => 'Αυτόματες περιλήψεις κλήσεων και ενέργειες';
+
+  @override
+  String get phoneCallsUpsellFeature3 => 'Οι παραλήπτες βλέπουν τον πραγματικό σας αριθμό, όχι τυχαίο';
+
+  @override
+  String get phoneCallsUpsellFeature4 => 'Οι κλήσεις σας παραμένουν ιδιωτικές και ασφαλείς';
+
+  @override
+  String get phoneCallsUpgradeButton => 'Αναβάθμιση σε Απεριόριστο';
+
+  @override
+  String get phoneCallsMaybeLater => 'Ίσως αργότερα';
+
+  @override
+  String get deleteSynced => 'Διαγραφή συγχρονισμένων';
+
+  @override
+  String get deleteSyncedFiles => 'Διαγραφή συγχρονισμένων ηχογραφήσεων';
+
+  @override
+  String get deleteSyncedFilesMessage =>
+      'Αυτές οι ηχογραφήσεις έχουν ήδη συγχρονιστεί με το τηλέφωνό σας. Δεν μπορεί να αναιρεθεί.';
+
+  @override
+  String get syncedFilesDeleted => 'Οι συγχρονισμένες ηχογραφήσεις διαγράφηκαν';
+
+  @override
+  String get deletePending => 'Διαγραφή εκκρεμών';
+
+  @override
+  String get deletePendingFiles => 'Διαγραφή εκκρεμών ηχογραφήσεων';
+
+  @override
+  String get deletePendingFilesWarning =>
+      'Αυτές οι ηχογραφήσεις ΔΕΝ έχουν συγχρονιστεί με το τηλέφωνό σας και θα χαθούν μόνιμα. Δεν μπορεί να αναιρεθεί.';
+
+  @override
+  String get pendingFilesDeleted => 'Οι εκκρεμείς ηχογραφήσεις διαγράφηκαν';
+
+  @override
+  String get deleteAllFiles => 'Διαγραφή όλων των ηχογραφήσεων';
+
+  @override
+  String get deleteAll => 'Διαγραφή όλων';
+
+  @override
+  String get deleteAllFilesWarning =>
+      'Αυτό θα διαγράψει συγχρονισμένες και εκκρεμείς ηχογραφήσεις. Οι εκκρεμείς ηχογραφήσεις ΔΕΝ έχουν συγχρονιστεί και θα χαθούν μόνιμα.';
+
+  @override
+  String get allFilesDeleted => 'Όλες οι ηχογραφήσεις διαγράφηκαν';
+
+  @override
+  String nFiles(int count) {
+    return '$count ηχογραφήσεις';
+  }
+
+  @override
+  String get manageStorage => 'Διαχείριση αποθήκευσης';
+
+  @override
+  String get safelyBackedUp => 'Αποθηκεύτηκε με ασφάλεια στο τηλέφωνό σας';
+
+  @override
+  String get notYetSynced => 'Δεν έχει συγχρονιστεί ακόμα με το τηλέφωνό σας';
+
+  @override
+  String get clearAll => 'Εκκαθάριση όλων';
+
+  @override
+  String get phoneKeypad => 'Πληκτρολόγιο';
+
+  @override
+  String get phoneHideKeypad => 'Απόκρυψη πληκτρολογίου';
+
+  @override
+  String get fairUsePolicy => 'Δίκαιη χρήση';
+
+  @override
+  String get fairUseLoadError => 'Δεν ήταν δυνατή η φόρτωση της κατάστασης δίκαιης χρήσης. Παρακαλώ δοκιμάστε ξανά.';
+
+  @override
+  String get fairUseStatusNormal => 'Η χρήση σας είναι εντός κανονικών ορίων.';
+
+  @override
+  String get fairUseStageNormal => 'Κανονική';
+
+  @override
+  String get fairUseStageWarning => 'Προειδοποίηση';
+
+  @override
+  String get fairUseStageThrottle => 'Περιορισμένη';
+
+  @override
+  String get fairUseStageRestrict => 'Αποκλεισμένη';
+
+  @override
+  String get fairUseSpeechUsage => 'Χρήση ομιλίας';
+
+  @override
+  String get fairUseToday => 'Σήμερα';
+
+  @override
+  String get fairUse3Day => '3ήμερο κυλιόμενο';
+
+  @override
+  String get fairUseWeekly => 'Εβδομαδιαίο κυλιόμενο';
+
+  @override
+  String get fairUseAboutTitle => 'Σχετικά με τη δίκαιη χρήση';
+
+  @override
+  String get fairUseAboutBody =>
+      'Το Omi είναι σχεδιασμένο για προσωπικές συνομιλίες, συναντήσεις και ζωντανές αλληλεπιδράσεις. Η χρήση μετράται βάσει του πραγματικού χρόνου ομιλίας που ανιχνεύεται, όχι του χρόνου σύνδεσης. Εάν η χρήση υπερβαίνει σημαντικά τα κανονικά πρότυπα για μη προσωπικό περιεχόμενο, ενδέχεται να εφαρμοστούν προσαρμογές.';
+
+  @override
+  String fairUseCaseRefCopied(String caseRef) {
+    return '$caseRef αντιγράφηκε';
+  }
+
+  @override
+  String get fairUseDailyTranscription => 'Daily Transcription';
+
+  @override
+  String fairUseBudgetUsed(String used, String limit) {
+    return '${used}m / ${limit}m';
+  }
+
+  @override
+  String get fairUseBudgetExhausted => 'Daily transcription limit reached';
+
+  @override
+  String fairUseBudgetResetsAt(String time) {
+    return 'Resets $time';
+  }
+
+  @override
+  String get transcriptionPaused => 'Εγγραφή, επανασύνδεση';
+
+  @override
+  String get transcriptionPausedReconnecting => 'Συνεχίζει η εγγραφή — επανασύνδεση με τη μεταγραφή...';
 }

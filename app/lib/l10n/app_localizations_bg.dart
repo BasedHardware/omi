@@ -8300,4 +8300,373 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get conversationsEmptyStateMessage => 'Започнете разговор с Nooto или запишете един с вашето устройство';
+
+  @override
+  String get tasksCleanTodayTitle => 'Да изчистим днешните задачи?';
+
+  @override
+  String get tasksCleanTodayMessage => 'Това само ще премахне крайните срокове';
+
+  @override
+  String get shared => 'Споделено';
+
+  @override
+  String get onlyYouCanSeeConversation => 'Само вие можете да видите този разговор';
+
+  @override
+  String get anyoneWithLinkCanView => 'Всеки с връзката може да преглежда';
+
+  @override
+  String get tasksOverdue => 'Просрочени';
+
+  @override
+  String get phoneCallsWithOmi => 'Телефонни обаждания с Omi';
+
+  @override
+  String get phoneCallsSubtitle => 'Обаждайте се с транскрипция в реално време';
+
+  @override
+  String get phoneSetupStep1Title => 'Потвърдете телефонния си номер';
+
+  @override
+  String get phoneSetupStep1Subtitle => 'Ще ви се обадим, за да потвърдим, че е ваш';
+
+  @override
+  String get phoneSetupStep2Title => 'Въведете код за потвърждение';
+
+  @override
+  String get phoneSetupStep2Subtitle => 'Кратък код, който ще въведете по време на обаждането';
+
+  @override
+  String get phoneSetupStep3Title => 'Започнете да се обаждате на контактите си';
+
+  @override
+  String get phoneSetupStep3Subtitle => 'С вградена транскрипция на живо';
+
+  @override
+  String get phoneGetStarted => 'Започнете';
+
+  @override
+  String get callRecordingConsentDisclaimer =>
+      'Записването на обаждания може да изисква съгласие във вашата юрисдикция';
+
+  @override
+  String get enterYourNumber => 'Въведете номера си';
+
+  @override
+  String get phoneNumberCallerIdHint => 'След потвърждение това ще стане вашият идентификатор на обаждащия се';
+
+  @override
+  String get phoneNumberHint => 'Телефонен номер';
+
+  @override
+  String get failedToStartVerification => 'Неуспешно стартиране на потвърждението';
+
+  @override
+  String get phoneContinue => 'Продължи';
+
+  @override
+  String get verifyYourNumber => 'Потвърдете номера си';
+
+  @override
+  String get answerTheCallFrom => 'Отговорете на обаждането от';
+
+  @override
+  String get onTheCallEnterThisCode => 'По време на обаждането въведете този код';
+
+  @override
+  String get followTheVoiceInstructions => 'Следвайте гласовите инструкции';
+
+  @override
+  String get statusCalling => 'Обаждане...';
+
+  @override
+  String get statusCallInProgress => 'Обаждане в ход';
+
+  @override
+  String get statusVerifiedLabel => 'Потвърдено';
+
+  @override
+  String get statusCallMissed => 'Пропуснато обаждане';
+
+  @override
+  String get statusTimedOut => 'Времето изтече';
+
+  @override
+  String get phoneTryAgain => 'Опитайте отново';
+
+  @override
+  String get phonePageTitle => 'Телефон';
+
+  @override
+  String get phoneContactsTab => 'Контакти';
+
+  @override
+  String get phoneKeypadTab => 'Клавиатура';
+
+  @override
+  String get grantContactsAccess => 'Предоставете достъп до контактите си';
+
+  @override
+  String get phoneAllow => 'Разреши';
+
+  @override
+  String get phoneSearchHint => 'Търсене';
+
+  @override
+  String get phoneNoContactsFound => 'Няма намерени контакти';
+
+  @override
+  String get phoneEnterNumber => 'Въведете номер';
+
+  @override
+  String get failedToStartCall => 'Неуспешно стартиране на обаждането';
+
+  @override
+  String get callStateConnecting => 'Свързване...';
+
+  @override
+  String get callStateRinging => 'Звъни...';
+
+  @override
+  String get callStateEnded => 'Обаждането приключи';
+
+  @override
+  String get callStateFailed => 'Обаждането не успя';
+
+  @override
+  String get transcriptPlaceholder => 'Транскрипцията ще се появи тук...';
+
+  @override
+  String get phoneUnmute => 'Включи звука';
+
+  @override
+  String get phoneMute => 'Заглуши';
+
+  @override
+  String get phoneSpeaker => 'Високоговорител';
+
+  @override
+  String get phoneEndCall => 'Край';
+
+  @override
+  String get phoneCallSettingsTitle => 'Настройки на телефонните обаждания';
+
+  @override
+  String get yourVerifiedNumbers => 'Вашите потвърдени номера';
+
+  @override
+  String get verifiedNumbersDescription => 'Когато се обадите на някого, той ще види този номер на телефона си';
+
+  @override
+  String get noVerifiedNumbers => 'Няма потвърдени номера';
+
+  @override
+  String deletePhoneNumberConfirm(String phoneNumber) {
+    return 'Изтриване на $phoneNumber?';
+  }
+
+  @override
+  String get deletePhoneNumberWarning => 'Ще трябва да потвърдите отново, за да извършвате обаждания';
+
+  @override
+  String get phoneDeleteButton => 'Изтрий';
+
+  @override
+  String verifiedMinutesAgo(int minutes) {
+    return 'Потвърдено преди $minutes мин';
+  }
+
+  @override
+  String verifiedHoursAgo(int hours) {
+    return 'Потвърдено преди $hours ч';
+  }
+
+  @override
+  String verifiedDaysAgo(int days) {
+    return 'Потвърдено преди $days дни';
+  }
+
+  @override
+  String verifiedOnDate(String date) {
+    return 'Потвърдено на $date';
+  }
+
+  @override
+  String get verifiedFallback => 'Потвърдено';
+
+  @override
+  String get callAlreadyInProgress => 'Вече има обаждане в ход';
+
+  @override
+  String get failedToGetCallToken => 'Неуспешно получаване на токен за обаждане. Първо потвърдете телефонния си номер.';
+
+  @override
+  String get failedToInitializeCallService => 'Неуспешна инициализация на услугата за обаждания';
+
+  @override
+  String get speakerLabelYou => 'Вие';
+
+  @override
+  String get speakerLabelUnknown => 'Неизвестен';
+
+  @override
+  String get showDailyScoreOnHomepage => 'Покажи дневния резултат на началната страница';
+
+  @override
+  String get showTasksOnHomepage => 'Покажи задачите на началната страница';
+
+  @override
+  String get phoneCallsUnlimitedOnly => 'Телефонни обаждания чрез Omi';
+
+  @override
+  String get phoneCallsUpsellSubtitle =>
+      'Правете обаждания чрез Omi и получавайте транскрипция в реално време, автоматични резюмета и още. Достъпно само за абонати на план Неограничен.';
+
+  @override
+  String get phoneCallsUpsellFeature1 => 'Транскрипция в реално време на всяко обаждане';
+
+  @override
+  String get phoneCallsUpsellFeature2 => 'Автоматични резюмета и задачи от обаждания';
+
+  @override
+  String get phoneCallsUpsellFeature3 => 'Получателите виждат истинския ви номер, не случаен';
+
+  @override
+  String get phoneCallsUpsellFeature4 => 'Вашите обаждания остават лични и сигурни';
+
+  @override
+  String get phoneCallsUpgradeButton => 'Надградете до Неограничен';
+
+  @override
+  String get phoneCallsMaybeLater => 'Може би по-късно';
+
+  @override
+  String get deleteSynced => 'Изтриване на синхронизираните';
+
+  @override
+  String get deleteSyncedFiles => 'Изтрий синхронизираните записи';
+
+  @override
+  String get deleteSyncedFilesMessage =>
+      'Тези записи вече са синхронизирани с телефона ви. Това не може да бъде отменено.';
+
+  @override
+  String get syncedFilesDeleted => 'Синхронизираните записи са изтрити';
+
+  @override
+  String get deletePending => 'Изтриване на чакащите';
+
+  @override
+  String get deletePendingFiles => 'Изтрий чакащите записи';
+
+  @override
+  String get deletePendingFilesWarning =>
+      'Тези записи НЕ са синхронизирани с телефона ви и ще бъдат загубени завинаги. Това не може да бъде отменено.';
+
+  @override
+  String get pendingFilesDeleted => 'Чакащите записи са изтрити';
+
+  @override
+  String get deleteAllFiles => 'Изтрий всички записи';
+
+  @override
+  String get deleteAll => 'Изтриване на всички';
+
+  @override
+  String get deleteAllFilesWarning =>
+      'Това ще изтрие синхронизираните и чакащите записи. Чакащите записи НЕ са синхронизирани и ще бъдат загубени завинаги.';
+
+  @override
+  String get allFilesDeleted => 'Всички записи са изтрити';
+
+  @override
+  String nFiles(int count) {
+    return '$count записа';
+  }
+
+  @override
+  String get manageStorage => 'Управление на хранилището';
+
+  @override
+  String get safelyBackedUp => 'Безопасно запазено на телефона ви';
+
+  @override
+  String get notYetSynced => 'Все още не е синхронизирано с телефона ви';
+
+  @override
+  String get clearAll => 'Изчисти всичко';
+
+  @override
+  String get phoneKeypad => 'Клавиатура';
+
+  @override
+  String get phoneHideKeypad => 'Скрий клавиатурата';
+
+  @override
+  String get fairUsePolicy => 'Честна употреба';
+
+  @override
+  String get fairUseLoadError => 'Неуспешно зареждане на статуса на честна употреба. Моля, опитайте отново.';
+
+  @override
+  String get fairUseStatusNormal => 'Вашата употреба е в нормалните граници.';
+
+  @override
+  String get fairUseStageNormal => 'Нормална';
+
+  @override
+  String get fairUseStageWarning => 'Предупреждение';
+
+  @override
+  String get fairUseStageThrottle => 'Ограничена';
+
+  @override
+  String get fairUseStageRestrict => 'Забранена';
+
+  @override
+  String get fairUseSpeechUsage => 'Употреба на реч';
+
+  @override
+  String get fairUseToday => 'Днес';
+
+  @override
+  String get fairUse3Day => '3-дневен период';
+
+  @override
+  String get fairUseWeekly => 'Седмичен период';
+
+  @override
+  String get fairUseAboutTitle => 'Относно честната употреба';
+
+  @override
+  String get fairUseAboutBody =>
+      'Omi е проектиран за лични разговори, срещи и взаимодействия на живо. Употребата се измерва по реалното открито време на реч, а не по времето на връзка. Ако употребата значително надвишава нормалните модели за неличностно съдържание, може да се приложат корекции.';
+
+  @override
+  String fairUseCaseRefCopied(String caseRef) {
+    return '$caseRef копирано';
+  }
+
+  @override
+  String get fairUseDailyTranscription => 'Daily Transcription';
+
+  @override
+  String fairUseBudgetUsed(String used, String limit) {
+    return '${used}m / ${limit}m';
+  }
+
+  @override
+  String get fairUseBudgetExhausted => 'Daily transcription limit reached';
+
+  @override
+  String fairUseBudgetResetsAt(String time) {
+    return 'Resets $time';
+  }
+
+  @override
+  String get transcriptionPaused => 'Записва се, свързване отново';
+
+  @override
+  String get transcriptionPausedReconnecting => 'Все още се записва — свързване с транскрипцията...';
 }

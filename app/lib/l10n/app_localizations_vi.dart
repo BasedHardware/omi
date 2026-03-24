@@ -8270,4 +8270,371 @@ class AppLocalizationsVi extends AppLocalizations {
   @override
   String get conversationsEmptyStateMessage =>
       'Bắt đầu cuộc trò chuyện với Nooto hoặc ghi âm một cuộc bằng thiết bị của bạn';
+
+  @override
+  String get tasksCleanTodayTitle => 'Dọn các nhiệm vụ hôm nay?';
+
+  @override
+  String get tasksCleanTodayMessage => 'Thao tác này chỉ xóa thời hạn';
+
+  @override
+  String get shared => 'Đã chia sẻ';
+
+  @override
+  String get onlyYouCanSeeConversation => 'Chỉ bạn mới có thể xem cuộc trò chuyện này';
+
+  @override
+  String get anyoneWithLinkCanView => 'Bất kỳ ai có liên kết đều có thể xem';
+
+  @override
+  String get tasksOverdue => 'Quá hạn';
+
+  @override
+  String get phoneCallsWithOmi => 'Cuộc gọi với Omi';
+
+  @override
+  String get phoneCallsSubtitle => 'Gọi điện với phiên âm thời gian thực';
+
+  @override
+  String get phoneSetupStep1Title => 'Xác minh số điện thoại của bạn';
+
+  @override
+  String get phoneSetupStep1Subtitle => 'Chúng tôi sẽ gọi cho bạn để xác nhận';
+
+  @override
+  String get phoneSetupStep2Title => 'Nhập mã xác minh';
+
+  @override
+  String get phoneSetupStep2Subtitle => 'Một mã ngắn bạn sẽ nhập trong cuộc gọi';
+
+  @override
+  String get phoneSetupStep3Title => 'Bắt đầu gọi danh bạ của bạn';
+
+  @override
+  String get phoneSetupStep3Subtitle => 'Với phiên âm trực tiếp tích hợp';
+
+  @override
+  String get phoneGetStarted => 'Bắt đầu';
+
+  @override
+  String get callRecordingConsentDisclaimer => 'Ghi âm cuộc gọi có thể yêu cầu sự đồng ý trong khu vực pháp lý của bạn';
+
+  @override
+  String get enterYourNumber => 'Nhập số của bạn';
+
+  @override
+  String get phoneNumberCallerIdHint => 'Sau khi xác minh, đây sẽ là ID người gọi của bạn';
+
+  @override
+  String get phoneNumberHint => 'Số điện thoại';
+
+  @override
+  String get failedToStartVerification => 'Không thể bắt đầu xác minh';
+
+  @override
+  String get phoneContinue => 'Tiếp tục';
+
+  @override
+  String get verifyYourNumber => 'Xác minh số của bạn';
+
+  @override
+  String get answerTheCallFrom => 'Trả lời cuộc gọi từ';
+
+  @override
+  String get onTheCallEnterThisCode => 'Trong cuộc gọi, nhập mã này';
+
+  @override
+  String get followTheVoiceInstructions => 'Làm theo hướng dẫn bằng giọng nói';
+
+  @override
+  String get statusCalling => 'Đang gọi...';
+
+  @override
+  String get statusCallInProgress => 'Cuộc gọi đang diễn ra';
+
+  @override
+  String get statusVerifiedLabel => 'Đã xác minh';
+
+  @override
+  String get statusCallMissed => 'Cuộc gọi nhỡ';
+
+  @override
+  String get statusTimedOut => 'Hết thời gian';
+
+  @override
+  String get phoneTryAgain => 'Thử lại';
+
+  @override
+  String get phonePageTitle => 'Điện thoại';
+
+  @override
+  String get phoneContactsTab => 'Danh bạ';
+
+  @override
+  String get phoneKeypadTab => 'Bàn phím';
+
+  @override
+  String get grantContactsAccess => 'Cấp quyền truy cập danh bạ';
+
+  @override
+  String get phoneAllow => 'Cho phép';
+
+  @override
+  String get phoneSearchHint => 'Tìm kiếm';
+
+  @override
+  String get phoneNoContactsFound => 'Không tìm thấy danh bạ';
+
+  @override
+  String get phoneEnterNumber => 'Nhập số';
+
+  @override
+  String get failedToStartCall => 'Không thể bắt đầu cuộc gọi';
+
+  @override
+  String get callStateConnecting => 'Đang kết nối...';
+
+  @override
+  String get callStateRinging => 'Đang đổ chuông...';
+
+  @override
+  String get callStateEnded => 'Cuộc gọi kết thúc';
+
+  @override
+  String get callStateFailed => 'Cuộc gọi thất bại';
+
+  @override
+  String get transcriptPlaceholder => 'Phiên âm sẽ xuất hiện ở đây...';
+
+  @override
+  String get phoneUnmute => 'Bật tiếng';
+
+  @override
+  String get phoneMute => 'Tắt tiếng';
+
+  @override
+  String get phoneSpeaker => 'Loa';
+
+  @override
+  String get phoneEndCall => 'Kết thúc';
+
+  @override
+  String get phoneCallSettingsTitle => 'Cài đặt cuộc gọi';
+
+  @override
+  String get yourVerifiedNumbers => 'Số đã xác minh của bạn';
+
+  @override
+  String get verifiedNumbersDescription => 'Khi bạn gọi cho ai đó, họ sẽ thấy số này';
+
+  @override
+  String get noVerifiedNumbers => 'Không có số đã xác minh';
+
+  @override
+  String deletePhoneNumberConfirm(String phoneNumber) {
+    return 'Xóa $phoneNumber?';
+  }
+
+  @override
+  String get deletePhoneNumberWarning => 'Bạn cần xác minh lại để gọi điện';
+
+  @override
+  String get phoneDeleteButton => 'Xóa';
+
+  @override
+  String verifiedMinutesAgo(int minutes) {
+    return 'Đã xác minh ${minutes}phút trước';
+  }
+
+  @override
+  String verifiedHoursAgo(int hours) {
+    return 'Đã xác minh ${hours}giờ trước';
+  }
+
+  @override
+  String verifiedDaysAgo(int days) {
+    return 'Đã xác minh ${days}ngày trước';
+  }
+
+  @override
+  String verifiedOnDate(String date) {
+    return 'Đã xác minh vào $date';
+  }
+
+  @override
+  String get verifiedFallback => 'Đã xác minh';
+
+  @override
+  String get callAlreadyInProgress => 'Một cuộc gọi đang diễn ra';
+
+  @override
+  String get failedToGetCallToken => 'Không thể lấy token. Xác minh số của bạn trước.';
+
+  @override
+  String get failedToInitializeCallService => 'Không thể khởi tạo dịch vụ cuộc gọi';
+
+  @override
+  String get speakerLabelYou => 'Bạn';
+
+  @override
+  String get speakerLabelUnknown => 'Không xác định';
+
+  @override
+  String get showDailyScoreOnHomepage => 'Hiển thị Điểm hàng ngày trên trang chủ';
+
+  @override
+  String get showTasksOnHomepage => 'Hiển thị Nhiệm vụ trên trang chủ';
+
+  @override
+  String get phoneCallsUnlimitedOnly => 'Cuộc gọi điện thoại qua Omi';
+
+  @override
+  String get phoneCallsUpsellSubtitle =>
+      'Gọi điện qua Omi và nhận phiên âm thời gian thực, tóm tắt tự động và nhiều hơn nữa.';
+
+  @override
+  String get phoneCallsUpsellFeature1 => 'Phiên âm thời gian thực mọi cuộc gọi';
+
+  @override
+  String get phoneCallsUpsellFeature2 => 'Tóm tắt cuộc gọi tự động và danh sách hành động';
+
+  @override
+  String get phoneCallsUpsellFeature3 => 'Người nhận thấy số thật của bạn, không phải số ngẫu nhiên';
+
+  @override
+  String get phoneCallsUpsellFeature4 => 'Cuộc gọi của bạn luôn riêng tư và an toàn';
+
+  @override
+  String get phoneCallsUpgradeButton => 'Nâng cấp lên Không giới hạn';
+
+  @override
+  String get phoneCallsMaybeLater => 'Để sau';
+
+  @override
+  String get deleteSynced => 'Xóa đã đồng bộ';
+
+  @override
+  String get deleteSyncedFiles => 'Xóa bản ghi đã đồng bộ';
+
+  @override
+  String get deleteSyncedFilesMessage => 'Các bản ghi này đã được đồng bộ với điện thoại của bạn. Không thể hoàn tác.';
+
+  @override
+  String get syncedFilesDeleted => 'Đã xóa bản ghi đồng bộ';
+
+  @override
+  String get deletePending => 'Xóa đang chờ';
+
+  @override
+  String get deletePendingFiles => 'Xóa bản ghi đang chờ';
+
+  @override
+  String get deletePendingFilesWarning =>
+      'Các bản ghi này CHƯA được đồng bộ với điện thoại của bạn và sẽ bị mất vĩnh viễn. Không thể hoàn tác.';
+
+  @override
+  String get pendingFilesDeleted => 'Đã xóa bản ghi đang chờ';
+
+  @override
+  String get deleteAllFiles => 'Xóa tất cả bản ghi';
+
+  @override
+  String get deleteAll => 'Xóa tất cả';
+
+  @override
+  String get deleteAllFilesWarning =>
+      'Thao tác này sẽ xóa các bản ghi đã đồng bộ và đang chờ. Bản ghi đang chờ CHƯA được đồng bộ và sẽ bị mất vĩnh viễn.';
+
+  @override
+  String get allFilesDeleted => 'Đã xóa tất cả bản ghi';
+
+  @override
+  String nFiles(int count) {
+    return '$count bản ghi';
+  }
+
+  @override
+  String get manageStorage => 'Quản lý lưu trữ';
+
+  @override
+  String get safelyBackedUp => 'Đã sao lưu an toàn vào điện thoại';
+
+  @override
+  String get notYetSynced => 'Chưa đồng bộ với điện thoại của bạn';
+
+  @override
+  String get clearAll => 'Xóa tất cả';
+
+  @override
+  String get phoneKeypad => 'Bàn phím';
+
+  @override
+  String get phoneHideKeypad => 'Ẩn bàn phím';
+
+  @override
+  String get fairUsePolicy => 'Sử dụng hợp lý';
+
+  @override
+  String get fairUseLoadError => 'Không thể tải trạng thái sử dụng hợp lý. Vui lòng thử lại.';
+
+  @override
+  String get fairUseStatusNormal => 'Mức sử dụng của bạn trong giới hạn bình thường.';
+
+  @override
+  String get fairUseStageNormal => 'Bình thường';
+
+  @override
+  String get fairUseStageWarning => 'Cảnh báo';
+
+  @override
+  String get fairUseStageThrottle => 'Bị hạn chế';
+
+  @override
+  String get fairUseStageRestrict => 'Bị chặn';
+
+  @override
+  String get fairUseSpeechUsage => 'Sử dụng giọng nói';
+
+  @override
+  String get fairUseToday => 'Hôm nay';
+
+  @override
+  String get fairUse3Day => '3 ngày liên tục';
+
+  @override
+  String get fairUseWeekly => 'Hàng tuần liên tục';
+
+  @override
+  String get fairUseAboutTitle => 'Về sử dụng hợp lý';
+
+  @override
+  String get fairUseAboutBody =>
+      'Omi được thiết kế cho các cuộc trò chuyện cá nhân, cuộc họp và tương tác trực tiếp. Mức sử dụng được đo bằng thời gian nói thực tế được phát hiện, không phải thời gian kết nối. Nếu mức sử dụng vượt quá đáng kể các mẫu bình thường cho nội dung không cá nhân, có thể áp dụng các điều chỉnh.';
+
+  @override
+  String fairUseCaseRefCopied(String caseRef) {
+    return 'Đã sao chép $caseRef';
+  }
+
+  @override
+  String get fairUseDailyTranscription => 'Chuyển giọng hàng ngày';
+
+  @override
+  String fairUseBudgetUsed(String used, String limit) {
+    return '${used}p / ${limit}p';
+  }
+
+  @override
+  String get fairUseBudgetExhausted => 'Đã đạt giới hạn chuyển giọng hàng ngày';
+
+  @override
+  String fairUseBudgetResetsAt(String time) {
+    return 'Đặt lại $time';
+  }
+
+  @override
+  String get transcriptionPaused => 'Đang ghi, đang kết nối lại';
+
+  @override
+  String get transcriptionPausedReconnecting => 'Vẫn đang ghi — đang kết nối lại với phiên âm...';
 }

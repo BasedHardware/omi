@@ -8284,4 +8284,371 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get conversationsEmptyStateMessage => 'Sāciet sarunu ar Nooto vai ierakstiet vienu ar savu ierīci';
+
+  @override
+  String get tasksCleanTodayTitle => 'Notīrīt šodienas uzdevumus?';
+
+  @override
+  String get tasksCleanTodayMessage => 'Tas noņems tikai termiņus';
+
+  @override
+  String get shared => 'Kopīgots';
+
+  @override
+  String get onlyYouCanSeeConversation => 'Tikai jūs varat redzēt šo sarunu';
+
+  @override
+  String get anyoneWithLinkCanView => 'Ikviens, kam ir saite, var skatīt';
+
+  @override
+  String get tasksOverdue => 'Nokavētas';
+
+  @override
+  String get phoneCallsWithOmi => 'Zvani ar Omi';
+
+  @override
+  String get phoneCallsSubtitle => 'Zvaniet ar realaika transkripciju';
+
+  @override
+  String get phoneSetupStep1Title => 'Verificejiet savu talruna numuru';
+
+  @override
+  String get phoneSetupStep1Subtitle => 'Mes jums piezvanisim, lai apstiprinātu';
+
+  @override
+  String get phoneSetupStep2Title => 'Ievadiet verificesanas kodu';
+
+  @override
+  String get phoneSetupStep2Subtitle => 'Iss kods, ko ievadisiet zvana laika';
+
+  @override
+  String get phoneSetupStep3Title => 'Saciet zvanit saviem kontaktiem';
+
+  @override
+  String get phoneSetupStep3Subtitle => 'Ar iebuvetu tiessaistes transkripciju';
+
+  @override
+  String get phoneGetStarted => 'Sakt';
+
+  @override
+  String get callRecordingConsentDisclaimer => 'Zvanu ierakstisanai var but nepieciesama piekrišana jusu jurisdikcija';
+
+  @override
+  String get enterYourNumber => 'Ievadiet savu numuru';
+
+  @override
+  String get phoneNumberCallerIdHint => 'Pec verificesanas tas kluus par jusu zvanitaja ID';
+
+  @override
+  String get phoneNumberHint => 'Talruna numurs';
+
+  @override
+  String get failedToStartVerification => 'Neizdevas sakt verificesanu';
+
+  @override
+  String get phoneContinue => 'Turpinat';
+
+  @override
+  String get verifyYourNumber => 'Verificejiet savu numuru';
+
+  @override
+  String get answerTheCallFrom => 'Atbildiet uz zvanu no';
+
+  @override
+  String get onTheCallEnterThisCode => 'Zvana laika ievadiet šo kodu';
+
+  @override
+  String get followTheVoiceInstructions => 'Sekojiet balss noraadiajumiem';
+
+  @override
+  String get statusCalling => 'Zvana...';
+
+  @override
+  String get statusCallInProgress => 'Zvans notiek';
+
+  @override
+  String get statusVerifiedLabel => 'Verificets';
+
+  @override
+  String get statusCallMissed => 'Neatbildets zvans';
+
+  @override
+  String get statusTimedOut => 'Laiks beidzies';
+
+  @override
+  String get phoneTryAgain => 'Meginet velreiz';
+
+  @override
+  String get phonePageTitle => 'Talrunis';
+
+  @override
+  String get phoneContactsTab => 'Kontakti';
+
+  @override
+  String get phoneKeypadTab => 'Tastatatura';
+
+  @override
+  String get grantContactsAccess => 'Pieškkiriet pieeju kontaktiem';
+
+  @override
+  String get phoneAllow => 'Atliaut';
+
+  @override
+  String get phoneSearchHint => 'Meklet';
+
+  @override
+  String get phoneNoContactsFound => 'Kontakti nav atrasti';
+
+  @override
+  String get phoneEnterNumber => 'Ievadiet numuru';
+
+  @override
+  String get failedToStartCall => 'Neizdevas sakt zvanu';
+
+  @override
+  String get callStateConnecting => 'Savienojums...';
+
+  @override
+  String get callStateRinging => 'Zvana...';
+
+  @override
+  String get callStateEnded => 'Zvans beidzies';
+
+  @override
+  String get callStateFailed => 'Zvans neizdevas';
+
+  @override
+  String get transcriptPlaceholder => 'Transkripcija paradisies šeit...';
+
+  @override
+  String get phoneUnmute => 'Iesleegt skanu';
+
+  @override
+  String get phoneMute => 'Izslegt skanu';
+
+  @override
+  String get phoneSpeaker => 'Skalrunis';
+
+  @override
+  String get phoneEndCall => 'Beigt';
+
+  @override
+  String get phoneCallSettingsTitle => 'Zvanu iestatijumi';
+
+  @override
+  String get yourVerifiedNumbers => 'Jusu verificetie numuri';
+
+  @override
+  String get verifiedNumbersDescription => 'Kad zvanisiet kadam, vinš redzees šo numuru';
+
+  @override
+  String get noVerifiedNumbers => 'Nav verificetu numuru';
+
+  @override
+  String deletePhoneNumberConfirm(String phoneNumber) {
+    return 'Dzest $phoneNumber?';
+  }
+
+  @override
+  String get deletePhoneNumberWarning => 'Jums bus javerifice atkal, lai zvanitu';
+
+  @override
+  String get phoneDeleteButton => 'Dzest';
+
+  @override
+  String verifiedMinutesAgo(int minutes) {
+    return 'Verificets pirms ${minutes}min';
+  }
+
+  @override
+  String verifiedHoursAgo(int hours) {
+    return 'Verificets pirms ${hours}h';
+  }
+
+  @override
+  String verifiedDaysAgo(int days) {
+    return 'Verificets pirms ${days}d';
+  }
+
+  @override
+  String verifiedOnDate(String date) {
+    return 'Verificets $date';
+  }
+
+  @override
+  String get verifiedFallback => 'Verificets';
+
+  @override
+  String get callAlreadyInProgress => 'Zvans jau notiek';
+
+  @override
+  String get failedToGetCallToken => 'Neizdevas iegut pilnvaru. Vispirms verificejiet savu numuru.';
+
+  @override
+  String get failedToInitializeCallService => 'Neizdevas inicializet zvanu pakalpojumu';
+
+  @override
+  String get speakerLabelYou => 'Jus';
+
+  @override
+  String get speakerLabelUnknown => 'Nezinams';
+
+  @override
+  String get showDailyScoreOnHomepage => 'Rādīt dienas rezultātu sākumlapā';
+
+  @override
+  String get showTasksOnHomepage => 'Rādīt uzdevumus sākumlapā';
+
+  @override
+  String get phoneCallsUnlimitedOnly => 'Tālruņa zvani caur Omi';
+
+  @override
+  String get phoneCallsUpsellSubtitle =>
+      'Veiciet zvanus caur Omi un saņemiet reāllaika transkripciju, automātiskus kopsavilkumus un daudz ko citu.';
+
+  @override
+  String get phoneCallsUpsellFeature1 => 'Katra zvana reāllaika transkripcija';
+
+  @override
+  String get phoneCallsUpsellFeature2 => 'Automātiski zvanu kopsavilkumi un uzdevumi';
+
+  @override
+  String get phoneCallsUpsellFeature3 => 'Saņēmēji redz jūsu īsto numuru, nevis nejaušu';
+
+  @override
+  String get phoneCallsUpsellFeature4 => 'Jūsu zvani paliek privāti un droši';
+
+  @override
+  String get phoneCallsUpgradeButton => 'Jaunināt uz Neierobežoto';
+
+  @override
+  String get phoneCallsMaybeLater => 'Varbūt vēlāk';
+
+  @override
+  String get deleteSynced => 'Dzēst sinhronizētos';
+
+  @override
+  String get deleteSyncedFiles => 'Dzēst sinhronizētos ierakstus';
+
+  @override
+  String get deleteSyncedFilesMessage => 'Šie ieraksti jau ir sinhronizēti ar jūsu tālruni. To nevar atsaukt.';
+
+  @override
+  String get syncedFilesDeleted => 'Sinhronizētie ieraksti dzēsti';
+
+  @override
+  String get deletePending => 'Dzēst gaidošos';
+
+  @override
+  String get deletePendingFiles => 'Dzēst gaidošos ierakstus';
+
+  @override
+  String get deletePendingFilesWarning =>
+      'Šie ieraksti NAV sinhronizēti ar jūsu tālruni un tiks neatgriezeniski zaudēti. To nevar atsaukt.';
+
+  @override
+  String get pendingFilesDeleted => 'Gaidošie ieraksti dzēsti';
+
+  @override
+  String get deleteAllFiles => 'Dzēst visus ierakstus';
+
+  @override
+  String get deleteAll => 'Dzēst visu';
+
+  @override
+  String get deleteAllFilesWarning =>
+      'Tas dzēsīs sinhronizētos un gaidošos ierakstus. Gaidošie ieraksti NAV sinhronizēti un tiks neatgriezeniski zaudēti.';
+
+  @override
+  String get allFilesDeleted => 'Visi ieraksti dzēsti';
+
+  @override
+  String nFiles(int count) {
+    return '$count ierakstu';
+  }
+
+  @override
+  String get manageStorage => 'Pārvaldīt krātuvi';
+
+  @override
+  String get safelyBackedUp => 'Droši dublēts jūsu tālrunī';
+
+  @override
+  String get notYetSynced => 'Vēl nav sinhronizēts ar jūsu tālruni';
+
+  @override
+  String get clearAll => 'Notīrīt visu';
+
+  @override
+  String get phoneKeypad => 'Tastatūra';
+
+  @override
+  String get phoneHideKeypad => 'Paslēpt tastatūru';
+
+  @override
+  String get fairUsePolicy => 'Godīga lietošana';
+
+  @override
+  String get fairUseLoadError => 'Nevarēja ielādēt godīgas lietošanas statusu. Lūdzu, mēģiniet vēlreiz.';
+
+  @override
+  String get fairUseStatusNormal => 'Jūsu lietojums ir normas robežās.';
+
+  @override
+  String get fairUseStageNormal => 'Normāls';
+
+  @override
+  String get fairUseStageWarning => 'Brīdinājums';
+
+  @override
+  String get fairUseStageThrottle => 'Ierobežots';
+
+  @override
+  String get fairUseStageRestrict => 'Bloķēts';
+
+  @override
+  String get fairUseSpeechUsage => 'Runas lietojums';
+
+  @override
+  String get fairUseToday => 'Šodien';
+
+  @override
+  String get fairUse3Day => '3 dienu periods';
+
+  @override
+  String get fairUseWeekly => 'Nedēļas periods';
+
+  @override
+  String get fairUseAboutTitle => 'Par godīgu lietošanu';
+
+  @override
+  String get fairUseAboutBody =>
+      'Omi ir izstrādāts personīgām sarunām, sanāksmēm un tiešsaistes mijiedarbībai. Lietojums tiek mērīts pēc konstatētā reālā runas laika, nevis savienojuma laika. Ja lietojums ievērojami pārsniedz parastos modeļus nepersoniskam saturam, var tikt piemēroti pielāgojumi.';
+
+  @override
+  String fairUseCaseRefCopied(String caseRef) {
+    return '$caseRef nokopēts';
+  }
+
+  @override
+  String get fairUseDailyTranscription => 'Daily Transcription';
+
+  @override
+  String fairUseBudgetUsed(String used, String limit) {
+    return '${used}m / ${limit}m';
+  }
+
+  @override
+  String get fairUseBudgetExhausted => 'Daily transcription limit reached';
+
+  @override
+  String fairUseBudgetResetsAt(String time) {
+    return 'Resets $time';
+  }
+
+  @override
+  String get transcriptionPaused => 'Ierakstīšana, atkārtota savienošana';
+
+  @override
+  String get transcriptionPausedReconnecting => 'Joprojām ieraksta — atkārtoti savienojas ar transkripciju...';
 }

@@ -8310,4 +8310,373 @@ class AppLocalizationsRo extends AppLocalizations {
   @override
   String get conversationsEmptyStateMessage =>
       'Începeți o conversație cu Nooto sau înregistrați una cu dispozitivul dvs.';
+
+  @override
+  String get tasksCleanTodayTitle => 'Curăți sarcinile de azi?';
+
+  @override
+  String get tasksCleanTodayMessage => 'Aceasta va elimina doar termenele limită';
+
+  @override
+  String get shared => 'Partajat';
+
+  @override
+  String get onlyYouCanSeeConversation => 'Doar tu poți vedea această conversație';
+
+  @override
+  String get anyoneWithLinkCanView => 'Oricine are linkul poate vizualiza';
+
+  @override
+  String get tasksOverdue => 'Întârziate';
+
+  @override
+  String get phoneCallsWithOmi => 'Apeluri cu Omi';
+
+  @override
+  String get phoneCallsSubtitle => 'Apelati cu transcriere in timp real';
+
+  @override
+  String get phoneSetupStep1Title => 'Verificati numarul de telefon';
+
+  @override
+  String get phoneSetupStep1Subtitle => 'Va vom suna pentru a confirma';
+
+  @override
+  String get phoneSetupStep2Title => 'Introduceti un cod de verificare';
+
+  @override
+  String get phoneSetupStep2Subtitle => 'Un cod scurt pe care il introduceti in timpul apelului';
+
+  @override
+  String get phoneSetupStep3Title => 'Incepeti sa apelati contactele';
+
+  @override
+  String get phoneSetupStep3Subtitle => 'Cu transcriere live integrata';
+
+  @override
+  String get phoneGetStarted => 'Incepe';
+
+  @override
+  String get callRecordingConsentDisclaimer =>
+      'Inregistrarea apelurilor poate necesita consimtamant in jurisdictia dvs.';
+
+  @override
+  String get enterYourNumber => 'Introduceti numarul dvs.';
+
+  @override
+  String get phoneNumberCallerIdHint => 'Dupa verificare, acesta devine ID-ul dvs. de apelant';
+
+  @override
+  String get phoneNumberHint => 'Numar de telefon';
+
+  @override
+  String get failedToStartVerification => 'Nu s-a putut initia verificarea';
+
+  @override
+  String get phoneContinue => 'Continua';
+
+  @override
+  String get verifyYourNumber => 'Verificati numarul dvs.';
+
+  @override
+  String get answerTheCallFrom => 'Raspundeti la apelul de la';
+
+  @override
+  String get onTheCallEnterThisCode => 'In timpul apelului, introduceti acest cod';
+
+  @override
+  String get followTheVoiceInstructions => 'Urmati instructiunile vocale';
+
+  @override
+  String get statusCalling => 'Se apeleaza...';
+
+  @override
+  String get statusCallInProgress => 'Apel in curs';
+
+  @override
+  String get statusVerifiedLabel => 'Verificat';
+
+  @override
+  String get statusCallMissed => 'Apel pierdut';
+
+  @override
+  String get statusTimedOut => 'Timp expirat';
+
+  @override
+  String get phoneTryAgain => 'Incercati din nou';
+
+  @override
+  String get phonePageTitle => 'Telefon';
+
+  @override
+  String get phoneContactsTab => 'Contacte';
+
+  @override
+  String get phoneKeypadTab => 'Tastatura';
+
+  @override
+  String get grantContactsAccess => 'Acordati acces la contactele dvs.';
+
+  @override
+  String get phoneAllow => 'Permite';
+
+  @override
+  String get phoneSearchHint => 'Cauta';
+
+  @override
+  String get phoneNoContactsFound => 'Niciun contact gasit';
+
+  @override
+  String get phoneEnterNumber => 'Introduceti numarul';
+
+  @override
+  String get failedToStartCall => 'Nu s-a putut initia apelul';
+
+  @override
+  String get callStateConnecting => 'Se conecteaza...';
+
+  @override
+  String get callStateRinging => 'Suna...';
+
+  @override
+  String get callStateEnded => 'Apel incheiat';
+
+  @override
+  String get callStateFailed => 'Apel esuat';
+
+  @override
+  String get transcriptPlaceholder => 'Transcrierea va aparea aici...';
+
+  @override
+  String get phoneUnmute => 'Activeaza sunetul';
+
+  @override
+  String get phoneMute => 'Dezactiveaza sunetul';
+
+  @override
+  String get phoneSpeaker => 'Difuzor';
+
+  @override
+  String get phoneEndCall => 'Incheie';
+
+  @override
+  String get phoneCallSettingsTitle => 'Setari apeluri';
+
+  @override
+  String get yourVerifiedNumbers => 'Numerele dvs. verificate';
+
+  @override
+  String get verifiedNumbersDescription => 'Cand apelati pe cineva, va vedea acest numar';
+
+  @override
+  String get noVerifiedNumbers => 'Niciun numar verificat';
+
+  @override
+  String deletePhoneNumberConfirm(String phoneNumber) {
+    return 'Stergeti $phoneNumber?';
+  }
+
+  @override
+  String get deletePhoneNumberWarning => 'Va trebui sa verificati din nou pentru a apela';
+
+  @override
+  String get phoneDeleteButton => 'Sterge';
+
+  @override
+  String verifiedMinutesAgo(int minutes) {
+    return 'Verificat acum ${minutes}min';
+  }
+
+  @override
+  String verifiedHoursAgo(int hours) {
+    return 'Verificat acum ${hours}h';
+  }
+
+  @override
+  String verifiedDaysAgo(int days) {
+    return 'Verificat acum ${days}z';
+  }
+
+  @override
+  String verifiedOnDate(String date) {
+    return 'Verificat pe $date';
+  }
+
+  @override
+  String get verifiedFallback => 'Verificat';
+
+  @override
+  String get callAlreadyInProgress => 'Un apel este deja in curs';
+
+  @override
+  String get failedToGetCallToken => 'Nu s-a putut obtine tokenul. Verificati mai intai numarul.';
+
+  @override
+  String get failedToInitializeCallService => 'Nu s-a putut initializa serviciul de apeluri';
+
+  @override
+  String get speakerLabelYou => 'Dvs.';
+
+  @override
+  String get speakerLabelUnknown => 'Necunoscut';
+
+  @override
+  String get showDailyScoreOnHomepage => 'Afișați scorul zilnic pe pagina principală';
+
+  @override
+  String get showTasksOnHomepage => 'Afișați sarcinile pe pagina principală';
+
+  @override
+  String get phoneCallsUnlimitedOnly => 'Apeluri telefonice prin Omi';
+
+  @override
+  String get phoneCallsUpsellSubtitle =>
+      'Efectuați apeluri prin Omi și obțineți transcriere în timp real, rezumate automate și multe altele.';
+
+  @override
+  String get phoneCallsUpsellFeature1 => 'Transcriere în timp real a fiecărui apel';
+
+  @override
+  String get phoneCallsUpsellFeature2 => 'Rezumate automate ale apelurilor și sarcini';
+
+  @override
+  String get phoneCallsUpsellFeature3 => 'Destinatarii văd numărul dvs. real, nu unul aleatoriu';
+
+  @override
+  String get phoneCallsUpsellFeature4 => 'Apelurile dvs. rămân private și sigure';
+
+  @override
+  String get phoneCallsUpgradeButton => 'Treceți la Nelimitat';
+
+  @override
+  String get phoneCallsMaybeLater => 'Poate mai târziu';
+
+  @override
+  String get deleteSynced => 'Șterge sincronizate';
+
+  @override
+  String get deleteSyncedFiles => 'Șterge înregistrările sincronizate';
+
+  @override
+  String get deleteSyncedFilesMessage =>
+      'Aceste înregistrări sunt deja sincronizate cu telefonul dvs. Aceasta nu poate fi anulată.';
+
+  @override
+  String get syncedFilesDeleted => 'Înregistrările sincronizate au fost șterse';
+
+  @override
+  String get deletePending => 'Șterge în așteptare';
+
+  @override
+  String get deletePendingFiles => 'Șterge înregistrările în așteptare';
+
+  @override
+  String get deletePendingFilesWarning =>
+      'Aceste înregistrări NU sunt sincronizate cu telefonul dvs. și vor fi pierdute permanent. Aceasta nu poate fi anulată.';
+
+  @override
+  String get pendingFilesDeleted => 'Înregistrările în așteptare au fost șterse';
+
+  @override
+  String get deleteAllFiles => 'Șterge toate înregistrările';
+
+  @override
+  String get deleteAll => 'Șterge tot';
+
+  @override
+  String get deleteAllFilesWarning =>
+      'Aceasta va șterge înregistrările sincronizate și în așteptare. Înregistrările în așteptare NU sunt sincronizate și vor fi pierdute permanent.';
+
+  @override
+  String get allFilesDeleted => 'Toate înregistrările au fost șterse';
+
+  @override
+  String nFiles(int count) {
+    return '$count înregistrări';
+  }
+
+  @override
+  String get manageStorage => 'Gestionare stocare';
+
+  @override
+  String get safelyBackedUp => 'Salvat în siguranță pe telefonul dvs.';
+
+  @override
+  String get notYetSynced => 'Nu a fost încă sincronizat cu telefonul dvs.';
+
+  @override
+  String get clearAll => 'Șterge tot';
+
+  @override
+  String get phoneKeypad => 'Tastatură';
+
+  @override
+  String get phoneHideKeypad => 'Ascunde tastatura';
+
+  @override
+  String get fairUsePolicy => 'Utilizare echitabilă';
+
+  @override
+  String get fairUseLoadError => 'Nu s-a putut încărca starea de utilizare echitabilă. Vă rugăm să încercați din nou.';
+
+  @override
+  String get fairUseStatusNormal => 'Utilizarea dvs. este în limitele normale.';
+
+  @override
+  String get fairUseStageNormal => 'Normal';
+
+  @override
+  String get fairUseStageWarning => 'Avertisment';
+
+  @override
+  String get fairUseStageThrottle => 'Limitat';
+
+  @override
+  String get fairUseStageRestrict => 'Blocat';
+
+  @override
+  String get fairUseSpeechUsage => 'Utilizare vocală';
+
+  @override
+  String get fairUseToday => 'Astăzi';
+
+  @override
+  String get fairUse3Day => '3 zile consecutive';
+
+  @override
+  String get fairUseWeekly => 'Săptămânal';
+
+  @override
+  String get fairUseAboutTitle => 'Despre utilizarea echitabilă';
+
+  @override
+  String get fairUseAboutBody =>
+      'Omi este conceput pentru conversații personale, întâlniri și interacțiuni în direct. Utilizarea este măsurată prin timpul real de vorbire detectat, nu prin timpul de conexiune. Dacă utilizarea depășește semnificativ tiparele normale pentru conținut non-personal, se pot aplica ajustări.';
+
+  @override
+  String fairUseCaseRefCopied(String caseRef) {
+    return '$caseRef copiat';
+  }
+
+  @override
+  String get fairUseDailyTranscription => 'Daily Transcription';
+
+  @override
+  String fairUseBudgetUsed(String used, String limit) {
+    return '${used}m / ${limit}m';
+  }
+
+  @override
+  String get fairUseBudgetExhausted => 'Daily transcription limit reached';
+
+  @override
+  String fairUseBudgetResetsAt(String time) {
+    return 'Resets $time';
+  }
+
+  @override
+  String get transcriptionPaused => 'Înregistrare, reconectare';
+
+  @override
+  String get transcriptionPausedReconnecting => 'Încă înregistrează — reconectare la transcriere...';
 }
