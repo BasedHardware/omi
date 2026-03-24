@@ -1086,8 +1086,13 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     Task { @MainActor in
       AuthService.shared.handleOAuthCallback(url: url)
-      // Bring app to foreground after OAuth redirect — Safari stays in front otherwise
+      // Bring app to foreground after OAuth redirect — Safari stays in front otherwise.
+      // NSApp.activate() alone doesn't switch macOS Spaces; ordering a window front does.
       NSApp.activate()
+      if let window = NSApp.windows.first(where: { $0.isVisible && !$0.isMiniaturized }) ?? NSApp.windows.first(where: { !$0.isMiniaturized }) {
+        window.makeKeyAndOrderFront(nil)
+        window.orderFrontRegardless()
+      }
     }
   }
 
