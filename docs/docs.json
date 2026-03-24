@@ -12,6 +12,7 @@
     "groups": [
       {
         "group": "Get Started",
+        "icon": "rocket",
         "pages": [
           "doc/get_started/introduction",
           "getstartedwithomi",
@@ -20,11 +21,13 @@
       },
       {
         "group": "Core Development",
+        "icon": "code",
         "pages": [
           "doc/developer/AppSetup",
           "doc/developer/Cursor",
           {
             "group": "Backend",
+            "icon": "server",
             "pages": [
               "doc/developer/backend/Backend_Setup",
               "doc/developer/backend/backend_deepdive",
@@ -36,12 +39,14 @@
           },
           {
             "group": "Firmware",
+            "icon": "microchip",
             "pages": [
               "doc/developer/firmware/Compile_firmware"
             ]
           },
           {
             "group": "SDK",
+            "icon": "cube",
             "pages": [
               "doc/developer/sdk/sdk",
               "doc/developer/sdk/python",
@@ -54,6 +59,7 @@
           "doc/integrations",
           {
             "group": "Audio & Testing",
+            "icon": "headphones",
             "pages": [
               "doc/developer/savingaudio",
               "doc/developer/AudioStreaming",
@@ -64,6 +70,7 @@
       },
       {
         "group": "Developer API",
+        "icon": "square-terminal",
         "pages": [
           "doc/developer/api/overview",
           "doc/developer/api/memories",
@@ -74,12 +81,14 @@
       },
       {
         "group": "MCP Integration",
+        "icon": "plug",
         "pages": [
           "doc/developer/MCP"
         ]
       },
       {
         "group": "Build Apps",
+        "icon": "grid-2",
         "pages": [
           "doc/developer/apps/Introduction",
           "doc/developer/apps/PromptBased",
@@ -87,6 +96,7 @@
           "doc/developer/apps/ChatTools",
           {
             "group": "Examples",
+            "icon": "flask",
             "pages": [
               "doc/developer/apps/examples/Github",
               "doc/developer/apps/examples/Slack",
@@ -98,15 +108,17 @@
           "doc/developer/apps/Oauth",
           "doc/developer/apps/Notifications",
           "doc/developer/apps/Submitting",
-                    "doc/developer/apps/OpenSource"
+          "doc/developer/apps/OpenSource"
         ]
       },
       {
         "group": "Hardware",
+        "icon": "circuit-board",
         "pages": [
           "doc/hardware/OmiConsumer",
           {
             "group": "Open Source Hardware",
+            "icon": "screwdriver-wrench",
             "pages": [
               "doc/hardware/consumer/index",
               "doc/hardware/consumer/electronics",
@@ -122,6 +134,7 @@
       },
       {
         "group": "OmiGlass",
+        "icon": "glasses",
         "pages": [
           "doc/hardware/omiGlass",
           "doc/hardware/omiglass/flash-firmware",
@@ -130,6 +143,7 @@
       },
       {
         "group": "DIY Guide",
+        "icon": "hammer",
         "pages": [
           "doc/assembly/introduction",
           "doc/assembly/Buying_Guide",
@@ -139,6 +153,7 @@
       },
       {
         "group": "Info",
+        "icon": "circle-info",
         "pages": [
           "doc/info/Support",
           "doc/info/License",
