@@ -188,8 +188,11 @@ class WalSyncs implements IWalSync {
     });
 
     // Phase 0: New multi-file storage sync (for new firmware with LittleFS)
-    if (await _storageSync.hasFilesToSync()) {
-      Logger.debug("WalSyncs: Phase 0 - Downloading multi-file storage data to phone");
+    // Refresh file list from device via BLE (safe — not syncing yet)
+    await _storageSync.refreshWalsFromDevice();
+    final storageMissing = await _storageSync.getMissingWals();
+    if (storageMissing.isNotEmpty) {
+      Logger.debug("WalSyncs: Phase 0 - Downloading ${storageMissing.length} multi-file storage files to phone");
       DebugLogManager.logInfo('Sync Phase 0: Multi-file storage sync');
       progress?.onWalSyncedProgress(0.0, phase: SyncPhase.downloadingFromDevice);
       await _storageSync.syncAll(progress: progress);
