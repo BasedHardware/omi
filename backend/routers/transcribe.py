@@ -29,6 +29,7 @@ from firebase_admin.auth import InvalidIdTokenError
 
 from utils.speaker_assignment import (
     process_speaker_assigned_segments,
+    rehydrate_session_segments,
     update_speaker_assignment_maps,
     should_update_speaker_to_person_map,
 )
@@ -843,18 +844,11 @@ async def _stream_handler(
             # Rehydrate current_session_segments from persisted transcript segments so that
             # speaker sample extraction (can_assign check) works after WS reconnect (#5949)
             existing_segments = existing_conversation.get('transcript_segments', [])
-            for seg in existing_segments:
-                sid = seg.get('id') if isinstance(seg, dict) else getattr(seg, 'id', None)
-                if sid:
-                    spp = (
-                        seg.get('speech_profile_processed', True)
-                        if isinstance(seg, dict)
-                        else getattr(seg, 'speech_profile_processed', True)
-                    )
-                    current_session_segments[sid] = spp
-            if existing_segments:
+            rehydrated = rehydrate_session_segments(existing_segments)
+            current_session_segments.update(rehydrated)
+            if rehydrated:
                 logger.info(
-                    f"Rehydrated {len(current_session_segments)} segments for resumed conversation {current_conversation_id} {uid} {session_id}"
+                    f"Rehydrated {len(rehydrated)} segments for resumed conversation {current_conversation_id} {uid} {session_id}"
                 )
 
             logger.info(
