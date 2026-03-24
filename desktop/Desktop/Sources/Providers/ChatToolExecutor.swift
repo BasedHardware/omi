@@ -24,6 +24,10 @@ class ChatToolExecutor {
     /// Called when request_permission returns "pending" — used to trigger the permission help timer
     static var onPermissionPending: ((_ permissionType: String) -> Void)?
 
+    /// Email/calendar insights from background reading (set by OnboardingChatView)
+    static var emailInsightsText: String?
+    static var calendarInsightsText: String?
+
     private static var fileScanFileCount = 0
     private static var followupContinuation: CheckedContinuation<String, Never>?
 
@@ -100,6 +104,11 @@ class ChatToolExecutor {
             let nodeCount = (toolCall.arguments["nodes"] as? [[String: Any]])?.count ?? 0
             let edgeCount = (toolCall.arguments["edges"] as? [[String: Any]])?.count ?? 0
             AnalyticsManager.shared.onboardingChatToolUsed(tool: "save_knowledge_graph", properties: ["nodes": nodeCount, "edges": edgeCount])
+            return result
+
+        case "get_email_insights":
+            let result = executeGetEmailInsights()
+            AnalyticsManager.shared.onboardingChatToolUsed(tool: "get_email_insights", properties: ["has_email": emailInsightsText != nil, "has_calendar": calendarInsightsText != nil])
             return result
 
         default:
@@ -817,6 +826,24 @@ class ChatToolExecutor {
             logError("Tool get_file_scan_results failed", error: error)
             return "Error: \(error.localizedDescription)"
         }
+    }
+
+    /// Return email/calendar insights from background reading
+    private static func executeGetEmailInsights() -> String {
+        var sections: [String] = []
+
+        if let email = emailInsightsText, !email.isEmpty {
+            sections.append("## Email Insights\n\(email)")
+        }
+        if let calendar = calendarInsightsText, !calendar.isEmpty {
+            sections.append("## Calendar Insights\n\(calendar)")
+        }
+
+        if sections.isEmpty {
+            return "No email insights available yet. The background reading may still be in progress, or no browser with a Gmail session was found."
+        }
+
+        return sections.joined(separator: "\n\n")
     }
 
     /// Set user preferences (language, name)
