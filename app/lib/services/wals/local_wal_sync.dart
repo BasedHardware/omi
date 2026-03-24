@@ -472,7 +472,7 @@ class LocalWalSyncImpl implements LocalWalSync {
           }
         }
       } catch (e) {
-        Logger.debug('Local WAL sync batch failed: $e, continuing with remaining files');
+        print('Local WAL sync batch failed: $e, continuing with remaining files');
         batchesFailed++;
         DebugLogManager.logError(e, null, 'Local upload batch failed: ${e.toString()}', {
           'batchIndex': (wals.length - 1 - i) ~/ steps,
@@ -546,7 +546,7 @@ class LocalWalSyncImpl implements LocalWalSync {
       }
     } catch (e) {
       wal.status = WalStatus.corrupted;
-      Logger.debug(e.toString());
+      print(e.toString());
       DebugLogManager.logError(e, null, 'Single WAL corrupted: unexpected error - ${e.toString()}', {'walId': wal.id});
     }
 
