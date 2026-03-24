@@ -1471,35 +1471,23 @@ workflows:
 
           xcrun stapler staple "$APP_PATH"
 
-      - name: Install create-dmg
-        script: |
-          brew install create-dmg
-
       - name: Create DMG installer
         script: |
           set -e
+          pip3 install dmgbuild
           APP_PATH=$(find $(pwd)/build/macos -name "Omi.app" -type d | head -1)
 
           mkdir -p build/macos/dmg
-          DMG_NAME="Omi.dmg"
-          DMG_PATH="build/macos/dmg/${DMG_NAME}"
+          DMG_PATH="build/macos/dmg/Omi.dmg"
 
-          # Create professional DMG with Applications folder shortcut
-          # Use --skip-jenkins to avoid AppleScript timeout issues in CI
-          create-dmg \
-            --volname "Omi ${VERSION}" \
-            --volicon "$APP_PATH/Contents/Resources/prodAppIcon.icns" \
-            --window-pos 200 120 \
-            --window-size 660 400 \
-            --icon-size 130 \
-            --text-size 16 \
-            --icon "Omi.app" 180 180 \
-            --hide-extension "Omi.app" \
-            --app-drop-link 480 180 \
-            --no-internet-enable \
-            --skip-jenkins \
-            "$DMG_PATH" \
-            "$APP_PATH"
+          # Use dmgbuild instead of create-dmg — writes .DS_Store directly
+          # without Finder/AppleScript (which hangs in CI with --skip-jenkins)
+          dmgbuild -s ../desktop/dmg-assets/dmgbuild_settings.py \
+            -D app_path="$APP_PATH" \
+            -D app_name=Omi \
+            -D assets_dir="$(pwd)/../desktop/dmg-assets" \
+            "Omi ${VERSION}" \
+            "$DMG_PATH"
 
           # Sign DMG
           codesign --force --sign "$DEVELOPER_ID_CERT" "$DMG_PATH"
@@ -2295,13 +2283,11 @@ workflows:
           xcrun stapler staple "$APP_BUNDLE"
           echo "App stapled"
 
-      - name: Install create-dmg
-        script: |
-          brew install create-dmg || true
-
       - name: Create DMG installer
         script: |
           set -e
+          pip3 install dmgbuild
+
           STAGING_DIR="/tmp/omi-dmg-staging-$$"
           mkdir -p "$STAGING_DIR"
           # Use ditto to preserve the notarization staple ticket (cp -R drops it)
@@ -2310,23 +2296,14 @@ workflows:
           xcrun stapler validate "$STAGING_DIR/$APP_NAME.app" 2>/dev/null || \
             xcrun stapler staple "$STAGING_DIR/$APP_NAME.app"
 
-          BG_ARGS=""
-          [ -f "dmg-assets/background.png" ] && BG_ARGS="--background dmg-assets/background.png"
-
-          create-dmg \
-            --volname "$APP_NAME" \
-            --volicon "$STAGING_DIR/$APP_NAME.app/Contents/Resources/OmiIcon.icns" \
-            --window-pos 200 120 \
-            --window-size 610 365 \
-            --icon-size 80 \
-            --icon "$APP_NAME.app" 155 175 \
-            --hide-extension "$APP_NAME.app" \
-            --app-drop-link 455 175 \
-            --no-internet-enable \
-            --skip-jenkins \
-            $BG_ARGS \
-            "$DMG_PATH" \
-            "$STAGING_DIR/$APP_NAME.app"
+          # Use dmgbuild instead of create-dmg — writes .DS_Store directly
+          # without Finder/AppleScript (which hangs in CI with --skip-jenkins)
+          dmgbuild -s dmg-assets/dmgbuild_settings.py \
+            -D app_path="$STAGING_DIR/$APP_NAME.app" \
+            -D app_name="$APP_NAME" \
+            -D assets_dir="$(pwd)/dmg-assets" \
+            "$APP_NAME" \
+            "$DMG_PATH"
 
           rm -rf "$STAGING_DIR"
           echo "DMG created"
