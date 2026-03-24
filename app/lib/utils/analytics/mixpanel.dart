@@ -1376,6 +1376,13 @@ class MixpanelManager {
     );
   }
 
+  void omiTripleTap({required String feature, Map<String, dynamic>? additionalProperties}) {
+    track(
+      'Omi Triple Tap',
+      properties: {'feature': feature, if (additionalProperties != null) ...additionalProperties},
+    );
+  }
+
   // ============================================================================
   // WRAPPED 2025 TRACKING
   // ============================================================================
@@ -1675,5 +1682,35 @@ class MixpanelManager {
 
   void dailyReflectionToggled({required bool enabled}) {
     track('Daily Reflection Toggled', properties: {'enabled': enabled});
+  }
+
+  // ============================================================================
+  // NOTES TRACKING
+  // ============================================================================
+
+  void notesPageOpened() => track('Notes Page Opened');
+
+  void notesFetched({required int count}) {
+    track('Notes Fetched', properties: {'count': count});
+  }
+
+  void noteCreated({required String type}) {
+    track('Note Created', properties: {'type': type});
+  }
+
+  void noteUpdated({required String noteId}) {
+    track('Note Updated', properties: {'note_id': noteId});
+  }
+
+  void noteDeleted({required String noteId}) {
+    track('Note Deleted', properties: {'note_id': noteId});
+  }
+
+  void notePlayed({required String noteId}) {
+    track('Note Played', properties: {'note_id': noteId});
+  }
+
+  void voiceNoteRecorded({required double duration}) {
+    track('Voice Note Recorded', properties: {'duration': duration});
   }
 }

@@ -10366,5 +10366,49 @@
                 "type": "int"
             }
         }
+    },
+    "searchNotes": "Search notes...",
+    "@searchNotes": {
+        "description": "Search input hint for notes"
+    },
+    "noNotes": "No notes yet",
+    "@noNotes": {
+        "description": "Empty state when no notes"
+    },
+    "voiceNotes": "Voice",
+    "@voiceNotes": {
+        "description": "Voice notes filter"
+    },
+    "textNotes": "Text",
+    "@textNotes": {
+        "description": "Text notes filter"
+    },
+    "tripleTapToRecord": "Triple tap your device button to record",
+    "@tripleTapToRecord": {
+        "description": "Hint for triple tap recording"
+    },
+    "noteDeleted": "Note deleted",
+    "@noteDeleted": {
+        "description": "Notification when note deleted"
+    },
+    "editNote": "Edit Note",
+    "@editNote": {
+        "description": "Edit note sheet title"
+    },
+    "newNote": "New Note",
+    "@newNote": {
+        "description": "New note sheet title"
+    },
+    "noteTitleHint": "Title (optional)",
+    "@noteTitleHint": {
+        "description": "Hint for note title field"
+    },
+    "transcriptionHint": "Transcription...",
+    "@transcriptionHint": {
+        "description": "Hint for transcription field"
+    },
+    "noteContentHint": "Note content...",
+    "@noteContentHint": {
+        "description": "Hint for note content"
     }
 }

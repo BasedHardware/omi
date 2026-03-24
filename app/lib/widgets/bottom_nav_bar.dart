@@ -128,6 +128,27 @@ class BottomNavBar extends StatelessWidget {
                         ),
                       ),
                     ),
+                    // Notes tab
+                    Expanded(
+                      child: InkWell(
+                        onTap: () {
+                          HapticFeedback.mediumImpact();
+                          MixpanelManager().bottomNavigationTabClicked('Notes');
+                          primaryFocus?.unfocus();
+                          onTabTap(4, home.selectedIndex == 4);
+                        },
+                        child: SizedBox(
+                          height: 90,
+                          child: Center(
+                            child: Icon(
+                              FontAwesomeIcons.noteSticky,
+                              color: home.selectedIndex == 4 ? Colors.white : Colors.grey,
+                              size: 26,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
                   ],
                 ),
               ),

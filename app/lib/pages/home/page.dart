@@ -30,6 +30,7 @@ import 'package:omi/pages/conversations/conversations_page.dart';
 import 'package:omi/pages/conversations/sync_page.dart';
 import 'package:omi/pages/conversations/widgets/merge_action_bar.dart';
 import 'package:omi/pages/memories/page.dart';
+import 'package:omi/pages/notes/notes_page.dart';
 import 'package:omi/pages/phone_calls/phone_calls_page.dart';
 import 'package:omi/pages/phone_calls/phone_calls_upsell_sheet.dart';
 import 'package:omi/models/subscription.dart';
@@ -127,6 +128,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
   final GlobalKey<State<ActionItemsPage>> _actionItemsPageKey = GlobalKey<State<ActionItemsPage>>();
   final GlobalKey<State<MemoriesPage>> _memoriesPageKey = GlobalKey<State<MemoriesPage>>();
   final GlobalKey<AppsPageState> _appsPageKey = GlobalKey<AppsPageState>();
+  final GlobalKey<State<NotesPage>> _notesPageKey = GlobalKey<State<NotesPage>>();
   late final List<Widget> _pages;
 
   // Freemium switch handler for auto-switch dialogs
@@ -238,6 +240,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
       ActionItemsPage(key: _actionItemsPageKey, onAddGoal: _addGoal),
       MemoriesPage(key: _memoriesPageKey),
       AppsPage(key: _appsPageKey),
+      NotesPage(key: _notesPageKey),
     ];
     SharedPreferencesUtil().onboardingCompleted = true;
     updateUserOnboardingState(completed: true);

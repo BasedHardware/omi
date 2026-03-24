@@ -57,6 +57,7 @@ import 'package:omi/providers/locale_provider.dart';
 import 'package:omi/providers/mcp_provider.dart';
 import 'package:omi/providers/memories_provider.dart';
 import 'package:omi/providers/message_provider.dart';
+import 'package:omi/providers/notes_provider.dart';
 import 'package:omi/providers/onboarding_provider.dart';
 import 'package:omi/providers/people_provider.dart';
 import 'package:omi/providers/speech_profile_provider.dart';
@@ -358,6 +359,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         ChangeNotifierProvider(create: (context) => VoiceRecorderProvider()),
         ChangeNotifierProvider(create: (context) => AnnouncementProvider()),
         ChangeNotifierProvider(create: (context) => PhoneCallProvider()),
+        ChangeNotifierProvider(create: (context) => NotesProvider()),
       ],
       builder: (context, child) {
         return WithForegroundTask(

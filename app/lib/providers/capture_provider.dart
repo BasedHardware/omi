@@ -15,6 +15,8 @@ import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 import 'package:omi/backend/http/api/conversations.dart';
+import 'package:omi/backend/http/api/messages.dart';
+import 'package:omi/backend/http/api/notes.dart';
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/services/auth_service.dart';
@@ -23,6 +25,7 @@ import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/geolocation.dart';
 import 'package:omi/backend/schema/message.dart';
 import 'package:omi/backend/schema/person.dart';
+import 'package:omi/backend/schema/note.dart';
 import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/models/custom_stt_config.dart';
@@ -292,6 +295,12 @@ class CaptureProvider extends ChangeNotifier
   bool _voiceSessionStartedByLegacyLongPress =
       false; // Track if session was started by legacy long press (3) vs new toggle (1), TODO: remove this flag later
 
+  // Voice note recording state (triple tap)
+  DateTime? _voiceNoteSession;
+  List<List<int>> _voiceNoteBytes = [];
+  DateTime? _voiceNoteStartTime;
+  Timer? _voiceNoteTimeoutTimer; // Auto-end timer for voice notes
+
   StreamSubscription? _storageStream;
 
   get storageStream => _storageStream;
@@ -522,6 +531,81 @@ class CaptureProvider extends ChangeNotifier
     _processVoiceCommandBytes(deviceId, data);
   }
 
+  // Start a 60s timeout timer for voice notes - auto-ends if user forgets to stop
+  void _startVoiceNoteTimeout(String deviceId) {
+    _voiceNoteTimeoutTimer?.cancel();
+    _voiceNoteTimeoutTimer = Timer(const Duration(seconds: 60), () {
+      debugPrint("Voice note timeout - auto-ending recording after 60s");
+      if (_voiceNoteSession != null) {
+        _endVoiceNoteRecording(deviceId);
+      }
+    });
+  }
+
+  // Start voice note recording
+  void _startVoiceNoteRecording(String deviceId) {
+    _voiceNoteSession = DateTime.now();
+    _voiceNoteBytes = [];
+    _voiceNoteStartTime = DateTime.now();
+    _startVoiceNoteTimeout(deviceId);
+    _playSpeakerHaptic(deviceId, 1);
+    notifyListeners();
+  }
+
+  // End voice note recording and save the note
+  void _endVoiceNoteRecording(String deviceId) {
+    _voiceNoteTimeoutTimer?.cancel();
+    _voiceNoteTimeoutTimer = null;
+    _voiceNoteSession = null;
+    var data = List<List<int>>.from(_voiceNoteBytes);
+    _voiceNoteBytes = [];
+    _saveVoiceNote(data, deviceId);
+    notifyListeners();
+  }
+
+  // Save voice note to the backend
+  Future<void> _saveVoiceNote(List<List<int>> audioBytes, String deviceId) async {
+    if (audioBytes.isEmpty) {
+      Logger.debug("Voice note: no audio data to save");
+      return;
+    }
+
+    try {
+      // Concatenate all audio bytes
+      final allBytes = <int>[];
+      for (final chunk in audioBytes) {
+        allBytes.addAll(chunk);
+      }
+
+      // Calculate duration based on sample rate (16kHz) and bytes (16-bit = 2 bytes per sample)
+      final duration = allBytes.length / (16000 * 2);
+
+      // Save audio to a temporary file for transcription
+      String? transcription;
+      try {
+        final tempDir = await getTemporaryDirectory();
+        final tempFile = File('${tempDir.path}/voice_note_${DateTime.now().millisecondsSinceEpoch}.wav');
+        await tempFile.writeAsBytes(allBytes);
+        transcription = await transcribeVoiceMessage(tempFile);
+        await tempFile.delete();
+      } catch (e) {
+        Logger.debug("Voice note transcription failed: $e");
+      }
+
+      // Create the voice note via the Notes API directly
+      await createNoteServer(
+        content: transcription ?? 'Voice note',
+        type: NoteType.voice,
+        duration: duration,
+        transcription: transcription,
+      );
+
+      Logger.debug("Voice note saved successfully with duration: ${duration.toStringAsFixed(1)}s");
+    } catch (e) {
+      Logger.debug("Error saving voice note: $e");
+    }
+  }
+
   Future streamButton(String deviceId) async {
     Logger.debug('streamButton in capture_provider');
     _bleButtonStream?.cancel();
@@ -591,6 +675,30 @@ class CaptureProvider extends ChangeNotifier
           return;
         }
 
+        // Triple tap (buttonState == 4) - toggle voice note recording
+        if (buttonState == 4) {
+          Logger.debug("Triple tap detected");
+
+          // Guard: ignore if already processing a button event or voice command session
+          if (_isProcessingButtonEvent) {
+            Logger.debug("Triple tap: already processing, ignoring");
+            return;
+          }
+
+          if (_voiceNoteSession != null) {
+            // End voice note recording
+            Logger.debug("Triple tap: ending voice note recording");
+            _endVoiceNoteRecording(deviceId);
+            MixpanelManager().voiceNoteRecorded(duration: DateTime.now().difference(_voiceNoteStartTime!).inSeconds.toDouble());
+          } else {
+            // Start voice note recording
+            Logger.debug("Triple tap: starting voice note recording");
+            _startVoiceNoteRecording(deviceId);
+            MixpanelManager().omiTripleTap(feature: 'voice_note');
+          }
+          return;
+        }
+
         // Single tap (buttonState == 1) - toggle voice question mode
         // Tap once to start, tap again to end
         if (buttonState == 1) {
@@ -650,6 +758,11 @@ class CaptureProvider extends ChangeNotifier
             : false;
         if (_voiceCommandSession != null && voiceCommandSupported) {
           _commandBytes.add(snapshot.sublist(3));
+        }
+
+        // Voice note recording (triple tap) - capture audio bytes
+        if (_voiceNoteSession != null && voiceCommandSupported) {
+          _voiceNoteBytes.add(snapshot.sublist(3));
         }
 
         // Local storage syncs
