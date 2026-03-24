@@ -61,6 +61,7 @@ Helm charts: `backend/charts/{backend-listen,pusher,diarizer,vad,deepgram-self-h
 - **vad** (`modal/main.py`) — GPU. `/v1/vad` (voice activity detection) and `/v1/speaker-identification` (speaker matching). Called by backend only (`HOSTED_VAD_API_URL`, `HOSTED_SPEECH_PROFILE_API_URL`).
 - **deepgram** — STT. Streaming uses self-hosted (`DEEPGRAM_SELF_HOSTED_URL`) or cloud based on `DEEPGRAM_SELF_HOSTED_ENABLED` (`utils/stt/streaming.py`). Pre-recorded always uses Deepgram cloud (`utils/stt/pre_recorded.py`). Called by backend and pusher.
 - **notifications-job** (`modal/job.py`) — Cron job, reads Firestore/Redis, sends push notifications.
+- **speech profile sharing** (`backend/routers/speech_profile.py`, `backend/database/users.py`) — owner can share/revoke/remove speech-profile access via `users/{owner}/shared_speech_profiles/{target}` (`shared_with_uid`, `revoked_at`). `/v4/listen` loads active shared owner embeddings into `person_embeddings_cache` as `shared:{owner_uid}` at session start. Shared IDs are valid for transcript/retrieval name resolution, but are excluded from pusher speaker-sample extraction.
 
 Keep this map up to date. When adding, removing, or changing inter-service calls, update this section and the matching section in `CLAUDE.md`.
 
