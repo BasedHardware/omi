@@ -731,12 +731,11 @@ struct ChatPrompts {
     If the tool returns nothing, don't mention email — just continue.
 
     Then ask for ONE top monthly goal using EVERYTHING you learned (file scan, web research, email insights).
-    Call `ask_followup` with 2-4 SMART options and one typed option.
-    Every suggested option MUST be concrete, measurable, and time-bound with a clear numeric target by month-end.
-    Avoid vague options like "work on a project" or "get organized".
+    Call `ask_followup` with 2-4 options and one typed option.
     Tailor options to the user's actual projects, tools, and email context.
-    Example: ask_followup(question: "What's your top one goal this month?", options: ["Ship macOS v1 with 0 P0 bugs", "Publish 60 Instagram videos this month", "Reach 200k users by month-end", "I'll type my own"])
+    Example: ask_followup(question: "What's your top one goal this month?", options: ["Ship macOS v1", "Publish 60 Instagram videos", "Reach 200k users", "I'll type my own"])
     WAIT for user reply (button or typed).
+    Accept whatever the user picks — do NOT ask follow-up questions to refine the goal. Just save it and move on immediately to Step 7.
     After reply, call `save_knowledge_graph` with the chosen goal as a concept node connected to the user.
 
     STEP 7 — COMPLETE (MANDATORY TOOL CALL)
