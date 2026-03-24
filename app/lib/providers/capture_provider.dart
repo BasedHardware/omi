@@ -127,6 +127,11 @@ class CaptureProvider extends ChangeNotifier
   List<int> _systemAudioBuffer = [];
   bool _systemAudioCaching = true;
 
+  // Phone mic WAL: buffer for splitting variable-sized PCM chunks into fixed-size frames
+  List<int> _phoneMicWalBuffer = [];
+  static const int _phoneMicFrameSize = 320; // 10ms at 16kHz, 16-bit mono = 320 bytes
+  bool _phoneMicWalActive = false;
+
   bool _isLoadingInProgressConversation = false;
 
   // BLE streaming metrics
@@ -977,11 +982,28 @@ class CaptureProvider extends ChangeNotifier
     // prepare
     await changeAudioRecordProfile(audioCodec: BleAudioCodec.pcm16, sampleRate: 16000);
 
+    // Initialize WAL for phone mic recording
+    _phoneMicWalBuffer = [];
+    _phoneMicWalActive = true;
+    await _wal.getSyncs().phone.onAudioCodecChanged(BleAudioCodec.pcm16);
+    _wal.getSyncs().phone.setDeviceInfo('phone-mic', 'Phone Microphone');
+    setIsWalSupported(true);
+
     // record
     await ServiceManager.instance().mic.start(
       onByteReceived: (bytes) {
-        if (_socket?.state == SocketServiceState.connected) {
-          _socket?.send(bytes);
+        // Always buffer to WAL for offline resilience.
+        // Split variable-sized mic chunks into fixed-size frames for WAL timing math.
+        _phoneMicWalBuffer.addAll(bytes);
+        while (_phoneMicWalBuffer.length >= _phoneMicFrameSize) {
+          final frame = _phoneMicWalBuffer.sublist(0, _phoneMicFrameSize);
+          _phoneMicWalBuffer = _phoneMicWalBuffer.sublist(_phoneMicFrameSize);
+          _wal.getSyncs().phone.onByteStream(frame);
+
+          if (_socket?.state == SocketServiceState.connected) {
+            _socket?.send(frame);
+            _wal.getSyncs().phone.onBytesSync(frame);
+          }
         }
       },
       onRecording: () {
@@ -997,6 +1019,18 @@ class CaptureProvider extends ChangeNotifier
   }
 
   stopStreamRecording() async {
+    // Flush remaining phone mic WAL buffer before stopping
+    if (_phoneMicWalActive) {
+      if (_phoneMicWalBuffer.isNotEmpty) {
+        _wal.getSyncs().phone.onByteStream(_phoneMicWalBuffer);
+        if (_socket?.state == SocketServiceState.connected) {
+          _socket?.send(_phoneMicWalBuffer);
+          _wal.getSyncs().phone.onBytesSync(_phoneMicWalBuffer);
+        }
+      }
+      _phoneMicWalBuffer = [];
+      _phoneMicWalActive = false;
+    }
     await _cleanupCurrentState();
     ServiceManager.instance().mic.stop();
     updateRecordingState(RecordingState.stop);
