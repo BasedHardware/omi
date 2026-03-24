@@ -45,13 +45,4 @@ if [[ ${#missing_files[@]} -gt 0 ]]; then
   dart run build_runner build --delete-conflicting-outputs
 fi
 
-flutter test test/providers/capture_provider_test.dart
-flutter test test/widgets/transcription_paused_warning_test.dart
-flutter test test/widgets/transcript_test.dart
-flutter test test/unit/audio_player_utils_test.dart
-flutter test test/unit/get_tag_test.dart
-flutter test test/unit/env_test.dart
-flutter test test/unit/testflight_preferences_test.dart
-flutter test test/unit/multipart_401_retry_test.dart
-flutter test test/unit/token_refresh_loop_test.dart
-flutter test test/widgets/usage_page_fair_use_banner_test.dart
+flutter test

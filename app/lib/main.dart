@@ -23,6 +23,7 @@ import 'package:opus_flutter/opus_flutter.dart' as opus_flutter;
 import 'package:provider/provider.dart';
 import 'package:talker_flutter/talker_flutter.dart';
 
+import 'package:omi/app_globals.dart';
 import 'package:omi/backend/http/shared.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/core/app_shell.dart';
@@ -245,7 +246,8 @@ class MyApp extends StatefulWidget {
   static _MyAppState of(BuildContext context) => context.findAncestorStateOfType<_MyAppState>()!;
 
   // The navigator key is necessary to navigate using static methods
-  static final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
+  // Delegates to the extracted globalNavigatorKey so files don't need to import main.dart
+  static GlobalKey<NavigatorState> get navigatorKey => globalNavigatorKey;
 }
 
 class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
@@ -298,13 +300,8 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
           update: (BuildContext context, value, MessageProvider? previous) =>
               (previous?..updateAppProvider(value)) ?? MessageProvider(),
         ),
-        ChangeNotifierProxyProvider4<
-          ConversationProvider,
-          MessageProvider,
-          PeopleProvider,
-          UsageProvider,
-          CaptureProvider
-        >(
+        ChangeNotifierProxyProvider4<ConversationProvider, MessageProvider, PeopleProvider, UsageProvider,
+            CaptureProvider>(
           create: (context) => CaptureProvider(),
           update: (BuildContext context, conversation, message, people, usage, CaptureProvider? previous) =>
               (previous?..updateProviderInstances(conversation, message, people, usage)) ?? CaptureProvider(),

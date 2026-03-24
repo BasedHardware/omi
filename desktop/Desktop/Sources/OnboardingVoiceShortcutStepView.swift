@@ -53,20 +53,7 @@ struct OnboardingVoiceShortcutStepView: View {
   }
 
   private var leftPane: some View {
-    VStack(alignment: .leading, spacing: 0) {
-      HStack {
-        Button(action: onSkip) {
-          Text("Skip")
-            .font(.system(size: 13))
-            .foregroundColor(OmiColors.textTertiary)
-        }
-        .buttonStyle(.plain)
-
-        Spacer()
-      }
-      .padding(.horizontal, 28)
-      .padding(.top, 18)
-
+    VStack(spacing: 0) {
       Spacer()
 
       VStack(alignment: .leading, spacing: 18) {
@@ -104,8 +91,19 @@ struct OnboardingVoiceShortcutStepView: View {
       .ignoresSafeArea()
 
       VStack(spacing: 28) {
+        HStack {
+          Spacer()
+          Button(action: onSkip) {
+            Text("Skip")
+              .font(.system(size: 13))
+              .foregroundColor(OmiColors.textTertiary)
+          }
+          .buttonStyle(.plain)
+        }
+        .padding(.bottom, -16)
+
         VStack(alignment: .leading, spacing: 18) {
-          Text("Hold the key, then ask omi something")
+          Text("Press this shortcut.\nDo the buttons light up?")
             .font(.system(size: 22, weight: .semibold))
             .foregroundColor(Color.black.opacity(0.86))
             .frame(maxWidth: .infinity, alignment: .leading)

@@ -19,6 +19,20 @@ final class APIKeyService: ObservableObject {
     @Published private(set) var isLoaded: Bool = false
     @Published private(set) var loadError: String?
 
+    /// The in-flight fetch task, so callers can await it instead of polling.
+    private var fetchTask: Task<Void, Never>?
+
+    /// Start fetching keys in the background. Callers can await via waitForKeys().
+    func startFetchingKeys() {
+        fetchTask = Task { await self.fetchKeys() }
+    }
+
+    /// Wait for keys to be loaded. Returns immediately if already loaded.
+    func waitForKeys() async {
+        if isLoaded { return }
+        await fetchTask?.value
+    }
+
     /// Effective key: developer override > backend-provided > nil
     var effectiveDeepgramKey: String? {
         nonEmpty(UserDefaults.standard.string(forKey: "dev_deepgram_api_key")) ?? deepgramApiKey

@@ -9,7 +9,7 @@ import 'package:omi/gen/pigeon_communicator.g.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
-import 'package:omi/main.dart';
+import 'package:omi/app_globals.dart';
 import 'package:omi/pages/home/firmware_update.dart';
 import 'package:omi/pages/home/omiglass_ota_update.dart';
 import 'package:omi/providers/capture_provider.dart';
@@ -164,7 +164,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
         );
         if (batteryLevel < 20 && !_hasLowBatteryAlerted) {
           _hasLowBatteryAlerted = true;
-          final ctx = MyApp.navigatorKey.currentContext;
+          final ctx = globalNavigatorKey.currentContext;
           NotificationService.instance.createNotification(
             title: ctx?.l10n.lowBatteryAlertTitle ?? "Low Battery Alert",
             body: ctx?.l10n.lowBatteryAlertBody ?? "Your device is running low on battery. Time for a recharge! 🔋",
@@ -341,6 +341,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     ServiceManager.instance().wal.getSyncs().flashPage.setDevice(null);
 
     PlatformManager.instance.crashReporter.logInfo('Omi Device Disconnected');
+
     MixpanelManager().deviceDisconnected();
     BatteryWidgetService().updateBatteryInfo(
       deviceName: SharedPreferencesUtil().deviceName,
@@ -443,7 +444,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     try {
       if (SharedPreferencesUtil().companionAssociationPrompted) return;
       if (await BleHostApi().hasCompanionDeviceAssociation()) return;
-      final ctx = MyApp.navigatorKey.currentContext;
+      final ctx = globalNavigatorKey.currentContext;
       if (ctx == null || !ctx.mounted) return;
       SharedPreferencesUtil().companionAssociationPrompted = true;
       await showDialog(
@@ -485,7 +486,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
       if (_havingNewFirmware) {
         // Use a small delay to ensure the UI is ready
         Future.delayed(const Duration(milliseconds: 500), () {
-          final context = MyApp.navigatorKey.currentContext;
+          final context = globalNavigatorKey.currentContext;
           if (context != null) {
             showFirmwareUpdateDialog(context);
           }

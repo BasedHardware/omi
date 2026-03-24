@@ -13,6 +13,7 @@ enum OnboardingChatPersistence {
   private static let explorationTextKey = "onboardingExplorationText"
   private static let explorationCompletedKey = "onboardingExplorationCompleted"
   private static let toolCompletedKey = "onboardingToolCompleted"
+  private static let goalCompletedKey = "onboardingGoalCompleted"
 
   /// Save the ACP session ID for resume after restart
   static func saveSessionId(_ sessionId: String) {
@@ -67,6 +68,16 @@ enum OnboardingChatPersistence {
     UserDefaults.standard.bool(forKey: toolCompletedKey)
   }
 
+  /// Mark that the user answered the monthly goal question
+  static func markGoalCompleted() {
+    UserDefaults.standard.set(true, forKey: goalCompletedKey)
+  }
+
+  /// Whether the user already answered the monthly goal question
+  static var isGoalCompleted: Bool {
+    UserDefaults.standard.bool(forKey: goalCompletedKey)
+  }
+
   /// Clear all persisted onboarding data
   static func clear() {
     UserDefaults.standard.removeObject(forKey: sessionIdKey)
@@ -74,6 +85,7 @@ enum OnboardingChatPersistence {
     UserDefaults.standard.removeObject(forKey: explorationTextKey)
     UserDefaults.standard.removeObject(forKey: explorationCompletedKey)
     UserDefaults.standard.removeObject(forKey: toolCompletedKey)
+    UserDefaults.standard.removeObject(forKey: goalCompletedKey)
     // Clean up legacy messages key if present
     UserDefaults.standard.removeObject(forKey: "onboardingChatMessages")
   }
@@ -310,7 +322,7 @@ struct OnboardingChatView: View {
                   HStack(spacing: 6) {
                     Image(systemName: "gear")
                       .font(.system(size: 12))
-                    Text("Open System Settings")
+                    Text("Open \(permissionLabel(pending)) Settings")
                       .font(.system(size: 13, weight: .medium))
                   }
                   .foregroundColor(.white)
@@ -503,6 +515,19 @@ struct OnboardingChatView: View {
     }
   }
 
+  /// Human-readable label for a permission type
+  private func permissionLabel(_ type: String) -> String {
+    switch type {
+    case "screen_recording": return "Screen Recording"
+    case "microphone": return "Microphone"
+    case "accessibility": return "Accessibility"
+    case "automation": return "Automation"
+    case "notifications": return "Notification"
+    case "full_disk_access": return "Full Disk Access"
+    default: return "System"
+    }
+  }
+
   /// Open System Settings to the correct pane for a permission type
   private func openSettingsForPermission(_ type: String) {
     let urlString: String? = {
@@ -633,6 +658,9 @@ struct OnboardingChatView: View {
       }
 
       Task {
+        // Wait for API keys (fetchKeys() started during sign-in as a parallel Task)
+        await APIKeyService.shared.waitForKeys()
+
         // Start bridge eagerly so it's ready by the time we need to send
         async let bridgeWarmup: () = chatProvider.warmupBridge()
 
@@ -677,6 +705,10 @@ struct OnboardingChatView: View {
       OnboardingChatPersistence.saveMidOnboarding()
 
       Task {
+        // Wait for API keys (fetchKeys() started during sign-in as a parallel Task).
+        // The bridge needs ANTHROPIC_API_KEY in the environment before launching.
+        await APIKeyService.shared.waitForKeys()
+
         await chatProvider.sendMessage(
           "Hi, I just installed omi!",
           systemPromptPrefix: systemPrompt
@@ -718,6 +750,10 @@ struct OnboardingChatView: View {
           !chatProvider.isSending
         else { return }
 
+        guard OnboardingChatPersistence.isGoalCompleted || OnboardingChatPersistence.isToolCompleted else {
+          log("OnboardingChatView: Skipping auto-unlock — goal not yet completed")
+          return
+        }
         log("OnboardingChatView: Auto-unlocking Continue after recovered onboarding went idle")
         onboardingCompleted = true
       }
@@ -882,9 +918,13 @@ struct OnboardingChatView: View {
       || lower.contains("#1 goal")
       || lower.contains("number 1 goal")
       || lower.contains("goal this month")
+      || lower.contains("monthly goal")
       || lower.contains("what's your #1 goal")
       || lower.contains("top priority")
       || lower.contains("priority right now")
+      || lower.contains("goal ideas")
+      || lower.contains("main goal")
+      || lower.contains("biggest goal")
   }
 
   private func isDailyTaskQuestion(_ text: String) -> Bool {
@@ -1124,6 +1164,7 @@ struct OnboardingChatView: View {
       _ = try? await GoalStorage.shared.syncServerGoal(goal)
       createdGoalTitles.insert(dedupeKey)
       awaitingGoalInput = false
+      OnboardingChatPersistence.markGoalCompleted()
       log(
         "OnboardingChat: Created goal from onboarding input: \(title) (\(config.goalType.rawValue), target: \(config.targetValue))"
       )
@@ -1581,6 +1622,7 @@ struct OnboardingChatView: View {
           gmailReadingText = summaryText
           gmailReadingCompleted = true
           gmailReadingRunning = false
+          ChatToolExecutor.emailInsightsText = summaryText
         }
 
         log(
@@ -1645,6 +1687,7 @@ struct OnboardingChatView: View {
           calendarReadingText = summaryText
           calendarReadingCompleted = true
           calendarReadingRunning = false
+          ChatToolExecutor.calendarInsightsText = summaryText
         }
 
         log(

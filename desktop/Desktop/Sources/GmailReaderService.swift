@@ -1,4 +1,5 @@
 import Foundation
+import Security
 
 // MARK: - Models
 
@@ -57,22 +58,42 @@ private struct BrowserConfig {
         keychainService: "Chrome Safe Storage",
         cookiePath: "\(home)/Library/Application Support/Google/Chrome/Default/Cookies"
       ),
-      BrowserConfig(
-        name: "Brave",
-        keychainService: "Brave Safe Storage",
-        cookiePath: "\(home)/Library/Application Support/BraveSoftware/Brave-Browser/Default/Cookies"
-      ),
-      BrowserConfig(
-        name: "Edge",
-        keychainService: "Microsoft Edge Safe Storage",
-        cookiePath: "\(home)/Library/Application Support/Microsoft Edge/Default/Cookies"
-      ),
-      BrowserConfig(
-        name: "Vivaldi",
-        keychainService: "Vivaldi Safe Storage",
-        cookiePath: "\(home)/Library/Application Support/Vivaldi/Default/Cookies"
-      ),
     ]
+  }
+}
+
+// MARK: - Shared Keychain Cache
+
+/// Shared cache for browser keychain passwords so we only prompt once per session.
+/// Used by both GmailReaderService and CalendarReaderService.
+final class BrowserKeychainCache: @unchecked Sendable {
+  static let shared = BrowserKeychainCache()
+  private var cache: [String: String] = [:]
+  private let lock = NSLock()
+
+  func get(_ service: String) -> String? {
+    lock.lock()
+    defer { lock.unlock() }
+    return cache[service]
+  }
+
+  func set(_ service: String, password: String) {
+    lock.lock()
+    defer { lock.unlock() }
+    cache[service] = password
+  }
+
+  /// Returns true if we already tried and failed for this service
+  func hasAttempted(_ service: String) -> Bool {
+    lock.lock()
+    defer { lock.unlock() }
+    return cache.keys.contains(service)
+  }
+
+  func markFailed(_ service: String) {
+    lock.lock()
+    defer { lock.unlock() }
+    cache[service] = ""
   }
 }
 
@@ -539,23 +560,35 @@ actor GmailReaderService {
   // MARK: - Keychain
 
   private func getKeychainPassword(service: String) -> String? {
-    let process = Process()
-    process.executableURL = URL(fileURLWithPath: "/usr/bin/security")
-    process.arguments = ["find-generic-password", "-s", service, "-w"]
-    let pipe = Pipe()
-    let errPipe = Pipe()
-    process.standardOutput = pipe
-    process.standardError = errPipe
-    do {
-      try process.run()
-      process.waitUntilExit()
-      guard process.terminationStatus == 0 else { return nil }
-      let output = String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)?
-        .trimmingCharacters(in: .whitespacesAndNewlines)
-      return output?.isEmpty == false ? output : nil
-    } catch {
+    // Check shared cache first to avoid duplicate keychain prompts
+    if let cached = BrowserKeychainCache.shared.get(service) {
+      return cached.isEmpty ? nil : cached
+    }
+    if BrowserKeychainCache.shared.hasAttempted(service) {
       return nil
     }
+
+    let query: [String: Any] = [
+      kSecClass as String: kSecClassGenericPassword,
+      kSecAttrService as String: service,
+      kSecReturnData as String: true,
+      kSecMatchLimit as String: kSecMatchLimitOne,
+    ]
+    var result: AnyObject?
+    let status = SecItemCopyMatching(query as CFDictionary, &result)
+    guard status == errSecSuccess, let data = result as? Data,
+      let password = String(data: data, encoding: .utf8)
+    else {
+      BrowserKeychainCache.shared.markFailed(service)
+      if status != errSecItemNotFound {
+        log("GmailReaderService: Keychain lookup for '\(service)' failed with status \(status)")
+      }
+      return nil
+    }
+    if !password.isEmpty {
+      BrowserKeychainCache.shared.set(service, password: password)
+    }
+    return password.isEmpty ? nil : password
   }
 
   // MARK: - Date Parsing

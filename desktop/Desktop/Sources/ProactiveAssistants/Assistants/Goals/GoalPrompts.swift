@@ -1,7 +1,7 @@
 import Foundation
 
 /// Prompts for AI-powered goal features
-/// Adapted from backend: /Users/matthewdi/omi/backend/utils/llm/goals.py
+/// Adapted from backend: backend/utils/llm/goals.py
 enum GoalPrompts {
 
     /// Prompt for getting actionable advice on achieving a goal

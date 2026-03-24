@@ -559,8 +559,11 @@ class AnalyticsManager {
   }
 
   /// Track when the Claude agent bridge fails to start or errors
-  func chatAgentError(error: String) {
-    let props: [String: Any] = ["error": error]
+  func chatAgentError(error: String, rawError: String? = nil) {
+    var props: [String: Any] = ["error": error]
+    if let raw = rawError, raw != error {
+      props["raw_error"] = String(raw.prefix(500))
+    }
     MixpanelManager.shared.track(
       "Chat Agent Error", properties: props.compactMapValues { $0 as? MixpanelType })
     PostHogManager.shared.track("chat_agent_error", properties: props)
