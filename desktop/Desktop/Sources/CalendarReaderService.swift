@@ -573,6 +573,14 @@ sys.exit(0)
     // MARK: - Keychain
 
     private func getKeychainPassword(service: String) -> String? {
+        // Check shared cache first to avoid duplicate keychain prompts
+        if let cached = BrowserKeychainCache.shared.get(service) {
+            return cached.isEmpty ? nil : cached
+        }
+        if BrowserKeychainCache.shared.hasAttempted(service) {
+            return nil
+        }
+
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
@@ -584,10 +592,14 @@ sys.exit(0)
         guard status == errSecSuccess, let data = result as? Data,
             let password = String(data: data, encoding: .utf8)
         else {
+            BrowserKeychainCache.shared.markFailed(service)
             if status != errSecItemNotFound {
                 log("CalendarReaderService: Keychain lookup for '\(service)' failed with status \(status)")
             }
             return nil
+        }
+        if !password.isEmpty {
+            BrowserKeychainCache.shared.set(service, password: password)
         }
         return password.isEmpty ? nil : password
     }
