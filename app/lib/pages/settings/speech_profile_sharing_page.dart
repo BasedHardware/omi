@@ -137,30 +137,28 @@ class _SpeechProfileSharingPageState extends State<SpeechProfileSharingPage> {
         ? '${info.uid.substring(0, 6)}...${info.uid.substring(info.uid.length - 4)}'
         : info.uid;
     return Theme(
-      data: Theme.of(context).copyWith(
-        splashColor: Colors.transparent,
-        highlightColor: Colors.transparent,
-      ),
+      data: Theme.of(context).copyWith(splashColor: Colors.transparent, highlightColor: Colors.transparent),
       child: ListTile(
-      title: Text(
-        hasName ? info.name : truncatedUid,
-        style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w500),
+        title: Text(
+          hasName ? info.name : truncatedUid,
+          style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w500),
+        ),
+        subtitle: hasName
+            ? GestureDetector(
+                onTap: () {
+                  Clipboard.setData(ClipboardData(text: info.uid));
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.l10n.userIdCopied)));
+                },
+                child: Text(truncatedUid, style: TextStyle(color: Colors.grey.shade600, fontSize: 13)),
+              )
+            : null,
+        onLongPress: () {
+          Clipboard.setData(ClipboardData(text: info.uid));
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.l10n.userIdCopied)));
+        },
+        trailing: trailing,
       ),
-      subtitle: hasName
-          ? GestureDetector(
-              onTap: () {
-                Clipboard.setData(ClipboardData(text: info.uid));
-                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.l10n.userIdCopied)));
-              },
-              child: Text(truncatedUid, style: TextStyle(color: Colors.grey.shade600, fontSize: 13)),
-            )
-          : null,
-      onLongPress: () {
-        Clipboard.setData(ClipboardData(text: info.uid));
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.l10n.userIdCopied)));
-      },
-      trailing: trailing,
-    ));
+    );
   }
 
   Widget _buildActionPill(String label, Color color, VoidCallback onTap) {

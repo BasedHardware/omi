@@ -51,8 +51,7 @@ Future<void> showShareSpeechProfileDialog(
               content: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text(context.l10n.enterUserIdToShare,
-                      style: const TextStyle(color: Color(0xFF8E8E93), fontSize: 14)),
+                  Text(context.l10n.enterUserIdToShare, style: const TextStyle(color: Color(0xFF8E8E93), fontSize: 14)),
                   const SizedBox(height: 12),
                   TextField(
                     controller: controller,
@@ -61,10 +60,8 @@ Future<void> showShareSpeechProfileDialog(
                     decoration: InputDecoration(
                       hintText: context.l10n.userId,
                       hintStyle: const TextStyle(color: Color(0xFF636366)),
-                      enabledBorder:
-                          const UnderlineInputBorder(borderSide: BorderSide(color: Color(0xFF3C3C43))),
-                      focusedBorder:
-                          const UnderlineInputBorder(borderSide: BorderSide(color: Colors.white)),
+                      enabledBorder: const UnderlineInputBorder(borderSide: BorderSide(color: Color(0xFF3C3C43))),
+                      focusedBorder: const UnderlineInputBorder(borderSide: BorderSide(color: Colors.white)),
                     ),
                   ),
                 ],
@@ -72,8 +69,7 @@ Future<void> showShareSpeechProfileDialog(
               actions: [
                 TextButton(
                   onPressed: isSharing ? null : () => Navigator.pop(ctx),
-                  child:
-                      Text(context.l10n.cancel, style: TextStyle(color: isSharing ? Colors.grey : Colors.white)),
+                  child: Text(context.l10n.cancel, style: TextStyle(color: isSharing ? Colors.grey : Colors.white)),
                 ),
                 TextButton(
                   onPressed: isSharing

@@ -511,12 +511,12 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
                               data.speakerId == omiSpeakerId
                                   ? 'omi'
                                   : (suggestion != null && person == null
-                                      ? '${suggestion.personName}?'
-                                      : (person?.name ??
-                                          widget.sharedSpeakerNames[data.speakerId] ??
-                                          context.l10n.speakerWithId(
-                                            '${TranscriptSegment.getDisplaySpeakerId(data.speakerId, widget.segments)}',
-                                          ))),
+                                        ? '${suggestion.personName}?'
+                                        : (person?.name ??
+                                              widget.sharedSpeakerNames[data.speakerId] ??
+                                              context.l10n.speakerWithId(
+                                                '${TranscriptSegment.getDisplaySpeakerId(data.speakerId, widget.segments)}',
+                                              ))),
                               style: TextStyle(
                                 color: data.speakerId == omiSpeakerId || person != null
                                     ? Colors.grey.shade300
@@ -534,7 +534,7 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
                               child: CircularProgressIndicator(
                                 strokeWidth: 1.5,
                                 valueColor: AlwaysStoppedAnimation(Colors.white),
-                              )
+                              ),
                             ),
                           ],
                         ],
