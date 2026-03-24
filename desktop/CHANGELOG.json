@@ -1,10 +1,15 @@
 {
-  "unreleased": [
-    "Fixed DMG installer to show drag-to-Applications arrow",
-    "App now comes to foreground after sign-in across Spaces",
-    "Screenshots start capturing earlier during onboarding"
-  ],
+  "unreleased": [],
   "releases": [
+    {
+      "version": "0.11.169",
+      "date": "2026-03-24",
+      "changes": [
+        "Fixed DMG installer to show drag-to-Applications arrow",
+        "App now comes to foreground after sign-in across Spaces",
+        "Screenshots start capturing earlier during onboarding"
+      ]
+    },
     {
       "version": "0.11.168",
       "date": "2026-03-24",
