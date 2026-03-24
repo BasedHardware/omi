@@ -2655,11 +2655,13 @@
   "switchApiConfirmBody": "Lülituda keskkonnale {environment}? Peate rakenduse sulgema ja uuesti avama, et muudatused jõustuksid.",
   "switchApiConfirmTitle": "Vaheta API keskkonda",
   "switchRequiresRestart": "Vahetamine nõuab rakenduse taaskäivitamist",
+  "officialTeamName": "Nooto Team",
+  "conversationsEmptyStateMessage": "Alustage vestlust Nootoga või salvestage üks oma seadmega",
+  "tasksCleanTodayTitle": "Puhastada tänased ülesanded?",
+  "tasksCleanTodayMessage": "See eemaldab ainult tähtajad",
   "shared": "Jagatud",
   "onlyYouCanSeeConversation": "Ainult teie saate seda vestlust näha",
   "anyoneWithLinkCanView": "Igaüks, kellel on link, saab vaadata",
-  "tasksCleanTodayTitle": "Puhastada tänased ülesanded?",
-  "tasksCleanTodayMessage": "See eemaldab ainult tähtajad",
   "tasksOverdue": "Tähtaja ületanud",
   "answerTheCallFrom": "Vasta konesle numbrilt",
   "callAlreadyInProgress": "Kone on juba pooleli",
@@ -2794,7 +2796,5 @@
         "type": "String"
       }
     }
-  },
-  "officialTeamName": "Nooto Team",
-  "conversationsEmptyStateMessage": "Alustage vestlust Nootoga või salvestage üks oma seadmega"
+  }
 }

@@ -10075,14 +10075,16 @@
   "@apiEnvSavedRestartRequired": {
     "description": "Snackbar message after saving API environment preference"
   },
+  "officialTeamName": "Nooto Team",
+  "conversationsEmptyStateMessage": "Start a conversation with Nooto or record one with your device",
+  "tasksCleanTodayTitle": "Clean today's tasks?",
+  "tasksCleanTodayMessage": "This will only remove deadlines",
   "shared": "Shared",
   "onlyYouCanSeeConversation": "Only you can see this conversation",
   "anyoneWithLinkCanView": "Anyone with the link can view",
-  "tasksCleanTodayTitle": "Clean today's tasks?",
   "@tasksCleanTodayTitle": {
     "description": "Confirmation dialog title for cleaning today task deadlines"
   },
-  "tasksCleanTodayMessage": "This will only remove deadlines",
   "@tasksCleanTodayMessage": {
     "description": "Confirmation dialog message for cleaning today task deadlines"
   },
@@ -10347,7 +10349,5 @@
     }
   },
   "transcriptionPaused": "Recording, reconnecting",
-  "transcriptionPausedReconnecting": "Still recording — reconnecting to transcription...",
-  "officialTeamName": "Nooto Team",
-  "conversationsEmptyStateMessage": "Start a conversation with Nooto or record one with your device"
+  "transcriptionPausedReconnecting": "Still recording — reconnecting to transcription..."
 }

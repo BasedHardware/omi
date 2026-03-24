@@ -2690,11 +2690,13 @@
   "switchApiConfirmBody": "Переключиться на {environment}? Вам нужно будет закрыть и снова открыть приложение, чтобы изменения вступили в силу.",
   "switchApiConfirmTitle": "Переключение среды API",
   "switchRequiresRestart": "Переключение требует перезапуска приложения",
+  "officialTeamName": "Nooto Team",
+  "conversationsEmptyStateMessage": "Начните разговор с Nooto или запишите его с помощью вашего устройства",
+  "tasksCleanTodayTitle": "Очистить задачи на сегодня?",
+  "tasksCleanTodayMessage": "Это удалит только сроки",
   "shared": "Общий",
   "onlyYouCanSeeConversation": "Только вы можете видеть этот разговор",
   "anyoneWithLinkCanView": "Любой, у кого есть ссылка, может просматривать",
-  "tasksCleanTodayTitle": "Очистить задачи на сегодня?",
-  "tasksCleanTodayMessage": "Это удалит только сроки",
   "tasksOverdue": "Просроченные",
   "answerTheCallFrom": "Ответьте на звонок от",
   "callAlreadyInProgress": "Звонок уже идет",
@@ -2829,7 +2831,5 @@
         "type": "String"
       }
     }
-  },
-  "officialTeamName": "Nooto Team",
-  "conversationsEmptyStateMessage": "Начните разговор с Nooto или запишите его с помощью вашего устройства"
+  }
 }

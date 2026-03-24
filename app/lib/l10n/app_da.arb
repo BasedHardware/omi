@@ -2664,11 +2664,13 @@
   "switchApiConfirmBody": "Skift til {environment}? Du skal lukke og genåbne appen for at ændringerne træder i kraft.",
   "switchApiConfirmTitle": "Skift API-miljø",
   "switchRequiresRestart": "Skift kræver genstart af appen",
+  "officialTeamName": "Nooto Team",
+  "conversationsEmptyStateMessage": "Start en samtale med Nooto eller optag en med din enhed",
+  "tasksCleanTodayTitle": "Ryd dagens opgaver?",
+  "tasksCleanTodayMessage": "Dette fjerner kun deadlines",
   "shared": "Delt",
   "onlyYouCanSeeConversation": "Kun du kan se denne samtale",
   "anyoneWithLinkCanView": "Alle med linket kan se",
-  "tasksCleanTodayTitle": "Ryd dagens opgaver?",
-  "tasksCleanTodayMessage": "Dette fjerner kun deadlines",
   "tasksOverdue": "Forfaldne",
   "answerTheCallFrom": "Besvar opkaldet fra",
   "callAlreadyInProgress": "Et opkald er allerede i gang",
@@ -2803,7 +2805,5 @@
         "type": "String"
       }
     }
-  },
-  "officialTeamName": "Nooto Team",
-  "conversationsEmptyStateMessage": "Start en samtale med Nooto eller optag en med din enhed"
+  }
 }

@@ -2690,11 +2690,13 @@
   "switchApiConfirmBody": "Przełączyć na {environment}? Aby zmiany zaczęły obowiązywać, musisz zamknąć i ponownie otworzyć aplikację.",
   "switchApiConfirmTitle": "Przełącz środowisko API",
   "switchRequiresRestart": "Przełączenie wymaga ponownego uruchomienia aplikacji",
+  "officialTeamName": "Nooto Team",
+  "conversationsEmptyStateMessage": "Rozpocznij rozmowę z Nooto lub nagraj jedną za pomocą swojego urządzenia",
+  "tasksCleanTodayTitle": "Wyczyścić dzisiejsze zadania?",
+  "tasksCleanTodayMessage": "To usunie tylko terminy",
   "shared": "Udostępniono",
   "onlyYouCanSeeConversation": "Tylko Ty możesz zobaczyć tę rozmowę",
   "anyoneWithLinkCanView": "Każdy, kto ma link, może wyświetlić",
-  "tasksCleanTodayTitle": "Wyczyścić dzisiejsze zadania?",
-  "tasksCleanTodayMessage": "To usunie tylko terminy",
   "tasksOverdue": "Zaległe",
   "answerTheCallFrom": "Odbierz polaczenie od",
   "callAlreadyInProgress": "Polaczenie jest juz w toku",
@@ -2829,7 +2831,5 @@
         "type": "String"
       }
     }
-  },
-  "officialTeamName": "Nooto Team",
-  "conversationsEmptyStateMessage": "Rozpocznij rozmowę z Nooto lub nagraj jedną za pomocą swojego urządzenia"
+  }
 }

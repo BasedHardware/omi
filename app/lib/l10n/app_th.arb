@@ -2655,11 +2655,13 @@
   "switchApiConfirmBody": "สลับไปที่ {environment}? คุณจะต้องปิดและเปิดแอปใหม่เพื่อให้การเปลี่ยนแปลงมีผล",
   "switchApiConfirmTitle": "สลับสภาพแวดล้อม API",
   "switchRequiresRestart": "การสลับต้องรีสตาร์ทแอป",
+  "officialTeamName": "Nooto Team",
+  "conversationsEmptyStateMessage": "เริ่มการสนทนากับ Nooto หรือบันทึกการสนทนาด้วยอุปกรณ์ของคุณ",
+  "tasksCleanTodayTitle": "ล้างงานของวันนี้ไหม?",
+  "tasksCleanTodayMessage": "การดำเนินการนี้จะลบเฉพาะกำหนดส่ง",
   "shared": "แชร์แล้ว",
   "onlyYouCanSeeConversation": "เฉพาะคุณเท่านั้นที่สามารถดูการสนทนานี้ได้",
   "anyoneWithLinkCanView": "ใครก็ตามที่มีลิงก์สามารถดูได้",
-  "tasksCleanTodayTitle": "ล้างงานของวันนี้ไหม?",
-  "tasksCleanTodayMessage": "การดำเนินการนี้จะลบเฉพาะกำหนดส่ง",
   "tasksOverdue": "เกินกำหนด",
   "answerTheCallFrom": "รับสายจาก",
   "callAlreadyInProgress": "มีสายโทรศัพท์อยู่แล้ว",
@@ -2794,7 +2796,5 @@
         "type": "String"
       }
     }
-  },
-  "officialTeamName": "Nooto Team",
-  "conversationsEmptyStateMessage": "เริ่มการสนทนากับ Nooto หรือบันทึกการสนทนาด้วยอุปกรณ์ของคุณ"
+  }
 }

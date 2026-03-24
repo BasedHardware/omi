@@ -2655,11 +2655,13 @@
   "switchApiConfirmBody": "Bytte til {environment}? Du må lukke og åpne appen på nytt for at endringene skal tre i kraft.",
   "switchApiConfirmTitle": "Bytt API-miljø",
   "switchRequiresRestart": "Bytting krever omstart av appen",
+  "officialTeamName": "Nooto Team",
+  "conversationsEmptyStateMessage": "Start en samtale med Nooto eller ta opp en med enheten din",
+  "tasksCleanTodayTitle": "Rydde dagens oppgaver?",
+  "tasksCleanTodayMessage": "Dette vil kun fjerne frister",
   "shared": "Delt",
   "onlyYouCanSeeConversation": "Bare du kan se denne samtalen",
   "anyoneWithLinkCanView": "Alle med lenken kan se",
-  "tasksCleanTodayTitle": "Rydde dagens oppgaver?",
-  "tasksCleanTodayMessage": "Dette vil kun fjerne frister",
   "tasksOverdue": "Forfalt",
   "answerTheCallFrom": "Svar pa anropet fra",
   "callAlreadyInProgress": "En samtale pagar allerede",
@@ -2794,7 +2796,5 @@
         "type": "String"
       }
     }
-  },
-  "officialTeamName": "Nooto Team",
-  "conversationsEmptyStateMessage": "Start en samtale med Nooto eller ta opp en med enheten din"
+  }
 }

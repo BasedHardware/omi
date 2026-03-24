@@ -2655,11 +2655,13 @@
   "switchApiConfirmBody": "Pārslēgt uz {environment}? Jums būs jāaizver un vēlreiz jāatver lietotne, lai izmaiņas stātos spēkā.",
   "switchApiConfirmTitle": "Pārslēgt API vidi",
   "switchRequiresRestart": "Pārslēgšanai nepieciešama lietotnes pārstartēšana",
+  "officialTeamName": "Nooto Team",
+  "conversationsEmptyStateMessage": "Sāciet sarunu ar Nooto vai ierakstiet vienu ar savu ierīci",
+  "tasksCleanTodayTitle": "Notīrīt šodienas uzdevumus?",
+  "tasksCleanTodayMessage": "Tas noņems tikai termiņus",
   "shared": "Kopīgots",
   "onlyYouCanSeeConversation": "Tikai jūs varat redzēt šo sarunu",
   "anyoneWithLinkCanView": "Ikviens, kam ir saite, var skatīt",
-  "tasksCleanTodayTitle": "Notīrīt šodienas uzdevumus?",
-  "tasksCleanTodayMessage": "Tas noņems tikai termiņus",
   "tasksOverdue": "Nokavētas",
   "answerTheCallFrom": "Atbildiet uz zvanu no",
   "callAlreadyInProgress": "Zvans jau notiek",
@@ -2794,7 +2796,5 @@
         "type": "String"
       }
     }
-  },
-  "officialTeamName": "Nooto Team",
-  "conversationsEmptyStateMessage": "Sāciet sarunu ar Nooto vai ierakstiet vienu ar savu ierīci"
+  }
 }

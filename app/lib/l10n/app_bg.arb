@@ -2624,11 +2624,13 @@
   "switchApiConfirmBody": "Превключване към {environment}? Ще трябва да затворите и отворите отново приложението, за да влязат в сила промените.",
   "switchApiConfirmTitle": "Превключване на API среда",
   "switchRequiresRestart": "Превключването изисква рестартиране на приложението",
+  "officialTeamName": "Nooto Team",
+  "conversationsEmptyStateMessage": "Започнете разговор с Nooto или запишете един с вашето устройство",
+  "tasksCleanTodayTitle": "Да изчистим днешните задачи?",
+  "tasksCleanTodayMessage": "Това само ще премахне крайните срокове",
   "shared": "Споделено",
   "onlyYouCanSeeConversation": "Само вие можете да видите този разговор",
   "anyoneWithLinkCanView": "Всеки с връзката може да преглежда",
-  "tasksCleanTodayTitle": "Да изчистим днешните задачи?",
-  "tasksCleanTodayMessage": "Това само ще премахне крайните срокове",
   "tasksOverdue": "Просрочени",
   "phoneCallsWithOmi": "Телефонни обаждания с Omi",
   "phoneCallsSubtitle": "Обаждайте се с транскрипция в реално време",
@@ -2763,7 +2765,5 @@
         "type": "String"
       }
     }
-  },
-  "officialTeamName": "Nooto Team",
-  "conversationsEmptyStateMessage": "Започнете разговор с Nooto или запишете един с вашето устройство"
+  }
 }

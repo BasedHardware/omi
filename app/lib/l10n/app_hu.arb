@@ -2751,11 +2751,13 @@
   "switchApiConfirmBody": "Váltás erre: {environment}? A módosítások érvényesítéséhez be kell zárnod és újra kell nyitnod az alkalmazást.",
   "switchApiConfirmTitle": "API környezet váltása",
   "switchRequiresRestart": "A váltás az alkalmazás újraindítását igényli",
+  "officialTeamName": "Nooto Team",
+  "conversationsEmptyStateMessage": "Kezdjen beszélgetést a Nootóval, vagy rögzítsen egyet az eszközével",
+  "tasksCleanTodayTitle": "Törlöd a mai feladatokat?",
+  "tasksCleanTodayMessage": "Ez csak a határidőket távolítja el",
   "shared": "Megosztott",
   "onlyYouCanSeeConversation": "Csak Ön láthatja ezt a beszélgetést",
   "anyoneWithLinkCanView": "Bárki megtekintheti, akinek megvan a link",
-  "tasksCleanTodayTitle": "Törlöd a mai feladatokat?",
-  "tasksCleanTodayMessage": "Ez csak a határidőket távolítja el",
   "tasksOverdue": "Lejárt",
   "answerTheCallFrom": "Fogadja a hivast innen",
   "callAlreadyInProgress": "Egy hivas mar folyamatban van",
@@ -2890,7 +2892,5 @@
         "type": "String"
       }
     }
-  },
-  "officialTeamName": "Nooto Team",
-  "conversationsEmptyStateMessage": "Kezdjen beszélgetést a Nootóval, vagy rögzítsen egyet az eszközével"
+  }
 }

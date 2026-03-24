@@ -2660,11 +2660,13 @@
   "switchApiConfirmBody": "Prepnúť na {environment}? Budete musieť zatvoriť a znova otvoriť aplikáciu, aby sa zmeny prejavili.",
   "switchApiConfirmTitle": "Prepnúť API prostredie",
   "switchRequiresRestart": "Prepnutie vyžaduje reštart aplikácie",
+  "officialTeamName": "Nooto Team",
+  "conversationsEmptyStateMessage": "Začnite konverzáciu s Nooto alebo nahrajte jednu svojím zariadením",
+  "tasksCleanTodayTitle": "Vyčistiť dnešné úlohy?",
+  "tasksCleanTodayMessage": "Týmto sa odstránia iba termíny",
   "shared": "Zdieľané",
   "onlyYouCanSeeConversation": "Túto konverzáciu môžete vidieť iba vy",
   "anyoneWithLinkCanView": "Ktokoľvek s odkazom môže zobraziť",
-  "tasksCleanTodayTitle": "Vyčistiť dnešné úlohy?",
-  "tasksCleanTodayMessage": "Týmto sa odstránia iba termíny",
   "tasksOverdue": "Po termíne",
   "answerTheCallFrom": "Odpovedzte na hovor od",
   "callAlreadyInProgress": "Hovor uz prebieha",
@@ -2799,7 +2801,5 @@
         "type": "String"
       }
     }
-  },
-  "officialTeamName": "Nooto Team",
-  "conversationsEmptyStateMessage": "Začnite konverzáciu s Nooto alebo nahrajte jednu svojím zariadením"
+  }
 }

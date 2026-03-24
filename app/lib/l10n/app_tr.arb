@@ -2690,11 +2690,13 @@
   "switchApiConfirmBody": "{environment} ortamına geçilsin mi? Değişikliklerin geçerli olması için uygulamayı kapatıp yeniden açmanız gerekecek.",
   "switchApiConfirmTitle": "API Ortamını Değiştir",
   "switchRequiresRestart": "Değiştirme uygulama yeniden başlatma gerektirir",
+  "officialTeamName": "Nooto Team",
+  "conversationsEmptyStateMessage": "Nooto ile bir sohbet başlatın veya cihazınızla bir tane kaydedin",
+  "tasksCleanTodayTitle": "Bugünün görevleri temizlensin mi?",
+  "tasksCleanTodayMessage": "Bu işlem yalnızca son tarihleri kaldırır",
   "shared": "Paylaşıldı",
   "onlyYouCanSeeConversation": "Bu konuşmayı yalnızca siz görebilirsiniz",
   "anyoneWithLinkCanView": "Bağlantıya sahip olan herkes görüntüleyebilir",
-  "tasksCleanTodayTitle": "Bugünün görevleri temizlensin mi?",
-  "tasksCleanTodayMessage": "Bu işlem yalnızca son tarihleri kaldırır",
   "tasksOverdue": "Gecikmiş",
   "answerTheCallFrom": "Su numaradan gelen aramayi cevaplayin",
   "callAlreadyInProgress": "Bir arama zaten devam ediyor",
@@ -2829,7 +2831,5 @@
         "type": "String"
       }
     }
-  },
-  "officialTeamName": "Nooto Team",
-  "conversationsEmptyStateMessage": "Nooto ile bir sohbet başlatın veya cihazınızla bir tane kaydedin"
+  }
 }

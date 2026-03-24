@@ -2655,11 +2655,13 @@
   "switchApiConfirmBody": "Comutați la {environment}? Va trebui să închideți și să redeschideți aplicația pentru ca modificările să aibă efect.",
   "switchApiConfirmTitle": "Comutare mediu API",
   "switchRequiresRestart": "Comutarea necesită repornirea aplicației",
+  "officialTeamName": "Nooto Team",
+  "conversationsEmptyStateMessage": "Începeți o conversație cu Nooto sau înregistrați una cu dispozitivul dvs.",
+  "tasksCleanTodayTitle": "Curăți sarcinile de azi?",
+  "tasksCleanTodayMessage": "Aceasta va elimina doar termenele limită",
   "shared": "Partajat",
   "onlyYouCanSeeConversation": "Doar tu poți vedea această conversație",
   "anyoneWithLinkCanView": "Oricine are linkul poate vizualiza",
-  "tasksCleanTodayTitle": "Curăți sarcinile de azi?",
-  "tasksCleanTodayMessage": "Aceasta va elimina doar termenele limită",
   "tasksOverdue": "Întârziate",
   "answerTheCallFrom": "Raspundeti la apelul de la",
   "callAlreadyInProgress": "Un apel este deja in curs",
@@ -2794,7 +2796,5 @@
         "type": "String"
       }
     }
-  },
-  "officialTeamName": "Nooto Team",
-  "conversationsEmptyStateMessage": "Începeți o conversație cu Nooto sau înregistrați una cu dispozitivul dvs."
+  }
 }

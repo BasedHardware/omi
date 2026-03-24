@@ -2697,11 +2697,13 @@
   "switchApiConfirmBody": "Beralih ke {environment}? Anda perlu menutup dan membuka kembali aplikasi agar perubahan diterapkan.",
   "switchApiConfirmTitle": "Ganti Lingkungan API",
   "switchRequiresRestart": "Pergantian memerlukan restart aplikasi",
+  "officialTeamName": "Nooto Team",
+  "conversationsEmptyStateMessage": "Mulai percakapan dengan Nooto atau rekam satu dengan perangkat Anda",
+  "tasksCleanTodayTitle": "Bersihkan tugas hari ini?",
+  "tasksCleanTodayMessage": "Ini hanya akan menghapus tenggat waktu",
   "shared": "Dibagikan",
   "onlyYouCanSeeConversation": "Hanya Anda yang dapat melihat percakapan ini",
   "anyoneWithLinkCanView": "Siapa pun yang memiliki tautan dapat melihat",
-  "tasksCleanTodayTitle": "Bersihkan tugas hari ini?",
-  "tasksCleanTodayMessage": "Ini hanya akan menghapus tenggat waktu",
   "tasksOverdue": "Terlambat",
   "answerTheCallFrom": "Jawab panggilan dari",
   "callAlreadyInProgress": "Panggilan sedang berlangsung",
@@ -2836,7 +2838,5 @@
         "type": "String"
       }
     }
-  },
-  "officialTeamName": "Nooto Team",
-  "conversationsEmptyStateMessage": "Mulai percakapan dengan Nooto atau rekam satu dengan perangkat Anda"
+  }
 }

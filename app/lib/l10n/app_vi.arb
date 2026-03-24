@@ -2660,11 +2660,13 @@
   "switchApiConfirmBody": "Chuyển sang {environment}? Bạn sẽ cần đóng và mở lại ứng dụng để các thay đổi có hiệu lực.",
   "switchApiConfirmTitle": "Chuyển đổi môi trường API",
   "switchRequiresRestart": "Chuyển đổi yêu cầu khởi động lại ứng dụng",
+  "officialTeamName": "Nooto Team",
+  "conversationsEmptyStateMessage": "Bắt đầu cuộc trò chuyện với Nooto hoặc ghi âm một cuộc bằng thiết bị của bạn",
+  "tasksCleanTodayTitle": "Dọn các nhiệm vụ hôm nay?",
+  "tasksCleanTodayMessage": "Thao tác này chỉ xóa thời hạn",
   "shared": "Đã chia sẻ",
   "onlyYouCanSeeConversation": "Chỉ bạn mới có thể xem cuộc trò chuyện này",
   "anyoneWithLinkCanView": "Bất kỳ ai có liên kết đều có thể xem",
-  "tasksCleanTodayTitle": "Dọn các nhiệm vụ hôm nay?",
-  "tasksCleanTodayMessage": "Thao tác này chỉ xóa thời hạn",
   "tasksOverdue": "Quá hạn",
   "answerTheCallFrom": "Trả lời cuộc gọi từ",
   "callAlreadyInProgress": "Một cuộc gọi đang diễn ra",
@@ -2799,7 +2801,5 @@
         "type": "String"
       }
     }
-  },
-  "officialTeamName": "Nooto Team",
-  "conversationsEmptyStateMessage": "Bắt đầu cuộc trò chuyện với Nooto hoặc ghi âm một cuộc bằng thiết bị của bạn"
+  }
 }

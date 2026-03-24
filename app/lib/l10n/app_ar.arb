@@ -2622,11 +2622,13 @@
   "switchApiConfirmBody": "التبديل إلى {environment}؟ ستحتاج إلى إغلاق التطبيق وإعادة فتحه لتطبيق التغييرات.",
   "switchApiConfirmTitle": "تبديل بيئة API",
   "switchRequiresRestart": "يتطلب التبديل إعادة تشغيل التطبيق",
+  "officialTeamName": "Nooto Team",
+  "conversationsEmptyStateMessage": "ابدأ محادثة مع Nooto أو سجّل واحدة بجهازك",
+  "tasksCleanTodayTitle": "تنظيف مهام اليوم؟",
+  "tasksCleanTodayMessage": "سيؤدي هذا فقط إلى إزالة المواعيد النهائية",
   "shared": "مشترك",
   "onlyYouCanSeeConversation": "أنت فقط من يمكنه رؤية هذه المحادثة",
   "anyoneWithLinkCanView": "يمكن لأي شخص لديه الرابط العرض",
-  "tasksCleanTodayTitle": "تنظيف مهام اليوم؟",
-  "tasksCleanTodayMessage": "سيؤدي هذا فقط إلى إزالة المواعيد النهائية",
   "tasksOverdue": "متأخرة",
   "phoneCallsWithOmi": "المكالمات الهاتفية مع Omi",
   "phoneCallsSubtitle": "إجراء مكالمات مع النسخ الفوري",
@@ -2761,7 +2763,5 @@
         "type": "String"
       }
     }
-  },
-  "officialTeamName": "Nooto Team",
-  "conversationsEmptyStateMessage": "ابدأ محادثة مع Nooto أو سجّل واحدة بجهازك"
+  }
 }

@@ -2655,11 +2655,13 @@
   "switchApiConfirmBody": "Εναλλαγή σε {environment}; Θα πρέπει να κλείσετε και να ανοίξετε ξανά την εφαρμογή για να εφαρμοστούν οι αλλαγές.",
   "switchApiConfirmTitle": "Εναλλαγή περιβάλλοντος API",
   "switchRequiresRestart": "Η εναλλαγή απαιτεί επανεκκίνηση της εφαρμογής",
+  "officialTeamName": "Nooto Team",
+  "conversationsEmptyStateMessage": "Ξεκινήστε μια συνομιλία με το Nooto ή ηχογραφήστε μία με τη συσκευή σας",
+  "tasksCleanTodayTitle": "Να καθαριστούν οι σημερινές εργασίες;",
+  "tasksCleanTodayMessage": "Αυτό θα αφαιρέσει μόνο τις προθεσμίες",
   "shared": "Κοινόχρηστο",
   "onlyYouCanSeeConversation": "Μόνο εσείς μπορείτε να δείτε αυτή τη συνομιλία",
   "anyoneWithLinkCanView": "Οποιοσδήποτε έχει τον σύνδεσμο μπορεί να δει",
-  "tasksCleanTodayTitle": "Να καθαριστούν οι σημερινές εργασίες;",
-  "tasksCleanTodayMessage": "Αυτό θα αφαιρέσει μόνο τις προθεσμίες",
   "tasksOverdue": "Εκπρόθεσμα",
   "answerTheCallFrom": "Απαντήστε στην κλήση από",
   "callAlreadyInProgress": "Μια κλήση είναι ήδη σε εξέλιξη",
@@ -2794,7 +2796,5 @@
         "type": "String"
       }
     }
-  },
-  "officialTeamName": "Nooto Team",
-  "conversationsEmptyStateMessage": "Ξεκινήστε μια συνομιλία με το Nooto ή ηχογραφήστε μία με τη συσκευή σας"
+  }
 }

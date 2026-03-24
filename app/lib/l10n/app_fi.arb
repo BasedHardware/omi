@@ -2655,11 +2655,13 @@
   "switchApiConfirmBody": "Vaihdetaanko ympäristöön {environment}? Sinun on suljettava ja avattava sovellus uudelleen, jotta muutokset tulevat voimaan.",
   "switchApiConfirmTitle": "Vaihda API-ympäristö",
   "switchRequiresRestart": "Vaihto vaatii sovelluksen uudelleenkäynnistyksen",
+  "officialTeamName": "Nooto Team",
+  "conversationsEmptyStateMessage": "Aloita keskustelu Nooton kanssa tai nauhoita yksi laitteellasi",
+  "tasksCleanTodayTitle": "Siivota tämän päivän tehtävät?",
+  "tasksCleanTodayMessage": "Tämä poistaa vain määräajat",
   "shared": "Jaettu",
   "onlyYouCanSeeConversation": "Vain sinä voit nähdä tämän keskustelun",
   "anyoneWithLinkCanView": "Kuka tahansa linkin haltija voi katsella",
-  "tasksCleanTodayTitle": "Siivota tämän päivän tehtävät?",
-  "tasksCleanTodayMessage": "Tämä poistaa vain määräajat",
   "tasksOverdue": "Myöhässä",
   "answerTheCallFrom": "Vastaa puheluun numerosta",
   "callAlreadyInProgress": "Puhelu on jo kaynnissa",
@@ -2794,7 +2796,5 @@
         "type": "String"
       }
     }
-  },
-  "officialTeamName": "Nooto Team",
-  "conversationsEmptyStateMessage": "Aloita keskustelu Nooton kanssa tai nauhoita yksi laitteellasi"
+  }
 }

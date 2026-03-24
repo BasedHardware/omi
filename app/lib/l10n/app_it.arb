@@ -2655,11 +2655,13 @@
   "switchApiConfirmBody": "Passare a {environment}? Dovrai chiudere e riaprire l'app perché le modifiche abbiano effetto.",
   "switchApiConfirmTitle": "Cambiare ambiente API?",
   "switchRequiresRestart": "Il cambio di ambiente richiede il riavvio dell'app",
+  "officialTeamName": "Nooto Team",
+  "conversationsEmptyStateMessage": "Avvia una conversazione con Nooto o registrane una con il tuo dispositivo",
+  "tasksCleanTodayTitle": "Pulire le attività di oggi?",
+  "tasksCleanTodayMessage": "Questo rimuoverà solo le scadenze",
   "shared": "Condiviso",
   "onlyYouCanSeeConversation": "Solo tu puoi vedere questa conversazione",
   "anyoneWithLinkCanView": "Chiunque abbia il link può visualizzare",
-  "tasksCleanTodayTitle": "Pulire le attività di oggi?",
-  "tasksCleanTodayMessage": "Questo rimuoverà solo le scadenze",
   "tasksOverdue": "Scadute",
   "answerTheCallFrom": "Rispondi alla chiamata da",
   "callAlreadyInProgress": "Una chiamata e gia in corso",
@@ -2794,7 +2796,5 @@
         "type": "String"
       }
     }
-  },
-  "officialTeamName": "Nooto Team",
-  "conversationsEmptyStateMessage": "Avvia una conversazione con Nooto o registrane una con il tuo dispositivo"
+  }
 }
