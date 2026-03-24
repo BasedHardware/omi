@@ -446,81 +446,275 @@ class TestSegmentDeduplication:
 
 
 # ---------------------------------------------------------------------------
-# 7. Behavioral test — process_segment with mocked dependencies
+# 7. Behavioral test — real process_segment with mocked dependencies
 # ---------------------------------------------------------------------------
 
+# Stub heavy modules before importing process_segment
+import sys
+from types import ModuleType
+from unittest.mock import MagicMock, patch
 
-class TestProcessSegmentBehavior:
-    """Behavioral tests that exercise the actual process_segment function logic."""
+_stub_modules = [
+    'database._client',
+    'database.redis_db',
+    'database.fair_use',
+    'database.users',
+    'database.user_usage',
+    'database.conversations',
+    'firebase_admin',
+    'firebase_admin.messaging',
+    'opuslib',
+    'pydub',
+    'utils.other.endpoints',
+    'utils.other.storage',
+    'utils.encryption',
+    'utils.stt.pre_recorded',
+    'utils.stt.vad',
+    'utils.fair_use',
+    'utils.subscription',
+    'utils.conversations.process_conversation',
+]
+for mod_name in _stub_modules:
+    if mod_name not in sys.modules:
+        sys.modules[mod_name] = ModuleType(mod_name)
 
-    def test_process_segment_error_collection_pattern(self):
-        """
-        Simulate the exact pattern used in process_segment:
-        - Thread-safe error collection via lock
-        - Empty transcript → error appended, no memory created
-        - Exception → error appended via except clause
-        """
-        errors = []
-        lock = threading.Lock()
-        response = {'updated_memories': set(), 'new_memories': set()}
+# Set up required module attributes
+sys.modules['database.redis_db'].r = MagicMock()
+sys.modules['database._client'].db = MagicMock()
+# database.conversations needs specific function stubs
+_mock_conversations_db = sys.modules['database.conversations']
+_mock_conversations_db.get_closest_conversation_to_timestamps = MagicMock()
+_mock_conversations_db.update_conversation_segments = MagicMock()
+_mock_conversations_db.update_conversation = MagicMock()
+_mock_conversations_db.get_conversation = MagicMock()
+sys.modules['opuslib'].Decoder = MagicMock()
+sys.modules['pydub'].AudioSegment = MagicMock()
+sys.modules['utils.other.endpoints'].get_current_user_uid = MagicMock()
+sys.modules['utils.other.storage'].get_syncing_file_temporal_signed_url = MagicMock(return_value='https://fake.url')
+sys.modules['utils.other.storage'].delete_syncing_temporal_file = MagicMock()
+sys.modules['utils.other.storage'].download_audio_chunks_and_merge = MagicMock()
+sys.modules['utils.other.storage'].get_or_create_merged_audio = MagicMock()
+sys.modules['utils.other.storage'].get_merged_audio_signed_url = MagicMock()
+sys.modules['utils.encryption'].encrypt = MagicMock()
+sys.modules['utils.stt.pre_recorded'].deepgram_prerecorded = MagicMock()
+sys.modules['utils.stt.pre_recorded'].postprocess_words = MagicMock()
+sys.modules['utils.stt.vad'].vad_is_empty = MagicMock()
+sys.modules['utils.fair_use'].FAIR_USE_ENABLED = False
+sys.modules['utils.fair_use'].record_speech_ms = MagicMock()
+sys.modules['utils.fair_use'].get_rolling_speech_ms = MagicMock()
+sys.modules['utils.fair_use'].check_soft_caps = MagicMock()
+sys.modules['utils.fair_use'].is_hard_restricted = MagicMock(return_value=False)
+sys.modules['utils.fair_use'].trigger_classifier_if_needed = MagicMock()
+sys.modules['utils.subscription'].has_transcription_credits = MagicMock(return_value=True)
+sys.modules['utils.conversations.process_conversation'].process_conversation = MagicMock()
 
-        def simulate_empty_transcript(path, uid, resp, lk, errs):
-            """Simulates process_segment when deepgram returns empty."""
-            try:
-                words = []  # Empty from deepgram
-                transcript_segments = []  # postprocess_words returns empty
-                if not transcript_segments:
-                    error_msg = f'Transcription returned empty for segment {path}'
-                    with lk:
-                        errs.append(error_msg)
-                    return
-            except Exception as e:
-                with lk:
-                    errs.append(f'Failed to process segment {path}: {e}')
 
-        def simulate_exception(path, uid, resp, lk, errs):
-            """Simulates process_segment when deepgram raises."""
-            try:
-                raise ConnectionError("Deepgram connection refused")
-            except Exception as e:
-                with lk:
-                    errs.append(f'Failed to process segment {path}: {e}')
+class TestProcessSegmentReal:
+    """Tests that call the real process_segment function with mocked deps."""
 
-        def simulate_success(path, uid, resp, lk, errs):
-            """Simulates process_segment when everything works."""
-            try:
-                with lk:
-                    resp['new_memories'].add(f'conv-{path}')
-            except Exception as e:
-                with lk:
-                    errs.append(f'Failed to process segment {path}: {e}')
+    def _import_process_segment(self):
+        """Import the real function (stubs already set up above)."""
+        from routers.sync import process_segment
 
-        threads = [
-            threading.Thread(target=simulate_success, args=('/tmp/seg1.wav', 'uid', response, lock, errors)),
-            threading.Thread(target=simulate_empty_transcript, args=('/tmp/seg2.wav', 'uid', response, lock, errors)),
-            threading.Thread(target=simulate_exception, args=('/tmp/seg3.wav', 'uid', response, lock, errors)),
-            threading.Thread(target=simulate_success, args=('/tmp/seg4.wav', 'uid', response, lock, errors)),
+        return process_segment
+
+    def _common_patches(self):
+        """Common patches for all real process_segment tests.
+        Includes time.sleep patch to prevent 480s delay from delete_file thread."""
+        return [
+            patch('routers.sync.delete_syncing_temporal_file'),
+            patch('routers.sync.get_syncing_file_temporal_signed_url', return_value='https://fake'),
+            patch('routers.sync.time.sleep'),  # Prevent 480s sleep in delete_file thread
         ]
 
-        chunk_size = 5
-        for i in range(0, len(threads), chunk_size):
-            [t.start() for t in threads[i : i + chunk_size]]
-            [t.join() for t in threads[i : i + chunk_size]]
+    def test_empty_transcript_appends_error(self):
+        """Real process_segment: empty Deepgram result → error collected, no memory."""
+        process_segment = self._import_process_segment()
 
-        # 2 succeeded, 2 failed
-        assert len(response['new_memories']) == 2
-        assert len(errors) == 2
+        response = {'updated_memories': set(), 'new_memories': set()}
+        errors = []
+        lock = threading.Lock()
 
-        # Verify error messages are descriptive
-        assert any('Transcription returned empty' in e for e in errors)
-        assert any('Deepgram connection refused' in e for e in errors)
+        with patch('routers.sync.deepgram_prerecorded', return_value=([], 'en')), patch(
+            'routers.sync.postprocess_words', return_value=[]
+        ), patch('routers.sync.delete_syncing_temporal_file'), patch(
+            'routers.sync.get_syncing_file_temporal_signed_url', return_value='https://fake'
+        ), patch(
+            'routers.sync.time.sleep'
+        ):
+            from models.conversation import ConversationSource
 
-        # Status code logic
-        total_segments = 4
-        failed_segments = len(errors)
-        successful_segments = total_segments - failed_segments
+            process_segment('/tmp/1700000000.wav', 'uid', response, lock, errors, ConversationSource.omi, False)
 
-        assert failed_segments == 2
-        assert successful_segments == 2
-        # Partial failure → 207
-        assert successful_segments > 0 and failed_segments > 0
+        assert len(errors) == 1
+        assert 'Transcription returned empty' in errors[0]
+        assert len(response['new_memories']) == 0
+        assert len(response['updated_memories']) == 0
+
+    def test_exception_caught_and_collected(self):
+        """Real process_segment: Deepgram raises → exception caught, error collected."""
+        process_segment = self._import_process_segment()
+
+        response = {'updated_memories': set(), 'new_memories': set()}
+        errors = []
+        lock = threading.Lock()
+
+        with patch('routers.sync.deepgram_prerecorded', side_effect=ConnectionError('timeout')), patch(
+            'routers.sync.delete_syncing_temporal_file'
+        ), patch('routers.sync.get_syncing_file_temporal_signed_url', return_value='https://fake'), patch(
+            'routers.sync.time.sleep'
+        ):
+            from models.conversation import ConversationSource
+
+            process_segment('/tmp/1700000000.wav', 'uid', response, lock, errors, ConversationSource.omi, False)
+
+        assert len(errors) == 1
+        assert 'Failed to process segment' in errors[0]
+        assert 'timeout' in errors[0]
+
+    def _make_real_segment(self):
+        """Create a real TranscriptSegment for Pydantic validation."""
+        from models.transcript_segment import TranscriptSegment
+
+        return TranscriptSegment(text='hello', speaker='SPEAKER_00', is_user=False, start=0.0, end=5.0)
+
+    def test_success_adds_to_new_memories(self):
+        """Real process_segment: success path creates conversation and adds to response."""
+        process_segment = self._import_process_segment()
+
+        response = {'updated_memories': set(), 'new_memories': set()}
+        errors = []
+        lock = threading.Lock()
+
+        real_segment = self._make_real_segment()
+        mock_conv = MagicMock()
+        mock_conv.id = 'conv-abc123'
+
+        with patch('routers.sync.deepgram_prerecorded', return_value=([{'text': 'hello'}], 'en')), patch(
+            'routers.sync.postprocess_words', return_value=[real_segment]
+        ), patch('routers.sync.get_timestamp_from_path', return_value=1700000000.0), patch(
+            'routers.sync.get_closest_conversation_to_timestamps', return_value=None
+        ), patch(
+            'routers.sync.process_conversation', return_value=mock_conv
+        ), patch(
+            'routers.sync.delete_syncing_temporal_file'
+        ), patch(
+            'routers.sync.get_syncing_file_temporal_signed_url', return_value='https://fake'
+        ), patch(
+            'routers.sync.time.sleep'
+        ):
+            from models.conversation import ConversationSource
+
+            process_segment('/tmp/1700000000.wav', 'uid', response, lock, errors, ConversationSource.omi, False)
+
+        assert len(errors) == 0, f"Unexpected errors: {errors}"
+        assert 'conv-abc123' in response['new_memories']
+
+    def test_mixed_threaded_execution(self):
+        """Real process_segment in threads: mixed success/failure, errors collected."""
+        process_segment = self._import_process_segment()
+
+        response = {'updated_memories': set(), 'new_memories': set()}
+        errors = []
+        lock = threading.Lock()
+
+        call_count = [0]
+        call_lock = threading.Lock()
+
+        def mock_deepgram_mixed(url, speakers_count=3, attempts=0, return_language=True):
+            with call_lock:
+                call_count[0] += 1
+                n = call_count[0]
+            if n == 2:
+                return [], 'en'  # Segment 2 fails (empty transcript)
+            return [{'text': 'hello'}], 'en'
+
+        real_segment = self._make_real_segment()
+        mock_conv = MagicMock()
+        mock_conv.id = 'conv-success'
+
+        def mock_postprocess(words, offset):
+            if not words:
+                return []
+            return [real_segment]
+
+        with patch('routers.sync.deepgram_prerecorded', side_effect=mock_deepgram_mixed), patch(
+            'routers.sync.postprocess_words', side_effect=mock_postprocess
+        ), patch('routers.sync.get_timestamp_from_path', return_value=1700000000.0), patch(
+            'routers.sync.get_closest_conversation_to_timestamps', return_value=None
+        ), patch(
+            'routers.sync.process_conversation', return_value=mock_conv
+        ), patch(
+            'routers.sync.delete_syncing_temporal_file'
+        ), patch(
+            'routers.sync.get_syncing_file_temporal_signed_url', return_value='https://fake'
+        ), patch(
+            'routers.sync.time.sleep'
+        ):
+            from models.conversation import ConversationSource
+
+            threads = [
+                threading.Thread(
+                    target=process_segment,
+                    args=(f'/tmp/{i}.wav', 'uid', response, lock, errors, ConversationSource.omi, False),
+                )
+                for i in range(3)
+            ]
+            for t in threads:
+                t.start()
+            for t in threads:
+                t.join()
+
+        # 2 succeeded, 1 failed
+        assert len(errors) == 1, f"Expected 1 error, got {len(errors)}: {errors}"
+        assert 'Transcription returned empty' in errors[0]
+        assert len(response['new_memories']) >= 1  # At least 1 success
+
+    def test_dedup_skips_existing_segments_on_retry(self):
+        """Real process_segment: retry with existing segments → dedup skips merge."""
+        process_segment = self._import_process_segment()
+
+        response = {'updated_memories': set(), 'new_memories': set()}
+        errors = []
+        lock = threading.Lock()
+
+        mock_segment = MagicMock()
+        mock_segment.end = 5.0
+        mock_segment.dict.return_value = {'start': 0.0, 'end': 5.0, 'text': 'hello', 'speaker': 'SPEAKER_00'}
+
+        # Simulate existing conversation with the SAME segments (retry scenario)
+        existing_conv = {
+            'id': 'conv-existing',
+            'started_at': MagicMock(timestamp=MagicMock(return_value=1700000000.0)),
+            'finished_at': MagicMock(timestamp=MagicMock(return_value=1700000005.0)),
+            'transcript_segments': [
+                {'start': 0.0, 'end': 5.0, 'text': 'hello', 'speaker': 'SPEAKER_00', 'timestamp': 1700000000.0},
+            ],
+            'discarded': False,
+        }
+        # Make finished_at comparable
+        from datetime import datetime, timezone
+
+        existing_conv['finished_at'] = datetime.fromtimestamp(1700000005.0, tz=timezone.utc)
+
+        with patch('routers.sync.deepgram_prerecorded', return_value=([{'text': 'hello'}], 'en')), patch(
+            'routers.sync.postprocess_words', return_value=[mock_segment]
+        ), patch('routers.sync.get_timestamp_from_path', return_value=1700000000.0), patch(
+            'routers.sync.get_closest_conversation_to_timestamps', return_value=existing_conv
+        ), patch(
+            'routers.sync.update_conversation_segments'
+        ) as mock_update, patch(
+            'routers.sync.delete_syncing_temporal_file'
+        ), patch(
+            'routers.sync.get_syncing_file_temporal_signed_url', return_value='https://fake'
+        ), patch(
+            'routers.sync.time.sleep'
+        ):
+            from models.conversation import ConversationSource
+
+            process_segment('/tmp/1700000000.wav', 'uid', response, lock, errors, ConversationSource.omi, False)
+
+        # Dedup should have skipped the merge — update_conversation_segments NOT called
+        mock_update.assert_not_called()
+        assert len(errors) == 0
+        assert 'conv-existing' in response['updated_memories']
