@@ -1899,8 +1899,8 @@ class _ManualFirmwareFlashPage extends StatefulWidget {
     required this.fileName,
     required this.device,
   });
- 
-  @override
+
+  @override 
   State<_ManualFirmwareFlashPage> createState() => _ManualFirmwareFlashPageState();
 }
 
