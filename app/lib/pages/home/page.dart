@@ -83,7 +83,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> {
   void initState() {
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (mounted) {
-        context.read<DeviceProvider>().periodicConnect('coming from HomePageWrapper', boundDeviceOnly: true);
+        context.read<DeviceProvider>().initiateConnection('HomePageWrapper', boundDeviceOnly: true);
       }
       if (SharedPreferencesUtil().notificationsEnabled) {
         NotificationService.instance.register();
