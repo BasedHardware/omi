@@ -471,18 +471,22 @@ class LocalWalSyncImpl implements LocalWalSync {
 
         batchesCompleted++;
 
-        // Mark WALs as synced even on partial failure — backend already processed
-        // what it could, and segment dedup on the backend prevents duplicates if
-        // the app retries later.
         for (var j = left; j <= right; j++) {
           if (j < wals.length) {
             var wal = wals[j];
-            wals[j].status = WalStatus.synced;
-            wals[j].isSyncing = false;
-            wals[j].syncStartedAt = null;
-            wals[j].syncEtaSeconds = null;
-
-            listener.onWalSynced(wal);
+            if (partialRes.hasPartialFailure) {
+              // Keep WALs retryable on partial failure so failed segments get
+              // another chance. Backend dedup prevents duplicate transcripts.
+              wals[j].isSyncing = false;
+              wals[j].syncStartedAt = null;
+              wals[j].syncEtaSeconds = null;
+            } else {
+              wals[j].status = WalStatus.synced;
+              wals[j].isSyncing = false;
+              wals[j].syncStartedAt = null;
+              wals[j].syncEtaSeconds = null;
+              listener.onWalSynced(wal);
+            }
           }
         }
       } catch (e) {
@@ -589,13 +593,19 @@ class LocalWalSyncImpl implements LocalWalSync {
         });
       }
 
-      walToSync.status = WalStatus.synced;
-      walToSync.isSyncing = false;
-      walToSync.syncStartedAt = null;
-      walToSync.syncEtaSeconds = null;
-
-      DebugLogManager.logInfo('Single WAL upload succeeded', {'walId': wal.id});
-      listener.onWalSynced(wal);
+      if (partialRes.hasPartialFailure) {
+        // Keep WAL retryable so failed segments get another chance
+        walToSync.isSyncing = false;
+        walToSync.syncStartedAt = null;
+        walToSync.syncEtaSeconds = null;
+      } else {
+        walToSync.status = WalStatus.synced;
+        walToSync.isSyncing = false;
+        walToSync.syncStartedAt = null;
+        walToSync.syncEtaSeconds = null;
+        DebugLogManager.logInfo('Single WAL upload succeeded', {'walId': wal.id});
+        listener.onWalSynced(wal);
+      }
     } catch (e) {
       Logger.debug('Single WAL sync failed: $e');
       DebugLogManager.logError(e, null, 'Single WAL upload failed: ${e.toString()}', {'walId': wal.id});
