@@ -64,6 +64,44 @@ void main() {
     });
   });
 
+  group('WAL header properties', () {
+    test('Opus walHeaderSize is 3 (BLE firmware header)', () {
+      expect(BleAudioCodec.opus.walHeaderSize, 3);
+    });
+
+    test('OpusFS320 walHeaderSize is 3', () {
+      expect(BleAudioCodec.opusFS320.walHeaderSize, 3);
+    });
+
+    test('PCM16 walHeaderSize is 1 (app index byte)', () {
+      expect(BleAudioCodec.pcm16.walHeaderSize, 1);
+    });
+
+    test('PCM8 walHeaderSize is 1 (app index byte)', () {
+      expect(BleAudioCodec.pcm8.walHeaderSize, 1);
+    });
+
+    test('unknown codec walHeaderSize is 0', () {
+      expect(BleAudioCodec.unknown.walHeaderSize, 0);
+    });
+
+    test('aac walHeaderSize is 0', () {
+      expect(BleAudioCodec.aac.walHeaderSize, 0);
+    });
+
+    test('Opus syncMatchBytes equals walHeaderSize (3)', () {
+      expect(BleAudioCodec.opus.syncMatchBytes, 3);
+    });
+
+    test('PCM16 syncMatchBytes equals walHeaderSize (1)', () {
+      expect(BleAudioCodec.pcm16.syncMatchBytes, 1);
+    });
+
+    test('unknown codec syncMatchBytes falls back to 4 (content matching)', () {
+      expect(BleAudioCodec.unknown.syncMatchBytes, 4);
+    });
+  });
+
   group('Phone mic WAL frame splitting', () {
     // Simulates the frame splitting logic from capture_provider.dart streamRecording()
     List<List<int>> splitIntoFrames(List<int> rawBytes, int frameSize) {
@@ -117,10 +155,45 @@ void main() {
     });
   });
 
+  group('Phone mic index header prepend', () {
+    // Simulates the index header prepend logic from capture_provider.dart
+    test('index byte prepended to PCM frame', () {
+      int frameIndex = 0;
+      final pcmFrame = List<int>.filled(320, 42);
+      final walFrame = [frameIndex & 0xFF, ...pcmFrame];
+      frameIndex = (frameIndex + 1) & 0xFF;
+
+      expect(walFrame.length, 321); // 1 header + 320 PCM
+      expect(walFrame[0], 0); // First index is 0
+      expect(walFrame[1], 42); // PCM data starts at offset 1
+    });
+
+    test('index wraps at 255 to 0', () {
+      int frameIndex = 255;
+      final pcmFrame = List<int>.filled(320, 42);
+      final walFrame = [frameIndex & 0xFF, ...pcmFrame];
+      frameIndex = (frameIndex + 1) & 0xFF;
+
+      expect(walFrame[0], 255);
+      expect(frameIndex, 0); // Wrapped back to 0
+    });
+
+    test('sequential frames have incrementing indices', () {
+      int frameIndex = 0;
+      final indices = <int>[];
+      for (int i = 0; i < 5; i++) {
+        indices.add(frameIndex & 0xFF);
+        frameIndex = (frameIndex + 1) & 0xFF;
+      }
+      expect(indices, [0, 1, 2, 3, 4]);
+    });
+  });
+
   group('WAL flush header stripping logic', () {
     // Simulates the codec-aware header stripping from local_wal_sync.dart _flush()
+    // Now uses codec.walHeaderSize instead of hardcoded isOpusSupported() check
     List<int> stripHeader(List<int> frame, BleAudioCodec codec) {
-      final headerSize = codec.isOpusSupported() ? 3 : 0;
+      final headerSize = codec.walHeaderSize;
       return headerSize > 0 && frame.length > headerSize ? frame.sublist(headerSize) : frame;
     }
 
@@ -136,16 +209,22 @@ void main() {
       expect(stripped, [0xAA, 0xBB]);
     });
 
-    test('PCM16 frames have no header stripped', () {
-      final frame = [0x01, 0x02, 0x03, 0xAA, 0xBB, 0xCC];
+    test('PCM16 frames have 1-byte index header stripped', () {
+      final frame = [0x05, 0xAA, 0xBB, 0xCC, 0xDD]; // 1-byte index + 4 audio bytes
       final stripped = stripHeader(frame, BleAudioCodec.pcm16);
-      expect(stripped, [0x01, 0x02, 0x03, 0xAA, 0xBB, 0xCC]);
+      expect(stripped, [0xAA, 0xBB, 0xCC, 0xDD]);
     });
 
-    test('PCM8 frames have no header stripped', () {
-      final frame = [0x01, 0x02, 0x03];
+    test('PCM8 frames have 1-byte index header stripped', () {
+      final frame = [0x0A, 0x01, 0x02, 0x03];
       final stripped = stripHeader(frame, BleAudioCodec.pcm8);
       expect(stripped, [0x01, 0x02, 0x03]);
+    });
+
+    test('unknown codec frames have no header stripped', () {
+      final frame = [0x01, 0x02, 0x03, 0xAA, 0xBB, 0xCC];
+      final stripped = stripHeader(frame, BleAudioCodec.unknown);
+      expect(stripped, [0x01, 0x02, 0x03, 0xAA, 0xBB, 0xCC]);
     });
 
     test('short Opus frame with fewer than 3 bytes not stripped', () {
@@ -153,12 +232,19 @@ void main() {
       final stripped = stripHeader(frame, BleAudioCodec.opus);
       expect(stripped, [0x01, 0x02]);
     });
+
+    test('single-byte PCM frame not stripped (need > headerSize)', () {
+      final frame = [0x05]; // Only 1 byte = headerSize, not stripped
+      final stripped = stripHeader(frame, BleAudioCodec.pcm16);
+      expect(stripped, [0x05]);
+    });
   });
 
   group('WAL onBytesSync matching logic', () {
     // Simulates the codec-aware sync matching from local_wal_sync.dart onBytesSync()
+    // Now uses codec.syncMatchBytes instead of hardcoded isOpusSupported() check
     int? findSyncMatch(List<List<int>> frames, List<int> value, BleAudioCodec codec) {
-      final matchBytes = codec.isOpusSupported() ? 3 : 4;
+      final matchBytes = codec.syncMatchBytes;
       if (value.length < matchBytes) return null;
       for (int i = frames.length - 1; i >= 0; i--) {
         if (frames[i].length < matchBytes) continue;
@@ -184,24 +270,44 @@ void main() {
       expect(match, 1);
     });
 
-    test('PCM16 matching uses 4 bytes (audio content)', () {
+    test('PCM16 matching uses 1 byte (index header)', () {
       final frames = [
-        [10, 20, 30, 40, 50],
-        [10, 20, 30, 41, 60],
-        [10, 20, 30, 42, 70],
+        [0, 10, 20, 30, 40], // index=0
+        [1, 10, 20, 30, 40], // index=1
+        [2, 10, 20, 30, 40], // index=2
       ];
-      // PCM matches on 4 bytes — [10,20,30,41] matches frame 1
-      final match = findSyncMatch(frames, [10, 20, 30, 41, 60], BleAudioCodec.pcm16);
+      // PCM matches on 1 byte (index header) — index=1 matches frame 1
+      final match = findSyncMatch(frames, [1, 10, 20, 30, 40], BleAudioCodec.pcm16);
+      expect(match, 1);
+    });
+
+    test('PCM16 index byte distinguishes frames with same audio content', () {
+      final frames = [
+        [0, 42, 42, 42, 42], // index=0, same PCM data
+        [1, 42, 42, 42, 42], // index=1, same PCM data
+        [2, 42, 42, 42, 42], // index=2, same PCM data
+      ];
+      // Matching on index=1 finds frame 1 even though audio content is identical
+      final match = findSyncMatch(frames, [1, 42, 42, 42, 42], BleAudioCodec.pcm16);
       expect(match, 1);
     });
 
     test('PCM16 matching finds last match (backward search)', () {
       final frames = [
-        [10, 20, 30, 40, 50],
-        [10, 20, 30, 40, 60], // Same first 4 bytes as frame 0
+        [5, 10, 20, 30, 40],
+        [5, 10, 20, 30, 60], // Same index as frame 0 (wrapping)
       ];
-      final match = findSyncMatch(frames, [10, 20, 30, 40, 99], BleAudioCodec.pcm16);
+      final match = findSyncMatch(frames, [5, 99, 99, 99, 99], BleAudioCodec.pcm16);
       expect(match, 1); // Should find the last match
+    });
+
+    test('unknown codec matching uses 4 bytes (content fallback)', () {
+      final frames = [
+        [10, 20, 30, 40, 50],
+        [10, 20, 30, 41, 60],
+      ];
+      final match = findSyncMatch(frames, [10, 20, 30, 41, 60], BleAudioCodec.unknown);
+      expect(match, 1);
     });
 
     test('no match returns null', () {
@@ -212,11 +318,11 @@ void main() {
       expect(match, isNull);
     });
 
-    test('short value returns null for PCM', () {
+    test('short value returns null for unknown codec (needs 4 bytes)', () {
       final frames = [
         [1, 2, 3, 4, 5],
       ];
-      final match = findSyncMatch(frames, [1, 2, 3], BleAudioCodec.pcm16); // Need 4 bytes for PCM
+      final match = findSyncMatch(frames, [1, 2, 3], BleAudioCodec.unknown); // Need 4 bytes for unknown
       expect(match, isNull);
     });
 
@@ -225,6 +331,14 @@ void main() {
         [1, 2, 3, 4, 5],
       ];
       final match = findSyncMatch(frames, [1, 2, 3], BleAudioCodec.opus);
+      expect(match, 0);
+    });
+
+    test('single byte works for PCM16 (1 byte sufficient)', () {
+      final frames = [
+        [42, 10, 20, 30],
+      ];
+      final match = findSyncMatch(frames, [42], BleAudioCodec.pcm16);
       expect(match, 0);
     });
   });
