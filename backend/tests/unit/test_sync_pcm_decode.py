@@ -297,3 +297,10 @@ class TestDecodeFilesToWavPcmRouting:
 
             wav_files = decode_files_to_wav([bin_path])
             assert len(wav_files) == 0
+
+    def test_opus_filename_not_routed_to_pcm(self):
+        """Verify non-PCM filenames don't trigger PCM decode path."""
+        assert _is_pcm_codec('audio_omi_opus_16000_1_fs160_1710000000.bin') is False
+        assert _is_pcm_codec('audio_omi_opus_fs320_16000_2_fs320_1710000000.bin') is False
+        assert _is_pcm_codec('audio_omi_aac_16000_1_fs160_1710000000.bin') is False
+        assert _is_pcm_codec('audio_omi_lc3_16000_1_fs160_1710000000.bin') is False
