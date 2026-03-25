@@ -48,7 +48,7 @@ struct OnboardingPermissionStepView: View {
 
               Image(systemName: icon)
                 .font(.system(size: 24, weight: .semibold))
-                .foregroundColor(OmiColors.purplePrimary)
+                .foregroundColor(OmiColors.textSecondary)
             }
 
             VStack(alignment: .leading, spacing: 4) {
