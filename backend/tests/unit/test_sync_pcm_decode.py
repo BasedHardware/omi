@@ -191,18 +191,34 @@ class TestDecodePcmFileToWav:
         result = decode_pcm_file_to_wav('/nonexistent/path.bin', '/nonexistent/out.wav')
         assert result is False
 
-    def test_pcm8_sample_rate(self):
+    def test_pcm8_sample_rate_and_width(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             bin_path = os.path.join(tmpdir, 'test.bin')
             wav_path = os.path.join(tmpdir, 'test.wav')
             frame = bytes([42] * 160)  # 160 bytes for pcm8
             self._make_pcm_bin([frame], bin_path)
 
-            result = decode_pcm_file_to_wav(bin_path, wav_path, sample_rate=8000)
+            result = decode_pcm_file_to_wav(bin_path, wav_path, sample_rate=8000, sample_width=1)
             assert result is True
 
             with wave.open(wav_path, 'rb') as wf:
                 assert wf.getframerate() == 8000
+                assert wf.getsampwidth() == 1  # 8-bit audio
+                assert wf.getnframes() == 160  # 160 bytes / 1 byte per sample
+
+    def test_pcm16_sample_width(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            bin_path = os.path.join(tmpdir, 'test.bin')
+            wav_path = os.path.join(tmpdir, 'test.wav')
+            frame = bytes([42] * 320)
+            self._make_pcm_bin([frame], bin_path)
+
+            result = decode_pcm_file_to_wav(bin_path, wav_path, sample_rate=16000, sample_width=2)
+            assert result is True
+
+            with wave.open(wav_path, 'rb') as wf:
+                assert wf.getsampwidth() == 2  # 16-bit audio
+                assert wf.getnframes() == 160  # 320 bytes / 2 bytes per sample
 
 
 class TestDecodeFilesToWavPcmRouting:
@@ -232,7 +248,7 @@ class TestDecodeFilesToWavPcmRouting:
                 duration = wf.getnframes() / wf.getframerate()
                 assert duration >= 1.0
 
-    def test_pcm8_file_uses_filename_sample_rate(self):
+    def test_pcm8_file_uses_filename_sample_rate_and_width(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             # pcm8 filename with 16000 sample rate (not default 8000)
             bin_path = os.path.join(tmpdir, 'audio_phonemic_pcm8_16000_1_fs160_1710000000.bin')
@@ -244,6 +260,7 @@ class TestDecodeFilesToWavPcmRouting:
 
             with wave.open(wav_files[0], 'rb') as wf:
                 assert wf.getframerate() == 16000  # Should parse from filename, not default to 8000
+                assert wf.getsampwidth() == 1  # pcm8 = 8-bit = 1 byte per sample
 
     def test_pcm16_fallback_sample_rate_when_no_match(self):
         with tempfile.TemporaryDirectory() as tmpdir:
