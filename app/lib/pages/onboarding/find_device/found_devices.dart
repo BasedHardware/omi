@@ -34,7 +34,7 @@ class _FoundDevicesState extends State<FoundDevices> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (mounted) {
-        context.read<DeviceProvider>().periodicConnect('coming from FoundDevices');
+        context.read<DeviceProvider>().initiateConnection('FoundDevices');
       }
     });
   }
@@ -260,8 +260,8 @@ class _FoundDevicesState extends State<FoundDevices> {
                       color: provider.batteryPercentage <= 25
                           ? Colors.red
                           : provider.batteryPercentage <= 50
-                          ? Colors.orange
-                          : Colors.green,
+                              ? Colors.orange
+                              : Colors.green,
                     ),
                   ),
                 ),
