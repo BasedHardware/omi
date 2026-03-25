@@ -82,6 +82,9 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
     OnboardingChatPersistence.saveMidOnboarding()
     appState.checkAllPermissions()
 
+    // Always start onboarding with a clean graph so stale data doesn't appear.
+    Task { await KnowledgeGraphStorage.shared.clearAll() }
+
     if scanSnapshot == nil {
       Task { await refreshSnapshotIfAvailable() }
     }
@@ -217,7 +220,10 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
     scanState = .scanning
     scanStatusText = "Scanning your projects and apps..."
 
-    Task { await startBackgroundInsightsIfNeeded() }
+    // Start Gmail/Calendar/web research in parallel with the file scan
+    // so insights are ready by the time the user reaches the research step.
+    // Must use Task.detached to avoid @MainActor serialization with the scan.
+    Task.detached { await self.startBackgroundInsightsIfNeeded() }
 
     let result = await executeTool(name: "scan_files", arguments: [:])
     if result.lowercased().hasPrefix("error") {
@@ -503,6 +509,8 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
       if !analysis.summary.isEmpty {
         webResearchSummary = analysis.summary
       }
+
+      log("OnboardingPagedIntroCoordinator: Enrichment goals: \(analysis.goals), summary: \(analysis.summary.prefix(100))")
 
       if !analysis.goals.isEmpty {
         suggestedGoals = Array(

@@ -73,6 +73,7 @@ final class BrowserKeychainCache: @unchecked Sendable {
   private let lock = NSLock()
 
   /// Ensures only one keychain lookup runs per browser service at a time.
+  /// Persists to the app's own keychain so app restarts don't re-prompt.
   func password(for service: String, loader: () -> String?) -> String? {
     loop: while true {
       lock.lock()
@@ -80,6 +81,23 @@ final class BrowserKeychainCache: @unchecked Sendable {
       if let cached = cache[service] {
         lock.unlock()
         return cached.isEmpty ? nil : cached
+      }
+
+      // Check app's own keychain entry (persists across restarts, no prompt)
+      let ownService = "com.omi.browser-cache.\(service)"
+      let ownQuery: [String: Any] = [
+        kSecClass as String: kSecClassGenericPassword,
+        kSecAttrService as String: ownService,
+        kSecReturnData as String: true,
+        kSecMatchLimit as String: kSecMatchLimitOne,
+      ]
+      var ownResult: AnyObject?
+      if SecItemCopyMatching(ownQuery as CFDictionary, &ownResult) == errSecSuccess,
+         let data = ownResult as? Data,
+         let saved = String(data: data, encoding: .utf8), !saved.isEmpty {
+        cache[service] = saved
+        lock.unlock()
+        return saved
       }
 
       if let group = inFlight[service] {
@@ -94,6 +112,17 @@ final class BrowserKeychainCache: @unchecked Sendable {
       lock.unlock()
 
       let password = loader()
+
+      // Save to app's own keychain so we never prompt again
+      if let password, !password.isEmpty, let data = password.data(using: .utf8) {
+        let addQuery: [String: Any] = [
+          kSecClass as String: kSecClassGenericPassword,
+          kSecAttrService as String: ownService,
+          kSecValueData as String: data,
+        ]
+        SecItemDelete(addQuery as CFDictionary)
+        SecItemAdd(addQuery as CFDictionary, nil)
+      }
 
       lock.lock()
       cache[service] = password ?? ""

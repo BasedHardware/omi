@@ -13,7 +13,7 @@ struct OnboardingResearchStepView: View {
       stepIndex: stepIndex,
       totalSteps: totalSteps,
       eyebrow: "Second Brain",
-      title: "Your graph is live.",
+      title: "Your 2nd brain is live.",
       description: "Omi now has real context."
     ) {
       VStack(alignment: .leading, spacing: 14) {
@@ -86,6 +86,10 @@ struct OnboardingResearchStepView: View {
       .frame(maxWidth: .infinity, alignment: .leading)
       .task {
         await graphViewModel.addGraphFromStorage()
+        // If app restarted mid-onboarding, re-trigger insights
+        if !coordinator.isResearchComplete {
+          await coordinator.startBackgroundInsightsIfNeeded()
+        }
       }
     }
   }

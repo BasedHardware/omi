@@ -11,13 +11,13 @@ enum OnboardingFlow {
     "Notifications",
     "Accessibility",
     "Automation",
-    "Research",
     "ScreenRecording",
-    "Goal",
     "FloatingBarShortcut",
     "FloatingBar",
     "VoiceShortcut",
     "VoiceDemo",
+    "Research",
+    "Goal",
     "Tasks",
   ]
   static let introStepCount = 12
