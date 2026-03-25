@@ -57,13 +57,13 @@ struct OnboardingVoiceShortcutStepView: View {
       Spacer()
 
       VStack(alignment: .leading, spacing: 18) {
-        Text("Hold the shortcut\nand ask a question")
+        Text("Set your voice\nshortcut")
           .font(.system(size: 40, weight: .bold))
           .foregroundColor(OmiColors.textPrimary)
           .lineSpacing(2)
 
         Text(
-          "Hold the key you want to use for voice questions, then release to send. Try asking \"What's on my screen?\" If the preview reacts on the right, you're set. If not, switch to another key."
+          "Pick a key to hold for voice input. Press and hold it now to check it works — if the preview lights up on the right, you're set."
         )
         .font(.system(size: 16))
         .foregroundColor(OmiColors.textSecondary)

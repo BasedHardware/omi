@@ -49,13 +49,13 @@ struct OnboardingFloatingBarShortcutStepView: View {
             Spacer()
 
             VStack(alignment: .leading, spacing: 18) {
-                Text("Open the floating bar\nwith a shortcut")
+                Text("Set your\nkeyboard shortcut")
                     .font(.system(size: 40, weight: .bold))
                     .foregroundColor(OmiColors.textPrimary)
                     .lineSpacing(2)
 
                 Text(
-                    "Use this keyboard shortcut to open the floating bar anytime. Type a question, hit Enter, and get an answer right where you're working."
+                    "Press the shortcut to check it works. You'll use this to quickly ask omi anything, right where you're working."
                 )
                 .font(.system(size: 16))
                 .foregroundColor(OmiColors.textSecondary)
