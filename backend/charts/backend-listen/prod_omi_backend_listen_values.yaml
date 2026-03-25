@@ -369,7 +369,7 @@ livenessProbe:
 readinessProbe:
   tcpSocket:
     port: 8080
-  failureThreshold: 3
+  failureThreshold: 2
   periodSeconds: 10
   timeoutSeconds: 1
 
