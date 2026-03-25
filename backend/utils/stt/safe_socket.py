@@ -88,14 +88,16 @@ class SafeDeepgramSocket:
         try:
             ret = self._conn.keep_alive()
             if ret is False:
-                self._death_reason = 'keep_alive returned False'
+                if self._death_reason is None:
+                    self._death_reason = 'keep_alive returned False'
                 logger.warning('DG keep_alive returned False, connection dead')
                 self._dg_dead = True
             else:
                 self._keepalive_count += 1
                 self._last_activity = self._clock()
         except Exception as e:
-            self._death_reason = f'keep_alive {type(e).__name__}: {e}'
+            if self._death_reason is None:
+                self._death_reason = f'keep_alive {type(e).__name__}: {e}'
             logger.warning('DG keep_alive exception, connection dead: %s: %s', type(e).__name__, e)
             self._dg_dead = True
 
@@ -122,13 +124,15 @@ class SafeDeepgramSocket:
             try:
                 ret = self._conn.send(data)
                 if ret is False:
-                    self._death_reason = 'send returned False'
+                    if self._death_reason is None:
+                        self._death_reason = 'send returned False'
                     logger.warning('DG send returned False, connection dead')
                     self._dg_dead = True
                 else:
                     self._last_activity = self._clock()
             except Exception as e:
-                self._death_reason = f'send {type(e).__name__}: {e}'
+                if self._death_reason is None:
+                    self._death_reason = f'send {type(e).__name__}: {e}'
                 logger.warning('DG send exception, connection dead: %s: %s', type(e).__name__, e)
                 self._dg_dead = True
 
