@@ -840,3 +840,113 @@ def test_close_reason_preserved_when_keepalive_fails_after():
         assert safe.death_reason == 'DG error event: server_error'
     finally:
         safe.finish()
+
+
+def test_close_reason_preserved_when_send_raises_after():
+    """If close reason is set first, subsequent send exception does not override it (#6036)."""
+    from utils.stt.safe_socket import KeepaliveConfig, SafeDeepgramSocket
+
+    mock_conn = MagicMock()
+    mock_conn.send.side_effect = ConnectionResetError('Connection reset by peer')
+    cfg = KeepaliveConfig(keepalive_interval_sec=5.0, check_period_sec=999.0)
+    safe = SafeDeepgramSocket(mock_conn, cfg=cfg)
+    try:
+        safe.set_close_reason('DG close event: code=1006')
+        safe.send(b'\x00' * 960)
+        assert safe.is_connection_dead is True
+        assert safe.death_reason == 'DG close event: code=1006'
+    finally:
+        safe.finish()
+
+
+def test_close_reason_preserved_when_keepalive_raises_after():
+    """If close reason is set first, subsequent keepalive exception does not override it (#6036)."""
+    import time as _time
+    from utils.stt.safe_socket import KeepaliveConfig, SafeDeepgramSocket
+
+    mock_conn = MagicMock()
+    mock_conn.send.return_value = True
+    mock_conn.keep_alive.side_effect = TimeoutError('timed out')
+
+    fake_time = [0.0]
+    cfg = KeepaliveConfig(keepalive_interval_sec=5.0, check_period_sec=0.01)
+    safe = SafeDeepgramSocket(mock_conn, cfg=cfg, clock=lambda: fake_time[0])
+    try:
+        safe.set_close_reason('DG error event: server_error')
+        safe.send(b'\x00' * 960)
+        fake_time[0] = 6.0
+        _time.sleep(0.1)
+        assert safe.is_connection_dead is True
+        assert safe.death_reason == 'DG error event: server_error'
+    finally:
+        safe.finish()
+
+
+# ---------------------------------------------------------------------------
+# DG callback wiring tests (streaming.py)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_process_audio_dg_registers_close_error_handlers():
+    """process_audio_dg registers Close and Error handlers on dg_connection (#6036)."""
+    from utils.stt.safe_socket import SafeDeepgramSocket
+
+    mock_dg_conn = MagicMock()
+    with patch(
+        'utils.stt.streaming.connect_to_deepgram_with_backoff', new_callable=AsyncMock, return_value=mock_dg_conn
+    ):
+        result = await process_audio_dg(
+            stream_transcript=MagicMock(),
+            language='en',
+            sample_rate=16000,
+            channels=1,
+        )
+    assert isinstance(result, SafeDeepgramSocket)
+
+    # Verify .on() was called for Close and Error events
+    on_calls = mock_dg_conn.on.call_args_list
+    registered_events = [call[0][0] for call in on_calls]
+    LiveTranscriptionEvents = sys.modules['deepgram'].LiveTranscriptionEvents
+    assert LiveTranscriptionEvents.Close in registered_events
+    assert LiveTranscriptionEvents.Error in registered_events
+
+    # Invoke the close handler and verify it sets death_reason
+    for call in on_calls:
+        event, handler = call[0][0], call[0][1]
+        if event == LiveTranscriptionEvents.Close:
+            handler(None, 'CloseResponse(type=Close)')
+            break
+    assert result.death_reason == 'DG close event: CloseResponse(type=Close)'
+    result.finish()
+
+
+# ---------------------------------------------------------------------------
+# GatedDeepgramSocket death_reason delegation tests
+# ---------------------------------------------------------------------------
+
+
+def test_gated_socket_death_reason_delegates_to_safe_socket():
+    """GatedDeepgramSocket.death_reason returns underlying SafeDeepgramSocket reason (#6036)."""
+    from utils.stt.safe_socket import KeepaliveConfig, SafeDeepgramSocket
+    from utils.stt.vad_gate import GatedDeepgramSocket
+
+    mock_conn = MagicMock()
+    cfg = KeepaliveConfig(keepalive_interval_sec=5.0, check_period_sec=999.0)
+    safe = SafeDeepgramSocket(mock_conn, cfg=cfg)
+    gated = GatedDeepgramSocket(safe, gate=None)
+    try:
+        assert gated.death_reason is None
+        safe.set_close_reason('DG close event: code=1006')
+        assert gated.death_reason == 'DG close event: code=1006'
+    finally:
+        safe.finish()
+
+
+def test_gated_socket_death_reason_returns_none_for_non_safe_socket():
+    """GatedDeepgramSocket.death_reason returns None when wrapping a non-SafeDeepgramSocket."""
+    from utils.stt.vad_gate import GatedDeepgramSocket
+
+    mock_conn = MagicMock(spec=[])  # No _is_safe_dg_socket attribute
+    gated = GatedDeepgramSocket(mock_conn, gate=None)
+    assert gated.death_reason is None
