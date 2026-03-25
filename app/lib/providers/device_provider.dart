@@ -56,7 +56,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   Map<String, dynamic> get latestOmiGlassFirmwareDetails => _latestOmiGlassFirmwareDetails;
 
   Timer? _disconnectNotificationTimer;
-  Timer? _discoveryTimer; // Periodic scan for onboarding only (no paired device)
+  Timer? _discoveryTimer;
   bool _manualDisconnect = false;
   final Debouncer _disconnectDebouncer = Debouncer(delay: const Duration(milliseconds: 500));
   final Debouncer _connectDebouncer = Debouncer(delay: const Duration(milliseconds: 100));
@@ -356,11 +356,10 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
       return;
     }
 
-    // Native auto-reconnect handles reconnection — no Dart-side polling needed.
     // Show a notification if still disconnected after 30 seconds.
     _disconnectNotificationTimer?.cancel();
     _disconnectNotificationTimer = Timer(const Duration(seconds: 30), () {
-      final ctx = MyApp.navigatorKey.currentContext;
+      final ctx = globalNavigatorKey.currentContext;
       NotificationService.instance.createNotification(
         title: ctx?.l10n.deviceDisconnectedNotificationTitle ?? 'Your Omi Device Disconnected',
         body: ctx?.l10n.deviceDisconnectedNotificationBody ?? 'Please reconnect to continue using your Omi.',
