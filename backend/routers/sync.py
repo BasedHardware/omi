@@ -53,12 +53,12 @@ router = APIRouter()
 # **********************************************
 
 
-def pcm_to_wav(pcm_data: bytes, sample_rate: int = 16000, channels: int = 1) -> bytes:
-    """Convert PCM16 data to WAV format."""
+def pcm_to_wav(pcm_data: bytes, sample_rate: int = 16000, channels: int = 1, sample_width: int = 2) -> bytes:
+    """Convert raw PCM data to WAV format."""
     wav_buffer = io.BytesIO()
     with wave.open(wav_buffer, 'wb') as wav_file:
         wav_file.setnchannels(channels)
-        wav_file.setsampwidth(2)  # 16-bit audio
+        wav_file.setsampwidth(sample_width)
         wav_file.setframerate(sample_rate)
         wav_file.writeframes(pcm_data)
     return wav_buffer.getvalue()
@@ -514,11 +514,12 @@ def get_wav_duration(wav_path: str) -> float:
         return 0.0
 
 
-def decode_pcm_file_to_wav(pcm_file_path, wav_file_path, sample_rate=16000, channels=1):
-    """Decode a length-prefixed PCM16 .bin file to WAV.
+def decode_pcm_file_to_wav(pcm_file_path, wav_file_path, sample_rate=16000, channels=1, sample_width=2):
+    """Decode a length-prefixed PCM .bin file to WAV.
 
     The file format is: [4-byte uint32 frame_length][frame_bytes] repeated.
-    Each frame contains raw PCM16 samples (no encoding).
+    Each frame contains raw PCM samples (no encoding).
+    sample_width: 2 for pcm16, 1 for pcm8.
     """
     try:
         pcm_data = bytearray()
@@ -540,7 +541,7 @@ def decode_pcm_file_to_wav(pcm_file_path, wav_file_path, sample_rate=16000, chan
             logger.info(f"PCM decode: no data in {pcm_file_path}")
             return False
 
-        wav_data = pcm_to_wav(bytes(pcm_data), sample_rate=sample_rate, channels=channels)
+        wav_data = pcm_to_wav(bytes(pcm_data), sample_rate=sample_rate, channels=channels, sample_width=sample_width)
         with open(wav_file_path, 'wb') as f:
             f.write(wav_data)
         return True
@@ -575,7 +576,8 @@ def decode_files_to_wav(files_path: List[str]):
             sample_rate = (
                 int(sample_rate_match.group(1)) if sample_rate_match else (16000 if '_pcm16_' in filename else 8000)
             )
-            success = decode_pcm_file_to_wav(path, wav_path, sample_rate=sample_rate)
+            sample_width = 1 if '_pcm8_' in filename else 2
+            success = decode_pcm_file_to_wav(path, wav_path, sample_rate=sample_rate, sample_width=sample_width)
         else:
             success = decode_opus_file_to_wav(path, wav_path, frame_size=frame_size)
 
