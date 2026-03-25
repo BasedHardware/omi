@@ -989,6 +989,8 @@ class CaptureProvider extends ChangeNotifier
     _phoneMicWalActive = true;
     await _wal.getSyncs().phone.onAudioCodecChanged(BleAudioCodec.pcm16);
     _wal.getSyncs().phone.setDeviceInfo('phone-mic', 'Phone Microphone');
+    // Phone mic adds 1-byte index header (vs BLE device's 3-byte firmware header)
+    _wal.getSyncs().phone.setWalHeaderSize(1);
     setIsWalSupported(true);
 
     // record
