@@ -86,6 +86,23 @@ class AnalyticsManager {
     PostHogManager.shared.track("Onboarding Chat Message", properties: props)
   }
 
+  /// Track full onboarding chat message content for debugging user issues.
+  /// Sent only to PostHog (not Mixpanel) to avoid event size limits.
+  func onboardingChatMessageDetailed(role: String, text: String, step: String, toolCalls: [String]? = nil, model: String? = nil, error: String? = nil) {
+    var props: [String: Any] = [
+      "role": role,
+      "step": step,
+      "text": String(text.prefix(2000)),
+      "text_length": text.count,
+    ]
+    if let toolCalls = toolCalls, !toolCalls.isEmpty {
+      props["tool_calls"] = toolCalls.joined(separator: ", ")
+    }
+    if let model = model { props["model"] = model }
+    if let error = error { props["error"] = error }
+    PostHogManager.shared.track("onboarding_chat_message_detailed", properties: props)
+  }
+
   // MARK: - Authentication Events
 
   func signInStarted(provider: String) {
