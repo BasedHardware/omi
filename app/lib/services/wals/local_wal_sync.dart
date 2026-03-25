@@ -458,8 +458,22 @@ class LocalWalSyncImpl implements LocalWalSync {
           ),
         );
 
+        if (partialRes.hasPartialFailure) {
+          Logger.debug(
+            'WAL batch partial failure: ${partialRes.failedSegments}/${partialRes.totalSegments} segments failed',
+          );
+          DebugLogManager.logWarning('Local upload batch partial failure', {
+            'failedSegments': partialRes.failedSegments,
+            'totalSegments': partialRes.totalSegments,
+            'errors': partialRes.errors.take(3).toList(),
+          });
+        }
+
         batchesCompleted++;
 
+        // Mark WALs as synced even on partial failure — backend already processed
+        // what it could, and segment dedup on the backend prevents duplicates if
+        // the app retries later.
         for (var j = left; j <= right; j++) {
           if (j < wals.length) {
             var wal = wals[j];
@@ -562,6 +576,18 @@ class LocalWalSyncImpl implements LocalWalSync {
           (id) => !resp.updatedConversationIds.contains(id) && !resp.newConversationIds.contains(id),
         ),
       );
+
+      if (partialRes.hasPartialFailure) {
+        Logger.debug(
+          'Single WAL partial failure: ${partialRes.failedSegments}/${partialRes.totalSegments} segments failed',
+        );
+        DebugLogManager.logWarning('Single WAL upload partial failure', {
+          'walId': wal.id,
+          'failedSegments': partialRes.failedSegments,
+          'totalSegments': partialRes.totalSegments,
+          'errors': partialRes.errors.take(3).toList(),
+        });
+      }
 
       walToSync.status = WalStatus.synced;
       walToSync.isSyncing = false;
