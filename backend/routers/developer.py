@@ -13,6 +13,7 @@ import database.dev_api_key as dev_api_key_db
 import database.action_items as action_items_db
 import database.goals as goals_db
 import database.users as users_db
+import database.folders as folders_db
 
 from models.memories import MemoryCategory, Memory, MemoryDB
 from models.conversation import (
@@ -642,6 +643,8 @@ class Conversation(BaseModel):
     source: Optional[str] = None
     transcript_segments: Optional[List[SimpleTranscriptSegment]] = None
     geolocation: Optional[Geolocation] = None
+    folder_id: Optional[str] = None
+    folder_name: Optional[str] = None
 
 
 class CreateConversationRequest(BaseModel):
@@ -728,6 +731,26 @@ def _add_speaker_names_to_segments(uid, conversations: list):
                 seg['speaker_name'] = f"Speaker {seg.get('speaker_id', 0)}"
 
 
+def _add_folder_names_to_conversations(uid, conversations: list):
+    """Add folder_name to conversations based on folder_id mappings."""
+    folder_ids = set()
+    for conv in conversations:
+        if conv.get('folder_id'):
+            folder_ids.add(conv['folder_id'])
+
+    if not folder_ids:
+        for conv in conversations:
+            conv['folder_name'] = None
+        return
+
+    all_folders = folders_db.get_folders(uid)
+    folder_map = {f['id']: f['name'] for f in all_folders}
+
+    for conv in conversations:
+        folder_id = conv.get('folder_id')
+        conv['folder_name'] = folder_map.get(folder_id) if folder_id else None
+
+
 @router.get("/v1/dev/user/conversations", response_model=List[Conversation], tags=["developer"])
 def get_conversations(
     start_date: Optional[datetime] = None,
@@ -768,6 +791,8 @@ def get_conversations(
             conv.pop('transcript_segments', None)
     else:
         _add_speaker_names_to_segments(uid, unlocked_conversations)
+
+    _add_folder_names_to_conversations(uid, unlocked_conversations)
 
     return unlocked_conversations
 
@@ -875,6 +900,8 @@ def get_conversation_endpoint(
         conversation.pop('transcript_segments', None)
     else:
         _add_speaker_names_to_segments(uid, [conversation])
+
+    _add_folder_names_to_conversations(uid, [conversation])
 
     return conversation
 
@@ -1062,7 +1089,9 @@ def update_conversation_endpoint(
         else:
             conversations_db.update_conversation(uid, conversation_id, {'discarded': False})
 
-    return conversations_db.get_conversation(uid, conversation_id)
+    conversation = conversations_db.get_conversation(uid, conversation_id)
+    _add_folder_names_to_conversations(uid, [conversation])
+    return conversation
 
 
 # ******************************************************
