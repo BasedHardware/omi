@@ -89,12 +89,24 @@ class SafeDeepgramSocket:
             if ret is False:
                 logger.warning('DG keep_alive returned False, connection dead')
                 self._dg_dead = True
+                try:
+                    from utils.metrics import DG_KEEPALIVE_FAILURES, dg_failure_tracker
+                    DG_KEEPALIVE_FAILURES.inc()
+                    dg_failure_tracker.record()
+                except Exception:
+                    pass
             else:
                 self._keepalive_count += 1
                 self._last_activity = self._clock()
         except Exception:
             logger.warning('DG keep_alive exception, connection dead')
             self._dg_dead = True
+            try:
+                from utils.metrics import DG_KEEPALIVE_FAILURES, dg_failure_tracker
+                DG_KEEPALIVE_FAILURES.inc()
+                dg_failure_tracker.record()
+            except Exception:
+                pass
 
     @property
     def is_connection_dead(self) -> bool:

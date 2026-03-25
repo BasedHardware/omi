@@ -149,10 +149,65 @@ async def health_search():
     return _make_response("search", result)
 
 
+@router.get("/v1/health/listen")
+async def health_listen():
+    """Check realtime transcription (Deepgram WebSocket) health.
+
+    Uses a rolling 5-minute window of keepalive failures.
+    - 0-5 failures: ok (normal background noise)
+    - 6-20 failures: degraded
+    - 21+ failures: down
+    """
+    try:
+        from utils.metrics import dg_failure_tracker, BACKEND_LISTEN_ACTIVE_WS_CONNECTIONS
+        failures = dg_failure_tracker.count()
+        try:
+            active_connections = int(BACKEND_LISTEN_ACTIVE_WS_CONNECTIONS._value.get())
+        except Exception:
+            active_connections = -1
+
+        if failures <= 5:
+            status = "ok"
+            code = 200
+        elif failures <= 20:
+            status = "degraded"
+            code = 200
+        else:
+            status = "down"
+            code = 503
+
+        body = {
+            "service": "realtime-transcription",
+            "status": status,
+            "keepalive_failures_5m": failures,
+            "active_connections": active_connections,
+        }
+        return JSONResponse(content=body, status_code=code, headers={"Cache-Control": "no-cache, no-store"})
+    except Exception as e:
+        return JSONResponse(
+            content={"service": "realtime-transcription", "status": "unknown", "error": str(e)[:200]},
+            status_code=200,
+            headers={"Cache-Control": "no-cache, no-store"},
+        )
+
+
 @router.get("/v1/health/services")
 async def health_services():
     """Aggregate health check for all services."""
     start = time.time()
+    # Check listen health inline
+    try:
+        from utils.metrics import dg_failure_tracker
+        listen_failures = dg_failure_tracker.count()
+        if listen_failures <= 5:
+            listen_result = {"status": "ok"}
+        elif listen_failures <= 20:
+            listen_result = {"status": "degraded", "keepalive_failures_5m": listen_failures}
+        else:
+            listen_result = {"status": "down", "keepalive_failures_5m": listen_failures}
+    except Exception:
+        listen_result = {"status": "unknown"}
+
     results = await asyncio.gather(
         _check_anthropic(),
         _check_deepgram(),
@@ -161,8 +216,9 @@ async def health_services():
         _check_typesense(),
         return_exceptions=True,
     )
+    results = list(results) + [listen_result]
 
-    service_names = ["chat", "transcription", "ai", "storage", "search"]
+    service_names = ["chat", "transcription", "ai", "storage", "search", "realtime-transcription"]
     services = {}
     for name, result in zip(service_names, results):
         if isinstance(result, Exception):

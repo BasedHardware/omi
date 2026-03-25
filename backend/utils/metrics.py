@@ -26,6 +26,44 @@ PUSHER_SESSION_DEGRADED = Gauge(
     'Number of sessions currently in degraded mode (pusher unavailable)',
 )
 
+DG_KEEPALIVE_FAILURES = Counter(
+    'dg_keepalive_failures_total',
+    'Total Deepgram WebSocket keepalive failures',
+)
+
+DG_CONNECTION_CLOSES = Counter(
+    'dg_connection_closes_total',
+    'Total Deepgram WebSocket connection closes (1011 errors)',
+)
+
+# Rolling window for health check (last 5 minutes)
+import time
+import threading
+
+class _FailureTracker:
+    """Thread-safe rolling window failure counter for health checks."""
+    def __init__(self, window_seconds=300):
+        self._window = window_seconds
+        self._events: list[float] = []
+        self._lock = threading.Lock()
+
+    def record(self):
+        now = time.time()
+        with self._lock:
+            self._events.append(now)
+            # Prune old events
+            cutoff = now - self._window
+            self._events = [t for t in self._events if t > cutoff]
+
+    def count(self) -> int:
+        now = time.time()
+        cutoff = now - self._window
+        with self._lock:
+            self._events = [t for t in self._events if t > cutoff]
+            return len(self._events)
+
+dg_failure_tracker = _FailureTracker(window_seconds=300)
+
 
 def metrics_response() -> Response:
     return Response(content=generate_latest(), media_type=CONTENT_TYPE_LATEST)
