@@ -75,11 +75,6 @@ struct OnboardingPermissionStepView: View {
               .foregroundColor(OmiColors.textTertiary)
           }
 
-          if requiresRestart {
-            Text("macOS may relaunch Omi here. This flow will resume on the same step.")
-              .font(.system(size: 13, weight: .medium))
-              .foregroundColor(OmiColors.textTertiary)
-          }
 
           if let error = coordinator.lastActionError, !isGranted {
             Text(error)
@@ -108,9 +103,6 @@ struct OnboardingPermissionStepView: View {
           .buttonStyle(OnboardingCardButtonStyle(isPrimary: true))
           .disabled(isRequesting)
 
-          Text("This page advances automatically as soon as macOS confirms the change.")
-            .font(.system(size: 13))
-            .foregroundColor(OmiColors.textTertiary)
         }
       }
       .frame(maxWidth: .infinity, alignment: .leading)

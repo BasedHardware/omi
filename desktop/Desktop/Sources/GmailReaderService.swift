@@ -1,5 +1,4 @@
 import Foundation
-import Security
 
 // MARK: - Models
 
@@ -579,23 +578,23 @@ actor GmailReaderService {
 
   private func getKeychainPassword(service: String) -> String? {
     BrowserKeychainCache.shared.password(for: service) {
-      let query: [String: Any] = [
-        kSecClass as String: kSecClassGenericPassword,
-        kSecAttrService as String: service,
-        kSecReturnData as String: true,
-        kSecMatchLimit as String: kSecMatchLimitOne,
-      ]
-      var result: AnyObject?
-      let status = SecItemCopyMatching(query as CFDictionary, &result)
-      guard status == errSecSuccess, let data = result as? Data,
-        let password = String(data: data, encoding: .utf8)
-      else {
-        if status != errSecItemNotFound {
-          log("GmailReaderService: Keychain lookup for '\(service)' failed with status \(status)")
-        }
+      let process = Process()
+      process.executableURL = URL(fileURLWithPath: "/usr/bin/security")
+      process.arguments = ["find-generic-password", "-s", service, "-w"]
+      let pipe = Pipe()
+      let errPipe = Pipe()
+      process.standardOutput = pipe
+      process.standardError = errPipe
+      do {
+        try process.run()
+        process.waitUntilExit()
+        guard process.terminationStatus == 0 else { return nil }
+        let output = String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)?
+          .trimmingCharacters(in: .whitespacesAndNewlines)
+        return output?.isEmpty == false ? output : nil
+      } catch {
         return nil
       }
-      return password.isEmpty ? nil : password
     }
   }
 
