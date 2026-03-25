@@ -123,63 +123,65 @@ struct OnboardingView: View {
           graphViewModel: graphViewModel,
           stepIndex: 3,
           totalSteps: OnboardingFlow.introStepCount,
-          eyebrow: "Access",
-          title: "Let Omi scan your work.",
-          description: "File access lets Omi map your projects and files.",
-          permissionType: "full_disk_access",
-          icon: "externaldrive.fill.badge.person.crop",
-          reasonTitle: "Full Disk Access",
-          reasonDetail: "This lets Omi scan your projects and recent files.",
-          primaryActionLabel: "Open Full Disk Access",
-          requiresRestart: false,
+          eyebrow: "Permission",
+          title: "Let Omi read your screen.",
+          description: "Screen Recording lets Omi see what you're working on.",
+          permissionType: "screen_recording",
+          icon: "display.and.arrow.down",
+          reasonTitle: "Screen Recording",
+          reasonDetail: "Screen Recording lets Omi see what you're working on.",
+          primaryActionLabel: "Open Screen Recording settings",
+          requiresRestart: true,
           onContinue: {
-            AnalyticsManager.shared.onboardingStepCompleted(step: 3, stepName: "FullDiskAccess")
+            AnalyticsManager.shared.onboardingStepCompleted(step: 3, stepName: "ScreenRecording")
+            startMonitoringIfNeeded()
             currentStep = 4
           },
           onSkip: {
             AnalyticsManager.shared.onboardingStepCompleted(
-              step: 3, stepName: "FullDiskAccess_Skipped")
+              step: 3, stepName: "ScreenRecording_Skipped")
             currentStep = 4
           }
         )
       } else if currentStep == 4 {
-        OnboardingFileScanStepView(
+        OnboardingPermissionStepView(
           appState: appState,
           coordinator: introCoordinator,
           graphViewModel: graphViewModel,
           stepIndex: 4,
           totalSteps: OnboardingFlow.introStepCount,
+          eyebrow: "Access",
+          title: "Let Omi scan your work.",
+          description: "File access lets Omi map your projects and files.",
+          permissionType: "full_disk_access",
+          icon: "externaldrive.fill.badge.person.crop",
+          reasonTitle: "Disk Access",
+          reasonDetail: "This lets Omi scan your projects and recent files.",
+          primaryActionLabel: "Open Disk Access",
+          requiresRestart: false,
           onContinue: {
-            AnalyticsManager.shared.onboardingStepCompleted(step: 4, stepName: "FileScan")
+            AnalyticsManager.shared.onboardingStepCompleted(step: 4, stepName: "FullDiskAccess")
             currentStep = 5
           },
           onSkip: {
-            AnalyticsManager.shared.onboardingStepCompleted(step: 4, stepName: "FileScan_Skipped")
+            AnalyticsManager.shared.onboardingStepCompleted(
+              step: 4, stepName: "FullDiskAccess_Skipped")
             currentStep = 5
           }
         )
       } else if currentStep == 5 {
-        OnboardingPermissionStepView(
+        OnboardingFileScanStepView(
           appState: appState,
           coordinator: introCoordinator,
           graphViewModel: graphViewModel,
           stepIndex: 5,
           totalSteps: OnboardingFlow.introStepCount,
-          eyebrow: "Permission",
-          title: "Let Omi use your mic.",
-          description: "Microphone lets Omi transcribe meetings.",
-          permissionType: "microphone",
-          icon: "mic.fill",
-          reasonTitle: "Microphone",
-          reasonDetail: "This lets Omi transcribe meetings and voice notes.",
-          primaryActionLabel: "Grant microphone access",
-          requiresRestart: false,
           onContinue: {
-            AnalyticsManager.shared.onboardingStepCompleted(step: 5, stepName: "Microphone")
+            AnalyticsManager.shared.onboardingStepCompleted(step: 5, stepName: "FileScan")
             currentStep = 6
           },
           onSkip: {
-            AnalyticsManager.shared.onboardingStepCompleted(step: 5, stepName: "Microphone_Skipped")
+            AnalyticsManager.shared.onboardingStepCompleted(step: 5, stepName: "FileScan_Skipped")
             currentStep = 6
           }
         )
@@ -191,21 +193,20 @@ struct OnboardingView: View {
           stepIndex: 6,
           totalSteps: OnboardingFlow.introStepCount,
           eyebrow: "Permission",
-          title: "Let Omi send reminders.",
-          description: "Notifications let Omi send proactive tips.",
-          permissionType: "notifications",
-          icon: "bell.badge.fill",
-          reasonTitle: "Notifications",
-          reasonDetail: "This lets Omi send reminders and proactive tips.",
-          primaryActionLabel: "Enable notifications",
+          title: "Let Omi use your mic.",
+          description: "Microphone lets Omi transcribe meetings.",
+          permissionType: "microphone",
+          icon: "mic.fill",
+          reasonTitle: "Microphone",
+          reasonDetail: "This lets Omi transcribe meetings and voice notes.",
+          primaryActionLabel: "Grant microphone access",
           requiresRestart: false,
           onContinue: {
-            AnalyticsManager.shared.onboardingStepCompleted(step: 6, stepName: "Notifications")
+            AnalyticsManager.shared.onboardingStepCompleted(step: 6, stepName: "Microphone")
             currentStep = 7
           },
           onSkip: {
-            AnalyticsManager.shared.onboardingStepCompleted(
-              step: 6, stepName: "Notifications_Skipped")
+            AnalyticsManager.shared.onboardingStepCompleted(step: 6, stepName: "Microphone_Skipped")
             currentStep = 7
           }
         )
@@ -217,21 +218,21 @@ struct OnboardingView: View {
           stepIndex: 7,
           totalSteps: OnboardingFlow.introStepCount,
           eyebrow: "Permission",
-          title: "Let Omi see the active app.",
-          description: "Accessibility lets Omi know which app is active.",
-          permissionType: "accessibility",
-          icon: "figure.wave",
-          reasonTitle: "Accessibility",
-          reasonDetail: "This lets Omi know which app you are using.",
-          primaryActionLabel: "Open Accessibility settings",
+          title: "Let Omi send reminders.",
+          description: "Notifications let Omi send proactive tips.",
+          permissionType: "notifications",
+          icon: "bell.badge.fill",
+          reasonTitle: "Notifications",
+          reasonDetail: "This lets Omi send reminders and proactive tips.",
+          primaryActionLabel: "Enable notifications",
           requiresRestart: false,
           onContinue: {
-            AnalyticsManager.shared.onboardingStepCompleted(step: 7, stepName: "Accessibility")
+            AnalyticsManager.shared.onboardingStepCompleted(step: 7, stepName: "Notifications")
             currentStep = 8
           },
           onSkip: {
             AnalyticsManager.shared.onboardingStepCompleted(
-              step: 7, stepName: "Accessibility_Skipped")
+              step: 7, stepName: "Notifications_Skipped")
             currentStep = 8
           }
         )
@@ -243,20 +244,21 @@ struct OnboardingView: View {
           stepIndex: 8,
           totalSteps: OnboardingFlow.introStepCount,
           eyebrow: "Permission",
-          title: "Let Omi act when asked.",
-          description: "Automation lets Omi take actions for you.",
-          permissionType: "automation",
-          icon: "bolt.horizontal.circle.fill",
-          reasonTitle: "Automation",
-          reasonDetail: "This lets Omi take actions when you ask.",
-          primaryActionLabel: "Open Automation settings",
+          title: "Let Omi see the active app.",
+          description: "Accessibility lets Omi know which app is active.",
+          permissionType: "accessibility",
+          icon: "figure.wave",
+          reasonTitle: "Accessibility",
+          reasonDetail: "This lets Omi know which app you are using.",
+          primaryActionLabel: "Open Accessibility settings",
           requiresRestart: false,
           onContinue: {
-            AnalyticsManager.shared.onboardingStepCompleted(step: 8, stepName: "Automation")
+            AnalyticsManager.shared.onboardingStepCompleted(step: 8, stepName: "Accessibility")
             currentStep = 9
           },
           onSkip: {
-            AnalyticsManager.shared.onboardingStepCompleted(step: 8, stepName: "Automation_Skipped")
+            AnalyticsManager.shared.onboardingStepCompleted(
+              step: 8, stepName: "Accessibility_Skipped")
             currentStep = 9
           }
         )
@@ -268,22 +270,20 @@ struct OnboardingView: View {
           stepIndex: 9,
           totalSteps: OnboardingFlow.introStepCount,
           eyebrow: "Permission",
-          title: "Let Omi read your screen.",
-          description: "Screen Recording lets Omi see what you're working on.",
-          permissionType: "screen_recording",
-          icon: "display.and.arrow.down",
-          reasonTitle: "Screen Recording",
-          reasonDetail: "This lets Omi see what is on screen.",
-          primaryActionLabel: "Open Screen Recording settings",
-          requiresRestart: true,
+          title: "Let Omi act when asked.",
+          description: "Automation lets Omi take actions for you.",
+          permissionType: "automation",
+          icon: "bolt.horizontal.circle.fill",
+          reasonTitle: "Automation",
+          reasonDetail: "This lets Omi take actions when you ask.",
+          primaryActionLabel: "Open Automation settings",
+          requiresRestart: false,
           onContinue: {
-            AnalyticsManager.shared.onboardingStepCompleted(step: 9, stepName: "ScreenRecording")
-            startMonitoringIfNeeded()
+            AnalyticsManager.shared.onboardingStepCompleted(step: 9, stepName: "Automation")
             currentStep = 10
           },
           onSkip: {
-            AnalyticsManager.shared.onboardingStepCompleted(
-              step: 9, stepName: "ScreenRecording_Skipped")
+            AnalyticsManager.shared.onboardingStepCompleted(step: 9, stepName: "Automation_Skipped")
             currentStep = 10
           }
         )
