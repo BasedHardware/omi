@@ -783,6 +783,8 @@ class CaptureProvider extends ChangeNotifier
     if (connection == null) return;
     final codec = await _getAudioCodec(deviceId);
     await _wal.getSyncs().phone.onAudioCodecChanged(codec);
+    // BLE device: firmware adds 3-byte header [packet_id_low, packet_id_high, packet_index]
+    _wal.getSyncs().phone.setWalHeaderSize(3);
 
     // Set device info for WAL creation
     final pd = await device.getDeviceInfo(connection);
@@ -1936,6 +1938,8 @@ class CaptureProvider extends ChangeNotifier
     final deviceId = _recordingDevice!.id;
     BleAudioCodec codec = await _getAudioCodec(deviceId);
     await _wal.getSyncs().phone.onAudioCodecChanged(codec);
+    // BLE device: firmware adds 3-byte header
+    _wal.getSyncs().phone.setWalHeaderSize(3);
 
     await streamAudioToWs(deviceId, codec);
 
