@@ -796,6 +796,31 @@ def test_set_close_reason_does_not_override_send_death():
         safe.finish()
 
 
+def test_set_close_reason_does_not_override_keepalive_death():
+    """If keepalive fails first, set_close_reason doesn't override the death reason."""
+    import time as _time
+    from utils.stt.safe_socket import KeepaliveConfig, SafeDeepgramSocket
+
+    mock_conn = MagicMock()
+    mock_conn.send.return_value = True
+    mock_conn.keep_alive.side_effect = TimeoutError('timed out')
+
+    fake_time = [0.0]
+    cfg = KeepaliveConfig(keepalive_interval_sec=5.0, check_period_sec=0.01)
+    safe = SafeDeepgramSocket(mock_conn, cfg=cfg, clock=lambda: fake_time[0])
+    try:
+        safe.send(b'\x00' * 960)
+        fake_time[0] = 6.0
+        _time.sleep(0.1)
+        assert safe.is_connection_dead is True
+        assert 'TimeoutError' in safe.death_reason
+        # External close reason arrives after keepalive death — should not override
+        safe.set_close_reason('DG close event: code=1006')
+        assert 'TimeoutError' in safe.death_reason
+    finally:
+        safe.finish()
+
+
 def test_close_reason_preserved_when_send_fails_after():
     """If close reason is set first, subsequent send failure does not override it (#6036)."""
     from utils.stt.safe_socket import KeepaliveConfig, SafeDeepgramSocket
@@ -918,6 +943,34 @@ async def test_process_audio_dg_registers_close_error_handlers():
             handler(None, 'CloseResponse(type=Close)')
             break
     assert result.death_reason == 'DG close event: CloseResponse(type=Close)'
+    result.finish()
+
+
+@pytest.mark.asyncio
+async def test_process_audio_dg_error_handler_sets_death_reason():
+    """process_audio_dg Error handler feeds into set_close_reason (#6036)."""
+    from utils.stt.safe_socket import SafeDeepgramSocket
+
+    mock_dg_conn = MagicMock()
+    with patch(
+        'utils.stt.streaming.connect_to_deepgram_with_backoff', new_callable=AsyncMock, return_value=mock_dg_conn
+    ):
+        result = await process_audio_dg(
+            stream_transcript=MagicMock(),
+            language='en',
+            sample_rate=16000,
+            channels=1,
+        )
+    assert isinstance(result, SafeDeepgramSocket)
+
+    on_calls = mock_dg_conn.on.call_args_list
+    LiveTranscriptionEvents = sys.modules['deepgram'].LiveTranscriptionEvents
+    for call in on_calls:
+        event, handler = call[0][0], call[0][1]
+        if event == LiveTranscriptionEvents.Error:
+            handler(None, 'ErrorResponse(message=server_error)')
+            break
+    assert result.death_reason == 'DG error event: ErrorResponse(message=server_error)'
     result.finish()
 
 
