@@ -647,9 +647,17 @@ def process_segment(
         threading.Thread(target=delete_file).start()
 
         words, language = deepgram_prerecorded(url, speakers_count=3, attempts=0, return_language=True)
+        if not words:
+            # deepgram_prerecorded returns [] on both "no speech" AND "failure after retries".
+            # Treat as error so the segment is retried — dedup prevents duplicates.
+            error_msg = f'Deepgram returned no words for segment {path}'
+            logger.error(error_msg)
+            with lock:
+                errors.append(error_msg)
+            return
         transcript_segments: List[TranscriptSegment] = postprocess_words(words, 0)
         if not transcript_segments:
-            logger.warning(f'Transcription returned empty for segment {path} (silent/no speech)')
+            logger.warning(f'Postprocessing returned empty for segment {path} (words present but no segments)')
             return
 
         timestamp = get_timestamp_from_path(path)
