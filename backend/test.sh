@@ -44,3 +44,4 @@ pytest tests/unit/test_storage_opus_encoding.py -v
 pytest tests/unit/test_people_conversations_500s.py -v
 pytest tests/unit/test_firestore_read_ops_cache.py -v
 pytest tests/unit/test_ws_auth_handshake.py -v
+pytest tests/unit/test_pusher_circuit_breaker.py -v
