@@ -8,6 +8,13 @@ import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
 import 'package:omi/backend/http/api/apps.dart';
 import 'package:omi/backend/http/api/audio.dart';
 import 'package:omi/backend/http/api/conversations.dart';
+import 'package:omi/backend/http/api/conversations.dart' as conversations_api
+    show
+        unlinkCalendarEvent,
+        addSummaryToCalendarEvent,
+        linkCalendarEvent,
+        autoLinkCalendarEvent,
+        listGoogleCalendarEvents;
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/app.dart';
@@ -538,6 +545,133 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
       _cachedConversation!.visibility = newVisibility;
       conversationProvider?.updateConversation(_cachedConversation!);
       notifyListeners();
+    }
+  }
+
+  /// Unlinks the calendar event from the current conversation
+  Future<bool> unlinkCalendarEvent() async {
+    try {
+      final success = await conversations_api.unlinkCalendarEvent(conversation.id);
+      if (success) {
+        if (_cachedConversation != null) {
+          final updatedConversation = ServerConversation(
+            id: _cachedConversation!.id,
+            createdAt: _cachedConversation!.createdAt,
+            structured: _cachedConversation!.structured,
+            startedAt: _cachedConversation!.startedAt,
+            finishedAt: _cachedConversation!.finishedAt,
+            transcriptSegments: _cachedConversation!.transcriptSegments,
+            appResults: _cachedConversation!.appResults,
+            suggestedSummarizationApps: _cachedConversation!.suggestedSummarizationApps,
+            geolocation: _cachedConversation!.geolocation,
+            photos: _cachedConversation!.photos,
+            discarded: _cachedConversation!.discarded,
+            deleted: _cachedConversation!.deleted,
+            source: _cachedConversation!.source,
+            language: _cachedConversation!.language,
+            externalIntegration: _cachedConversation!.externalIntegration,
+            calendarEvent: null,
+            status: _cachedConversation!.status,
+            isLocked: _cachedConversation!.isLocked,
+          );
+          _cachedConversation = updatedConversation;
+          conversationProvider?.updateConversation(updatedConversation);
+        }
+        notifyListeners();
+        return true;
+      }
+      return false;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  /// Adds conversation summary to the linked calendar event and returns the event link
+  Future<String?> addSummaryToCalendarEvent() async {
+    try {
+      final htmlLink = await conversations_api.addSummaryToCalendarEvent(conversation.id);
+      return htmlLink;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  /// Helper method to update the local conversation state with a calendar event
+  void _updateLocalConversationWithCalendarEvent(CalendarEventLink? calendarEvent) {
+    if (_cachedConversation != null) {
+      final updatedConversation = ServerConversation(
+        id: _cachedConversation!.id,
+        createdAt: _cachedConversation!.createdAt,
+        structured: _cachedConversation!.structured,
+        startedAt: _cachedConversation!.startedAt,
+        finishedAt: _cachedConversation!.finishedAt,
+        transcriptSegments: _cachedConversation!.transcriptSegments,
+        appResults: _cachedConversation!.appResults,
+        suggestedSummarizationApps: _cachedConversation!.suggestedSummarizationApps,
+        geolocation: _cachedConversation!.geolocation,
+        photos: _cachedConversation!.photos,
+        audioFiles: _cachedConversation!.audioFiles,
+        discarded: _cachedConversation!.discarded,
+        deleted: _cachedConversation!.deleted,
+        source: _cachedConversation!.source,
+        language: _cachedConversation!.language,
+        externalIntegration: _cachedConversation!.externalIntegration,
+        calendarEvent: calendarEvent,
+        status: _cachedConversation!.status,
+        isLocked: _cachedConversation!.isLocked,
+        starred: _cachedConversation!.starred,
+      );
+      _cachedConversation = updatedConversation;
+      conversationProvider?.updateConversation(updatedConversation);
+    }
+    notifyListeners();
+  }
+
+  /// Auto-links the conversation to the best overlapping calendar event
+  Future<CalendarEventLink?> autoLinkCalendarEvent() async {
+    try {
+      final calendarEvent = await conversations_api.autoLinkCalendarEvent(conversation.id);
+      if (calendarEvent != null) {
+        _updateLocalConversationWithCalendarEvent(calendarEvent);
+      }
+      return calendarEvent;
+    } catch (e) {
+      debugPrint('Error auto-linking calendar event: $e');
+      return null;
+    }
+  }
+
+  /// Links the conversation to a specific calendar event by event ID
+  Future<CalendarEventLink?> linkCalendarEvent(String eventId) async {
+    try {
+      final calendarEvent = await conversations_api.linkCalendarEvent(conversation.id, eventId);
+      if (calendarEvent != null) {
+        _updateLocalConversationWithCalendarEvent(calendarEvent);
+      }
+      return calendarEvent;
+    } catch (e) {
+      debugPrint('Error linking calendar event: $e');
+      return null;
+    }
+  }
+
+  /// Lists Google Calendar events around the conversation time for the picker UI
+  Future<List<CalendarEventLink>> listCalendarEventsForPicker() async {
+    try {
+      final conversationStart = conversation.startedAt ?? conversation.createdAt;
+      final conversationEnd = conversation.finishedAt ?? conversationStart.add(const Duration(hours: 1));
+
+      final timeMin = conversationStart.subtract(const Duration(hours: 2));
+      final timeMax = conversationEnd.add(const Duration(hours: 2));
+
+      return await conversations_api.listGoogleCalendarEvents(
+        timeMin: timeMin,
+        timeMax: timeMax,
+        maxResults: 30,
+      );
+    } catch (e) {
+      debugPrint('Error listing calendar events: $e');
+      return [];
     }
   }
 
