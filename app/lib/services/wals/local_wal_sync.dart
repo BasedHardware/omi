@@ -26,6 +26,7 @@ class LocalWalSyncImpl implements LocalWalSync {
 
   int _framesPerSecond = 100;
   BleAudioCodec _codec = BleAudioCodec.opus;
+  int _walHeaderSize = 3; // Default: BLE device 3-byte firmware header
   String? _deviceId;
   String? _deviceModel;
 
@@ -126,6 +127,11 @@ class LocalWalSyncImpl implements LocalWalSync {
   void setDeviceInfo(String? deviceId, String? deviceModel) {
     _deviceId = deviceId;
     _deviceModel = deviceModel;
+  }
+
+  @override
+  void setWalHeaderSize(int headerSize) {
+    _walHeaderSize = headerSize;
   }
 
   Future _chunk() async {
@@ -233,8 +239,8 @@ class LocalWalSyncImpl implements LocalWalSync {
 
         List<int> data = [];
         // Strip WAL header bytes before writing to disk.
-        // Each codec defines its own walHeaderSize: BLE Opus=3, phone mic PCM=1, others=0.
-        final headerSize = wal.codec.walHeaderSize;
+        // Header size depends on audio source: BLE device=3, phone mic=1.
+        final headerSize = _walHeaderSize;
         for (int i = 0; i < wal.data.length; i++) {
           var frame = headerSize > 0 && wal.data[i].length > headerSize ? wal.data[i].sublist(headerSize) : wal.data[i];
 
@@ -333,9 +339,9 @@ class LocalWalSyncImpl implements LocalWalSync {
 
   @override
   void onBytesSync(List<int> value) {
-    // Match frames using codec-defined sync bytes.
-    // Each codec defines syncMatchBytes: Opus=3 (BLE header), PCM=1 (index byte), others=4 (content).
-    final matchBytes = _codec.syncMatchBytes;
+    // Match frames using source-defined header bytes.
+    // BLE device=3 (firmware header), phone mic=1 (index byte), no header=4 (content fallback).
+    final matchBytes = _walHeaderSize > 0 ? _walHeaderSize : 4;
     if (value.length < matchBytes) return;
     for (int i = _frames.length - 1; i >= 0; i--) {
       if (_frames[i].length < matchBytes) continue;

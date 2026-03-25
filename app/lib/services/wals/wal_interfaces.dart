@@ -69,6 +69,12 @@ abstract class LocalWalSync implements IWalSync {
   void onBytesSync(List<int> value);
   Future onAudioCodecChanged(BleAudioCodec codec);
   void setDeviceInfo(String? deviceId, String? deviceModel);
+
+  /// Set WAL header size based on the audio source (not codec).
+  /// BLE devices: 3 (firmware adds [packet_id_low, packet_id_high, packet_index]).
+  /// Phone mic: 1 (app prepends [frame_index] for data consistency).
+  /// Header is stripped before writing to disk and used for sync matching.
+  void setWalHeaderSize(int headerSize);
 }
 
 abstract class SDCardWalSync implements IWalSync {
