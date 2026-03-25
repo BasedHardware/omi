@@ -362,20 +362,23 @@ resources:
 livenessProbe:
   tcpSocket:
     port: 8080
-  failureThreshold: 30
+  failureThreshold: 3
   periodSeconds: 10
+  timeoutSeconds: 1
 
 readinessProbe:
   tcpSocket:
     port: 8080
-  failureThreshold: 30
+  failureThreshold: 3
   periodSeconds: 10
+  timeoutSeconds: 1
 
 startupProbe:
   tcpSocket:
     port: 8080
   failureThreshold: 30
   periodSeconds: 10
+  timeoutSeconds: 1
 
 # This section is for setting up autoscaling more information can be found here: https://kubernetes.io/docs/concepts/workloads/autoscaling/
 autoscaling:
