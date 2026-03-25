@@ -289,6 +289,7 @@ struct OnboardingView: View {
           requiresRestart: true,
           onContinue: {
             AnalyticsManager.shared.onboardingStepCompleted(step: 10, stepName: "ScreenRecording")
+            startMonitoringIfNeeded()
             currentStep = 11
           },
           onSkip: {
@@ -306,9 +307,7 @@ struct OnboardingView: View {
           totalSteps: OnboardingFlow.introStepCount,
           onContinue: {
             AnalyticsManager.shared.onboardingStepCompleted(step: 11, stepName: "Goal")
-            if !ProactiveAssistantsPlugin.shared.isMonitoring {
-              ProactiveAssistantsPlugin.shared.startMonitoring { _, _ in }
-            }
+            startMonitoringIfNeeded()
             currentStep = 12
           }
         )
@@ -418,7 +417,7 @@ struct OnboardingView: View {
     if LaunchAtLoginManager.shared.setEnabled(true) {
       AnalyticsManager.shared.launchAtLoginChanged(enabled: true, source: "onboarding_complete")
     }
-    ProactiveAssistantsPlugin.shared.startMonitoring { _, _ in }
+    startMonitoringIfNeeded()
     appState.startTranscription()
 
     // Create welcome task
@@ -433,6 +432,13 @@ struct OnboardingView: View {
           priority: "low"
         )
       }
+    }
+  }
+
+  private func startMonitoringIfNeeded() {
+    AssistantSettings.shared.screenAnalysisEnabled = true
+    if !ProactiveAssistantsPlugin.shared.isMonitoring {
+      ProactiveAssistantsPlugin.shared.startMonitoring { _, _ in }
     }
   }
 }
@@ -467,7 +473,7 @@ struct OnboardingTrustPreviewCard: View {
       HStack(spacing: 8) {
         Image(systemName: "shield.lefthalf.filled")
           .font(.system(size: 16, weight: .semibold))
-          .foregroundColor(OmiColors.purplePrimary.opacity(0.9))
+          .foregroundColor(OmiColors.textSecondary)
         Text("Trust & Privacy")
           .font(.system(size: 17, weight: .medium))
           .foregroundColor(OmiColors.textSecondary)
@@ -498,7 +504,7 @@ struct OnboardingTrustPreviewCard: View {
           .fill(OmiColors.backgroundTertiary.opacity(0.75))
           .overlay(
             RoundedRectangle(cornerRadius: 16)
-              .stroke(OmiColors.purplePrimary.opacity(0.25), lineWidth: 1)
+              .stroke(Color.white.opacity(0.08), lineWidth: 1)
           )
       )
     }
@@ -511,7 +517,7 @@ struct OnboardingTrustPreviewCard: View {
     HStack(alignment: .top, spacing: 10) {
       Image(systemName: icon)
         .font(.system(size: 14, weight: .semibold))
-        .foregroundColor(OmiColors.purplePrimary)
+        .foregroundColor(OmiColors.textSecondary)
         .frame(width: 20, height: 20)
 
       VStack(alignment: .leading, spacing: 2) {
@@ -524,7 +530,7 @@ struct OnboardingTrustPreviewCard: View {
               .foregroundColor(OmiColors.textSecondary)
             if let url = URL(string: "https://github.com/basedhardware/omi/") {
               Link("public", destination: url)
-                .foregroundColor(OmiColors.purpleSecondary)
+                .foregroundColor(OmiColors.textPrimary)
                 .underline()
             }
             Text(" and auditable.")
@@ -628,7 +634,7 @@ struct OnboardingPrivacySheet: View {
       HStack {
         Image(systemName: "shield.lefthalf.filled")
           .scaledFont(size: 16)
-          .foregroundColor(OmiColors.purplePrimary)
+          .foregroundColor(OmiColors.textSecondary)
 
         Text("Data & Privacy")
           .scaledFont(size: 16, weight: .semibold)

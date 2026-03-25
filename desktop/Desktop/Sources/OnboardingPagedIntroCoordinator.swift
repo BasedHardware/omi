@@ -217,6 +217,8 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
     scanState = .scanning
     scanStatusText = "Scanning your projects and apps..."
 
+    Task { await startBackgroundInsightsIfNeeded() }
+
     let result = await executeTool(name: "scan_files", arguments: [:])
     if result.lowercased().hasPrefix("error") {
       scanState = .failed(result)
@@ -227,7 +229,6 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
     await refreshSnapshotIfAvailable()
     scanState = .complete
     scanStatusText = "Your workspace is mapped."
-    await startBackgroundInsightsIfNeeded()
   }
 
   func refreshSnapshotIfAvailable() async {
@@ -655,6 +656,7 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
     let publicDomains: Set<String> = [
       "gmail.com", "googlemail.com", "icloud.com", "me.com", "mac.com", "yahoo.com",
       "outlook.com", "hotmail.com", "live.com", "proton.me", "protonmail.com",
+      "privaterelay.appleid.com", "privaterelay.icloud.com",
     ]
 
     guard !publicDomains.contains(domain) else { return nil }

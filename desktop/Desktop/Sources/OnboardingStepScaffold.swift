@@ -152,7 +152,7 @@ struct OnboardingStepScaffold<Content: View>: View {
     HStack(spacing: 8) {
       ForEach(0..<totalSteps, id: \.self) { index in
         Capsule()
-          .fill(index <= stepIndex ? OmiColors.purplePrimary : Color.white.opacity(0.1))
+          .fill(index <= stepIndex ? Color.white : Color.white.opacity(0.1))
           .frame(width: index == stepIndex ? 28 : 8, height: 6)
       }
     }
@@ -164,7 +164,7 @@ struct OnboardingStepScaffold<Content: View>: View {
       Text(eyebrow.uppercased())
         .font(.system(size: 12, weight: .semibold))
         .tracking(1.2)
-        .foregroundColor(OmiColors.purplePrimary)
+        .foregroundColor(OmiColors.textTertiary)
 
       Text(title)
         .font(.system(size: 40, weight: .bold))
@@ -288,12 +288,12 @@ struct OnboardingCardButtonStyle: ButtonStyle {
   func makeBody(configuration: Configuration) -> some View {
     configuration.label
       .font(.system(size: 15, weight: .semibold))
-      .foregroundColor(isPrimary ? .white : OmiColors.textPrimary)
+      .foregroundColor(isPrimary ? .black : OmiColors.textPrimary)
       .padding(.horizontal, 18)
       .padding(.vertical, 12)
       .background(
         RoundedRectangle(cornerRadius: 14, style: .continuous)
-          .fill(isPrimary ? OmiColors.purplePrimary : OmiColors.backgroundTertiary)
+          .fill(isPrimary ? Color.white : OmiColors.backgroundTertiary)
       )
       .overlay(
         RoundedRectangle(cornerRadius: 14, style: .continuous)
@@ -319,7 +319,7 @@ struct OnboardingInsightCard: View {
 
         Image(systemName: icon)
           .font(.system(size: 16, weight: .semibold))
-          .foregroundColor(OmiColors.purplePrimary)
+          .foregroundColor(OmiColors.textSecondary)
       }
 
       VStack(alignment: .leading, spacing: 6) {
@@ -356,12 +356,12 @@ struct OnboardingSelectableChip: View {
     Button(action: action) {
       Text(title)
         .font(.system(size: 14, weight: .semibold))
-        .foregroundColor(isSelected ? .white : OmiColors.textSecondary)
+        .foregroundColor(isSelected ? .black : OmiColors.textSecondary)
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
         .background(
           Capsule()
-            .fill(isSelected ? OmiColors.purplePrimary : OmiColors.backgroundSecondary)
+            .fill(isSelected ? Color.white : OmiColors.backgroundSecondary)
         )
         .overlay(
           Capsule()

@@ -15,7 +15,7 @@ struct OnboardingFileScanStepView: View {
       stepIndex: stepIndex,
       totalSteps: totalSteps,
       eyebrow: "Discovery",
-      title: "Map your work once.",
+      title: "Start building your profile.",
       description: "Omi scans projects and recent files.",
       showsSkip: true,
       onSkip: onSkip
@@ -51,20 +51,6 @@ struct OnboardingFileScanStepView: View {
           .padding(28)
         }
         .frame(maxWidth: 560, maxHeight: 280)
-
-        if let snapshot = coordinator.scanSnapshot {
-          OnboardingInsightCard(
-            icon: "shippingbox.fill",
-            title: "Mapped",
-            detail: [
-              snapshot.projectNames.prefix(3).joined(separator: ", "),
-              snapshot.technologies.prefix(3).joined(separator: ", "),
-            ]
-            .filter { !$0.isEmpty }
-            .joined(separator: "  •  ")
-          )
-          .frame(maxWidth: 560)
-        }
 
         if coordinator.scanSnapshot != nil {
           Button("Continue") {
