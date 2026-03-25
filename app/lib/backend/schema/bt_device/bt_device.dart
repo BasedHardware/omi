@@ -90,27 +90,6 @@ enum BleAudioCodec {
     return this == BleAudioCodec.opusFS320 ? 320 : 160;
   }
 
-  /// WAL header size in bytes prepended to each frame for data consistency.
-  /// BLE devices (Opus): 3-byte header [packet_id_low, packet_id_high, packet_index] added by firmware.
-  /// Phone mic (PCM): 1-byte header [frame_index] added by app for sync matching.
-  /// Other/unknown codecs: 0 (no header, falls back to content-based matching).
-  int get walHeaderSize {
-    switch (this) {
-      case BleAudioCodec.opus:
-      case BleAudioCodec.opusFS320:
-        return 3;
-      case BleAudioCodec.pcm16:
-      case BleAudioCodec.pcm8:
-        return 1;
-      default:
-        return 0;
-    }
-  }
-
-  /// Number of leading bytes used to match frames for WAL sync confirmation.
-  /// Uses header bytes when available; falls back to 4 content bytes for codecs without headers.
-  int get syncMatchBytes => walHeaderSize > 0 ? walHeaderSize : 4;
-
   /// Check if this codec is supported for custom STT providers
   bool get isCustomSttSupported {
     return this == BleAudioCodec.pcm8 ||
