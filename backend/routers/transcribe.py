@@ -2507,7 +2507,13 @@ async def _stream_handler(
             # Check if DG connection died (keepalive or send failure) (#5870)
             # Separated from routing so profile socket still receives audio if main dies.
             if dg_socket is not None and dg_socket.is_connection_dead:
-                logger.error('DG connection died mid-session uid=%s session=%s', uid, session_id)
+                close_reason = getattr(dg_socket, 'death_reason', None) or 'unknown'
+                logger.error(
+                    'DG connection died mid-session uid=%s session=%s reason=%s',
+                    uid,
+                    session_id,
+                    close_reason,
+                )
                 dg_socket = None  # Stop sending to dead connection
 
             if dg_socket is not None:
