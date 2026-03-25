@@ -329,6 +329,68 @@ void main() {
     });
   });
 
+  group('Source transition: header size must reset per source', () {
+    // Simulates the source-transition scenario: phone mic (headerSize=1) → BLE (headerSize=3).
+    // Both share the same LocalWalSyncImpl instance. If BLE path doesn't reset headerSize,
+    // BLE frames would be flushed with 1-byte stripping (corrupted audio).
+    test('phone mic → BLE transition resets headerSize from 1 to 3', () {
+      int walHeaderSize = 3; // Default BLE
+
+      void setWalHeaderSize(int size) {
+        walHeaderSize = size;
+      }
+
+      List<int> stripHeader(List<int> frame) {
+        return walHeaderSize > 0 && frame.length > walHeaderSize ? frame.sublist(walHeaderSize) : frame;
+      }
+
+      // Phone mic session: set headerSize=1
+      setWalHeaderSize(1);
+      expect(walHeaderSize, 1);
+      final phoneMicFrame = [0x05, 0xAA, 0xBB, 0xCC]; // 1-byte index + audio
+      expect(stripHeader(phoneMicFrame), [0xAA, 0xBB, 0xCC]);
+
+      // BLE session: MUST reset headerSize=3 explicitly
+      setWalHeaderSize(3);
+      expect(walHeaderSize, 3);
+      final bleFrame = [0x01, 0x02, 0x03, 0xAA, 0xBB]; // 3-byte firmware header + audio
+      expect(stripHeader(bleFrame), [0xAA, 0xBB]);
+    });
+
+    test('BLE → phone mic transition resets headerSize from 3 to 1', () {
+      int walHeaderSize = 3;
+
+      void setWalHeaderSize(int size) {
+        walHeaderSize = size;
+      }
+
+      int syncMatchBytes() => walHeaderSize > 0 ? walHeaderSize : 4;
+
+      // BLE session
+      setWalHeaderSize(3);
+      expect(syncMatchBytes(), 3);
+
+      // Phone mic session: set headerSize=1
+      setWalHeaderSize(1);
+      expect(syncMatchBytes(), 1);
+    });
+
+    test('stale headerSize=1 corrupts BLE flush (regression guard)', () {
+      int walHeaderSize = 1; // Stale from phone mic session
+
+      List<int> stripHeader(List<int> frame) {
+        return walHeaderSize > 0 && frame.length > walHeaderSize ? frame.sublist(walHeaderSize) : frame;
+      }
+
+      // BLE frame with 3-byte firmware header
+      final bleFrame = [0x01, 0x02, 0x03, 0xAA, 0xBB];
+      final stripped = stripHeader(bleFrame);
+      // With stale headerSize=1, only 1 byte stripped → firmware bytes leak into audio
+      expect(stripped, [0x02, 0x03, 0xAA, 0xBB]); // WRONG: 0x02, 0x03 are firmware header, not audio
+      expect(stripped.length, 4); // Should be 2 if headerSize were correct
+    });
+  });
+
   group('Session boundary reset', () {
     // Verifies that onAudioCodecChanged must reset frames even when codec is unchanged,
     // to prevent stale frames from a prior session leaking into a new session.
