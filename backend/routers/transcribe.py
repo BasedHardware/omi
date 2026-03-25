@@ -73,7 +73,7 @@ from utils.conversations.process_conversation import process_conversation, retri
 from utils.notifications import send_credit_limit_notification, send_silent_user_notification
 from utils.other import endpoints as auth
 from utils.other.storage import get_profile_audio_if_exists, get_user_has_speech_profile
-from utils.pusher import connect_to_trigger_pusher
+from utils.pusher import connect_to_trigger_pusher, PusherCircuitBreakerOpen, get_circuit_breaker, CircuitState
 from utils.speaker_identification import detect_speaker_from_text
 from utils.stt.streaming import (
     SPEECH_PROFILE_FIXED_DURATION,
@@ -107,7 +107,12 @@ from utils.onboarding import OnboardingHandler
 
 from utils.aac import AACDecoder
 from utils.audio import AudioRingBuffer
-from utils.metrics import BACKEND_LISTEN_ACTIVE_WS_CONNECTIONS
+from utils.metrics import (
+    BACKEND_LISTEN_ACTIVE_WS_CONNECTIONS,
+    PUSHER_CIRCUIT_BREAKER_REJECTIONS,
+    PUSHER_CIRCUIT_BREAKER_STATE,
+    PUSHER_SESSION_DEGRADED,
+)
 from utils.stt.speaker_embedding import (
     extract_embedding_from_bytes,
     compare_embeddings,
@@ -127,6 +132,20 @@ PUSHER_ENABLED = bool(os.getenv('HOSTED_PUSHER_API_URL'))
 FREEMIUM_THRESHOLD_SECONDS = 180  # 3 minutes remaining - notify user
 
 TARGET_SAMPLE_RATE = 16000
+
+
+# Per-session pusher reconnect state machine
+class PusherReconnectState(str, Enum):
+    CONNECTED = 'connected'
+    RECONNECT_BACKOFF = 'reconnect_backoff'
+    DEGRADED = 'degraded'
+    HALF_OPEN_PROBE = 'half_open_probe'
+
+
+PUSHER_MAX_RECONNECT_ATTEMPTS = 6
+PUSHER_DEGRADED_COOLDOWN = 60.0  # seconds before probing from DEGRADED
+PUSHER_RECONNECT_BASE_DELAY = 1.0  # seconds
+PUSHER_RECONNECT_MAX_DELAY = 60.0  # seconds
 
 
 # ---- Multi-channel support ----
@@ -718,10 +737,15 @@ async def _stream_handler(
             return
 
         for conversation in processing:
-            if PUSHER_ENABLED:
+            if PUSHER_ENABLED and pusher_is_connected is not None and pusher_is_connected():
                 await request_conversation_processing(conversation['id'])
-            else:
+            elif PUSHER_ENABLED and pusher_is_degraded is not None and pusher_is_degraded():
                 await _create_conversation_fallback(conversation)
+            elif not PUSHER_ENABLED:
+                await _create_conversation_fallback(conversation)
+            else:
+                # PUSHER_ENABLED but handler not yet initialized — try pusher
+                await request_conversation_processing(conversation['id'])
 
     async def process_pending_conversations(timed_out_id: Optional[str]):
         await asyncio.sleep(7.0)
@@ -814,11 +838,21 @@ async def _stream_handler(
         if conversation:
             has_content = conversation.get('transcript_segments') or conversation.get('photos')
             if has_content:
-                if PUSHER_ENABLED:
+                # Use pusher if enabled AND connected, otherwise fallback
+                if PUSHER_ENABLED and pusher_is_connected is not None and pusher_is_connected():
                     on_conversation_processing_started(conversation_id)
                     await request_conversation_processing(conversation_id)
-                else:
+                elif PUSHER_ENABLED and pusher_is_degraded is not None and pusher_is_degraded():
+                    logger.info(
+                        f"Pusher degraded, using fallback for conversation {conversation_id} {uid} {session_id}"
+                    )
                     await _create_conversation_fallback(conversation)
+                elif not PUSHER_ENABLED:
+                    await _create_conversation_fallback(conversation)
+                else:
+                    # PUSHER_ENABLED but handler not yet initialized — try pusher
+                    on_conversation_processing_started(conversation_id)
+                    await request_conversation_processing(conversation_id)
             else:
                 logger.info(f'Clean up the conversation {conversation_id}, reason: no content {uid} {session_id}')
                 conversations_db.delete_conversation(uid, conversation_id)
@@ -954,7 +988,6 @@ async def _stream_handler(
                             1,
                             preseconds=0,
                             model=stt_model,
-                            is_active=lambda: websocket_active,
                         )
                     elif stt_service == STTService.soniox:
                         stt_sockets_multi[i] = await process_audio_soniox(
@@ -1164,6 +1197,13 @@ async def _stream_handler(
         pusher_connect_lock = asyncio.Lock()
         pusher_connected = False
 
+        # Per-session reconnect state machine
+        reconnect_state = PusherReconnectState.CONNECTED
+        reconnect_attempts = 0
+        reconnect_task = None  # single task per session
+        degraded_since: float = 0.0
+        fallback_processed_ids: set = set()  # guard against duplicate processing
+
         # Transcript (bounded to prevent memory growth when pusher is down)
         segment_buffers: deque = deque(maxlen=MAX_SEGMENT_BUFFER_SIZE)
 
@@ -1232,11 +1272,9 @@ async def _stream_handler(
                     await pusher_ws.send(data)
                 except ConnectionClosed as e:
                     logger.error(f"Pusher transcripts Connection closed: {e} {uid} {session_id}")
-                    pusher_connected = False
+                    _mark_disconnected()
                 except Exception as e:
                     logger.error(f"Pusher transcripts failed: {e} {uid} {session_id}")
-            if auto_reconnect and pusher_connected is False and websocket_active:
-                await connect()
 
         async def transcript_consume():
             nonlocal websocket_active
@@ -1290,7 +1328,7 @@ async def _stream_handler(
                     last_synced_conversation_id = current_conversation_id
                 except ConnectionClosed as e:
                     logger.error(f"Pusher audio_bytes Connection closed: {e} {uid} {session_id}")
-                    pusher_connected = False
+                    _mark_disconnected()
                 except Exception as e:
                     logger.error(f"Failed to send conversation_id to pusher: {e} {uid} {session_id}")
 
@@ -1320,11 +1358,9 @@ async def _stream_handler(
                     await pusher_ws.send(data)
                 except ConnectionClosed as e:
                     logger.error(f"Pusher audio_bytes Connection closed: {e} {uid} {session_id}")
-                    pusher_connected = False
+                    _mark_disconnected()
                 except Exception as e:
                     logger.error(f"Pusher audio_bytes failed: {e} {uid} {session_id}")
-            if auto_reconnect and pusher_connected is False and websocket_active:
-                await connect()
 
         async def audio_bytes_consume():
             nonlocal websocket_active
@@ -1378,7 +1414,7 @@ async def _stream_handler(
                     break
                 except ConnectionClosed as e:
                     logger.error(f"Pusher receive connection closed: {e} {uid} {session_id}")
-                    pusher_connected = False
+                    _mark_disconnected()
                 except Exception as e:
                     logger.error(f"Pusher receive error: {e} {uid} {session_id}")
                     await asyncio.sleep(0.5)
@@ -1398,6 +1434,9 @@ async def _stream_handler(
                         logger.error(
                             f"Conversation {cid} failed after {MAX_RETRIES_PER_REQUEST} retries, giving up {uid} {session_id}"
                         )
+                        # Route to fallback if in degraded mode
+                        if reconnect_state == PusherReconnectState.DEGRADED:
+                            await _fallback_process_conversation(cid)
                         pending_conversation_requests.pop(cid, None)
                         continue
                     info['retries'] += 1
@@ -1406,13 +1445,137 @@ async def _stream_handler(
                     )
                     await request_conversation_processing(cid)
 
-                # Reconnect outside try/except (same pattern as flush functions)
-                if pusher_connected is False and websocket_active:
-                    await connect()
-
         async def _flush():
             await _audio_bytes_flush(auto_reconnect=False)
             await _transcript_flush(auto_reconnect=False)
+
+        def _mark_disconnected():
+            """Signal pusher disconnection — sets state and ensures reconnect loop is running."""
+            nonlocal pusher_connected, reconnect_state, reconnect_task
+            if not pusher_connected:
+                return  # already marked
+            pusher_connected = False
+            if reconnect_state == PusherReconnectState.CONNECTED:
+                reconnect_state = PusherReconnectState.RECONNECT_BACKOFF
+                logger.info(f"Pusher disconnected, entering RECONNECT_BACKOFF {uid} {session_id}")
+            # Ensure reconnect loop is running (single task per session)
+            if reconnect_task is None or reconnect_task.done():
+                reconnect_task = asyncio.create_task(_pusher_reconnect_loop())
+
+        async def _fallback_process_conversation(conversation_id: str):
+            """Route conversation to fallback processing (degraded mode)."""
+            nonlocal fallback_processed_ids
+            if conversation_id in fallback_processed_ids:
+                logger.info(
+                    f"Conversation {conversation_id} already processed via fallback, skipping {uid} {session_id}"
+                )
+                return
+            conversation_data = conversations_db.get_conversation(uid, conversation_id)
+            if conversation_data:
+                fallback_processed_ids.add(conversation_id)
+                logger.info(f"Routing conversation {conversation_id} to fallback (degraded mode) {uid} {session_id}")
+                await _create_conversation_fallback(conversation_data)
+
+        async def _pusher_reconnect_loop():
+            """Single reconnect loop per session — replaces 3 scattered auto-reconnect calls.
+
+            State machine:
+            RECONNECT_BACKOFF → (6 failures) → DEGRADED → (60s) → HALF_OPEN_PROBE → success → CONNECTED
+                                                                                   → failure → DEGRADED
+            """
+            nonlocal reconnect_state, reconnect_attempts, degraded_since, pusher_connected
+            logger.info(f"Pusher reconnect loop started {uid} {session_id}")
+            PUSHER_SESSION_DEGRADED.inc()
+            try:
+                while websocket_active and not pusher_connected:
+                    if reconnect_state == PusherReconnectState.RECONNECT_BACKOFF:
+                        if reconnect_attempts >= PUSHER_MAX_RECONNECT_ATTEMPTS:
+                            reconnect_state = PusherReconnectState.DEGRADED
+                            degraded_since = time.monotonic()
+                            reconnect_attempts = 0
+                            logger.warning(
+                                f"Pusher reconnect exhausted ({PUSHER_MAX_RECONNECT_ATTEMPTS} attempts), "
+                                f"entering DEGRADED mode {uid} {session_id}"
+                            )
+                            # Route pending conversations to fallback (pop each to avoid race)
+                            for cid in list(pending_conversation_requests.keys()):
+                                pending_conversation_requests.pop(cid, None)
+                                await _fallback_process_conversation(cid)
+                            continue
+
+                        # Exponential backoff: 1s, 2s, 4s, 8s, 16s, 32s (capped at 60s)
+                        delay = min(
+                            PUSHER_RECONNECT_BASE_DELAY * (2**reconnect_attempts),
+                            PUSHER_RECONNECT_MAX_DELAY,
+                        )
+                        # Add jitter (±25%)
+                        delay *= 0.75 + random.random() * 0.5
+                        logger.info(
+                            f"Pusher reconnect attempt {reconnect_attempts + 1}/{PUSHER_MAX_RECONNECT_ATTEMPTS}, "
+                            f"waiting {delay:.1f}s {uid} {session_id}"
+                        )
+                        await asyncio.sleep(delay)
+                        if not websocket_active:
+                            break
+
+                        try:
+                            await connect()
+                            if pusher_connected:
+                                reconnect_state = PusherReconnectState.CONNECTED
+                                reconnect_attempts = 0
+                                logger.info(f"Pusher reconnected successfully {uid} {session_id}")
+                                break
+                        except PusherCircuitBreakerOpen:
+                            PUSHER_CIRCUIT_BREAKER_REJECTIONS.inc()
+                            # Circuit breaker is open — skip to degraded immediately
+                            reconnect_state = PusherReconnectState.DEGRADED
+                            degraded_since = time.monotonic()
+                            reconnect_attempts = 0
+                            logger.warning(f"Circuit breaker open, skipping to DEGRADED {uid} {session_id}")
+                            for cid in list(pending_conversation_requests.keys()):
+                                pending_conversation_requests.pop(cid, None)
+                                await _fallback_process_conversation(cid)
+                            continue
+                        except Exception:
+                            pass  # _connect already logged the error
+
+                        reconnect_attempts += 1
+
+                    elif reconnect_state == PusherReconnectState.DEGRADED:
+                        # Wait for cooldown before probing
+                        elapsed = time.monotonic() - degraded_since
+                        remaining = PUSHER_DEGRADED_COOLDOWN - elapsed
+                        if remaining > 0:
+                            await asyncio.sleep(min(remaining, 5.0))
+                            continue
+                        # Cooldown elapsed — try a single probe
+                        reconnect_state = PusherReconnectState.HALF_OPEN_PROBE
+                        logger.info(f"Pusher DEGRADED cooldown elapsed, probing {uid} {session_id}")
+
+                    elif reconnect_state == PusherReconnectState.HALF_OPEN_PROBE:
+                        try:
+                            await connect()
+                            if pusher_connected:
+                                reconnect_state = PusherReconnectState.CONNECTED
+                                reconnect_attempts = 0
+                                logger.info(f"Pusher probe succeeded, back to CONNECTED {uid} {session_id}")
+                                break
+                        except PusherCircuitBreakerOpen:
+                            PUSHER_CIRCUIT_BREAKER_REJECTIONS.inc()
+                            pass
+                        except Exception:
+                            pass
+                        # Probe failed — back to DEGRADED
+                        reconnect_state = PusherReconnectState.DEGRADED
+                        degraded_since = time.monotonic()
+                        logger.warning(f"Pusher probe failed, back to DEGRADED {uid} {session_id}")
+
+                    else:
+                        # Shouldn't happen, but guard against
+                        break
+            finally:
+                PUSHER_SESSION_DEGRADED.dec()
+                logger.info(f"Pusher reconnect loop ended (state={reconnect_state.value}) {uid} {session_id}")
 
         async def connect():
             nonlocal pusher_connected
@@ -1428,13 +1591,14 @@ async def _stream_handler(
                         pusher_ws = None
                     except Exception as e:
                         logger.error(f"Pusher draining failed: {e} {uid} {session_id}")
-                # connect
+                # connect (PusherCircuitBreakerOpen propagates to caller)
                 await _connect()
 
         async def _connect():
             nonlocal pusher_ws
             nonlocal pusher_connected
             nonlocal current_conversation_id
+            nonlocal reconnect_state, reconnect_attempts, fallback_processed_ids
 
             try:
                 pusher_sample_rate = TARGET_SAMPLE_RATE if is_multi_channel else sample_rate
@@ -1445,21 +1609,43 @@ async def _stream_handler(
                     # Session ended during connection attempt
                     return
                 pusher_connected = True
+                reconnect_state = PusherReconnectState.CONNECTED
+                reconnect_attempts = 0
                 # Re-send any pending conversation requests after reconnect
+                # (skip conversations already processed via fallback to avoid duplication)
                 if pending_conversation_requests:
                     logger.info(
                         f"Reconnected to pusher, re-sending {len(pending_conversation_requests)} pending requests {uid} {session_id}"
                     )
                     for cid in list(pending_conversation_requests.keys()):
+                        if cid in fallback_processed_ids:
+                            pending_conversation_requests.pop(cid, None)
+                            continue
                         pending_conversation_requests[cid]['sent_at'] = time.time()
                         await request_conversation_processing(cid)
+                # Clear fallback tracking after processing pending queue
+                fallback_processed_ids.clear()
+            except PusherCircuitBreakerOpen:
+                raise  # Let caller handle circuit breaker
             except Exception as e:
-                logger.error(f"Exception in connect: {e}")
+                logger.error(f"Exception in connect: {e} {uid} {session_id}")
 
         async def close(code: int = 1000):
+            nonlocal reconnect_task
+            # Cancel reconnect loop if running
+            if reconnect_task and not reconnect_task.done():
+                reconnect_task.cancel()
+                try:
+                    await reconnect_task
+                except asyncio.CancelledError:
+                    pass
+                reconnect_task = None
             await _flush()
             if pusher_ws:
                 await pusher_ws.close(code)
+
+        def is_degraded():
+            return reconnect_state in (PusherReconnectState.DEGRADED, PusherReconnectState.HALF_OPEN_PROBE)
 
         async def send_speaker_sample_request(
             person_id: str,
@@ -1511,9 +1697,17 @@ async def _stream_handler(
                     try:
                         await pusher_ws.send(struct.pack("I", 100))
                     except ConnectionClosed:
-                        pusher_connected = False
+                        _mark_disconnected()
                     except Exception as e:
                         logger.error(f"Pusher heartbeat send failed: {e} {uid} {session_id}")
+
+        def start_degraded():
+            """Enter degraded mode and start reconnect loop after initial connect failure."""
+            nonlocal reconnect_state, reconnect_task, degraded_since
+            reconnect_state = PusherReconnectState.DEGRADED
+            degraded_since = time.monotonic()
+            if reconnect_task is None or reconnect_task.done():
+                reconnect_task = asyncio.create_task(_pusher_reconnect_loop())
 
         return (
             connect,
@@ -1525,6 +1719,8 @@ async def _stream_handler(
             request_conversation_processing,
             pusher_receive,
             is_connected,
+            is_degraded,
+            start_degraded,
             send_speaker_sample_request,
             pusher_heartbeat,
         )
@@ -1538,6 +1734,8 @@ async def _stream_handler(
     request_conversation_processing = None
     pusher_receive = None
     pusher_is_connected = None
+    pusher_is_degraded = None
+    pusher_start_degraded = None
     send_speaker_sample_request = None
     pusher_heartbeat = None
 
@@ -2600,18 +2798,28 @@ async def _stream_handler(
                 request_conversation_processing,
                 pusher_receive,
                 pusher_is_connected,
+                pusher_is_degraded,
+                pusher_start_degraded,
                 send_speaker_sample_request,
                 pusher_heartbeat,
             ) = create_pusher_task_handler()
 
-            # Pusher connection
-            await pusher_connect()
-            if not pusher_is_connected():
-                logger.error(f"Pusher connection failed after retries {uid} {session_id}")
-                await websocket.close(code=1011, reason="Pusher connection failed")
-                return
+            # Pusher connection — graceful degradation instead of 1011 hard close
+            try:
+                await pusher_connect()
+            except PusherCircuitBreakerOpen:
+                logger.warning(f"Circuit breaker open on initial connect, starting in degraded mode {uid} {session_id}")
+            except Exception as e:
+                logger.error(f"Pusher initial connect failed: {e}, starting in degraded mode {uid} {session_id}")
 
-            # Pusher tasks
+            if not pusher_is_connected():
+                logger.warning(
+                    f"Pusher not connected, session starts in degraded mode (DG streaming continues) {uid} {session_id}"
+                )
+                # Enter degraded mode and start reconnect loop
+                pusher_start_degraded()
+
+            # Pusher tasks (always started — they handle disconnected state gracefully)
             if transcript_consume is not None:
                 pusher_tasks.append(asyncio.create_task(transcript_consume()))
             if audio_bytes_consume is not None:
