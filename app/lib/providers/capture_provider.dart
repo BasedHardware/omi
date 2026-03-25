@@ -131,6 +131,7 @@ class CaptureProvider extends ChangeNotifier
   List<int> _phoneMicWalBuffer = [];
   static const int _phoneMicFrameSize = 320; // 10ms at 16kHz, 16-bit mono = 320 bytes
   bool _phoneMicWalActive = false;
+  int _phoneMicFrameIndex = 0; // Wrapping index (0-255) prepended to each PCM frame for WAL data consistency
 
   bool _isLoadingInProgressConversation = false;
 
@@ -984,6 +985,7 @@ class CaptureProvider extends ChangeNotifier
 
     // Initialize WAL for phone mic recording
     _phoneMicWalBuffer = [];
+    _phoneMicFrameIndex = 0;
     _phoneMicWalActive = true;
     await _wal.getSyncs().phone.onAudioCodecChanged(BleAudioCodec.pcm16);
     _wal.getSyncs().phone.setDeviceInfo('phone-mic', 'Phone Microphone');
@@ -998,11 +1000,17 @@ class CaptureProvider extends ChangeNotifier
         while (_phoneMicWalBuffer.length >= _phoneMicFrameSize) {
           final frame = _phoneMicWalBuffer.sublist(0, _phoneMicFrameSize);
           _phoneMicWalBuffer = _phoneMicWalBuffer.sublist(_phoneMicFrameSize);
-          _wal.getSyncs().phone.onByteStream(frame);
+
+          // Prepend 1-byte index header for WAL data consistency (like BLE's 3-byte header).
+          // WAL stores/matches on header; backend receives raw PCM (header stripped before disk).
+          final walFrame = [_phoneMicFrameIndex & 0xFF, ...frame];
+          _phoneMicFrameIndex = (_phoneMicFrameIndex + 1) & 0xFF;
+
+          _wal.getSyncs().phone.onByteStream(walFrame);
 
           if (_socket?.state == SocketServiceState.connected) {
             _socket?.send(frame);
-            _wal.getSyncs().phone.onBytesSync(frame);
+            _wal.getSyncs().phone.onBytesSync(walFrame);
           }
         }
       },
@@ -1022,10 +1030,12 @@ class CaptureProvider extends ChangeNotifier
     // Flush remaining phone mic WAL buffer before stopping
     if (_phoneMicWalActive) {
       if (_phoneMicWalBuffer.isNotEmpty) {
-        _wal.getSyncs().phone.onByteStream(_phoneMicWalBuffer);
+        final walFrame = [_phoneMicFrameIndex & 0xFF, ..._phoneMicWalBuffer];
+        _phoneMicFrameIndex = (_phoneMicFrameIndex + 1) & 0xFF;
+        _wal.getSyncs().phone.onByteStream(walFrame);
         if (_socket?.state == SocketServiceState.connected) {
           _socket?.send(_phoneMicWalBuffer);
-          _wal.getSyncs().phone.onBytesSync(_phoneMicWalBuffer);
+          _wal.getSyncs().phone.onBytesSync(walFrame);
         }
       }
       _phoneMicWalBuffer = [];
