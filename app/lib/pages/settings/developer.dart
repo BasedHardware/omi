@@ -1920,8 +1920,8 @@ class _ManualFirmwareFlashPageState extends State<_ManualFirmwareFlashPage> with
   }
 
   Future<void> _startFlash() async {
-    setState(() { 
-      _confirmed = true;
+    setState(() {
+      _confirmed = true; 
       _error = null;
     });
     try {
