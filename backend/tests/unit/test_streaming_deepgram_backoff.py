@@ -236,6 +236,32 @@ async def test_retries_one_failure_raises_no_sleep():
 
 
 @pytest.mark.asyncio
+async def test_connect_uses_asyncio_to_thread():
+    """connect_to_deepgram is offloaded via asyncio.to_thread to avoid blocking the event loop."""
+    mock_conn = MagicMock()
+
+    async def fake_to_thread(func, *args):
+        return func(*args)
+
+    with patch('utils.stt.streaming.connect_to_deepgram', return_value=mock_conn) as mock_connect, patch(
+        'utils.stt.streaming.asyncio.to_thread', side_effect=fake_to_thread
+    ) as mock_to_thread:
+        result = await connect_to_deepgram_with_backoff(
+            on_message=MagicMock(),
+            on_error=MagicMock(),
+            language='en',
+            sample_rate=16000,
+            channels=1,
+            model='nova-2-general',
+        )
+    assert result is mock_conn
+    mock_to_thread.assert_called_once()
+    # Verify connect_to_deepgram was passed as the first arg to to_thread
+    call_args = mock_to_thread.call_args
+    assert call_args[0][0] is mock_connect
+
+
+@pytest.mark.asyncio
 async def test_process_audio_dg_returns_none_when_inactive():
     """process_audio_dg returns None when is_active aborts the connection."""
     with patch('utils.stt.streaming.connect_to_deepgram_with_backoff', new_callable=AsyncMock, return_value=None):
