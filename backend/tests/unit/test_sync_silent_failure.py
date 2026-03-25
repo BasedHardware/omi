@@ -40,16 +40,24 @@ class TestProcessSegmentErrorHandling:
         assert 'try:' in func_body, "process_segment must have try/except"
         assert 'except Exception' in func_body, "process_segment must catch exceptions"
 
-    def test_process_segment_warns_on_empty_transcript(self):
-        """When transcript is empty, log a warning and return (no error — silent segments are normal)."""
+    def test_process_segment_errors_on_empty_words(self):
+        """When Deepgram returns no words, treat as error (may be Deepgram failure, not just silence)."""
         source = self._read_sync_source()
         start = source.index('def process_segment(')
         next_def = source.index('\ndef ', start + 1)
         func_body = source[start:next_def]
 
-        assert 'Transcription returned empty' in func_body, "Must log a warning for empty transcript"
-        # Empty transcript should NOT append to errors — it's a normal condition for silent segments
-        # Only actual exceptions should be collected as errors
+        assert 'Deepgram returned no words' in func_body, "Must log error for empty Deepgram words"
+        assert 'errors.append' in func_body, "Must append to errors list for empty words"
+
+    def test_process_segment_warns_on_empty_postprocessed(self):
+        """When words exist but postprocessing yields nothing, log warning (not error)."""
+        source = self._read_sync_source()
+        start = source.index('def process_segment(')
+        next_def = source.index('\ndef ', start + 1)
+        func_body = source[start:next_def]
+
+        assert 'Postprocessing returned empty' in func_body, "Must log warning for empty postprocessed segments"
 
     def test_process_segment_collects_errors_on_exception(self):
         """When an exception occurs, it must be caught and appended to errors."""
@@ -267,24 +275,23 @@ class TestAppSideSyncBehavior:
                 return f.read()
         return None
 
-    def test_app_currently_only_accepts_200(self):
-        """App only treats HTTP 200 as success — 207 will be treated as failure.
-        This is SAFE: WALs stay in miss state and are retried."""
+    def test_app_accepts_200_and_207(self):
+        """App treats both HTTP 200 and 207 as parseable responses."""
         source = self._read_app_file('backend/http/api/conversations.dart')
         if source is None:
             pytest.skip("App source not available")
 
         assert 'response.statusCode == 200' in source
-        # 207 falls through to the else branch → throws exception → WALs not marked synced
+        assert 'response.statusCode == 207' in source
 
-    def test_app_marks_all_wals_synced_on_200(self):
-        """App marks ALL WALs synced on 200 — follow-up PR should handle 207
-        to only mark successful WALs as synced."""
+    def test_app_keeps_wals_retryable_on_partial_failure(self):
+        """App keeps WALs retryable when response has partial failure (207)."""
         source = self._read_app_file('services/wals/local_wal_sync.dart')
         if source is None:
             pytest.skip("App source not available")
 
-        assert 'WalStatus.synced' in source
+        assert 'hasPartialFailure' in source, "Must check for partial failure"
+        assert 'WalStatus.synced' in source, "Must still mark synced on full success"
 
 
 # ---------------------------------------------------------------------------
@@ -348,7 +355,7 @@ class TestDataLossPreventionFlow:
 
     def test_response_includes_error_details_for_debugging(self):
         """Response includes structured error info for debugging."""
-        segment_errors = ['Transcription returned empty for segment /tmp/1700000100.wav']
+        segment_errors = ['Deepgram returned no words for segment /tmp/1700000100.wav']
         total_segments = 3
         failed_segments = len(segment_errors)
 
@@ -363,7 +370,7 @@ class TestDataLossPreventionFlow:
         assert result['failed_segments'] == 1
         assert result['total_segments'] == 3
         assert len(result['errors']) == 1
-        assert 'Transcription returned empty' in result['errors'][0]
+        assert 'Deepgram returned no words' in result['errors'][0]
 
 
 # ---------------------------------------------------------------------------
@@ -545,12 +552,12 @@ class TestProcessSegmentReal:
     def _import_process_segment(self):
         return self._process_segment
 
-    def test_empty_transcript_skips_without_error(self):
-        """Real process_segment: empty Deepgram result → silent skip (no error).
+    def test_empty_words_collects_error(self):
+        """Real process_segment: empty Deepgram words → error collected.
 
-        Empty transcripts are expected for silent/no-speech segments and must NOT
-        be treated as errors, otherwise silent WAL segments would trigger permanent
-        207 retry loops for old clients.
+        deepgram_prerecorded returns [] on both "no speech" AND "failure after retries".
+        We treat it as an error so the segment is retried — dedup prevents duplicates
+        if the segment was actually silent.
         """
         process_segment = self._import_process_segment()
 
@@ -559,6 +566,32 @@ class TestProcessSegmentReal:
         lock = threading.Lock()
 
         with patch('routers.sync.deepgram_prerecorded', return_value=([], 'en')), patch(
+            'routers.sync.delete_syncing_temporal_file'
+        ), patch('routers.sync.get_syncing_file_temporal_signed_url', return_value='https://fake'), patch(
+            'routers.sync.time.sleep'
+        ):
+            from models.conversation import ConversationSource
+
+            process_segment('/tmp/1700000000.wav', 'uid', response, lock, errors, ConversationSource.omi, False)
+
+        assert len(errors) == 1, "Empty words must be treated as an error"
+        assert 'Deepgram returned no words' in errors[0]
+        assert len(response['new_memories']) == 0
+        assert len(response['updated_memories']) == 0
+
+    def test_empty_postprocessed_skips_without_error(self):
+        """Real process_segment: words present but postprocessing empty → warning, no error.
+
+        When Deepgram returns words but postprocess_words yields no segments,
+        it's a legitimate edge case (e.g. all words filtered out). Not an error.
+        """
+        process_segment = self._import_process_segment()
+
+        response = {'updated_memories': set(), 'new_memories': set()}
+        errors = []
+        lock = threading.Lock()
+
+        with patch('routers.sync.deepgram_prerecorded', return_value=([{'text': 'um'}], 'en')), patch(
             'routers.sync.postprocess_words', return_value=[]
         ), patch('routers.sync.delete_syncing_temporal_file'), patch(
             'routers.sync.get_syncing_file_temporal_signed_url', return_value='https://fake'
@@ -569,7 +602,7 @@ class TestProcessSegmentReal:
 
             process_segment('/tmp/1700000000.wav', 'uid', response, lock, errors, ConversationSource.omi, False)
 
-        assert len(errors) == 0, "Empty transcript must NOT be treated as an error"
+        assert len(errors) == 0, "Empty postprocessed segments must NOT be treated as an error"
         assert len(response['new_memories']) == 0
         assert len(response['updated_memories']) == 0
 
