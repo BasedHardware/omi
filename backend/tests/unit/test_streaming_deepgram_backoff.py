@@ -794,3 +794,49 @@ def test_set_close_reason_does_not_override_send_death():
         assert 'BrokenPipeError' in safe.death_reason
     finally:
         safe.finish()
+
+
+def test_close_reason_preserved_when_send_fails_after():
+    """If close reason is set first, subsequent send failure does not override it (#6036)."""
+    from utils.stt.safe_socket import KeepaliveConfig, SafeDeepgramSocket
+
+    mock_conn = MagicMock()
+    mock_conn.send.return_value = False
+    cfg = KeepaliveConfig(keepalive_interval_sec=5.0, check_period_sec=999.0)
+    safe = SafeDeepgramSocket(mock_conn, cfg=cfg)
+    try:
+        # DG callback fires close reason first
+        safe.set_close_reason('DG close event: code=1006')
+        assert safe.death_reason == 'DG close event: code=1006'
+        # Then send detects death — reason must not change
+        safe.send(b'\x00' * 960)
+        assert safe.is_connection_dead is True
+        assert safe.death_reason == 'DG close event: code=1006'
+    finally:
+        safe.finish()
+
+
+def test_close_reason_preserved_when_keepalive_fails_after():
+    """If close reason is set first, subsequent keepalive failure does not override it (#6036)."""
+    import time as _time
+    from utils.stt.safe_socket import KeepaliveConfig, SafeDeepgramSocket
+
+    mock_conn = MagicMock()
+    mock_conn.send.return_value = True
+    mock_conn.keep_alive.return_value = False
+
+    fake_time = [0.0]
+    cfg = KeepaliveConfig(keepalive_interval_sec=5.0, check_period_sec=0.01)
+    safe = SafeDeepgramSocket(mock_conn, cfg=cfg, clock=lambda: fake_time[0])
+    try:
+        # DG callback fires close reason first
+        safe.set_close_reason('DG error event: server_error')
+        # Trigger keepalive failure
+        safe.send(b'\x00' * 960)
+        fake_time[0] = 6.0
+        _time.sleep(0.1)
+        assert safe.is_connection_dead is True
+        # Close reason from DG callback must be preserved
+        assert safe.death_reason == 'DG error event: server_error'
+    finally:
+        safe.finish()
