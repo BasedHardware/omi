@@ -383,7 +383,7 @@ async def process_audio_dg(
         stream_transcript(segments)
 
     def on_error(self, error, **kwargs):
-        logger.error(f"Error: {error}")
+        logger.error(f"Deepgram error: {error}")
 
     logger.info("Connecting to Deepgram")  # Log before connection attempt
     dg_connection = await connect_to_deepgram_with_backoff(
@@ -395,6 +395,20 @@ async def process_audio_dg(
 
     # Always wrap with SafeDeepgramSocket for dead-connection detection (#5870)
     safe_conn = SafeDeepgramSocket(dg_connection)
+
+    # Register close-reason handlers that feed into SafeDeepgramSocket
+    def on_dg_close(self, close, **kwargs):
+        reason = f'DG close event: {close}'
+        logger.info('Deepgram connection closed: %s', close)
+        safe_conn.set_close_reason(reason)
+
+    def on_dg_error(self, error, **kwargs):
+        reason = f'DG error event: {error}'
+        logger.warning('Deepgram error (close-reason capture): %s', error)
+        safe_conn.set_close_reason(reason)
+
+    dg_connection.on(LiveTranscriptionEvents.Close, on_dg_close)
+    dg_connection.on(LiveTranscriptionEvents.Error, on_dg_error)
 
     # Wrap with VAD gate if provided
     if vad_gate is not None:
