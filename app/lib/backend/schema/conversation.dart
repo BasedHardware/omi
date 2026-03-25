@@ -398,13 +398,27 @@ class ServerConversation {
 class SyncLocalFilesResponse {
   List<String> newConversationIds = [];
   List<String> updatedConversationIds = [];
+  int failedSegments;
+  int totalSegments;
+  List<String> errors;
 
-  SyncLocalFilesResponse({required this.newConversationIds, required this.updatedConversationIds});
+  SyncLocalFilesResponse({
+    required this.newConversationIds,
+    required this.updatedConversationIds,
+    this.failedSegments = 0,
+    this.totalSegments = 0,
+    this.errors = const [],
+  });
+
+  bool get hasPartialFailure => failedSegments > 0;
 
   factory SyncLocalFilesResponse.fromJson(Map<String, dynamic> json) {
     return SyncLocalFilesResponse(
       newConversationIds: ((json['new_memories'] ?? []) as List<dynamic>).map((val) => val.toString()).toList(),
       updatedConversationIds: ((json['updated_memories'] ?? []) as List<dynamic>).map((val) => val.toString()).toList(),
+      failedSegments: json['failed_segments'] ?? 0,
+      totalSegments: json['total_segments'] ?? 0,
+      errors: ((json['errors'] ?? []) as List<dynamic>).map((val) => val.toString()).toList(),
     );
   }
 }
