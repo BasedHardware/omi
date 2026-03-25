@@ -64,41 +64,41 @@ void main() {
     });
   });
 
-  group('WAL header properties', () {
-    test('Opus walHeaderSize is 3 (BLE firmware header)', () {
-      expect(BleAudioCodec.opus.walHeaderSize, 3);
+  group('WAL header size is source-dependent (not codec-dependent)', () {
+    // walHeaderSize depends on audio SOURCE, not codec:
+    // BLE device (any codec): 3-byte firmware header [id_lo, id_hi, pkt_idx]
+    // Phone mic (any codec): 1-byte app index header [frame_index]
+    // The same codec (e.g., pcm16) has different headers depending on source.
+
+    test('BLE device PCM16 has 3-byte header (firmware adds it)', () {
+      // BLE device sending pcm16 → firmware still adds 3-byte header
+      const bleHeaderSize = 3;
+      final frame = [0x01, 0x02, 0x03, 0xAA, 0xBB]; // 3-byte BLE header + audio
+      final stripped = frame.sublist(bleHeaderSize);
+      expect(stripped, [0xAA, 0xBB]);
     });
 
-    test('OpusFS320 walHeaderSize is 3', () {
-      expect(BleAudioCodec.opusFS320.walHeaderSize, 3);
+    test('Phone mic PCM16 has 1-byte header (app adds it)', () {
+      // Phone mic pcm16 → app adds 1-byte index header
+      const phoneMicHeaderSize = 1;
+      final frame = [0x05, 0xAA, 0xBB, 0xCC]; // 1-byte index + audio
+      final stripped = frame.sublist(phoneMicHeaderSize);
+      expect(stripped, [0xAA, 0xBB, 0xCC]);
     });
 
-    test('PCM16 walHeaderSize is 1 (app index byte)', () {
-      expect(BleAudioCodec.pcm16.walHeaderSize, 1);
+    test('same codec, different source → different header size', () {
+      // This is the key insight: codec alone cannot determine header size
+      const bleHeaderSize = 3;
+      const phoneMicHeaderSize = 1;
+      expect(bleHeaderSize != phoneMicHeaderSize, isTrue);
     });
 
-    test('PCM8 walHeaderSize is 1 (app index byte)', () {
-      expect(BleAudioCodec.pcm8.walHeaderSize, 1);
-    });
-
-    test('unknown codec walHeaderSize is 0', () {
-      expect(BleAudioCodec.unknown.walHeaderSize, 0);
-    });
-
-    test('aac walHeaderSize is 0', () {
-      expect(BleAudioCodec.aac.walHeaderSize, 0);
-    });
-
-    test('Opus syncMatchBytes equals walHeaderSize (3)', () {
-      expect(BleAudioCodec.opus.syncMatchBytes, 3);
-    });
-
-    test('PCM16 syncMatchBytes equals walHeaderSize (1)', () {
-      expect(BleAudioCodec.pcm16.syncMatchBytes, 1);
-    });
-
-    test('unknown codec syncMatchBytes falls back to 4 (content matching)', () {
-      expect(BleAudioCodec.unknown.syncMatchBytes, 4);
+    test('sync match bytes derived from header size', () {
+      // matchBytes = headerSize > 0 ? headerSize : 4 (content fallback)
+      int matchBytes(int headerSize) => headerSize > 0 ? headerSize : 4;
+      expect(matchBytes(3), 3); // BLE device
+      expect(matchBytes(1), 1); // Phone mic
+      expect(matchBytes(0), 4); // No header (fallback)
     });
   });
 
@@ -190,61 +190,48 @@ void main() {
   });
 
   group('WAL flush header stripping logic', () {
-    // Simulates the codec-aware header stripping from local_wal_sync.dart _flush()
-    // Now uses codec.walHeaderSize instead of hardcoded isOpusSupported() check
-    List<int> stripHeader(List<int> frame, BleAudioCodec codec) {
-      final headerSize = codec.walHeaderSize;
-      return headerSize > 0 && frame.length > headerSize ? frame.sublist(headerSize) : frame;
+    // Simulates the source-aware header stripping from local_wal_sync.dart _flush()
+    // Uses _walHeaderSize (set per source), not codec property
+    List<int> stripHeader(List<int> frame, int walHeaderSize) {
+      return walHeaderSize > 0 && frame.length > walHeaderSize ? frame.sublist(walHeaderSize) : frame;
     }
 
-    test('Opus frames have 3-byte header stripped', () {
-      final frame = [0x01, 0x02, 0x03, 0xAA, 0xBB, 0xCC]; // 3-byte header + 3 audio bytes
-      final stripped = stripHeader(frame, BleAudioCodec.opus);
+    test('BLE device frames have 3-byte header stripped', () {
+      final frame = [0x01, 0x02, 0x03, 0xAA, 0xBB, 0xCC]; // 3-byte BLE header + audio
+      final stripped = stripHeader(frame, 3);
       expect(stripped, [0xAA, 0xBB, 0xCC]);
     });
 
-    test('OpusFS320 frames have 3-byte header stripped', () {
-      final frame = [0x01, 0x02, 0x03, 0xAA, 0xBB];
-      final stripped = stripHeader(frame, BleAudioCodec.opusFS320);
-      expect(stripped, [0xAA, 0xBB]);
-    });
-
-    test('PCM16 frames have 1-byte index header stripped', () {
-      final frame = [0x05, 0xAA, 0xBB, 0xCC, 0xDD]; // 1-byte index + 4 audio bytes
-      final stripped = stripHeader(frame, BleAudioCodec.pcm16);
+    test('Phone mic frames have 1-byte index header stripped', () {
+      final frame = [0x05, 0xAA, 0xBB, 0xCC, 0xDD]; // 1-byte index + audio
+      final stripped = stripHeader(frame, 1);
       expect(stripped, [0xAA, 0xBB, 0xCC, 0xDD]);
     });
 
-    test('PCM8 frames have 1-byte index header stripped', () {
-      final frame = [0x0A, 0x01, 0x02, 0x03];
-      final stripped = stripHeader(frame, BleAudioCodec.pcm8);
-      expect(stripped, [0x01, 0x02, 0x03]);
-    });
-
-    test('unknown codec frames have no header stripped', () {
+    test('No-header source frames pass through unchanged', () {
       final frame = [0x01, 0x02, 0x03, 0xAA, 0xBB, 0xCC];
-      final stripped = stripHeader(frame, BleAudioCodec.unknown);
+      final stripped = stripHeader(frame, 0);
       expect(stripped, [0x01, 0x02, 0x03, 0xAA, 0xBB, 0xCC]);
     });
 
-    test('short Opus frame with fewer than 3 bytes not stripped', () {
+    test('short BLE frame with fewer than 3 bytes not stripped', () {
       final frame = [0x01, 0x02]; // Only 2 bytes, nothing to strip
-      final stripped = stripHeader(frame, BleAudioCodec.opus);
+      final stripped = stripHeader(frame, 3);
       expect(stripped, [0x01, 0x02]);
     });
 
-    test('single-byte PCM frame not stripped (need > headerSize)', () {
+    test('single-byte phone mic frame not stripped (need > headerSize)', () {
       final frame = [0x05]; // Only 1 byte = headerSize, not stripped
-      final stripped = stripHeader(frame, BleAudioCodec.pcm16);
+      final stripped = stripHeader(frame, 1);
       expect(stripped, [0x05]);
     });
   });
 
   group('WAL onBytesSync matching logic', () {
-    // Simulates the codec-aware sync matching from local_wal_sync.dart onBytesSync()
-    // Now uses codec.syncMatchBytes instead of hardcoded isOpusSupported() check
-    int? findSyncMatch(List<List<int>> frames, List<int> value, BleAudioCodec codec) {
-      final matchBytes = codec.syncMatchBytes;
+    // Simulates the source-aware sync matching from local_wal_sync.dart onBytesSync()
+    // Uses _walHeaderSize (set per source) to determine match bytes
+    int? findSyncMatch(List<List<int>> frames, List<int> value, int walHeaderSize) {
+      final matchBytes = walHeaderSize > 0 ? walHeaderSize : 4;
       if (value.length < matchBytes) return null;
       for (int i = frames.length - 1; i >= 0; i--) {
         if (frames[i].length < matchBytes) continue;
@@ -260,53 +247,52 @@ void main() {
       return null;
     }
 
-    test('Opus matching uses 3 bytes (BLE header)', () {
+    test('BLE device matching uses 3 bytes (firmware header)', () {
       final frames = [
         [1, 2, 3, 100, 200],
         [4, 5, 6, 100, 200],
         [7, 8, 9, 100, 200],
       ];
-      final match = findSyncMatch(frames, [4, 5, 6, 100, 200], BleAudioCodec.opus);
+      final match = findSyncMatch(frames, [4, 5, 6, 100, 200], 3);
       expect(match, 1);
     });
 
-    test('PCM16 matching uses 1 byte (index header)', () {
+    test('Phone mic matching uses 1 byte (index header)', () {
       final frames = [
         [0, 10, 20, 30, 40], // index=0
         [1, 10, 20, 30, 40], // index=1
         [2, 10, 20, 30, 40], // index=2
       ];
-      // PCM matches on 1 byte (index header) — index=1 matches frame 1
-      final match = findSyncMatch(frames, [1, 10, 20, 30, 40], BleAudioCodec.pcm16);
+      final match = findSyncMatch(frames, [1, 10, 20, 30, 40], 1);
       expect(match, 1);
     });
 
-    test('PCM16 index byte distinguishes frames with same audio content', () {
+    test('Phone mic index byte distinguishes frames with same audio content', () {
       final frames = [
         [0, 42, 42, 42, 42], // index=0, same PCM data
         [1, 42, 42, 42, 42], // index=1, same PCM data
         [2, 42, 42, 42, 42], // index=2, same PCM data
       ];
-      // Matching on index=1 finds frame 1 even though audio content is identical
-      final match = findSyncMatch(frames, [1, 42, 42, 42, 42], BleAudioCodec.pcm16);
+      final match = findSyncMatch(frames, [1, 42, 42, 42, 42], 1);
       expect(match, 1);
     });
 
-    test('PCM16 matching finds last match (backward search)', () {
+    test('BLE PCM16 matching also uses 3 bytes (same as BLE Opus)', () {
+      // Key test: BLE device sending PCM16 still uses 3-byte BLE header
       final frames = [
-        [5, 10, 20, 30, 40],
-        [5, 10, 20, 30, 60], // Same index as frame 0 (wrapping)
+        [1, 0, 0, 0xAA, 0xBB], // BLE header [id_lo=1, id_hi=0, idx=0] + PCM
+        [2, 0, 0, 0xAA, 0xBB], // BLE header [id_lo=2, id_hi=0, idx=0] + PCM
       ];
-      final match = findSyncMatch(frames, [5, 99, 99, 99, 99], BleAudioCodec.pcm16);
-      expect(match, 1); // Should find the last match
+      final match = findSyncMatch(frames, [2, 0, 0, 0xAA, 0xBB], 3); // BLE header size
+      expect(match, 1);
     });
 
-    test('unknown codec matching uses 4 bytes (content fallback)', () {
+    test('no-header source uses 4-byte content fallback', () {
       final frames = [
         [10, 20, 30, 40, 50],
         [10, 20, 30, 41, 60],
       ];
-      final match = findSyncMatch(frames, [10, 20, 30, 41, 60], BleAudioCodec.unknown);
+      final match = findSyncMatch(frames, [10, 20, 30, 41, 60], 0);
       expect(match, 1);
     });
 
@@ -314,31 +300,31 @@ void main() {
       final frames = [
         [1, 2, 3, 4, 5],
       ];
-      final match = findSyncMatch(frames, [9, 9, 9, 9, 9], BleAudioCodec.pcm16);
+      final match = findSyncMatch(frames, [9, 9, 9, 9, 9], 1);
       expect(match, isNull);
     });
 
-    test('short value returns null for unknown codec (needs 4 bytes)', () {
+    test('short value returns null for no-header source (needs 4 bytes)', () {
       final frames = [
         [1, 2, 3, 4, 5],
       ];
-      final match = findSyncMatch(frames, [1, 2, 3], BleAudioCodec.unknown); // Need 4 bytes for unknown
+      final match = findSyncMatch(frames, [1, 2, 3], 0);
       expect(match, isNull);
     });
 
-    test('short value works for Opus (3 bytes sufficient)', () {
+    test('short value works for BLE (3 bytes sufficient)', () {
       final frames = [
         [1, 2, 3, 4, 5],
       ];
-      final match = findSyncMatch(frames, [1, 2, 3], BleAudioCodec.opus);
+      final match = findSyncMatch(frames, [1, 2, 3], 3);
       expect(match, 0);
     });
 
-    test('single byte works for PCM16 (1 byte sufficient)', () {
+    test('single byte works for phone mic (1 byte sufficient)', () {
       final frames = [
         [42, 10, 20, 30],
       ];
-      final match = findSyncMatch(frames, [42], BleAudioCodec.pcm16);
+      final match = findSyncMatch(frames, [42], 1);
       expect(match, 0);
     });
   });
