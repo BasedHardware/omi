@@ -65,6 +65,7 @@ class SafeDeepgramSocket:
         self._clock = clock
         self._dg_dead = False
         self._closed = False
+        self._death_reason: Optional[str] = None  # Why the connection died (exception type + message)
         self._lock = threading.Lock()
         self._last_activity: float = self._clock()
         self._keepalive_count = 0
@@ -87,19 +88,26 @@ class SafeDeepgramSocket:
         try:
             ret = self._conn.keep_alive()
             if ret is False:
+                self._death_reason = 'keep_alive returned False'
                 logger.warning('DG keep_alive returned False, connection dead')
                 self._dg_dead = True
             else:
                 self._keepalive_count += 1
                 self._last_activity = self._clock()
-        except Exception:
-            logger.warning('DG keep_alive exception, connection dead')
+        except Exception as e:
+            self._death_reason = f'keep_alive {type(e).__name__}: {e}'
+            logger.warning('DG keep_alive exception, connection dead: %s: %s', type(e).__name__, e)
             self._dg_dead = True
 
     @property
     def is_connection_dead(self) -> bool:
         """True if DG connection has been detected as dead."""
         return self._dg_dead
+
+    @property
+    def death_reason(self) -> Optional[str]:
+        """Why the connection died, or None if still alive."""
+        return self._death_reason
 
     @property
     def keepalive_count(self) -> int:
@@ -114,13 +122,25 @@ class SafeDeepgramSocket:
             try:
                 ret = self._conn.send(data)
                 if ret is False:
+                    self._death_reason = 'send returned False'
                     logger.warning('DG send returned False, connection dead')
                     self._dg_dead = True
                 else:
                     self._last_activity = self._clock()
-            except Exception:
-                logger.warning('DG send exception, connection dead')
+            except Exception as e:
+                self._death_reason = f'send {type(e).__name__}: {e}'
+                logger.warning('DG send exception, connection dead: %s: %s', type(e).__name__, e)
                 self._dg_dead = True
+
+    def set_close_reason(self, reason: str) -> None:
+        """Record a close reason from external source (e.g., DG on_close/on_error callback).
+
+        Only stores the first reason — subsequent calls are no-ops since the first
+        close event is the root cause.
+        """
+        with self._lock:
+            if self._death_reason is None:
+                self._death_reason = reason
 
     def finalize(self) -> None:
         """Flush pending transcript."""
