@@ -659,3 +659,138 @@ def test_profile_socket_routing_when_main_dies():
     finally:
         main_socket.finish()
         profile_socket.finish()
+
+
+# ---------------------------------------------------------------------------
+# Death reason and close-reason logging tests
+# ---------------------------------------------------------------------------
+
+
+def test_death_reason_none_when_alive():
+    """death_reason is None when connection is alive."""
+    from utils.stt.safe_socket import KeepaliveConfig, SafeDeepgramSocket
+
+    mock_conn = MagicMock()
+    mock_conn.send.return_value = True
+    cfg = KeepaliveConfig(keepalive_interval_sec=5.0, check_period_sec=999.0)
+    safe = SafeDeepgramSocket(mock_conn, cfg=cfg)
+    try:
+        assert safe.death_reason is None
+        safe.send(b'\x00' * 960)
+        assert safe.death_reason is None
+    finally:
+        safe.finish()
+
+
+def test_death_reason_on_send_false():
+    """death_reason records 'send returned False' when send returns False."""
+    from utils.stt.safe_socket import KeepaliveConfig, SafeDeepgramSocket
+
+    mock_conn = MagicMock()
+    mock_conn.send.return_value = False
+    cfg = KeepaliveConfig(keepalive_interval_sec=5.0, check_period_sec=999.0)
+    safe = SafeDeepgramSocket(mock_conn, cfg=cfg)
+    try:
+        safe.send(b'\x00' * 960)
+        assert safe.is_connection_dead is True
+        assert safe.death_reason == 'send returned False'
+    finally:
+        safe.finish()
+
+
+def test_death_reason_on_send_exception():
+    """death_reason captures exception type and message on send failure."""
+    from utils.stt.safe_socket import KeepaliveConfig, SafeDeepgramSocket
+
+    mock_conn = MagicMock()
+    mock_conn.send.side_effect = ConnectionResetError('Connection reset by peer')
+    cfg = KeepaliveConfig(keepalive_interval_sec=5.0, check_period_sec=999.0)
+    safe = SafeDeepgramSocket(mock_conn, cfg=cfg)
+    try:
+        safe.send(b'\x00' * 960)
+        assert safe.is_connection_dead is True
+        assert 'ConnectionResetError' in safe.death_reason
+        assert 'Connection reset by peer' in safe.death_reason
+    finally:
+        safe.finish()
+
+
+def test_death_reason_on_keepalive_false():
+    """death_reason records keepalive failure when keep_alive returns False."""
+    import time as _time
+    from utils.stt.safe_socket import KeepaliveConfig, SafeDeepgramSocket
+
+    mock_conn = MagicMock()
+    mock_conn.send.return_value = True
+    mock_conn.keep_alive.return_value = False
+
+    fake_time = [0.0]
+    cfg = KeepaliveConfig(keepalive_interval_sec=5.0, check_period_sec=0.01)
+    safe = SafeDeepgramSocket(mock_conn, cfg=cfg, clock=lambda: fake_time[0])
+    try:
+        safe.send(b'\x00' * 960)
+        fake_time[0] = 6.0
+        _time.sleep(0.1)
+        assert safe.is_connection_dead is True
+        assert safe.death_reason == 'keep_alive returned False'
+    finally:
+        safe.finish()
+
+
+def test_death_reason_on_keepalive_exception():
+    """death_reason captures exception on keepalive failure."""
+    import time as _time
+    from utils.stt.safe_socket import KeepaliveConfig, SafeDeepgramSocket
+
+    mock_conn = MagicMock()
+    mock_conn.send.return_value = True
+    mock_conn.keep_alive.side_effect = TimeoutError('timed out')
+
+    fake_time = [0.0]
+    cfg = KeepaliveConfig(keepalive_interval_sec=5.0, check_period_sec=0.01)
+    safe = SafeDeepgramSocket(mock_conn, cfg=cfg, clock=lambda: fake_time[0])
+    try:
+        safe.send(b'\x00' * 960)
+        fake_time[0] = 6.0
+        _time.sleep(0.1)
+        assert safe.is_connection_dead is True
+        assert 'TimeoutError' in safe.death_reason
+        assert 'timed out' in safe.death_reason
+    finally:
+        safe.finish()
+
+
+def test_set_close_reason_stores_first_reason():
+    """set_close_reason stores only the first reason (root cause)."""
+    from utils.stt.safe_socket import KeepaliveConfig, SafeDeepgramSocket
+
+    mock_conn = MagicMock()
+    cfg = KeepaliveConfig(keepalive_interval_sec=5.0, check_period_sec=999.0)
+    safe = SafeDeepgramSocket(mock_conn, cfg=cfg)
+    try:
+        assert safe.death_reason is None
+        safe.set_close_reason('DG close event: code=1006')
+        assert safe.death_reason == 'DG close event: code=1006'
+        # Second call is a no-op
+        safe.set_close_reason('DG error event: something else')
+        assert safe.death_reason == 'DG close event: code=1006'
+    finally:
+        safe.finish()
+
+
+def test_set_close_reason_does_not_override_send_death():
+    """If send fails first, set_close_reason doesn't override the death reason."""
+    from utils.stt.safe_socket import KeepaliveConfig, SafeDeepgramSocket
+
+    mock_conn = MagicMock()
+    mock_conn.send.side_effect = BrokenPipeError('Broken pipe')
+    cfg = KeepaliveConfig(keepalive_interval_sec=5.0, check_period_sec=999.0)
+    safe = SafeDeepgramSocket(mock_conn, cfg=cfg)
+    try:
+        safe.send(b'\x00' * 960)
+        assert 'BrokenPipeError' in safe.death_reason
+        # External close reason arrives after send death — should not override
+        safe.set_close_reason('DG close event: code=1006')
+        assert 'BrokenPipeError' in safe.death_reason
+    finally:
+        safe.finish()
