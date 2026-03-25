@@ -153,6 +153,39 @@ class TestDecodePcmFileToWav:
             result = decode_pcm_file_to_wav(bin_path, wav_path)
             assert result is True  # First frame still valid
 
+    def test_frame_length_boundary_65536_accepted(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            bin_path = os.path.join(tmpdir, 'test.bin')
+            wav_path = os.path.join(tmpdir, 'test.wav')
+            # 65536 bytes is the max accepted frame length
+            frame = bytes([42] * 65536)
+            with open(bin_path, 'wb') as f:
+                f.write(struct.pack('<I', len(frame)))
+                f.write(frame)
+
+            result = decode_pcm_file_to_wav(bin_path, wav_path)
+            assert result is True
+
+            with wave.open(wav_path, 'rb') as wf:
+                assert wf.getnframes() == 65536 // 2  # 16-bit samples = 2 bytes each
+
+    def test_frame_length_boundary_65537_rejected(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            bin_path = os.path.join(tmpdir, 'test.bin')
+            wav_path = os.path.join(tmpdir, 'test.wav')
+            # Valid frame then 65537 bytes (just over limit)
+            valid_frame = bytes([42] * 320)
+            with open(bin_path, 'wb') as f:
+                f.write(struct.pack('<I', len(valid_frame)))
+                f.write(valid_frame)
+                f.write(struct.pack('<I', 65537))  # Just over 65536 limit
+
+            result = decode_pcm_file_to_wav(bin_path, wav_path)
+            assert result is True  # First frame still valid
+
+            with wave.open(wav_path, 'rb') as wf:
+                assert wf.getnframes() == 160  # Only the first valid frame
+
     def test_zero_length_frame_stops(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             bin_path = os.path.join(tmpdir, 'test.bin')
