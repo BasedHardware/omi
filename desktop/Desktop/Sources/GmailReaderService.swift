@@ -69,31 +69,40 @@ private struct BrowserConfig {
 final class BrowserKeychainCache: @unchecked Sendable {
   static let shared = BrowserKeychainCache()
   private var cache: [String: String] = [:]
+  private var inFlight: [String: DispatchGroup] = [:]
   private let lock = NSLock()
 
-  func get(_ service: String) -> String? {
-    lock.lock()
-    defer { lock.unlock() }
-    return cache[service]
-  }
+  /// Ensures only one keychain lookup runs per browser service at a time.
+  func password(for service: String, loader: () -> String?) -> String? {
+    loop: while true {
+      lock.lock()
 
-  func set(_ service: String, password: String) {
-    lock.lock()
-    defer { lock.unlock() }
-    cache[service] = password
-  }
+      if let cached = cache[service] {
+        lock.unlock()
+        return cached.isEmpty ? nil : cached
+      }
 
-  /// Returns true if we already tried and failed for this service
-  func hasAttempted(_ service: String) -> Bool {
-    lock.lock()
-    defer { lock.unlock() }
-    return cache.keys.contains(service)
-  }
+      if let group = inFlight[service] {
+        lock.unlock()
+        group.wait()
+        continue loop
+      }
 
-  func markFailed(_ service: String) {
-    lock.lock()
-    defer { lock.unlock() }
-    cache[service] = ""
+      let group = DispatchGroup()
+      group.enter()
+      inFlight[service] = group
+      lock.unlock()
+
+      let password = loader()
+
+      lock.lock()
+      cache[service] = password ?? ""
+      let completedGroup = inFlight.removeValue(forKey: service)
+      lock.unlock()
+
+      completedGroup?.leave()
+      return password
+    }
   }
 }
 
@@ -106,14 +115,18 @@ actor GmailReaderService {
   /// - Parameters:
   ///   - maxResults: Maximum number of emails to return
   ///   - query: Gmail search query (default: "newer_than:1d"). For onboarding use "newer_than:30d".
-  func readRecentEmails(maxResults: Int = 50, query: String = "newer_than:1d") async throws -> [GmailEmail] {
+  func readRecentEmails(maxResults: Int = 50, query: String = "newer_than:1d") async throws
+    -> [GmailEmail]
+  {
     let emails = try fetchGmailViaAtomFeed(maxResults: maxResults, query: query)
     return emails.sorted { $0.date > $1.date }
   }
 
   /// Synthesize profile memories and tasks from a batch of emails.
   /// Uses an LLM call to extract ~10 memories and 2-3 tasks.
-  func synthesizeFromEmails(emails: [GmailEmail]) async -> (memories: Int, tasks: Int, profileSummary: String) {
+  func synthesizeFromEmails(emails: [GmailEmail]) async -> (
+    memories: Int, tasks: Int, profileSummary: String
+  ) {
     guard !emails.isEmpty else { return (0, 0, "") }
 
     // Format emails compactly for the LLM
@@ -123,37 +136,38 @@ actor GmailReaderService {
     for email in emails {
       let date = dateFormatter.string(from: email.date)
       let sender =
-        email.from.components(separatedBy: "<").first?.trimmingCharacters(in: .whitespaces) ?? email.from
+        email.from.components(separatedBy: "<").first?.trimmingCharacters(in: .whitespaces)
+        ?? email.from
       emailLines.append("[\(date)] From: \(sender) | Subject: \(email.subject) | \(email.snippet)")
     }
     let emailText = emailLines.joined(separator: "\n")
 
     let synthesisPrompt = """
-    Analyze these \(emails.count) recent emails and extract profile information about the user.
+      Analyze these \(emails.count) recent emails and extract profile information about the user.
 
-    EMAILS:
-    \(emailText)
+      EMAILS:
+      \(emailText)
 
-    Respond ONLY with valid JSON (no markdown, no code fences, no backticks):
-    {
-      "memories": [
-        "factual statement about the user based on email patterns"
-      ],
-      "tasks": [
-        {"description": "actionable follow-up item", "priority": "high"}
-      ],
-      "profile": "2-3 sentence summary of who this user is"
-    }
+      Respond ONLY with valid JSON (no markdown, no code fences, no backticks):
+      {
+        "memories": [
+          "factual statement about the user based on email patterns"
+        ],
+        "tasks": [
+          {"description": "actionable follow-up item", "priority": "high"}
+        ],
+        "profile": "2-3 sentence summary of who this user is"
+      }
 
-    RULES:
-    - Extract exactly 10 memories (facts about their role, company, projects, relationships, interests, tools, communication patterns)
-    - Extract 2-3 tasks (pending replies, upcoming deadlines, things to follow up on)
-    - Each memory should be a single clear factual statement
-    - Task priorities: "high", "medium", or "low"
-    - Profile should summarize professional identity and key interests
-    - Do NOT include raw email content — synthesize and generalize
-    - Output ONLY the JSON object, nothing else
-    """
+      RULES:
+      - Extract exactly 10 memories (facts about their role, company, projects, relationships, interests, tools, communication patterns)
+      - Extract 2-3 tasks (pending replies, upcoming deadlines, things to follow up on)
+      - Each memory should be a single clear factual statement
+      - Task priorities: "high", "medium", or "low"
+      - Profile should summarize professional identity and key interests
+      - Do NOT include raw email content — synthesize and generalize
+      - Output ONLY the JSON object, nothing else
+      """
 
     do {
       let bridge = ACPBridge(passApiKey: true)
@@ -181,7 +195,8 @@ actor GmailReaderService {
         }
         // Remove closing fence
         if responseText.hasSuffix("```") {
-          responseText = String(responseText.dropLast(3)).trimmingCharacters(in: .whitespacesAndNewlines)
+          responseText = String(responseText.dropLast(3)).trimmingCharacters(
+            in: .whitespacesAndNewlines)
         }
       }
 
@@ -272,7 +287,9 @@ actor GmailReaderService {
 
   // MARK: - All-in-one Python: decrypt cookies + fetch Atom feed + return JSON
 
-  private func fetchGmailViaAtomFeed(maxResults: Int, query: String = "newer_than:1d") throws -> [GmailEmail] {
+  private func fetchGmailViaAtomFeed(maxResults: Int, query: String = "newer_than:1d") throws
+    -> [GmailEmail]
+  {
     // Build browser configs as JSON for Python
     var browserConfigs: [[String: String]] = []
     for browser in BrowserConfig.allBrowsers() {
@@ -514,7 +531,8 @@ actor GmailReaderService {
     }
 
     let output = pipe.fileHandleForReading.readDataToEndOfFile()
-    let errOutput = String(data: errPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+    let errOutput =
+      String(data: errPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
     if !errOutput.isEmpty {
       log("GmailReaderService: Python stderr: \(errOutput.prefix(500))")
     }
@@ -560,35 +578,25 @@ actor GmailReaderService {
   // MARK: - Keychain
 
   private func getKeychainPassword(service: String) -> String? {
-    // Check shared cache first to avoid duplicate keychain prompts
-    if let cached = BrowserKeychainCache.shared.get(service) {
-      return cached.isEmpty ? nil : cached
-    }
-    if BrowserKeychainCache.shared.hasAttempted(service) {
-      return nil
-    }
-
-    let query: [String: Any] = [
-      kSecClass as String: kSecClassGenericPassword,
-      kSecAttrService as String: service,
-      kSecReturnData as String: true,
-      kSecMatchLimit as String: kSecMatchLimitOne,
-    ]
-    var result: AnyObject?
-    let status = SecItemCopyMatching(query as CFDictionary, &result)
-    guard status == errSecSuccess, let data = result as? Data,
-      let password = String(data: data, encoding: .utf8)
-    else {
-      BrowserKeychainCache.shared.markFailed(service)
-      if status != errSecItemNotFound {
-        log("GmailReaderService: Keychain lookup for '\(service)' failed with status \(status)")
+    BrowserKeychainCache.shared.password(for: service) {
+      let query: [String: Any] = [
+        kSecClass as String: kSecClassGenericPassword,
+        kSecAttrService as String: service,
+        kSecReturnData as String: true,
+        kSecMatchLimit as String: kSecMatchLimitOne,
+      ]
+      var result: AnyObject?
+      let status = SecItemCopyMatching(query as CFDictionary, &result)
+      guard status == errSecSuccess, let data = result as? Data,
+        let password = String(data: data, encoding: .utf8)
+      else {
+        if status != errSecItemNotFound {
+          log("GmailReaderService: Keychain lookup for '\(service)' failed with status \(status)")
+        }
+        return nil
       }
-      return nil
+      return password.isEmpty ? nil : password
     }
-    if !password.isEmpty {
-      BrowserKeychainCache.shared.set(service, password: password)
-    }
-    return password.isEmpty ? nil : password
   }
 
   // MARK: - Date Parsing
@@ -601,7 +609,9 @@ actor GmailReaderService {
     iso.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
     if let d = iso.date(from: str) { return d }
     // Fallback: RFC 2822
-    let formats = ["EEE, dd MMM yyyy HH:mm:ss Z", "dd MMM yyyy HH:mm:ss Z", "yyyy-MM-dd'T'HH:mm:ssZ"]
+    let formats = [
+      "EEE, dd MMM yyyy HH:mm:ss Z", "dd MMM yyyy HH:mm:ss Z", "yyyy-MM-dd'T'HH:mm:ssZ",
+    ]
     for fmt in formats {
       let f = DateFormatter()
       f.dateFormat = fmt
