@@ -1913,8 +1913,8 @@ class _ManualFirmwareFlashPageState extends State<_ManualFirmwareFlashPage> with
     super.initState();
   }
 
-  @override 
-  void dispose() {
+  @override
+  void dispose() { 
     killMcuUpdateManager();
     super.dispose();
   }
