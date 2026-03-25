@@ -943,10 +943,16 @@ def test_gated_socket_death_reason_delegates_to_safe_socket():
         safe.finish()
 
 
-def test_gated_socket_death_reason_returns_none_for_non_safe_socket():
-    """GatedDeepgramSocket.death_reason returns None when wrapping a non-SafeDeepgramSocket."""
+def test_gated_socket_death_reason_delegates_none_when_alive():
+    """GatedDeepgramSocket.death_reason returns None when SafeDeepgramSocket has no reason."""
+    from utils.stt.safe_socket import KeepaliveConfig, SafeDeepgramSocket
     from utils.stt.vad_gate import GatedDeepgramSocket
 
-    mock_conn = MagicMock(spec=[])  # No _is_safe_dg_socket attribute
-    gated = GatedDeepgramSocket(mock_conn, gate=None)
-    assert gated.death_reason is None
+    mock_conn = MagicMock()
+    cfg = KeepaliveConfig(keepalive_interval_sec=5.0, check_period_sec=999.0)
+    safe = SafeDeepgramSocket(mock_conn, cfg=cfg)
+    gated = GatedDeepgramSocket(safe, gate=None)
+    try:
+        assert gated.death_reason is None
+    finally:
+        safe.finish()
