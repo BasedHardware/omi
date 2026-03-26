@@ -41,19 +41,21 @@ struct OnboardingFloatingBarDemoView: View {
             // Content
             VStack(spacing: 28) {
                 VStack(spacing: 12) {
-                    Text("The Floating Bar")
-                        .font(.system(size: 24, weight: .bold))
-                        .foregroundColor(OmiColors.textPrimary)
-
                     if !barActivated {
+                        Text("Omi sees your screen and gives you hyper-personalized responses")
+                            .font(.system(size: 20, weight: .bold))
+                            .foregroundColor(OmiColors.textPrimary)
+                            .multilineTextAlignment(.center)
+                            .frame(maxWidth: 560)
+
                         Text("Press this shortcut to open Ask Omi.")
                             .font(.system(size: 18, weight: .medium))
                             .foregroundColor(OmiColors.textSecondary)
                             .multilineTextAlignment(.center)
                     } else {
-                        Text("Type “Which computer suits me best?”")
-                            .font(.system(size: 18, weight: .medium))
-                            .foregroundColor(OmiColors.textSecondary)
+                        Text("Type 'Which computer suits me best?'")
+                            .font(.system(size: 24, weight: .bold))
+                            .foregroundColor(OmiColors.textPrimary)
                             .multilineTextAlignment(.center)
                             .lineSpacing(4)
                             .frame(maxWidth: 560)
@@ -85,13 +87,6 @@ struct OnboardingFloatingBarDemoView: View {
                         .transition(.opacity.combined(with: .move(edge: .bottom)))
                 }
 
-                if barActivated && !showContinue {
-                    Text("Ask the question above, then wait for the answer.")
-                        .font(.system(size: 13))
-                        .foregroundColor(OmiColors.textTertiary)
-                        .padding(.top, 4)
-                        .transition(.opacity)
-                }
             }
             .padding(.top, 88)
             .padding(.horizontal, 40)
