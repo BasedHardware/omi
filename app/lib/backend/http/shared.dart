@@ -164,6 +164,44 @@ http.Request _buildRequest(String url, Map<String, String> headers, String body,
   return request;
 }
 
+Future<http.StreamedResponse> _sendMultipartWithProgress(
+  http.MultipartRequest request,
+  UploadProgressCallback? onProgress,
+) async {
+  if (onProgress == null) {
+    return HttpPoolManager.instance.sendStreaming(request);
+  }
+
+  final totalBytes = request.contentLength;
+  int bytesSent = 0;
+  final startTime = DateTime.now();
+
+  final originalStream = request.finalize();
+  final progressStream = originalStream.transform(
+    StreamTransformer<List<int>, List<int>>.fromHandlers(
+      handleData: (data, sink) {
+        sink.add(data);
+        bytesSent += data.length;
+        final elapsed = DateTime.now().difference(startTime).inMilliseconds / 1000.0;
+        final speed = elapsed > 0.3 ? (bytesSent / 1024.0) / elapsed : 0.0;
+        onProgress(bytesSent, totalBytes, speed);
+      },
+    ),
+  );
+
+  final streamedRequest = http.StreamedRequest(request.method, request.url);
+  streamedRequest.headers.addAll(request.headers);
+  streamedRequest.contentLength = totalBytes;
+
+  progressStream.listen(
+    streamedRequest.sink.add,
+    onError: streamedRequest.sink.addError,
+    onDone: streamedRequest.sink.close,
+  );
+
+  return HttpPoolManager.instance.sendStreaming(streamedRequest);
+}
+
 Future<http.MultipartRequest> _buildMultipartRequest({
   required String url,
   required List<File> files,
@@ -186,6 +224,8 @@ Future<http.MultipartRequest> _buildMultipartRequest({
   return request;
 }
 
+typedef UploadProgressCallback = void Function(int bytesSent, int totalBytes, double speedKBps);
+
 Future<http.Response> makeMultipartApiCall({
   required String url,
   required List<File> files,
@@ -193,6 +233,7 @@ Future<http.Response> makeMultipartApiCall({
   Map<String, String> fields = const {},
   String fileFieldName = 'files',
   String method = 'POST',
+  UploadProgressCallback? onUploadProgress,
 }) async {
   try {
     final bool requireAuthCheck = _isRequiredAuthCheck(url);
@@ -207,7 +248,7 @@ Future<http.Response> makeMultipartApiCall({
       method: method,
     );
 
-    var streamedResponse = await HttpPoolManager.instance.sendStreaming(request);
+    var streamedResponse = await _sendMultipartWithProgress(request, onUploadProgress);
     var response = await http.Response.fromStream(streamedResponse);
 
     if (requireAuthCheck && response.statusCode == 401) {
@@ -223,7 +264,7 @@ Future<http.Response> makeMultipartApiCall({
           fileFieldName: fileFieldName,
           method: method,
         );
-        streamedResponse = await HttpPoolManager.instance.sendStreaming(request);
+        streamedResponse = await _sendMultipartWithProgress(request, onUploadProgress);
         response = await http.Response.fromStream(streamedResponse);
         Logger.log('Token refreshed and multipart request retried');
         if (response.statusCode == 401) {
