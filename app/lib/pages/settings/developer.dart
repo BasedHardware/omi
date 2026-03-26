@@ -1940,8 +1940,8 @@ class _ManualFirmwareFlashPageState extends State<_ManualFirmwareFlashPage> with
       appBar: AppBar(
         backgroundColor: Colors.black,
         title: const Text('Flash Firmware', style: TextStyle(color: Colors.white)),
-        iconTheme: const IconThemeData(color: Colors.white), 
-        elevation: 0,
+        iconTheme: const IconThemeData(color: Colors.white),
+        elevation: 0, 
       ),
       body: Padding(
         padding: const EdgeInsets.all(24),
