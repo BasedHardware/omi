@@ -1474,7 +1474,7 @@ workflows:
       - name: Create DMG installer
         script: |
           set -e
-          pip3 install dmgbuild
+          pip3 install --break-system-packages dmgbuild
           APP_PATH=$(find $(pwd)/build/macos -name "Omi.app" -type d | head -1)
 
           mkdir -p build/macos/dmg
@@ -2286,7 +2286,7 @@ workflows:
       - name: Create DMG installer
         script: |
           set -e
-          pip3 install dmgbuild
+          pip3 install --break-system-packages dmgbuild
 
           STAGING_DIR="/tmp/omi-dmg-staging-$$"
           mkdir -p "$STAGING_DIR"

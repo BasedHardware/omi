@@ -605,7 +605,7 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
     });
 
     ServiceManager.instance().device.subscribe(this, this);
-    await deviceProvider?.periodicConnect("Come from Onboarding");
+    await deviceProvider?.initiateConnection("Onboarding");
   }
 
   @override

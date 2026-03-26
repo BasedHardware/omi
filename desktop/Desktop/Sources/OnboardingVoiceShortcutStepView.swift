@@ -1,157 +1,80 @@
 import SwiftUI
 
-/// Onboarding step: verify the push-to-talk shortcut and complete one voice query
-/// without pre-showing the floating bar.
+/// Onboarding step: verify the push-to-talk shortcut key without opening the voice bar.
 struct OnboardingVoiceShortcutStepView: View {
   @ObservedObject var appState: AppState
   @ObservedObject var chatProvider: ChatProvider
   var onComplete: () -> Void
   var onSkip: () -> Void
 
-  @ObservedObject private var pttManager = PushToTalkManager.shared
   @ObservedObject private var shortcutSettings = ShortcutSettings.shared
 
-  @State private var observedShortcutPress = false
+  @State private var shortcutDetected = false
   @State private var showContinue = false
+  @State private var keyMonitor: Any?
 
   var body: some View {
-    HStack(spacing: 0) {
-      leftPane
+    VStack(spacing: 0) {
+      // Header
+      HStack {
+        Text("Set your voice shortcut")
+          .font(.system(size: 18, weight: .semibold))
+          .foregroundColor(OmiColors.textPrimary)
+
+        Spacer()
+
+        Button(action: onSkip) {
+          Text("Skip")
+            .font(.system(size: 13))
+            .foregroundColor(OmiColors.textTertiary)
+        }
+        .buttonStyle(.plain)
+      }
+      .padding(.horizontal, 24)
+      .padding(.vertical, 16)
 
       Divider()
         .background(OmiColors.backgroundTertiary)
 
-      rightPane
-    }
-    .frame(maxWidth: .infinity, maxHeight: .infinity)
-    .background(OmiColors.backgroundPrimary)
-    .onAppear {
-      FloatingControlBarManager.shared.setup(appState: appState, chatProvider: chatProvider)
-
-      if let barState = FloatingControlBarManager.shared.barState {
-        PushToTalkManager.shared.setup(barState: barState)
-      }
-    }
-    .onDisappear {
-      if FloatingControlBarManager.shared.barState?.showingAIConversation == true {
-        FloatingControlBarManager.shared.toggleAIInput()
-      }
-    }
-    .onChange(of: pttManager.state) { _, newState in
-      if newState != .idle {
-        observedShortcutPress = true
-      }
-      if OnboardingFlow.shouldUnlockVoiceShortcutContinue(
-        observedShortcutPress: observedShortcutPress,
-        pttState: newState
-      ) {
-        withAnimation(.easeInOut(duration: 0.3)) {
-          showContinue = true
-        }
-      }
-    }
-  }
-
-  private var leftPane: some View {
-    VStack(spacing: 0) {
       Spacer()
 
-      VStack(alignment: .leading, spacing: 18) {
-        Text("Hold the shortcut\nand ask a question")
-          .font(.system(size: 40, weight: .bold))
+      // Content
+      VStack(spacing: 24) {
+        Text("Press and hold to test.\nDoes the button light up?")
+          .font(.system(size: 22, weight: .semibold))
           .foregroundColor(OmiColors.textPrimary)
-          .lineSpacing(2)
+          .multilineTextAlignment(.center)
 
-        Text(
-          "Hold the key you want to use for voice questions, then release to send. Try asking \"What's on my screen?\" If the preview reacts on the right, you're set. If not, switch to another key."
-        )
-        .font(.system(size: 16))
-        .foregroundColor(OmiColors.textSecondary)
-        .lineSpacing(4)
-        .frame(maxWidth: 420, alignment: .leading)
-      }
-
-      Spacer()
-    }
-    .frame(maxWidth: .infinity, maxHeight: .infinity)
-    .padding(.horizontal, 50)
-  }
-
-  private var rightPane: some View {
-    ZStack {
-      LinearGradient(
-        colors: [
-          Color(red: 0.17, green: 0.16, blue: 0.08).opacity(0.12),
-          Color(red: 0.57, green: 0.48, blue: 0.08).opacity(0.08),
-          Color.clear,
-        ],
-        startPoint: .topLeading,
-        endPoint: .bottomTrailing
-      )
-      .ignoresSafeArea()
-
-      VStack(spacing: 28) {
-        HStack {
-          Spacer()
-          Button(action: onSkip) {
-            Text("Skip")
-              .font(.system(size: 13))
-              .foregroundColor(OmiColors.textTertiary)
+        RoundedRectangle(cornerRadius: 16, style: .continuous)
+          .fill(OmiColors.backgroundSecondary)
+          .frame(height: 128)
+          .frame(maxWidth: 400)
+          .overlay {
+            shortcutKeyPreview
           }
-          .buttonStyle(.plain)
-        }
-        .padding(.bottom, -16)
 
-        VStack(alignment: .leading, spacing: 18) {
-          Text("Press this shortcut.\nDo the buttons light up?")
-            .font(.system(size: 22, weight: .semibold))
-            .foregroundColor(Color.black.opacity(0.86))
-            .frame(maxWidth: .infinity, alignment: .leading)
+        VStack(spacing: 12) {
+          Text("Try another key if it doesn't react:")
+            .font(.system(size: 14, weight: .medium))
+            .foregroundColor(OmiColors.textSecondary)
 
-          RoundedRectangle(cornerRadius: 16, style: .continuous)
-            .fill(Color(red: 0.95, green: 0.94, blue: 0.92))
-            .frame(height: 128)
-            .overlay {
-              shortcutKeyPreview
-            }
-
-          VStack(alignment: .leading, spacing: 12) {
-            Text("Try another key if it doesn't react:")
-              .font(.system(size: 14, weight: .medium))
-              .foregroundColor(Color.black.opacity(0.68))
-
-            HStack(spacing: 10) {
-              ForEach(ShortcutSettings.PTTKey.allCases, id: \.self) { key in
-                shortcutChoiceButton(key)
-              }
+          HStack(spacing: 10) {
+            ForEach(ShortcutSettings.PTTKey.allCases, id: \.self) { key in
+              shortcutChoiceButton(key)
             }
           }
-        }
-        .padding(32)
-        .background(
-          RoundedRectangle(cornerRadius: 24, style: .continuous)
-            .fill(Color.white.opacity(0.97))
-            .shadow(color: .black.opacity(0.08), radius: 26, x: 0, y: 14)
-        )
-        .frame(maxWidth: 520)
-
-        if !showContinue {
-          Text("Try asking: \"What's on my screen?\"")
-            .font(.system(size: 13))
-            .foregroundColor(Color.black.opacity(0.55))
-            .italic()
         }
 
         HStack(spacing: 14) {
           Button(action: cycleShortcut) {
             Text("Change shortcut")
               .font(.system(size: 15, weight: .semibold))
-              .foregroundColor(Color.black.opacity(0.72))
+              .foregroundColor(OmiColors.textSecondary)
               .padding(.horizontal, 18)
               .padding(.vertical, 12)
               .background(
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
-                  .fill(Color.white.opacity(0.82))
+                  .fill(OmiColors.backgroundSecondary)
               )
           }
           .buttonStyle(.plain)
@@ -160,12 +83,12 @@ struct OnboardingVoiceShortcutStepView: View {
             Button(action: onComplete) {
               Text("Continue")
                 .font(.system(size: 15, weight: .semibold))
-                .foregroundColor(.white)
+                .foregroundColor(.black)
                 .padding(.horizontal, 28)
                 .padding(.vertical, 12)
                 .background(
                   RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(OmiColors.purplePrimary)
+                    .fill(Color.white)
                 )
             }
             .buttonStyle(.plain)
@@ -173,37 +96,63 @@ struct OnboardingVoiceShortcutStepView: View {
           }
         }
       }
-      .padding(.horizontal, 40)
+
+      Spacer()
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
+    .background(OmiColors.backgroundPrimary)
+    .onAppear {
+      FloatingControlBarManager.shared.setup(appState: appState, chatProvider: chatProvider)
+      resetFloatingBarConversation()
+      FloatingControlBarManager.shared.hide()
+      PushToTalkManager.shared.cleanup()
+      installKeyMonitor()
+    }
+    .onDisappear {
+      if let monitor = keyMonitor {
+        NSEvent.removeMonitor(monitor)
+        keyMonitor = nil
+      }
+    }
+  }
+
+  private func resetFloatingBarConversation() {
+    guard let barState = FloatingControlBarManager.shared.barState else { return }
+    barState.showingAIConversation = false
+    barState.showingAIResponse = false
+    barState.aiInputText = ""
+    barState.currentAIMessage = nil
+    barState.chatHistory = []
+    barState.isVoiceFollowUp = false
+    barState.voiceFollowUpTranscript = ""
   }
 
   private var shortcutKeyPreview: some View {
     VStack(spacing: 12) {
       RoundedRectangle(cornerRadius: 14, style: .continuous)
-        .fill(isShortcutActive ? OmiColors.purplePrimary : Color.white)
+        .fill(shortcutDetected ? Color.white : OmiColors.backgroundTertiary)
         .frame(width: 64, height: 64)
         .overlay(
           RoundedRectangle(cornerRadius: 14, style: .continuous)
             .stroke(
-              isShortcutActive ? OmiColors.purplePrimary : Color.black.opacity(0.12), lineWidth: 2)
+              shortcutDetected ? Color.white : OmiColors.textTertiary.opacity(0.3),
+              lineWidth: 2)
         )
-        .shadow(color: .black.opacity(0.12), radius: 10, x: 0, y: 6)
         .overlay {
           VStack(spacing: 6) {
             Text(shortcutLabelTop)
               .font(.system(size: 13, weight: .semibold))
-              .foregroundColor(isShortcutActive ? .white : Color.black.opacity(0.7))
+              .foregroundColor(shortcutDetected ? .black : OmiColors.textPrimary)
 
             Text(shortcutLabelBottom)
               .font(.system(size: 14, weight: .medium))
-              .foregroundColor(isShortcutActive ? .white.opacity(0.95) : Color.black.opacity(0.65))
+              .foregroundColor(shortcutDetected ? .black.opacity(0.7) : OmiColors.textSecondary)
           }
         }
 
-      Text(isShortcutActive ? "Shortcut detected" : "Press and hold to test")
+      Text(shortcutDetected ? "Shortcut detected" : "Press and hold to test")
         .font(.system(size: 13, weight: .medium))
-        .foregroundColor(Color.black.opacity(0.55))
+        .foregroundColor(OmiColors.textTertiary)
     }
   }
 
@@ -211,7 +160,7 @@ struct OnboardingVoiceShortcutStepView: View {
     let isSelected = shortcutSettings.pttKey == key
     return Button {
       shortcutSettings.pttKey = key
-      observedShortcutPress = false
+      shortcutDetected = false
       showContinue = false
     } label: {
       HStack(spacing: 6) {
@@ -220,28 +169,15 @@ struct OnboardingVoiceShortcutStepView: View {
         Text(pttChoiceTitle(for: key))
           .font(.system(size: 13, weight: .semibold))
       }
-      .foregroundColor(isSelected ? .white : Color.black.opacity(0.7))
+      .foregroundColor(isSelected ? .black : OmiColors.textSecondary)
       .padding(.horizontal, 14)
       .padding(.vertical, 10)
       .background(
         RoundedRectangle(cornerRadius: 12, style: .continuous)
-          .fill(isSelected ? OmiColors.purplePrimary : Color.white)
-      )
-      .overlay(
-        RoundedRectangle(cornerRadius: 12, style: .continuous)
-          .stroke(isSelected ? OmiColors.purplePrimary : Color.black.opacity(0.08), lineWidth: 1)
+          .fill(isSelected ? Color.white : OmiColors.backgroundSecondary)
       )
     }
     .buttonStyle(.plain)
-  }
-
-  private var isShortcutActive: Bool {
-    switch pttManager.state {
-    case .idle:
-      return false
-    case .listening, .lockedListening, .finalizing:
-      return true
-    }
   }
 
   private var shortcutLabelTop: String {
@@ -270,13 +206,39 @@ struct OnboardingVoiceShortcutStepView: View {
     }
   }
 
+  private func installKeyMonitor() {
+    keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .flagsChanged) { event in
+      guard !shortcutDetected else { return event }
+      guard matchesCurrentPTTShortcut(event) else { return event }
+
+      shortcutDetected = true
+      withAnimation(.easeInOut(duration: 0.3)) {
+        showContinue = true
+      }
+      return nil
+    }
+  }
+
+  private func matchesCurrentPTTShortcut(_ event: NSEvent) -> Bool {
+    switch shortcutSettings.pttKey {
+    case .option:
+      let otherModifiers: NSEvent.ModifierFlags = [.command, .control, .shift]
+      return event.modifierFlags.intersection(otherModifiers) == []
+        && event.modifierFlags.contains(.option)
+    case .rightCommand:
+      return event.keyCode == 54 && event.modifierFlags.contains(.command)
+    case .fn:
+      return event.modifierFlags.contains(.function)
+    }
+  }
+
   private func cycleShortcut() {
     let allKeys = ShortcutSettings.PTTKey.allCases
     guard let currentIndex = allKeys.firstIndex(of: shortcutSettings.pttKey) else { return }
     let nextIndex = allKeys.index(after: currentIndex)
     shortcutSettings.pttKey =
       nextIndex == allKeys.endIndex ? allKeys[allKeys.startIndex] : allKeys[nextIndex]
-    observedShortcutPress = false
+    shortcutDetected = false
     showContinue = false
   }
 }

@@ -1,6 +1,7 @@
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/models/sync_state.dart';
+import 'package:omi/services/audio_sources/audio_source.dart';
 import 'package:omi/services/wals/wal.dart';
 
 // Re-export for convenience
@@ -65,16 +66,20 @@ abstract class LocalWalSync implements IWalSync {
   Future<List<Wal>> getAllWals();
   Future<void> deleteAllSyncedWals();
   Future<void> deleteAllPendingWals();
-  void onByteStream(List<int> value);
-  void onBytesSync(List<int> value);
-  Future onAudioCodecChanged(BleAudioCodec codec);
-  void setDeviceInfo(String? deviceId, String? deviceModel);
 
-  /// Set WAL header size based on the audio source (not codec).
-  /// BLE devices: 3 (firmware adds [packet_id_low, packet_id_high, packet_index]).
-  /// Phone mic: 1 (app prepends [frame_index] for data consistency).
-  /// Header is stripped before writing to disk and used for sync matching.
-  void setWalHeaderSize(int headerSize);
+  /// Ingest a pre-processed audio frame from an AudioSource.
+  /// The frame contains headerless payload and a source-specific sync key.
+  void onFrameCaptured(WalFrame frame);
+
+  /// Mark a frame as synced (sent to server via WebSocket).
+  /// Matches frames by sync key (source-agnostic).
+  void markFrameSynced(FrameSyncKey key);
+
+  /// Notify WAL that the audio codec has changed (resets frame state).
+  Future onAudioCodecChanged(BleAudioCodec codec);
+
+  /// Set device metadata for WAL file naming.
+  void setDeviceInfo(String? deviceId, String? deviceModel);
 }
 
 abstract class SDCardWalSync implements IWalSync {

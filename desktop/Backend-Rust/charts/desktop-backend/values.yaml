@@ -47,11 +47,6 @@ env:
     value: "info"
   - name: GOOGLE_APPLICATION_CREDENTIALS
     value: "/app/google-credentials.json"
-  - name: RESEND_API_KEY
-    valueFrom:
-      secretKeyRef:
-        name: prod-omi-backend-secrets
-        key: RESEND_API_KEY
 
 resources:
   requests:

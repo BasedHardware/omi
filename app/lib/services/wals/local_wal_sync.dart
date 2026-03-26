@@ -3,10 +3,12 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
+import 'package:meta/meta.dart';
 
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/services/audio_sources/audio_source.dart';
 import 'package:omi/services/wals/wal.dart';
 import 'package:omi/services/wals/wal_interfaces.dart';
 import 'package:omi/utils/debug_log_manager.dart';
@@ -16,7 +18,7 @@ import 'package:omi/utils/wal_file_manager.dart';
 class LocalWalSyncImpl implements LocalWalSync {
   List<Wal> _wals = const [];
 
-  List<List<int>> _frames = [];
+  List<WalFrame> _frames = [];
   List<bool> _frameSynced = [];
 
   Timer? _chunkingTimer;
@@ -26,7 +28,6 @@ class LocalWalSyncImpl implements LocalWalSync {
 
   int _framesPerSecond = 100;
   BleAudioCodec _codec = BleAudioCodec.opus;
-  int _walHeaderSize = 3; // Default: BLE device 3-byte firmware header
   String? _deviceId;
   String? _deviceModel;
 
@@ -38,6 +39,15 @@ class LocalWalSyncImpl implements LocalWalSync {
   SyncLocalFilesResponse? get accumulatedResponse => _accumulatedResponse;
 
   LocalWalSyncImpl(this.listener);
+
+  @visibleForTesting
+  List<WalFrame> get testFrames => _frames;
+
+  @visibleForTesting
+  List<bool> get testFrameSynced => _frameSynced;
+
+  @visibleForTesting
+  List<Wal> get testWals => _wals;
 
   @override
   void cancelSync() {
@@ -129,11 +139,6 @@ class LocalWalSyncImpl implements LocalWalSync {
     _deviceModel = deviceModel;
   }
 
-  @override
-  void setWalHeaderSize(int headerSize) {
-    _walHeaderSize = headerSize;
-  }
-
   Future _chunk() async {
     if (_frames.isEmpty) {
       Logger.debug("Frames are empty");
@@ -149,7 +154,7 @@ class LocalWalSyncImpl implements LocalWalSync {
 
     var high = pivot;
     var low = 0;
-    var chunk = _frames.sublist(low, high);
+    var chunk = _frames.sublist(low, high).map((f) => f.payload).toList();
     var timerStart = timerEnd - (high - low) ~/ _framesPerSecond;
     var chunkFrameCount = high - low;
 
@@ -238,15 +243,12 @@ class LocalWalSyncImpl implements LocalWalSync {
         }
 
         List<int> data = [];
-        // Strip WAL header bytes before writing to disk.
-        // Header size depends on audio source: BLE device=3, phone mic=1.
-        final headerSize = _walHeaderSize;
         for (int i = 0; i < wal.data.length; i++) {
-          var frame = headerSize > 0 && wal.data[i].length > headerSize ? wal.data[i].sublist(headerSize) : wal.data[i];
+          var frame = wal.data[i];
 
           final byteFrame = ByteData(frame.length);
-          for (int i = 0; i < frame.length; i++) {
-            byteFrame.setUint8(i, frame[i]);
+          for (int j = 0; j < frame.length; j++) {
+            byteFrame.setUint8(j, frame[j]);
           }
           data.addAll(Uint32List.fromList([frame.length]).buffer.asUint8List());
           data.addAll(byteFrame.buffer.asUint8List());
@@ -332,27 +334,15 @@ class LocalWalSyncImpl implements LocalWalSync {
   }
 
   @override
-  void onByteStream(List<int> value) async {
-    _frames.add(value);
+  void onFrameCaptured(WalFrame frame) {
+    _frames.add(frame);
     _frameSynced.add(false);
   }
 
   @override
-  void onBytesSync(List<int> value) {
-    // Match frames using source-defined header bytes.
-    // BLE device=3 (firmware header), phone mic=1 (index byte), no header=4 (content fallback).
-    final matchBytes = _walHeaderSize > 0 ? _walHeaderSize : 4;
-    if (value.length < matchBytes) return;
+  void markFrameSynced(FrameSyncKey key) {
     for (int i = _frames.length - 1; i >= 0; i--) {
-      if (_frames[i].length < matchBytes) continue;
-      bool match = true;
-      for (int j = 0; j < matchBytes; j++) {
-        if (_frames[i][j] != value[j]) {
-          match = false;
-          break;
-        }
-      }
-      if (match) {
+      if (_frames[i].syncKey == key) {
         _frameSynced[i] = true;
         break;
       }
@@ -474,17 +464,35 @@ class LocalWalSyncImpl implements LocalWalSync {
           ),
         );
 
+        if (partialRes.hasPartialFailure) {
+          Logger.debug(
+            'WAL batch partial failure: ${partialRes.failedSegments}/${partialRes.totalSegments} segments failed',
+          );
+          DebugLogManager.logWarning('Local upload batch partial failure', {
+            'failedSegments': partialRes.failedSegments,
+            'totalSegments': partialRes.totalSegments,
+            'errors': partialRes.errors.take(3).toList(),
+          });
+        }
+
         batchesCompleted++;
 
         for (var j = left; j <= right; j++) {
           if (j < wals.length) {
             var wal = wals[j];
-            wals[j].status = WalStatus.synced;
-            wals[j].isSyncing = false;
-            wals[j].syncStartedAt = null;
-            wals[j].syncEtaSeconds = null;
-
-            listener.onWalSynced(wal);
+            if (partialRes.hasPartialFailure) {
+              // Keep WALs retryable on partial failure so failed segments get
+              // another chance. Backend dedup prevents duplicate transcripts.
+              wals[j].isSyncing = false;
+              wals[j].syncStartedAt = null;
+              wals[j].syncEtaSeconds = null;
+            } else {
+              wals[j].status = WalStatus.synced;
+              wals[j].isSyncing = false;
+              wals[j].syncStartedAt = null;
+              wals[j].syncEtaSeconds = null;
+              listener.onWalSynced(wal);
+            }
           }
         }
       } catch (e) {
@@ -579,13 +587,31 @@ class LocalWalSyncImpl implements LocalWalSync {
         ),
       );
 
-      walToSync.status = WalStatus.synced;
-      walToSync.isSyncing = false;
-      walToSync.syncStartedAt = null;
-      walToSync.syncEtaSeconds = null;
+      if (partialRes.hasPartialFailure) {
+        Logger.debug(
+          'Single WAL partial failure: ${partialRes.failedSegments}/${partialRes.totalSegments} segments failed',
+        );
+        DebugLogManager.logWarning('Single WAL upload partial failure', {
+          'walId': wal.id,
+          'failedSegments': partialRes.failedSegments,
+          'totalSegments': partialRes.totalSegments,
+          'errors': partialRes.errors.take(3).toList(),
+        });
+      }
 
-      DebugLogManager.logInfo('Single WAL upload succeeded', {'walId': wal.id});
-      listener.onWalSynced(wal);
+      if (partialRes.hasPartialFailure) {
+        // Keep WAL retryable so failed segments get another chance
+        walToSync.isSyncing = false;
+        walToSync.syncStartedAt = null;
+        walToSync.syncEtaSeconds = null;
+      } else {
+        walToSync.status = WalStatus.synced;
+        walToSync.isSyncing = false;
+        walToSync.syncStartedAt = null;
+        walToSync.syncEtaSeconds = null;
+        DebugLogManager.logInfo('Single WAL upload succeeded', {'walId': wal.id});
+        listener.onWalSynced(wal);
+      }
     } catch (e) {
       Logger.debug('Single WAL sync failed: $e');
       DebugLogManager.logError(e, null, 'Single WAL upload failed: ${e.toString()}', {'walId': wal.id});
