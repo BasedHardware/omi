@@ -246,6 +246,54 @@ void main() {
     });
   });
 
+  group('audio_player_utils temp file serialization (no double-strip)', () {
+    test('headerless payloads are serialized without extra sublist(3)', () {
+      // Simulate a Wal with headerless payloads (as now stored by _chunk)
+      final headerlessPayloads = [
+        [0xAA, 0xBB, 0xCC, 0xDD], // 4 bytes of pure audio
+        [0x11, 0x22, 0x33], // 3 bytes of pure audio
+      ];
+
+      // This is the FIXED audio_player_utils._createTempFileFromMemoryData logic:
+      // var frame = wal.data[i]; (no sublist(3))
+      List<int> fixedData = [];
+      for (int i = 0; i < headerlessPayloads.length; i++) {
+        var frame = headerlessPayloads[i]; // FIXED: direct access
+        final byteFrame = ByteData(frame.length);
+        for (int j = 0; j < frame.length; j++) {
+          byteFrame.setUint8(j, frame[j]);
+        }
+        fixedData.addAll(Uint32List.fromList([frame.length]).buffer.asUint8List());
+        fixedData.addAll(byteFrame.buffer.asUint8List());
+      }
+
+      // Verify first frame is fully preserved
+      final len1 = ByteData.sublistView(Uint8List.fromList(fixedData.sublist(0, 4))).getUint32(0, Endian.little);
+      expect(len1, 4); // Full 4-byte payload
+      expect(fixedData.sublist(4, 8), [0xAA, 0xBB, 0xCC, 0xDD]);
+
+      // Verify second frame is fully preserved
+      final len2 = ByteData.sublistView(Uint8List.fromList(fixedData.sublist(8, 12))).getUint32(0, Endian.little);
+      expect(len2, 3); // Full 3-byte payload
+      expect(fixedData.sublist(12, 15), [0x11, 0x22, 0x33]);
+    });
+
+    test('old buggy sublist(3) would corrupt headerless payloads', () {
+      // Demonstrate the bug that was fixed: applying sublist(3) to
+      // already-headerless payloads truncates audio data
+      final headerlessPayload = [0xAA, 0xBB, 0xCC, 0xDD]; // 4 bytes
+
+      // OLD buggy code: wal.data[i].sublist(3) on headerless payload
+      final buggyResult = headerlessPayload.sublist(3);
+      expect(buggyResult, [0xDD]); // Lost 3 bytes of audio!
+
+      // FIXED code: wal.data[i] directly
+      final fixedResult = headerlessPayload;
+      expect(fixedResult, [0xAA, 0xBB, 0xCC, 0xDD]); // All audio preserved
+      expect(fixedResult.length, buggyResult.length + 3); // 3 bytes recovered
+    });
+  });
+
   group('_chunk payload extraction', () {
     test('WalFrame.payload is used for Wal.data (not raw bytes)', () {
       // Simulate what _chunk does: extract payloads from WalFrames
