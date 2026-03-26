@@ -1005,17 +1005,34 @@ def ack_deferred_conversation(uid: str, conversation_id: str, language: str):
     r.delete(f'deferred_conv_active:{conversation_id}')
 
 
-@try_catch_decorator
-def nack_deferred_conversation(uid: str, conversation_id: str, language: str):
-    """Return a failed item back to the main queue for retry.
+DEFERRED_CONVERSATION_MAX_RETRIES = 3
 
-    Clears the active processing lock and moves item back to queue.
-    Does NOT delete the dedup lock — it persists until TTL expiry or ack.
+
+@try_catch_decorator
+def nack_deferred_conversation(uid: str, conversation_id: str, language: str) -> bool:
+    """Return a failed item to the back of the queue for retry, or discard after max retries.
+
+    Clears the active processing lock. Uses RPUSH (back of queue) to prevent
+    poison-pill starvation. Tracks retry count; after DEFERRED_CONVERSATION_MAX_RETRIES
+    failures, the item is discarded (not re-queued).
+    Returns True if re-queued, False if discarded.
     """
     item = json.dumps({'uid': uid, 'conversation_id': conversation_id, 'language': language})
     r.lrem(DEFERRED_CONVERSATION_PROCESSING_KEY, 1, item)
     r.delete(f'deferred_conv_active:{conversation_id}')
-    r.lpush(DEFERRED_CONVERSATION_QUEUE_KEY, item)
+    # Track retry count
+    retry_key = f'deferred_conv_retries:{conversation_id}'
+    retries = r.incr(retry_key)
+    r.expire(retry_key, DEFERRED_CONVERSATION_TTL)
+    if retries > DEFERRED_CONVERSATION_MAX_RETRIES:
+        logger.warning(
+            f"Deferred conversation {conversation_id} exceeded {DEFERRED_CONVERSATION_MAX_RETRIES} retries, discarding"
+        )
+        r.delete(retry_key)
+        r.delete(f'deferred_conv_lock:{conversation_id}')
+        return False
+    r.rpush(DEFERRED_CONVERSATION_QUEUE_KEY, item)
+    return True
 
 
 @try_catch_decorator
