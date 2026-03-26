@@ -236,7 +236,7 @@ class AudioPlayerUtils extends ChangeNotifier {
 
     List<int> data = [];
     for (int i = 0; i < wal.data.length; i++) {
-      var frame = wal.data[i].sublist(3);
+      var frame = wal.data[i];
       final byteFrame = ByteData(frame.length);
       for (int j = 0; j < frame.length; j++) {
         byteFrame.setUint8(j, frame[j]);
