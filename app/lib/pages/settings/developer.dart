@@ -1932,8 +1932,8 @@ class _ManualFirmwareFlashPageState extends State<_ManualFirmwareFlashPage> with
       }
     }
   }
- 
-  @override
+
+  @override 
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.black,
