@@ -42,18 +42,18 @@ struct OnboardingFloatingBarDemoView: View {
             VStack(spacing: 28) {
                 VStack(spacing: 12) {
                     if !barActivated {
-                        Text(“Omi sees your screen and gives you hyper-personalized responses”)
+                        Text("Omi sees your screen and gives you hyper-personalized responses")
                             .font(.system(size: 20, weight: .bold))
                             .foregroundColor(OmiColors.textPrimary)
                             .multilineTextAlignment(.center)
                             .frame(maxWidth: 560)
 
-                        Text(“Press this shortcut to open Ask Omi.”)
+                        Text("Press this shortcut to open Ask Omi.")
                             .font(.system(size: 18, weight: .medium))
                             .foregroundColor(OmiColors.textSecondary)
                             .multilineTextAlignment(.center)
                     } else {
-                        Text(“Type “Which computer suits me best?””)
+                        Text("Type 'Which computer suits me best?'")
                             .font(.system(size: 24, weight: .bold))
                             .foregroundColor(OmiColors.textPrimary)
                             .multilineTextAlignment(.center)
