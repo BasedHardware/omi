@@ -236,12 +236,13 @@ class _CountryPickerSheet extends StatefulWidget {
 
 class _CountryPickerSheetState extends State<_CountryPickerSheet> {
   final TextEditingController _searchController = TextEditingController();
+  final List<IntlCountryData> _allCountries = IntlCountryData.all();
   List<IntlCountryData> _filtered = IntlCountryData.all();
 
   void _filter(String query) {
     var q = query.toLowerCase();
     setState(() {
-      _filtered = IntlCountryData.all().where((c) {
+      _filtered = _allCountries.where((c) {
         return c.name.toLowerCase().contains(q) ||
             c.telephoneCode.contains(q) ||
             c.codeAlpha2.toLowerCase().contains(q);
