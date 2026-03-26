@@ -119,12 +119,49 @@ def test_redis_enqueue_deferred_conversation():
     assert hasattr(redis_db, 'get_deferred_queue_length')
 
 
+def test_redis_ack_nack_recover_exist():
+    """ack, nack, and recover functions must exist for crash-safe processing."""
+    from database import redis_db
+
+    assert hasattr(redis_db, 'ack_deferred_conversation')
+    assert hasattr(redis_db, 'nack_deferred_conversation')
+    assert hasattr(redis_db, 'recover_deferred_processing')
+
+
 def test_redis_queue_key_defined():
-    """DEFERRED_CONVERSATION_QUEUE_KEY must be defined in redis_db."""
+    """DEFERRED_CONVERSATION_QUEUE_KEY and PROCESSING_KEY must be defined in redis_db."""
     from database import redis_db
 
     assert hasattr(redis_db, 'DEFERRED_CONVERSATION_QUEUE_KEY')
     assert redis_db.DEFERRED_CONVERSATION_QUEUE_KEY == 'deferred_conversations'
+    assert hasattr(redis_db, 'DEFERRED_CONVERSATION_PROCESSING_KEY')
+    assert redis_db.DEFERRED_CONVERSATION_PROCESSING_KEY == 'deferred_conversations_processing'
+
+
+def test_enqueue_uses_pipeline_for_atomicity():
+    """enqueue_deferred_conversation must use a Redis pipeline for atomic dedup+push."""
+    import pathlib
+
+    src = pathlib.Path(__file__).resolve().parents[2] / 'database' / 'redis_db.py'
+    source = src.read_text()
+    pos = source.find('def enqueue_deferred_conversation')
+    assert pos > 0
+    next_func = source.find('\ndef ', pos + 1)
+    func_body = source[pos:next_func] if next_func > 0 else source[pos : pos + 1000]
+    assert 'pipeline' in func_body, "enqueue must use a Redis pipeline for atomic dedup+push"
+
+
+def test_dequeue_uses_lmove():
+    """dequeue_deferred_conversation must use LMOVE for crash-safe dequeue."""
+    import pathlib
+
+    src = pathlib.Path(__file__).resolve().parents[2] / 'database' / 'redis_db.py'
+    source = src.read_text()
+    pos = source.find('def dequeue_deferred_conversation')
+    assert pos > 0
+    next_func = source.find('\ndef ', pos + 1)
+    func_body = source[pos:next_func] if next_func > 0 else source[pos : pos + 500]
+    assert 'lmove' in func_body, "dequeue must use LMOVE (atomic pop+push to processing list)"
 
 
 # ---------------------------------------------------------------------------
@@ -193,6 +230,27 @@ def test_pusher_main_starts_deferred_worker():
     source = _read_pusher_main_source()
     assert 'deferred_queue_worker' in source
     assert 'startup' in source
+
+
+def test_deferred_worker_uses_ack_nack():
+    """deferred_queue_worker must use ack on success and nack on failure."""
+    source = _read_pusher_source()
+    pos = source.find('async def deferred_queue_worker')
+    assert pos > 0
+    next_func = source.find('\n@router', pos + 1)
+    func_body = source[pos:next_func] if next_func > 0 else source[pos : pos + 2000]
+    assert 'ack_deferred_conversation' in func_body, "Worker must ack on success"
+    assert 'nack_deferred_conversation' in func_body, "Worker must nack on failure for retry"
+
+
+def test_deferred_worker_recovers_on_startup():
+    """deferred_queue_worker must call recover_deferred_processing on startup."""
+    source = _read_pusher_source()
+    pos = source.find('async def deferred_queue_worker')
+    assert pos > 0
+    next_func = source.find('\n@router', pos + 1)
+    func_body = source[pos:next_func] if next_func > 0 else source[pos : pos + 2000]
+    assert 'recover_deferred_processing' in func_body, "Worker must recover stuck items on startup"
 
 
 # ---------------------------------------------------------------------------
