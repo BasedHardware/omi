@@ -721,6 +721,11 @@ class GatedDeepgramSocket:
             return self._conn.is_connection_dead
         return False
 
+    @property
+    def death_reason(self) -> Optional[str]:
+        """Why the DG connection died. Delegates to SafeDeepgramSocket."""
+        return self._conn.death_reason
+
     def send(self, data: bytes, wall_time: Optional[float] = None) -> None:
         """Send audio through VAD gate (if active), then to DG."""
         if self.is_connection_dead:

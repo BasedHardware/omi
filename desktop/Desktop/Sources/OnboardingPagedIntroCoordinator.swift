@@ -79,8 +79,14 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
 
   func prepare(appState: AppState) {
     ChatToolExecutor.onboardingAppState = appState
-    OnboardingChatPersistence.saveMidOnboarding()
     appState.checkAllPermissions()
+
+    // Clear graph only on first onboarding start, not mid-onboarding restarts.
+    let isResuming = OnboardingChatPersistence.isMidOnboarding
+    OnboardingChatPersistence.saveMidOnboarding()
+    if !isResuming {
+      Task { await KnowledgeGraphStorage.shared.clearAll() }
+    }
 
     if scanSnapshot == nil {
       Task { await refreshSnapshotIfAvailable() }
@@ -217,6 +223,11 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
     scanState = .scanning
     scanStatusText = "Scanning your projects and apps..."
 
+    // Start Gmail/Calendar/web research in parallel with the file scan
+    // so insights are ready by the time the user reaches the research step.
+    // Must use Task.detached to avoid @MainActor serialization with the scan.
+    Task.detached { await self.startBackgroundInsightsIfNeeded() }
+
     let result = await executeTool(name: "scan_files", arguments: [:])
     if result.lowercased().hasPrefix("error") {
       scanState = .failed(result)
@@ -227,7 +238,6 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
     await refreshSnapshotIfAvailable()
     scanState = .complete
     scanStatusText = "Your workspace is mapped."
-    await startBackgroundInsightsIfNeeded()
   }
 
   func refreshSnapshotIfAvailable() async {
@@ -503,6 +513,8 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
         webResearchSummary = analysis.summary
       }
 
+      log("OnboardingPagedIntroCoordinator: Enrichment goals: \(analysis.goals), summary: \(analysis.summary.prefix(100))")
+
       if !analysis.goals.isEmpty {
         suggestedGoals = Array(
           NSOrderedSet(
@@ -655,6 +667,7 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
     let publicDomains: Set<String> = [
       "gmail.com", "googlemail.com", "icloud.com", "me.com", "mac.com", "yahoo.com",
       "outlook.com", "hotmail.com", "live.com", "proton.me", "protonmail.com",
+      "privaterelay.appleid.com", "privaterelay.icloud.com",
     ]
 
     guard !publicDomains.contains(domain) else { return nil }

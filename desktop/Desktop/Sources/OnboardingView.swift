@@ -123,63 +123,65 @@ struct OnboardingView: View {
           graphViewModel: graphViewModel,
           stepIndex: 3,
           totalSteps: OnboardingFlow.introStepCount,
-          eyebrow: "Access",
-          title: "Let Omi scan your work.",
-          description: "File access lets Omi map your projects and files.",
-          permissionType: "full_disk_access",
-          icon: "externaldrive.fill.badge.person.crop",
-          reasonTitle: "Full Disk Access",
-          reasonDetail: "This lets Omi scan your projects and recent files.",
-          primaryActionLabel: "Open Full Disk Access",
-          requiresRestart: false,
+          eyebrow: "Permission",
+          title: "Let Omi read your screen.",
+          description: "Screen Recording lets Omi see what you're working on.",
+          permissionType: "screen_recording",
+          icon: "display.and.arrow.down",
+          reasonTitle: "Screen Recording",
+          reasonDetail: "Screen Recording lets Omi see what you're working on.",
+          primaryActionLabel: "Open Screen Recording settings",
+          requiresRestart: true,
           onContinue: {
-            AnalyticsManager.shared.onboardingStepCompleted(step: 3, stepName: "FullDiskAccess")
+            AnalyticsManager.shared.onboardingStepCompleted(step: 3, stepName: "ScreenRecording")
+            startMonitoringIfNeeded()
             currentStep = 4
           },
           onSkip: {
             AnalyticsManager.shared.onboardingStepCompleted(
-              step: 3, stepName: "FullDiskAccess_Skipped")
+              step: 3, stepName: "ScreenRecording_Skipped")
             currentStep = 4
           }
         )
       } else if currentStep == 4 {
-        OnboardingFileScanStepView(
+        OnboardingPermissionStepView(
           appState: appState,
           coordinator: introCoordinator,
           graphViewModel: graphViewModel,
           stepIndex: 4,
           totalSteps: OnboardingFlow.introStepCount,
+          eyebrow: "Access",
+          title: "Let Omi scan your work.",
+          description: "File access lets Omi map your projects and files.",
+          permissionType: "full_disk_access",
+          icon: "externaldrive.fill.badge.person.crop",
+          reasonTitle: "Disk Access",
+          reasonDetail: "This lets Omi scan your projects and recent files.",
+          primaryActionLabel: "Open Disk Access",
+          requiresRestart: false,
           onContinue: {
-            AnalyticsManager.shared.onboardingStepCompleted(step: 4, stepName: "FileScan")
+            AnalyticsManager.shared.onboardingStepCompleted(step: 4, stepName: "FullDiskAccess")
             currentStep = 5
           },
           onSkip: {
-            AnalyticsManager.shared.onboardingStepCompleted(step: 4, stepName: "FileScan_Skipped")
+            AnalyticsManager.shared.onboardingStepCompleted(
+              step: 4, stepName: "FullDiskAccess_Skipped")
             currentStep = 5
           }
         )
       } else if currentStep == 5 {
-        OnboardingPermissionStepView(
+        OnboardingFileScanStepView(
           appState: appState,
           coordinator: introCoordinator,
           graphViewModel: graphViewModel,
           stepIndex: 5,
           totalSteps: OnboardingFlow.introStepCount,
-          eyebrow: "Permission",
-          title: "Let Omi use your mic.",
-          description: "Microphone lets Omi transcribe meetings.",
-          permissionType: "microphone",
-          icon: "mic.fill",
-          reasonTitle: "Microphone",
-          reasonDetail: "This lets Omi transcribe meetings and voice notes.",
-          primaryActionLabel: "Grant microphone access",
-          requiresRestart: false,
           onContinue: {
-            AnalyticsManager.shared.onboardingStepCompleted(step: 5, stepName: "Microphone")
+            AnalyticsManager.shared.onboardingStepCompleted(step: 5, stepName: "FileScan")
             currentStep = 6
           },
           onSkip: {
-            AnalyticsManager.shared.onboardingStepCompleted(step: 5, stepName: "Microphone_Skipped")
+            AnalyticsManager.shared.onboardingStepCompleted(step: 5, stepName: "FileScan_Skipped")
             currentStep = 6
           }
         )
@@ -191,21 +193,20 @@ struct OnboardingView: View {
           stepIndex: 6,
           totalSteps: OnboardingFlow.introStepCount,
           eyebrow: "Permission",
-          title: "Let Omi send reminders.",
-          description: "Notifications let Omi send proactive tips.",
-          permissionType: "notifications",
-          icon: "bell.badge.fill",
-          reasonTitle: "Notifications",
-          reasonDetail: "This lets Omi send reminders and proactive tips.",
-          primaryActionLabel: "Enable notifications",
+          title: "Let Omi use your mic.",
+          description: "Microphone lets Omi transcribe meetings.",
+          permissionType: "microphone",
+          icon: "mic.fill",
+          reasonTitle: "Microphone",
+          reasonDetail: "This lets Omi transcribe meetings and voice notes.",
+          primaryActionLabel: "Grant microphone access",
           requiresRestart: false,
           onContinue: {
-            AnalyticsManager.shared.onboardingStepCompleted(step: 6, stepName: "Notifications")
+            AnalyticsManager.shared.onboardingStepCompleted(step: 6, stepName: "Microphone")
             currentStep = 7
           },
           onSkip: {
-            AnalyticsManager.shared.onboardingStepCompleted(
-              step: 6, stepName: "Notifications_Skipped")
+            AnalyticsManager.shared.onboardingStepCompleted(step: 6, stepName: "Microphone_Skipped")
             currentStep = 7
           }
         )
@@ -217,21 +218,21 @@ struct OnboardingView: View {
           stepIndex: 7,
           totalSteps: OnboardingFlow.introStepCount,
           eyebrow: "Permission",
-          title: "Let Omi see the active app.",
-          description: "Accessibility lets Omi know which app is active.",
-          permissionType: "accessibility",
-          icon: "figure.wave",
-          reasonTitle: "Accessibility",
-          reasonDetail: "This lets Omi know which app you are using.",
-          primaryActionLabel: "Open Accessibility settings",
+          title: "Let Omi send reminders.",
+          description: "Notifications let Omi send proactive tips.",
+          permissionType: "notifications",
+          icon: "bell.badge.fill",
+          reasonTitle: "Notifications",
+          reasonDetail: "This lets Omi send reminders and proactive tips.",
+          primaryActionLabel: "Enable notifications",
           requiresRestart: false,
           onContinue: {
-            AnalyticsManager.shared.onboardingStepCompleted(step: 7, stepName: "Accessibility")
+            AnalyticsManager.shared.onboardingStepCompleted(step: 7, stepName: "Notifications")
             currentStep = 8
           },
           onSkip: {
             AnalyticsManager.shared.onboardingStepCompleted(
-              step: 7, stepName: "Accessibility_Skipped")
+              step: 7, stepName: "Notifications_Skipped")
             currentStep = 8
           }
         )
@@ -243,6 +244,32 @@ struct OnboardingView: View {
           stepIndex: 8,
           totalSteps: OnboardingFlow.introStepCount,
           eyebrow: "Permission",
+          title: "Let Omi see the active app.",
+          description: "Accessibility lets Omi know which app is active.",
+          permissionType: "accessibility",
+          icon: "figure.wave",
+          reasonTitle: "Accessibility",
+          reasonDetail: "This lets Omi know which app you are using.",
+          primaryActionLabel: "Open Accessibility settings",
+          requiresRestart: false,
+          onContinue: {
+            AnalyticsManager.shared.onboardingStepCompleted(step: 8, stepName: "Accessibility")
+            currentStep = 9
+          },
+          onSkip: {
+            AnalyticsManager.shared.onboardingStepCompleted(
+              step: 8, stepName: "Accessibility_Skipped")
+            currentStep = 9
+          }
+        )
+      } else if currentStep == 9 {
+        OnboardingPermissionStepView(
+          appState: appState,
+          coordinator: introCoordinator,
+          graphViewModel: graphViewModel,
+          stepIndex: 9,
+          totalSteps: OnboardingFlow.introStepCount,
+          eyebrow: "Permission",
           title: "Let Omi act when asked.",
           description: "Automation lets Omi take actions for you.",
           permissionType: "automation",
@@ -252,120 +279,94 @@ struct OnboardingView: View {
           primaryActionLabel: "Open Automation settings",
           requiresRestart: false,
           onContinue: {
-            AnalyticsManager.shared.onboardingStepCompleted(step: 8, stepName: "Automation")
-            currentStep = 9
+            AnalyticsManager.shared.onboardingStepCompleted(step: 9, stepName: "Automation")
+            currentStep = 10
           },
           onSkip: {
-            AnalyticsManager.shared.onboardingStepCompleted(step: 8, stepName: "Automation_Skipped")
-            currentStep = 9
-          }
-        )
-      } else if currentStep == 9 {
-        OnboardingResearchStepView(
-          coordinator: introCoordinator,
-          graphViewModel: graphViewModel,
-          stepIndex: 9,
-          totalSteps: OnboardingFlow.introStepCount,
-          onContinue: {
-            AnalyticsManager.shared.onboardingStepCompleted(step: 9, stepName: "Research")
+            AnalyticsManager.shared.onboardingStepCompleted(step: 9, stepName: "Automation_Skipped")
             currentStep = 10
           }
         )
       } else if currentStep == 10 {
-        OnboardingPermissionStepView(
-          appState: appState,
-          coordinator: introCoordinator,
-          graphViewModel: graphViewModel,
-          stepIndex: 10,
-          totalSteps: OnboardingFlow.introStepCount,
-          eyebrow: "Permission",
-          title: "Let Omi read your screen.",
-          description: "Screen Recording lets Omi see what you're working on.",
-          permissionType: "screen_recording",
-          icon: "display.and.arrow.down",
-          reasonTitle: "Screen Recording",
-          reasonDetail: "This lets Omi see what is on screen.",
-          primaryActionLabel: "Open Screen Recording settings",
-          requiresRestart: true,
-          onContinue: {
-            AnalyticsManager.shared.onboardingStepCompleted(step: 10, stepName: "ScreenRecording")
-            currentStep = 11
-          },
-          onSkip: {
-            AnalyticsManager.shared.onboardingStepCompleted(
-              step: 10, stepName: "ScreenRecording_Skipped")
-            currentStep = 11
-          }
-        )
-      } else if currentStep == 11 {
-        OnboardingGoalStepView(
-          appState: appState,
-          coordinator: introCoordinator,
-          graphViewModel: graphViewModel,
-          stepIndex: 11,
-          totalSteps: OnboardingFlow.introStepCount,
-          onContinue: {
-            AnalyticsManager.shared.onboardingStepCompleted(step: 11, stepName: "Goal")
-            if !ProactiveAssistantsPlugin.shared.isMonitoring {
-              ProactiveAssistantsPlugin.shared.startMonitoring { _, _ in }
-            }
-            currentStep = 12
-          }
-        )
-      } else if currentStep == 12 {
         OnboardingFloatingBarShortcutStepView(
           appState: appState,
           chatProvider: chatProvider,
           onComplete: {
             AnalyticsManager.shared.onboardingStepCompleted(
-              step: 12, stepName: "FloatingBarShortcut")
-            currentStep = 13
+              step: 10, stepName: "FloatingBarShortcut")
+            currentStep = 11
           },
           onSkip: {
             AnalyticsManager.shared.onboardingStepCompleted(
-              step: 12, stepName: "FloatingBarShortcut_Skipped")
-            currentStep = 13
+              step: 10, stepName: "FloatingBarShortcut_Skipped")
+            currentStep = 11
           }
         )
-      } else if currentStep == 13 {
+      } else if currentStep == 11 {
         OnboardingFloatingBarDemoView(
           appState: appState,
           chatProvider: chatProvider,
           onComplete: {
-            AnalyticsManager.shared.onboardingStepCompleted(step: 13, stepName: "FloatingBar")
-            currentStep = 14
+            AnalyticsManager.shared.onboardingStepCompleted(step: 11, stepName: "FloatingBar")
+            currentStep = 12
           },
           onSkip: {
             AnalyticsManager.shared.onboardingStepCompleted(
-              step: 13, stepName: "FloatingBar_Skipped")
-            currentStep = 14
+              step: 11, stepName: "FloatingBar_Skipped")
+            currentStep = 12
           }
         )
-      } else if currentStep == 14 {
+      } else if currentStep == 12 {
         OnboardingVoiceShortcutStepView(
           appState: appState,
           chatProvider: chatProvider,
           onComplete: {
-            AnalyticsManager.shared.onboardingStepCompleted(step: 14, stepName: "VoiceShortcut")
-            currentStep = 15
+            AnalyticsManager.shared.onboardingStepCompleted(step: 12, stepName: "VoiceShortcut")
+            currentStep = 13
           },
           onSkip: {
             AnalyticsManager.shared.onboardingStepCompleted(
-              step: 14, stepName: "VoiceShortcut_Skipped")
-            currentStep = 15
+              step: 12, stepName: "VoiceShortcut_Skipped")
+            currentStep = 13
           }
         )
-      } else if currentStep == 15 {
+      } else if currentStep == 13 {
         OnboardingVoiceDemoView(
           appState: appState,
           chatProvider: chatProvider,
           onComplete: {
-            AnalyticsManager.shared.onboardingStepCompleted(step: 15, stepName: "VoiceDemo")
-            currentStep = 16
+            AnalyticsManager.shared.onboardingStepCompleted(step: 13, stepName: "VoiceDemo")
+            currentStep = 14
           },
           onSkip: {
             AnalyticsManager.shared.onboardingStepCompleted(
-              step: 15, stepName: "VoiceDemo_Skipped")
+              step: 13, stepName: "VoiceDemo_Skipped")
+            currentStep = 14
+          }
+        )
+      } else if currentStep == 14 {
+        OnboardingResearchStepView(
+          coordinator: introCoordinator,
+          graphViewModel: graphViewModel,
+          stepIndex: 14,
+          totalSteps: OnboardingFlow.introStepCount,
+          onContinue: {
+            AnalyticsManager.shared.onboardingStepCompleted(step: 14, stepName: "Research")
+            currentStep = 15
+          }
+        )
+      } else if currentStep == 15 {
+        OnboardingGoalStepView(
+          appState: appState,
+          coordinator: introCoordinator,
+          graphViewModel: graphViewModel,
+          stepIndex: 15,
+          totalSteps: OnboardingFlow.introStepCount,
+          onContinue: {
+            AnalyticsManager.shared.onboardingStepCompleted(step: 15, stepName: "Goal")
+            if !ProactiveAssistantsPlugin.shared.isMonitoring {
+              ProactiveAssistantsPlugin.shared.startMonitoring { _, _ in }
+            }
             currentStep = 16
           }
         )
@@ -418,7 +419,7 @@ struct OnboardingView: View {
     if LaunchAtLoginManager.shared.setEnabled(true) {
       AnalyticsManager.shared.launchAtLoginChanged(enabled: true, source: "onboarding_complete")
     }
-    ProactiveAssistantsPlugin.shared.startMonitoring { _, _ in }
+    startMonitoringIfNeeded()
     appState.startTranscription()
 
     // Create welcome task
@@ -433,6 +434,13 @@ struct OnboardingView: View {
           priority: "low"
         )
       }
+    }
+  }
+
+  private func startMonitoringIfNeeded() {
+    AssistantSettings.shared.screenAnalysisEnabled = true
+    if !ProactiveAssistantsPlugin.shared.isMonitoring {
+      ProactiveAssistantsPlugin.shared.startMonitoring { _, _ in }
     }
   }
 }
@@ -467,7 +475,7 @@ struct OnboardingTrustPreviewCard: View {
       HStack(spacing: 8) {
         Image(systemName: "shield.lefthalf.filled")
           .font(.system(size: 16, weight: .semibold))
-          .foregroundColor(OmiColors.purplePrimary.opacity(0.9))
+          .foregroundColor(OmiColors.textSecondary)
         Text("Trust & Privacy")
           .font(.system(size: 17, weight: .medium))
           .foregroundColor(OmiColors.textSecondary)
@@ -498,7 +506,7 @@ struct OnboardingTrustPreviewCard: View {
           .fill(OmiColors.backgroundTertiary.opacity(0.75))
           .overlay(
             RoundedRectangle(cornerRadius: 16)
-              .stroke(OmiColors.purplePrimary.opacity(0.25), lineWidth: 1)
+              .stroke(Color.white.opacity(0.08), lineWidth: 1)
           )
       )
     }
@@ -511,7 +519,7 @@ struct OnboardingTrustPreviewCard: View {
     HStack(alignment: .top, spacing: 10) {
       Image(systemName: icon)
         .font(.system(size: 14, weight: .semibold))
-        .foregroundColor(OmiColors.purplePrimary)
+        .foregroundColor(OmiColors.textSecondary)
         .frame(width: 20, height: 20)
 
       VStack(alignment: .leading, spacing: 2) {
@@ -524,7 +532,7 @@ struct OnboardingTrustPreviewCard: View {
               .foregroundColor(OmiColors.textSecondary)
             if let url = URL(string: "https://github.com/basedhardware/omi/") {
               Link("public", destination: url)
-                .foregroundColor(OmiColors.purpleSecondary)
+                .foregroundColor(OmiColors.textPrimary)
                 .underline()
             }
             Text(" and auditable.")
@@ -628,7 +636,7 @@ struct OnboardingPrivacySheet: View {
       HStack {
         Image(systemName: "shield.lefthalf.filled")
           .scaledFont(size: 16)
-          .foregroundColor(OmiColors.purplePrimary)
+          .foregroundColor(OmiColors.textSecondary)
 
         Text("Data & Privacy")
           .scaledFont(size: 16, weight: .semibold)

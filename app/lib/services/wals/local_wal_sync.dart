@@ -464,17 +464,35 @@ class LocalWalSyncImpl implements LocalWalSync {
           ),
         );
 
+        if (partialRes.hasPartialFailure) {
+          Logger.debug(
+            'WAL batch partial failure: ${partialRes.failedSegments}/${partialRes.totalSegments} segments failed',
+          );
+          DebugLogManager.logWarning('Local upload batch partial failure', {
+            'failedSegments': partialRes.failedSegments,
+            'totalSegments': partialRes.totalSegments,
+            'errors': partialRes.errors.take(3).toList(),
+          });
+        }
+
         batchesCompleted++;
 
         for (var j = left; j <= right; j++) {
           if (j < wals.length) {
             var wal = wals[j];
-            wals[j].status = WalStatus.synced;
-            wals[j].isSyncing = false;
-            wals[j].syncStartedAt = null;
-            wals[j].syncEtaSeconds = null;
-
-            listener.onWalSynced(wal);
+            if (partialRes.hasPartialFailure) {
+              // Keep WALs retryable on partial failure so failed segments get
+              // another chance. Backend dedup prevents duplicate transcripts.
+              wals[j].isSyncing = false;
+              wals[j].syncStartedAt = null;
+              wals[j].syncEtaSeconds = null;
+            } else {
+              wals[j].status = WalStatus.synced;
+              wals[j].isSyncing = false;
+              wals[j].syncStartedAt = null;
+              wals[j].syncEtaSeconds = null;
+              listener.onWalSynced(wal);
+            }
           }
         }
       } catch (e) {
@@ -569,13 +587,31 @@ class LocalWalSyncImpl implements LocalWalSync {
         ),
       );
 
-      walToSync.status = WalStatus.synced;
-      walToSync.isSyncing = false;
-      walToSync.syncStartedAt = null;
-      walToSync.syncEtaSeconds = null;
+      if (partialRes.hasPartialFailure) {
+        Logger.debug(
+          'Single WAL partial failure: ${partialRes.failedSegments}/${partialRes.totalSegments} segments failed',
+        );
+        DebugLogManager.logWarning('Single WAL upload partial failure', {
+          'walId': wal.id,
+          'failedSegments': partialRes.failedSegments,
+          'totalSegments': partialRes.totalSegments,
+          'errors': partialRes.errors.take(3).toList(),
+        });
+      }
 
-      DebugLogManager.logInfo('Single WAL upload succeeded', {'walId': wal.id});
-      listener.onWalSynced(wal);
+      if (partialRes.hasPartialFailure) {
+        // Keep WAL retryable so failed segments get another chance
+        walToSync.isSyncing = false;
+        walToSync.syncStartedAt = null;
+        walToSync.syncEtaSeconds = null;
+      } else {
+        walToSync.status = WalStatus.synced;
+        walToSync.isSyncing = false;
+        walToSync.syncStartedAt = null;
+        walToSync.syncEtaSeconds = null;
+        DebugLogManager.logInfo('Single WAL upload succeeded', {'walId': wal.id});
+        listener.onWalSynced(wal);
+      }
     } catch (e) {
       Logger.debug('Single WAL sync failed: $e');
       DebugLogManager.logError(e, null, 'Single WAL upload failed: ${e.toString()}', {'walId': wal.id});

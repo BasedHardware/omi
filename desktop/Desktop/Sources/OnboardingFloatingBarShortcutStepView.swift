@@ -13,7 +13,8 @@ struct OnboardingFloatingBarShortcutStepView: View {
 
     @State private var shortcutDetected = false
     @State private var showContinue = false
-    @State private var keyMonitor: Any?
+    @State private var localKeyMonitor: Any?
+    @State private var globalKeyMonitor: Any?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -67,35 +68,20 @@ struct OnboardingFloatingBarShortcutStepView: View {
                     }
                 }
 
-                HStack(spacing: 14) {
-                    Button(action: cycleShortcut) {
-                        Text("Change shortcut")
+                if showContinue {
+                    Button(action: onComplete) {
+                        Text("Continue")
                             .font(.system(size: 15, weight: .semibold))
-                            .foregroundColor(OmiColors.textSecondary)
-                            .padding(.horizontal, 18)
+                            .foregroundColor(.black)
+                            .padding(.horizontal, 28)
                             .padding(.vertical, 12)
                             .background(
                                 RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                    .fill(OmiColors.backgroundSecondary)
+                                    .fill(Color.white)
                             )
                     }
                     .buttonStyle(.plain)
-
-                    if showContinue {
-                        Button(action: onComplete) {
-                            Text("Continue")
-                                .font(.system(size: 15, weight: .semibold))
-                                .foregroundColor(.white)
-                                .padding(.horizontal, 28)
-                                .padding(.vertical, 12)
-                                .background(
-                                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                        .fill(OmiColors.purplePrimary)
-                                )
-                        }
-                        .buttonStyle(.plain)
-                        .transition(.move(edge: .trailing).combined(with: .opacity))
-                    }
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
             }
 
@@ -110,9 +96,13 @@ struct OnboardingFloatingBarShortcutStepView: View {
             installKeyMonitor()
         }
         .onDisappear {
-            if let monitor = keyMonitor {
+            if let monitor = localKeyMonitor {
                 NSEvent.removeMonitor(monitor)
-                keyMonitor = nil
+                localKeyMonitor = nil
+            }
+            if let monitor = globalKeyMonitor {
+                NSEvent.removeMonitor(monitor)
+                globalKeyMonitor = nil
             }
             // Re-register the global hotkey for the next step.
             GlobalShortcutManager.shared.registerShortcuts()
@@ -137,19 +127,19 @@ struct OnboardingFloatingBarShortcutStepView: View {
 
     private func keyCap(_ label: String) -> some View {
         RoundedRectangle(cornerRadius: 10, style: .continuous)
-            .fill(shortcutDetected ? OmiColors.purplePrimary : OmiColors.backgroundTertiary)
+            .fill(shortcutDetected ? Color.white : OmiColors.backgroundTertiary)
             .frame(width: 48, height: 48)
             .overlay(
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
                     .stroke(
-                        shortcutDetected ? OmiColors.purplePrimary : OmiColors.textTertiary.opacity(0.3),
+                        shortcutDetected ? Color.white : OmiColors.textTertiary.opacity(0.3),
                         lineWidth: 2
                     )
             )
             .overlay {
                 Text(label)
                     .font(.system(size: 18, weight: .semibold))
-                    .foregroundColor(shortcutDetected ? .white : OmiColors.textPrimary)
+                    .foregroundColor(shortcutDetected ? .black : OmiColors.textPrimary)
             }
     }
 
@@ -168,12 +158,12 @@ struct OnboardingFloatingBarShortcutStepView: View {
                         .font(.system(size: 13, weight: .medium))
                 }
             }
-            .foregroundColor(isSelected ? .white : OmiColors.textSecondary)
+            .foregroundColor(isSelected ? .black : OmiColors.textSecondary)
             .padding(.horizontal, 14)
             .padding(.vertical, 10)
             .background(
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(isSelected ? OmiColors.purplePrimary : OmiColors.backgroundSecondary)
+                    .fill(isSelected ? Color.white : OmiColors.backgroundSecondary)
             )
         }
         .buttonStyle(.plain)
@@ -182,28 +172,26 @@ struct OnboardingFloatingBarShortcutStepView: View {
     // MARK: - Key Monitor
 
     private func installKeyMonitor() {
-        keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
-            guard !shortcutDetected else { return event }
-            if shortcutSettings.askOmiKey.matches(event) {
-                shortcutDetected = true
-                withAnimation(.easeInOut(duration: 0.3)) {
-                    showContinue = true
-                }
-                return nil  // consume the event so the floating bar does not open
+        localKeyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+            if handleShortcutEvent(event) {
+                return nil
             }
             return event
         }
+        globalKeyMonitor = NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { event in
+            _ = handleShortcutEvent(event)
+        }
     }
 
-    // MARK: - Cycle Shortcut
-
-    private func cycleShortcut() {
-        let allKeys = ShortcutSettings.AskOmiKey.allCases
-        guard let currentIndex = allKeys.firstIndex(of: shortcutSettings.askOmiKey) else { return }
-        let nextIndex = allKeys.index(after: currentIndex)
-        shortcutSettings.askOmiKey =
-            nextIndex == allKeys.endIndex ? allKeys[allKeys.startIndex] : allKeys[nextIndex]
-        shortcutDetected = false
-        showContinue = false
+    private func handleShortcutEvent(_ event: NSEvent) -> Bool {
+        guard !shortcutDetected else { return false }
+        guard shortcutSettings.askOmiKey.matches(event) else { return false }
+        DispatchQueue.main.async {
+            shortcutDetected = true
+            withAnimation(.easeInOut(duration: 0.3)) {
+                showContinue = true
+            }
+        }
+        return true
     }
 }

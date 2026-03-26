@@ -116,13 +116,13 @@ private struct GoalChipGrid: View {
         Button(action: { onSelect(item) }) {
           Text(item)
             .font(.system(size: 13, weight: .semibold))
-            .foregroundColor(isSelected ? .white : OmiColors.textSecondary)
+            .foregroundColor(isSelected ? .black : OmiColors.textSecondary)
             .frame(maxWidth: .infinity)
             .padding(.horizontal, 14)
             .padding(.vertical, 12)
             .background(
               RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .fill(isSelected ? OmiColors.purplePrimary : Color.white.opacity(0.05))
+                .fill(isSelected ? Color.white : Color.white.opacity(0.05))
                 .overlay(
                   RoundedRectangle(cornerRadius: 14, style: .continuous)
                     .stroke(Color.white.opacity(isSelected ? 0 : 0.08), lineWidth: 1)

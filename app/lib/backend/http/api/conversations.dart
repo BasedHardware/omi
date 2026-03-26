@@ -348,9 +348,17 @@ Future<SyncLocalFilesResponse> syncLocalFiles(List<File> files, {UploadProgressC
     var response = await makeMultipartApiCall(
         url: '${Env.apiBaseUrl}v1/sync-local-files', files: files, onUploadProgress: onUploadProgress);
 
-    if (response.statusCode == 200) {
-      Logger.debug('syncLocalFile Response body: ${jsonDecode(response.body)}');
-      return SyncLocalFilesResponse.fromJson(jsonDecode(response.body));
+    if (response.statusCode == 200 || response.statusCode == 207) {
+      var result = SyncLocalFilesResponse.fromJson(jsonDecode(response.body));
+      if (response.statusCode == 207) {
+        Logger.debug(
+          'syncLocalFiles partial failure: ${result.failedSegments}/${result.totalSegments} segments failed, '
+          'errors: ${result.errors}',
+        );
+      } else {
+        Logger.debug('syncLocalFile Response body: ${jsonDecode(response.body)}');
+      }
+      return result;
     } else if (response.statusCode == 400) {
       throw Exception('Audio file could not be processed by server');
     } else if (response.statusCode == 413) {

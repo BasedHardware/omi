@@ -522,6 +522,9 @@ class ChatToolExecutor {
         switch type {
         case "screen_recording":
             appState.triggerScreenRecordingPermission()
+            if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture") {
+                NSWorkspace.shared.open(url)
+            }
             try? await Task.sleep(nanoseconds: 2_000_000_000)
             appState.checkScreenRecordingPermission()
             try? await Task.sleep(nanoseconds: 500_000_000)
@@ -931,10 +934,8 @@ class ChatToolExecutor {
             let remappedSource = idRemap[sourceId] ?? sourceId
             let remappedTarget = idRemap[targetId] ?? targetId
 
-            // Skip self-referencing edges and edges to missing nodes
-            guard remappedSource != remappedTarget,
-                  seenLabels.values.contains(remappedSource),
-                  seenLabels.values.contains(remappedTarget) else { continue }
+            // Skip self-referencing edges
+            guard remappedSource != remappedTarget else { continue }
 
             let edgeId = "\(remappedSource)_\(remappedTarget)_\(label.lowercased().replacingOccurrences(of: " ", with: "_"))"
             edgeRecords.append(LocalKGEdgeRecord(
