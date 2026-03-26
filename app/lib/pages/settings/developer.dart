@@ -1942,8 +1942,8 @@ class _ManualFirmwareFlashPageState extends State<_ManualFirmwareFlashPage> with
         title: const Text('Flash Firmware', style: TextStyle(color: Colors.white)),
         iconTheme: const IconThemeData(color: Colors.white),
         elevation: 0,
-      ), 
-      body: Padding(
+      ),
+      body: Padding( 
         padding: const EdgeInsets.all(24),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
