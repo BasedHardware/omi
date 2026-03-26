@@ -54,7 +54,6 @@ class ActiveCallBanner extends StatelessWidget {
                       padding: const EdgeInsets.only(top: 10),
                       child: _TranscriptSnippet(
                         text: provider.transcriptSegments.last.text,
-                        isUser: provider.transcriptSegments.last.isUser,
                         speakerLabel: provider.getSpeakerLabel(provider.transcriptSegments.last),
                       ),
                     ),
@@ -168,10 +167,9 @@ class _CallInfoRow extends StatelessWidget {
 
 class _TranscriptSnippet extends StatelessWidget {
   final String text;
-  final bool isUser;
   final String speakerLabel;
 
-  const _TranscriptSnippet({required this.text, required this.isUser, required this.speakerLabel});
+  const _TranscriptSnippet({required this.text, required this.speakerLabel});
 
   @override
   Widget build(BuildContext context) {
@@ -266,10 +264,12 @@ class _CompactControlButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      onTap: () {
-        HapticFeedback.mediumImpact();
-        onTap?.call();
-      },
+      onTap: onTap == null
+          ? null
+          : () {
+              HapticFeedback.mediumImpact();
+              onTap!();
+            },
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         decoration: BoxDecoration(
