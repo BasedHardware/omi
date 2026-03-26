@@ -14,6 +14,12 @@ import time
 from dataclasses import dataclass
 from typing import Callable, Optional
 
+try:
+    from utils.metrics import DG_KEEPALIVE_FAILURES, dg_failure_tracker
+except ImportError:
+    DG_KEEPALIVE_FAILURES = None
+    dg_failure_tracker = None
+
 logger = logging.getLogger(__name__)
 
 
@@ -89,24 +95,20 @@ class SafeDeepgramSocket:
             if ret is False:
                 logger.warning('DG keep_alive returned False, connection dead')
                 self._dg_dead = True
-                try:
-                    from utils.metrics import DG_KEEPALIVE_FAILURES, dg_failure_tracker
+                if DG_KEEPALIVE_FAILURES is not None:
                     DG_KEEPALIVE_FAILURES.inc()
+                if dg_failure_tracker is not None:
                     dg_failure_tracker.record()
-                except Exception:
-                    pass
             else:
                 self._keepalive_count += 1
                 self._last_activity = self._clock()
         except Exception:
             logger.warning('DG keep_alive exception, connection dead')
             self._dg_dead = True
-            try:
-                from utils.metrics import DG_KEEPALIVE_FAILURES, dg_failure_tracker
+            if DG_KEEPALIVE_FAILURES is not None:
                 DG_KEEPALIVE_FAILURES.inc()
+            if dg_failure_tracker is not None:
                 dg_failure_tracker.record()
-            except Exception:
-                pass
 
     @property
     def is_connection_dead(self) -> bool:
