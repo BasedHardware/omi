@@ -147,6 +147,8 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
     _autoUploadPendingPhoneFiles();
   }
 
+  bool _isAutoUploading = false;
+
   /// Auto-upload phone WALs to cloud on app open when device is not connected
   /// and no sync is already in progress.
   void _autoUploadPendingPhoneFiles() async {
@@ -158,10 +160,21 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
         .toList();
     if (phoneWals.isEmpty) return;
     Logger.debug('SyncProvider: Auto-uploading ${phoneWals.length} pending phone files to cloud');
+    _isAutoUploading = true;
     await _performSync(
       operation: () => _walService.getSyncs().phone.syncAll(progress: this),
       context: 'auto-upload phone files',
     );
+    _isAutoUploading = false;
+  }
+
+  /// Cancel auto-upload if running. Called before device-triggered sync.
+  void _cancelAutoUploadIfNeeded() {
+    if (_isAutoUploading) {
+      Logger.debug('SyncProvider: Cancelling auto-upload for device sync');
+      _walService.getSyncs().phone.cancelSync();
+      _isAutoUploading = false;
+    }
   }
 
   void _onAudioPlayerStateChanged() {
@@ -204,6 +217,7 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
   }
 
   Future<void> syncWals({IWifiConnectionListener? connectionListener}) async {
+    _cancelAutoUploadIfNeeded();
     _updateSyncState(_syncState.toIdle());
     _totalWalsToProcess = missingWals.length;
     _walsProcessedCount = 0;
@@ -214,6 +228,7 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
   }
 
   Future<void> syncWal(Wal wal, {IWifiConnectionListener? connectionListener}) async {
+    _cancelAutoUploadIfNeeded();
     _updateSyncState(_syncState.toIdle());
     await _performSync(
       operation: () => _walService.getSyncs().syncWal(wal: wal, progress: this, connectionListener: connectionListener),
