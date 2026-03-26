@@ -247,6 +247,7 @@ async def _stream_handler(
         include_speech_profile = False
 
     if not uid or len(uid) <= 0:
+        BACKEND_LISTEN_ACTIVE_WS_CONNECTIONS.dec()
         await websocket.close(code=1008, reason="Bad uid")
         return
 
@@ -290,6 +291,7 @@ async def _stream_handler(
         language, multi_lang_enabled=not single_language_mode
     )
     if not stt_service or not stt_language:
+        BACKEND_LISTEN_ACTIVE_WS_CONNECTIONS.dec()
         await websocket.close(code=1008, reason=f"The language is not supported, {language}")
         return
 
