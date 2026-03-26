@@ -911,6 +911,26 @@ DEFERRED_CONVERSATION_TTL = 60 * 60 * 4  # 4 hours — stale items auto-expire
 
 DEFERRED_CONVERSATION_PROCESSING_KEY = 'deferred_conversations_processing'
 
+# Lua script for atomic dedup+push: only RPUSH if SET NX succeeds
+_ENQUEUE_LUA = """
+local lock_acquired = redis.call('SET', KEYS[1], '1', 'EX', ARGV[1], 'NX')
+if lock_acquired then
+    redis.call('RPUSH', KEYS[2], ARGV[2])
+    return 1
+end
+return 0
+"""
+
+# Lua script for atomic recovery: LPOP + RPUSH in one call
+_RECOVER_ONE_LUA = """
+local item = redis.call('LPOP', KEYS[1])
+if item then
+    redis.call('RPUSH', KEYS[2], item)
+    return item
+end
+return nil
+"""
+
 
 @try_catch_decorator
 def enqueue_deferred_conversation(uid: str, conversation_id: str, language: str) -> bool:
@@ -918,22 +938,13 @@ def enqueue_deferred_conversation(uid: str, conversation_id: str, language: str)
 
     Idempotent: uses conversation_id as dedup key so the same conversation
     is never queued twice even if multiple sessions enqueue it.
-    Atomic: dedup lock + queue push happen in a single Redis pipeline.
+    Fully atomic via Lua script: RPUSH only executes if SET NX succeeds.
     Returns True if newly added, False if already queued or on error.
     """
     item = json.dumps({'uid': uid, 'conversation_id': conversation_id, 'language': language})
     dedup_key = f'deferred_conv_lock:{conversation_id}'
-    # Atomic pipeline: set dedup lock + push to queue in one round-trip
-    pipe = r.pipeline(True)
-    pipe.set(dedup_key, '1', ex=DEFERRED_CONVERSATION_TTL, nx=True)
-    pipe.rpush(DEFERRED_CONVERSATION_QUEUE_KEY, item)
-    results = pipe.execute()
-    lock_acquired = results[0]
-    if not lock_acquired:
-        # Already queued — remove the duplicate we just pushed
-        r.lrem(DEFERRED_CONVERSATION_QUEUE_KEY, 1, item)
-        return False
-    return True
+    result = r.eval(_ENQUEUE_LUA, 2, dedup_key, DEFERRED_CONVERSATION_QUEUE_KEY, str(DEFERRED_CONVERSATION_TTL), item)
+    return result == 1
 
 
 @try_catch_decorator
@@ -973,12 +984,12 @@ def recover_deferred_processing():
     """Move any items stuck in the processing list back to the main queue.
 
     Called on pusher startup to recover from crashes.
+    Atomic per-item via Lua script: LPOP + RPUSH in a single server-side call.
     """
     while True:
-        item = r.lpop(DEFERRED_CONVERSATION_PROCESSING_KEY)
+        item = r.eval(_RECOVER_ONE_LUA, 2, DEFERRED_CONVERSATION_PROCESSING_KEY, DEFERRED_CONVERSATION_QUEUE_KEY)
         if not item:
             break
-        r.rpush(DEFERRED_CONVERSATION_QUEUE_KEY, item)
         try:
             data = json.loads(item)
             r.delete(f'deferred_conv_lock:{data["conversation_id"]}')
