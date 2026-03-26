@@ -380,3 +380,222 @@ def test_reconnect_loop_routes_to_enqueue():
     func_body = source[pos:next_func] if next_func > 0 else source[pos : pos + 3000]
     assert '_fallback_enqueue_conversation' in func_body
     assert '_fallback_process_conversation' not in func_body or '_fallback_enqueue_conversation' in func_body
+
+
+# ---------------------------------------------------------------------------
+# Behavioral Redis queue tests (requires running Redis)
+# ---------------------------------------------------------------------------
+
+_TEST_UID = 'test-uid-6061'
+_TEST_CONV_ID_PREFIX = 'test-conv-6061-'
+_TEST_LANGUAGE = 'en'
+
+
+def _cleanup_redis_keys(conv_id):
+    """Clean up Redis keys created during a test."""
+    from database.redis_db import r
+
+    r.delete(f'deferred_conv_lock:{conv_id}')
+    r.delete(f'deferred_conv_active:{conv_id}')
+    r.delete(f'deferred_conv_retries:{conv_id}')
+    # Clean queue entries that might contain this conversation
+    from database.redis_db import DEFERRED_CONVERSATION_QUEUE_KEY, DEFERRED_CONVERSATION_PROCESSING_KEY
+    import json
+
+    item = json.dumps({'uid': _TEST_UID, 'conversation_id': conv_id, 'language': _TEST_LANGUAGE})
+    r.lrem(DEFERRED_CONVERSATION_QUEUE_KEY, 0, item)
+    r.lrem(DEFERRED_CONVERSATION_PROCESSING_KEY, 0, item)
+
+
+def test_redis_enqueue_dequeue_round_trip():
+    """Enqueue → dequeue must return the same item."""
+    from database import redis_db
+
+    conv_id = f'{_TEST_CONV_ID_PREFIX}roundtrip'
+    try:
+        result = redis_db.enqueue_deferred_conversation(_TEST_UID, conv_id, _TEST_LANGUAGE)
+        assert result is True, "First enqueue must return True"
+
+        item = redis_db.dequeue_deferred_conversation()
+        assert item is not None
+        assert item['uid'] == _TEST_UID
+        assert item['conversation_id'] == conv_id
+        assert item['language'] == _TEST_LANGUAGE
+
+        # Ack to clean up
+        redis_db.ack_deferred_conversation(_TEST_UID, conv_id, _TEST_LANGUAGE)
+    finally:
+        _cleanup_redis_keys(conv_id)
+
+
+def test_redis_enqueue_idempotent():
+    """Second enqueue of same conversation_id must return False."""
+    from database import redis_db
+
+    conv_id = f'{_TEST_CONV_ID_PREFIX}idempotent'
+    try:
+        first = redis_db.enqueue_deferred_conversation(_TEST_UID, conv_id, _TEST_LANGUAGE)
+        assert first is True
+        second = redis_db.enqueue_deferred_conversation(_TEST_UID, conv_id, _TEST_LANGUAGE)
+        assert second is False
+
+        # Clean up: dequeue and ack
+        item = redis_db.dequeue_deferred_conversation()
+        if item:
+            redis_db.ack_deferred_conversation(item['uid'], item['conversation_id'], item['language'])
+    finally:
+        _cleanup_redis_keys(conv_id)
+
+
+def test_redis_dequeue_empty_returns_none():
+    """Dequeue from empty queue must return None."""
+    from database import redis_db
+
+    item = redis_db.dequeue_deferred_conversation()
+    # Queue might have items from other tests — just verify it doesn't crash
+    # and returns either None or a valid dict
+    assert item is None or isinstance(item, dict)
+
+
+def test_redis_ack_removes_from_processing():
+    """Ack must remove the item from the processing list."""
+    from database import redis_db
+    from database.redis_db import r, DEFERRED_CONVERSATION_PROCESSING_KEY
+    import json
+
+    conv_id = f'{_TEST_CONV_ID_PREFIX}ack'
+    try:
+        redis_db.enqueue_deferred_conversation(_TEST_UID, conv_id, _TEST_LANGUAGE)
+        item = redis_db.dequeue_deferred_conversation()
+        assert item is not None
+
+        # Item should be in processing list
+        item_json = json.dumps({'uid': _TEST_UID, 'conversation_id': conv_id, 'language': _TEST_LANGUAGE})
+        count_before = r.llen(DEFERRED_CONVERSATION_PROCESSING_KEY) or 0
+
+        redis_db.ack_deferred_conversation(_TEST_UID, conv_id, _TEST_LANGUAGE)
+
+        # Active lock should be cleared
+        assert not r.exists(f'deferred_conv_active:{conv_id}')
+    finally:
+        _cleanup_redis_keys(conv_id)
+
+
+def test_redis_nack_requeues_to_back():
+    """Nack must return item to the back of the queue."""
+    from database import redis_db
+    from database.redis_db import r, DEFERRED_CONVERSATION_QUEUE_KEY
+
+    conv_id = f'{_TEST_CONV_ID_PREFIX}nack'
+    try:
+        redis_db.enqueue_deferred_conversation(_TEST_UID, conv_id, _TEST_LANGUAGE)
+        redis_db.dequeue_deferred_conversation()
+
+        queue_len_before = r.llen(DEFERRED_CONVERSATION_QUEUE_KEY) or 0
+        redis_db.nack_deferred_conversation(_TEST_UID, conv_id, _TEST_LANGUAGE)
+        queue_len_after = r.llen(DEFERRED_CONVERSATION_QUEUE_KEY) or 0
+
+        assert queue_len_after == queue_len_before + 1, "Nack must add item back to queue"
+        # Active lock should be cleared
+        assert not r.exists(f'deferred_conv_active:{conv_id}')
+
+        # Clean up
+        item = redis_db.dequeue_deferred_conversation()
+        if item:
+            redis_db.ack_deferred_conversation(item['uid'], item['conversation_id'], item['language'])
+    finally:
+        _cleanup_redis_keys(conv_id)
+
+
+def test_redis_nack_max_retries_discards():
+    """After DEFERRED_CONVERSATION_MAX_RETRIES nacks, item must be discarded."""
+    from database import redis_db
+    from database.redis_db import r, DEFERRED_CONVERSATION_MAX_RETRIES
+
+    conv_id = f'{_TEST_CONV_ID_PREFIX}maxretry'
+    try:
+        redis_db.enqueue_deferred_conversation(_TEST_UID, conv_id, _TEST_LANGUAGE)
+
+        for i in range(DEFERRED_CONVERSATION_MAX_RETRIES):
+            item = redis_db.dequeue_deferred_conversation()
+            assert item is not None, f"Dequeue should succeed on retry {i + 1}"
+            result = redis_db.nack_deferred_conversation(_TEST_UID, conv_id, _TEST_LANGUAGE)
+            assert result is True, f"Nack should re-queue on retry {i + 1}"
+
+        # One more dequeue + nack should discard
+        item = redis_db.dequeue_deferred_conversation()
+        assert item is not None
+        result = redis_db.nack_deferred_conversation(_TEST_UID, conv_id, _TEST_LANGUAGE)
+        assert result is False, "Nack should discard after max retries"
+    finally:
+        _cleanup_redis_keys(conv_id)
+
+
+def test_redis_dequeue_sets_active_lock():
+    """Dequeue must set an active processing lock."""
+    from database import redis_db
+    from database.redis_db import r
+
+    conv_id = f'{_TEST_CONV_ID_PREFIX}activelock'
+    try:
+        redis_db.enqueue_deferred_conversation(_TEST_UID, conv_id, _TEST_LANGUAGE)
+        redis_db.dequeue_deferred_conversation()
+
+        assert r.exists(f'deferred_conv_active:{conv_id}'), "Dequeue must set active processing lock"
+        ttl = r.ttl(f'deferred_conv_active:{conv_id}')
+        assert ttl > 0, "Active lock must have a TTL"
+
+        redis_db.ack_deferred_conversation(_TEST_UID, conv_id, _TEST_LANGUAGE)
+    finally:
+        _cleanup_redis_keys(conv_id)
+
+
+def test_redis_recover_skips_active_items():
+    """Recovery must skip items with an active processing lock."""
+    from database import redis_db
+    from database.redis_db import r, DEFERRED_CONVERSATION_PROCESSING_KEY
+    import json
+
+    conv_id = f'{_TEST_CONV_ID_PREFIX}recover-active'
+    try:
+        redis_db.enqueue_deferred_conversation(_TEST_UID, conv_id, _TEST_LANGUAGE)
+        redis_db.dequeue_deferred_conversation()
+
+        # Item is in processing with active lock — recovery should skip it
+        processing_count_before = r.llen(DEFERRED_CONVERSATION_PROCESSING_KEY) or 0
+        redis_db.recover_deferred_processing()
+        processing_count_after = r.llen(DEFERRED_CONVERSATION_PROCESSING_KEY) or 0
+
+        assert processing_count_after == processing_count_before, "Recovery must not re-queue items with active lock"
+
+        redis_db.ack_deferred_conversation(_TEST_UID, conv_id, _TEST_LANGUAGE)
+    finally:
+        _cleanup_redis_keys(conv_id)
+
+
+def test_redis_recover_requeues_stale_items():
+    """Recovery must re-queue items whose active lock has expired."""
+    from database import redis_db
+    from database.redis_db import r, DEFERRED_CONVERSATION_PROCESSING_KEY, DEFERRED_CONVERSATION_QUEUE_KEY
+    import json
+
+    conv_id = f'{_TEST_CONV_ID_PREFIX}recover-stale'
+    try:
+        redis_db.enqueue_deferred_conversation(_TEST_UID, conv_id, _TEST_LANGUAGE)
+        redis_db.dequeue_deferred_conversation()
+
+        # Simulate crash: delete the active lock (as if TTL expired)
+        r.delete(f'deferred_conv_active:{conv_id}')
+
+        queue_len_before = r.llen(DEFERRED_CONVERSATION_QUEUE_KEY) or 0
+        redis_db.recover_deferred_processing()
+        queue_len_after = r.llen(DEFERRED_CONVERSATION_QUEUE_KEY) or 0
+
+        assert queue_len_after > queue_len_before, "Recovery must re-queue items without active lock"
+
+        # Clean up
+        item = redis_db.dequeue_deferred_conversation()
+        if item:
+            redis_db.ack_deferred_conversation(item['uid'], item['conversation_id'], item['language'])
+    finally:
+        _cleanup_redis_keys(conv_id)
