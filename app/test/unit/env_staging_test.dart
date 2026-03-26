@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:omi/env/env.dart';
 
-/// EnvFields stub with an explicit stagingApiUrl to exercise the isTrue path.
+/// EnvFields stub with a custom stagingApiUrl to verify Env ignores it.
 /// Must live in a separate test file because Env._instance is late final.
 class _StagingEnvFields implements EnvFields {
   @override
@@ -38,26 +38,28 @@ void main() {
     Env.init(_StagingEnvFields());
   });
 
-  group('Env.isUsingStagingApi with explicit stagingApiUrl', () {
-    test('true when override matches configured stagingApiUrl', () {
-      Env.overrideApiBaseUrl('https://staging.omiapi.com/');
+  group('Env.stagingApiUrl is hardcoded', () {
+    test('returns hardcoded URL, ignores instance value', () {
+      // _StagingEnvFields.stagingApiUrl is 'https://staging.omiapi.com/'
+      // but Env.stagingApiUrl is hardcoded and ignores it
+      expect(Env.stagingApiUrl, 'https://api.omiapi.com/');
+    });
+  });
+
+  group('Env.isUsingStagingApi', () {
+    test('true when override matches hardcoded staging URL', () {
+      Env.overrideApiBaseUrl('https://api.omiapi.com/');
       expect(Env.isUsingStagingApi, isTrue);
     });
 
     test('true with normalisation — trailing slash and case differences', () {
-      Env.overrideApiBaseUrl('https://Staging.OmiApi.com');
+      Env.overrideApiBaseUrl('https://API.OmiApi.com');
       expect(Env.isUsingStagingApi, isTrue);
     });
 
     test('false when override points to a different URL', () {
       Env.overrideApiBaseUrl('https://api.prod.example.com/');
       expect(Env.isUsingStagingApi, isFalse);
-    });
-  });
-
-  group('Env.stagingApiUrl getter', () {
-    test('returns explicitly configured staging URL', () {
-      expect(Env.stagingApiUrl, 'https://staging.omiapi.com/');
     });
   });
 }
