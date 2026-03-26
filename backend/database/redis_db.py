@@ -971,12 +971,14 @@ def ack_deferred_conversation(uid: str, conversation_id: str, language: str):
 
 @try_catch_decorator
 def nack_deferred_conversation(uid: str, conversation_id: str, language: str):
-    """Return a failed item back to the main queue for retry."""
+    """Return a failed item back to the main queue for retry.
+
+    Does NOT delete the dedup lock — it persists until TTL expiry or ack,
+    preventing duplicate enqueue while the item is still queued for retry.
+    """
     item = json.dumps({'uid': uid, 'conversation_id': conversation_id, 'language': language})
     r.lrem(DEFERRED_CONVERSATION_PROCESSING_KEY, 1, item)
     r.lpush(DEFERRED_CONVERSATION_QUEUE_KEY, item)
-    # Clear dedup lock so it can be re-enqueued if needed
-    r.delete(f'deferred_conv_lock:{conversation_id}')
 
 
 @try_catch_decorator
@@ -985,16 +987,17 @@ def recover_deferred_processing():
 
     Called on pusher startup to recover from crashes.
     Atomic per-item via Lua script: LPOP + RPUSH in a single server-side call.
+    Does NOT delete dedup locks — they persist until TTL expiry or ack,
+    preventing duplicate enqueue while recovery items are re-queued.
     """
+    count = 0
     while True:
         item = r.eval(_RECOVER_ONE_LUA, 2, DEFERRED_CONVERSATION_PROCESSING_KEY, DEFERRED_CONVERSATION_QUEUE_KEY)
         if not item:
             break
-        try:
-            data = json.loads(item)
-            r.delete(f'deferred_conv_lock:{data["conversation_id"]}')
-        except Exception:
-            pass
+        count += 1
+    if count:
+        logger.info(f"Recovered {count} deferred conversation(s) from processing list")
 
 
 @try_catch_decorator
