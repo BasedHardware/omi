@@ -899,3 +899,46 @@ def try_acquire_conversation_goal_lock(uid: str, conversation_id: str, ttl: int 
     """Idempotency lock: one goal extraction per conversation. Returns True if acquired."""
     result = r.set(f'users:{uid}:conv_goal_lock:{conversation_id}', '1', ex=ttl, nx=True)
     return result is not None
+
+
+# ******************************************************
+# ********** DEFERRED CONVERSATION QUEUE ***************
+# ******************************************************
+
+DEFERRED_CONVERSATION_QUEUE_KEY = 'deferred_conversations'
+DEFERRED_CONVERSATION_TTL = 60 * 60 * 4  # 4 hours — stale items auto-expire
+
+
+@try_catch_decorator
+def enqueue_deferred_conversation(uid: str, conversation_id: str, language: str) -> bool:
+    """Enqueue a conversation for deferred processing by pusher.
+
+    Idempotent: uses conversation_id as dedup key so the same conversation
+    is never queued twice even if multiple sessions enqueue it.
+    Returns True if newly added, False if already queued.
+    """
+    item = json.dumps({'uid': uid, 'conversation_id': conversation_id, 'language': language})
+    dedup_key = f'deferred_conv_lock:{conversation_id}'
+    # Atomic dedup: only add to queue if the lock doesn't exist
+    if not r.set(dedup_key, '1', ex=DEFERRED_CONVERSATION_TTL, nx=True):
+        return False
+    r.rpush(DEFERRED_CONVERSATION_QUEUE_KEY, item)
+    return True
+
+
+@try_catch_decorator
+def dequeue_deferred_conversation() -> dict:
+    """Pop the next deferred conversation from the queue.
+
+    Returns dict with {uid, conversation_id, language} or None if empty.
+    """
+    item = r.lpop(DEFERRED_CONVERSATION_QUEUE_KEY)
+    if not item:
+        return None
+    return json.loads(item)
+
+
+@try_catch_decorator
+def get_deferred_queue_length() -> int:
+    """Return the current length of the deferred conversation queue."""
+    return r.llen(DEFERRED_CONVERSATION_QUEUE_KEY) or 0
