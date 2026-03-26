@@ -703,12 +703,19 @@ async def _stream_handler(
 
     # Deferred processing: enqueue to Redis for pusher to drain (#6061)
     # No heavy work on the listen event loop — pusher handles all processing.
-    def _enqueue_conversation_for_deferred_processing(conversation_id: str):
+    def _enqueue_conversation_for_deferred_processing(conversation_id: str) -> bool:
+        """Returns True if enqueued or already queued, False on Redis error."""
         enqueued = redis_db.enqueue_deferred_conversation(uid, conversation_id, language)
-        if enqueued:
+        if enqueued is True:
             logger.info(f"Enqueued conversation {conversation_id} for deferred processing {uid} {session_id}")
-        else:
+            return True
+        elif enqueued is False:
             logger.info(f"Conversation {conversation_id} already queued for deferred processing {uid} {session_id}")
+            return True
+        else:
+            # enqueued is None — Redis error (swallowed by try_catch_decorator)
+            logger.error(f"Failed to enqueue conversation {conversation_id} (Redis error) {uid} {session_id}")
+            return False
 
     async def cleanup_processing_conversations():
         processing = conversations_db.get_processing_conversations(uid)
@@ -1452,11 +1459,12 @@ async def _stream_handler(
                     f"Conversation {conversation_id} already enqueued via fallback, skipping {uid} {session_id}"
                 )
                 return
-            fallback_processed_ids.add(conversation_id)
             logger.info(
                 f"Enqueueing conversation {conversation_id} for deferred processing (degraded) {uid} {session_id}"
             )
-            _enqueue_conversation_for_deferred_processing(conversation_id)
+            success = _enqueue_conversation_for_deferred_processing(conversation_id)
+            if success:
+                fallback_processed_ids.add(conversation_id)
 
         async def _pusher_reconnect_loop():
             """Single reconnect loop per session — replaces 3 scattered auto-reconnect calls.
