@@ -82,8 +82,10 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
     OnboardingChatPersistence.saveMidOnboarding()
     appState.checkAllPermissions()
 
-    // Always start onboarding with a clean graph so stale data doesn't appear.
-    Task { await KnowledgeGraphStorage.shared.clearAll() }
+    // Clear graph only on first onboarding start (step 0), not mid-onboarding restarts.
+    if !OnboardingChatPersistence.isMidOnboarding {
+      Task { await KnowledgeGraphStorage.shared.clearAll() }
+    }
 
     if scanSnapshot == nil {
       Task { await refreshSnapshotIfAvailable() }
