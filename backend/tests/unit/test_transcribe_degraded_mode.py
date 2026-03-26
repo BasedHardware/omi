@@ -30,3 +30,24 @@ def test_transcribe_attempts_recovery_after_degraded_mode_entry():
     degraded_event_pos = source.find('status="stt_degraded"')
     assert degraded_event_pos > 0
     assert degraded_pos > degraded_event_pos
+
+
+def test_metric_dec_on_early_return_bad_uid():
+    """Verify BACKEND_LISTEN_ACTIVE_WS_CONNECTIONS.dec() before early return on bad uid."""
+    source = _read_transcribe_source()
+    bad_uid_pos = source.find('reason="Bad uid"')
+    assert bad_uid_pos > 0
+    # dec() must appear before the close/return for bad uid
+    dec_before = source.rfind('BACKEND_LISTEN_ACTIVE_WS_CONNECTIONS.dec()', 0, bad_uid_pos)
+    inc_pos = source.find('BACKEND_LISTEN_ACTIVE_WS_CONNECTIONS.inc()')
+    assert dec_before > inc_pos, "dec() must appear between inc() and bad uid early return"
+
+
+def test_metric_dec_on_early_return_unsupported_language():
+    """Verify BACKEND_LISTEN_ACTIVE_WS_CONNECTIONS.dec() before early return on unsupported language."""
+    source = _read_transcribe_source()
+    lang_pos = source.find('The language is not supported')
+    assert lang_pos > 0
+    dec_before = source.rfind('BACKEND_LISTEN_ACTIVE_WS_CONNECTIONS.dec()', 0, lang_pos)
+    inc_pos = source.find('BACKEND_LISTEN_ACTIVE_WS_CONNECTIONS.inc()')
+    assert dec_before > inc_pos, "dec() must appear between inc() and language early return"
