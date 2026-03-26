@@ -67,8 +67,10 @@ void main() {
       expect(source.getSocketPayload(raw), [0xAA, 0xBB]);
     });
 
-    test('getSocketPayload handles short packets', () {
-      expect(source.getSocketPayload([1, 2]), [1, 2]);
+    test('getSocketPayload returns empty for header-only packets', () {
+      expect(source.getSocketPayload([1, 2, 3]), isEmpty);
+      expect(source.getSocketPayload([1, 2]), isEmpty);
+      expect(source.getSocketPayload([]), isEmpty);
     });
 
     test('flush returns empty (no buffering)', () {
@@ -79,6 +81,20 @@ void main() {
       expect(source.codec, BleAudioCodec.opus);
       expect(source.deviceId, 'test-device');
       expect(source.deviceModel, 'Omi');
+    });
+
+    test('WAL compatibility: processBytes payload matches old sublist(3) behavior', () {
+      // Simulate a typical BLE Opus packet (3-byte header + audio)
+      final blePacket = [0x05, 0x00, 0x02, ...List.filled(80, 0xAA)];
+      final frames = source.processBytes(blePacket);
+
+      // Old behavior: wal.data[i].sublist(3) during flush
+      final oldBehavior = blePacket.sublist(3);
+      // New behavior: WalFrame.payload (already headerless)
+      final newBehavior = frames[0].payload;
+
+      expect(newBehavior, equals(oldBehavior));
+      expect(newBehavior.length, 80);
     });
   });
 
