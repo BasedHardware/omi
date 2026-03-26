@@ -4,12 +4,14 @@ import { useRef, useEffect } from 'react';
 import gsap from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import { ArrowRight } from 'lucide-react';
-import Link from 'next/link';
+import { useTranslations } from 'next-intl';
+import { Link } from '@/i18n/navigation';
 import { brand } from '@/lib/config';
 
 gsap.registerPlugin(ScrollTrigger);
 
 export function CTASection() {
+  const t = useTranslations('cta');
   const sectionRef = useRef<HTMLElement>(null);
   const cardRef = useRef<HTMLDivElement>(null);
 
@@ -23,7 +25,6 @@ export function CTASection() {
         },
       );
 
-      // Glow pulse
       const glow = cardRef.current?.querySelector('.cta-glow');
       if (glow) {
         gsap.fromTo(glow,
@@ -49,17 +50,15 @@ export function CTASection() {
 
           <div className="relative z-10">
             <h2 className="font-display font-bold text-3xl md:text-5xl mb-4">
-              Ready to never forget<br />a conversation again?
+              {t('heading')}<br />{t('headingLine2')}
             </h2>
-            <p className="text-text-tertiary text-lg max-w-md mx-auto mb-10">
-              Join thousands of professionals who use {brand.name} to stay on top of every meeting and conversation.
-            </p>
+            <p className="text-text-tertiary text-lg max-w-md mx-auto mb-10">{t('description')}</p>
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
               <Link href={brand.links.order} className="group flex items-center gap-2 bg-brand hover:bg-brand-dark text-white font-medium text-sm px-8 py-4 rounded-full transition-all hover:shadow-lg hover:shadow-brand/20">
-                Order {brand.name} <ArrowRight size={16} className="group-hover:translate-x-1 transition-transform" />
+                {t('orderNooto')} <ArrowRight size={16} className="group-hover:translate-x-1 transition-transform" />
               </Link>
               <Link href={brand.links.tryBrowser} className="text-text-secondary hover:text-white text-sm font-medium border border-white/10 px-8 py-4 rounded-full hover:border-white/20 transition-all">
-                Try free in browser
+                {t('tryFreeInBrowser')}
               </Link>
             </div>
           </div>

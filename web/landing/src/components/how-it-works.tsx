@@ -4,39 +4,24 @@ import { useRef, useEffect } from 'react';
 import gsap from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import { Mic, Brain, ListChecks } from 'lucide-react';
-import { brand } from '@/lib/config';
+import { useTranslations } from 'next-intl';
 
 gsap.registerPlugin(ScrollTrigger);
 
-const steps = [
-  {
-    icon: Mic,
-    step: '01',
-    title: 'Capture',
-    description: `Wear ${brand.name} during meetings, conversations, or brainstorming sessions. It listens and captures everything in the background.`,
-  },
-  {
-    icon: Brain,
-    step: '02',
-    title: 'Process',
-    description: 'AI transcribes, summarizes, and extracts key insights, action items, and important moments from your conversations.',
-  },
-  {
-    icon: ListChecks,
-    step: '03',
-    title: 'Act',
-    description: 'Get organized summaries, automatic task creation, smart reminders, and searchable memories — all synced across your devices.',
-  },
-];
-
 export function HowItWorks() {
+  const t = useTranslations('howItWorks');
   const sectionRef = useRef<HTMLElement>(null);
   const headerRef = useRef<HTMLDivElement>(null);
   const cardsRef = useRef<HTMLDivElement>(null);
 
+  const steps = [
+    { icon: Mic, step: '01', title: t('step1Title'), description: t('step1Description') },
+    { icon: Brain, step: '02', title: t('step2Title'), description: t('step2Description') },
+    { icon: ListChecks, step: '03', title: t('step3Title'), description: t('step3Description') },
+  ];
+
   useEffect(() => {
     const ctx = gsap.context(() => {
-      // Header reveal
       gsap.fromTo(headerRef.current,
         { opacity: 0, y: 40, filter: 'blur(4px)' },
         {
@@ -45,7 +30,6 @@ export function HowItWorks() {
         },
       );
 
-      // Cards stagger
       const cards = cardsRef.current?.querySelectorAll('.hiw-card');
       if (cards) {
         gsap.fromTo(cards,
@@ -56,7 +40,6 @@ export function HowItWorks() {
           },
         );
 
-        // Connector lines
         const lines = cardsRef.current?.querySelectorAll('.hiw-line');
         if (lines) {
           gsap.fromTo(lines,
@@ -77,10 +60,8 @@ export function HowItWorks() {
     <section ref={sectionRef} className="py-24 md:py-32">
       <div className="mx-auto max-w-7xl px-6">
         <div ref={headerRef} className="text-center mb-20">
-          <h2 className="font-display font-bold text-3xl md:text-5xl mb-4">How it works</h2>
-          <p className="text-text-tertiary text-lg max-w-lg mx-auto">
-            From conversation to action in three simple steps.
-          </p>
+          <h2 className="font-display font-bold text-3xl md:text-5xl mb-4">{t('heading')}</h2>
+          <p className="text-text-tertiary text-lg max-w-lg mx-auto">{t('description')}</p>
         </div>
 
         <div ref={cardsRef} className="grid md:grid-cols-3 gap-8 md:gap-12">

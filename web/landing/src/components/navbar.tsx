@@ -1,13 +1,22 @@
 'use client';
 
 import { useState } from 'react';
-import Link from 'next/link';
-import { ChevronDown, Menu, X } from 'lucide-react';
+import { ChevronDown, Menu, X, Globe } from 'lucide-react';
+import { useTranslations, useLocale } from 'next-intl';
+import { Link, useRouter, usePathname } from '@/i18n/navigation';
 import { brand } from '@/lib/config';
 import { cn } from '@/lib/utils';
+import { type Locale } from '@/i18n/routing';
+
+const locales: { code: Locale; label: string }[] = [
+  { code: 'en', label: 'English' },
+  { code: 'pt-br', label: 'Portugu\u00eas' },
+  { code: 'es', label: 'Espa\u00f1ol' },
+];
 
 export function Navbar() {
   const [mobileOpen, setMobileOpen] = useState(false);
+  const t = useTranslations('navbar');
 
   return (
     <nav className="fixed top-0 left-0 right-0 z-50 bg-bg-primary/80 backdrop-blur-xl border-b border-white/5">
@@ -19,23 +28,24 @@ export function Navbar() {
 
         {/* Desktop Nav */}
         <div className="hidden md:flex items-center gap-8">
-          <NavDropdown label="Products">
-            <DropdownLink href={brand.links.product}>{brand.name}</DropdownLink>
-            <DropdownLink href={brand.links.glass}>{brand.name} Glass</DropdownLink>
+          <NavDropdown label={t('products')}>
+            <DropdownLink href="/product">{brand.name}</DropdownLink>
+            <DropdownLink href={brand.links.glass}>{t('glass')}</DropdownLink>
           </NavDropdown>
-          <NavDropdown label="Use Cases">
-            <DropdownLink href="#">Meetings</DropdownLink>
-            <DropdownLink href="#">Note Taking</DropdownLink>
-            <DropdownLink href="#">Voice Memos</DropdownLink>
+          <NavDropdown label={t('useCases')}>
+            <DropdownLink href="#">{t('meetings')}</DropdownLink>
+            <DropdownLink href="#">{t('noteTaking')}</DropdownLink>
+            <DropdownLink href="#">{t('voiceMemos')}</DropdownLink>
           </NavDropdown>
           <Link href={brand.links.manifesto} className="text-sm text-text-secondary hover:text-white transition-colors">
-            Manifesto
+            {t('manifesto')}
           </Link>
+          <LanguageSwitcher />
           <Link
             href={brand.links.order}
             className="bg-brand hover:bg-brand-dark text-white text-sm font-medium px-5 py-2 rounded-full transition-colors"
           >
-            Buy now
+            {t('buyNow')}
           </Link>
         </div>
 
@@ -48,24 +58,69 @@ export function Navbar() {
       {/* Mobile menu */}
       {mobileOpen && (
         <div className="md:hidden bg-bg-primary border-t border-white/5 px-6 py-6 space-y-4">
-          <Link href={brand.links.product} className="block text-text-secondary hover:text-white transition-colors">
-            Products
+          <Link href="/product" className="block text-text-secondary hover:text-white transition-colors">
+            {t('products')}
           </Link>
           <Link href="#" className="block text-text-secondary hover:text-white transition-colors">
-            Use Cases
+            {t('useCases')}
           </Link>
           <Link href={brand.links.manifesto} className="block text-text-secondary hover:text-white transition-colors">
-            Manifesto
+            {t('manifesto')}
           </Link>
+          <LanguageSwitcher />
           <Link
             href={brand.links.order}
             className="inline-block bg-brand text-white text-sm font-medium px-5 py-2 rounded-full"
           >
-            Buy now
+            {t('buyNow')}
           </Link>
         </div>
       )}
     </nav>
+  );
+}
+
+function LanguageSwitcher() {
+  const [open, setOpen] = useState(false);
+  const locale = useLocale();
+  const router = useRouter();
+  const pathname = usePathname();
+
+  const currentLocale = locales.find((l) => l.code === locale) || locales[0];
+
+  function switchLocale(newLocale: Locale) {
+    router.replace(pathname, { locale: newLocale });
+    setOpen(false);
+  }
+
+  return (
+    <div className="relative" onMouseEnter={() => setOpen(true)} onMouseLeave={() => setOpen(false)}>
+      <button className="flex items-center gap-1.5 text-sm text-text-secondary hover:text-white transition-colors">
+        <Globe size={15} />
+        {currentLocale.label}
+        <ChevronDown size={14} className={cn('transition-transform', open && 'rotate-180')} />
+      </button>
+      {open && (
+        <div className="absolute top-full left-0 pt-2 min-w-[140px]">
+          <div className="bg-bg-secondary border border-white/10 rounded-xl p-2 shadow-2xl">
+            {locales.map((l) => (
+              <button
+                key={l.code}
+                onClick={() => switchLocale(l.code)}
+                className={cn(
+                  'w-full text-left block px-4 py-2 text-sm rounded-lg transition-colors',
+                  l.code === locale
+                    ? 'text-brand bg-brand/10'
+                    : 'text-text-secondary hover:text-white hover:bg-white/5',
+                )}
+              >
+                {l.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -79,8 +134,10 @@ function NavDropdown({ label, children }: { label: string; children: React.React
         <ChevronDown size={14} className={cn('transition-transform', open && 'rotate-180')} />
       </button>
       {open && (
-        <div className="absolute top-full left-0 mt-2 bg-bg-secondary border border-white/10 rounded-xl p-2 min-w-[180px] shadow-2xl">
-          {children}
+        <div className="absolute top-full left-0 pt-2 min-w-[180px]">
+          <div className="bg-bg-secondary border border-white/10 rounded-xl p-2 shadow-2xl">
+            {children}
+          </div>
         </div>
       )}
     </div>

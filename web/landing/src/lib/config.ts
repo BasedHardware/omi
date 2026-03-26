@@ -12,7 +12,7 @@ export const brand = {
     download: '#',
     tryBrowser: '#',
     order: '#',
-    product: '#',
+    product: '/product',
     glass: '#',
     apps: '#',
     docs: '/docs',

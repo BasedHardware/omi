@@ -1,11 +1,15 @@
+import { Metadata } from 'next';
+import { getTranslations } from 'next-intl/server';
 import { Navbar } from '@/components/navbar';
 import { DocsSidebar } from '@/components/docs-sidebar';
-import { brand } from '@/lib/config';
 
-export const metadata = {
-  title: `Documentation — ${brand.name}`,
-  description: `${brand.name} developer documentation, guides, and API reference.`,
-};
+export async function generateMetadata({ params }: { params: { locale: string } }): Promise<Metadata> {
+  const t = await getTranslations({ locale: params.locale, namespace: 'metadata' });
+  return {
+    title: t('docsTitle'),
+    description: t('docsDescription'),
+  };
+}
 
 export default function DocsLayout({ children }: { children: React.ReactNode }) {
   return (

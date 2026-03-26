@@ -4,29 +4,31 @@ import { useRef, useEffect } from 'react';
 import gsap from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import { Smartphone, LayoutGrid } from 'lucide-react';
-import Link from 'next/link';
+import { useTranslations } from 'next-intl';
+import { Link } from '@/i18n/navigation';
 import { brand } from '@/lib/config';
 
 gsap.registerPlugin(ScrollTrigger);
 
-const features = [
-  {
-    icon: Smartphone,
-    title: 'Works with every device',
-    description: `${brand.name} App works seamlessly with your existing device — no need to buy anything new!`,
-    cta: { label: 'Integrate your device', href: brand.links.integrations },
-  },
-  {
-    icon: LayoutGrid,
-    title: 'Thousands of Apps',
-    description: 'Apps for Productivity, Relationships, Health, Companionship and more — all on one device.',
-    cta: { label: 'Browse apps', href: brand.links.apps },
-  },
-];
-
 export function Features() {
+  const t = useTranslations('features');
   const sectionRef = useRef<HTMLElement>(null);
   const cardsRef = useRef<HTMLDivElement>(null);
+
+  const features = [
+    {
+      icon: Smartphone,
+      title: t('worksWithEveryDevice'),
+      description: t('worksWithEveryDeviceDescription'),
+      cta: { label: t('integrateYourDevice'), href: brand.links.integrations },
+    },
+    {
+      icon: LayoutGrid,
+      title: t('thousandsOfApps'),
+      description: t('thousandsOfAppsDescription'),
+      cta: { label: t('browseApps'), href: brand.links.apps },
+    },
+  ];
 
   useEffect(() => {
     const ctx = gsap.context(() => {

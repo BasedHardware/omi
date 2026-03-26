@@ -4,12 +4,14 @@ import { useRef, useEffect } from 'react';
 import gsap from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import { ArrowRight } from 'lucide-react';
-import Link from 'next/link';
+import { useTranslations } from 'next-intl';
+import { Link } from '@/i18n/navigation';
 import { brand } from '@/lib/config';
 
 gsap.registerPlugin(ScrollTrigger);
 
 export function MeetNooto() {
+  const t = useTranslations('meetNooto');
   const sectionRef = useRef<HTMLElement>(null);
   const headerRef = useRef<HTMLDivElement>(null);
   const cardsRef = useRef<HTMLDivElement>(null);
@@ -41,23 +43,35 @@ export function MeetNooto() {
       <div className="mx-auto max-w-7xl px-6">
         <div ref={headerRef} className="text-center mb-16">
           <h2 className="font-display font-bold text-3xl md:text-5xl mb-6">
-            Meet <strong>{brand.nameLower}</strong>
+            {t('heading')} <strong>{brand.nameLower}</strong>
           </h2>
-          <p className="text-text-tertiary text-lg max-w-lg mx-auto">
-            Beautiful hardware, powerful AI. Choose the device that fits your life.
-          </p>
+          <p className="text-text-tertiary text-lg max-w-lg mx-auto">{t('chooseDevice')}</p>
         </div>
 
         <div ref={cardsRef} className="grid md:grid-cols-2 gap-6">
-          <ProductCard title={brand.name} subtitle="AI Wearable Pendant" description="Lightweight pendant that captures conversations and turns them into actionable insights." href={brand.links.product} accent="brand" />
-          <ProductCard title={`${brand.name} Glass`} subtitle="Smart Glasses Dev Kit" description="See the world differently. AI-powered smart glasses with real-time transcription." href={brand.links.glass} accent="white" />
+          <ProductCard
+            title={brand.name}
+            subtitle={t('pendantSubtitle')}
+            description={t('pendantDescription')}
+            href={brand.links.product}
+            accent="brand"
+            learnMore={t('learnMore')}
+          />
+          <ProductCard
+            title={`${brand.name} Glass`}
+            subtitle={t('glassSubtitle')}
+            description={t('glassDescription')}
+            href={brand.links.glass}
+            accent="white"
+            learnMore={t('learnMore')}
+          />
         </div>
       </div>
     </section>
   );
 }
 
-function ProductCard({ title, subtitle, description, href, accent }: { title: string; subtitle: string; description: string; href: string; accent: string }) {
+function ProductCard({ title, subtitle, description, href, accent, learnMore }: { title: string; subtitle: string; description: string; href: string; accent: string; learnMore: string }) {
   const isBrand = accent === 'brand';
   return (
     <Link href={href} className="meet-card group block">
@@ -75,7 +89,7 @@ function ProductCard({ title, subtitle, description, href, accent }: { title: st
           <h3 className="font-display font-bold text-xl md:text-2xl mb-2">{title}</h3>
           <p className="text-text-tertiary text-sm leading-relaxed mb-4">{description}</p>
           <div className="flex items-center gap-2 text-sm font-medium text-brand group-hover:gap-3 transition-all">
-            Learn more <ArrowRight size={16} />
+            {learnMore} <ArrowRight size={16} />
           </div>
         </div>
       </div>

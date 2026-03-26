@@ -1,15 +1,16 @@
 'use client';
 
 import { useState } from 'react';
-import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { ChevronDown, Menu, X } from 'lucide-react';
-import { docsNav } from '@/lib/docs-nav';
+import { useTranslations } from 'next-intl';
+import { Link } from '@/i18n/navigation';
+import { docsNavStructure, type NavGroupEntry, type DocEntry } from '@/lib/docs-data';
 import { cn } from '@/lib/utils';
-import { brand } from '@/lib/config';
 
 export function DocsSidebar() {
   const [mobileOpen, setMobileOpen] = useState(false);
+  const t = useTranslations('docs');
 
   return (
     <>
@@ -30,12 +31,12 @@ export function DocsSidebar() {
         )}
       >
         <Link href="/docs" className="block px-3 mb-8">
-          <span className="font-display font-bold text-base">{brand.name} Docs</span>
+          <span className="font-display font-bold text-base">{t('docsTitle')}</span>
         </Link>
 
         <nav className="space-y-6">
-          {docsNav.map((group) => (
-            <NavGroup key={group.title} group={group} onNavigate={() => setMobileOpen(false)} />
+          {docsNavStructure.map((group) => (
+            <NavGroup key={group.titleKey} group={group} t={t} onNavigate={() => setMobileOpen(false)} />
           ))}
         </nav>
       </aside>
@@ -48,16 +49,16 @@ export function DocsSidebar() {
   );
 }
 
-function NavGroup({ group, onNavigate }: { group: (typeof docsNav)[number]; onNavigate: () => void }) {
+function NavGroup({ group, t, onNavigate }: { group: NavGroupEntry; t: ReturnType<typeof useTranslations>; onNavigate: () => void }) {
   return (
     <div>
-      <p className="px-3 text-xs font-semibold text-text-tertiary uppercase tracking-wider mb-2">{group.title}</p>
+      <p className="px-3 text-xs font-semibold text-text-tertiary uppercase tracking-wider mb-2">{t(group.titleKey)}</p>
       <ul className="space-y-0.5">
         {group.items.map((item) => {
           if ('items' in item) {
-            return <SubGroup key={item.title} title={item.title} items={item.items} onNavigate={onNavigate} />;
+            return <SubGroup key={item.titleKey} titleKey={item.titleKey} items={item.items} t={t} onNavigate={onNavigate} />;
           }
-          return <NavLink key={item.slug} slug={item.slug} title={item.title} onNavigate={onNavigate} />;
+          return <NavLink key={item.slug} slug={item.slug} titleKey={item.titleKey} t={t} onNavigate={onNavigate} />;
         })}
       </ul>
     </div>
@@ -65,17 +66,19 @@ function NavGroup({ group, onNavigate }: { group: (typeof docsNav)[number]; onNa
 }
 
 function SubGroup({
-  title,
+  titleKey,
   items,
+  t,
   onNavigate,
 }: {
-  title: string;
-  items: { title: string; slug: string }[];
+  titleKey: string;
+  items: DocEntry[];
+  t: ReturnType<typeof useTranslations>;
   onNavigate: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
-  const isActive = items.some((item) => pathname === `/docs/${item.slug}`);
+  const isActive = items.some((item) => pathname.endsWith(`/docs/${item.slug}`));
 
   return (
     <li>
@@ -86,13 +89,13 @@ function SubGroup({
           isActive ? 'text-white' : 'text-text-tertiary hover:text-text-secondary hover:bg-white/[0.03]',
         )}
       >
-        {title}
+        {t(titleKey)}
         <ChevronDown size={14} className={cn('transition-transform', (open || isActive) && 'rotate-180')} />
       </button>
       {(open || isActive) && (
         <ul className="ml-3 mt-0.5 border-l border-white/5 pl-3 space-y-0.5">
           {items.map((item) => (
-            <NavLink key={item.slug} slug={item.slug} title={item.title} onNavigate={onNavigate} />
+            <NavLink key={item.slug} slug={item.slug} titleKey={item.titleKey} t={t} onNavigate={onNavigate} />
           ))}
         </ul>
       )}
@@ -100,9 +103,9 @@ function SubGroup({
   );
 }
 
-function NavLink({ slug, title, onNavigate }: { slug: string; title: string; onNavigate: () => void }) {
+function NavLink({ slug, titleKey, t, onNavigate }: { slug: string; titleKey: string; t: ReturnType<typeof useTranslations>; onNavigate: () => void }) {
   const pathname = usePathname();
-  const isActive = pathname === `/docs/${slug}`;
+  const isActive = pathname.endsWith(`/docs/${slug}`);
 
   return (
     <li>
@@ -116,7 +119,7 @@ function NavLink({ slug, title, onNavigate }: { slug: string; title: string; onN
             : 'text-text-tertiary hover:text-text-secondary hover:bg-white/[0.03]',
         )}
       >
-        {title}
+        {t(titleKey)}
       </Link>
     </li>
   );

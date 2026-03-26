@@ -11,6 +11,7 @@
 
   body {
     @apply bg-bg-primary text-text-primary font-body;
+    letter-spacing: -0.011em;
   }
 
   ::selection {

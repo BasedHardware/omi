@@ -1,12 +1,23 @@
+'use client';
+
+import { useTranslations } from 'next-intl';
+import { getDocBySlug } from '@/lib/docs-data';
 import { brand } from '@/lib/config';
 
 interface DocsContentProps {
-  title: string;
-  description?: string;
-  content?: string;
+  docSlug: string;
 }
 
-export function DocsContent({ title, description, content }: DocsContentProps) {
+export function DocsContent({ docSlug }: DocsContentProps) {
+  const t = useTranslations('docs');
+  const doc = getDocBySlug(docSlug);
+
+  if (!doc) return null;
+
+  const title = t(doc.titleKey);
+  const description = t(doc.descriptionKey);
+  const content = t(doc.contentKey);
+
   return (
     <article className="max-w-3xl">
       <h1 className="font-display font-bold text-3xl md:text-4xl mb-3">{title}</h1>
@@ -80,9 +91,9 @@ export function DocsContent({ title, description, content }: DocsContentProps) {
           <div className="w-12 h-12 rounded-xl bg-brand/10 flex items-center justify-center mx-auto mb-4">
             <span className="text-brand text-lg">📄</span>
           </div>
-          <h3 className="font-display font-semibold text-lg mb-2">Coming Soon</h3>
+          <h3 className="font-display font-semibold text-lg mb-2">{t('comingSoon')}</h3>
           <p className="text-text-tertiary text-sm max-w-md mx-auto">
-            This documentation page is being written. Check back soon or contribute on{' '}
+            {t('comingSoonDesc')}{' '}
             <a href={brand.social.github} className="text-brand hover:underline">
               GitHub
             </a>

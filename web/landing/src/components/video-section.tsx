@@ -4,12 +4,13 @@ import { useRef, useEffect } from 'react';
 import gsap from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import { Play } from 'lucide-react';
-import Link from 'next/link';
-import { brand } from '@/lib/config';
+import { useTranslations } from 'next-intl';
+import { Link } from '@/i18n/navigation';
 
 gsap.registerPlugin(ScrollTrigger);
 
 export function VideoSection() {
+  const t = useTranslations('videoSection');
   const sectionRef = useRef<HTMLElement>(null);
   const videoRef = useRef<HTMLDivElement>(null);
 
@@ -42,7 +43,7 @@ export function VideoSection() {
           </div>
           <div className="absolute bottom-0 inset-x-0 h-24 bg-gradient-to-t from-black/40 to-transparent" />
           <div className="absolute bottom-6 left-6">
-            <span className="text-xs text-white/60">Watch how {brand.name} works</span>
+            <span className="text-xs text-white/60">{t('watchHow')}</span>
           </div>
         </div>
       </div>

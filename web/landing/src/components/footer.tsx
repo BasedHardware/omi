@@ -1,6 +1,9 @@
-import Link from 'next/link';
-import { brand } from '@/lib/config';
+'use client';
+
 import { Twitter, Linkedin, Github, Youtube } from 'lucide-react';
+import { useTranslations } from 'next-intl';
+import { Link } from '@/i18n/navigation';
+import { brand } from '@/lib/config';
 
 const socialIcons = [
   { icon: Twitter, href: brand.social.twitter, label: 'Twitter' },
@@ -10,11 +13,32 @@ const socialIcons = [
 ];
 
 export function Footer() {
+  const t = useTranslations('footer');
+
+  const companyLinks = [
+    { label: t('privacy'), href: '/privacy' },
+    { label: t('manifesto'), href: '#' },
+  ];
+
+  const productLinks = [
+    { label: 'Nooto', href: '#' },
+    { label: 'Nooto Glass', href: '#' },
+    { label: t('download'), href: '#' },
+  ];
+
+  const resourceLinks = [
+    { label: t('helpCenter'), href: '#' },
+    { label: t('docs'), href: '/docs' },
+    { label: t('appStore'), href: '#' },
+    { label: t('feedback'), href: '#' },
+    { label: 'GitHub', href: 'https://github.com/BasedHardware/omi' },
+    { label: t('community'), href: '#' },
+  ];
+
   return (
     <footer className="border-t border-white/5 bg-bg-primary">
       <div className="mx-auto max-w-7xl px-6 py-16">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-12">
-          {/* Brand column */}
           <div>
             <p className="font-display font-bold text-lg mb-4">{brand.tagline}</p>
             <div className="text-text-tertiary text-sm space-y-1">
@@ -38,23 +62,22 @@ export function Footer() {
             </div>
           </div>
 
-          {/* Link columns */}
-          <FooterColumn title="Company" links={brand.footer.company} />
-          <FooterColumn title="Products" links={brand.footer.products} />
-          <FooterColumn title="Resources" links={brand.footer.resources} />
+          <FooterColumn title={t('company')} links={companyLinks} />
+          <FooterColumn title={t('products')} links={productLinks} />
+          <FooterColumn title={t('resources')} links={resourceLinks} />
         </div>
       </div>
 
       <div className="border-t border-white/5 py-6 px-6">
         <p className="text-center text-text-tertiary text-xs">
-          &copy; {new Date().getFullYear()} {brand.company}. All rights reserved.
+          &copy; {new Date().getFullYear()} {brand.company}. {t('allRightsReserved')}
         </p>
       </div>
     </footer>
   );
 }
 
-function FooterColumn({ title, links }: { title: string; links: ReadonlyArray<{ label: string; href: string }> }) {
+function FooterColumn({ title, links }: { title: string; links: Array<{ label: string; href: string }> }) {
   return (
     <div>
       <p className="font-display font-semibold text-sm mb-4">{title}</p>
