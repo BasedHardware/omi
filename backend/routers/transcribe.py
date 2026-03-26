@@ -148,6 +148,25 @@ PUSHER_DEGRADED_COOLDOWN = 60.0  # seconds before probing from DEGRADED
 PUSHER_RECONNECT_BASE_DELAY = 1.0  # seconds
 PUSHER_RECONNECT_MAX_DELAY = 60.0  # seconds
 
+# Conversation fallback: cap concurrent heavy processing on the listen event loop (#6061)
+FALLBACK_PROCESS_MAX_CONCURRENCY = max(1, int(os.getenv("FALLBACK_PROCESS_MAX_CONCURRENCY", "2")))
+FALLBACK_PROCESS_SEMAPHORE = asyncio.Semaphore(FALLBACK_PROCESS_MAX_CONCURRENCY)
+
+
+def _process_fallback_sync(uid: str, language: str, conversation, session_id: str):
+    """Run heavy conversation processing in a thread — must never run on the event loop.
+
+    Called via asyncio.to_thread() from _create_conversation_fallback().
+    """
+    geolocation = get_cached_user_geolocation(uid)
+    if geolocation:
+        geo = Geolocation(**geolocation)
+        conversation.geolocation = get_google_maps_location(geo.latitude, geo.longitude)
+
+    conversation = process_conversation(uid, language, conversation)
+    messages = trigger_external_integrations(uid, conversation)
+    return conversation, messages
+
 
 # ---- Multi-channel support ----
 
@@ -707,6 +726,7 @@ async def _stream_handler(
             _send_message_event(ConversationEvent(event_type="memory_processing_started", memory=conversation))
 
     # Fallback for when pusher is not available
+    # Heavy work runs in a thread to avoid blocking the event loop (#6061)
     async def _create_conversation_fallback(conversation_data: dict):
         conversation = Conversation(**conversation_data)
         if conversation.status != ConversationStatus.processing:
@@ -715,14 +735,10 @@ async def _stream_handler(
             conversation.status = ConversationStatus.processing
 
         try:
-            # Geolocation
-            geolocation = get_cached_user_geolocation(uid)
-            if geolocation:
-                geolocation = Geolocation(**geolocation)
-                conversation.geolocation = get_google_maps_location(geolocation.latitude, geolocation.longitude)
-
-            conversation = process_conversation(uid, language, conversation)
-            messages = trigger_external_integrations(uid, conversation)
+            async with FALLBACK_PROCESS_SEMAPHORE:
+                conversation, messages = await asyncio.to_thread(
+                    _process_fallback_sync, uid, language, conversation, session_id
+                )
         except Exception as e:
             logger.error(f"Error processing conversation: {e} {uid} {session_id}")
             conversations_db.set_conversation_as_discarded(uid, conversation.id)
