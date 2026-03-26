@@ -204,7 +204,7 @@ class OmiBleManager private constructor(private val application: Application) {
     }
 
     /** Addresses with an in-flight GATT connect (between connectGatt and onConnectionStateChange). */
-    private val connectingAddresses = mutableSetOf<String>()
+    private val connectingAddresses = ConcurrentHashMap.newKeySet<String>()
 
     fun connectPeripheral(address: String, caller: String = "unknown") {
         val addr = address.uppercase()
