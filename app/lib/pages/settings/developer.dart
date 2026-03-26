@@ -1934,8 +1934,8 @@ class _ManualFirmwareFlashPageState extends State<_ManualFirmwareFlashPage> with
   }
 
   @override
-  Widget build(BuildContext context) { 
-    return Scaffold(
+  Widget build(BuildContext context) {
+    return Scaffold( 
       backgroundColor: Colors.black,
       appBar: AppBar(
         backgroundColor: Colors.black,
