@@ -360,31 +360,34 @@ resources:
 
 # This is to setup the liveness and readiness probes more information can be found here: https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/
 livenessProbe:
-  tcpSocket:
+  httpGet:
+    path: /v1/health
+    port: 8080
+  failureThreshold: 5
+  periodSeconds: 10
+  timeoutSeconds: 5
+
+readinessProbe:
+  httpGet:
+    path: /v1/health
     port: 8080
   failureThreshold: 3
   periodSeconds: 10
-  timeoutSeconds: 1
-
-readinessProbe:
-  tcpSocket:
-    port: 8080
-  failureThreshold: 2
-  periodSeconds: 10
-  timeoutSeconds: 1
+  timeoutSeconds: 5
 
 startupProbe:
-  tcpSocket:
+  httpGet:
+    path: /v1/health
     port: 8080
   failureThreshold: 30
   periodSeconds: 10
-  timeoutSeconds: 1
+  timeoutSeconds: 5
 
 # This section is for setting up autoscaling more information can be found here: https://kubernetes.io/docs/concepts/workloads/autoscaling/
 autoscaling:
   enabled: true
   minReplicas: 20
-  maxReplicas: 40
+  maxReplicas: 60
   behavior:
     scaleDown:
       stabilizationWindowSeconds: 600
@@ -397,19 +400,19 @@ autoscaling:
         periodSeconds: 120
       selectPolicy: Min
     scaleUp:
-      stabilizationWindowSeconds: 120
+      stabilizationWindowSeconds: 30
       policies:
       - type: Percent
-        value: 30
-        periodSeconds: 60
+        value: 100
+        periodSeconds: 1
       - type: Pods
         value: 5
-        periodSeconds: 60
+        periodSeconds: 1
       selectPolicy: Max
   # targetCPUUtilizationPercentage: 70
   # targetMemoryUtilizationPercentage: 70
-  # requestsPerPod: 10
   # failedResponseCode: 10
+  requestsPerPod: 10
   activeConnectionsPerPod: 22
 
 podDisruptionBudget:
