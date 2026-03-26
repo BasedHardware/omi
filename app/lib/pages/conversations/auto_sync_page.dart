@@ -617,6 +617,13 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: () {
+        final syncProvider = context.read<SyncProvider>();
+        if (syncProvider.isSyncing && wal.storage == WalStorage.sdcard) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Sync in progress'), duration: Duration(seconds: 2)),
+          );
+          return;
+        }
         Navigator.of(context).push(MaterialPageRoute(builder: (_) => WalItemDetailPage(wal: wal)));
       },
       child: Padding(
