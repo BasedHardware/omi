@@ -215,12 +215,12 @@ class OmiDeviceConnection extends DeviceConnection {
       final totalBytes = storageFiles[0];
       final fileCount = storageFiles.length >= 2 ? storageFiles[1] : 0;
 
-      // Distinguish new firmware from old: old firmware has [totalBytes, offset],
-      // new firmware has [totalBytes, fileCount]. If fileCount > totalBytes it's
-      // clearly an offset (old firmware). Also if totalBytes is 0 and fileCount is 0
-      // we can't tell, but that's fine — no files to sync either way.
-      if (fileCount > totalBytes && totalBytes > 0) {
-        Logger.debug('OmiDeviceConnection: Looks like old firmware (field[1]=$fileCount > totalBytes=$totalBytes)');
+      // Distinguish new firmware from old: old firmware returns [totalBytes, offset]
+      // where offset is a byte position (large number). New firmware returns
+      // [totalBytes, fileCount] where fileCount is small (typically 0-100).
+      // A value > 1000 in field[1] is almost certainly an old-firmware byte offset.
+      if (fileCount > 1000) {
+        Logger.debug('OmiDeviceConnection: Looks like old firmware (field[1]=$fileCount too large for file count)');
         return null;
       }
 
@@ -281,18 +281,20 @@ class OmiDeviceConnection extends DeviceConnection {
       });
 
       // Send CMD_LIST_FILES
-      await transport.writeCharacteristic(storageDataStreamServiceUuid, storageDataStreamCharacteristicUuid, [0x10]);
+      try {
+        await transport.writeCharacteristic(storageDataStreamServiceUuid, storageDataStreamCharacteristicUuid, [0x10]);
 
-      final result = await completer.future.timeout(
-        const Duration(seconds: 10),
-        onTimeout: () {
-          Logger.debug('OmiDeviceConnection: listFiles timeout');
-          return <StorageFileInfo>[];
-        },
-      );
-
-      await sub.cancel();
-      return result;
+        final result = await completer.future.timeout(
+          const Duration(seconds: 10),
+          onTimeout: () {
+            Logger.debug('OmiDeviceConnection: listFiles timeout');
+            return <StorageFileInfo>[];
+          },
+        );
+        return result;
+      } finally {
+        await sub?.cancel();
+      }
     } catch (e) {
       Logger.debug('OmiDeviceConnection: Error listing storage files: $e');
       return [];
@@ -329,15 +331,18 @@ class OmiDeviceConnection extends DeviceConnection {
       });
 
       // Send CMD_DELETE_FILE command
-      await transport.writeCharacteristic(storageDataStreamServiceUuid, storageDataStreamCharacteristicUuid, [
-        0x12,
-        fileIndex & 0xFF,
-      ]);
+      try {
+        await transport.writeCharacteristic(storageDataStreamServiceUuid, storageDataStreamCharacteristicUuid, [
+          0x12,
+          fileIndex & 0xFF,
+        ]);
 
-      final result = await completer.future;
-      await subscription.cancel();
-      timeout.cancel();
-      return result;
+        final result = await completer.future;
+        return result;
+      } finally {
+        await subscription?.cancel();
+        timeout?.cancel();
+      }
     } catch (e) {
       Logger.debug('OmiDeviceConnection: Error deleting storage file: $e');
       return false;
