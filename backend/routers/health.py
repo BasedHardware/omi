@@ -7,6 +7,9 @@ import httpx
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 
+from database._client import db
+from utils.metrics import dg_failure_tracker, BACKEND_LISTEN_ACTIVE_WS_CONNECTIONS
+
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
@@ -79,9 +82,8 @@ async def _check_openai() -> dict:
 async def _check_firestore() -> dict:
     """Check Firestore connectivity with a minimal read."""
     try:
-        from database._client import db
-        # Read a nonexistent doc — fast, just checks connectivity
-        doc = db.collection('_health_check').document('ping').get()
+        loop = asyncio.get_event_loop()
+        await loop.run_in_executor(None, lambda: db.collection('_health_check').document('ping').get())
         return {"status": "ok"}
     except Exception as e:
         return {"status": "down", "error": str(e)[:200]}
@@ -159,10 +161,10 @@ async def health_listen():
     - 21+ failures: down
     """
     try:
-        from utils.metrics import dg_failure_tracker, BACKEND_LISTEN_ACTIVE_WS_CONNECTIONS
         failures = dg_failure_tracker.count()
         try:
-            active_connections = int(BACKEND_LISTEN_ACTIVE_WS_CONNECTIONS._value.get())
+            samples = list(BACKEND_LISTEN_ACTIVE_WS_CONNECTIONS.collect()[0].samples)
+            active_connections = int(samples[0].value) if samples else -1
         except Exception:
             active_connections = -1
 
@@ -197,7 +199,6 @@ async def health_services():
     start = time.time()
     # Check listen health inline
     try:
-        from utils.metrics import dg_failure_tracker
         listen_failures = dg_failure_tracker.count()
         if listen_failures <= 5:
             listen_result = {"status": "ok"}
