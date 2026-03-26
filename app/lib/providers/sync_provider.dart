@@ -323,6 +323,8 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
       updatedConversationIds: result.updatedConversationIds,
     );
     _updateSyncState(_syncState.toCompleted(conversations: conversations));
+    // Refresh WAL list so home screen cloud icon updates (clears synced WALs)
+    await refreshWals();
   }
 
   // Audio playback delegate methods
@@ -397,10 +399,21 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
 
   @override
   void onWalSyncedProgress(double percentage,
-      {double? speedKBps, SyncPhase? phase, int? currentFile, int? totalFiles}) {
+      {double? speedKBps,
+      SyncPhase? phase,
+      int? currentFile,
+      int? totalFiles,
+      int? uploadedBytes,
+      int? totalBytesToUpload}) {
     if (_syncState.isSyncing) {
       _updateSyncState(_syncState.toSyncing(
-          progress: percentage, speedKBps: speedKBps, phase: phase, currentFile: currentFile, totalFiles: totalFiles));
+          progress: percentage,
+          speedKBps: speedKBps,
+          phase: phase,
+          currentFile: currentFile,
+          totalFiles: totalFiles,
+          uploadedBytes: uploadedBytes,
+          totalBytesToUpload: totalBytesToUpload));
     }
   }
 
