@@ -111,22 +111,10 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
       ),
       child: Column(
         children: [
-          if (isSyncing) ...[
-            ClipRRect(
-              borderRadius: BorderRadius.circular(2),
-              child: LinearProgressIndicator(
-                value: syncState.progress,
-                backgroundColor: const Color(0xFF3C3C43),
-                valueColor: const AlwaysStoppedAnimation<Color>(Colors.deepPurpleAccent),
-                minHeight: 3,
-              ),
-            ),
-            const SizedBox(height: 20),
-          ],
           _buildTierRow(
               context.l10n.omisStorage, deviceTier, _deviceDetail(syncState, isSyncing, hasPending, pendingWals)),
           _tierLine(deviceTier),
-          _buildTierRow(context.l10n.phoneStorage, phoneTier, _phoneDetail(phoneTier, pendingWals, syncState)),
+          _buildTierRow(context.l10n.phoneStorage, phoneTier, _phoneDetail(syncState, isSyncing, pendingWals)),
           _tierLine(phoneTier),
           _buildTierRow(context.l10n.cloudStorage, cloudTier, _cloudDetail(syncState, isSyncing)),
           if (isSyncing) ...[
@@ -141,6 +129,20 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
                 ),
                 child: Text(context.l10n.cancel,
                     style: const TextStyle(color: Colors.redAccent, fontSize: 13, fontWeight: FontWeight.w500)),
+              ),
+            ),
+          ] else if (hasPending && isDeviceConnected) ...[
+            const SizedBox(height: 18),
+            GestureDetector(
+              onTap: () => syncProvider.syncWals(),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 7),
+                decoration: BoxDecoration(
+                  color: Colors.deepPurpleAccent.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(100),
+                ),
+                child: Text(context.l10n.sync,
+                    style: const TextStyle(color: Colors.deepPurpleAccent, fontSize: 13, fontWeight: FontWeight.w500)),
               ),
             ),
           ],
@@ -271,9 +273,11 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
   }
 
   String? _deviceDetail(SyncState syncState, bool isSyncing, bool hasPending, List<Wal> pendingWals) {
-    if (isSyncing && syncState.phase == SyncPhase.downloadingFromDevice) {
-      final speed = syncState.speedKBps;
-      return speed != null && speed > 0 ? '${speed.toStringAsFixed(1)} KB/s' : context.l10n.transferring;
+    if (isSyncing &&
+        syncState.phase == SyncPhase.downloadingFromDevice &&
+        syncState.currentFile != null &&
+        syncState.totalFiles != null) {
+      return '${syncState.currentFile} of ${syncState.totalFiles} files';
     }
     if (hasPending) {
       final deviceFiles = pendingWals.where((w) => w.storage == WalStorage.sdcard).toList();
@@ -285,18 +289,19 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
     return null;
   }
 
-  String? _phoneDetail(_TierState state, List<Wal> pendingWals, SyncState syncState) {
-    final phoneFiles = pendingWals.where((w) => w.storage == WalStorage.disk).toList();
-    if (phoneFiles.isNotEmpty) {
-      final totalBytes = phoneFiles.fold<int>(0, (s, w) => s + w.storageTotalBytes);
-      return '${phoneFiles.length} file${phoneFiles.length == 1 ? '' : 's'} \u00b7 ${_fmtBytes(totalBytes)}';
+  String? _phoneDetail(SyncState syncState, bool isSyncing, List<Wal> pendingWals) {
+    if (isSyncing && syncState.phase == SyncPhase.downloadingFromDevice) {
+      final speed = syncState.speedKBps;
+      return speed != null && speed > 0 ? '${speed.toStringAsFixed(1)} KB/s' : context.l10n.transferring;
     }
     return null;
   }
 
   String? _cloudDetail(SyncState syncState, bool isSyncing) {
     if (isSyncing && syncState.phase == SyncPhase.uploadingToCloud) {
-      return '${(syncState.progress * 100).toInt()}%';
+      final speed = syncState.speedKBps;
+      if (speed != null && speed > 0) return '${speed.toStringAsFixed(1)} KB/s';
+      return context.l10n.transferring;
     }
     return null;
   }
