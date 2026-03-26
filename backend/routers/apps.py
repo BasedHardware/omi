@@ -438,18 +438,10 @@ def search_apps(
 
 @router.get('/v1/approved-apps', tags=['v1'], response_model=List[AppBaseModel])
 def get_approved_apps(include_reviews: bool = False):
-    # apps = get_approved_available_apps(include_reviews=include_reviews)
-    # # Always exclude persona type apps
-    # filtered_apps = [app for app in apps if not app.is_a_persona()]
-    # return [normalize_app_numeric_fields(app.to_reduced_dict()) for app in filtered_apps]
-    import database.conversations as conversations_db
-    import database.memories as memories_db
-    import database.action_items as action_items_db
-
-    uid = 'LbDXTOTOmNZM9XvY2auEhaXDdar1'
-    conversations_db.unlock_all_conversations(uid)
-    memories_db.unlock_all_memories(uid)
-    action_items_db.unlock_all_action_items(uid)
+    apps = get_approved_available_apps(include_reviews=include_reviews)
+    # Always exclude persona type apps
+    filtered_apps = [app for app in apps if not app.is_a_persona()]
+    return [normalize_app_numeric_fields(app.to_reduced_dict()) for app in filtered_apps]
 
 
 @router.get('/v1/apps/popular', tags=['v1'], response_model=List[AppBaseModel])
