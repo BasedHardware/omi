@@ -8,6 +8,7 @@ Verifies:
 
 import asyncio
 import sys
+import threading
 import time
 from unittest.mock import MagicMock, patch, AsyncMock
 
@@ -400,21 +401,23 @@ def test_circuit_breaker_timeout_exact_edge():
     cb = get_deepgram_circuit_breaker()
     cb.failure_threshold = 1
     cb.reset_timeout_seconds = 10.0
-    cb.record_failure(Exception("open"))
+
+    # Use deterministic monotonic mock to avoid CI timing flakes
+    base_time = 1000.0
+    with patch('utils.stt.streaming.time.monotonic', return_value=base_time):
+        cb.record_failure(Exception("open"))
 
     # Just under the timeout: still open
-    cb._opened_at_monotonic = time.monotonic() - 9.999
-    assert cb.allow_request() is False
+    with patch('utils.stt.streaming.time.monotonic', return_value=base_time + 9.999):
+        assert cb.allow_request() is False
 
     # Exactly at the timeout: should allow
-    cb._opened_at_monotonic = time.monotonic() - 10.0
-    assert cb.allow_request() is True
+    with patch('utils.stt.streaming.time.monotonic', return_value=base_time + 10.0):
+        assert cb.allow_request() is True
 
 
 def test_circuit_breaker_concurrent_access():
     """CB handles concurrent record_failure/allow_request without corruption."""
-    import threading
-
     cb = get_deepgram_circuit_breaker()
     cb.failure_threshold = 5
     cb.reset_timeout_seconds = 60.0
