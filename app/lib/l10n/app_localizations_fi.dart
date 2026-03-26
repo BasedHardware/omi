@@ -8645,4 +8645,72 @@ class AppLocalizationsFi extends AppLocalizations {
   String clockSkewWarning(int minutes) {
     return 'Laitteesi kello on ~$minutes min. väärässä. Tarkista päivämäärä- ja aika-asetukset.';
   }
+
+  @override
+  String get omisStorage => 'Omin tallennustila';
+
+  @override
+  String get phoneStorage => 'Puhelimen tallennustila';
+
+  @override
+  String get cloudStorage => 'Pilvitallennustila';
+
+  @override
+  String get howSyncingWorks => 'Miten synkronointi toimii';
+
+  @override
+  String get noSyncedRecordings => 'Ei synkronoituja nauhoituksia vielä';
+
+  @override
+  String get recordingsSyncAutomatically => 'Nauhoitukset synkronoidaan automaattisesti — toimenpiteitä ei tarvita.';
+
+  @override
+  String get filesDownloadedUploadedNextTime => 'Jo ladatut tiedostot ladataan palvelimelle seuraavalla kerralla.';
+
+  @override
+  String nConversationsCreated(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count keskustelua luotu',
+      one: '1 keskustelu luotu',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get tapToView => 'Napauta nähdäksesi';
+
+  @override
+  String get syncFailed => 'Synkronointi epäonnistui';
+
+  @override
+  String get keepSyncing => 'Jatka synkronointia';
+
+  @override
+  String get cancelSyncQuestion => 'Peruuta synkronointi?';
+
+  @override
+  String get omisStorageDesc =>
+      'Kun Omi ei ole yhdistetty puhelimeesi, se tallentaa äänen paikallisesti sisäiseen muistiinsa. Et koskaan menetä nauhoitusta.';
+
+  @override
+  String get phoneStorageDesc =>
+      'Kun Omi yhdistyy uudelleen, nauhoitukset siirretään automaattisesti puhelimeesi ennen palvelimelle lataamista.';
+
+  @override
+  String get cloudStorageDesc =>
+      'Lataamisen jälkeen nauhoituksesi käsitellään ja litteroidaan. Keskustelut ovat saatavilla minuutin kuluessa.';
+
+  @override
+  String get tipKeepPhoneNearby => 'Pidä puhelin lähellä nopeampaa synkronointia varten';
+
+  @override
+  String get tipStableInternet => 'Vakaa internet nopeuttaa pilveen lataamista';
+
+  @override
+  String get tipAutoSync => 'Nauhoitukset synkronoidaan automaattisesti';
+
+  @override
+  String get storageSection => 'TALLENNUSTILA';
 }

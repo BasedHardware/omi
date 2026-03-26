@@ -8689,4 +8689,72 @@ class AppLocalizationsRo extends AppLocalizations {
   String clockSkewWarning(int minutes) {
     return 'Ceasul dispozitivului diferă cu ~$minutes min. Verificați setările de dată și oră.';
   }
+
+  @override
+  String get omisStorage => 'Stocarea Omi';
+
+  @override
+  String get phoneStorage => 'Stocarea telefonului';
+
+  @override
+  String get cloudStorage => 'Stocare în cloud';
+
+  @override
+  String get howSyncingWorks => 'Cum funcționează sincronizarea';
+
+  @override
+  String get noSyncedRecordings => 'Nicio înregistrare sincronizată încă';
+
+  @override
+  String get recordingsSyncAutomatically => 'Înregistrările se sincronizează automat — nu este necesară nicio acțiune.';
+
+  @override
+  String get filesDownloadedUploadedNextTime => 'Fișierele deja descărcate vor fi încărcate data viitoare.';
+
+  @override
+  String nConversationsCreated(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count conversații create',
+      one: '1 conversație creată',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get tapToView => 'Atingeți pentru a vizualiza';
+
+  @override
+  String get syncFailed => 'Sincronizarea a eșuat';
+
+  @override
+  String get keepSyncing => 'Continuă sincronizarea';
+
+  @override
+  String get cancelSyncQuestion => 'Anulezi sincronizarea?';
+
+  @override
+  String get omisStorageDesc =>
+      'Când Omi nu este conectat la telefon, stochează audio local în memoria sa integrată. Nu veți pierde niciodată o înregistrare.';
+
+  @override
+  String get phoneStorageDesc =>
+      'Când Omi se reconectează, înregistrările sunt transferate automat pe telefon înainte de încărcare.';
+
+  @override
+  String get cloudStorageDesc =>
+      'După încărcare, înregistrările sunt procesate și transcrise. Conversațiile vor fi disponibile într-un minut.';
+
+  @override
+  String get tipKeepPhoneNearby => 'Păstrați telefonul aproape pentru sincronizare mai rapidă';
+
+  @override
+  String get tipStableInternet => 'Internetul stabil accelerează încărcarea în cloud';
+
+  @override
+  String get tipAutoSync => 'Înregistrările se sincronizează automat';
+
+  @override
+  String get storageSection => 'STOCARE';
 }

@@ -8641,4 +8641,72 @@ class AppLocalizationsNo extends AppLocalizations {
   String clockSkewWarning(int minutes) {
     return 'Enhetens klokke avviker ~$minutes min. Sjekk dato- og tidsinnstillingene.';
   }
+
+  @override
+  String get omisStorage => 'Omis lagring';
+
+  @override
+  String get phoneStorage => 'Telefonlagring';
+
+  @override
+  String get cloudStorage => 'Skylagring';
+
+  @override
+  String get howSyncingWorks => 'Slik fungerer synkronisering';
+
+  @override
+  String get noSyncedRecordings => 'Ingen synkroniserte opptak ennå';
+
+  @override
+  String get recordingsSyncAutomatically => 'Opptak synkroniseres automatisk — ingen handling nødvendig.';
+
+  @override
+  String get filesDownloadedUploadedNextTime => 'Allerede nedlastede filer vil bli lastet opp neste gang.';
+
+  @override
+  String nConversationsCreated(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count samtaler opprettet',
+      one: '1 samtale opprettet',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get tapToView => 'Trykk for å se';
+
+  @override
+  String get syncFailed => 'Synkronisering mislyktes';
+
+  @override
+  String get keepSyncing => 'Fortsett synkronisering';
+
+  @override
+  String get cancelSyncQuestion => 'Avbryt synkronisering?';
+
+  @override
+  String get omisStorageDesc =>
+      'Når din Omi ikke er koblet til telefonen, lagrer den lyd lokalt i det innebygde minnet. Du mister aldri et opptak.';
+
+  @override
+  String get phoneStorageDesc =>
+      'Når Omi kobler til igjen, overføres opptak automatisk til telefonen din før opplasting.';
+
+  @override
+  String get cloudStorageDesc =>
+      'Etter opplasting behandles og transkriberes opptakene dine. Samtaler vil være tilgjengelige innen ett minutt.';
+
+  @override
+  String get tipKeepPhoneNearby => 'Hold telefonen i nærheten for raskere synkronisering';
+
+  @override
+  String get tipStableInternet => 'Stabilt internett fremskynder skyopplasting';
+
+  @override
+  String get tipAutoSync => 'Opptak synkroniseres automatisk';
+
+  @override
+  String get storageSection => 'LAGRING';
 }

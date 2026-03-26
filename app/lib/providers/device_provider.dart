@@ -30,6 +30,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   bool isConnecting = false;
   bool isConnected = false;
   bool isDeviceStorageSupport = false;
+  bool supportsMultiFileSync = SharedPreferencesUtil().deviceSupportsMultiFileSync;
   BtDevice? connectedDevice;
   BtDevice? pairedDevice;
   StreamSubscription<List<int>>? _bleBatteryLevelListener;
@@ -62,6 +63,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   final Debouncer _connectDebouncer = Debouncer(delay: const Duration(milliseconds: 100));
 
   void Function(BtDevice device)? onDeviceConnected;
+  void Function(BtDevice device, int fileCount, int totalBytes)? onOfflineDataDetected;
 
   DeviceProvider() {
     ServiceManager.instance().device.subscribe(this, this);
@@ -426,6 +428,10 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     // Wals
     ServiceManager.instance().wal.getSyncs().sdcard.setDevice(device);
     ServiceManager.instance().wal.getSyncs().flashPage.setDevice(device);
+    ServiceManager.instance().wal.getSyncs().storage.setDevice(device);
+
+    // Auto-sync: check if device has offline files (new multi-file firmware)
+    _checkAndStartAutoSync(device);
 
     notifyListeners();
 
@@ -437,6 +443,43 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     }
 
     onDeviceConnected?.call(device);
+  }
+
+  /// Check firmware version to determine multi-file sync support.
+  /// Firmware >= 3.0.17 supports the new LittleFS multi-file protocol.
+  static bool _isFirmwareVersionSupported(String? version) {
+    if (version == null || version.isEmpty || version == 'Unknown') return false;
+    final parts = version.split('.').map((p) => int.tryParse(p) ?? 0).toList();
+    if (parts.length < 3) return false;
+    // Compare against 3.0.17
+    if (parts[0] > 3) return true;
+    if (parts[0] < 3) return false;
+    if (parts[1] > 0) return true;
+    if (parts[1] < 0) return false;
+    return parts[2] >= 17;
+  }
+
+  Future<void> _checkAndStartAutoSync(BtDevice device) async {
+    try {
+      // Use firmware version as the reliable signal for multi-file support
+      // Read from pairedDevice which has firmwareRevision populated by getDeviceInfo()
+      supportsMultiFileSync = _isFirmwareVersionSupported(pairedDevice?.firmwareRevision ?? device.firmwareRevision);
+      SharedPreferencesUtil().deviceSupportsMultiFileSync = supportsMultiFileSync;
+      notifyListeners();
+
+      if (!supportsMultiFileSync) return;
+
+      var connection = await ServiceManager.instance().device.ensureConnection(device.id);
+      if (connection == null) return;
+
+      final status = await connection.getStorageFileStats();
+      if (status == null || status.fileCount == 0) return;
+
+      Logger.debug('DeviceProvider: Auto-sync detected ${status.fileCount} files (${status.totalUsedBytes} bytes)');
+      onOfflineDataDetected?.call(device, status.fileCount, status.totalUsedBytes);
+    } catch (e) {
+      Logger.debug('DeviceProvider: Auto-sync check failed: $e');
+    }
   }
 
   Future<void> _ensureCompanionAssociation(BtDevice device) async {

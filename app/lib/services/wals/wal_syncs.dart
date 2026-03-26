@@ -8,6 +8,7 @@ import 'package:omi/services/connectivity_service.dart';
 import 'package:omi/services/wals/flash_page_wal_sync.dart';
 import 'package:omi/services/wals/local_wal_sync.dart';
 import 'package:omi/services/wals/sdcard_wal_sync.dart';
+import 'package:omi/services/wals/storage_sync.dart';
 import 'package:omi/services/wals/wal.dart';
 import 'package:omi/services/wals/wal_interfaces.dart';
 import 'package:omi/utils/debug_log_manager.dart';
@@ -23,6 +24,9 @@ class WalSyncs implements IWalSync {
   late FlashPageWalSyncImpl _flashPageSync;
   FlashPageWalSyncImpl get flashPage => _flashPageSync;
 
+  late StorageSyncImpl _storageSync;
+  StorageSyncImpl get storage => _storageSync;
+
   final IWalSyncListener listener;
 
   bool _isCancelled = false;
@@ -31,9 +35,11 @@ class WalSyncs implements IWalSync {
     _phoneSync = LocalWalSyncImpl(listener);
     _sdcardSync = SDCardWalSyncImpl(listener);
     _flashPageSync = FlashPageWalSyncImpl(listener);
+    _storageSync = StorageSyncImpl(listener);
 
     _sdcardSync.setLocalSync(_phoneSync);
     _flashPageSync.setLocalSync(_phoneSync);
+    _storageSync.setLocalSync(_phoneSync);
 
     _sdcardSync.loadWifiCredentials();
   }
@@ -43,11 +49,13 @@ class WalSyncs implements IWalSync {
     await _phoneSync.deleteWal(wal);
     await _sdcardSync.deleteWal(wal);
     await _flashPageSync.deleteWal(wal);
+    await _storageSync.deleteWal(wal);
   }
 
   @override
   Future<List<Wal>> getMissingWals() async {
     List<Wal> wals = [];
+    wals.addAll(await _storageSync.getMissingWals());
     wals.addAll(await _sdcardSync.getMissingWals());
     wals.addAll(await _phoneSync.getMissingWals());
     wals.addAll(await _flashPageSync.getMissingWals());
@@ -56,6 +64,7 @@ class WalSyncs implements IWalSync {
 
   Future<List<Wal>> getAllWals() async {
     List<Wal> wals = [];
+    wals.addAll(await _storageSync.getMissingWals());
     wals.addAll(await _sdcardSync.getMissingWals());
     wals.addAll(await _phoneSync.getAllWals());
     wals.addAll(await _flashPageSync.getMissingWals());
@@ -136,12 +145,14 @@ class WalSyncs implements IWalSync {
     await _phoneSync.deleteAllSyncedWals();
     await _sdcardSync.deleteAllSyncedWals();
     await _flashPageSync.deleteAllSyncedWals();
+    await _storageSync.deleteAllSyncedWals();
   }
 
   Future<void> deleteAllPendingWals() async {
     await _phoneSync.deleteAllPendingWals();
     await _sdcardSync.deleteAllPendingWals();
     await _flashPageSync.deleteAllPendingWals();
+    await _storageSync.deleteAllPendingWals();
   }
 
   @override
@@ -149,6 +160,7 @@ class WalSyncs implements IWalSync {
     _phoneSync.start();
     _sdcardSync.start();
     _flashPageSync.start();
+    _storageSync.start();
   }
 
   @override
@@ -156,6 +168,7 @@ class WalSyncs implements IWalSync {
     await _phoneSync.stop();
     await _sdcardSync.stop();
     await _flashPageSync.stop();
+    await _storageSync.stop();
   }
 
   @override
@@ -174,7 +187,23 @@ class WalSyncs implements IWalSync {
       'phone': allMissing.where((w) => w.storage == WalStorage.disk || w.storage == WalStorage.mem).length,
     });
 
-    // Phase 1a: Download SD card data to phone
+    // Phase 0: New multi-file storage sync (for new firmware with LittleFS)
+    // Refresh file list from device via BLE (safe — not syncing yet)
+    await _storageSync.refreshWalsFromDevice();
+    final storageMissing = await _storageSync.getMissingWals();
+    if (storageMissing.isNotEmpty) {
+      Logger.debug("WalSyncs: Phase 0 - Downloading ${storageMissing.length} multi-file storage files to phone");
+      DebugLogManager.logInfo('Sync Phase 0: Multi-file storage sync');
+      progress?.onWalSyncedProgress(0.0, phase: SyncPhase.downloadingFromDevice);
+      await _storageSync.syncAll(progress: progress);
+    }
+
+    if (_isCancelled) {
+      Logger.debug("WalSyncs: Cancelled after storage sync phase");
+      return resp;
+    }
+
+    // Phase 1a: Download SD card data to phone (legacy firmware)
     Logger.debug("WalSyncs: Phase 1a - Downloading SD card data to phone");
     DebugLogManager.logInfo('Sync Phase 1a: Downloading SD card data to phone');
     progress?.onWalSyncedProgress(0.0, phase: SyncPhase.downloadingFromDevice);
@@ -277,10 +306,15 @@ class WalSyncs implements IWalSync {
   @override
   void cancelSync() {
     _isCancelled = true;
+    _storageSync.cancelSync();
     _sdcardSync.cancelSync();
     _flashPageSync.cancelSync();
     _phoneSync.cancelSync();
   }
+
+  bool get isStorageSyncing => _storageSync.isSyncing;
+
+  double get storageSpeedKBps => _storageSync.currentSpeedKBps;
 
   bool get isSdCardSyncing => _sdcardSync.isSyncing;
 

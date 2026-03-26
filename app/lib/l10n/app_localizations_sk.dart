@@ -8636,4 +8636,70 @@ class AppLocalizationsSk extends AppLocalizations {
   String clockSkewWarning(int minutes) {
     return 'Hodiny zariadenia sa líšia o ~$minutes min. Skontrolujte nastavenia dátumu a času.';
   }
+
+  @override
+  String get omisStorage => 'Úložisko Omi';
+
+  @override
+  String get phoneStorage => 'Úložisko telefónu';
+
+  @override
+  String get cloudStorage => 'Cloudové úložisko';
+
+  @override
+  String get howSyncingWorks => 'Ako funguje synchronizácia';
+
+  @override
+  String get noSyncedRecordings => 'Zatiaľ žiadne synchronizované nahrávky';
+
+  @override
+  String get recordingsSyncAutomatically => 'Nahrávky sa synchronizujú automaticky — nie je potrebná žiadna akcia.';
+
+  @override
+  String get filesDownloadedUploadedNextTime => 'Už stiahnuté súbory budú nahrané nabudúce.';
+
+  @override
+  String nConversationsCreated(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count konverzácií vytvorených',
+      one: '1 konverzácia vytvorená',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get tapToView => 'Klepnite pre zobrazenie';
+
+  @override
+  String get syncFailed => 'Synchronizácia zlyhala';
+
+  @override
+  String get keepSyncing => 'Pokračovať v synchronizácii';
+
+  @override
+  String get cancelSyncQuestion => 'Zrušiť synchronizáciu?';
+
+  @override
+  String get omisStorageDesc =>
+      'Keď váš Omi nie je pripojený k telefónu, ukladá zvuk lokálne vo vstavanej pamäti. Nikdy nestratíte nahrávku.';
+
+  @override
+  String get phoneStorageDesc => 'Keď sa Omi znova pripojí, nahrávky sa automaticky prenesú do telefónu pred nahraním.';
+
+  @override
+  String get cloudStorageDesc => 'Po nahraní sa vaše nahrávky spracujú a prepíšu. Konverzácie budú dostupné do minúty.';
+
+  @override
+  String get tipKeepPhoneNearby => 'Majte telefón nablízku pre rýchlejšiu synchronizáciu';
+
+  @override
+  String get tipStableInternet => 'Stabilný internet urýchľuje nahrávanie do cloudu';
+
+  @override
+  String get tipAutoSync => 'Nahrávky sa synchronizujú automaticky';
+
+  @override
+  String get storageSection => 'ÚLOŽISKO';
 }

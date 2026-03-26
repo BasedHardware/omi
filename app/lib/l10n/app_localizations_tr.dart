@@ -8659,4 +8659,72 @@ class AppLocalizationsTr extends AppLocalizations {
   String clockSkewWarning(int minutes) {
     return 'Cihazınızın saati ~$minutes dk. farklı. Tarih ve saat ayarlarınızı kontrol edin.';
   }
+
+  @override
+  String get omisStorage => 'Omi\'nin Depolaması';
+
+  @override
+  String get phoneStorage => 'Telefon Depolaması';
+
+  @override
+  String get cloudStorage => 'Bulut Depolaması';
+
+  @override
+  String get howSyncingWorks => 'Senkronizasyon nasıl çalışır';
+
+  @override
+  String get noSyncedRecordings => 'Henüz senkronize kayıt yok';
+
+  @override
+  String get recordingsSyncAutomatically => 'Kayıtlar otomatik olarak senkronize edilir — herhangi bir işlem gerekmez.';
+
+  @override
+  String get filesDownloadedUploadedNextTime => 'Zaten indirilen dosyalar bir dahaki sefere yüklenecektir.';
+
+  @override
+  String nConversationsCreated(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count konuşma oluşturuldu',
+      one: '1 konuşma oluşturuldu',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get tapToView => 'Görüntülemek için dokunun';
+
+  @override
+  String get syncFailed => 'Senkronizasyon başarısız';
+
+  @override
+  String get keepSyncing => 'Senkronizasyona devam et';
+
+  @override
+  String get cancelSyncQuestion => 'Senkronizasyon iptal edilsin mi?';
+
+  @override
+  String get omisStorageDesc =>
+      'Omi\'niz telefonunuza bağlı olmadığında, sesi yerleşik belleğinde yerel olarak saklar. Hiçbir kaydı kaybetmezsiniz.';
+
+  @override
+  String get phoneStorageDesc =>
+      'Omi yeniden bağlandığında, kayıtlar yüklenmeden önce otomatik olarak telefonunuza aktarılır.';
+
+  @override
+  String get cloudStorageDesc =>
+      'Yüklendikten sonra kayıtlarınız işlenir ve yazıya dökülür. Konuşmalar bir dakika içinde kullanılabilir olacaktır.';
+
+  @override
+  String get tipKeepPhoneNearby => 'Daha hızlı senkronizasyon için telefonunuzu yakında tutun';
+
+  @override
+  String get tipStableInternet => 'Kararlı internet bulut yüklemelerini hızlandırır';
+
+  @override
+  String get tipAutoSync => 'Kayıtlar otomatik olarak senkronize edilir';
+
+  @override
+  String get storageSection => 'DEPOLAMA';
 }

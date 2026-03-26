@@ -8644,4 +8644,72 @@ class AppLocalizationsEt extends AppLocalizations {
   String clockSkewWarning(int minutes) {
     return 'Teie seadme kell erineb ~$minutes min. Kontrollige kuupäeva ja kellaaja seadeid.';
   }
+
+  @override
+  String get omisStorage => 'Omi salvestusruum';
+
+  @override
+  String get phoneStorage => 'Telefoni salvestusruum';
+
+  @override
+  String get cloudStorage => 'Pilvsalvestus';
+
+  @override
+  String get howSyncingWorks => 'Kuidas sünkroonimine töötab';
+
+  @override
+  String get noSyncedRecordings => 'Sünkroonitud salvestusi veel pole';
+
+  @override
+  String get recordingsSyncAutomatically => 'Salvestised sünkroonitakse automaatselt — tegevust pole vaja.';
+
+  @override
+  String get filesDownloadedUploadedNextTime => 'Juba allalaaditud failid laaditakse üles järgmisel korral.';
+
+  @override
+  String nConversationsCreated(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count vestlust loodud',
+      one: '1 vestlus loodud',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get tapToView => 'Puudutage vaatamiseks';
+
+  @override
+  String get syncFailed => 'Sünkroonimine ebaõnnestus';
+
+  @override
+  String get keepSyncing => 'Jätka sünkroonimist';
+
+  @override
+  String get cancelSyncQuestion => 'Tühista sünkroonimine?';
+
+  @override
+  String get omisStorageDesc =>
+      'Kui teie Omi pole telefoniga ühendatud, salvestab see heli kohalikult sisseehitatud mällu. Te ei kaota kunagi salvestist.';
+
+  @override
+  String get phoneStorageDesc =>
+      'Kui Omi uuesti ühendub, kantakse salvestised automaatselt teie telefoni enne üleslaadimist.';
+
+  @override
+  String get cloudStorageDesc =>
+      'Pärast üleslaadimist töödeldakse ja transkribeeritakse teie salvestised. Vestlused on saadaval minuti jooksul.';
+
+  @override
+  String get tipKeepPhoneNearby => 'Hoidke telefon lähedal kiiremaks sünkroonimiseks';
+
+  @override
+  String get tipStableInternet => 'Stabiilne internet kiirendab pilveüleslaadimist';
+
+  @override
+  String get tipAutoSync => 'Salvestised sünkroonitakse automaatselt';
+
+  @override
+  String get storageSection => 'SALVESTUSRUUM';
 }

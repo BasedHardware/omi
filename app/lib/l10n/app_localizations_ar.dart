@@ -8588,4 +8588,71 @@ class AppLocalizationsAr extends AppLocalizations {
   String clockSkewWarning(int minutes) {
     return 'ساعة جهازك متأخرة بـ ~$minutes دقيقة. تحقق من إعدادات التاريخ والوقت.';
   }
+
+  @override
+  String get omisStorage => 'تخزين Omi';
+
+  @override
+  String get phoneStorage => 'تخزين الهاتف';
+
+  @override
+  String get cloudStorage => 'التخزين السحابي';
+
+  @override
+  String get howSyncingWorks => 'كيف يعمل المزامنة';
+
+  @override
+  String get noSyncedRecordings => 'لا توجد تسجيلات مزامنة بعد';
+
+  @override
+  String get recordingsSyncAutomatically => 'تتم مزامنة التسجيلات تلقائيًا — لا حاجة لأي إجراء.';
+
+  @override
+  String get filesDownloadedUploadedNextTime => 'سيتم رفع الملفات التي تم تنزيلها بالفعل في المرة القادمة.';
+
+  @override
+  String nConversationsCreated(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count محادثات تم إنشاؤها',
+      one: 'محادثة واحدة تم إنشاؤها',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get tapToView => 'اضغط للعرض';
+
+  @override
+  String get syncFailed => 'فشلت المزامنة';
+
+  @override
+  String get keepSyncing => 'متابعة المزامنة';
+
+  @override
+  String get cancelSyncQuestion => 'إلغاء المزامنة؟';
+
+  @override
+  String get omisStorageDesc =>
+      'عندما لا يكون Omi متصلاً بهاتفك، يخزن الصوت محليًا في ذاكرته المدمجة. لن تفقد أي تسجيل أبدًا.';
+
+  @override
+  String get phoneStorageDesc =>
+      'عند إعادة اتصال Omi، يتم نقل التسجيلات تلقائيًا إلى هاتفك كمنطقة تخزين مؤقتة قبل الرفع.';
+
+  @override
+  String get cloudStorageDesc => 'بمجرد الرفع، تتم معالجة تسجيلاتك ونسخها. ستكون المحادثات متاحة في غضون دقيقة.';
+
+  @override
+  String get tipKeepPhoneNearby => 'أبقِ هاتفك قريبًا للمزامنة الأسرع';
+
+  @override
+  String get tipStableInternet => 'اتصال إنترنت مستقر يسرّع الرفع السحابي';
+
+  @override
+  String get tipAutoSync => 'التسجيلات تتم مزامنتها تلقائيًا';
+
+  @override
+  String get storageSection => 'التخزين';
 }

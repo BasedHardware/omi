@@ -5,6 +5,7 @@ import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/models/sync_state.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/services/wals/wal.dart';
@@ -367,6 +368,8 @@ class LocalWalSyncImpl implements LocalWalSync {
     int batchesCompleted = 0;
     int batchesFailed = 0;
     int corruptedCount = 0;
+    int filesUploaded = 0;
+    final totalFilesToUpload = wals.length;
 
     var steps = 3;
     for (var i = wals.length - 1; i >= 0; i -= steps) {
@@ -443,7 +446,9 @@ class LocalWalSyncImpl implements LocalWalSync {
         continue;
       }
 
-      progress?.onWalSyncedProgress(1.0 - (left).toDouble() / wals.length);
+      // Report file-count progress
+      progress?.onWalSyncedProgress(filesUploaded / totalFilesToUpload,
+          phase: SyncPhase.uploadingToCloud, currentFile: filesUploaded, totalFiles: totalFilesToUpload);
 
       listener.onWalUpdated();
       try {
@@ -489,8 +494,10 @@ class LocalWalSyncImpl implements LocalWalSync {
             }
           }
         }
+        // Count actual unique synced WALs (batch ranges overlap, so don't accumulate files.length)
+        filesUploaded = wals.where((w) => w.status == WalStatus.synced).length;
       } catch (e) {
-        Logger.debug('Local WAL sync batch failed: $e, continuing with remaining files');
+        print('Local WAL sync batch failed: $e, continuing with remaining files');
         batchesFailed++;
         DebugLogManager.logError(e, null, 'Local upload batch failed: ${e.toString()}', {
           'batchIndex': (wals.length - 1 - i) ~/ steps,
@@ -564,7 +571,7 @@ class LocalWalSyncImpl implements LocalWalSync {
       }
     } catch (e) {
       wal.status = WalStatus.corrupted;
-      Logger.debug(e.toString());
+      print(e.toString());
       DebugLogManager.logError(e, null, 'Single WAL corrupted: unexpected error - ${e.toString()}', {'walId': wal.id});
     }
 

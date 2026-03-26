@@ -27,6 +27,7 @@ import 'package:omi/pages/chat/page.dart';
 import 'package:omi/pages/conversation_capturing/page.dart';
 import 'package:omi/pages/conversation_detail/page.dart';
 import 'package:omi/pages/conversations/conversations_page.dart';
+import 'package:omi/pages/conversations/auto_sync_page.dart';
 import 'package:omi/pages/conversations/sync_page.dart';
 import 'package:omi/pages/conversations/widgets/merge_action_bar.dart';
 import 'package:omi/pages/memories/page.dart';
@@ -429,6 +430,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
     _listenToMessagesFromNotification();
     _listenToFreemiumThreshold();
     _checkForAnnouncements();
+    _registerAutoSyncCallback();
     super.initState();
 
     // After init
@@ -453,6 +455,20 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
 
       // Register callback for device connection to check firmware announcements
       deviceProvider.onDeviceConnected = _onDeviceConnectedForAnnouncements;
+    });
+  }
+
+  void _registerAutoSyncCallback() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final deviceProvider = Provider.of<DeviceProvider>(context, listen: false);
+      final syncProvider = Provider.of<SyncProvider>(context, listen: false);
+      deviceProvider.onOfflineDataDetected = (device, fileCount, totalBytes) {
+        if (!syncProvider.isSyncing) {
+          Logger.debug('HomePage: Auto-sync triggered ($fileCount files, $totalBytes bytes)');
+          syncProvider.syncWals();
+        }
+      };
     });
   }
 
@@ -784,7 +800,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                     return GestureDetector(
                       onTap: () {
                         HapticFeedback.mediumImpact();
-                        Navigator.push(context, MaterialPageRoute(builder: (context) => const SyncPage()));
+                        final page = deviceProvider.supportsMultiFileSync ? const AutoSyncPage() : const SyncPage();
+                        Navigator.push(context, MaterialPageRoute(builder: (context) => page));
                       },
                       child: Container(
                         width: 36,
@@ -1091,6 +1108,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
     try {
       final deviceProvider = Provider.of<DeviceProvider>(context, listen: false);
       deviceProvider.onDeviceConnected = null;
+      deviceProvider.onOfflineDataDetected = null;
     } catch (_) {}
     // Clean up freemium handler
     _freemiumHandler.dispose();

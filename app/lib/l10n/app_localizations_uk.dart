@@ -8660,4 +8660,72 @@ class AppLocalizationsUk extends AppLocalizations {
   String clockSkewWarning(int minutes) {
     return 'Годинник вашого пристрою відрізняється на ~$minutes хв. Перевірте налаштування дати та часу.';
   }
+
+  @override
+  String get omisStorage => 'Сховище Omi';
+
+  @override
+  String get phoneStorage => 'Сховище телефону';
+
+  @override
+  String get cloudStorage => 'Хмарне сховище';
+
+  @override
+  String get howSyncingWorks => 'Як працює синхронізація';
+
+  @override
+  String get noSyncedRecordings => 'Ще немає синхронізованих записів';
+
+  @override
+  String get recordingsSyncAutomatically => 'Записи синхронізуються автоматично — жодних дій не потрібно.';
+
+  @override
+  String get filesDownloadedUploadedNextTime => 'Вже завантажені файли будуть вивантажені наступного разу.';
+
+  @override
+  String nConversationsCreated(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count розмов створено',
+      one: '1 розмову створено',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get tapToView => 'Торкніться для перегляду';
+
+  @override
+  String get syncFailed => 'Помилка синхронізації';
+
+  @override
+  String get keepSyncing => 'Продовжити синхронізацію';
+
+  @override
+  String get cancelSyncQuestion => 'Скасувати синхронізацію?';
+
+  @override
+  String get omisStorageDesc =>
+      'Коли ваш Omi не підключений до телефону, він зберігає аудіо локально у вбудованій пам\'яті. Ви ніколи не втратите запис.';
+
+  @override
+  String get phoneStorageDesc =>
+      'Коли Omi знову підключається, записи автоматично переносяться на телефон перед завантаженням.';
+
+  @override
+  String get cloudStorageDesc =>
+      'Після завантаження ваші записи обробляються та транскрибуються. Розмови будуть доступні протягом хвилини.';
+
+  @override
+  String get tipKeepPhoneNearby => 'Тримайте телефон поруч для швидшої синхронізації';
+
+  @override
+  String get tipStableInternet => 'Стабільний інтернет прискорює завантаження в хмару';
+
+  @override
+  String get tipAutoSync => 'Записи синхронізуються автоматично';
+
+  @override
+  String get storageSection => 'СХОВИЩЕ';
 }
