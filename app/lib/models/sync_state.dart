@@ -45,6 +45,8 @@ class SyncState {
   final SyncMethod? syncMethod; // Current sync method (BLE or WiFi)
   final int? currentFile; // 1-based index of file being transferred
   final int? totalFiles; // Total files to transfer
+  final int? uploadedBytes; // Bytes uploaded to cloud so far
+  final int? totalBytesToUpload; // Total bytes to upload to cloud
 
   const SyncState({
     this.status = SyncStatus.idle,
@@ -57,6 +59,8 @@ class SyncState {
     this.syncMethod,
     this.currentFile,
     this.totalFiles,
+    this.uploadedBytes,
+    this.totalBytesToUpload,
   });
 
   SyncState copyWith({
@@ -71,6 +75,8 @@ class SyncState {
     bool clearSyncMethod = false,
     int? currentFile,
     int? totalFiles,
+    int? uploadedBytes,
+    int? totalBytesToUpload,
   }) {
     return SyncState(
       status: status ?? this.status,
@@ -83,6 +89,8 @@ class SyncState {
       syncMethod: clearSyncMethod ? null : (syncMethod ?? this.syncMethod),
       currentFile: currentFile ?? this.currentFile,
       totalFiles: totalFiles ?? this.totalFiles,
+      uploadedBytes: uploadedBytes,
+      totalBytesToUpload: totalBytesToUpload,
     );
   }
 
@@ -110,6 +118,8 @@ class SyncState {
     SyncPhase? phase,
     int? currentFile,
     int? totalFiles,
+    int? uploadedBytes,
+    int? totalBytesToUpload,
   }) =>
       copyWith(
         status: SyncStatus.syncing,
@@ -120,6 +130,8 @@ class SyncState {
         syncMethod: syncMethod,
         currentFile: currentFile,
         totalFiles: totalFiles,
+        uploadedBytes: uploadedBytes,
+        totalBytesToUpload: totalBytesToUpload,
       );
 
   SyncState toFetchingConversations() => copyWith(status: SyncStatus.fetchingConversations);
