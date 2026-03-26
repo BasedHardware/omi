@@ -1,5 +1,8 @@
-from prometheus_client import Counter, Gauge, generate_latest, CONTENT_TYPE_LATEST
+import threading
+import time
+
 from fastapi import Response
+from prometheus_client import Counter, Gauge, generate_latest, CONTENT_TYPE_LATEST
 
 BACKEND_LISTEN_ACTIVE_WS_CONNECTIONS = Gauge(
     'backend_listen_active_ws_connections',
@@ -31,17 +34,12 @@ DG_KEEPALIVE_FAILURES = Counter(
     'Total Deepgram WebSocket keepalive failures',
 )
 
-DG_CONNECTION_CLOSES = Counter(
-    'dg_connection_closes_total',
-    'Total Deepgram WebSocket connection closes (1011 errors)',
-)
-
 # Rolling window for health check (last 5 minutes)
-import time
-import threading
+
 
 class _FailureTracker:
     """Thread-safe rolling window failure counter for health checks."""
+
     def __init__(self, window_seconds=300):
         self._window = window_seconds
         self._events: list[float] = []
@@ -61,6 +59,7 @@ class _FailureTracker:
         with self._lock:
             self._events = [t for t in self._events if t > cutoff]
             return len(self._events)
+
 
 dg_failure_tracker = _FailureTracker(window_seconds=300)
 
