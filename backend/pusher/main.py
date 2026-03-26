@@ -20,6 +20,14 @@ app = FastAPI()
 app.include_router(pusher.router)
 app.include_router(metrics.router)
 
+
+@app.on_event("startup")
+async def start_deferred_queue_worker():
+    import asyncio
+
+    asyncio.create_task(pusher.deferred_queue_worker())
+
+
 paths = ['_temp', '_samples', '_segments', '_speech_profiles']
 for path in paths:
     if not os.path.exists(path):
