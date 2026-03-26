@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 import os
@@ -23,8 +24,6 @@ app.include_router(metrics.router)
 
 @app.on_event("startup")
 async def start_deferred_queue_worker():
-    import asyncio
-
     asyncio.create_task(pusher.deferred_queue_worker())
 
 
