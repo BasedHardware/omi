@@ -38,10 +38,7 @@ import database.calendar_meetings as calendar_db
 import database.users as user_db
 from database.users import get_user_transcription_preferences
 from database import redis_db
-from database.redis_db import (
-    check_credits_invalidation,
-    get_cached_user_geolocation,
-)
+from database.redis_db import check_credits_invalidation
 from models.conversation import (
     Conversation,
     ConversationPhoto,
@@ -67,10 +64,9 @@ from models.message_event import (
 from models.transcript_segment import Translation
 from models.users import PlanType
 from utils.analytics import record_usage
-from utils.app_integrations import trigger_external_integrations, trigger_realtime_integrations
+from utils.app_integrations import trigger_realtime_integrations
 from utils.apps import is_audio_bytes_app_enabled
-from utils.conversations.location import get_google_maps_location
-from utils.conversations.process_conversation import process_conversation, retrieve_in_progress_conversation
+from utils.conversations.process_conversation import retrieve_in_progress_conversation
 from utils.notifications import send_credit_limit_notification, send_silent_user_notification
 from utils.other import endpoints as auth
 from utils.other.storage import get_profile_audio_if_exists, get_user_has_speech_profile
@@ -147,26 +143,6 @@ PUSHER_MAX_RECONNECT_ATTEMPTS = 6
 PUSHER_DEGRADED_COOLDOWN = 60.0  # seconds before probing from DEGRADED
 PUSHER_RECONNECT_BASE_DELAY = 1.0  # seconds
 PUSHER_RECONNECT_MAX_DELAY = 60.0  # seconds
-
-# Conversation fallback: cap concurrent heavy processing on the listen event loop (#6061)
-FALLBACK_PROCESS_MAX_CONCURRENCY = max(1, int(os.getenv("FALLBACK_PROCESS_MAX_CONCURRENCY", "2")))
-FALLBACK_PROCESS_SEMAPHORE = asyncio.Semaphore(FALLBACK_PROCESS_MAX_CONCURRENCY)
-
-
-def _process_fallback_sync(uid: str, language: str, conversation, session_id: str):
-    """Run heavy conversation processing in a thread — must never run on the event loop.
-
-    Called via asyncio.to_thread() from _create_conversation_fallback().
-    """
-    geolocation = get_cached_user_geolocation(uid)
-    if geolocation:
-        geo = Geolocation(**geolocation)
-        conversation.geolocation = get_google_maps_location(geo.latitude, geo.longitude)
-
-    conversation = process_conversation(uid, language, conversation)
-    messages = trigger_external_integrations(uid, conversation)
-    return conversation, messages
-
 
 # ---- Multi-channel support ----
 
@@ -725,27 +701,14 @@ async def _stream_handler(
             conversation = Conversation(**conversation_data)
             _send_message_event(ConversationEvent(event_type="memory_processing_started", memory=conversation))
 
-    # Fallback for when pusher is not available
-    # Heavy work runs in a thread to avoid blocking the event loop (#6061)
-    async def _create_conversation_fallback(conversation_data: dict):
-        conversation = Conversation(**conversation_data)
-        if conversation.status != ConversationStatus.processing:
-            _send_message_event(ConversationEvent(event_type="memory_processing_started", memory=conversation))
-            conversations_db.update_conversation_status(uid, conversation.id, ConversationStatus.processing)
-            conversation.status = ConversationStatus.processing
-
-        try:
-            async with FALLBACK_PROCESS_SEMAPHORE:
-                conversation, messages = await asyncio.to_thread(
-                    _process_fallback_sync, uid, language, conversation, session_id
-                )
-        except Exception as e:
-            logger.error(f"Error processing conversation: {e} {uid} {session_id}")
-            conversations_db.set_conversation_as_discarded(uid, conversation.id)
-            conversation.discarded = True
-            messages = []
-
-        _send_message_event(ConversationEvent(event_type="memory_created", memory=conversation, messages=messages))
+    # Deferred processing: enqueue to Redis for pusher to drain (#6061)
+    # No heavy work on the listen event loop — pusher handles all processing.
+    def _enqueue_conversation_for_deferred_processing(conversation_id: str):
+        enqueued = redis_db.enqueue_deferred_conversation(uid, conversation_id, language)
+        if enqueued:
+            logger.info(f"Enqueued conversation {conversation_id} for deferred processing {uid} {session_id}")
+        else:
+            logger.info(f"Conversation {conversation_id} already queued for deferred processing {uid} {session_id}")
 
     async def cleanup_processing_conversations():
         processing = conversations_db.get_processing_conversations(uid)
@@ -757,9 +720,9 @@ async def _stream_handler(
             if PUSHER_ENABLED and pusher_is_connected is not None and pusher_is_connected():
                 await request_conversation_processing(conversation['id'])
             elif PUSHER_ENABLED and pusher_is_degraded is not None and pusher_is_degraded():
-                await _create_conversation_fallback(conversation)
+                _enqueue_conversation_for_deferred_processing(conversation['id'])
             elif not PUSHER_ENABLED:
-                await _create_conversation_fallback(conversation)
+                _enqueue_conversation_for_deferred_processing(conversation['id'])
             else:
                 # PUSHER_ENABLED but handler not yet initialized — try pusher
                 await request_conversation_processing(conversation['id'])
@@ -855,17 +818,17 @@ async def _stream_handler(
         if conversation:
             has_content = conversation.get('transcript_segments') or conversation.get('photos')
             if has_content:
-                # Use pusher if enabled AND connected, otherwise fallback
+                # Use pusher if enabled AND connected, otherwise enqueue for deferred processing
                 if PUSHER_ENABLED and pusher_is_connected is not None and pusher_is_connected():
                     on_conversation_processing_started(conversation_id)
                     await request_conversation_processing(conversation_id)
                 elif PUSHER_ENABLED and pusher_is_degraded is not None and pusher_is_degraded():
                     logger.info(
-                        f"Pusher degraded, using fallback for conversation {conversation_id} {uid} {session_id}"
+                        f"Pusher degraded, enqueueing conversation {conversation_id} for deferred processing {uid} {session_id}"
                     )
-                    await _create_conversation_fallback(conversation)
+                    _enqueue_conversation_for_deferred_processing(conversation_id)
                 elif not PUSHER_ENABLED:
-                    await _create_conversation_fallback(conversation)
+                    _enqueue_conversation_for_deferred_processing(conversation_id)
                 else:
                     # PUSHER_ENABLED but handler not yet initialized — try pusher
                     on_conversation_processing_started(conversation_id)
@@ -1455,7 +1418,7 @@ async def _stream_handler(
                         )
                         # Route to fallback if in degraded mode
                         if reconnect_state == PusherReconnectState.DEGRADED:
-                            await _fallback_process_conversation(cid)
+                            _fallback_enqueue_conversation(cid)
                         pending_conversation_requests.pop(cid, None)
                         continue
                     info['retries'] += 1
@@ -1481,19 +1444,19 @@ async def _stream_handler(
             if reconnect_task is None or reconnect_task.done():
                 reconnect_task = asyncio.create_task(_pusher_reconnect_loop())
 
-        async def _fallback_process_conversation(conversation_id: str):
-            """Route conversation to fallback processing (degraded mode)."""
+        def _fallback_enqueue_conversation(conversation_id: str):
+            """Enqueue conversation for deferred processing (degraded mode)."""
             nonlocal fallback_processed_ids
             if conversation_id in fallback_processed_ids:
                 logger.info(
-                    f"Conversation {conversation_id} already processed via fallback, skipping {uid} {session_id}"
+                    f"Conversation {conversation_id} already enqueued via fallback, skipping {uid} {session_id}"
                 )
                 return
-            conversation_data = conversations_db.get_conversation(uid, conversation_id)
-            if conversation_data:
-                fallback_processed_ids.add(conversation_id)
-                logger.info(f"Routing conversation {conversation_id} to fallback (degraded mode) {uid} {session_id}")
-                await _create_conversation_fallback(conversation_data)
+            fallback_processed_ids.add(conversation_id)
+            logger.info(
+                f"Enqueueing conversation {conversation_id} for deferred processing (degraded) {uid} {session_id}"
+            )
+            _enqueue_conversation_for_deferred_processing(conversation_id)
 
         async def _pusher_reconnect_loop():
             """Single reconnect loop per session — replaces 3 scattered auto-reconnect calls.
@@ -1519,7 +1482,7 @@ async def _stream_handler(
                             # Route pending conversations to fallback (pop each to avoid race)
                             for cid in list(pending_conversation_requests.keys()):
                                 pending_conversation_requests.pop(cid, None)
-                                await _fallback_process_conversation(cid)
+                                _fallback_enqueue_conversation(cid)
                             continue
 
                         # Exponential backoff: 1s, 2s, 4s, 8s, 16s, 32s (capped at 60s)
@@ -1553,7 +1516,7 @@ async def _stream_handler(
                             logger.warning(f"Circuit breaker open, skipping to DEGRADED {uid} {session_id}")
                             for cid in list(pending_conversation_requests.keys()):
                                 pending_conversation_requests.pop(cid, None)
-                                await _fallback_process_conversation(cid)
+                                _fallback_enqueue_conversation(cid)
                             continue
                         except Exception:
                             pass  # _connect already logged the error
