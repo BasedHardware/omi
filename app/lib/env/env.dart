@@ -23,11 +23,8 @@ abstract class Env {
   // static String? get apiBaseUrl => 'https://omi-backend.ngrok.app/';
   static String? get apiBaseUrl => _apiBaseUrlOverride ?? _instance.apiBaseUrl;
 
-  static String get stagingApiUrl {
-    final url = _instance.stagingApiUrl;
-    if (url != null && url.isNotEmpty) return url;
-    return 'https://api.omiapi.com/';
-  }
+  /// Hardcoded staging URL — not derived from env var to prevent dev misconfiguration.
+  static String get stagingApiUrl => 'https://api.omiapi.com/';
 
   static bool get isUsingStagingApi {
     final effective = apiBaseUrl;
