@@ -1,6 +1,7 @@
 import asyncio
 import os
 import random
+import threading
 import time
 from enum import Enum
 from typing import Callable, List, Optional
@@ -199,6 +200,87 @@ deepgram_nova3_languages = {
 
 # Supported values: soniox-stt-rt,dg-nova-3,dg-nova-2
 stt_service_models = os.getenv('STT_SERVICE_MODELS', 'dg-nova-3').split(',')
+
+
+class DeepgramCircuitBreaker:
+    """Pod-level circuit breaker for Deepgram connection failures."""
+
+    def __init__(self, failure_threshold: int = 3, reset_timeout_seconds: float = 30.0):
+        self.failure_threshold = max(1, failure_threshold)
+        self.reset_timeout_seconds = max(1.0, reset_timeout_seconds)
+        self._state = "closed"
+        self._consecutive_failures = 0
+        self._opened_at_monotonic: Optional[float] = None
+        self._lock = threading.Lock()
+
+    def allow_request(self) -> bool:
+        with self._lock:
+            if self._state != "open":
+                return True
+
+            now = time.monotonic()
+            if self._opened_at_monotonic is None:
+                self._state = "closed"
+                self._consecutive_failures = 0
+                return True
+
+            if now - self._opened_at_monotonic >= self.reset_timeout_seconds:
+                self._state = "closed"
+                self._consecutive_failures = 0
+                self._opened_at_monotonic = None
+                logger.info("DeepgramCircuitBreaker moved to CLOSED after timeout")
+                return True
+
+            return False
+
+    def record_success(self):
+        with self._lock:
+            if self._state == "open" or self._consecutive_failures > 0:
+                logger.info("DeepgramCircuitBreaker recorded success and reset to CLOSED")
+            self._state = "closed"
+            self._consecutive_failures = 0
+            self._opened_at_monotonic = None
+
+    def record_failure(self, error: Optional[Exception] = None):
+        with self._lock:
+            self._consecutive_failures += 1
+            if self._consecutive_failures >= self.failure_threshold:
+                self._state = "open"
+                self._opened_at_monotonic = time.monotonic()
+                logger.warning(
+                    "DeepgramCircuitBreaker moved to OPEN after %s failures. error=%s",
+                    self._consecutive_failures,
+                    error,
+                )
+
+    def is_open(self) -> bool:
+        with self._lock:
+            return self._state == "open"
+
+    def snapshot(self) -> dict:
+        with self._lock:
+            return {
+                "state": self._state,
+                "consecutive_failures": self._consecutive_failures,
+                "failure_threshold": self.failure_threshold,
+                "reset_timeout_seconds": self.reset_timeout_seconds,
+            }
+
+    def reset(self):
+        with self._lock:
+            self._state = "closed"
+            self._consecutive_failures = 0
+            self._opened_at_monotonic = None
+
+
+deepgram_circuit_breaker = DeepgramCircuitBreaker(
+    failure_threshold=int(os.getenv('DEEPGRAM_CB_FAILURE_THRESHOLD', '3')),
+    reset_timeout_seconds=float(os.getenv('DEEPGRAM_CB_RESET_TIMEOUT_SECONDS', '30')),
+)
+
+
+def get_deepgram_circuit_breaker() -> DeepgramCircuitBreaker:
+    return deepgram_circuit_breaker
 
 
 def get_stt_service_for_language(language: str, multi_lang_enabled: bool = True):
@@ -416,14 +498,21 @@ async def connect_to_deepgram_with_backoff(
     is_active: Optional[Callable[[], bool]] = None,
 ):
     logger.info("connect_to_deepgram_with_backoff")
+    if not deepgram_circuit_breaker.allow_request():
+        logger.warning("Deepgram circuit breaker OPEN, skipping connect attempt")
+        return None
+
     for attempt in range(retries):
         if is_active is not None and not is_active():
             logger.warning("Session ended, aborting Deepgram retry")
             return None
         try:
-            return connect_to_deepgram(on_message, on_error, language, sample_rate, channels, model, keywords)
+            dg_connection = connect_to_deepgram(on_message, on_error, language, sample_rate, channels, model, keywords)
+            deepgram_circuit_breaker.record_success()
+            return dg_connection
         except Exception as error:
             logger.error(f'An error occurred: {error}')
+            deepgram_circuit_breaker.record_failure(error)
             if attempt == retries - 1:  # Last attempt
                 raise
         backoff_delay = calculate_backoff_with_jitter(attempt)
