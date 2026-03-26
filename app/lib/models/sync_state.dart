@@ -43,6 +43,8 @@ class SyncState {
   final List<SyncedConversationPointer> syncedConversations;
   final double? speedKBps; // Download speed in KB/s
   final SyncMethod? syncMethod; // Current sync method (BLE or WiFi)
+  final int? currentFile; // 1-based index of file being transferred
+  final int? totalFiles; // Total files to transfer
 
   const SyncState({
     this.status = SyncStatus.idle,
@@ -53,6 +55,8 @@ class SyncState {
     this.syncedConversations = const [],
     this.speedKBps,
     this.syncMethod,
+    this.currentFile,
+    this.totalFiles,
   });
 
   SyncState copyWith({
@@ -65,6 +69,8 @@ class SyncState {
     double? speedKBps,
     SyncMethod? syncMethod,
     bool clearSyncMethod = false,
+    int? currentFile,
+    int? totalFiles,
   }) {
     return SyncState(
       status: status ?? this.status,
@@ -75,6 +81,8 @@ class SyncState {
       syncedConversations: syncedConversations ?? this.syncedConversations,
       speedKBps: speedKBps,
       syncMethod: clearSyncMethod ? null : (syncMethod ?? this.syncMethod),
+      currentFile: currentFile ?? this.currentFile,
+      totalFiles: totalFiles ?? this.totalFiles,
     );
   }
 
@@ -86,23 +94,33 @@ class SyncState {
   bool get isProcessing => isSyncing || isFetchingConversations;
 
   SyncState toIdle() => copyWith(
-    status: SyncStatus.idle,
-    phase: SyncPhase.idle,
-    progress: 0.0,
-    errorMessage: null,
-    failedWal: null,
-    syncedConversations: [],
-    clearSyncMethod: true,
-  );
+        status: SyncStatus.idle,
+        phase: SyncPhase.idle,
+        progress: 0.0,
+        errorMessage: null,
+        failedWal: null,
+        syncedConversations: [],
+        clearSyncMethod: true,
+      );
 
-  SyncState toSyncing({double progress = 0.0, double? speedKBps, SyncMethod? syncMethod, SyncPhase? phase}) => copyWith(
-    status: SyncStatus.syncing,
-    phase: phase,
-    progress: progress,
-    errorMessage: null,
-    speedKBps: speedKBps,
-    syncMethod: syncMethod,
-  );
+  SyncState toSyncing({
+    double progress = 0.0,
+    double? speedKBps,
+    SyncMethod? syncMethod,
+    SyncPhase? phase,
+    int? currentFile,
+    int? totalFiles,
+  }) =>
+      copyWith(
+        status: SyncStatus.syncing,
+        phase: phase,
+        progress: progress,
+        errorMessage: null,
+        speedKBps: speedKBps,
+        syncMethod: syncMethod,
+        currentFile: currentFile,
+        totalFiles: totalFiles,
+      );
 
   SyncState toFetchingConversations() => copyWith(status: SyncStatus.fetchingConversations);
 
