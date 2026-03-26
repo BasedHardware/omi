@@ -48,6 +48,10 @@ def test_metric_dec_on_early_return_unsupported_language():
     source = _read_transcribe_source()
     lang_pos = source.find('The language is not supported')
     assert lang_pos > 0
-    dec_before = source.rfind('BACKEND_LISTEN_ACTIVE_WS_CONNECTIONS.dec()', 0, lang_pos)
-    inc_pos = source.find('BACKEND_LISTEN_ACTIVE_WS_CONNECTIONS.inc()')
-    assert dec_before > inc_pos, "dec() must appear between inc() and language early return"
+    # Search for dec() only after the bad-uid block to avoid matching bad-uid's dec()
+    bad_uid_return_pos = source.find('reason="Bad uid"')
+    assert bad_uid_return_pos > 0
+    dec_after_bad_uid = source.find('BACKEND_LISTEN_ACTIVE_WS_CONNECTIONS.dec()', bad_uid_return_pos)
+    assert (
+        dec_after_bad_uid > 0 and dec_after_bad_uid < lang_pos
+    ), "dec() must appear between bad-uid block and language early return"
