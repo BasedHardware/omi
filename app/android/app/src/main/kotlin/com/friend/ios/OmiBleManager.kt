@@ -211,6 +211,7 @@ class OmiBleManager private constructor(private val application: Application) {
         appClosed = false
         manuallyDisconnected.remove(addr)
         reconnectRetryCount[addr] = 0
+        cancelPendingReconnect()
 
         connectedGatts[addr]?.let { gatt ->
             if (bluetoothManager.getConnectionState(gatt.device, BluetoothProfile.GATT) == BluetoothProfile.STATE_CONNECTED) {
@@ -282,6 +283,7 @@ class OmiBleManager private constructor(private val application: Application) {
         val addr = address.uppercase()
         appClosed = false
         reconnectRetryCount[addr] = 0
+        cancelPendingReconnect()
 
         if (isPeripheralConnected(addr)) {
             Log.i(TAG, "reconnectKnownPeripheral: $addr already connected, notifying Dart")
