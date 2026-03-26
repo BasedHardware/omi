@@ -396,9 +396,11 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
   }
 
   @override
-  void onWalSyncedProgress(double percentage, {double? speedKBps, SyncPhase? phase}) {
+  void onWalSyncedProgress(double percentage,
+      {double? speedKBps, SyncPhase? phase, int? currentFile, int? totalFiles}) {
     if (_syncState.isSyncing) {
-      _updateSyncState(_syncState.toSyncing(progress: percentage, speedKBps: speedKBps, phase: phase));
+      _updateSyncState(_syncState.toSyncing(
+          progress: percentage, speedKBps: speedKBps, phase: phase, currentFile: currentFile, totalFiles: totalFiles));
     }
   }
 
