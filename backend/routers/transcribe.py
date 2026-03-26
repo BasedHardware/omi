@@ -80,6 +80,8 @@ from utils.stt.streaming import (
     SPEECH_PROFILE_PADDING_DURATION,
     SPEECH_PROFILE_STABILIZE_DELAY,
     STTService,
+    calculate_backoff_with_jitter,
+    get_deepgram_circuit_breaker,
     get_stt_service_for_language,
     process_audio_dg,
     process_audio_soniox,
@@ -818,11 +820,119 @@ async def _stream_handler(
     speech_profile_complete = asyncio.Event()  # Signals when speech profile send is done
 
     vad_gate = None
+    deepgram_recovery_task: Optional[asyncio.Task] = None
+    stt_degraded = False
 
     def stream_transcript(segments):
         nonlocal realtime_segment_buffers
         # Note: DG timestamp remapping is handled inside GatedDeepgramSocket wrapper
         realtime_segment_buffers.extend(segments)
+
+    def make_multi_channel_callback(cfg: ChannelConfig):
+        def cb(segments):
+            for seg in segments:
+                seg['is_user'] = cfg.is_user
+                seg['speaker'] = cfg.speaker_label
+            realtime_segment_buffers.extend(segments)
+
+        return cb
+
+    def _send_stt_degraded_event(reason: str):
+        nonlocal stt_degraded
+        if stt_degraded:
+            return
+        stt_degraded = True
+        _send_message_event(MessageServiceStatusEvent(status="stt_degraded", status_text=reason))
+
+    def _send_stt_recovered_event():
+        nonlocal stt_degraded
+        if not stt_degraded:
+            return
+        stt_degraded = False
+        _send_message_event(MessageServiceStatusEvent(status="stt_recovered", status_text="STT Service Restored"))
+
+    async def _recover_deepgram_connection():
+        nonlocal deepgram_socket
+        nonlocal deepgram_recovery_task
+        nonlocal deepgram_profile_socket
+        attempt = 0
+
+        while websocket_active and stt_service == STTService.deepgram:
+            if is_multi_channel:
+                missing_indices = [i for i, sock in enumerate(stt_sockets_multi) if sock is None]
+                if len(missing_indices) == 0:
+                    _send_stt_recovered_event()
+                    return
+            elif deepgram_socket is not None:
+                _send_stt_recovered_event()
+                return
+
+            attempt += 1
+            if attempt > 1:
+                backoff_delay = calculate_backoff_with_jitter(attempt - 1)
+                await asyncio.sleep(backoff_delay / 1000.0)
+
+            try:
+                if is_multi_channel:
+                    for i in [idx for idx, sock in enumerate(stt_sockets_multi) if sock is None]:
+                        callback = make_multi_channel_callback(channel_configs[i])
+                        stt_sockets_multi[i] = await process_audio_dg(
+                            callback,
+                            stt_language,
+                            TARGET_SAMPLE_RATE,
+                            1,
+                            preseconds=0,
+                            model=stt_model,
+                            is_active=lambda: websocket_active,
+                        )
+                    if all(sock is not None for sock in stt_sockets_multi):
+                        logger.info(f"Recovered all multi-channel Deepgram sockets {uid} {session_id}")
+                        _send_stt_recovered_event()
+                        return
+                else:
+                    deepgram_socket = await process_audio_dg(
+                        stream_transcript,
+                        stt_language,
+                        sample_rate,
+                        1,
+                        preseconds=0,
+                        model=stt_model,
+                        keywords=vocabulary[:100] if vocabulary else None,
+                        vad_gate=vad_gate,
+                        is_active=lambda: websocket_active,
+                    )
+                    if deepgram_socket is not None:
+                        # Recovery path does not re-run speech profile bootstrap.
+                        deepgram_profile_socket = None
+                        speech_profile_complete.set()
+                        logger.info(f"Recovered Deepgram socket {uid} {session_id}")
+                        _send_stt_recovered_event()
+                        return
+            except Exception as e:
+                logger.error(f"Deepgram recovery attempt failed: {e} {uid} {session_id}")
+
+        deepgram_recovery_task = None
+
+    async def _enter_degraded_mode(reason: str):
+        nonlocal deepgram_recovery_task
+        nonlocal deepgram_profile_socket
+
+        cb = get_deepgram_circuit_breaker()
+        if cb.is_open():
+            logger.warning(f"Deepgram circuit breaker OPEN {cb.snapshot()} {uid} {session_id}")
+
+        _send_stt_degraded_event(reason)
+        speech_profile_complete.set()
+
+        if deepgram_profile_socket is not None:
+            try:
+                deepgram_profile_socket.finish()
+            except Exception as e:
+                logger.error(f"Error finishing Deepgram profile socket in degraded mode: {e} {uid} {session_id}")
+            deepgram_profile_socket = None
+
+        if deepgram_recovery_task is None or deepgram_recovery_task.done():
+            deepgram_recovery_task = spawn(_recover_deepgram_connection())
 
     async def _process_stt():
         nonlocal websocket_close_code
@@ -841,16 +951,6 @@ async def _stream_handler(
                 speech_profile_complete.set()  # No speech profile for multi-channel
                 # Create one STT connection per channel
                 for i, ch_config in enumerate(channel_configs):
-
-                    def make_multi_channel_callback(cfg):
-                        def cb(segments):
-                            for seg in segments:
-                                seg['is_user'] = cfg.is_user
-                                seg['speaker'] = cfg.speaker_label
-                            realtime_segment_buffers.extend(segments)
-
-                        return cb
-
                     callback = make_multi_channel_callback(ch_config)
                     if stt_service == STTService.deepgram:
                         stt_sockets_multi[i] = await process_audio_dg(
@@ -870,6 +970,8 @@ async def _stream_handler(
                         stt_sockets_multi[i] = await process_audio_speechmatics(
                             callback, TARGET_SAMPLE_RATE, stt_language, preseconds=0
                         )
+                if stt_service == STTService.deepgram and any(sock is None for sock in stt_sockets_multi):
+                    await _enter_degraded_mode("STT degraded: reconnecting to Deepgram")
                 logger.info(
                     f"Multi-channel STT connections established ({len(channel_configs)} channels) {uid} {session_id}"
                 )
@@ -943,16 +1045,26 @@ async def _stream_handler(
                     vad_gate=vad_gate,
                     is_active=lambda: websocket_active,
                 )
+                if deepgram_socket is None:
+                    await _enter_degraded_mode("STT degraded: reconnecting to Deepgram")
+                    return None
                 if has_speech_profile:
-                    deepgram_profile_socket = await process_audio_dg(
-                        stream_transcript,
-                        stt_language,
-                        sample_rate,
-                        1,
-                        model=stt_model,
-                        keywords=vocabulary[:100] if vocabulary else None,
-                        is_active=lambda: websocket_active,
-                    )
+                    try:
+                        deepgram_profile_socket = await process_audio_dg(
+                            stream_transcript,
+                            stt_language,
+                            sample_rate,
+                            1,
+                            model=stt_model,
+                            keywords=vocabulary[:100] if vocabulary else None,
+                            is_active=lambda: websocket_active,
+                        )
+                    except Exception as e:
+                        deepgram_profile_socket = None
+                        speech_profile_complete.set()
+                        logger.error(
+                            f"Deepgram speech profile socket init failed, continuing without profile: {e} {uid} {session_id}"
+                        )
 
             # SONIOX
             elif stt_service == STTService.soniox:
@@ -994,6 +1106,9 @@ async def _stream_handler(
 
         except Exception as e:
             logger.error(f"Initial processing error: {e} {uid} {session_id}")
+            if stt_service == STTService.deepgram:
+                await _enter_degraded_mode("STT degraded: reconnecting to Deepgram")
+                return None
             websocket_close_code = 1011
             await websocket.close(code=websocket_close_code)
             return None
@@ -2183,10 +2298,11 @@ async def _stream_handler(
     elif codec == 'lc3':
         lc3_decoder = lc3.Decoder(lc3_frame_duration_us, sample_rate)
 
-    async def receive_data(dg_socket, dg_profile_socket, soniox_sock, soniox_profile_sock, speechmatics_sock):
+    async def receive_data():
         nonlocal websocket_active, websocket_close_code, last_audio_received_time, last_activity_time, current_conversation_id
         nonlocal realtime_photo_buffers, speaker_to_person_map, first_audio_byte_timestamp, last_usage_record_timestamp
-        nonlocal soniox_profile_socket, deepgram_profile_socket, audio_ring_buffer
+        nonlocal soniox_socket, soniox_profile_socket, speechmatics_socket
+        nonlocal deepgram_socket, deepgram_profile_socket, audio_ring_buffer
         timer_start = time.time()
         last_audio_received_time = timer_start
         last_activity_time = timer_start
@@ -2209,9 +2325,14 @@ async def _stream_handler(
             # Use event-based routing instead of time-based
             profile_complete = speech_profile_complete.is_set()
 
-            if dg_socket is not None:
+            if deepgram_socket is not None:
                 if profile_complete or not deepgram_profile_socket:
-                    dg_socket.send(chunk)
+                    try:
+                        deepgram_socket.send(chunk)
+                    except Exception as e:
+                        logger.error(f"Deepgram send failed, entering degraded mode: {e} {uid} {session_id}")
+                        deepgram_socket = None
+                        await _enter_degraded_mode("STT degraded: reconnecting to Deepgram")
                     if deepgram_profile_socket:
                         logger.info(f'Scheduling delayed close of deepgram_profile_socket {uid} {session_id}')
                         socket_to_close = deepgram_profile_socket
@@ -2233,11 +2354,18 @@ async def _stream_handler(
 
                         spawn(close_dg_profile())
                 else:
-                    deepgram_profile_socket.send(chunk)
+                    try:
+                        deepgram_profile_socket.send(chunk)
+                    except Exception as e:
+                        logger.error(
+                            f"Deepgram profile socket send failed, degrading to main reconnect path: {e} {uid} {session_id}"
+                        )
+                        deepgram_profile_socket = None
+                        await _enter_degraded_mode("STT degraded: reconnecting to Deepgram")
 
-            if soniox_sock is not None:
+            if soniox_socket is not None:
                 if profile_complete or not soniox_profile_socket:
-                    await soniox_sock.send(chunk)
+                    await soniox_socket.send(chunk)
                     if soniox_profile_socket:
                         logger.info(f'Scheduling delayed close of soniox_profile_socket {uid} {session_id}')
                         socket_to_close = soniox_profile_socket
@@ -2252,8 +2380,8 @@ async def _stream_handler(
                 else:
                     await soniox_profile_socket.send(chunk)
 
-            if speechmatics_sock is not None:
-                await speechmatics_sock.send(chunk)
+            if speechmatics_socket is not None:
+                await speechmatics_socket.send(chunk)
 
         try:
             while websocket_active:
@@ -2314,6 +2442,9 @@ async def _stream_handler(
                                     await stt_sockets_multi[ch_idx].send(pcm_16k)
                             except Exception as e:
                                 logger.error(f"[MC-STT] ch={ch_idx} send error: {e} {uid} {session_id}")
+                                if stt_service == STTService.deepgram:
+                                    stt_sockets_multi[ch_idx] = None
+                                    await _enter_degraded_mode("STT degraded: reconnecting to Deepgram")
 
                         # Accumulate per-channel audio for mixing before sending to pusher
                         channel_mix_buffers[ch_idx].extend(pcm_16k)
@@ -2507,11 +2638,7 @@ async def _stream_handler(
             pusher_tasks.append(asyncio.create_task(pusher_heartbeat()))
 
         # Tasks
-        data_process_task = asyncio.create_task(
-            receive_data(
-                deepgram_socket, deepgram_profile_socket, soniox_socket, soniox_profile_socket, speechmatics_socket
-            )
-        )
+        data_process_task = asyncio.create_task(receive_data())
         stream_transcript_task = asyncio.create_task(stream_transcript_process())
         record_usage_task = asyncio.create_task(_record_usage_periodically())
 
