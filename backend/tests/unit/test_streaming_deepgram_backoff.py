@@ -354,3 +354,100 @@ async def test_circuit_breaker_allows_connect_after_timeout_window():
 
     assert result is mock_conn
     assert cb.is_open() is False
+
+
+@pytest.mark.asyncio
+async def test_circuit_breaker_threshold_1_full_connect_path():
+    """CB with threshold=1 opens after single failed connect_to_deepgram_with_backoff call."""
+    cb = get_deepgram_circuit_breaker()
+    cb.failure_threshold = 1
+
+    async def fake_sleep(duration):
+        pass
+
+    with patch('utils.stt.streaming.connect_to_deepgram', side_effect=Exception("single failure")), patch(
+        'utils.stt.streaming.asyncio.sleep', side_effect=fake_sleep
+    ):
+        with pytest.raises(Exception, match="single failure"):
+            await connect_to_deepgram_with_backoff(
+                on_message=MagicMock(),
+                on_error=MagicMock(),
+                language='en',
+                sample_rate=16000,
+                channels=1,
+                model='nova-2-general',
+                retries=1,
+            )
+
+    assert cb.is_open() is True
+    # Subsequent call should be fast-failed (None)
+    with patch('utils.stt.streaming.connect_to_deepgram') as mock_connect:
+        result = await connect_to_deepgram_with_backoff(
+            on_message=MagicMock(),
+            on_error=MagicMock(),
+            language='en',
+            sample_rate=16000,
+            channels=1,
+            model='nova-2-general',
+            retries=1,
+        )
+    assert result is None
+    mock_connect.assert_not_called()
+
+
+def test_circuit_breaker_timeout_exact_edge():
+    """CB stays open at exactly reset_timeout - epsilon, allows at exactly reset_timeout."""
+    cb = get_deepgram_circuit_breaker()
+    cb.failure_threshold = 1
+    cb.reset_timeout_seconds = 10.0
+    cb.record_failure(Exception("open"))
+
+    # Just under the timeout: still open
+    cb._opened_at_monotonic = time.monotonic() - 9.999
+    assert cb.allow_request() is False
+
+    # Exactly at the timeout: should allow
+    cb._opened_at_monotonic = time.monotonic() - 10.0
+    assert cb.allow_request() is True
+
+
+def test_circuit_breaker_concurrent_access():
+    """CB handles concurrent record_failure/allow_request without corruption."""
+    import threading
+
+    cb = get_deepgram_circuit_breaker()
+    cb.failure_threshold = 5
+    cb.reset_timeout_seconds = 60.0
+    cb.reset()
+
+    errors = []
+
+    def hammer_failures():
+        try:
+            for _ in range(100):
+                cb.record_failure(Exception("concurrent"))
+                cb.allow_request()
+        except Exception as e:
+            errors.append(e)
+
+    def hammer_successes():
+        try:
+            for _ in range(100):
+                cb.record_success()
+                cb.allow_request()
+        except Exception as e:
+            errors.append(e)
+
+    threads = []
+    for _ in range(5):
+        threads.append(threading.Thread(target=hammer_failures))
+        threads.append(threading.Thread(target=hammer_successes))
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    assert len(errors) == 0
+    # CB should be in a valid state (either open or closed)
+    snapshot = cb.snapshot()
+    assert snapshot['state'] in ('closed', 'open')
