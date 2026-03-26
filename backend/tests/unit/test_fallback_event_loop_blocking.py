@@ -138,8 +138,8 @@ def test_redis_queue_key_defined():
     assert redis_db.DEFERRED_CONVERSATION_PROCESSING_KEY == 'deferred_conversations_processing'
 
 
-def test_enqueue_uses_pipeline_for_atomicity():
-    """enqueue_deferred_conversation must use a Redis pipeline for atomic dedup+push."""
+def test_enqueue_uses_lua_for_atomicity():
+    """enqueue_deferred_conversation must use a Lua script for atomic dedup+push."""
     import pathlib
 
     src = pathlib.Path(__file__).resolve().parents[2] / 'database' / 'redis_db.py'
@@ -148,7 +148,17 @@ def test_enqueue_uses_pipeline_for_atomicity():
     assert pos > 0
     next_func = source.find('\ndef ', pos + 1)
     func_body = source[pos:next_func] if next_func > 0 else source[pos : pos + 1000]
-    assert 'pipeline' in func_body, "enqueue must use a Redis pipeline for atomic dedup+push"
+    assert 'eval' in func_body, "enqueue must use r.eval (Lua script) for atomic dedup+push"
+
+
+def test_enqueue_lua_script_defined():
+    """_ENQUEUE_LUA must be defined with SET NX + RPUSH logic."""
+    import pathlib
+
+    src = pathlib.Path(__file__).resolve().parents[2] / 'database' / 'redis_db.py'
+    source = src.read_text()
+    assert '_ENQUEUE_LUA' in source
+    assert 'SET' in source and 'NX' in source and 'RPUSH' in source
 
 
 def test_dequeue_uses_lmove():
@@ -162,6 +172,19 @@ def test_dequeue_uses_lmove():
     next_func = source.find('\ndef ', pos + 1)
     func_body = source[pos:next_func] if next_func > 0 else source[pos : pos + 500]
     assert 'lmove' in func_body, "dequeue must use LMOVE (atomic pop+push to processing list)"
+
+
+def test_recover_uses_lua_for_atomicity():
+    """recover_deferred_processing must use Lua for atomic LPOP+RPUSH."""
+    import pathlib
+
+    src = pathlib.Path(__file__).resolve().parents[2] / 'database' / 'redis_db.py'
+    source = src.read_text()
+    pos = source.find('def recover_deferred_processing')
+    assert pos > 0
+    next_func = source.find('\ndef ', pos + 1)
+    func_body = source[pos:next_func] if next_func > 0 else source[pos : pos + 500]
+    assert 'eval' in func_body, "recover must use r.eval (Lua script) for atomic LPOP+RPUSH"
 
 
 # ---------------------------------------------------------------------------
