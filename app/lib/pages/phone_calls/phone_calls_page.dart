@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_contacts/flutter_contacts.dart';
 import 'package:permission_handler/permission_handler.dart';
-import 'package:intl_phone_field/countries.dart';
+import 'package:intl_country_data/intl_country_data.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/pages/phone_calls/active_call_page.dart';
@@ -398,11 +398,12 @@ class _PhoneCallsPageState extends State<PhoneCallsPage> with SingleTickerProvid
   String? _extractCountryCode(String e164Number) {
     if (!e164Number.startsWith('+')) return null;
     var digits = e164Number.substring(1); // strip '+'
+    var allCountries = IntlCountryData.all();
     // Try longest match first (country codes are 1-3 digits)
     for (var len = 3; len >= 1; len--) {
       if (digits.length <= len) continue;
       var candidate = digits.substring(0, len);
-      if (countries.any((c) => c.fullCountryCode == candidate)) {
+      if (allCountries.any((c) => c.telephoneCode == candidate)) {
         return '+$candidate';
       }
     }
