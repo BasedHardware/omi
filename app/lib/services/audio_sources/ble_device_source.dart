@@ -40,7 +40,7 @@ class BleDeviceSource implements AudioSource {
 
   @override
   List<int> getSocketPayload(List<int> rawBytes) {
-    return rawBytes.length > headerSize ? rawBytes.sublist(headerSize) : rawBytes;
+    return rawBytes.length > headerSize ? rawBytes.sublist(headerSize) : const [];
   }
 
   @override
