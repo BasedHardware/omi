@@ -8,6 +8,7 @@ Verifies:
 
 import asyncio
 import sys
+import time
 from unittest.mock import MagicMock, patch, AsyncMock
 
 import pytest
@@ -39,7 +40,25 @@ sys.modules['deepgram'].LiveTranscriptionEvents = MagicMock()
 sys.modules['deepgram.clients.live.v1'].LiveOptions = MagicMock
 sys.modules['utils.stt.vad_gate'].GatedDeepgramSocket = MagicMock
 
-from utils.stt.streaming import connect_to_deepgram_with_backoff, process_audio_dg  # noqa: E402
+from utils.stt.streaming import (
+    connect_to_deepgram_with_backoff,
+    get_deepgram_circuit_breaker,
+    process_audio_dg,
+)  # noqa: E402
+
+
+@pytest.fixture(autouse=True)
+def _reset_deepgram_circuit_breaker():
+    cb = get_deepgram_circuit_breaker()
+    original_threshold = cb.failure_threshold
+    original_reset_timeout = cb.reset_timeout_seconds
+    cb.failure_threshold = 3
+    cb.reset_timeout_seconds = 30.0
+    cb.reset()
+    yield
+    cb.failure_threshold = original_threshold
+    cb.reset_timeout_seconds = original_reset_timeout
+    cb.reset()
 
 
 @pytest.mark.asyncio
@@ -263,3 +282,75 @@ async def test_process_audio_dg_no_vad_wrap_on_none():
             is_active=lambda: False,
         )
     assert result is None
+
+
+@pytest.mark.asyncio
+async def test_circuit_breaker_opens_after_repeated_failures():
+    cb = get_deepgram_circuit_breaker()
+    cb.failure_threshold = 2
+
+    async def fake_sleep(duration):
+        pass
+
+    with patch('utils.stt.streaming.connect_to_deepgram', side_effect=Exception("DG fail")), patch(
+        'utils.stt.streaming.asyncio.sleep', side_effect=fake_sleep
+    ):
+        with pytest.raises(Exception, match="DG fail"):
+            await connect_to_deepgram_with_backoff(
+                on_message=MagicMock(),
+                on_error=MagicMock(),
+                language='en',
+                sample_rate=16000,
+                channels=1,
+                model='nova-2-general',
+                retries=2,
+            )
+
+    assert cb.is_open() is True
+
+
+@pytest.mark.asyncio
+async def test_circuit_breaker_open_skips_connect_attempt():
+    cb = get_deepgram_circuit_breaker()
+    cb.failure_threshold = 1
+    cb.record_failure(Exception("force open"))
+    assert cb.is_open() is True
+
+    with patch('utils.stt.streaming.connect_to_deepgram') as mock_connect:
+        result = await connect_to_deepgram_with_backoff(
+            on_message=MagicMock(),
+            on_error=MagicMock(),
+            language='en',
+            sample_rate=16000,
+            channels=1,
+            model='nova-2-general',
+            retries=3,
+        )
+
+    assert result is None
+    mock_connect.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_circuit_breaker_allows_connect_after_timeout_window():
+    cb = get_deepgram_circuit_breaker()
+    cb.failure_threshold = 1
+    cb.reset_timeout_seconds = 1.0
+    cb.record_failure(Exception("open"))
+    cb._opened_at_monotonic = time.monotonic() - 2.0
+    assert cb.is_open() is True
+
+    mock_conn = MagicMock()
+    with patch('utils.stt.streaming.connect_to_deepgram', return_value=mock_conn):
+        result = await connect_to_deepgram_with_backoff(
+            on_message=MagicMock(),
+            on_error=MagicMock(),
+            language='en',
+            sample_rate=16000,
+            channels=1,
+            model='nova-2-general',
+            retries=1,
+        )
+
+    assert result is mock_conn
+    assert cb.is_open() is False
