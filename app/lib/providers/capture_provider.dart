@@ -35,6 +35,8 @@ import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/services/connectivity_service.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/services/sockets/transcription_service.dart';
+import 'package:omi/services/audio_sources/audio_source.dart';
+import 'package:omi/services/audio_sources/ble_device_source.dart';
 import 'package:omi/services/wals.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
@@ -82,6 +84,8 @@ class CaptureProvider extends ChangeNotifier
   static late MethodChannel _controlBarChannel;
 
   IWalService get _wal => ServiceManager.instance().wal;
+
+  AudioSource? _activeSource;
 
   bool _isWalSupported = false;
 
@@ -649,7 +653,8 @@ class CaptureProvider extends ChangeNotifier
             ? (_recordingDevice?.type == DeviceType.omi || _recordingDevice?.type == DeviceType.openglass)
             : false;
         if (_voiceCommandSession != null && voiceCommandSupported) {
-          _commandBytes.add(snapshot.sublist(3));
+          final payload = _activeSource?.getSocketPayload(snapshot) ?? snapshot.sublist(3);
+          _commandBytes.add(payload);
         }
 
         // Local storage syncs
@@ -660,23 +665,28 @@ class CaptureProvider extends ChangeNotifier
         if (checkWalSupported != _isWalSupported) {
           setIsWalSupported(checkWalSupported);
         }
+
+        // Process bytes through audio source and feed to WAL
+        final frames = _activeSource?.processBytes(snapshot) ?? [];
         if (_isWalSupported) {
-          _wal.getSyncs().phone.onByteStream(snapshot);
+          for (final frame in frames) {
+            _wal.getSyncs().phone.onFrameCaptured(frame);
+          }
         }
 
         // Send WS
         if (_socket?.state == SocketServiceState.connected) {
-          final paddingLeft =
-              (_recordingDevice?.type == DeviceType.omi || _recordingDevice?.type == DeviceType.openglass) ? 3 : 0;
-          final trimmedValue = paddingLeft > 0 ? value.sublist(paddingLeft) : value;
-          _socket?.send(trimmedValue);
+          final socketPayload = _activeSource?.getSocketPayload(snapshot) ?? snapshot;
+          _socket?.send(socketPayload);
 
           // Track bytes sent to websocket
-          _wsSocketBytesSent += trimmedValue.length;
+          _wsSocketBytesSent += socketPayload.length;
 
-          // Mark as synced
+          // Mark frames as synced
           if (_isWalSupported) {
-            _wal.getSyncs().phone.onBytesSync(value);
+            for (final frame in frames) {
+              _wal.getSyncs().phone.markFrameSynced(frame.syncKey);
+            }
           }
         }
       },
@@ -704,6 +714,7 @@ class CaptureProvider extends ChangeNotifier
   }
 
   Future _cleanupCurrentState() async {
+    _activeSource = null;
     await _closeBleStream();
     notifyListeners();
   }
@@ -778,9 +789,12 @@ class CaptureProvider extends ChangeNotifier
     final codec = await _getAudioCodec(deviceId);
     await _wal.getSyncs().phone.onAudioCodecChanged(codec);
 
-    // Set device info for WAL creation
+    // Create audio source for BLE device
     final pd = await device.getDeviceInfo(connection);
     final deviceModel = pd.modelNumber.isNotEmpty ? pd.modelNumber : "Omi";
+    if (device.type == DeviceType.omi || device.type == DeviceType.openglass) {
+      _activeSource = BleDeviceSource(codec: codec, deviceId: deviceId, deviceModel: deviceModel);
+    }
     _wal.getSyncs().phone.setDeviceInfo(deviceId, deviceModel);
 
     await streamButton(deviceId);
