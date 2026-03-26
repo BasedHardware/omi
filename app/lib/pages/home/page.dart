@@ -31,6 +31,7 @@ import 'package:omi/pages/conversations/auto_sync_page.dart';
 import 'package:omi/pages/conversations/sync_page.dart';
 import 'package:omi/pages/conversations/widgets/merge_action_bar.dart';
 import 'package:omi/pages/memories/page.dart';
+import 'package:omi/pages/phone_calls/active_call_banner.dart';
 import 'package:omi/pages/phone_calls/phone_calls_page.dart';
 import 'package:omi/pages/phone_calls/phone_calls_upsell_sheet.dart';
 import 'package:omi/models/subscription.dart';
@@ -630,6 +631,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                     children: [
                       Column(
                         children: [
+                          // Show slim green call bar on non-home tabs when a call is active
+                          if (homeProvider.selectedIndex != 0) const ActiveCallTopBar(),
                           Expanded(
                             child: IndexedStack(index: context.watch<HomeProvider>().selectedIndex, children: _pages),
                           ),

@@ -11,6 +11,7 @@ import 'package:omi/pages/conversations/widgets/daily_summaries_list.dart';
 import 'package:omi/pages/conversations/widgets/folder_tabs.dart';
 import 'package:omi/pages/conversations/widgets/goals_widget.dart';
 import 'package:omi/pages/conversations/widgets/processing_capture.dart';
+import 'package:omi/pages/phone_calls/active_call_banner.dart';
 import 'package:omi/pages/conversations/widgets/search_result_header_widget.dart';
 import 'package:omi/pages/conversations/widgets/search_widget.dart';
 import 'package:omi/pages/conversations/widgets/today_tasks_widget.dart';
@@ -180,6 +181,7 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
               // Header widgets (unchanged)
               const SliverToBoxAdapter(child: SpeechProfileCardWidget()),
               const SliverToBoxAdapter(child: UpdateFirmwareCardWidget()),
+              const SliverToBoxAdapter(child: ActiveCallBanner()),
               const SliverToBoxAdapter(child: ConversationCaptureWidget()),
 
               // Search bar
