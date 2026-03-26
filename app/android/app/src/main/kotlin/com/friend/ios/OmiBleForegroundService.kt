@@ -28,11 +28,12 @@ class OmiBleForegroundService : Service() {
 
         fun isActive(): Boolean = instance != null
 
-        fun startService(context: Context, deviceAddress: String, shouldConnect: Boolean = false) {
-            Log.d(TAG, "startService: address=$deviceAddress, shouldConnect=$shouldConnect")
+        fun startService(context: Context, deviceAddress: String, shouldConnect: Boolean = false, caller: String = "unknown") {
+            Log.d(TAG, "startService($caller): address=$deviceAddress, shouldConnect=$shouldConnect")
             val intent = Intent(context, OmiBleForegroundService::class.java).apply {
                 putExtra("device_address", deviceAddress)
                 putExtra("should_connect", shouldConnect)
+                putExtra("caller", caller)
             }
             try {
                 context.startForegroundService(intent)
@@ -111,8 +112,9 @@ class OmiBleForegroundService : Service() {
         if (address != null) {
             deviceAddress = address
             val shouldConnect = intent.getBooleanExtra("should_connect", false)
+            val caller = intent.getStringExtra("caller") ?: "unknown"
             if (shouldConnect) {
-                connectToDevice(address)
+                connectToDevice(address, caller)
             }
         }
 
@@ -130,9 +132,9 @@ class OmiBleForegroundService : Service() {
 
     override fun onBind(intent: Intent?): IBinder? = null
 
-    private fun connectToDevice(address: String) {
-        Log.d(TAG, "Connecting to device: $address")
-        OmiBleManager.instance.connectPeripheral(address)
+    private fun connectToDevice(address: String, caller: String = "FgService") {
+        Log.d(TAG, "Connecting to device: $address (caller=$caller)")
+        OmiBleManager.instance.connectPeripheral(address, caller = "FgService/$caller")
     }
 
     private fun reconnectInternal() {
