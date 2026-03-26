@@ -144,6 +144,24 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
 
   void _initializeProvider() async {
     await refreshWals();
+    _autoUploadPendingPhoneFiles();
+  }
+
+  /// Auto-upload phone WALs to cloud on app open when device is not connected
+  /// and no sync is already in progress.
+  void _autoUploadPendingPhoneFiles() async {
+    await Future.delayed(const Duration(seconds: 3));
+    if (_syncState.isProcessing) return;
+    if (_walService.getSyncs().isStorageSyncing || _walService.getSyncs().isSdCardSyncing) return;
+    final phoneWals = _allWals
+        .where((w) => w.status == WalStatus.miss && (w.storage == WalStorage.disk || w.storage == WalStorage.mem))
+        .toList();
+    if (phoneWals.isEmpty) return;
+    Logger.debug('SyncProvider: Auto-uploading ${phoneWals.length} pending phone files to cloud');
+    await _performSync(
+      operation: () => _walService.getSyncs().phone.syncAll(progress: this),
+      context: 'auto-upload phone files',
+    );
   }
 
   void _onAudioPlayerStateChanged() {
