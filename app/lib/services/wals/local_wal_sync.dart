@@ -5,6 +5,7 @@ import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/models/sync_state.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/services/wals/wal.dart';
@@ -447,7 +448,12 @@ class LocalWalSyncImpl implements LocalWalSync {
 
       listener.onWalUpdated();
       try {
-        var partialRes = await syncLocalFiles(files);
+        var partialRes = await syncLocalFiles(files, onUploadProgress: (bytesSent, totalBytes, speedKBps) {
+          final batchProgress = totalBytes > 0 ? bytesSent / totalBytes : 0.0;
+          final overallProgress = 1.0 - (left + (1.0 - batchProgress) * (right - left + 1)) / wals.length;
+          progress?.onWalSyncedProgress(overallProgress.clamp(0.0, 1.0),
+              speedKBps: speedKBps, phase: SyncPhase.uploadingToCloud);
+        });
 
         resp.newConversationIds.addAll(
           partialRes.newConversationIds.where((id) => !resp.newConversationIds.contains(id)),
