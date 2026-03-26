@@ -581,34 +581,36 @@ DEFERRED_QUEUE_POLL_INTERVAL = 5.0  # seconds between queue polls
 
 
 async def _process_deferred_conversation(uid: str, conversation_id: str, language: str):
-    """Process a single deferred conversation (same logic as _process_conversation_task without WS response)."""
+    """Process a single deferred conversation (same logic as _process_conversation_task without WS response).
+
+    Raises on unrecoverable errors so the caller can nack and re-queue.
+    Processing errors (LLM/integration failures) are handled by discarding
+    the conversation — these are terminal and should not be retried.
+    """
+    conversation_data = conversations_db.get_conversation(uid, conversation_id)
+    if not conversation_data:
+        logger.warning(f"Deferred conversation not found: {conversation_id} {uid}")
+        return
+
+    conversation = Conversation(**conversation_data)
+
+    if conversation.status != ConversationStatus.processing:
+        conversations_db.update_conversation_status(uid, conversation.id, ConversationStatus.processing)
+        conversation.status = ConversationStatus.processing
+
     try:
-        conversation_data = conversations_db.get_conversation(uid, conversation_id)
-        if not conversation_data:
-            logger.warning(f"Deferred conversation not found: {conversation_id} {uid}")
-            return
+        geolocation = get_cached_user_geolocation(uid)
+        if geolocation:
+            geolocation = Geolocation(**geolocation)
+            conversation.geolocation = get_google_maps_location(geolocation.latitude, geolocation.longitude)
 
-        conversation = Conversation(**conversation_data)
-
-        if conversation.status != ConversationStatus.processing:
-            conversations_db.update_conversation_status(uid, conversation.id, ConversationStatus.processing)
-            conversation.status = ConversationStatus.processing
-
-        try:
-            geolocation = get_cached_user_geolocation(uid)
-            if geolocation:
-                geolocation = Geolocation(**geolocation)
-                conversation.geolocation = get_google_maps_location(geolocation.latitude, geolocation.longitude)
-
-            conversation = await asyncio.to_thread(process_conversation, uid, language, conversation)
-            await asyncio.to_thread(trigger_external_integrations, uid, conversation)
-        except Exception as e:
-            logger.error(f"Error processing deferred conversation: {e} {uid} {conversation_id}")
-            conversations_db.set_conversation_as_discarded(uid, conversation.id)
-
-        logger.info(f"Deferred conversation processed: {conversation_id} {uid}")
+        conversation = await asyncio.to_thread(process_conversation, uid, language, conversation)
+        await asyncio.to_thread(trigger_external_integrations, uid, conversation)
     except Exception as e:
-        logger.error(f"Error in _process_deferred_conversation: {e} {uid} {conversation_id}")
+        logger.error(f"Error processing deferred conversation: {e} {uid} {conversation_id}")
+        conversations_db.set_conversation_as_discarded(uid, conversation.id)
+
+    logger.info(f"Deferred conversation processed: {conversation_id} {uid}")
 
 
 async def deferred_queue_worker():
