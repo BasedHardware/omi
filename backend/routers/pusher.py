@@ -617,8 +617,14 @@ async def deferred_queue_worker():
     Started on pusher startup. Polls Redis for conversations that backend-listen
     enqueued when pusher was unavailable, and processes them using the same
     pipeline as real-time requests.
+
+    Crash-safe: uses LMOVE to move items to a processing list before work.
+    On success, ack removes the item. On failure, nack returns it to the queue.
+    On startup, recover_deferred_processing re-queues any items stuck in processing.
     """
     logger.info("Deferred queue worker started")
+    # Recover any items left in the processing list from a prior crash
+    redis_db.recover_deferred_processing()
     while True:
         try:
             item = redis_db.dequeue_deferred_conversation()
@@ -630,7 +636,12 @@ async def deferred_queue_worker():
             conversation_id = item['conversation_id']
             language = item.get('language', 'en')
             logger.info(f"Deferred queue worker processing: {conversation_id} {uid}")
-            await _process_deferred_conversation(uid, conversation_id, language)
+            try:
+                await _process_deferred_conversation(uid, conversation_id, language)
+                redis_db.ack_deferred_conversation(uid, conversation_id, language)
+            except Exception as e:
+                logger.error(f"Deferred queue worker processing failed, re-queueing: {e} {uid} {conversation_id}")
+                redis_db.nack_deferred_conversation(uid, conversation_id, language)
 
         except Exception as e:
             logger.error(f"Deferred queue worker error: {e}")
