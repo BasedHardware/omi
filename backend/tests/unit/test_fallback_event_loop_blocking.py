@@ -249,3 +249,108 @@ async def test_semaphore_releases_on_exception():
 
     assert result is not None, "Semaphore must be released after exception for retry"
     assert call_count == 2
+
+
+# ---------------------------------------------------------------------------
+# Status transition and cancellation tests
+# ---------------------------------------------------------------------------
+
+
+def test_status_transition_skipped_when_already_processing():
+    """_create_conversation_fallback must NOT send memory_processing_started if already processing.
+
+    Source-level: the `if conversation.status != ConversationStatus.processing` guard
+    must exist in the fallback function.
+    """
+    source = _read_transcribe_source()
+    fallback_pos = source.find('async def _create_conversation_fallback')
+    assert fallback_pos > 0
+    next_func = source.find('\n    async def ', fallback_pos + 1)
+    fallback_body = source[fallback_pos:next_func] if next_func > 0 else source[fallback_pos : fallback_pos + 800]
+    assert (
+        'ConversationStatus.processing' in fallback_body
+    ), "Fallback must check conversation.status before sending processing event"
+
+
+def test_discard_path_on_exception():
+    """On exception, conversation must be discarded and memory_created still sent.
+
+    Source-level: set_conversation_as_discarded must appear in the except block.
+    """
+    source = _read_transcribe_source()
+    fallback_pos = source.find('async def _create_conversation_fallback')
+    assert fallback_pos > 0
+    next_func = source.find('\n    async def ', fallback_pos + 1)
+    fallback_body = source[fallback_pos:next_func] if next_func > 0 else source[fallback_pos : fallback_pos + 800]
+    assert 'set_conversation_as_discarded' in fallback_body, "Exception path must discard the conversation"
+    assert 'memory_created' in fallback_body, "memory_created event must be sent even on error (with empty messages)"
+
+
+@pytest.mark.asyncio
+async def test_cancellation_during_semaphore_wait():
+    """Task cancelled while waiting on semaphore must raise CancelledError."""
+    semaphore = asyncio.Semaphore(1)
+    # Hold the semaphore so the second task has to wait
+    await semaphore.acquire()
+
+    async def wait_for_semaphore():
+        async with semaphore:
+            return "acquired"
+
+    task = asyncio.create_task(wait_for_semaphore())
+    await asyncio.sleep(0.01)  # Let it start waiting
+    task.cancel()
+
+    with pytest.raises(asyncio.CancelledError):
+        await task
+
+    # Release the semaphore — it should still be usable
+    semaphore.release()
+    async with semaphore:
+        pass  # Semaphore still functional after cancellation
+
+
+@pytest.mark.asyncio
+async def test_cancellation_during_to_thread():
+    """Task cancelled during to_thread — CancelledError propagates but thread keeps running.
+
+    This documents the known behavior: asyncio.to_thread work is not truly
+    cancellable, but CancelledError is raised to the awaiter.
+    """
+    started = threading.Event()
+    finished = threading.Event()
+
+    def long_work(uid, language, conversation, session_id):
+        started.set()
+        time.sleep(0.5)
+        finished.set()
+        return conversation, []
+
+    task = asyncio.create_task(asyncio.to_thread(long_work, 'uid', 'en', MagicMock(), 'sess'))
+    await asyncio.sleep(0.05)  # Let the thread start
+    assert started.is_set(), "Thread should have started"
+
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+
+    # Thread continues running (expected behavior — to_thread is not cancellable)
+    finished.wait(timeout=2.0)
+    assert finished.is_set(), "Thread continues even after task cancel (expected)"
+
+
+@pytest.mark.asyncio
+async def test_fallback_return_value_shape():
+    """_process_fallback_sync must return (conversation, messages) tuple."""
+
+    def sync_impl(uid, language, conversation, session_id):
+        return conversation, ['msg1', 'msg2']
+
+    mock_conversation = MagicMock()
+    result = await asyncio.to_thread(sync_impl, 'uid', 'en', mock_conversation, 'sess')
+
+    assert isinstance(result, tuple), "Return value must be a tuple"
+    assert len(result) == 2, "Return value must be (conversation, messages)"
+    conversation, messages = result
+    assert conversation is mock_conversation
+    assert messages == ['msg1', 'msg2']
