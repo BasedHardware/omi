@@ -6,7 +6,7 @@ import 'package:omi/env/env.dart';
 /// we test with a single init and exercise the override/flag mechanisms.
 class _TestEnvFields implements EnvFields {
   @override
-  String? get stagingApiUrl => null; // triggers fallback
+  String? get stagingApiUrl => null; // not used — Env.stagingApiUrl is hardcoded
 
   @override
   String? get openAIAPIKey => null;
@@ -41,29 +41,23 @@ void main() {
   });
 
   group('Env.stagingApiUrl', () {
-    test('falls back to default when stagingApiUrl is null/empty', () {
-      // _TestEnvFields returns null for stagingApiUrl
+    test('always returns hardcoded staging URL', () {
       expect(Env.stagingApiUrl, 'https://api.omiapi.com/');
     });
   });
 
   group('Env.isUsingStagingApi', () {
-    // Note: _TestEnvFields.stagingApiUrl returns null, which means
-    // STAGING_API_URL is not explicitly configured. The implementation
-    // requires explicit configuration to return true.
     test('false when override points to non-staging URL', () {
       Env.overrideApiBaseUrl('https://api.prod.example.com/');
       expect(Env.isUsingStagingApi, isFalse);
     });
 
-    test('false when stagingApiUrl is not explicitly configured (null)', () {
-      // Even though the override matches the fallback staging URL,
-      // isUsingStagingApi requires _instance.stagingApiUrl to be non-null.
+    test('true when override matches hardcoded staging URL', () {
       Env.overrideApiBaseUrl('https://api.omiapi.com/');
-      expect(Env.isUsingStagingApi, isFalse);
+      expect(Env.isUsingStagingApi, isTrue);
     });
 
-    test('false when override differs from fallback', () {
+    test('false when override differs from staging', () {
       Env.overrideApiBaseUrl('https://something-else.example.com/');
       expect(Env.isUsingStagingApi, isFalse);
     });
