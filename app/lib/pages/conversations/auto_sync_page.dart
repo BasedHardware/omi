@@ -101,7 +101,7 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
   ) {
     final isSyncing = syncState.isSyncing || syncState.isFetchingConversations;
     final hasPending = pendingWals.isNotEmpty;
-    final (deviceTier, phoneTier, cloudTier) = _tierStates(syncState, isSyncing, hasPending, isDeviceConnected);
+    final (deviceTier, phoneTier, cloudTier) = _tierStates(syncState, isSyncing, pendingWals, isDeviceConnected);
 
     return Container(
       padding: const EdgeInsets.all(20),
@@ -111,8 +111,7 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
       ),
       child: Column(
         children: [
-          _buildTierRow(
-              context.l10n.omisStorage, deviceTier, _deviceDetail(syncState, isSyncing, hasPending, pendingWals)),
+          _buildTierRow(context.l10n.omisStorage, deviceTier, _deviceDetail(syncState, isSyncing, pendingWals)),
           _tierLine(deviceTier),
           _buildTierRow(context.l10n.phoneStorage, phoneTier, _phoneDetail(syncState, isSyncing, pendingWals)),
           _tierLine(phoneTier),
@@ -131,7 +130,7 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
                     style: const TextStyle(color: Colors.redAccent, fontSize: 13, fontWeight: FontWeight.w500)),
               ),
             ),
-          ] else if (hasPending && isDeviceConnected) ...[
+          ] else if (hasPending && !syncState.isCompleted) ...[
             const SizedBox(height: 18),
             GestureDetector(
               onTap: () => syncProvider.syncWals(),
@@ -152,11 +151,11 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
   }
 
   (_TierState, _TierState, _TierState) _tierStates(
-      SyncState syncState, bool isSyncing, bool hasPending, bool isDeviceConnected) {
+      SyncState syncState, bool isSyncing, List<Wal> pendingWals, bool isDeviceConnected) {
+    // During active sync — show phase-based states
     if (isSyncing) {
       switch (syncState.phase) {
         case SyncPhase.downloadingFromDevice:
-          // Data is on device (check), transferring to phone (spinner)
           return (_TierState.completed, _TierState.active, _TierState.pending);
         case SyncPhase.waitingForInternet:
           return (_TierState.completed, _TierState.completed, _TierState.waiting);
@@ -169,14 +168,40 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
     if (syncState.isFetchingConversations) {
       return (_TierState.completed, _TierState.completed, _TierState.active);
     }
-    if (hasPending) {
+
+    // Sync completed — all green regardless of remaining device files
+    if (syncState.isCompleted) {
+      return (_TierState.completed, _TierState.completed, _TierState.completed);
+    }
+
+    // Idle — show actual data location
+    if (pendingWals.isEmpty) {
+      return (_TierState.completed, _TierState.completed, _TierState.completed);
+    }
+
+    final deviceWals = pendingWals.where((w) => w.storage == WalStorage.sdcard).toList();
+    final phoneWals = pendingWals.where((w) => w.storage == WalStorage.disk || w.storage == WalStorage.mem).toList();
+
+    // Files on device waiting to be downloaded
+    if (deviceWals.isNotEmpty && phoneWals.isEmpty) {
       return (
         isDeviceConnected ? _TierState.waiting : _TierState.disconnected,
         _TierState.pending,
         _TierState.pending,
       );
     }
-    return (_TierState.completed, _TierState.completed, _TierState.completed);
+
+    // Files already on phone waiting to upload to cloud
+    if (deviceWals.isEmpty && phoneWals.isNotEmpty) {
+      return (_TierState.completed, _TierState.waiting, _TierState.pending);
+    }
+
+    // Files on both device and phone
+    return (
+      isDeviceConnected ? _TierState.waiting : _TierState.disconnected,
+      _TierState.waiting,
+      _TierState.pending,
+    );
   }
 
   Widget _buildTierRow(String label, _TierState state, String? detail) {
@@ -272,14 +297,16 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
     );
   }
 
-  String? _deviceDetail(SyncState syncState, bool isSyncing, bool hasPending, List<Wal> pendingWals) {
+  String? _deviceDetail(SyncState syncState, bool isSyncing, List<Wal> pendingWals) {
+    // During download from device — show file progress
     if (isSyncing &&
         syncState.phase == SyncPhase.downloadingFromDevice &&
         syncState.currentFile != null &&
         syncState.totalFiles != null) {
       return '${syncState.currentFile} of ${syncState.totalFiles} files';
     }
-    if (hasPending) {
+    // Idle — show remaining device files
+    if (!isSyncing && !syncState.isCompleted) {
       final deviceFiles = pendingWals.where((w) => w.storage == WalStorage.sdcard).toList();
       if (deviceFiles.isNotEmpty) {
         final totalBytes = deviceFiles.fold<int>(0, (s, w) => s + w.storageTotalBytes);
@@ -290,18 +317,38 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
   }
 
   String? _phoneDetail(SyncState syncState, bool isSyncing, List<Wal> pendingWals) {
+    // During download from device — show BLE transfer speed
     if (isSyncing && syncState.phase == SyncPhase.downloadingFromDevice) {
       final speed = syncState.speedKBps;
       return speed != null && speed > 0 ? '${speed.toStringAsFixed(1)} KB/s' : context.l10n.transferring;
+    }
+    // During upload to cloud — phone data is ready
+    if (isSyncing && syncState.phase == SyncPhase.uploadingToCloud) {
+      return null;
+    }
+    // Idle — show files on phone waiting to upload
+    if (!isSyncing && !syncState.isCompleted) {
+      final phoneFiles = pendingWals.where((w) => w.storage == WalStorage.disk || w.storage == WalStorage.mem).toList();
+      if (phoneFiles.isNotEmpty) {
+        return '${phoneFiles.length} file${phoneFiles.length == 1 ? '' : 's'} waiting to upload';
+      }
     }
     return null;
   }
 
   String? _cloudDetail(SyncState syncState, bool isSyncing) {
+    // During upload — show file count progress
     if (isSyncing && syncState.phase == SyncPhase.uploadingToCloud) {
-      final speed = syncState.speedKBps;
-      if (speed != null && speed > 0) return '${speed.toStringAsFixed(1)} KB/s';
+      final current = syncState.currentFile;
+      final total = syncState.totalFiles;
+      if (current != null && total != null && total > 0) {
+        return '$current of $total files';
+      }
       return context.l10n.transferring;
+    }
+    // Fetching conversations after upload
+    if (syncState.isFetchingConversations) {
+      return 'Processing...';
     }
     return null;
   }
