@@ -909,33 +909,81 @@ DEFERRED_CONVERSATION_QUEUE_KEY = 'deferred_conversations'
 DEFERRED_CONVERSATION_TTL = 60 * 60 * 4  # 4 hours — stale items auto-expire
 
 
+DEFERRED_CONVERSATION_PROCESSING_KEY = 'deferred_conversations_processing'
+
+
 @try_catch_decorator
 def enqueue_deferred_conversation(uid: str, conversation_id: str, language: str) -> bool:
     """Enqueue a conversation for deferred processing by pusher.
 
     Idempotent: uses conversation_id as dedup key so the same conversation
     is never queued twice even if multiple sessions enqueue it.
-    Returns True if newly added, False if already queued.
+    Atomic: dedup lock + queue push happen in a single Redis pipeline.
+    Returns True if newly added, False if already queued or on error.
     """
     item = json.dumps({'uid': uid, 'conversation_id': conversation_id, 'language': language})
     dedup_key = f'deferred_conv_lock:{conversation_id}'
-    # Atomic dedup: only add to queue if the lock doesn't exist
-    if not r.set(dedup_key, '1', ex=DEFERRED_CONVERSATION_TTL, nx=True):
+    # Atomic pipeline: set dedup lock + push to queue in one round-trip
+    pipe = r.pipeline(True)
+    pipe.set(dedup_key, '1', ex=DEFERRED_CONVERSATION_TTL, nx=True)
+    pipe.rpush(DEFERRED_CONVERSATION_QUEUE_KEY, item)
+    results = pipe.execute()
+    lock_acquired = results[0]
+    if not lock_acquired:
+        # Already queued — remove the duplicate we just pushed
+        r.lrem(DEFERRED_CONVERSATION_QUEUE_KEY, 1, item)
         return False
-    r.rpush(DEFERRED_CONVERSATION_QUEUE_KEY, item)
     return True
 
 
 @try_catch_decorator
 def dequeue_deferred_conversation() -> dict:
-    """Pop the next deferred conversation from the queue.
+    """Move the next deferred conversation to the processing list (crash-safe).
 
+    Uses LMOVE (atomic pop+push) so the item stays in the processing list
+    until explicitly acknowledged. If the worker crashes, the item remains
+    in the processing list for recovery.
     Returns dict with {uid, conversation_id, language} or None if empty.
     """
-    item = r.lpop(DEFERRED_CONVERSATION_QUEUE_KEY)
+    item = r.lmove(DEFERRED_CONVERSATION_QUEUE_KEY, DEFERRED_CONVERSATION_PROCESSING_KEY, 'LEFT', 'RIGHT')
     if not item:
         return None
     return json.loads(item)
+
+
+@try_catch_decorator
+def ack_deferred_conversation(uid: str, conversation_id: str, language: str):
+    """Acknowledge successful processing — remove from the processing list."""
+    item = json.dumps({'uid': uid, 'conversation_id': conversation_id, 'language': language})
+    r.lrem(DEFERRED_CONVERSATION_PROCESSING_KEY, 1, item)
+
+
+@try_catch_decorator
+def nack_deferred_conversation(uid: str, conversation_id: str, language: str):
+    """Return a failed item back to the main queue for retry."""
+    item = json.dumps({'uid': uid, 'conversation_id': conversation_id, 'language': language})
+    r.lrem(DEFERRED_CONVERSATION_PROCESSING_KEY, 1, item)
+    r.lpush(DEFERRED_CONVERSATION_QUEUE_KEY, item)
+    # Clear dedup lock so it can be re-enqueued if needed
+    r.delete(f'deferred_conv_lock:{conversation_id}')
+
+
+@try_catch_decorator
+def recover_deferred_processing():
+    """Move any items stuck in the processing list back to the main queue.
+
+    Called on pusher startup to recover from crashes.
+    """
+    while True:
+        item = r.lpop(DEFERRED_CONVERSATION_PROCESSING_KEY)
+        if not item:
+            break
+        r.rpush(DEFERRED_CONVERSATION_QUEUE_KEY, item)
+        try:
+            data = json.loads(item)
+            r.delete(f'deferred_conv_lock:{data["conversation_id"]}')
+        except Exception:
+            pass
 
 
 @try_catch_decorator
