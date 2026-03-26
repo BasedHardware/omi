@@ -368,6 +368,8 @@ class LocalWalSyncImpl implements LocalWalSync {
     int batchesCompleted = 0;
     int batchesFailed = 0;
     int corruptedCount = 0;
+    int filesUploaded = 0;
+    final totalFilesToUpload = wals.length;
 
     var steps = 3;
     for (var i = wals.length - 1; i >= 0; i -= steps) {
@@ -444,16 +446,13 @@ class LocalWalSyncImpl implements LocalWalSync {
         continue;
       }
 
-      progress?.onWalSyncedProgress(1.0 - (left).toDouble() / wals.length);
+      // Report file-count progress
+      progress?.onWalSyncedProgress(filesUploaded / totalFilesToUpload,
+          phase: SyncPhase.uploadingToCloud, currentFile: filesUploaded, totalFiles: totalFilesToUpload);
 
       listener.onWalUpdated();
       try {
-        var partialRes = await syncLocalFiles(files, onUploadProgress: (bytesSent, totalBytes, speedKBps) {
-          final batchProgress = totalBytes > 0 ? bytesSent / totalBytes : 0.0;
-          final overallProgress = 1.0 - (left + (1.0 - batchProgress) * (right - left + 1)) / wals.length;
-          progress?.onWalSyncedProgress(overallProgress.clamp(0.0, 1.0),
-              speedKBps: speedKBps, phase: SyncPhase.uploadingToCloud);
-        });
+        var partialRes = await syncLocalFiles(files);
 
         resp.newConversationIds.addAll(
           partialRes.newConversationIds.where((id) => !resp.newConversationIds.contains(id)),
@@ -495,6 +494,8 @@ class LocalWalSyncImpl implements LocalWalSync {
             }
           }
         }
+        // Count actual unique synced WALs (batch ranges overlap, so don't accumulate files.length)
+        filesUploaded = wals.where((w) => w.status == WalStatus.synced).length;
       } catch (e) {
         print('Local WAL sync batch failed: $e, continuing with remaining files');
         batchesFailed++;
