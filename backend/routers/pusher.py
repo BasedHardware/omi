@@ -11,6 +11,7 @@ from fastapi.websockets import WebSocketDisconnect, WebSocket
 from starlette.websockets import WebSocketState
 
 import database.conversations as conversations_db
+from database import redis_db
 from database import users as users_db
 from database.redis_db import get_cached_user_geolocation
 from models.conversation import Conversation, ConversationStatus, Geolocation
@@ -570,6 +571,70 @@ async def _websocket_util_trigger(
                 await websocket.close(code=websocket_close_code)
             except Exception as e:
                 logger.error(f"Error closing WebSocket: {e}")
+
+
+# ******************************************************
+# ********** DEFERRED CONVERSATION QUEUE WORKER ********
+# ******************************************************
+
+DEFERRED_QUEUE_POLL_INTERVAL = 5.0  # seconds between queue polls
+
+
+async def _process_deferred_conversation(uid: str, conversation_id: str, language: str):
+    """Process a single deferred conversation (same logic as _process_conversation_task without WS response)."""
+    try:
+        conversation_data = conversations_db.get_conversation(uid, conversation_id)
+        if not conversation_data:
+            logger.warning(f"Deferred conversation not found: {conversation_id} {uid}")
+            return
+
+        conversation = Conversation(**conversation_data)
+
+        if conversation.status != ConversationStatus.processing:
+            conversations_db.update_conversation_status(uid, conversation.id, ConversationStatus.processing)
+            conversation.status = ConversationStatus.processing
+
+        try:
+            geolocation = get_cached_user_geolocation(uid)
+            if geolocation:
+                geolocation = Geolocation(**geolocation)
+                conversation.geolocation = get_google_maps_location(geolocation.latitude, geolocation.longitude)
+
+            conversation = await asyncio.to_thread(process_conversation, uid, language, conversation)
+            await asyncio.to_thread(trigger_external_integrations, uid, conversation)
+        except Exception as e:
+            logger.error(f"Error processing deferred conversation: {e} {uid} {conversation_id}")
+            conversations_db.set_conversation_as_discarded(uid, conversation.id)
+
+        logger.info(f"Deferred conversation processed: {conversation_id} {uid}")
+    except Exception as e:
+        logger.error(f"Error in _process_deferred_conversation: {e} {uid} {conversation_id}")
+
+
+async def deferred_queue_worker():
+    """Background worker that drains the Redis deferred conversation queue.
+
+    Started on pusher startup. Polls Redis for conversations that backend-listen
+    enqueued when pusher was unavailable, and processes them using the same
+    pipeline as real-time requests.
+    """
+    logger.info("Deferred queue worker started")
+    while True:
+        try:
+            item = redis_db.dequeue_deferred_conversation()
+            if item is None:
+                await asyncio.sleep(DEFERRED_QUEUE_POLL_INTERVAL)
+                continue
+
+            uid = item['uid']
+            conversation_id = item['conversation_id']
+            language = item.get('language', 'en')
+            logger.info(f"Deferred queue worker processing: {conversation_id} {uid}")
+            await _process_deferred_conversation(uid, conversation_id, language)
+
+        except Exception as e:
+            logger.error(f"Deferred queue worker error: {e}")
+            await asyncio.sleep(DEFERRED_QUEUE_POLL_INTERVAL)
 
 
 @router.websocket("/v1/trigger/listen")
