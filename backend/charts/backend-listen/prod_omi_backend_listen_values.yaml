@@ -403,11 +403,11 @@ autoscaling:
       stabilizationWindowSeconds: 30
       policies:
       - type: Percent
-        value: 100
-        periodSeconds: 1
+        value: 50
+        periodSeconds: 15
       - type: Pods
         value: 5
-        periodSeconds: 1
+        periodSeconds: 15
       selectPolicy: Max
   # targetCPUUtilizationPercentage: 70
   # targetMemoryUtilizationPercentage: 70
