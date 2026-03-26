@@ -923,18 +923,42 @@ return 0
 
 DEFERRED_PROCESSING_LOCK_TTL = 300  # 5 min — active processing claim per conversation
 
-# Lua script for atomic recovery: only LPOP+RPUSH if the processing lock has expired
-_RECOVER_ONE_LUA = """
-local item = redis.call('LINDEX', KEYS[1], 0)
+# Lua script for atomic dequeue: LMOVE + SET active lock in one server-side call
+_DEQUEUE_LUA = """
+local item = redis.call('LMOVE', KEYS[1], KEYS[2], 'LEFT', 'RIGHT')
 if not item then return nil end
 local data = cjson.decode(item)
 local lock_key = 'deferred_conv_active:' .. data['conversation_id']
-if redis.call('EXISTS', lock_key) == 1 then
-    return 'ACTIVE'
-end
-redis.call('LPOP', KEYS[1])
-redis.call('RPUSH', KEYS[2], item)
+redis.call('SET', lock_key, '1', 'EX', ARGV[1])
 return item
+"""
+
+# Lua script for atomic recovery: scan ALL items, re-queue only those without active lock
+_RECOVER_ALL_LUA = """
+local processing_key = KEYS[1]
+local queue_key = KEYS[2]
+local count = 0
+local len = redis.call('LLEN', processing_key)
+local i = 0
+while i < len do
+    local item = redis.call('LINDEX', processing_key, i)
+    if not item then break end
+    local ok, data = pcall(cjson.decode, item)
+    if ok and data['conversation_id'] then
+        local lock_key = 'deferred_conv_active:' .. data['conversation_id']
+        if redis.call('EXISTS', lock_key) == 0 then
+            redis.call('LREM', processing_key, 1, item)
+            redis.call('RPUSH', queue_key, item)
+            count = count + 1
+            len = len - 1
+        else
+            i = i + 1
+        end
+    else
+        i = i + 1
+    end
+end
+return count
 """
 
 
@@ -957,18 +981,20 @@ def enqueue_deferred_conversation(uid: str, conversation_id: str, language: str)
 def dequeue_deferred_conversation() -> dict:
     """Move the next deferred conversation to the processing list (crash-safe).
 
-    Uses LMOVE (atomic pop+push) so the item stays in the processing list
-    until explicitly acknowledged. Sets a per-conversation processing lock
-    with TTL so recovery knows which items are actively being processed.
+    Fully atomic via Lua: LMOVE + SET active lock in a single server-side call.
+    No race window between move and lock acquisition.
     Returns dict with {uid, conversation_id, language} or None if empty.
     """
-    item = r.lmove(DEFERRED_CONVERSATION_QUEUE_KEY, DEFERRED_CONVERSATION_PROCESSING_KEY, 'LEFT', 'RIGHT')
-    if not item:
+    result = r.eval(
+        _DEQUEUE_LUA,
+        2,
+        DEFERRED_CONVERSATION_QUEUE_KEY,
+        DEFERRED_CONVERSATION_PROCESSING_KEY,
+        str(DEFERRED_PROCESSING_LOCK_TTL),
+    )
+    if not result:
         return None
-    data = json.loads(item)
-    # Set active processing lock — recovery skips items with this lock
-    r.set(f'deferred_conv_active:{data["conversation_id"]}', '1', ex=DEFERRED_PROCESSING_LOCK_TTL)
-    return data
+    return json.loads(result)
 
 
 @try_catch_decorator
@@ -996,22 +1022,14 @@ def nack_deferred_conversation(uid: str, conversation_id: str, language: str):
 def recover_deferred_processing():
     """Re-queue items stuck in the processing list from prior crashes.
 
-    Called on pusher startup. Only re-queues items whose active processing
-    lock has expired (meaning the processing pod crashed). Items still being
-    actively processed by another pod are left in place.
-    Atomic per-item via Lua script.
+    Called on pusher startup. Scans ALL items in the processing list and
+    only re-queues those whose active processing lock has expired (meaning
+    the processing pod crashed). Items still being actively processed by
+    another pod are left in place.
+    Fully atomic via Lua script — scans entire list in one call.
     """
-    count = 0
-    while True:
-        result = r.eval(_RECOVER_ONE_LUA, 2, DEFERRED_CONVERSATION_PROCESSING_KEY, DEFERRED_CONVERSATION_QUEUE_KEY)
-        if result is None:
-            break
-        if isinstance(result, bytes):
-            result = result.decode()
-        if result == 'ACTIVE':
-            break  # Hit an item still being processed — stop scanning
-        count += 1
-    if count:
+    count = r.eval(_RECOVER_ALL_LUA, 2, DEFERRED_CONVERSATION_PROCESSING_KEY, DEFERRED_CONVERSATION_QUEUE_KEY)
+    if count and count > 0:
         logger.info(f"Recovered {count} deferred conversation(s) from processing list")
 
 

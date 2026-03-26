@@ -161,17 +161,21 @@ def test_enqueue_lua_script_defined():
     assert 'SET' in source and 'NX' in source and 'RPUSH' in source
 
 
-def test_dequeue_uses_lmove():
-    """dequeue_deferred_conversation must use LMOVE for crash-safe dequeue."""
+def test_dequeue_uses_lua_with_lmove():
+    """dequeue_deferred_conversation must use Lua script with LMOVE + SET for atomicity."""
     import pathlib
 
     src = pathlib.Path(__file__).resolve().parents[2] / 'database' / 'redis_db.py'
     source = src.read_text()
+    # Check the Lua script contains LMOVE + SET
+    assert '_DEQUEUE_LUA' in source
+    assert 'LMOVE' in source
+    # Dequeue function must use eval (Lua)
     pos = source.find('def dequeue_deferred_conversation')
     assert pos > 0
     next_func = source.find('\ndef ', pos + 1)
     func_body = source[pos:next_func] if next_func > 0 else source[pos : pos + 500]
-    assert 'lmove' in func_body, "dequeue must use LMOVE (atomic pop+push to processing list)"
+    assert 'eval' in func_body, "dequeue must use r.eval (Lua script) for atomic LMOVE + SET lock"
 
 
 def test_recover_uses_lua_for_atomicity():
