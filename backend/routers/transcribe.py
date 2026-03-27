@@ -1167,6 +1167,11 @@ async def _stream_handler(
                     logger.warning(f"Speech profile file not found for {uid} {session_id}")
                     return
 
+                # Skip sending speech profile when free credits are exhausted (#6083)
+                if free_credits_dg_blocked:
+                    logger.info(f'fair_use: skipping speech profile send (credits exhausted) {uid} {session_id}')
+                    return
+
                 # Send to appropriate STT socket with fixed duration padding
                 if stt_service == STTService.deepgram and deepgram_socket:
 
@@ -2574,10 +2579,12 @@ async def _stream_handler(
 
                         spawn(close_dg_profile())
                 else:
-                    deepgram_profile_socket.send(chunk)
+                    if not free_credits_dg_blocked:
+                        deepgram_profile_socket.send(chunk)
             elif deepgram_profile_socket and not profile_complete:
                 # Main socket dead but profile socket still alive — keep routing (#5870)
-                deepgram_profile_socket.send(chunk)
+                if not free_credits_dg_blocked:
+                    deepgram_profile_socket.send(chunk)
 
             if soniox_sock is not None and not fair_use_dg_budget_exhausted and not free_credits_dg_blocked:
                 if profile_complete or not soniox_profile_socket:
@@ -2598,7 +2605,8 @@ async def _stream_handler(
 
                         spawn(close_soniox_profile())
                 else:
-                    await soniox_profile_socket.send(chunk)
+                    if not free_credits_dg_blocked:
+                        await soniox_profile_socket.send(chunk)
 
             if speechmatics_sock is not None and not fair_use_dg_budget_exhausted and not free_credits_dg_blocked:
                 await speechmatics_sock.send(chunk)
