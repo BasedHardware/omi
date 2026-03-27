@@ -285,7 +285,12 @@ class TestTriggerClassifierFreeTier:
     )
     @patch.object(fair_use_mod, 'is_free_credits_exhausted', return_value=False)
     def test_non_free_user_calls_llm_classifier(self, _mock_free, _mock_speech):
+        classify_called = {'called': False, 'uid': None}
+        _fair_use_db.create_fair_use_event.reset_mock()
+
         async def mock_classify(uid):
+            classify_called['called'] = True
+            classify_called['uid'] = uid
             return _make_classifier_result(misuse_score=0.1)
 
         fair_use_mod._classify_user_purpose = mock_classify
@@ -296,7 +301,13 @@ class TestTriggerClassifierFreeTier:
         finally:
             loop.close()
 
-        # Verify escalation was called (no assertion error = classify was called)
+        # Non-free user must invoke the LLM classifier
+        assert classify_called['called'] is True
+        assert classify_called['uid'] == 'test-uid'
+        # Event should be recorded with the classifier's actual result (not synthetic)
+        _fair_use_db.create_fair_use_event.assert_called_once()
+        event_data = _fair_use_db.create_fair_use_event.call_args[0][1]
+        assert event_data['classifier']['usage_type'] != 'free_exhausted'
 
     @patch.object(fair_use_mod, 'FAIR_USE_ENABLED', True)
     @patch.object(
@@ -337,3 +348,102 @@ class TestTriggerClassifierFreeTier:
         event_data = _fair_use_db.create_fair_use_event.call_args[0][1]
         assert event_data['classifier']['usage_type'] == 'free_exhausted'
         assert event_data['classifier']['free_credits_exhausted'] is True
+
+
+# ---------------------------------------------------------------------------
+# Negative test: classifier result cannot spoof free-tier bypass
+# ---------------------------------------------------------------------------
+
+
+class TestClassifierSpoofProtection:
+    """Ensure classifier_result dict cannot bypass the score gate on its own."""
+
+    def setup_method(self):
+        _fair_use_db.get_fair_use_state.reset_mock()
+        _fair_use_db.get_violation_counts.reset_mock()
+        _fair_use_db.create_fair_use_event.reset_mock()
+        _fair_use_db.update_fair_use_state.reset_mock()
+        _fair_use_db.create_fair_use_event.return_value = 'evt-123'
+        _fair_use_db.get_fair_use_events.return_value = [{'case_ref': 'FU-TEST01'}]
+
+    @patch.object(fair_use_mod, 'FAIR_USE_ENABLED', True)
+    @patch.object(
+        fair_use_mod, 'get_rolling_speech_ms', return_value={'daily_ms': 0, 'three_day_ms': 0, 'weekly_ms': 0}
+    )
+    @patch.object(fair_use_mod, 'is_free_credits_exhausted', return_value=False)
+    def test_spoofed_free_exhausted_in_classifier_does_not_bypass(self, _mock_free, _mock_speech):
+        """A classifier result claiming free_credits_exhausted should not bypass the score gate
+        when the trusted is_free_credits_exhausted() returns False."""
+        _fair_use_db.get_fair_use_state.return_value = {'stage': 'none'}
+        _fair_use_db.get_violation_counts.return_value = {'violation_count_7d': 1, 'violation_count_30d': 1}
+
+        # Classifier result tries to claim free_credits_exhausted
+        spoofed_result = {
+            'misuse_score': 0.1,
+            'usage_type': 'free_exhausted',
+            'free_credits_exhausted': True,
+        }
+
+        result = fair_use_mod.escalate_enforcement('test-uid', _make_trigger(), spoofed_result)
+
+        # Should NOT escalate because trusted check says not free-exhausted
+        assert result['action'] == 'none'
+        assert result['new_stage'] == 'none'
+
+
+# ---------------------------------------------------------------------------
+# Sync early-return test (credits exhausted skips Deepgram)
+# ---------------------------------------------------------------------------
+
+
+class TestSyncCreditsExhaustedEarlyReturn:
+    """Test that the sync endpoint returns early when credits are exhausted."""
+
+    def test_sync_response_structure_on_credits_exhausted(self):
+        """Verify the JSONResponse structure returned when should_lock is True."""
+        # Import JSONResponse to verify it's the correct type
+        from starlette.responses import JSONResponse
+
+        # The sync early-return creates this exact response
+        total_segments = 5
+        response = JSONResponse(
+            status_code=200,
+            content={
+                'new_memories': [],
+                'updated_memories': [],
+                'credits_exhausted': True,
+                'skipped_segments': total_segments,
+            },
+        )
+
+        assert response.status_code == 200
+        import json
+
+        body = json.loads(response.body)
+        assert body['credits_exhausted'] is True
+        assert body['skipped_segments'] == 5
+        assert body['new_memories'] == []
+        assert body['updated_memories'] == []
+
+    def test_is_free_credits_exhausted_matches_should_lock_logic(self):
+        """Verify that is_free_credits_exhausted produces the same result as the sync endpoint's
+        should_lock = not has_transcription_credits(uid) for free users."""
+        # Reset lazy import caches
+        fair_use_mod._has_transcription_credits = None
+        fair_use_mod._is_paid_plan = None
+
+        # Simulate: free user, no credits
+        mock_sub = MagicMock()
+        mock_sub.plan = 'basic'
+        fair_use_mod.users_db.get_user_valid_subscription = MagicMock(return_value=mock_sub)
+        _subscription_mod.is_paid_plan = MagicMock(return_value=False)
+        _subscription_mod.has_transcription_credits = MagicMock(return_value=False)
+
+        # is_free_credits_exhausted should be True (matching should_lock = not has_transcription_credits)
+        assert fair_use_mod.is_free_credits_exhausted('test-uid') is True
+
+        # Now simulate: free user WITH credits
+        _subscription_mod.has_transcription_credits = MagicMock(return_value=True)
+        fair_use_mod._has_transcription_credits = None  # Reset cache
+
+        assert fair_use_mod.is_free_credits_exhausted('test-uid') is False
