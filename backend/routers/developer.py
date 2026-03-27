@@ -1090,7 +1090,8 @@ def update_conversation_endpoint(
             conversations_db.update_conversation(uid, conversation_id, {'discarded': False})
 
     conversation = conversations_db.get_conversation(uid, conversation_id)
-    _add_folder_names_to_conversations(uid, [conversation])
+    if conversation:
+        _add_folder_names_to_conversations(uid, [conversation])
     return conversation
 
 
