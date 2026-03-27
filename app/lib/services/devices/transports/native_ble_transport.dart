@@ -124,6 +124,17 @@ class NativeBleTransport extends DeviceTransport {
     }
   }
 
+  /// Request bonding for devices that require encrypted links (e.g. Limitless).
+  /// Returns true if bonded, false if bond failed or timed out.
+  Future<bool> requestBond() async {
+    try {
+      return await _hostApi.requestBond(_peripheralUuid);
+    } catch (e) {
+      Logger.debug('[NativeBleTransport] requestBond failed: $e');
+      return false;
+    }
+  }
+
   // MARK: - Characteristic Streams
 
   @override
