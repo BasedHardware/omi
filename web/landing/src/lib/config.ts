@@ -14,7 +14,7 @@ export const brand = {
     order: '#',
     product: '/product',
     glass: '#',
-    apps: '#',
+    apps: '/apps',
     docs: '/docs',
     manifesto: '#',
     privacy: '/privacy',

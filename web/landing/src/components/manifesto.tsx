@@ -9,6 +9,7 @@ gsap.registerPlugin(ScrollTrigger);
 
 interface Statement {
   heading: string;
+  serifAccent: string;
   body: string;
   align: 'left' | 'center';
   headingSize: string;
@@ -25,30 +26,35 @@ export function Manifesto() {
   const statements: Statement[] = useMemo(() => [
     {
       heading: t('statement1Heading'),
+      serifAccent: t('statement1Serif'),
       body: t('statement1Body'),
       align: 'left',
       headingSize: 'text-[clamp(1.8rem,4vw,3rem)]',
     },
     {
       heading: t('statement2Heading'),
+      serifAccent: t('statement2Serif'),
       body: t('statement2Body'),
       align: 'left',
       headingSize: 'text-[clamp(1.6rem,3.5vw,2.75rem)]',
     },
     {
       heading: t('statement3Heading'),
+      serifAccent: t('statement3Serif'),
       body: t('statement3Body'),
       align: 'center',
       headingSize: 'text-[clamp(2rem,4.5vw,3.5rem)]',
     },
     {
       heading: t('statement4Heading'),
+      serifAccent: t('statement4Serif'),
       body: t('statement4Body'),
       align: 'left',
       headingSize: 'text-[clamp(1.6rem,3.5vw,2.75rem)]',
     },
     {
       heading: t('statement5Heading'),
+      serifAccent: t('statement5Serif'),
       body: t('statement5Body'),
       align: 'center',
       headingSize: 'text-[clamp(2.2rem,5vw,4rem)]',
@@ -190,13 +196,13 @@ export function Manifesto() {
         ref={headingRef}
         className="absolute inset-0 flex items-center justify-center z-10"
       >
-        <h2 className="font-display font-bold text-[clamp(2rem,5vw,4rem)] text-center leading-[1.1] px-6 max-w-4xl">
+        <h2 className="font-serif text-[clamp(2rem,5vw,4rem)] text-center leading-[1.15] px-6 max-w-4xl">
           {splitIntoWords(introHeading).map((word, i) => (
-            <span key={i} className="intro-word inline-block mr-[0.3em]">
+            <span key={i} className="intro-word inline-block mr-[0.3em] font-normal">
               {word}
             </span>
           ))}
-          <span className="intro-word inline-block text-brand">{t('introHighlight')}</span>
+          <span className="intro-word inline-block text-brand italic">{t('introHighlight')}</span>
         </h2>
       </div>
 
@@ -211,14 +217,24 @@ export function Manifesto() {
                 className={`card-line h-[2px] bg-brand mb-6 ${s.align === 'center' ? 'w-12 mx-auto origin-center' : 'w-16 origin-left'}`}
                 style={{ transform: 'scaleX(0)' }}
               />
-              <h3 className={`card-h font-display font-bold ${s.headingSize} leading-[1.12] mb-4`}>
+              <h3 className={`card-h font-serif ${s.headingSize} leading-[1.15] mb-4`}>
                 {splitIntoWords(s.heading).map((word, j) => (
-                  <span key={j} className="card-word inline-block mr-[0.25em]">
+                  <span key={j} className="card-word inline-block mr-[0.25em] font-normal">
                     {word}
                   </span>
                 ))}
+                {s.serifAccent && (
+                  <>
+                    {' '}
+                    {splitIntoWords(s.serifAccent).map((word, j) => (
+                      <span key={`s${j}`} className="card-word inline-block mr-[0.25em] italic">
+                        {word}
+                      </span>
+                    ))}
+                  </>
+                )}
               </h3>
-              <p className={`card-p text-text-tertiary text-base md:text-lg leading-relaxed ${s.align === 'center' ? 'max-w-2xl mx-auto' : 'max-w-2xl'}`}>
+              <p className={`card-p font-body text-text-tertiary text-base md:text-lg leading-relaxed ${s.align === 'center' ? 'max-w-2xl mx-auto' : 'max-w-2xl'}`}>
                 {s.body}
               </p>
             </div>

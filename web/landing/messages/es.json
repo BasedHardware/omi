@@ -34,7 +34,9 @@
     "heading": "Inteligencia personal que convierte el pensamiento en acción.",
     "description": "Nooto captura tus reuniones y conversaciones, crea resúmenes, tareas y memorias — en todos tus dispositivos.",
     "getStarted": "Comenzar",
-    "tryInBrowser": "Probar en el navegador"
+    "tryInBrowser": "Probar en el navegador",
+    "headingLine1": "Inteligencia personal que convierte",
+    "headingLine2": "pensamiento en acción."
   },
   "trustBar": {
     "heading": "Utilizado por más de 300,000 profesionales de"
@@ -42,16 +44,21 @@
   "manifesto": {
     "introHeading": "Estamos construyendo inteligencia personal que piensa",
     "introHighlight": "contigo.",
-    "statement1Heading": "La frontera entre el pensamiento y la máquina se está disolviendo.",
+    "statement1Heading": "La frontera entre pensamiento y máquina",
     "statement1Body": "Estamos al comienzo de una nueva era — sistemas inteligentes que escuchan, razonan y actúan.",
-    "statement2Heading": "Tus momentos más importantes viven en las conversaciones.",
+    "statement2Heading": "Tus momentos más importantes",
     "statement2Body": "Ideas compartidas. Decisiones tomadas. Promesas cumplidas. Sin embargo, la mayoría se desvanece antes de que puedas actuar.",
-    "statement3Heading": "La inteligencia debe acumularse, no decaer.",
+    "statement3Heading": "La inteligencia debería acumularse,",
     "statement3Body": "Nooto captura el matiz de cada conversación y convierte palabras dispersas en acción estructurada.",
-    "statement4Heading": "Una nueva interfaz que comienza escuchando.",
+    "statement4Heading": "Una nueva interfaz que comienza",
     "statement4Body": "Un dispositivo vestible combinado con IA profundamente personal — diseñado para extender tu memoria y amplificar tu intención.",
-    "statement5Heading": "Multimodal. Privado. Personal.",
-    "statement5Body": "Diseñado no para reemplazar tu pensamiento, sino para liberar tu mente para lo que más importa."
+    "statement5Heading": "Multimodal. Privado.",
+    "statement5Body": "Diseñado no para reemplazar tu pensamiento, sino para liberar tu mente para lo que más importa.",
+    "statement1Serif": "se está disolviendo.",
+    "statement2Serif": "viven en las conversaciones.",
+    "statement3Serif": "no decaer.",
+    "statement4Serif": "con la escucha.",
+    "statement5Serif": "Personal."
   },
   "productShowcase": {
     "heading": "Tus reuniones,",

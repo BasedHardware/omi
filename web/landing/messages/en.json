@@ -34,7 +34,9 @@
     "heading": "Personal intelligence that turns thought to action.",
     "description": "Nooto captures your meetings and conversations, creates summaries, tasks, and memories — across every device you own.",
     "getStarted": "Get started",
-    "tryInBrowser": "Try in browser"
+    "tryInBrowser": "Try in browser",
+    "headingLine1": "Personal intelligence that turns",
+    "headingLine2": "thought to action."
   },
   "trustBar": {
     "heading": "Trusted by 300,000+ professionals from"
@@ -42,16 +44,21 @@
   "manifesto": {
     "introHeading": "We are building personal intelligence that thinks",
     "introHighlight": "with you.",
-    "statement1Heading": "The boundary between thought and machine is dissolving.",
+    "statement1Heading": "The boundary between thought and machine",
     "statement1Body": "We are at the beginning of a new era — intelligent systems that listen, reason, and act.",
-    "statement2Heading": "Your most important moments live in conversations.",
+    "statement2Heading": "Your most important moments",
     "statement2Body": "Ideas shared. Decisions made. Promises kept. Yet most of it fades before you can act on it.",
-    "statement3Heading": "Intelligence should compound, not decay.",
+    "statement3Heading": "Intelligence should compound,",
     "statement3Body": "Nooto captures the nuance of every conversation and turns scattered words into structured action.",
-    "statement4Heading": "A new interface that begins with listening.",
+    "statement4Heading": "A new interface that begins",
     "statement4Body": "A wearable device paired with deeply personal AI — built to extend your memory and amplify your intent.",
-    "statement5Heading": "Multimodal. Private. Personal.",
-    "statement5Body": "Designed not to replace your thinking, but to free your mind for what matters most."
+    "statement5Heading": "Multimodal. Private.",
+    "statement5Body": "Designed not to replace your thinking, but to free your mind for what matters most.",
+    "statement1Serif": "is dissolving.",
+    "statement2Serif": "live in conversations.",
+    "statement3Serif": "not decay.",
+    "statement4Serif": "with listening.",
+    "statement5Serif": "Personal."
   },
   "productShowcase": {
     "heading": "Your meetings,",

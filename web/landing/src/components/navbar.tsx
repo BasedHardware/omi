@@ -22,7 +22,7 @@ export function Navbar() {
     <nav className="fixed top-0 left-0 right-0 z-50 bg-transparent backdrop-blur-md border-b border-white/[0.02]">
       <div className="mx-auto max-w-7xl px-6 flex items-center justify-between h-16">
         {/* Logo */}
-        <Link href="/" className="font-display font-bold text-2xl tracking-tight text-white">
+        <Link href="/" className="font-logo font-bold text-2xl tracking-tight text-white">
           {brand.nameLower}
         </Link>
 

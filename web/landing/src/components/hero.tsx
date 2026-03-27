@@ -101,7 +101,7 @@ export function Hero() {
   }, []);
 
   return (
-    <section ref={sectionRef} className="relative h-screen flex flex-col items-center justify-center overflow-hidden px-6">
+    <section ref={sectionRef} className="relative h-screen flex flex-col items-center justify-end pb-[18vh] overflow-hidden px-6">
       {/* Background image — extends behind navbar */}
       <div ref={bgRef} className="absolute -top-16 left-0 right-0 bottom-0 z-0" style={{ opacity: 0 }}>
         <Image
@@ -120,8 +120,9 @@ export function Hero() {
       <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-brand/[0.03] rounded-full blur-[150px]" />
 
       <div ref={textRef} className="relative z-10 text-center max-w-5xl mx-auto mb-16">
-        <h1 className="font-display font-bold text-[clamp(2rem,5vw,4.5rem)] tracking-tight leading-[1.1] mb-8 text-white drop-shadow-[0_2px_30px_rgba(0,0,0,0.8)]">
-          {t('heading')}
+        <h1 className="text-[clamp(2rem,5vw,4.5rem)] tracking-tight leading-[1.1] mb-8 text-white drop-shadow-[0_2px_30px_rgba(0,0,0,0.8)]">
+          <span className="font-display font-semibold">{t('headingLine1')}</span>{' '}
+          <span className="font-serif italic font-medium">{t('headingLine2')}</span>
         </h1>
         <p className="text-white/90 text-lg md:text-xl max-w-xl mx-auto leading-relaxed mb-10 drop-shadow-[0_1px_15px_rgba(0,0,0,0.7)]">
           {t('description')}

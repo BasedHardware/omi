@@ -24,6 +24,8 @@ const config: Config = {
       fontFamily: {
         display: ['var(--font-inter)', 'system-ui', 'sans-serif'],
         body: ['var(--font-inter)', 'system-ui', 'sans-serif'],
+        logo: ['var(--font-inter)', 'system-ui', 'sans-serif'],
+        serif: ['var(--font-serif)', 'Georgia', 'serif'],
       },
       animation: {
         'scroll-left': 'scroll-left 30s linear infinite',

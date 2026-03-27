@@ -34,7 +34,9 @@
     "heading": "Inteligência pessoal que transforma pensamento em ação.",
     "description": "Nooto captura suas reuniões e conversas, cria resumos, tarefas e memórias — em todos os seus dispositivos.",
     "getStarted": "Começar agora",
-    "tryInBrowser": "Testar no navegador"
+    "tryInBrowser": "Testar no navegador",
+    "headingLine1": "Inteligência pessoal que transforma",
+    "headingLine2": "pensamento em ação."
   },
   "trustBar": {
     "heading": "Utilizado por mais de 300.000 profissionais de"
@@ -42,16 +44,21 @@
   "manifesto": {
     "introHeading": "Estamos construindo inteligência pessoal que pensa",
     "introHighlight": "com você.",
-    "statement1Heading": "A fronteira entre pensamento e máquina está se dissolvendo.",
+    "statement1Heading": "A fronteira entre pensamento e máquina",
     "statement1Body": "Estamos no início de uma nova era — sistemas inteligentes que ouvem, raciocinam e agem.",
-    "statement2Heading": "Seus momentos mais importantes vivem nas conversas.",
+    "statement2Heading": "Seus momentos mais importantes",
     "statement2Body": "Ideias compartilhadas. Decisões tomadas. Promessas mantidas. Mas a maioria se perde antes que você possa agir.",
-    "statement3Heading": "A inteligência deve se acumular, não se dissipar.",
+    "statement3Heading": "A inteligência deveria se acumular,",
     "statement3Body": "Nooto captura a nuãnce de cada conversa e transforma palavras dispersas em ação estruturada.",
-    "statement4Heading": "Uma nova interface que começa ouvindo.",
+    "statement4Heading": "Uma nova interface que começa",
     "statement4Body": "Um dispositivo vestível combinado com IA profundamente pessoal — projetado para estender sua memória e amplificar sua intenção.",
-    "statement5Heading": "Multimodal. Privado. Pessoal.",
-    "statement5Body": "Projetado não para substituir seu pensamento, mas para liberar sua mente para o que realmente importa."
+    "statement5Heading": "Multimodal. Privado.",
+    "statement5Body": "Projetado não para substituir seu pensamento, mas para liberar sua mente para o que realmente importa.",
+    "statement1Serif": "está se dissolvendo.",
+    "statement2Serif": "vivem nas conversas.",
+    "statement3Serif": "não decair.",
+    "statement4Serif": "pela escuta.",
+    "statement5Serif": "Pessoal."
   },
   "productShowcase": {
     "heading": "Suas reuniões,",
