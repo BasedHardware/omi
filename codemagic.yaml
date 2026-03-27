@@ -23,6 +23,7 @@ workflows:
         - shorebird
       vars:
         APP_ID: 6502156163
+        STAGING_API_URL: "https://api.omiapi.com/"
       flutter: 3.35.3
       xcode: 16.4
       cocoapods: 1.16.2
@@ -198,6 +199,7 @@ workflows:
       vars:
         PACKAGE_NAME: "com.friend.ios"
         JAVA_TOOL_OPTIONS: "-Xmx8g"
+        STAGING_API_URL: "https://api.omiapi.com/"
       flutter: 3.35.3
       xcode: 16.4
       cocoapods: 1.16.2
@@ -373,6 +375,7 @@ workflows:
         - shorebird
       vars:
         APP_ID: 6502156163
+        STAGING_API_URL: "https://api.omiapi.com/"
       flutter: 3.35.3
       xcode: 16.4
       cocoapods: 1.16.2
@@ -752,6 +755,7 @@ workflows:
       vars:
         PACKAGE_NAME: "com.friend.ios"
         JAVA_TOOL_OPTIONS: "-Xmx8g"
+        STAGING_API_URL: "https://api.omiapi.com/"
       flutter: 3.35.3
       xcode: 16.4
       cocoapods: 1.16.2
@@ -925,6 +929,7 @@ workflows:
         - shorebird
       vars:
         APP_ID: 6502156163
+        STAGING_API_URL: "https://api.omiapi.com/"
       flutter: 3.35.3
       xcode: 16.4
       cocoapods: 1.16.2
@@ -1665,6 +1670,7 @@ workflows:
         - shorebird
       vars:
         PACKAGE_NAME: "com.friend.ios"
+        STAGING_API_URL: "https://api.omiapi.com/"
       flutter: 3.35.3
       xcode: 16.4
       cocoapods: 1.16.2

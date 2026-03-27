@@ -6,7 +6,7 @@ import 'package:omi/env/env.dart';
 /// we test with a single init and exercise the override/flag mechanisms.
 class _TestEnvFields implements EnvFields {
   @override
-  String? get stagingApiUrl => null; // triggers fallback
+  String? get stagingApiUrl => null; // STAGING_API_URL not configured
 
   @override
   String? get openAIAPIKey => null;
@@ -41,30 +41,25 @@ void main() {
   });
 
   group('Env.stagingApiUrl', () {
-    test('falls back to default when stagingApiUrl is null/empty', () {
-      // _TestEnvFields returns null for stagingApiUrl
-      expect(Env.stagingApiUrl, 'https://api.omiapi.com/');
+    test('returns null when STAGING_API_URL is not configured', () {
+      expect(Env.stagingApiUrl, isNull);
+    });
+  });
+
+  group('Env.isStagingConfigured', () {
+    test('false when STAGING_API_URL is not set', () {
+      expect(Env.isStagingConfigured, isFalse);
     });
   });
 
   group('Env.isUsingStagingApi', () {
-    // Note: _TestEnvFields.stagingApiUrl returns null, which means
-    // STAGING_API_URL is not explicitly configured. The implementation
-    // requires explicit configuration to return true.
-    test('false when override points to non-staging URL', () {
-      Env.overrideApiBaseUrl('https://api.prod.example.com/');
-      expect(Env.isUsingStagingApi, isFalse);
-    });
-
-    test('false when stagingApiUrl is not explicitly configured (null)', () {
-      // Even though the override matches the fallback staging URL,
-      // isUsingStagingApi requires _instance.stagingApiUrl to be non-null.
+    test('false when staging is not configured', () {
       Env.overrideApiBaseUrl('https://api.omiapi.com/');
       expect(Env.isUsingStagingApi, isFalse);
     });
 
-    test('false when override differs from fallback', () {
-      Env.overrideApiBaseUrl('https://something-else.example.com/');
+    test('false when override points to non-staging URL', () {
+      Env.overrideApiBaseUrl('https://api.prod.example.com/');
       expect(Env.isUsingStagingApi, isFalse);
     });
   });
