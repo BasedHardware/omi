@@ -30,6 +30,9 @@ final class OmiBleManager: NSObject {
     /// Whether the user explicitly disconnected (suppress auto-reconnect).
     private var manuallyDisconnected: Set<String> = []
 
+    /// RSSI keep-alive timer — periodic reads prevent connection supervision timeout.
+    private var rssiTimer: Timer?
+
     /// Scanning state.
     private var isScanning = false
     private var scanTimer: Timer?
@@ -146,13 +149,6 @@ final class OmiBleManager: NSObject {
         return peripherals[uuid]?.state == .connected
     }
 
-    // MARK: - Service Discovery
-
-    func discoverServices(peripheralUuid: String) {
-        guard let peripheral = peripherals[peripheralUuid], peripheral.state == .connected else { return }
-        peripheral.discoverServices(nil)
-    }
-
     // MARK: - Characteristic Operations
 
     func readCharacteristic(
@@ -222,6 +218,24 @@ final class OmiBleManager: NSObject {
         }
     }
 
+    // MARK: - RSSI Keep-Alive
+
+    private func startRssiKeepAlive(for peripheral: CBPeripheral) {
+        stopRssiKeepAlive()
+        rssiTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self, weak peripheral] _ in
+            guard let peripheral = peripheral, peripheral.state == .connected else {
+                self?.stopRssiKeepAlive()
+                return
+            }
+            peripheral.readRSSI()
+        }
+    }
+
+    private func stopRssiKeepAlive() {
+        rssiTimer?.invalidate()
+        rssiTimer = nil
+    }
+
     // MARK: - Private Helpers
 
     private func findCharacteristic(peripheralUuid: String, serviceUuid: String, characteristicUuid: String) -> CBCharacteristic? {
@@ -256,6 +270,7 @@ final class OmiBleManager: NSObject {
     // MARK: - Audio Batch Helpers
 
     private func cleanupPeripheral(_ peripheralUuid: String) {
+        stopRssiKeepAlive()
         discoveredServices.removeValue(forKey: peripheralUuid)
 
         // Clean up pending completions
@@ -387,7 +402,12 @@ extension OmiBleManager: CBPeripheralDelegate {
                 )
             }
             flutterApi?.onServicesDiscovered(peripheralUuid: uuid, services: bleServices) { _ in }
+            startRssiKeepAlive(for: peripheral)
         }
+    }
+
+    func peripheral(_ peripheral: CBPeripheral, didReadRSSI RSSI: NSNumber, error: Error?) {
+        // Pure keep-alive — value intentionally not used
     }
 
     func peripheral(_ peripheral: CBPeripheral, didUpdateValueFor characteristic: CBCharacteristic, error: Error?) {
