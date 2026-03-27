@@ -85,6 +85,7 @@ class OmiBleManager private constructor(private val application: Application) {
     private var pendingReconnectRunnable: Runnable? = null
     private var bondCompletionCallback: ((Boolean) -> Unit)? = null
     private var bondTimeoutRunnable: Runnable? = null
+    private var bondingAddress: String? = null
 
     private val bondStateReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
@@ -94,9 +95,11 @@ class OmiBleManager private constructor(private val application: Application) {
             val address = device.address.uppercase()
 
             Log.i(TAG, "Bond state changed: $address → $bondState")
+            if (address != bondingAddress) return
             when (bondState) {
                 BluetoothDevice.BOND_BONDED -> {
                     Log.i(TAG, "Bonding complete for $address")
+                    bondingAddress = null
                     bondTimeoutRunnable?.let { mainHandler.removeCallbacks(it) }
                     bondTimeoutRunnable = null
                     bondCompletionCallback?.invoke(true)
@@ -104,6 +107,7 @@ class OmiBleManager private constructor(private val application: Application) {
                 }
                 BluetoothDevice.BOND_NONE -> {
                     Log.w(TAG, "Bonding failed/removed for $address")
+                    bondingAddress = null
                     bondTimeoutRunnable?.let { mainHandler.removeCallbacks(it) }
                     bondTimeoutRunnable = null
                     bondCompletionCallback?.invoke(false)
@@ -310,10 +314,12 @@ class OmiBleManager private constructor(private val application: Application) {
             return
         }
         Log.i(TAG, "requestBond: $addr initiating bond")
+        bondingAddress = addr
         bondCompletionCallback = { bonded -> completion(Result.success(bonded)) }
         device.createBond()
         val timeoutRunnable = Runnable {
             bondTimeoutRunnable = null
+            bondingAddress = null
             Log.w(TAG, "requestBond: $addr bond timeout")
             bondCompletionCallback?.invoke(false)
             bondCompletionCallback = null
@@ -514,6 +520,7 @@ class OmiBleManager private constructor(private val application: Application) {
         val addr = address.uppercase()
         servicesDiscoveredFor.remove(addr)
         stopRssiKeepAlive()
+        bondingAddress = null
         bondTimeoutRunnable?.let { mainHandler.removeCallbacks(it) }
         bondTimeoutRunnable = null
         bondCompletionCallback?.invoke(false)

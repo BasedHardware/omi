@@ -44,7 +44,10 @@ class LimitlessDeviceConnection extends DeviceConnection {
     await super.connect(onConnectionStateChanged: onConnectionStateChanged);
 
     // Limitless requires an encrypted link — bond before accessing characteristics
-    await transport.requestBond();
+    final bonded = await transport.requestBond();
+    if (!bonded) {
+      Logger.debug('Limitless: bonding failed — encrypted characteristics may not work');
+    }
 
     await Future.delayed(const Duration(seconds: 1));
 
