@@ -169,12 +169,6 @@ struct OnboardingChatView: View {
             .foregroundColor(OmiColors.textTertiary)
         }
         .buttonStyle(.plain)
-        .alert("Are you sure?", isPresented: $showSkipConfirmation) {
-          Button("Skip anyway", role: .destructive) { onSkip() }
-          Button("Continue setup", role: .cancel) {}
-        } message: {
-          Text("Omi won't be useful for you if it doesn't know enough about you.")
-        }
       }
       .padding(.horizontal, 24)
       .padding(.vertical, 16)
@@ -440,6 +434,12 @@ struct OnboardingChatView: View {
       }
       .padding(.horizontal, 20)
       .padding(.vertical, 16)
+    }
+    .alert("Are you sure?", isPresented: $showSkipConfirmation) {
+      Button("Skip anyway", role: .destructive) { onSkip() }
+      Button("Continue setup", role: .cancel) {}
+    } message: {
+      Text("Omi won't be useful for you if it doesn't know enough about you.")
     }
     .onAppear {
       startChat()
@@ -776,6 +776,7 @@ struct OnboardingChatView: View {
     guard canSend else { return }
 
     let text = inputText.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !text.isEmpty else { return }
     inputText = ""
 
     // Clear quick replies and unblock any pending ask_followup
