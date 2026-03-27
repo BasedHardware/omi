@@ -31,7 +31,7 @@ class BleHostApiImpl(private val getActivity: () -> Activity?) : BleHostApi {
     }
 
     override fun connectPeripheral(uuid: String) {
-        bleManager.connectPeripheral(uuid)
+        bleManager.connectPeripheral(uuid, caller = "Dart")
     }
 
     override fun disconnectPeripheral(uuid: String) {
