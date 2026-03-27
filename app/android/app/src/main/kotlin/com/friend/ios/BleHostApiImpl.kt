@@ -42,6 +42,10 @@ class BleHostApiImpl(private val getActivity: () -> Activity?) : BleHostApi {
         bleManager.reconnectKnownPeripheral(uuid)
     }
 
+    override fun requestBond(uuid: String, callback: (Result<Boolean>) -> Unit) {
+        bleManager.requestBond(uuid, callback)
+    }
+
     override fun readCharacteristic(
         peripheralUuid: String,
         serviceUuid: String,
