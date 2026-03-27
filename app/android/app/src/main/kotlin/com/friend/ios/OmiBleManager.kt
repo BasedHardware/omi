@@ -29,9 +29,11 @@ class OmiBleManager private constructor(private val application: Application) {
         private const val RECONNECT_DELAY_MS = 3000L // 3s between retries
         private const val MTU_REQUEST_DELAY_MS = 100L // Small delay for BLE stack stability
         private const val STABILITY_TIMER_MS = 60000L // 60s — reset retry count after stable connection
+        private const val BOND_TIMEOUT_MS = 15000L // 15s — give up bonding if it hangs
+        private const val BOND_AFTER_DISCOVERY_DELAY_MS = 1000L // 1s delay before bonding after discovery
 
         /** GATT status codes that are transient and worth retrying. */
-        private val RETRYABLE_STATUS_CODES = setOf(8, 19, 62, 133, 257)
+        private val RETRYABLE_STATUS_CODES = setOf(8, 19, 22, 62, 133, 257)
 
         @Volatile
         private var _instance: OmiBleManager? = null
@@ -83,6 +85,7 @@ class OmiBleManager private constructor(private val application: Application) {
 
     private var stabilityTimerRunnable: Runnable? = null
     private var pendingReconnectRunnable: Runnable? = null
+    private var bondTimeoutRunnable: Runnable? = null
 
     private val bondStateReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
@@ -92,28 +95,14 @@ class OmiBleManager private constructor(private val application: Application) {
             val address = device.address.uppercase()
 
             Log.i(TAG, "Bond state changed: $address → $bondState")
-            val gatt = connectedGatts[address] ?: return
+            // Cancel bond timeout if bonding resolved (either success or failure)
+            if (bondState == BluetoothDevice.BOND_BONDED || bondState == BluetoothDevice.BOND_NONE) {
+                bondTimeoutRunnable?.let { mainHandler.removeCallbacks(it) }
+                bondTimeoutRunnable = null
+            }
             when (bondState) {
-                BluetoothDevice.BOND_BONDED -> {
-                    Log.i(TAG, "Bonding complete for $address, discovering services")
-                    servicesDiscoveredFor.remove(address)
-                    enqueueCommand {
-                        if (!gatt.discoverServices()) {
-                            Log.e(TAG, "discoverServices returned false after bonding")
-                            completeCommand()
-                        }
-                    }
-                }
-                BluetoothDevice.BOND_NONE -> {
-                    Log.w(TAG, "Bonding failed for $address, attempting service discovery anyway")
-                    servicesDiscoveredFor.remove(address)
-                    enqueueCommand {
-                        if (!gatt.discoverServices()) {
-                            Log.e(TAG, "discoverServices returned false after bond failure")
-                            completeCommand()
-                        }
-                    }
-                }
+                BluetoothDevice.BOND_BONDED -> Log.i(TAG, "Bonding complete for $address")
+                BluetoothDevice.BOND_NONE -> Log.w(TAG, "Bonding failed/removed for $address")
             }
         }
     }
@@ -325,23 +314,6 @@ class OmiBleManager private constructor(private val application: Application) {
         return bluetoothManager.getConnectionState(gatt.device, BluetoothProfile.GATT) == BluetoothProfile.STATE_CONNECTED
     }
 
-    fun discoverServices(address: String) {
-        val addr = address.uppercase()
-        Log.i(TAG, "discoverServices(Dart): $addr")
-        enqueueCommand {
-            if (servicesDiscoveredFor.contains(addr)) {
-                Log.i(TAG, "discoverServices(Dart): $addr already complete, skipping")
-                completeCommand()
-                return@enqueueCommand
-            }
-            val gatt = connectedGatts[addr]
-            if (gatt == null || !gatt.discoverServices()) {
-                Log.e(TAG, "discoverServices(Dart): returned false or no GATT for $addr")
-                completeCommand()
-            }
-        }
-    }
-
     fun readCharacteristic(
         address: String,
         serviceUuid: String,
@@ -534,6 +506,8 @@ class OmiBleManager private constructor(private val application: Application) {
         val addr = address.uppercase()
         servicesDiscoveredFor.remove(addr)
         stopRssiKeepAlive()
+        bondTimeoutRunnable?.let { mainHandler.removeCallbacks(it) }
+        bondTimeoutRunnable = null
 
         for (key in readCompletions.keys().toList().filter { it.startsWith(addr.lowercase()) }) {
             readCompletions.remove(key)?.invoke(Result.failure(Exception("Peripheral disconnected")))
@@ -576,18 +550,13 @@ class OmiBleManager private constructor(private val application: Application) {
 
                     startStabilityTimer(address)
 
-                    if (gatt.device.bondState == BluetoothDevice.BOND_BONDED) {
-                        Log.i(TAG, "Device $address already bonded, discovering services")
-                        enqueueCommand {
-                            if (!gatt.discoverServices()) {
-                                Log.e(TAG, "discoverServices returned false")
-                                completeCommand()
-                            }
+                    // Always discover services immediately — bond after discovery.
+                    // discoverServices() is bond-independent; bonding is initiated after onServicesDiscovered.
+                    enqueueCommand {
+                        if (!gatt.discoverServices()) {
+                            Log.e(TAG, "discoverServices returned false for $address")
+                            completeCommand()
                         }
-                    } else {
-                        Log.i(TAG, "Device $address not bonded (state=${gatt.device.bondState}), calling createBond()")
-                        gatt.device.createBond()
-                        // Service discovery happens in bondStateReceiver after bonding completes
                     }
                 }
                 BluetoothProfile.STATE_DISCONNECTED -> {
@@ -704,6 +673,26 @@ class OmiBleManager private constructor(private val application: Application) {
                     }
                 }
             }, MTU_REQUEST_DELAY_MS)
+
+            // Bond after discovery if not already bonded.
+            // discoverServices is bond-independent; bonding is for encrypted characteristic access.
+            if (gatt.device.bondState != BluetoothDevice.BOND_BONDED) {
+                mainHandler.postDelayed({
+                    if (connectedGatts[address] != null && gatt.device.bondState != BluetoothDevice.BOND_BONDED) {
+                        Log.i(TAG, "Initiating bond for $address after service discovery")
+                        gatt.device.createBond()
+                        // 15s bond timeout — proceed without bond if it hangs
+                        val timeoutRunnable = Runnable {
+                            bondTimeoutRunnable = null
+                            if (gatt.device.bondState != BluetoothDevice.BOND_BONDED) {
+                                Log.w(TAG, "Bond timeout for $address, proceeding without bond")
+                            }
+                        }
+                        bondTimeoutRunnable = timeoutRunnable
+                        mainHandler.postDelayed(timeoutRunnable, BOND_TIMEOUT_MS)
+                    }
+                }, BOND_AFTER_DISCOVERY_DELAY_MS)
+            }
         }
 
         override fun onCharacteristicChanged(gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic, value: ByteArray) {
