@@ -7,7 +7,13 @@ import 'package:omi/services/wals/wal.dart';
 export 'package:omi/backend/http/api/conversations.dart' show SyncLocalFilesResponse, syncLocalFiles;
 
 abstract class IWalSyncProgressListener {
-  void onWalSyncedProgress(double percentage, {double? speedKBps, SyncPhase? phase});
+  void onWalSyncedProgress(double percentage,
+      {double? speedKBps,
+      SyncPhase? phase,
+      int? currentFile,
+      int? totalFiles,
+      int? uploadedBytes,
+      int? totalBytesToUpload});
 }
 
 /// Listener for WiFi connection progress
@@ -88,6 +94,16 @@ abstract class SDCardWalSync implements IWalSync {
     IWalSyncProgressListener? progress,
     IWifiConnectionListener? connectionListener,
   });
+}
+
+abstract class StorageSync implements IWalSync {
+  void setLocalSync(LocalWalSync localSync);
+  void setDevice(BtDevice? device);
+  Future<void> deleteAllSyncedWals();
+  Future<void> deleteAllPendingWals();
+  bool get isSyncing;
+  double get currentSpeedKBps;
+  Future<bool> hasFilesToSync();
 }
 
 abstract class FlashPageWalSync implements IWalSync {

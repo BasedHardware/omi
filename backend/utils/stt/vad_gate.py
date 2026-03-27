@@ -332,6 +332,10 @@ class VADStreamingGate:
         self._last_send_wall_time: Optional[float] = None  # For keepalive timing
         self._keepalive_count = 0
 
+        # Fair-use speech accumulator (#5746)
+        self._speech_ms_total: float = 0.0
+        self._speech_ms_delta: float = 0.0
+
     def activate(self) -> None:
         """Switch from shadow to active mode (used after speech profile completes).
 
@@ -404,7 +408,7 @@ class VADStreamingGate:
             self._vad_buffer = np.concatenate([self._vad_buffer, float_data])
             del float_data
 
-            speech_detected = False
+            is_speech = False
             if len(self._vad_buffer) >= self._vad_window_samples:
                 model = _borrow_vad_model()
                 try:
@@ -423,9 +427,8 @@ class VADStreamingGate:
                         # Silero returns tensor; mock returns float
                         if hasattr(prob, 'item'):
                             prob = prob.item()
-                        window_is_speech = prob > self._speech_threshold
-                        if window_is_speech:
-                            speech_detected = True
+                        if prob > self._speech_threshold:
+                            is_speech = True
                     self._vad_state = _capture_model_state(model)
                 finally:
                     _return_vad_model(model)
@@ -434,7 +437,7 @@ class VADStreamingGate:
             if len(self._vad_buffer) > self._vad_window_samples:
                 self._vad_buffer = self._vad_buffer[-self._vad_window_samples :]
 
-            return speech_detected
+            return is_speech
 
     def process_audio(self, pcm_data: bytes, wall_time: float) -> GateOutput:
         """Process an audio chunk through the VAD gate.
@@ -465,6 +468,11 @@ class VADStreamingGate:
             self._chunks_speech += 1
         else:
             self._chunks_silence += 1
+
+        # Fair-use speech accumulator (#5746)
+        if is_speech and self.mode == 'active':
+            self._speech_ms_total += chunk_ms
+            self._speech_ms_delta += chunk_ms
 
         # Shadow mode: log but send everything
         if self.mode == 'shadow':
@@ -617,6 +625,17 @@ class VADStreamingGate:
         # Fallback: send everything
         return GateOutput(audio_to_send=pcm_data, is_speech=is_speech)
 
+    def consume_speech_ms_delta(self) -> int:
+        """Consume and reset the speech_ms delta since last call.
+
+        Used by the usage recording loop to periodically flush speech_ms
+        to Redis/Firestore for fair-use tracking (#5746).
+        Thread-safe: called from the same asyncio task that feeds audio.
+        """
+        delta = int(self._speech_ms_delta)
+        self._speech_ms_delta = 0.0
+        return delta
+
     def get_metrics(self) -> dict:
         """Return gate metrics for logging/monitoring."""
         total = self._chunks_total or 1
@@ -634,6 +653,7 @@ class VADStreamingGate:
             'bytes_skipped': bytes_skipped,
             'bytes_saved_ratio': bytes_skipped / total_bytes,
             'keepalive_count': self._keepalive_count,
+            'speech_ms_total': self._speech_ms_total,
             'state': self._state.value,
             'mode': self.mode,
         }
@@ -694,8 +714,22 @@ class GatedDeepgramSocket:
             self._raw_file = open(os.path.join(self._capture_dir, f'{session_id}_raw.pcm'), 'wb')
             self._gated_file = open(os.path.join(self._capture_dir, f'{session_id}_gated.pcm'), 'wb')
 
+    @property
+    def is_connection_dead(self) -> bool:
+        """True if DG connection has been detected as dead. Delegates to SafeDeepgramSocket."""
+        if getattr(self._conn, '_is_safe_dg_socket', None) is True:
+            return self._conn.is_connection_dead
+        return False
+
+    @property
+    def death_reason(self) -> Optional[str]:
+        """Why the DG connection died. Delegates to SafeDeepgramSocket."""
+        return self._conn.death_reason
+
     def send(self, data: bytes, wall_time: Optional[float] = None) -> None:
         """Send audio through VAD gate (if active), then to DG."""
+        if self.is_connection_dead:
+            return
         if self._gate is None:
             return self._conn.send(data)
 
@@ -712,14 +746,10 @@ class GatedDeepgramSocket:
         if self._gated_file and gate_out.audio_to_send:
             self._gated_file.write(gate_out.audio_to_send)
         if gate_out.audio_to_send:
+            # SafeDeepgramSocket.send() handles dead detection internally
             self._conn.send(gate_out.audio_to_send)
-        elif self._gate.needs_keepalive(now):
-            # Prevent DG 10s idle timeout during extended silence
-            try:
-                self._conn.keep_alive()
-                self._gate.record_keepalive(now)
-            except Exception:
-                logger.debug('keepalive failed uid=%s', self._gate.uid)
+        # Keepalive is handled automatically by SafeDeepgramSocket's background thread.
+        # No explicit keep_alive() call needed here (#5870 architecture).
         if gate_out.should_finalize:
             try:
                 self._conn.finalize()

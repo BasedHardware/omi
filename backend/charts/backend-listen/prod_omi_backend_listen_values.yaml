@@ -265,7 +265,7 @@ env:
         name: prod-omi-backend-secrets
         key: ENCRYPTION_SECRET
   - name: BASIC_TIER_MINUTES_LIMIT_PER_MONTH
-    value: "4800"
+    value: "1200"
   - name: BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH
     value: "0"
   - name: BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
@@ -311,6 +311,35 @@ env:
         key: TWILIO_TWIML_APP_SID
   - name: VAD_GATE_MODE
     value: "active"
+  # Fair-use system (PR #5748)
+  - name: FAIR_USE_ENABLED
+    value: "true"
+  - name: FAIR_USE_KILL_SWITCH
+    value: "false"
+  - name: FAIR_USE_DAILY_SPEECH_MS
+    value: "7200000"
+  - name: FAIR_USE_3DAY_SPEECH_MS
+    value: "28800000"
+  - name: FAIR_USE_WEEKLY_SPEECH_MS
+    value: "36000000"
+  - name: FAIR_USE_BUCKET_SECONDS
+    value: "60"
+  - name: FAIR_USE_REDIS_RETENTION_SECONDS
+    value: "691200"
+  - name: FAIR_USE_CLASSIFIER_ABUSE_SCORE_THRESHOLD
+    value: "0.7"
+  - name: FAIR_USE_CLASSIFIER_COOLDOWN_SECONDS
+    value: "43200"
+  - name: FAIR_USE_CLASSIFIER_MODEL
+    value: "gpt-5.1"
+  - name: FAIR_USE_CLASSIFIER_LOOKBACK_DAYS
+    value: "7"
+  - name: FAIR_USE_CHECK_INTERVAL_SECONDS
+    value: "300"
+  - name: FAIR_USE_EXEMPT_UIDS
+    value: ""
+  - name: FAIR_USE_RESTRICT_DAILY_DG_MS
+    value: "1800000"
   - name: METRICS_SECRET
     valueFrom:
       secretKeyRef:
@@ -331,28 +360,34 @@ resources:
 
 # This is to setup the liveness and readiness probes more information can be found here: https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/
 livenessProbe:
-  tcpSocket:
+  httpGet:
+    path: /v1/health
     port: 8080
-  failureThreshold: 30
+  failureThreshold: 5
   periodSeconds: 10
+  timeoutSeconds: 5
 
 readinessProbe:
-  tcpSocket:
+  httpGet:
+    path: /v1/health
     port: 8080
-  failureThreshold: 30
+  failureThreshold: 3
   periodSeconds: 10
+  timeoutSeconds: 5
 
 startupProbe:
-  tcpSocket:
+  httpGet:
+    path: /v1/health
     port: 8080
   failureThreshold: 30
   periodSeconds: 10
+  timeoutSeconds: 5
 
 # This section is for setting up autoscaling more information can be found here: https://kubernetes.io/docs/concepts/workloads/autoscaling/
 autoscaling:
   enabled: true
   minReplicas: 20
-  maxReplicas: 40
+  maxReplicas: 60
   behavior:
     scaleDown:
       stabilizationWindowSeconds: 600
@@ -365,20 +400,20 @@ autoscaling:
         periodSeconds: 120
       selectPolicy: Min
     scaleUp:
-      stabilizationWindowSeconds: 120
+      stabilizationWindowSeconds: 30
       policies:
       - type: Percent
-        value: 30
-        periodSeconds: 60
+        value: 50
+        periodSeconds: 15
       - type: Pods
         value: 5
-        periodSeconds: 60
+        periodSeconds: 15
       selectPolicy: Max
   # targetCPUUtilizationPercentage: 70
   # targetMemoryUtilizationPercentage: 70
-  # requestsPerPod: 10
   # failedResponseCode: 10
-  activeConnectionsPerPod: 21
+  requestsPerPod: 10
+  activeConnectionsPerPod: 22
 
 podDisruptionBudget:
   minAvailable: "80%"

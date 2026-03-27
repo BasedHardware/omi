@@ -375,7 +375,7 @@ def delete_person_endpoint(memory_id: str, uid: str = Depends(auth.get_current_u
     else:
         memory = get_conversation(uid, memory_id)
     memory = Conversation(**memory)
-    return {'result': followup_question_prompt(memory.transcript_segments)}
+    return {'result': followup_question_prompt(uid, memory.transcript_segments)}
 
 
 # **************************************

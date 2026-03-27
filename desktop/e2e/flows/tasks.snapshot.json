@@ -1,0 +1,46 @@
+{
+  "version": 1,
+  "flow": "tasks",
+  "flowHash": "7cde84f4070e16eb",
+  "device": {
+    "model": "unknown",
+    "resolution": "unknown"
+  },
+  "createdAt": "2026-03-20T07:13:55.045Z",
+  "runId": "IPx51fg",
+  "totalDurationMs": 317000,
+  "verifySteps": [
+    "S1",
+    "S2",
+    "S3",
+    "S4",
+    "S5"
+  ],
+  "steps": {
+    "S1": {
+      "kind": "action",
+      "waitAfterMs": 200,
+      "durationMs": 40000
+    },
+    "S2": {
+      "kind": "action",
+      "waitAfterMs": 200,
+      "durationMs": 73000
+    },
+    "S3": {
+      "kind": "action",
+      "waitAfterMs": 200,
+      "durationMs": 116000
+    },
+    "S4": {
+      "kind": "verify",
+      "waitAfterMs": 200,
+      "durationMs": 43000
+    },
+    "S5": {
+      "kind": "action",
+      "waitAfterMs": 500,
+      "durationMs": 45000
+    }
+  }
+}

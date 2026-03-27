@@ -4,6 +4,7 @@ import uuid
 from typing import Callable, Dict, List, Optional
 
 from utils.llm.clients import llm_mini
+from utils.llm.usage_tracker import track_usage, Features
 import logging
 
 logger = logging.getLogger(__name__)
@@ -211,7 +212,8 @@ Transcript: "{transcript}"
 
 Reply with only "yes" or "no"."""
 
-            response = await asyncio.to_thread(llm_mini.invoke, prompt)
+            with track_usage(self.uid, Features.ONBOARDING):
+                response = await asyncio.to_thread(llm_mini.invoke, prompt)
             return 'yes' in response.content.lower()
         except Exception as e:
             logger.error(f"AI check error: {e}")

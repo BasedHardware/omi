@@ -264,7 +264,7 @@ env:
         name: prod-omi-backend-secrets
         key: STT_SERVICE_MODELS
   - name: BASIC_TIER_MINUTES_LIMIT_PER_MONTH
-    value: "4800"
+    value: "1200"
   - name: BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH
     value: "0"
   - name: BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
@@ -299,20 +299,23 @@ resources:
 livenessProbe:
   tcpSocket:
     port: 8080
-  failureThreshold: 30
+  failureThreshold: 3
   periodSeconds: 10
+  timeoutSeconds: 1
 
 readinessProbe:
   tcpSocket:
     port: 8080
-  failureThreshold: 30
+  failureThreshold: 3
   periodSeconds: 10
+  timeoutSeconds: 1
 
 startupProbe:
   tcpSocket:
     port: 8080
-  failureThreshold: 30
+  failureThreshold: 60
   periodSeconds: 10
+  timeoutSeconds: 1
 
 # This section is for setting up autoscaling more information can be found here: https://kubernetes.io/docs/concepts/workloads/autoscaling/
 autoscaling:
@@ -342,7 +345,7 @@ autoscaling:
       selectPolicy: Max
   # targetCPUUtilizationPercentage: 60
   # targetMemoryUtilizationPercentage: 60
-  activeConnectionsPerPod: 21
+  activeConnectionsPerPod: 22
 
 podDisruptionBudget:
   minAvailable: "80%"
@@ -390,3 +393,29 @@ affinity:
               operator: In
               values:
                 - prod
+            - key: version
+              operator: In
+              values:
+                - v2
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        preference:
+          matchExpressions:
+            - key: topology.kubernetes.io/zone
+              operator: In
+              values:
+                - us-central1-a
+      - weight: 70
+        preference:
+          matchExpressions:
+            - key: topology.kubernetes.io/zone
+              operator: In
+              values:
+                - us-central1-b
+      - weight: 50
+        preference:
+          matchExpressions:
+            - key: topology.kubernetes.io/zone
+              operator: In
+              values:
+                - us-central1-c

@@ -448,7 +448,7 @@
     "exportConfiguration": "Configuratie exporteren",
     "bringYourOwn": "Breng je eigen mee",
     "payYourSttProvider": "Gebruik Omi vrij. Je betaalt alleen je STT-provider rechtstreeks.",
-    "freeMinutesMonth": "4.800 gratis minuten/maand inbegrepen. Onbeperkt met ",
+    "freeMinutesMonth": "1.200 gratis minuten/maand inbegrepen. Onbeperkt met ",
     "omiUnlimited": "Omi Onbeperkt",
     "hostRequired": "Host is vereist",
     "validPortRequired": "Geldige poort is vereist",
@@ -1459,7 +1459,7 @@
     "accessesAndTriggeredBy": "{accessDescription} en is {triggerDescription}.",
     "isTriggeredBy": "Wordt {triggerDescription} geactiveerd.",
     "noSpecificDataAccessConfigured": "Geen specifieke gegevenstoegang geconfigureerd.",
-    "basicPlanDescription": "4.800 premium minuten + onbeperkt op apparaat",
+    "basicPlanDescription": "1.200 premium minuten + onbeperkt op apparaat",
     "minutes": "minuten",
     "omiHas": "Omi heeft:",
     "premiumMinutesUsed": "Premium minuten gebruikt.",
@@ -1929,7 +1929,7 @@
     "deviceMayWarmUp": "Apparaat kan warm worden tijdens langdurig gebruik.",
     "speedAccuracyLower": "Snelheid en nauwkeurigheid kunnen lager zijn dan Cloud-modellen.",
     "cloudProvider": "Cloud-provider",
-    "premiumMinutesMonth": "4.800 premium minuten/maand. Het tabblad On-device biedt onbeperkte gratis transcriptie. ",
+    "premiumMinutesMonth": "1.200 premium minuten/maand. Het tabblad On-device biedt onbeperkte gratis transcriptie. ",
     "viewUsage": "Bekijk gebruik",
     "audioProcessedLocally": "Audio wordt lokaal verwerkt. Werkt offline, meer privacy, maar gebruikt meer batterij.",
     "languageLabel": "Taal",
@@ -2471,7 +2471,7 @@
     "noReviewsFound": "Geen recensies gevonden",
     "onDeviceIntensive": "On-device transcriptie is rekenintensief.",
     "onDeviceSlower": "On-device transcriptie kan trager zijn op dit apparaat.",
-    "premiumMinutesInfo": "4.800 premium minuten/maand. Het On-Device tabblad biedt onbeperkte gratis transcriptie.",
+    "premiumMinutesInfo": "1.200 premium minuten/maand. Het On-Device tabblad biedt onbeperkte gratis transcriptie.",
     "redownload": "Opnieuw downloaden",
     "reply": "Reageren",
     "replySentSuccessfully": "Reactie succesvol verzonden",
@@ -2749,5 +2749,81 @@
     "notYetSynced": "Nog niet gesynchroniseerd met uw telefoon",
     "clearAll": "Alles wissen",
     "phoneKeypad": "Toetsenbord",
-    "phoneHideKeypad": "Toetsenbord verbergen"
+    "phoneHideKeypad": "Toetsenbord verbergen",
+    "transcriptionPaused": "Opname, opnieuw verbinden",
+    "transcriptionPausedReconnecting": "Neemt nog steeds op — opnieuw verbinden met transcriptie...",
+    "fairUsePolicy": "Redelijk gebruik",
+    "fairUseLoadError": "Kan de status van redelijk gebruik niet laden. Probeer het opnieuw.",
+    "fairUseStatusNormal": "Uw gebruik is binnen de normale grenzen.",
+    "fairUseStageNormal": "Normaal",
+    "fairUseStageWarning": "Waarschuwing",
+    "fairUseStageThrottle": "Beperkt",
+    "fairUseStageRestrict": "Geblokkeerd",
+    "fairUseSpeechUsage": "Spraakgebruik",
+    "fairUseToday": "Vandaag",
+    "fairUse3Day": "3-daags voortschrijdend",
+    "fairUseWeekly": "Wekelijks voortschrijdend",
+    "fairUseAboutTitle": "Over redelijk gebruik",
+    "fairUseAboutBody": "Omi is ontworpen voor persoonlijke gesprekken, vergaderingen en live interacties. Het gebruik wordt gemeten aan de hand van de werkelijke gedetecteerde spreektijd, niet de verbindingstijd. Als het gebruik de normale patronen voor niet-persoonlijke inhoud aanzienlijk overschrijdt, kunnen aanpassingen worden toegepast.",
+    "fairUseCaseRefCopied": "{caseRef} gekopieerd",
+    "@fairUseCaseRefCopied": {
+        "description": "Snackbar message when case reference is copied",
+        "placeholders": {
+            "caseRef": {
+                "type": "String"
+            }
+        }
+    },
+    "fairUseDailyTranscription": "Daily Transcription",
+    "fairUseBudgetExhausted": "Daily transcription limit reached",
+    "fairUseBudgetResetsAt": "Resets {time}",
+    "fairUseBudgetUsed": "{used}m / {limit}m",
+    "@fairUseBudgetUsed": {
+        "placeholders": {
+            "used": {
+                "type": "String"
+            },
+            "limit": {
+                "type": "String"
+            }
+        }
+    },
+    "@fairUseBudgetResetsAt": {
+        "placeholders": {
+            "time": {
+                "type": "String"
+            }
+        }
+    },
+    "fairUseBannerStatus": "Eerlijk gebruik: {status}",
+    "@fairUseBannerStatus": {
+        "placeholders": {
+            "status": {
+                "type": "String"
+            }
+        }
+    },
+    "improveConnectionTitle": "Verbinding verbeteren",
+    "improveConnectionContent": "We hebben verbeterd hoe Omi verbonden blijft met je apparaat. Om dit te activeren, ga naar de Apparaatinfo-pagina, tik op \"Apparaat loskoppelen\" en koppel je apparaat opnieuw.",
+    "improveConnectionAction": "Begrepen",
+    "clockSkewWarning": "De klok van je apparaat wijkt ~{minutes} min. af. Controleer je datum- en tijdinstellingen.",
+    "omisStorage": "Omi's opslag",
+    "phoneStorage": "Telefoonopslag",
+    "cloudStorage": "Cloudopslag",
+    "howSyncingWorks": "Hoe synchronisatie werkt",
+    "noSyncedRecordings": "Nog geen gesynchroniseerde opnames",
+    "recordingsSyncAutomatically": "Opnames worden automatisch gesynchroniseerd — geen actie nodig.",
+    "filesDownloadedUploadedNextTime": "Reeds gedownloade bestanden worden de volgende keer geüpload.",
+    "nConversationsCreated": "{count, plural, =1{1 gesprek aangemaakt} other{{count} gesprekken aangemaakt}}",
+    "tapToView": "Tik om te bekijken",
+    "syncFailed": "Synchronisatie mislukt",
+    "keepSyncing": "Doorgaan met synchroniseren",
+    "cancelSyncQuestion": "Synchronisatie annuleren?",
+    "omisStorageDesc": "Wanneer uw Omi niet verbonden is met uw telefoon, slaat het audio lokaal op in het ingebouwde geheugen. U verliest nooit een opname.",
+    "phoneStorageDesc": "Wanneer Omi opnieuw verbinding maakt, worden opnames automatisch naar uw telefoon overgebracht voor het uploaden.",
+    "cloudStorageDesc": "Na het uploaden worden uw opnames verwerkt en getranscribeerd. Gesprekken zijn binnen een minuut beschikbaar.",
+    "storageSection": "OPSLAG",
+    "tipKeepPhoneNearby": "Houd uw telefoon dichtbij voor snellere synchronisatie",
+    "tipStableInternet": "Stabiel internet versnelt cloud-uploads",
+    "tipAutoSync": "Opnames worden automatisch gesynchroniseerd"
 }

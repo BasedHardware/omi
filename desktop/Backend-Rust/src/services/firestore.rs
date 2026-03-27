@@ -7798,8 +7798,8 @@ impl FirestoreService {
         // Check existing active goals
         let existing_goals = self.get_user_goals(uid, 10).await?;
 
-        // If we have 3 or more active goals, deactivate the oldest one
-        if existing_goals.len() >= 3 {
+        // If we have 4 or more active goals, deactivate the oldest one
+        if existing_goals.len() >= 4 {
             if let Some(oldest) = existing_goals.last() {
                 tracing::info!("Deactivating oldest goal {} to make room for new goal", oldest.id);
                 self.update_goal(uid, &oldest.id, None, None, None, None, None, None, None, Some(false), None).await?;

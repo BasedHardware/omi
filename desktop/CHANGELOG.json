@@ -2,6 +2,260 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.11.188",
+      "date": "2026-03-27",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.186",
+      "date": "2026-03-27",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.184",
+      "date": "2026-03-27",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.183",
+      "date": "2026-03-26",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.182",
+      "date": "2026-03-26",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.181",
+      "date": "2026-03-25",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.179",
+      "date": "2026-03-25",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.178",
+      "date": "2026-03-25",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.177",
+      "date": "2026-03-25",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.176",
+      "date": "2026-03-25",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.175",
+      "date": "2026-03-24",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.173",
+      "date": "2026-03-24",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.172",
+      "date": "2026-03-24",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.171",
+      "date": "2026-03-24",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.170",
+      "date": "2026-03-24",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.169",
+      "date": "2026-03-24",
+      "changes": [
+        "Fixed DMG installer to show drag-to-Applications arrow",
+        "App now comes to foreground after sign-in across Spaces",
+        "Screenshots start capturing earlier during onboarding"
+      ]
+    },
+    {
+      "version": "0.11.168",
+      "date": "2026-03-24",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.166",
+      "date": "2026-03-24",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.165",
+      "date": "2026-03-24",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.164",
+      "date": "2026-03-24",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.163",
+      "date": "2026-03-24",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.161",
+      "date": "2026-03-24",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.159",
+      "date": "2026-03-24",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.158",
+      "date": "2026-03-24",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.156",
+      "date": "2026-03-24",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.155",
+      "date": "2026-03-23",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.154",
+      "date": "2026-03-23",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.152",
+      "date": "2026-03-23",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.151",
+      "date": "2026-03-22",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.150",
+      "date": "2026-03-22",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.149",
+      "date": "2026-03-21",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.148",
+      "date": "2026-03-21",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.147",
+      "date": "2026-03-21",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.146",
+      "date": "2026-03-20",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.145",
+      "date": "2026-03-19",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.144",
+      "date": "2026-03-19",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
       "version": "0.11.143",
       "date": "2026-03-19",
       "changes": [

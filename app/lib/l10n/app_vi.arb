@@ -448,7 +448,7 @@
     "exportConfiguration": "Xuất cấu hình",
     "bringYourOwn": "Mang của riêng bạn",
     "payYourSttProvider": "Sử dụng omi tự do. Bạn chỉ trả tiền cho nhà cung cấp STT trực tiếp.",
-    "freeMinutesMonth": "4.800 phút miễn phí/tháng được bao gồm. Không giới hạn với ",
+    "freeMinutesMonth": "1.200 phút miễn phí/tháng được bao gồm. Không giới hạn với ",
     "omiUnlimited": "Omi Unlimited",
     "hostRequired": "Bắt buộc có host",
     "validPortRequired": "Bắt buộc có port hợp lệ",
@@ -1459,7 +1459,7 @@
     "accessesAndTriggeredBy": "{accessDescription} và {triggerDescription}.",
     "isTriggeredBy": "{triggerDescription}.",
     "noSpecificDataAccessConfigured": "Không có quyền truy cập dữ liệu cụ thể nào được cấu hình.",
-    "basicPlanDescription": "4.800 phút cao cấp + không giới hạn trên thiết bị",
+    "basicPlanDescription": "1.200 phút cao cấp + không giới hạn trên thiết bị",
     "minutes": "phút",
     "omiHas": "Omi có:",
     "premiumMinutesUsed": "Đã sử dụng phút cao cấp.",
@@ -1929,7 +1929,7 @@
     "deviceMayWarmUp": "Thiết bị có thể nóng lên khi sử dụng lâu.",
     "speedAccuracyLower": "Tốc độ và độ chính xác có thể thấp hơn so với các mô hình đám mây.",
     "cloudProvider": "Nhà cung cấp đám mây",
-    "premiumMinutesMonth": "4.800 phút premium/tháng. Tab Trên thiết bị cung cấp phiên âm miễn phí không giới hạn. ",
+    "premiumMinutesMonth": "1.200 phút premium/tháng. Tab Trên thiết bị cung cấp phiên âm miễn phí không giới hạn. ",
     "viewUsage": "Xem mức sử dụng",
     "audioProcessedLocally": "Âm thanh được xử lý cục bộ. Hoạt động ngoại tuyến, riêng tư hơn, nhưng sử dụng nhiều pin hơn.",
     "languageLabel": "Ngôn ngữ",
@@ -2754,5 +2754,81 @@
     "notYetSynced": "Chưa đồng bộ với điện thoại của bạn",
     "clearAll": "Xóa tất cả",
     "phoneKeypad": "Bàn phím",
-    "phoneHideKeypad": "Ẩn bàn phím"
+    "phoneHideKeypad": "Ẩn bàn phím",
+    "transcriptionPaused": "Đang ghi, đang kết nối lại",
+    "transcriptionPausedReconnecting": "Vẫn đang ghi — đang kết nối lại với phiên âm...",
+    "fairUsePolicy": "Sử dụng hợp lý",
+    "fairUseLoadError": "Không thể tải trạng thái sử dụng hợp lý. Vui lòng thử lại.",
+    "fairUseStatusNormal": "Mức sử dụng của bạn trong giới hạn bình thường.",
+    "fairUseStageNormal": "Bình thường",
+    "fairUseStageWarning": "Cảnh báo",
+    "fairUseStageThrottle": "Bị hạn chế",
+    "fairUseStageRestrict": "Bị chặn",
+    "fairUseSpeechUsage": "Sử dụng giọng nói",
+    "fairUseToday": "Hôm nay",
+    "fairUse3Day": "3 ngày liên tục",
+    "fairUseWeekly": "Hàng tuần liên tục",
+    "fairUseAboutTitle": "Về sử dụng hợp lý",
+    "fairUseAboutBody": "Omi được thiết kế cho các cuộc trò chuyện cá nhân, cuộc họp và tương tác trực tiếp. Mức sử dụng được đo bằng thời gian nói thực tế được phát hiện, không phải thời gian kết nối. Nếu mức sử dụng vượt quá đáng kể các mẫu bình thường cho nội dung không cá nhân, có thể áp dụng các điều chỉnh.",
+    "fairUseCaseRefCopied": "Đã sao chép {caseRef}",
+    "@fairUseCaseRefCopied": {
+        "description": "Snackbar message when case reference is copied",
+        "placeholders": {
+            "caseRef": {
+                "type": "String"
+            }
+        }
+    },
+    "fairUseDailyTranscription": "Chuyển giọng hàng ngày",
+    "fairUseBudgetExhausted": "Đã đạt giới hạn chuyển giọng hàng ngày",
+    "fairUseBudgetResetsAt": "Đặt lại {time}",
+    "fairUseBudgetUsed": "{used}p / {limit}p",
+    "@fairUseBudgetUsed": {
+        "placeholders": {
+            "used": {
+                "type": "String"
+            },
+            "limit": {
+                "type": "String"
+            }
+        }
+    },
+    "@fairUseBudgetResetsAt": {
+        "placeholders": {
+            "time": {
+                "type": "String"
+            }
+        }
+    },
+    "fairUseBannerStatus": "Sử dụng hợp lý: {status}",
+    "@fairUseBannerStatus": {
+        "placeholders": {
+            "status": {
+                "type": "String"
+            }
+        }
+    },
+    "improveConnectionTitle": "Cải thiện kết nối",
+    "improveConnectionContent": "Chúng tôi đã cải thiện cách Omi duy trì kết nối với thiết bị của bạn. Để kích hoạt, hãy vào trang Thông tin thiết bị, nhấn \"Ngắt kết nối thiết bị\", rồi ghép nối lại thiết bị.",
+    "improveConnectionAction": "Đã hiểu",
+    "clockSkewWarning": "Đồng hồ thiết bị của bạn lệch ~{minutes} phút. Kiểm tra cài đặt ngày và giờ.",
+    "omisStorage": "Bộ nhớ Omi",
+    "phoneStorage": "Bộ nhớ điện thoại",
+    "cloudStorage": "Bộ nhớ đám mây",
+    "howSyncingWorks": "Cách đồng bộ hoạt động",
+    "noSyncedRecordings": "Chưa có bản ghi đã đồng bộ",
+    "recordingsSyncAutomatically": "Bản ghi tự động đồng bộ — không cần thao tác.",
+    "filesDownloadedUploadedNextTime": "Các tệp đã tải xuống sẽ được tải lên lần sau.",
+    "nConversationsCreated": "{count, plural, =1{Đã tạo 1 cuộc trò chuyện} other{Đã tạo {count} cuộc trò chuyện}}",
+    "tapToView": "Nhấn để xem",
+    "syncFailed": "Đồng bộ thất bại",
+    "keepSyncing": "Tiếp tục đồng bộ",
+    "cancelSyncQuestion": "Hủy đồng bộ?",
+    "omisStorageDesc": "Khi Omi không kết nối với điện thoại, nó lưu trữ âm thanh cục bộ trong bộ nhớ tích hợp. Bạn sẽ không bao giờ mất bản ghi.",
+    "phoneStorageDesc": "Khi Omi kết nối lại, bản ghi tự động chuyển sang điện thoại trước khi tải lên.",
+    "cloudStorageDesc": "Sau khi tải lên, bản ghi của bạn được xử lý và chuyển thành văn bản. Cuộc trò chuyện sẽ có trong vòng một phút.",
+    "storageSection": "BỘ NHỚ",
+    "tipKeepPhoneNearby": "Giữ điện thoại gần để đồng bộ nhanh hơn",
+    "tipStableInternet": "Internet ổn định giúp tải lên đám mây nhanh hơn",
+    "tipAutoSync": "Bản ghi tự động đồng bộ"
 }

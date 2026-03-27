@@ -5,9 +5,7 @@
 version: 2
 name: tasks
 description: Tasks flow — navigate to Tasks page, browse categorized tasks (today/tomorrow/later/no deadline), filter by status/category/source/priority, create manual task, toggle completion
-app: com.omi.desktop-dev
-evidence:
-  video: true
+app: com.omi.computer-macos
 covers:
   - desktop/Desktop/Sources/MainWindow/Pages/TasksPage.swift
   - desktop/Desktop/Sources/Providers/TasksStore.swift

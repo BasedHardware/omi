@@ -1453,7 +1453,7 @@ class AppLocalizationsHi extends AppLocalizations {
   String get payYourSttProvider => 'Omi का मुफ्त उपयोग करें। आप केवल सीधे STT प्रदाता को भुगतान करते हैं।';
 
   @override
-  String get freeMinutesMonth => '4,800 मुफ़्त मिनट/माह शामिल हैं।';
+  String get freeMinutesMonth => '1,200 मुफ़्त मिनट/माह शामिल हैं।';
 
   @override
   String get omiUnlimited => 'Omi असीमित';
@@ -4738,7 +4738,7 @@ class AppLocalizationsHi extends AppLocalizations {
   String get noSpecificDataAccessConfigured => 'कोई विशिष्ट डेटा एक्सेस कॉन्फ़िगर नहीं किया गया।';
 
   @override
-  String get basicPlanDescription => '4,800 प्रीमियम मिनट + डिवाइस पर असीमित';
+  String get basicPlanDescription => '1,200 प्रीमियम मिनट + डिवाइस पर असीमित';
 
   @override
   String get minutes => 'मिनट';
@@ -6066,7 +6066,7 @@ class AppLocalizationsHi extends AppLocalizations {
   String get cloudProvider => 'क्लाउड प्रदाता';
 
   @override
-  String get premiumMinutesInfo => '4,800 प्रीमियम मिनट/माह। ऑन-डिवाइस टैब असीमित मुफ्त ट्रांसक्रिप्शन प्रदान करता है।';
+  String get premiumMinutesInfo => '1,200 प्रीमियम मिनट/माह। ऑन-डिवाइस टैब असीमित मुफ्त ट्रांसक्रिप्शन प्रदान करता है।';
 
   @override
   String get viewUsage => 'उपयोग देखें';
@@ -6148,7 +6148,7 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get premiumMinutesMonth =>
-      '4,800 प्रीमियम मिनट/माह। ऑन-डिवाइस टैब असीमित मुफ्त ट्रांसक्रिप्शन प्रदान करता है। ';
+      '1,200 प्रीमियम मिनट/माह। ऑन-डिवाइस टैब असीमित मुफ्त ट्रांसक्रिप्शन प्रदान करता है। ';
 
   @override
   String get audioProcessedLocally =>
@@ -8539,4 +8539,159 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get phoneHideKeypad => 'कीपैड छुपाएं';
+
+  @override
+  String get fairUsePolicy => 'उचित उपयोग';
+
+  @override
+  String get fairUseLoadError => 'उचित उपयोग की स्थिति लोड नहीं हो सकी। कृपया पुनः प्रयास करें।';
+
+  @override
+  String get fairUseStatusNormal => 'आपका उपयोग सामान्य सीमा के भीतर है।';
+
+  @override
+  String get fairUseStageNormal => 'सामान्य';
+
+  @override
+  String get fairUseStageWarning => 'चेतावनी';
+
+  @override
+  String get fairUseStageThrottle => 'सीमित';
+
+  @override
+  String get fairUseStageRestrict => 'प्रतिबंधित';
+
+  @override
+  String get fairUseSpeechUsage => 'वाक् उपयोग';
+
+  @override
+  String get fairUseToday => 'आज';
+
+  @override
+  String get fairUse3Day => '3-दिन की अवधि';
+
+  @override
+  String get fairUseWeekly => 'साप्ताहिक अवधि';
+
+  @override
+  String get fairUseAboutTitle => 'उचित उपयोग के बारे में';
+
+  @override
+  String get fairUseAboutBody =>
+      'Omi व्यक्तिगत वार्तालाप, बैठकों और लाइव इंटरैक्शन के लिए डिज़ाइन किया गया है। उपयोग को वास्तविक पहचानी गई वाक् समय से मापा जाता है, कनेक्शन समय से नहीं। यदि उपयोग गैर-व्यक्तिगत सामग्री के लिए सामान्य पैटर्न से काफी अधिक हो जाता है, तो समायोजन लागू हो सकते हैं।';
+
+  @override
+  String fairUseCaseRefCopied(String caseRef) {
+    return '$caseRef कॉपी किया गया';
+  }
+
+  @override
+  String get fairUseDailyTranscription => 'दैनिक ट्रांसक्रिप्शन';
+
+  @override
+  String fairUseBudgetUsed(String used, String limit) {
+    return '$usedमि / $limitमि';
+  }
+
+  @override
+  String get fairUseBudgetExhausted => 'दैनिक ट्रांसक्रिप्शन सीमा पूरी हुई';
+
+  @override
+  String fairUseBudgetResetsAt(String time) {
+    return 'रीसेट $time';
+  }
+
+  @override
+  String get transcriptionPaused => 'रिकॉर्डिंग जारी, पुन: कनेक्ट हो रहा है';
+
+  @override
+  String get transcriptionPausedReconnecting => 'अभी भी रिकॉर्ड हो रहा है — ट्रांसक्रिप्शन से पुनः कनेक्ट हो रहा है...';
+
+  @override
+  String fairUseBannerStatus(String status) {
+    return 'उचित उपयोग: $status';
+  }
+
+  @override
+  String get improveConnectionTitle => 'कनेक्शन सुधारें';
+
+  @override
+  String get improveConnectionContent =>
+      'हमने Omi के आपके डिवाइस से जुड़े रहने के तरीके में सुधार किया है। इसे सक्रिय करने के लिए, डिवाइस जानकारी पृष्ठ पर जाएं, \"डिवाइस डिस्कनेक्ट करें\" पर टैप करें, और अपने डिवाइस को फिर से पेयर करें।';
+
+  @override
+  String get improveConnectionAction => 'समझ गया';
+
+  @override
+  String clockSkewWarning(int minutes) {
+    return 'आपके डिवाइस की घड़ी ~$minutes मिनट गलत है। अपनी तारीख और समय सेटिंग जांचें।';
+  }
+
+  @override
+  String get omisStorage => 'Omi का स्टोरेज';
+
+  @override
+  String get phoneStorage => 'फ़ोन स्टोरेज';
+
+  @override
+  String get cloudStorage => 'क्लाउड स्टोरेज';
+
+  @override
+  String get howSyncingWorks => 'सिंक कैसे काम करता है';
+
+  @override
+  String get noSyncedRecordings => 'अभी तक कोई सिंक की गई रिकॉर्डिंग नहीं';
+
+  @override
+  String get recordingsSyncAutomatically => 'रिकॉर्डिंग अपने आप सिंक होती हैं — कोई कार्रवाई ज़रूरी नहीं।';
+
+  @override
+  String get filesDownloadedUploadedNextTime => 'पहले से डाउनलोड की गई फ़ाइलें अगली बार अपलोड होंगी।';
+
+  @override
+  String nConversationsCreated(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count बातचीत बनाई गईं',
+      one: '1 बातचीत बनाई गई',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get tapToView => 'देखने के लिए टैप करें';
+
+  @override
+  String get syncFailed => 'सिंक विफल';
+
+  @override
+  String get keepSyncing => 'सिंक जारी रखें';
+
+  @override
+  String get cancelSyncQuestion => 'सिंक रद्द करें?';
+
+  @override
+  String get omisStorageDesc =>
+      'जब आपका Omi फ़ोन से कनेक्ट नहीं होता, तो यह ऑडियो को अपनी बिल्ट-इन मेमोरी में स्टोर करता है। आप कभी कोई रिकॉर्डिंग नहीं खोएंगे।';
+
+  @override
+  String get phoneStorageDesc =>
+      'जब Omi फिर से कनेक्ट होता है, रिकॉर्डिंग अपलोड से पहले आपके फ़ोन में ऑटो-ट्रांसफर होती हैं।';
+
+  @override
+  String get cloudStorageDesc =>
+      'अपलोड होने के बाद, आपकी रिकॉर्डिंग प्रोसेस और ट्रांसक्राइब होती हैं। बातचीत एक मिनट में उपलब्ध होंगी।';
+
+  @override
+  String get tipKeepPhoneNearby => 'तेज़ सिंक के लिए अपना फ़ोन पास रखें';
+
+  @override
+  String get tipStableInternet => 'स्थिर इंटरनेट क्लाउड अपलोड तेज़ करता है';
+
+  @override
+  String get tipAutoSync => 'रिकॉर्डिंग अपने आप सिंक होती हैं';
+
+  @override
+  String get storageSection => 'स्टोरेज';
 }

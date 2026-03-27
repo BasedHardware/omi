@@ -1462,7 +1462,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get payYourSttProvider => 'Använd Omi fritt. Du betalar bara din STT-leverantör direkt.';
 
   @override
-  String get freeMinutesMonth => '4 800 gratis minuter/månad ingår. Obegränsat med ';
+  String get freeMinutesMonth => '1 200 gratis minuter/månad ingår. Obegränsat med ';
 
   @override
   String get omiUnlimited => 'Omi Unlimited';
@@ -1711,7 +1711,12 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'ENHETER', one: 'ENHET');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'ENHETER',
+      one: 'ENHET',
+    );
     return '$count $_temp0 HITTAD(E) I NÄRHETEN';
   }
 
@@ -4760,7 +4765,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get noSpecificDataAccessConfigured => 'Ingen specifik dataåtkomst konfigurerad.';
 
   @override
-  String get basicPlanDescription => '4 800 premium-minuter + obegränsat på enheten';
+  String get basicPlanDescription => '1 200 premium-minuter + obegränsat på enheten';
 
   @override
   String get minutes => 'minuter';
@@ -6089,7 +6094,7 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get premiumMinutesInfo =>
-      '4 800 premiumminuter/månad. Fliken På enheten erbjuder obegränsad gratis transkription.';
+      '1 200 premiumminuter/månad. Fliken På enheten erbjuder obegränsad gratis transkription.';
 
   @override
   String get viewUsage => 'Visa användning';
@@ -6170,7 +6175,7 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get premiumMinutesMonth =>
-      '4 800 premiumminuter/månad. Fliken På enheten erbjuder obegränsad gratis transkription. ';
+      '1 200 premiumminuter/månad. Fliken På enheten erbjuder obegränsad gratis transkription. ';
 
   @override
   String get audioProcessedLocally => 'Ljud behandlas lokalt. Fungerar offline, mer privat, men använder mer batteri.';
@@ -8558,4 +8563,159 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get phoneHideKeypad => 'Dölj knappsats';
+
+  @override
+  String get fairUsePolicy => 'Rimlig användning';
+
+  @override
+  String get fairUseLoadError => 'Det gick inte att läsa in status för rimlig användning. Försök igen.';
+
+  @override
+  String get fairUseStatusNormal => 'Din användning är inom normala gränser.';
+
+  @override
+  String get fairUseStageNormal => 'Normal';
+
+  @override
+  String get fairUseStageWarning => 'Varning';
+
+  @override
+  String get fairUseStageThrottle => 'Begränsad';
+
+  @override
+  String get fairUseStageRestrict => 'Blockerad';
+
+  @override
+  String get fairUseSpeechUsage => 'Talanvändning';
+
+  @override
+  String get fairUseToday => 'Idag';
+
+  @override
+  String get fairUse3Day => '3-dagars rullande';
+
+  @override
+  String get fairUseWeekly => 'Veckovis rullande';
+
+  @override
+  String get fairUseAboutTitle => 'Om rimlig användning';
+
+  @override
+  String get fairUseAboutBody =>
+      'Omi är utformat för personliga samtal, möten och liveinteraktioner. Användningen mäts efter faktisk detekterad taltid, inte anslutningstid. Om användningen avsevärt överstiger normala mönster för icke-personligt innehåll kan justeringar tillämpas.';
+
+  @override
+  String fairUseCaseRefCopied(String caseRef) {
+    return '$caseRef kopierat';
+  }
+
+  @override
+  String get fairUseDailyTranscription => 'Daily Transcription';
+
+  @override
+  String fairUseBudgetUsed(String used, String limit) {
+    return '${used}m / ${limit}m';
+  }
+
+  @override
+  String get fairUseBudgetExhausted => 'Daily transcription limit reached';
+
+  @override
+  String fairUseBudgetResetsAt(String time) {
+    return 'Resets $time';
+  }
+
+  @override
+  String get transcriptionPaused => 'Spelar in, återansluter';
+
+  @override
+  String get transcriptionPausedReconnecting => 'Spelar fortfarande in — återansluter till transkription...';
+
+  @override
+  String fairUseBannerStatus(String status) {
+    return 'Rättvis användning: $status';
+  }
+
+  @override
+  String get improveConnectionTitle => 'Förbättra anslutning';
+
+  @override
+  String get improveConnectionContent =>
+      'Vi har förbättrat hur Omi förblir ansluten till din enhet. För att aktivera detta, gå till sidan Enhetsinformation, tryck på \"Koppla från enhet\" och para ihop din enhet igen.';
+
+  @override
+  String get improveConnectionAction => 'Förstått';
+
+  @override
+  String clockSkewWarning(int minutes) {
+    return 'Enhetens klocka avviker ~$minutes min. Kontrollera dina datum- och tidsinställningar.';
+  }
+
+  @override
+  String get omisStorage => 'Omis lagring';
+
+  @override
+  String get phoneStorage => 'Telefonlagring';
+
+  @override
+  String get cloudStorage => 'Molnlagring';
+
+  @override
+  String get howSyncingWorks => 'Hur synkronisering fungerar';
+
+  @override
+  String get noSyncedRecordings => 'Inga synkroniserade inspelningar ännu';
+
+  @override
+  String get recordingsSyncAutomatically => 'Inspelningar synkroniseras automatiskt — ingen åtgärd krävs.';
+
+  @override
+  String get filesDownloadedUploadedNextTime => 'Redan nedladdade filer laddas upp nästa gång.';
+
+  @override
+  String nConversationsCreated(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count konversationer skapade',
+      one: '1 konversation skapad',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get tapToView => 'Tryck för att visa';
+
+  @override
+  String get syncFailed => 'Synkronisering misslyckades';
+
+  @override
+  String get keepSyncing => 'Fortsätt synkronisera';
+
+  @override
+  String get cancelSyncQuestion => 'Avbryta synkronisering?';
+
+  @override
+  String get omisStorageDesc =>
+      'När din Omi inte är ansluten till din telefon lagrar den ljud lokalt i sitt inbyggda minne. Du förlorar aldrig en inspelning.';
+
+  @override
+  String get phoneStorageDesc =>
+      'När Omi återansluter överförs inspelningar automatiskt till din telefon innan uppladdning.';
+
+  @override
+  String get cloudStorageDesc =>
+      'Efter uppladdning bearbetas och transkriberas dina inspelningar. Konversationer blir tillgängliga inom en minut.';
+
+  @override
+  String get tipKeepPhoneNearby => 'Håll telefonen nära för snabbare synkronisering';
+
+  @override
+  String get tipStableInternet => 'Stabilt internet snabbar upp molnuppladdningar';
+
+  @override
+  String get tipAutoSync => 'Inspelningar synkroniseras automatiskt';
+
+  @override
+  String get storageSection => 'LAGRING';
 }

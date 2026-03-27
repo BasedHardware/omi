@@ -1465,7 +1465,7 @@ class AppLocalizationsId extends AppLocalizations {
   String get payYourSttProvider => 'Gunakan omi secara bebas. Anda hanya membayar penyedia STT Anda secara langsung.';
 
   @override
-  String get freeMinutesMonth => '4.800 menit gratis/bulan termasuk. Tanpa batas dengan ';
+  String get freeMinutesMonth => '1.200 menit gratis/bulan termasuk. Tanpa batas dengan ';
 
   @override
   String get omiUnlimited => 'Omi Unlimited';
@@ -1714,7 +1714,12 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'PERANGKAT', one: 'PERANGKAT');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'PERANGKAT',
+      one: 'PERANGKAT',
+    );
     return '$count $_temp0 DITEMUKAN DI SEKITAR';
   }
 
@@ -4771,7 +4776,7 @@ class AppLocalizationsId extends AppLocalizations {
   String get noSpecificDataAccessConfigured => 'Tidak ada akses data spesifik yang dikonfigurasi.';
 
   @override
-  String get basicPlanDescription => '4.800 menit premium + tak terbatas di perangkat';
+  String get basicPlanDescription => '1.200 menit premium + tak terbatas di perangkat';
 
   @override
   String get minutes => 'menit';
@@ -6102,7 +6107,7 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get premiumMinutesInfo =>
-      '4.800 menit premium/bulan. Tab Di Perangkat menawarkan transkripsi gratis tanpa batas.';
+      '1.200 menit premium/bulan. Tab Di Perangkat menawarkan transkripsi gratis tanpa batas.';
 
   @override
   String get viewUsage => 'Lihat penggunaan';
@@ -6184,7 +6189,7 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get premiumMinutesMonth =>
-      '4.800 menit premium/bulan. Tab Di Perangkat menawarkan transkripsi gratis tanpa batas. ';
+      '1.200 menit premium/bulan. Tab Di Perangkat menawarkan transkripsi gratis tanpa batas. ';
 
   @override
   String get audioProcessedLocally =>
@@ -8564,4 +8569,159 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get phoneHideKeypad => 'Sembunyikan keypad';
+
+  @override
+  String get fairUsePolicy => 'Penggunaan Wajar';
+
+  @override
+  String get fairUseLoadError => 'Tidak dapat memuat status penggunaan wajar. Silakan coba lagi.';
+
+  @override
+  String get fairUseStatusNormal => 'Penggunaan Anda dalam batas normal.';
+
+  @override
+  String get fairUseStageNormal => 'Normal';
+
+  @override
+  String get fairUseStageWarning => 'Peringatan';
+
+  @override
+  String get fairUseStageThrottle => 'Dibatasi';
+
+  @override
+  String get fairUseStageRestrict => 'Diblokir';
+
+  @override
+  String get fairUseSpeechUsage => 'Penggunaan Ucapan';
+
+  @override
+  String get fairUseToday => 'Hari ini';
+
+  @override
+  String get fairUse3Day => '3 hari bergulir';
+
+  @override
+  String get fairUseWeekly => 'Mingguan bergulir';
+
+  @override
+  String get fairUseAboutTitle => 'Tentang Penggunaan Wajar';
+
+  @override
+  String get fairUseAboutBody =>
+      'Omi dirancang untuk percakapan pribadi, rapat, dan interaksi langsung. Penggunaan diukur berdasarkan waktu bicara nyata yang terdeteksi, bukan waktu koneksi. Jika penggunaan secara signifikan melebihi pola normal untuk konten non-pribadi, penyesuaian dapat diterapkan.';
+
+  @override
+  String fairUseCaseRefCopied(String caseRef) {
+    return '$caseRef disalin';
+  }
+
+  @override
+  String get fairUseDailyTranscription => 'Daily Transcription';
+
+  @override
+  String fairUseBudgetUsed(String used, String limit) {
+    return '${used}m / ${limit}m';
+  }
+
+  @override
+  String get fairUseBudgetExhausted => 'Daily transcription limit reached';
+
+  @override
+  String fairUseBudgetResetsAt(String time) {
+    return 'Resets $time';
+  }
+
+  @override
+  String get transcriptionPaused => 'Merekam, menghubungkan ulang';
+
+  @override
+  String get transcriptionPausedReconnecting => 'Masih merekam — menghubungkan ulang ke transkripsi...';
+
+  @override
+  String fairUseBannerStatus(String status) {
+    return 'Penggunaan Wajar: $status';
+  }
+
+  @override
+  String get improveConnectionTitle => 'Tingkatkan Koneksi';
+
+  @override
+  String get improveConnectionContent =>
+      'Kami telah meningkatkan cara Omi tetap terhubung ke perangkat Anda. Untuk mengaktifkan ini, buka halaman Info Perangkat, ketuk \"Putuskan Perangkat\", lalu pasangkan perangkat Anda kembali.';
+
+  @override
+  String get improveConnectionAction => 'Mengerti';
+
+  @override
+  String clockSkewWarning(int minutes) {
+    return 'Jam perangkat Anda melenceng ~$minutes menit. Periksa pengaturan tanggal & waktu.';
+  }
+
+  @override
+  String get omisStorage => 'Penyimpanan Omi';
+
+  @override
+  String get phoneStorage => 'Penyimpanan Telepon';
+
+  @override
+  String get cloudStorage => 'Penyimpanan Cloud';
+
+  @override
+  String get howSyncingWorks => 'Cara kerja sinkronisasi';
+
+  @override
+  String get noSyncedRecordings => 'Belum ada rekaman yang disinkronkan';
+
+  @override
+  String get recordingsSyncAutomatically => 'Rekaman disinkronkan secara otomatis — tidak perlu tindakan.';
+
+  @override
+  String get filesDownloadedUploadedNextTime => 'File yang sudah diunduh akan diunggah lain kali.';
+
+  @override
+  String nConversationsCreated(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count percakapan dibuat',
+      one: '1 percakapan dibuat',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get tapToView => 'Ketuk untuk melihat';
+
+  @override
+  String get syncFailed => 'Sinkronisasi gagal';
+
+  @override
+  String get keepSyncing => 'Lanjutkan sinkronisasi';
+
+  @override
+  String get cancelSyncQuestion => 'Batalkan sinkronisasi?';
+
+  @override
+  String get omisStorageDesc =>
+      'Saat Omi tidak terhubung ke ponsel Anda, ia menyimpan audio secara lokal di memori bawaannya. Anda tidak akan pernah kehilangan rekaman.';
+
+  @override
+  String get phoneStorageDesc =>
+      'Saat Omi terhubung kembali, rekaman ditransfer otomatis ke ponsel Anda sebelum diunggah.';
+
+  @override
+  String get cloudStorageDesc =>
+      'Setelah diunggah, rekaman Anda diproses dan ditranskripsikan. Percakapan akan tersedia dalam satu menit.';
+
+  @override
+  String get tipKeepPhoneNearby => 'Jaga ponsel Anda dekat untuk sinkronisasi lebih cepat';
+
+  @override
+  String get tipStableInternet => 'Internet stabil mempercepat unggahan cloud';
+
+  @override
+  String get tipAutoSync => 'Rekaman disinkronkan secara otomatis';
+
+  @override
+  String get storageSection => 'PENYIMPANAN';
 }

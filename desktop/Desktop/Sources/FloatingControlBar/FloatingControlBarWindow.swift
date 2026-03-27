@@ -14,7 +14,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     static let expandedBarSize = NSSize(width: 210, height: 50)
     private static let maxBarSize = NSSize(width: 1200, height: 1000)
     private static let expandedWidth: CGFloat = 430
-    private static let notificationWidth: CGFloat = 300
+    private static let notificationWidth: CGFloat = 430
     private static let notificationHeight: CGFloat = 108
     private static let notificationSpacing: CGFloat = 8
     /// Minimum window height when AI response first appears.
@@ -565,9 +565,10 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     func showNotification(_ notification: FloatingBarNotification, animated: Bool = true) {
         guard !state.showingAIConversation else { return }
         state.currentNotification = notification
+        let barHeight = state.isHoveringBar ? Self.expandedBarSize.height : Self.minBarSize.height
         let targetSize = NSSize(
             width: Self.notificationWidth,
-            height: Self.expandedBarSize.height + Self.notificationSpacing + Self.notificationHeight
+            height: barHeight + Self.notificationSpacing + Self.notificationHeight
         )
         resizeAnchored(to: targetSize, makeResizable: false, animated: animated, anchorTop: true)
     }

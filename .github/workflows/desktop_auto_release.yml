@@ -139,8 +139,6 @@ jobs:
             AGENT_GCS_BUCKET=based-hardware-agent
           secrets: |
             ENCRYPTION_SECRET=ENCRYPTION_SECRET:latest
-            AGENT_ANTHROPIC_API_KEY=AGENT_ANTHROPIC_API_KEY:latest
-            AGENT_GEMINI_API_KEY=AGENT_GEMINI_API_KEY:latest
             GEMINI_API_KEY=DESKTOP_GEMINI_API_KEY:latest
             REDIS_DB_PASSWORD=DESKTOP_REDIS_DB_PASSWORD:latest
             FIREBASE_API_KEY=DESKTOP_FIREBASE_API_KEY:latest

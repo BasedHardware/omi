@@ -29,6 +29,7 @@ import 'package:omi/pages/announcements/changelog_sheet.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'device_settings.dart';
 import 'phone_call_settings_page.dart';
+import '../conversations/auto_sync_page.dart';
 import '../conversations/sync_page.dart';
 
 enum SettingsMode { no_device, omi }
@@ -340,7 +341,9 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
                   title: context.l10n.offlineSync,
                   icon: const FaIcon(FontAwesomeIcons.solidCloud, color: Color(0xFF8E8E93), size: 20),
                   onTap: () {
-                    Navigator.of(context).push(MaterialPageRoute(builder: (context) => const SyncPage()));
+                    final page =
+                        SharedPreferencesUtil().deviceSupportsMultiFileSync ? const AutoSyncPage() : const SyncPage();
+                    Navigator.of(context).push(MaterialPageRoute(builder: (context) => page));
                   },
                 ),
                 Consumer<DeviceProvider>(
@@ -630,9 +633,8 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
           Expanded(
             child: SingleChildScrollView(
               padding: const EdgeInsets.symmetric(horizontal: 20),
-              child: widget.mode == SettingsMode.omi
-                  ? _buildOmiModeContent(context)
-                  : _buildNoDeviceModeContent(context),
+              child:
+                  widget.mode == SettingsMode.omi ? _buildOmiModeContent(context) : _buildNoDeviceModeContent(context),
             ),
           ),
         ],

@@ -1458,7 +1458,7 @@ class AppLocalizationsLt extends AppLocalizations {
   String get payYourSttProvider => 'Laisvai naudokite omi. Mokate tik savo STT teikėjui tiesiogiai.';
 
   @override
-  String get freeMinutesMonth => '4 800 nemokamų minučių per mėnesį įtraukta. Neribota su ';
+  String get freeMinutesMonth => '1 200 nemokamų minučių per mėnesį įtraukta. Neribota su ';
 
   @override
   String get omiUnlimited => 'Omi Unlimited';
@@ -1707,7 +1707,12 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'ĮRENGINIAI', one: 'ĮRENGINYS');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'ĮRENGINIAI',
+      one: 'ĮRENGINYS',
+    );
     return 'RASTA $count $_temp0 NETOLIESE';
   }
 
@@ -4757,7 +4762,7 @@ class AppLocalizationsLt extends AppLocalizations {
   String get noSpecificDataAccessConfigured => 'Nenustatyta konkreti prieiga prie duomenų.';
 
   @override
-  String get basicPlanDescription => '4 800 premium minučių + neribota įrenginyje';
+  String get basicPlanDescription => '1 200 premium minučių + neribota įrenginyje';
 
   @override
   String get minutes => 'minučių';
@@ -6086,7 +6091,7 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get premiumMinutesInfo =>
-      '4 800 premium minučių per mėnesį. Įrenginio skirtukas siūlo neribotą nemokamą transkripciją.';
+      '1 200 premium minučių per mėnesį. Įrenginio skirtukas siūlo neribotą nemokamą transkripciją.';
 
   @override
   String get viewUsage => 'Peržiūrėti naudojimą';
@@ -6168,7 +6173,7 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get premiumMinutesMonth =>
-      '4800 premium minučių/mėn. Įrenginyje skirtukas siūlo neribotą nemokamą transkripciją. ';
+      '1200 premium minučių/mėn. Įrenginyje skirtukas siūlo neribotą nemokamą transkripciją. ';
 
   @override
   String get audioProcessedLocally =>
@@ -8562,4 +8567,159 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get phoneHideKeypad => 'Slėpti klaviatūrą';
+
+  @override
+  String get fairUsePolicy => 'Sąžiningas naudojimas';
+
+  @override
+  String get fairUseLoadError => 'Nepavyko įkelti sąžiningo naudojimo būsenos. Bandykite dar kartą.';
+
+  @override
+  String get fairUseStatusNormal => 'Jūsų naudojimas yra normaliose ribose.';
+
+  @override
+  String get fairUseStageNormal => 'Normalus';
+
+  @override
+  String get fairUseStageWarning => 'Įspėjimas';
+
+  @override
+  String get fairUseStageThrottle => 'Apribotas';
+
+  @override
+  String get fairUseStageRestrict => 'Užblokuotas';
+
+  @override
+  String get fairUseSpeechUsage => 'Kalbos naudojimas';
+
+  @override
+  String get fairUseToday => 'Šiandien';
+
+  @override
+  String get fairUse3Day => '3 dienų slankus';
+
+  @override
+  String get fairUseWeekly => 'Savaitinis slankus';
+
+  @override
+  String get fairUseAboutTitle => 'Apie sąžiningą naudojimą';
+
+  @override
+  String get fairUseAboutBody =>
+      'Omi sukurtas asmeniniams pokalbiams, susitikimams ir tiesioginei sąveikai. Naudojimas matuojamas pagal aptiktą tikrąjį kalbos laiką, o ne prisijungimo laiką. Jei naudojimas žymiai viršija įprastus modelius ne asmeniniam turiniui, gali būti taikomi koregavimai.';
+
+  @override
+  String fairUseCaseRefCopied(String caseRef) {
+    return '$caseRef nukopijuota';
+  }
+
+  @override
+  String get fairUseDailyTranscription => 'Daily Transcription';
+
+  @override
+  String fairUseBudgetUsed(String used, String limit) {
+    return '${used}m / ${limit}m';
+  }
+
+  @override
+  String get fairUseBudgetExhausted => 'Daily transcription limit reached';
+
+  @override
+  String fairUseBudgetResetsAt(String time) {
+    return 'Resets $time';
+  }
+
+  @override
+  String get transcriptionPaused => 'Įrašoma, jungiamasi iš naujo';
+
+  @override
+  String get transcriptionPausedReconnecting => 'Vis dar įrašoma — jungiamasi prie transkripcijos...';
+
+  @override
+  String fairUseBannerStatus(String status) {
+    return 'Sąžiningas naudojimas: $status';
+  }
+
+  @override
+  String get improveConnectionTitle => 'Pagerinti ryšį';
+
+  @override
+  String get improveConnectionContent =>
+      'Patobulinome, kaip Omi lieka prisijungęs prie jūsų įrenginio. Norėdami tai aktyvuoti, eikite į įrenginio informacijos puslapį, bakstelėkite \"Atjungti įrenginį\" ir vėl susiekite savo įrenginį.';
+
+  @override
+  String get improveConnectionAction => 'Supratau';
+
+  @override
+  String clockSkewWarning(int minutes) {
+    return 'Jūsų įrenginio laikrodis skiriasi ~$minutes min. Patikrinkite datos ir laiko nustatymus.';
+  }
+
+  @override
+  String get omisStorage => 'Omi saugykla';
+
+  @override
+  String get phoneStorage => 'Telefono saugykla';
+
+  @override
+  String get cloudStorage => 'Debesų saugykla';
+
+  @override
+  String get howSyncingWorks => 'Kaip veikia sinchronizavimas';
+
+  @override
+  String get noSyncedRecordings => 'Dar nėra sinchronizuotų įrašų';
+
+  @override
+  String get recordingsSyncAutomatically => 'Įrašai sinchronizuojami automatiškai — jokių veiksmų nereikia.';
+
+  @override
+  String get filesDownloadedUploadedNextTime => 'Jau atsisiųsti failai bus įkelti kitą kartą.';
+
+  @override
+  String nConversationsCreated(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count pokalbių sukurta',
+      one: '1 pokalbis sukurtas',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get tapToView => 'Bakstelėkite, kad pamatytumėte';
+
+  @override
+  String get syncFailed => 'Sinchronizavimas nepavyko';
+
+  @override
+  String get keepSyncing => 'Tęsti sinchronizavimą';
+
+  @override
+  String get cancelSyncQuestion => 'Atšaukti sinchronizavimą?';
+
+  @override
+  String get omisStorageDesc =>
+      'Kai jūsų Omi nėra prijungtas prie telefono, jis saugo garsą vietoje savo integruotoje atmintyje. Niekada neprarasite įrašo.';
+
+  @override
+  String get phoneStorageDesc =>
+      'Kai Omi vėl prisijungia, įrašai automatiškai perkeliami į jūsų telefoną prieš įkėlimą.';
+
+  @override
+  String get cloudStorageDesc =>
+      'Įkėlus, jūsų įrašai apdorojami ir transkribuojami. Pokalbiai bus prieinami per minutę.';
+
+  @override
+  String get tipKeepPhoneNearby => 'Laikykite telefoną šalia greitesniam sinchronizavimui';
+
+  @override
+  String get tipStableInternet => 'Stabilus internetas pagreitina įkėlimą į debesį';
+
+  @override
+  String get tipAutoSync => 'Įrašai sinchronizuojami automatiškai';
+
+  @override
+  String get storageSection => 'SAUGYKLA';
 }

@@ -1452,7 +1452,7 @@ class AppLocalizationsTh extends AppLocalizations {
   String get payYourSttProvider => 'ใช้ Omi ได้อย่างอิสระ คุณจ่ายเฉพาะผู้ให้บริการ STT ของคุณโดยตรง';
 
   @override
-  String get freeMinutesMonth => 'รวม 4,800 นาทีฟรี/เดือน ไม่จำกัดด้วย ';
+  String get freeMinutesMonth => 'รวม 1,200 นาทีฟรี/เดือน ไม่จำกัดด้วย ';
 
   @override
   String get omiUnlimited => 'Omi Unlimited';
@@ -1701,7 +1701,12 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'อุปกรณ์', one: 'อุปกรณ์');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'อุปกรณ์',
+      one: 'อุปกรณ์',
+    );
     return 'พบ $count $_temp0 ในบริเวณใกล้เคียง';
   }
 
@@ -4734,7 +4739,7 @@ class AppLocalizationsTh extends AppLocalizations {
   String get noSpecificDataAccessConfigured => 'ไม่มีการกำหนดค่าการเข้าถึงข้อมูลเฉพาะ';
 
   @override
-  String get basicPlanDescription => '4,800 นาทีพรีเมียม + ไม่จำกัดบนอุปกรณ์';
+  String get basicPlanDescription => '1,200 นาทีพรีเมียม + ไม่จำกัดบนอุปกรณ์';
 
   @override
   String get minutes => 'นาที';
@@ -6053,7 +6058,7 @@ class AppLocalizationsTh extends AppLocalizations {
   String get cloudProvider => 'ผู้ให้บริการคลาวด์';
 
   @override
-  String get premiumMinutesInfo => '4,800 นาทีพรีเมียม/เดือน แท็บบนอุปกรณ์มีการถอดเสียงฟรีไม่จำกัด';
+  String get premiumMinutesInfo => '1,200 นาทีพรีเมียม/เดือน แท็บบนอุปกรณ์มีการถอดเสียงฟรีไม่จำกัด';
 
   @override
   String get viewUsage => 'ดูการใช้งาน';
@@ -6133,7 +6138,7 @@ class AppLocalizationsTh extends AppLocalizations {
   String get batteryDrainSignificantly => 'การใช้แบตเตอรี่จะเพิ่มขึ้นอย่างมาก';
 
   @override
-  String get premiumMinutesMonth => '4,800 นาทีพรีเมียม/เดือน แท็บบนอุปกรณ์ให้การถอดความฟรีไม่จำกัด ';
+  String get premiumMinutesMonth => '1,200 นาทีพรีเมียม/เดือน แท็บบนอุปกรณ์ให้การถอดความฟรีไม่จำกัด ';
 
   @override
   String get audioProcessedLocally =>
@@ -8510,4 +8515,158 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get phoneHideKeypad => 'ซ่อนแป้นกด';
+
+  @override
+  String get fairUsePolicy => 'การใช้งานอย่างเป็นธรรม';
+
+  @override
+  String get fairUseLoadError => 'ไม่สามารถโหลดสถานะการใช้งานอย่างเป็นธรรมได้ กรุณาลองอีกครั้ง';
+
+  @override
+  String get fairUseStatusNormal => 'การใช้งานของคุณอยู่ในขีดจำกัดปกติ';
+
+  @override
+  String get fairUseStageNormal => 'ปกติ';
+
+  @override
+  String get fairUseStageWarning => 'คำเตือน';
+
+  @override
+  String get fairUseStageThrottle => 'ถูกจำกัด';
+
+  @override
+  String get fairUseStageRestrict => 'ถูกระงับ';
+
+  @override
+  String get fairUseSpeechUsage => 'การใช้งานเสียงพูด';
+
+  @override
+  String get fairUseToday => 'วันนี้';
+
+  @override
+  String get fairUse3Day => '3 วันต่อเนื่อง';
+
+  @override
+  String get fairUseWeekly => 'รายสัปดาห์ต่อเนื่อง';
+
+  @override
+  String get fairUseAboutTitle => 'เกี่ยวกับการใช้งานอย่างเป็นธรรม';
+
+  @override
+  String get fairUseAboutBody =>
+      'Omi ออกแบบมาสำหรับการสนทนาส่วนตัว การประชุม และการโต้ตอบสด การใช้งานวัดจากเวลาพูดจริงที่ตรวจพบ ไม่ใช่เวลาเชื่อมต่อ หากการใช้งานเกินรูปแบบปกติอย่างมากสำหรับเนื้อหาที่ไม่ใช่ส่วนบุคคล อาจมีการปรับเปลี่ยน';
+
+  @override
+  String fairUseCaseRefCopied(String caseRef) {
+    return 'คัดลอก $caseRef แล้ว';
+  }
+
+  @override
+  String get fairUseDailyTranscription => 'Daily Transcription';
+
+  @override
+  String fairUseBudgetUsed(String used, String limit) {
+    return '${used}m / ${limit}m';
+  }
+
+  @override
+  String get fairUseBudgetExhausted => 'Daily transcription limit reached';
+
+  @override
+  String fairUseBudgetResetsAt(String time) {
+    return 'Resets $time';
+  }
+
+  @override
+  String get transcriptionPaused => 'กำลังบันทึก, กำลังเชื่อมต่อใหม่';
+
+  @override
+  String get transcriptionPausedReconnecting => 'ยังคงบันทึกอยู่ — กำลังเชื่อมต่อกับการถอดเสียงใหม่...';
+
+  @override
+  String fairUseBannerStatus(String status) {
+    return 'การใช้งานอย่างเป็นธรรม: $status';
+  }
+
+  @override
+  String get improveConnectionTitle => 'ปรับปรุงการเชื่อมต่อ';
+
+  @override
+  String get improveConnectionContent =>
+      'เราได้ปรับปรุงวิธีที่ Omi เชื่อมต่อกับอุปกรณ์ของคุณ เพื่อเปิดใช้งาน ให้ไปที่หน้าข้อมูลอุปกรณ์ แตะ \"ยกเลิกการเชื่อมต่ออุปกรณ์\" แล้วจับคู่อุปกรณ์อีกครั้ง';
+
+  @override
+  String get improveConnectionAction => 'เข้าใจแล้ว';
+
+  @override
+  String clockSkewWarning(int minutes) {
+    return 'นาฬิกาอุปกรณ์ของคุณคลาดเคลื่อน ~$minutes นาที ตรวจสอบการตั้งค่าวันที่และเวลา';
+  }
+
+  @override
+  String get omisStorage => 'พื้นที่จัดเก็บของ Omi';
+
+  @override
+  String get phoneStorage => 'พื้นที่จัดเก็บโทรศัพท์';
+
+  @override
+  String get cloudStorage => 'พื้นที่จัดเก็บคลาวด์';
+
+  @override
+  String get howSyncingWorks => 'การซิงค์ทำงานอย่างไร';
+
+  @override
+  String get noSyncedRecordings => 'ยังไม่มีการบันทึกที่ซิงค์แล้ว';
+
+  @override
+  String get recordingsSyncAutomatically => 'การบันทึกจะซิงค์โดยอัตโนมัติ — ไม่ต้องดำเนินการใดๆ';
+
+  @override
+  String get filesDownloadedUploadedNextTime => 'ไฟล์ที่ดาวน์โหลดแล้วจะถูกอัปโหลดในครั้งถัดไป';
+
+  @override
+  String nConversationsCreated(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'สร้าง $count บทสนทนา',
+      one: 'สร้าง 1 บทสนทนา',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get tapToView => 'แตะเพื่อดู';
+
+  @override
+  String get syncFailed => 'การซิงค์ล้มเหลว';
+
+  @override
+  String get keepSyncing => 'ซิงค์ต่อ';
+
+  @override
+  String get cancelSyncQuestion => 'ยกเลิกการซิงค์?';
+
+  @override
+  String get omisStorageDesc =>
+      'เมื่อ Omi ของคุณไม่ได้เชื่อมต่อกับโทรศัพท์ มันจะเก็บเสียงไว้ในหน่วยความจำภายใน คุณจะไม่สูญเสียการบันทึกใดๆ';
+
+  @override
+  String get phoneStorageDesc => 'เมื่อ Omi เชื่อมต่ออีกครั้ง การบันทึกจะถูกโอนไปยังโทรศัพท์โดยอัตโนมัติก่อนอัปโหลด';
+
+  @override
+  String get cloudStorageDesc =>
+      'เมื่ออัปโหลดแล้ว การบันทึกของคุณจะถูกประมวลผลและถอดเสียง บทสนทนาจะพร้อมใช้งานภายในหนึ่งนาที';
+
+  @override
+  String get tipKeepPhoneNearby => 'ให้โทรศัพท์อยู่ใกล้เพื่อการซิงค์ที่เร็วขึ้น';
+
+  @override
+  String get tipStableInternet => 'อินเทอร์เน็ตที่เสถียรช่วยให้อัปโหลดคลาวด์เร็วขึ้น';
+
+  @override
+  String get tipAutoSync => 'การบันทึกจะซิงค์โดยอัตโนมัติ';
+
+  @override
+  String get storageSection => 'พื้นที่จัดเก็บ';
 }

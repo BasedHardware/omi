@@ -448,7 +448,7 @@
     "exportConfiguration": "Eksportēt konfigurāciju",
     "bringYourOwn": "Atnesiet savu",
     "payYourSttProvider": "Brīvi izmantojiet omi. Jūs maksājat tikai savam STT pakalpojumu sniedzējam tieši.",
-    "freeMinutesMonth": "4800 bezmaksas minūtes/mēnesī iekļautas. Neierobežots ar ",
+    "freeMinutesMonth": "1200 bezmaksas minūtes/mēnesī iekļautas. Neierobežots ar ",
     "omiUnlimited": "Omi Neierobežots",
     "hostRequired": "Resursdators ir nepieciešams",
     "validPortRequired": "Ir nepieciešams derīgs ports",
@@ -1459,7 +1459,7 @@
     "accessesAndTriggeredBy": "{accessDescription} un ir {triggerDescription}.",
     "isTriggeredBy": "Ir {triggerDescription}.",
     "noSpecificDataAccessConfigured": "Nav konfigurēta specifiska datu piekļuve.",
-    "basicPlanDescription": "4800 premium minūtes + neierobežots ierīcē",
+    "basicPlanDescription": "1200 premium minūtes + neierobežots ierīcē",
     "minutes": "minūtes",
     "omiHas": "Omi ir:",
     "premiumMinutesUsed": "Premium minūtes izmantotas.",
@@ -1929,7 +1929,7 @@
     "deviceMayWarmUp": "Ierīce var uzkarst ilgstošas lietošanas laikā.",
     "speedAccuracyLower": "Ātrums un precizitāte var būt zemāki nekā mākoņa modeļiem.",
     "cloudProvider": "Mākoņa nodrošinātājs",
-    "premiumMinutesMonth": "4800 premium minūtes/mēnesī. Cilnē Ierīcē piedāvā neierobežotu bezmaksas transkripciju. ",
+    "premiumMinutesMonth": "1200 premium minūtes/mēnesī. Cilnē Ierīcē piedāvā neierobežotu bezmaksas transkripciju. ",
     "viewUsage": "Skatīt lietojumu",
     "audioProcessedLocally": "Audio tiek apstrādāts lokāli. Darbojas bezsaistē, privātāk, bet patērē vairāk akumulatora.",
     "languageLabel": "Valoda",
@@ -2471,7 +2471,7 @@
     "noReviewsFound": "Atsauksmes nav atrastas",
     "onDeviceIntensive": "Ierīces transkripcija ir skaitļošanas resursu ietilpīga.",
     "onDeviceSlower": "Ierīces transkripcija šajā ierīcē var būt lēnāka.",
-    "premiumMinutesInfo": "4800 premium minūtes mēnesī. Cilne \"Ierīcē\" piedāvā neierobežotu bezmaksas transkripciju.",
+    "premiumMinutesInfo": "1200 premium minūtes mēnesī. Cilne \"Ierīcē\" piedāvā neierobežotu bezmaksas transkripciju.",
     "redownload": "Lejupielādēt atkārtoti",
     "reply": "Atbildēt",
     "replySentSuccessfully": "Atbilde veiksmīgi nosūtīta",
@@ -2749,5 +2749,81 @@
     "notYetSynced": "Vēl nav sinhronizēts ar jūsu tālruni",
     "clearAll": "Notīrīt visu",
     "phoneKeypad": "Tastatūra",
-    "phoneHideKeypad": "Paslēpt tastatūru"
+    "phoneHideKeypad": "Paslēpt tastatūru",
+    "transcriptionPaused": "Ierakstīšana, atkārtota savienošana",
+    "transcriptionPausedReconnecting": "Joprojām ieraksta — atkārtoti savienojas ar transkripciju...",
+    "fairUsePolicy": "Godīga lietošana",
+    "fairUseLoadError": "Nevarēja ielādēt godīgas lietošanas statusu. Lūdzu, mēģiniet vēlreiz.",
+    "fairUseStatusNormal": "Jūsu lietojums ir normas robežās.",
+    "fairUseStageNormal": "Normāls",
+    "fairUseStageWarning": "Brīdinājums",
+    "fairUseStageThrottle": "Ierobežots",
+    "fairUseStageRestrict": "Bloķēts",
+    "fairUseSpeechUsage": "Runas lietojums",
+    "fairUseToday": "Šodien",
+    "fairUse3Day": "3 dienu periods",
+    "fairUseWeekly": "Nedēļas periods",
+    "fairUseAboutTitle": "Par godīgu lietošanu",
+    "fairUseAboutBody": "Omi ir izstrādāts personīgām sarunām, sanāksmēm un tiešsaistes mijiedarbībai. Lietojums tiek mērīts pēc konstatētā reālā runas laika, nevis savienojuma laika. Ja lietojums ievērojami pārsniedz parastos modeļus nepersoniskam saturam, var tikt piemēroti pielāgojumi.",
+    "fairUseCaseRefCopied": "{caseRef} nokopēts",
+    "@fairUseCaseRefCopied": {
+        "description": "Snackbar message when case reference is copied",
+        "placeholders": {
+            "caseRef": {
+                "type": "String"
+            }
+        }
+    },
+    "fairUseDailyTranscription": "Daily Transcription",
+    "fairUseBudgetExhausted": "Daily transcription limit reached",
+    "fairUseBudgetResetsAt": "Resets {time}",
+    "fairUseBudgetUsed": "{used}m / {limit}m",
+    "@fairUseBudgetUsed": {
+        "placeholders": {
+            "used": {
+                "type": "String"
+            },
+            "limit": {
+                "type": "String"
+            }
+        }
+    },
+    "@fairUseBudgetResetsAt": {
+        "placeholders": {
+            "time": {
+                "type": "String"
+            }
+        }
+    },
+    "fairUseBannerStatus": "Godprātīga izmantošana: {status}",
+    "@fairUseBannerStatus": {
+        "placeholders": {
+            "status": {
+                "type": "String"
+            }
+        }
+    },
+    "improveConnectionTitle": "Uzlabot savienojumu",
+    "improveConnectionContent": "Mēs esam uzlabojuši veidu, kā Omi paliek savienots ar jūsu ierīci. Lai to aktivizētu, dodieties uz ierīces informācijas lapu, pieskarieties \"Atvienot ierīci\" un savienojiet ierīci pārī no jauna.",
+    "improveConnectionAction": "Sapratu",
+    "clockSkewWarning": "Jūsu ierīces pulkstenis atšķiras par ~{minutes} min. Pārbaudiet datuma un laika iestatījumus.",
+    "omisStorage": "Omi krātuve",
+    "phoneStorage": "Tālruņa krātuve",
+    "cloudStorage": "Mākoņkrātuve",
+    "howSyncingWorks": "Kā darbojas sinhronizācija",
+    "noSyncedRecordings": "Vēl nav sinhronizētu ierakstu",
+    "recordingsSyncAutomatically": "Ieraksti tiek sinhronizēti automātiski — darbība nav nepieciešama.",
+    "filesDownloadedUploadedNextTime": "Jau lejupielādētie faili tiks augšupielādēti nākamreiz.",
+    "nConversationsCreated": "{count, plural, =1{1 saruna izveidota} other{{count} sarunas izveidotas}}",
+    "tapToView": "Pieskarieties, lai skatītu",
+    "syncFailed": "Sinhronizācija neizdevās",
+    "keepSyncing": "Turpināt sinhronizāciju",
+    "cancelSyncQuestion": "Atcelt sinhronizāciju?",
+    "omisStorageDesc": "Kad jūsu Omi nav savienots ar tālruni, tas saglabā audio lokāli iebūvētajā atmiņā. Jūs nekad nezaudēsiet ierakstu.",
+    "phoneStorageDesc": "Kad Omi atkārtoti pieslēdzas, ieraksti automātiski tiek pārsūtīti uz jūsu tālruni pirms augšupielādes.",
+    "cloudStorageDesc": "Pēc augšupielādes jūsu ieraksti tiek apstrādāti un transkribēti. Sarunas būs pieejamas minūtes laikā.",
+    "storageSection": "KRĀTUVE",
+    "tipKeepPhoneNearby": "Turiet tālruni tuvumā ātrākai sinhronizācijai",
+    "tipStableInternet": "Stabils internets paātrina mākoņa augšupielādi",
+    "tipAutoSync": "Ieraksti tiek sinhronizēti automātiski"
 }

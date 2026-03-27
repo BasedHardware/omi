@@ -1466,7 +1466,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get payYourSttProvider => 'Свободно используйте omi. Вы платите только своему провайдеру STT напрямую.';
 
   @override
-  String get freeMinutesMonth => '4800 бесплатных минут в месяц включено. Безлимитно с ';
+  String get freeMinutesMonth => '1200 бесплатных минут в месяц включено. Безлимитно с ';
 
   @override
   String get omiUnlimited => 'Omi Unlimited';
@@ -4775,7 +4775,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get noSpecificDataAccessConfigured => 'Конкретный доступ к данным не настроен.';
 
   @override
-  String get basicPlanDescription => '4 800 премиум минут + неограниченно на устройстве';
+  String get basicPlanDescription => '1 200 премиум минут + неограниченно на устройстве';
 
   @override
   String get minutes => 'минут';
@@ -6104,7 +6104,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get premiumMinutesInfo =>
-      '4 800 премиум-минут в месяц. Вкладка \"На устройстве\" предлагает неограниченную бесплатную транскрипцию.';
+      '1 200 премиум-минут в месяц. Вкладка \"На устройстве\" предлагает неограниченную бесплатную транскрипцию.';
 
   @override
   String get viewUsage => 'Посмотреть использование';
@@ -6187,7 +6187,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get premiumMinutesMonth =>
-      '4800 премиум-минут/месяц. Вкладка На устройстве предлагает неограниченную бесплатную транскрипцию. ';
+      '1200 премиум-минут/месяц. Вкладка На устройстве предлагает неограниченную бесплатную транскрипцию. ';
 
   @override
   String get audioProcessedLocally =>
@@ -8587,4 +8587,160 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get phoneHideKeypad => 'Скрыть клавиатуру';
+
+  @override
+  String get fairUsePolicy => 'Добросовестное использование';
+
+  @override
+  String get fairUseLoadError =>
+      'Не удалось загрузить статус добросовестного использования. Пожалуйста, попробуйте снова.';
+
+  @override
+  String get fairUseStatusNormal => 'Ваше использование в пределах нормы.';
+
+  @override
+  String get fairUseStageNormal => 'Нормальное';
+
+  @override
+  String get fairUseStageWarning => 'Предупреждение';
+
+  @override
+  String get fairUseStageThrottle => 'Ограничено';
+
+  @override
+  String get fairUseStageRestrict => 'Заблокировано';
+
+  @override
+  String get fairUseSpeechUsage => 'Использование речи';
+
+  @override
+  String get fairUseToday => 'Сегодня';
+
+  @override
+  String get fairUse3Day => '3-дневный период';
+
+  @override
+  String get fairUseWeekly => 'Недельный период';
+
+  @override
+  String get fairUseAboutTitle => 'О добросовестном использовании';
+
+  @override
+  String get fairUseAboutBody =>
+      'Omi предназначен для личных разговоров, встреч и живого общения. Использование измеряется по фактическому обнаруженному времени речи, а не по времени подключения. Если использование значительно превышает обычные модели для неличного контента, могут применяться корректировки.';
+
+  @override
+  String fairUseCaseRefCopied(String caseRef) {
+    return '$caseRef скопировано';
+  }
+
+  @override
+  String get fairUseDailyTranscription => 'Ежедневная транскрипция';
+
+  @override
+  String fairUseBudgetUsed(String used, String limit) {
+    return '$usedм / $limitм';
+  }
+
+  @override
+  String get fairUseBudgetExhausted => 'Достигнут дневной лимит транскрипции';
+
+  @override
+  String fairUseBudgetResetsAt(String time) {
+    return 'Сброс $time';
+  }
+
+  @override
+  String get transcriptionPaused => 'Запись, переподключение';
+
+  @override
+  String get transcriptionPausedReconnecting => 'Запись продолжается — переподключение к транскрипции...';
+
+  @override
+  String fairUseBannerStatus(String status) {
+    return 'Добросовестное использование: $status';
+  }
+
+  @override
+  String get improveConnectionTitle => 'Улучшить соединение';
+
+  @override
+  String get improveConnectionContent =>
+      'Мы улучшили способ подключения Omi к вашему устройству. Чтобы активировать это, перейдите на страницу информации об устройстве, нажмите \"Отключить устройство\" и снова подключите ваше устройство.';
+
+  @override
+  String get improveConnectionAction => 'Понятно';
+
+  @override
+  String clockSkewWarning(int minutes) {
+    return 'Часы вашего устройства отличаются на ~$minutes мин. Проверьте настройки даты и времени.';
+  }
+
+  @override
+  String get omisStorage => 'Хранилище Omi';
+
+  @override
+  String get phoneStorage => 'Хранилище телефона';
+
+  @override
+  String get cloudStorage => 'Облачное хранилище';
+
+  @override
+  String get howSyncingWorks => 'Как работает синхронизация';
+
+  @override
+  String get noSyncedRecordings => 'Синхронизированных записей пока нет';
+
+  @override
+  String get recordingsSyncAutomatically => 'Записи синхронизируются автоматически — никаких действий не требуется.';
+
+  @override
+  String get filesDownloadedUploadedNextTime => 'Уже загруженные файлы будут отправлены в следующий раз.';
+
+  @override
+  String nConversationsCreated(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count разговоров создано',
+      one: '1 разговор создан',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get tapToView => 'Нажмите для просмотра';
+
+  @override
+  String get syncFailed => 'Ошибка синхронизации';
+
+  @override
+  String get keepSyncing => 'Продолжить синхронизацию';
+
+  @override
+  String get cancelSyncQuestion => 'Отменить синхронизацию?';
+
+  @override
+  String get omisStorageDesc =>
+      'Когда ваш Omi не подключён к телефону, он сохраняет аудио локально во встроенной памяти. Вы никогда не потеряете запись.';
+
+  @override
+  String get phoneStorageDesc =>
+      'При повторном подключении Omi записи автоматически переносятся на телефон перед загрузкой.';
+
+  @override
+  String get cloudStorageDesc =>
+      'После загрузки ваши записи обрабатываются и расшифровываются. Разговоры будут доступны в течение минуты.';
+
+  @override
+  String get tipKeepPhoneNearby => 'Держите телефон рядом для быстрой синхронизации';
+
+  @override
+  String get tipStableInternet => 'Стабильный интернет ускоряет загрузку в облако';
+
+  @override
+  String get tipAutoSync => 'Записи синхронизируются автоматически';
+
+  @override
+  String get storageSection => 'ХРАНИЛИЩЕ';
 }

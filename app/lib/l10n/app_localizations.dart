@@ -156,7 +156,7 @@ abstract class AppLocalizations {
     Locale('tr'),
     Locale('uk'),
     Locale('vi'),
-    Locale('zh'),
+    Locale('zh')
   ];
 
   /// The app title displayed in various places
@@ -2850,7 +2850,7 @@ abstract class AppLocalizations {
   /// No description provided for @freeMinutesMonth.
   ///
   /// In en, this message translates to:
-  /// **'4,800 free minutes/month included. Unlimited with '**
+  /// **'1,200 free minutes/month included. Unlimited with '**
   String get freeMinutesMonth;
 
   /// No description provided for @omiUnlimited.
@@ -9024,7 +9024,7 @@ abstract class AppLocalizations {
   /// Description of basic plan features in usage page
   ///
   /// In en, this message translates to:
-  /// **'4,800 premium mins + unlimited on-device'**
+  /// **'1,200 premium mins + unlimited on-device'**
   String get basicPlanDescription;
 
   /// Unit label for minutes
@@ -11514,7 +11514,7 @@ abstract class AppLocalizations {
   /// Info about premium minutes
   ///
   /// In en, this message translates to:
-  /// **'4,800 premium minutes/month. On-Device tab offers unlimited free transcription.'**
+  /// **'1,200 premium minutes/month. On-Device tab offers unlimited free transcription.'**
   String get premiumMinutesInfo;
 
   /// Link to view usage
@@ -11658,7 +11658,7 @@ abstract class AppLocalizations {
   /// Description of premium minutes quota
   ///
   /// In en, this message translates to:
-  /// **'4,800 premium minutes/month. On-Device tab offers unlimited free transcription. '**
+  /// **'1,200 premium minutes/month. On-Device tab offers unlimited free transcription. '**
   String get premiumMinutesMonth;
 
   /// Description of on-device processing
@@ -15992,6 +15992,270 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Hide Keypad'**
   String get phoneHideKeypad;
+
+  /// No description provided for @fairUsePolicy.
+  ///
+  /// In en, this message translates to:
+  /// **'Fair Use'**
+  String get fairUsePolicy;
+
+  /// No description provided for @fairUseLoadError.
+  ///
+  /// In en, this message translates to:
+  /// **'Unable to load fair use status. Please try again.'**
+  String get fairUseLoadError;
+
+  /// No description provided for @fairUseStatusNormal.
+  ///
+  /// In en, this message translates to:
+  /// **'Your usage is within normal limits.'**
+  String get fairUseStatusNormal;
+
+  /// No description provided for @fairUseStageNormal.
+  ///
+  /// In en, this message translates to:
+  /// **'Normal'**
+  String get fairUseStageNormal;
+
+  /// No description provided for @fairUseStageWarning.
+  ///
+  /// In en, this message translates to:
+  /// **'Warning'**
+  String get fairUseStageWarning;
+
+  /// No description provided for @fairUseStageThrottle.
+  ///
+  /// In en, this message translates to:
+  /// **'Throttled'**
+  String get fairUseStageThrottle;
+
+  /// No description provided for @fairUseStageRestrict.
+  ///
+  /// In en, this message translates to:
+  /// **'Restricted'**
+  String get fairUseStageRestrict;
+
+  /// No description provided for @fairUseSpeechUsage.
+  ///
+  /// In en, this message translates to:
+  /// **'Speech Usage'**
+  String get fairUseSpeechUsage;
+
+  /// No description provided for @fairUseToday.
+  ///
+  /// In en, this message translates to:
+  /// **'Today'**
+  String get fairUseToday;
+
+  /// No description provided for @fairUse3Day.
+  ///
+  /// In en, this message translates to:
+  /// **'3-Day Rolling'**
+  String get fairUse3Day;
+
+  /// No description provided for @fairUseWeekly.
+  ///
+  /// In en, this message translates to:
+  /// **'Weekly Rolling'**
+  String get fairUseWeekly;
+
+  /// No description provided for @fairUseAboutTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'About Fair Use'**
+  String get fairUseAboutTitle;
+
+  /// No description provided for @fairUseAboutBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Omi is designed for personal conversations, meetings, and live interactions. Usage is measured by real speech time detected, not connection time. If usage significantly exceeds normal patterns for non-personal content, adjustments may apply.'**
+  String get fairUseAboutBody;
+
+  /// Snackbar message when case reference is copied to clipboard
+  ///
+  /// In en, this message translates to:
+  /// **'{caseRef} copied'**
+  String fairUseCaseRefCopied(String caseRef);
+
+  /// No description provided for @fairUseDailyTranscription.
+  ///
+  /// In en, this message translates to:
+  /// **'Daily Transcription'**
+  String get fairUseDailyTranscription;
+
+  /// No description provided for @fairUseBudgetUsed.
+  ///
+  /// In en, this message translates to:
+  /// **'{used}m / {limit}m'**
+  String fairUseBudgetUsed(String used, String limit);
+
+  /// No description provided for @fairUseBudgetExhausted.
+  ///
+  /// In en, this message translates to:
+  /// **'Daily transcription limit reached'**
+  String get fairUseBudgetExhausted;
+
+  /// No description provided for @fairUseBudgetResetsAt.
+  ///
+  /// In en, this message translates to:
+  /// **'Resets {time}'**
+  String fairUseBudgetResetsAt(String time);
+
+  /// No description provided for @transcriptionPaused.
+  ///
+  /// In en, this message translates to:
+  /// **'Recording, reconnecting'**
+  String get transcriptionPaused;
+
+  /// No description provided for @transcriptionPausedReconnecting.
+  ///
+  /// In en, this message translates to:
+  /// **'Still recording — reconnecting to transcription...'**
+  String get transcriptionPausedReconnecting;
+
+  /// No description provided for @fairUseBannerStatus.
+  ///
+  /// In en, this message translates to:
+  /// **'Fair Use: {status}'**
+  String fairUseBannerStatus(String status);
+
+  /// No description provided for @improveConnectionTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Improve Connection'**
+  String get improveConnectionTitle;
+
+  /// No description provided for @improveConnectionContent.
+  ///
+  /// In en, this message translates to:
+  /// **'We\'ve improved how Omi stays connected to your device. To activate this, please go to the Device Info page, tap \"Disconnect Device\", and then pair your device again.'**
+  String get improveConnectionContent;
+
+  /// No description provided for @improveConnectionAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Got it'**
+  String get improveConnectionAction;
+
+  /// No description provided for @clockSkewWarning.
+  ///
+  /// In en, this message translates to:
+  /// **'Your device clock is off by ~{minutes} min. Check your date & time settings.'**
+  String clockSkewWarning(int minutes);
+
+  /// Label for device storage tier in sync pipeline
+  ///
+  /// In en, this message translates to:
+  /// **'Omi\'s Storage'**
+  String get omisStorage;
+
+  /// Label for phone storage tier in sync pipeline
+  ///
+  /// In en, this message translates to:
+  /// **'Phone Storage'**
+  String get phoneStorage;
+
+  /// Label for cloud storage tier in sync pipeline
+  ///
+  /// In en, this message translates to:
+  /// **'Cloud Storage'**
+  String get cloudStorage;
+
+  /// Title for sync info bottom sheet
+  ///
+  /// In en, this message translates to:
+  /// **'How syncing works'**
+  String get howSyncingWorks;
+
+  /// Empty state for synced recordings list
+  ///
+  /// In en, this message translates to:
+  /// **'No synced recordings yet'**
+  String get noSyncedRecordings;
+
+  /// Tip in sync info sheet
+  ///
+  /// In en, this message translates to:
+  /// **'Recordings sync automatically — no action needed.'**
+  String get recordingsSyncAutomatically;
+
+  /// Cancel sync confirmation message
+  ///
+  /// In en, this message translates to:
+  /// **'Files already downloaded will be uploaded next time.'**
+  String get filesDownloadedUploadedNextTime;
+
+  /// Shows number of conversations created after sync
+  ///
+  /// In en, this message translates to:
+  /// **'{count} conversation{count, plural, =1{} other{s}} created'**
+  String nConversationsCreated(int count);
+
+  /// Subtitle hint for tappable items
+  ///
+  /// In en, this message translates to:
+  /// **'Tap to view'**
+  String get tapToView;
+
+  /// Error state text when sync fails
+  ///
+  /// In en, this message translates to:
+  /// **'Sync failed'**
+  String get syncFailed;
+
+  /// Button label to dismiss cancel dialog and continue syncing
+  ///
+  /// In en, this message translates to:
+  /// **'Keep syncing'**
+  String get keepSyncing;
+
+  /// Title for cancel sync confirmation dialog
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel sync?'**
+  String get cancelSyncQuestion;
+
+  /// Description of device storage in sync info sheet
+  ///
+  /// In en, this message translates to:
+  /// **'When your Omi is not connected to your phone, it stores audio locally on its built-in memory. You never lose a recording.'**
+  String get omisStorageDesc;
+
+  /// Description of phone storage in sync info sheet
+  ///
+  /// In en, this message translates to:
+  /// **'When Omi reconnects, recordings are automatically transferred to your phone as a temporary holding area before uploading.'**
+  String get phoneStorageDesc;
+
+  /// Description of cloud storage in sync info sheet
+  ///
+  /// In en, this message translates to:
+  /// **'Once uploaded, your recordings are processed and transcribed. Conversations will be available within a minute.'**
+  String get cloudStorageDesc;
+
+  /// Tip in sync info sheet
+  ///
+  /// In en, this message translates to:
+  /// **'Keep your phone nearby for faster syncing'**
+  String get tipKeepPhoneNearby;
+
+  /// Tip in sync info sheet
+  ///
+  /// In en, this message translates to:
+  /// **'Stable internet speeds up cloud uploads'**
+  String get tipStableInternet;
+
+  /// Tip in sync info sheet
+  ///
+  /// In en, this message translates to:
+  /// **'Recordings sync automatically'**
+  String get tipAutoSync;
+
+  /// Section header for storage settings
+  ///
+  /// In en, this message translates to:
+  /// **'STORAGE'**
+  String get storageSection;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {
@@ -16004,41 +16268,41 @@ class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> 
 
   @override
   bool isSupported(Locale locale) => <String>[
-    'ar',
-    'bg',
-    'ca',
-    'cs',
-    'da',
-    'de',
-    'el',
-    'en',
-    'es',
-    'et',
-    'fi',
-    'fr',
-    'hi',
-    'hu',
-    'id',
-    'it',
-    'ja',
-    'ko',
-    'lt',
-    'lv',
-    'ms',
-    'nl',
-    'no',
-    'pl',
-    'pt',
-    'ro',
-    'ru',
-    'sk',
-    'sv',
-    'th',
-    'tr',
-    'uk',
-    'vi',
-    'zh',
-  ].contains(locale.languageCode);
+        'ar',
+        'bg',
+        'ca',
+        'cs',
+        'da',
+        'de',
+        'el',
+        'en',
+        'es',
+        'et',
+        'fi',
+        'fr',
+        'hi',
+        'hu',
+        'id',
+        'it',
+        'ja',
+        'ko',
+        'lt',
+        'lv',
+        'ms',
+        'nl',
+        'no',
+        'pl',
+        'pt',
+        'ro',
+        'ru',
+        'sk',
+        'sv',
+        'th',
+        'tr',
+        'uk',
+        'vi',
+        'zh'
+      ].contains(locale.languageCode);
 
   @override
   bool shouldReload(_AppLocalizationsDelegate old) => false;
@@ -16117,10 +16381,8 @@ AppLocalizations lookupAppLocalizations(Locale locale) {
       return AppLocalizationsZh();
   }
 
-  throw FlutterError(
-    'AppLocalizations.delegate failed to load unsupported locale "$locale". This is likely '
-    'an issue with the localizations generation tool. Please file an issue '
-    'on GitHub with a reproducible sample app and the gen-l10n configuration '
-    'that was used.',
-  );
+  throw FlutterError('AppLocalizations.delegate failed to load unsupported locale "$locale". This is likely '
+      'an issue with the localizations generation tool. Please file an issue '
+      'on GitHub with a reproducible sample app and the gen-l10n configuration '
+      'that was used.');
 }

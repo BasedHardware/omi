@@ -448,7 +448,7 @@
     "exportConfiguration": "Exportă configurația",
     "bringYourOwn": "Folosește propriul tău",
     "payYourSttProvider": "Folosește Omi liber. Plătești doar furnizorul STT direct.",
-    "freeMinutesMonth": "4.800 de minute gratuite/lună incluse. Nelimitat cu ",
+    "freeMinutesMonth": "1.200 de minute gratuite/lună incluse. Nelimitat cu ",
     "omiUnlimited": "Omi Nelimitat",
     "hostRequired": "Host-ul este necesar",
     "validPortRequired": "Port valid este necesar",
@@ -1459,7 +1459,7 @@
     "accessesAndTriggeredBy": "{accessDescription} și este {triggerDescription}.",
     "isTriggeredBy": "Este {triggerDescription}.",
     "noSpecificDataAccessConfigured": "Niciun acces specific la date configurat.",
-    "basicPlanDescription": "4.800 minute premium + nelimitat pe dispozitiv",
+    "basicPlanDescription": "1.200 minute premium + nelimitat pe dispozitiv",
     "minutes": "minute",
     "omiHas": "Omi are:",
     "premiumMinutesUsed": "Minute premium utilizate.",
@@ -1929,7 +1929,7 @@
     "deviceMayWarmUp": "Dispozitivul se poate încălzi în timpul utilizării prelungite.",
     "speedAccuracyLower": "Viteza și precizia pot fi mai mici decât modelele Cloud.",
     "cloudProvider": "Furnizor cloud",
-    "premiumMinutesMonth": "4.800 minute premium/lună. Fila Pe dispozitiv oferă transcriere gratuită nelimitată. ",
+    "premiumMinutesMonth": "1.200 minute premium/lună. Fila Pe dispozitiv oferă transcriere gratuită nelimitată. ",
     "viewUsage": "Vizualizați utilizarea",
     "audioProcessedLocally": "Audio este procesat local. Funcționează offline, mai privat, dar consumă mai multă baterie.",
     "languageLabel": "Limbă",
@@ -2471,7 +2471,7 @@
     "noReviewsFound": "Nu s-au găsit recenzii",
     "onDeviceIntensive": "Transcrierea pe dispozitiv necesită resurse intensive de calcul.",
     "onDeviceSlower": "Transcrierea pe dispozitiv poate fi mai lentă pe acest dispozitiv.",
-    "premiumMinutesInfo": "4.800 minute premium/lună. Fila Pe dispozitiv oferă transcriere gratuită nelimitată.",
+    "premiumMinutesInfo": "1.200 minute premium/lună. Fila Pe dispozitiv oferă transcriere gratuită nelimitată.",
     "redownload": "Descarcă din nou",
     "reply": "Răspuns",
     "replySentSuccessfully": "Răspuns trimis cu succes",
@@ -2749,5 +2749,81 @@
     "notYetSynced": "Nu a fost încă sincronizat cu telefonul dvs.",
     "clearAll": "Șterge tot",
     "phoneKeypad": "Tastatură",
-    "phoneHideKeypad": "Ascunde tastatura"
+    "phoneHideKeypad": "Ascunde tastatura",
+    "transcriptionPaused": "Înregistrare, reconectare",
+    "transcriptionPausedReconnecting": "Încă înregistrează — reconectare la transcriere...",
+    "fairUsePolicy": "Utilizare echitabilă",
+    "fairUseLoadError": "Nu s-a putut încărca starea de utilizare echitabilă. Vă rugăm să încercați din nou.",
+    "fairUseStatusNormal": "Utilizarea dvs. este în limitele normale.",
+    "fairUseStageNormal": "Normal",
+    "fairUseStageWarning": "Avertisment",
+    "fairUseStageThrottle": "Limitat",
+    "fairUseStageRestrict": "Blocat",
+    "fairUseSpeechUsage": "Utilizare vocală",
+    "fairUseToday": "Astăzi",
+    "fairUse3Day": "3 zile consecutive",
+    "fairUseWeekly": "Săptămânal",
+    "fairUseAboutTitle": "Despre utilizarea echitabilă",
+    "fairUseAboutBody": "Omi este conceput pentru conversații personale, întâlniri și interacțiuni în direct. Utilizarea este măsurată prin timpul real de vorbire detectat, nu prin timpul de conexiune. Dacă utilizarea depășește semnificativ tiparele normale pentru conținut non-personal, se pot aplica ajustări.",
+    "fairUseCaseRefCopied": "{caseRef} copiat",
+    "@fairUseCaseRefCopied": {
+        "description": "Snackbar message when case reference is copied",
+        "placeholders": {
+            "caseRef": {
+                "type": "String"
+            }
+        }
+    },
+    "fairUseDailyTranscription": "Daily Transcription",
+    "fairUseBudgetExhausted": "Daily transcription limit reached",
+    "fairUseBudgetResetsAt": "Resets {time}",
+    "fairUseBudgetUsed": "{used}m / {limit}m",
+    "@fairUseBudgetUsed": {
+        "placeholders": {
+            "used": {
+                "type": "String"
+            },
+            "limit": {
+                "type": "String"
+            }
+        }
+    },
+    "@fairUseBudgetResetsAt": {
+        "placeholders": {
+            "time": {
+                "type": "String"
+            }
+        }
+    },
+    "fairUseBannerStatus": "Utilizare echitabilă: {status}",
+    "@fairUseBannerStatus": {
+        "placeholders": {
+            "status": {
+                "type": "String"
+            }
+        }
+    },
+    "improveConnectionTitle": "Îmbunătățire conexiune",
+    "improveConnectionContent": "Am îmbunătățit modul în care Omi rămâne conectat la dispozitivul tău. Pentru a activa acest lucru, mergi la pagina Informații dispozitiv, apasă \"Deconectare dispozitiv\" și împerechează din nou dispozitivul.",
+    "improveConnectionAction": "Am înțeles",
+    "clockSkewWarning": "Ceasul dispozitivului diferă cu ~{minutes} min. Verificați setările de dată și oră.",
+    "omisStorage": "Stocarea Omi",
+    "phoneStorage": "Stocarea telefonului",
+    "cloudStorage": "Stocare în cloud",
+    "howSyncingWorks": "Cum funcționează sincronizarea",
+    "noSyncedRecordings": "Nicio înregistrare sincronizată încă",
+    "recordingsSyncAutomatically": "Înregistrările se sincronizează automat — nu este necesară nicio acțiune.",
+    "filesDownloadedUploadedNextTime": "Fișierele deja descărcate vor fi încărcate data viitoare.",
+    "nConversationsCreated": "{count, plural, =1{1 conversație creată} other{{count} conversații create}}",
+    "tapToView": "Atingeți pentru a vizualiza",
+    "syncFailed": "Sincronizarea a eșuat",
+    "keepSyncing": "Continuă sincronizarea",
+    "cancelSyncQuestion": "Anulezi sincronizarea?",
+    "omisStorageDesc": "Când Omi nu este conectat la telefon, stochează audio local în memoria sa integrată. Nu veți pierde niciodată o înregistrare.",
+    "phoneStorageDesc": "Când Omi se reconectează, înregistrările sunt transferate automat pe telefon înainte de încărcare.",
+    "cloudStorageDesc": "După încărcare, înregistrările sunt procesate și transcrise. Conversațiile vor fi disponibile într-un minut.",
+    "storageSection": "STOCARE",
+    "tipKeepPhoneNearby": "Păstrați telefonul aproape pentru sincronizare mai rapidă",
+    "tipStableInternet": "Internetul stabil accelerează încărcarea în cloud",
+    "tipAutoSync": "Înregistrările se sincronizează automat"
 }

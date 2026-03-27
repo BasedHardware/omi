@@ -1956,7 +1956,7 @@ struct PromoteResponse: Codable {
 
 extension APIClient {
 
-    /// Fetches all active goals (up to 3). Uses 5-second cache to deduplicate parallel calls.
+    /// Fetches all active goals (up to 4). Uses 5-second cache to deduplicate parallel calls.
     func getGoals() async throws -> [Goal] {
         if let cache = goalsCache, let time = goalsCacheTime, Date().timeIntervalSince(time) < 5 {
             return cache

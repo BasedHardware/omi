@@ -183,6 +183,12 @@ class Features:
     KNOWLEDGE_GRAPH = "knowledge_graph"
     OTHER = "other"
 
+    PROACTIVE_NOTIFICATION = "proactive_notification"
+    FOLLOWUP = "followup"
+    OPENGLASS = "openglass"
+    APP_GENERATOR = "app_generator"
+    ONBOARDING = "onboarding"
+
     # Conversation processing sub-features (granular cost tracking)
     CONVERSATION_DISCARD = "conv_discard"
     CONVERSATION_STRUCTURE = "conv_structure"

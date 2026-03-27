@@ -1839,7 +1839,7 @@ class _PlansSheetState extends State<PlansSheet> {
     bool isPopular = false,
     required VoidCallback onTap,
   }) {
-    final title = '${planData['title']} Unlimited';
+    final title = planData['title'] as String;
     final priceString = planData['price_string'] as String;
     final interval = planData['interval'] as String;
     final unitAmount = planData['unit_amount'] as int;

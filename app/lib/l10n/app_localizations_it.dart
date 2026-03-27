@@ -1466,7 +1466,7 @@ class AppLocalizationsIt extends AppLocalizations {
   String get payYourSttProvider => 'Usa Omi liberamente. Paghi solo il tuo provider STT direttamente.';
 
   @override
-  String get freeMinutesMonth => '4.800 minuti gratuiti/mese inclusi. Illimitato con ';
+  String get freeMinutesMonth => '1.200 minuti gratuiti/mese inclusi. Illimitato con ';
 
   @override
   String get omiUnlimited => 'Omi Unlimited';
@@ -1715,7 +1715,12 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'DISPOSITIVI', one: 'DISPOSITIVO');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'DISPOSITIVI',
+      one: 'DISPOSITIVO',
+    );
     return '$count $_temp0 TROVATO/I NELLE VICINANZE';
   }
 
@@ -4787,7 +4792,7 @@ class AppLocalizationsIt extends AppLocalizations {
   String get noSpecificDataAccessConfigured => 'Nessun accesso ai dati specifico configurato.';
 
   @override
-  String get basicPlanDescription => '4.800 minuti premium + illimitato sul dispositivo';
+  String get basicPlanDescription => '1.200 minuti premium + illimitato sul dispositivo';
 
   @override
   String get minutes => 'minuti';
@@ -6121,7 +6126,7 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get premiumMinutesInfo =>
-      '4.800 minuti premium/mese. La scheda Su dispositivo offre trascrizione gratuita illimitata.';
+      '1.200 minuti premium/mese. La scheda Su dispositivo offre trascrizione gratuita illimitata.';
 
   @override
   String get viewUsage => 'Visualizza utilizzo';
@@ -6205,7 +6210,7 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get premiumMinutesMonth =>
-      '4.800 minuti premium/mese. La scheda Sul dispositivo offre trascrizione gratuita illimitata. ';
+      '1.200 minuti premium/mese. La scheda Sul dispositivo offre trascrizione gratuita illimitata. ';
 
   @override
   String get audioProcessedLocally =>
@@ -8606,4 +8611,160 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get phoneHideKeypad => 'Nascondi tastiera';
+
+  @override
+  String get fairUsePolicy => 'Uso corretto';
+
+  @override
+  String get fairUseLoadError => 'Impossibile caricare lo stato di uso corretto. Riprova.';
+
+  @override
+  String get fairUseStatusNormal => 'Il tuo utilizzo è entro i limiti normali.';
+
+  @override
+  String get fairUseStageNormal => 'Normale';
+
+  @override
+  String get fairUseStageWarning => 'Avviso';
+
+  @override
+  String get fairUseStageThrottle => 'Limitato';
+
+  @override
+  String get fairUseStageRestrict => 'Bloccato';
+
+  @override
+  String get fairUseSpeechUsage => 'Utilizzo vocale';
+
+  @override
+  String get fairUseToday => 'Oggi';
+
+  @override
+  String get fairUse3Day => '3 giorni consecutivi';
+
+  @override
+  String get fairUseWeekly => 'Settimanale';
+
+  @override
+  String get fairUseAboutTitle => 'Informazioni sull\'uso corretto';
+
+  @override
+  String get fairUseAboutBody =>
+      'Omi è progettato per conversazioni personali, riunioni e interazioni dal vivo. L\'utilizzo è misurato dal tempo reale di parlato rilevato, non dal tempo di connessione. Se l\'utilizzo supera significativamente i modelli normali per contenuti non personali, potrebbero essere applicate modifiche.';
+
+  @override
+  String fairUseCaseRefCopied(String caseRef) {
+    return '$caseRef copiato';
+  }
+
+  @override
+  String get fairUseDailyTranscription => 'Trascrizione giornaliera';
+
+  @override
+  String fairUseBudgetUsed(String used, String limit) {
+    return '${used}m / ${limit}m';
+  }
+
+  @override
+  String get fairUseBudgetExhausted => 'Limite di trascrizione giornaliero raggiunto';
+
+  @override
+  String fairUseBudgetResetsAt(String time) {
+    return 'Si reimposta $time';
+  }
+
+  @override
+  String get transcriptionPaused => 'Registrazione, riconnessione';
+
+  @override
+  String get transcriptionPausedReconnecting => 'Registrazione in corso — riconnessione alla trascrizione...';
+
+  @override
+  String fairUseBannerStatus(String status) {
+    return 'Uso corretto: $status';
+  }
+
+  @override
+  String get improveConnectionTitle => 'Migliora connessione';
+
+  @override
+  String get improveConnectionContent =>
+      'Abbiamo migliorato il modo in cui Omi rimane connesso al tuo dispositivo. Per attivarlo, vai alla pagina Info dispositivo, tocca \"Disconnetti dispositivo\" e associa nuovamente il tuo dispositivo.';
+
+  @override
+  String get improveConnectionAction => 'Capito';
+
+  @override
+  String clockSkewWarning(int minutes) {
+    return 'L\'orologio del dispositivo è sfasato di ~$minutes min. Controlla le impostazioni di data e ora.';
+  }
+
+  @override
+  String get omisStorage => 'Archivio di Omi';
+
+  @override
+  String get phoneStorage => 'Archivio del telefono';
+
+  @override
+  String get cloudStorage => 'Archivio cloud';
+
+  @override
+  String get howSyncingWorks => 'Come funziona la sincronizzazione';
+
+  @override
+  String get noSyncedRecordings => 'Nessuna registrazione sincronizzata ancora';
+
+  @override
+  String get recordingsSyncAutomatically =>
+      'Le registrazioni si sincronizzano automaticamente — nessuna azione necessaria.';
+
+  @override
+  String get filesDownloadedUploadedNextTime => 'I file già scaricati verranno caricati la prossima volta.';
+
+  @override
+  String nConversationsCreated(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count conversazioni create',
+      one: '1 conversazione creata',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get tapToView => 'Tocca per visualizzare';
+
+  @override
+  String get syncFailed => 'Sincronizzazione fallita';
+
+  @override
+  String get keepSyncing => 'Continua sincronizzazione';
+
+  @override
+  String get cancelSyncQuestion => 'Annullare la sincronizzazione?';
+
+  @override
+  String get omisStorageDesc =>
+      'Quando il tuo Omi non è collegato al telefono, memorizza l\'audio localmente nella sua memoria integrata. Non perderai mai una registrazione.';
+
+  @override
+  String get phoneStorageDesc =>
+      'Quando Omi si riconnette, le registrazioni vengono trasferite automaticamente al telefono prima del caricamento.';
+
+  @override
+  String get cloudStorageDesc =>
+      'Una volta caricate, le registrazioni vengono elaborate e trascritte. Le conversazioni saranno disponibili entro un minuto.';
+
+  @override
+  String get tipKeepPhoneNearby => 'Tieni il telefono vicino per una sincronizzazione più veloce';
+
+  @override
+  String get tipStableInternet => 'Internet stabile velocizza i caricamenti cloud';
+
+  @override
+  String get tipAutoSync => 'Le registrazioni si sincronizzano automaticamente';
+
+  @override
+  String get storageSection => 'ARCHIVIO';
 }

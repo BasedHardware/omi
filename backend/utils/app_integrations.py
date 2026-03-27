@@ -293,13 +293,14 @@ def _process_mentor_proactive_notification(uid: str, conversation_messages: list
 
     # ── Step 1: Gate ─────────────────────────────────────────────────────
     try:
-        relevance = evaluate_relevance(
-            user_name=user_name,
-            user_facts=user_facts,
-            goals=goals,
-            current_messages=conversation_messages,
-            recent_notifications=recent_notifications,
-        )
+        with track_usage(uid, Features.PROACTIVE_NOTIFICATION):
+            relevance = evaluate_relevance(
+                user_name=user_name,
+                user_facts=user_facts,
+                goals=goals,
+                current_messages=conversation_messages,
+                recent_notifications=recent_notifications,
+            )
     except Exception as e:
         logger.error(f"mentor_proactive gate_failed uid={uid} error={e}")
         return None
@@ -348,16 +349,17 @@ def _process_mentor_proactive_notification(uid: str, conversation_messages: list
 
     # ── Step 2: Generate ─────────────────────────────────────────────────
     try:
-        draft = generate_notification(
-            user_name=user_name,
-            user_facts=user_facts,
-            goals=goals,
-            past_conversations_str=past_conversations_str,
-            current_messages=conversation_messages,
-            recent_notifications=recent_notifications,
-            frequency=frequency,
-            gate_reasoning=relevance.reasoning,
-        )
+        with track_usage(uid, Features.PROACTIVE_NOTIFICATION):
+            draft = generate_notification(
+                user_name=user_name,
+                user_facts=user_facts,
+                goals=goals,
+                past_conversations_str=past_conversations_str,
+                current_messages=conversation_messages,
+                recent_notifications=recent_notifications,
+                frequency=frequency,
+                gate_reasoning=relevance.reasoning,
+            )
     except Exception as e:
         logger.error(f"mentor_proactive generate_failed uid={uid} error={e}")
         return None
@@ -376,13 +378,14 @@ def _process_mentor_proactive_notification(uid: str, conversation_messages: list
 
     # ── Step 3: Critic ───────────────────────────────────────────────────
     try:
-        validation = validate_notification(
-            user_name=user_name,
-            notification_text=notification_text,
-            draft_reasoning=draft.reasoning,
-            current_messages=conversation_messages,
-            goals=goals,
-        )
+        with track_usage(uid, Features.PROACTIVE_NOTIFICATION):
+            validation = validate_notification(
+                user_name=user_name,
+                notification_text=notification_text,
+                draft_reasoning=draft.reasoning,
+                current_messages=conversation_messages,
+                goals=goals,
+            )
     except Exception as e:
         logger.error(f"mentor_proactive critic_failed uid={uid} error={e}")
         return None

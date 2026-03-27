@@ -9,6 +9,7 @@ struct OnboardingFloatingBarDemoView: View {
     var onComplete: () -> Void
     var onSkip: () -> Void
 
+    @ObservedObject private var shortcutSettings = ShortcutSettings.shared
     @State private var barActivated = false
     @State private var showContinue = false
 
@@ -38,48 +39,54 @@ struct OnboardingFloatingBarDemoView: View {
             Spacer()
 
             // Content
-            VStack(spacing: 24) {
-                MacLineupPreview()
-                    .frame(maxWidth: 980)
-
+            VStack(spacing: 28) {
                 VStack(spacing: 12) {
-                    Text("The Floating Bar")
-                        .font(.system(size: 24, weight: .bold))
-                        .foregroundColor(OmiColors.textPrimary)
+                    if !barActivated {
+                        Text("Omi sees your screen and gives you hyper-personalized responses")
+                            .font(.system(size: 20, weight: .bold))
+                            .foregroundColor(OmiColors.textPrimary)
+                            .multilineTextAlignment(.center)
+                            .frame(maxWidth: 560)
 
-                    Text("Try asking: Which computer suits me best?")
-                        .font(.system(size: 14))
-                        .foregroundColor(OmiColors.textSecondary)
-                        .multilineTextAlignment(.center)
-                        .lineSpacing(4)
-                        .frame(maxWidth: 560)
+                        Text("Press this shortcut to open Ask Omi.")
+                            .font(.system(size: 18, weight: .medium))
+                            .foregroundColor(OmiColors.textSecondary)
+                            .multilineTextAlignment(.center)
+                    } else {
+                        Text("Type 'Which computer suits me best?'")
+                            .font(.system(size: 24, weight: .bold))
+                            .foregroundColor(OmiColors.textPrimary)
+                            .multilineTextAlignment(.center)
+                            .lineSpacing(4)
+                            .frame(maxWidth: 560)
+                    }
                 }
 
                 if !barActivated {
-                    // Keyboard shortcut hint
                     VStack(spacing: 12) {
-                        Text("Try it now")
+                        HStack(spacing: 6) {
+                            ForEach(Array(shortcutSettings.askOmiKey.hintKeys.enumerated()), id: \.offset) { index, symbol in
+                                if index > 0 {
+                                    Text("+")
+                                        .font(.system(size: 15, weight: .medium))
+                                        .foregroundColor(OmiColors.textTertiary)
+                                }
+                                keyCap(symbol)
+                            }
+                        }
+
+                        Text("Ask Omi opens at the top of your screen.")
                             .font(.system(size: 13))
                             .foregroundColor(OmiColors.textTertiary)
-
-                        HStack(spacing: 6) {
-                            keyCap("⌘")
-                            Text("+")
-                                .font(.system(size: 15, weight: .medium))
-                                .foregroundColor(OmiColors.textTertiary)
-                            keyCap("Enter")
-                        }
                     }
                     .padding(.top, 4)
                     .transition(.opacity)
-                } else if !showContinue {
-                    // Waiting for user to type and get a response
-                    Text("Type a question in the floating bar above")
-                        .font(.system(size: 13))
-                        .foregroundColor(OmiColors.textTertiary)
-                        .padding(.top, 4)
-                        .transition(.opacity)
+                } else {
+                    MacLineupPreview()
+                        .frame(maxWidth: 980)
+                        .transition(.opacity.combined(with: .move(edge: .bottom)))
                 }
+
             }
             .padding(.top, 88)
             .padding(.horizontal, 40)
@@ -91,10 +98,10 @@ struct OnboardingFloatingBarDemoView: View {
                 Button(action: onComplete) {
                     Text("Continue")
                         .font(.system(size: 15, weight: .semibold))
-                        .foregroundColor(.white)
+                        .foregroundColor(.black)
                         .frame(maxWidth: 280)
                         .padding(.vertical, 12)
-                        .background(OmiColors.purplePrimary)
+                        .background(Color.white)
                         .cornerRadius(12)
                 }
                 .buttonStyle(.plain)

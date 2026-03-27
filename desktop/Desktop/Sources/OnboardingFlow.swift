@@ -1,7 +1,27 @@
 import Foundation
 
 enum OnboardingFlow {
-  static let steps = ["Chat", "FloatingBar", "VoiceShortcut", "Tasks"]
+  static let steps = [
+    "Trust",
+    "Name",
+    "Language",
+    "ScreenRecording",
+    "FullDiskAccess",
+    "FileScan",
+    "Microphone",
+    "Notifications",
+    "Accessibility",
+    "Automation",
+    "FloatingBarShortcut",
+    "FloatingBar",
+    "VoiceShortcut",
+    "VoiceDemo",
+    "Research",
+    "Goal",
+    "Tasks",
+  ]
+  static let introStepCount = 12
+  static let legacyPostIntroOffset = 11
   static let lastStepIndex = steps.count - 1
 
   static func migratedStep(
@@ -9,7 +29,9 @@ enum OnboardingFlow {
     hasMigratedVideoStep: Bool,
     hasInsertedVoiceShortcutStep: Bool,
     hasMergedVoiceInputStep: Bool,
-    hasRemovedNotificationStep: Bool
+    hasRemovedNotificationStep: Bool,
+    hasInsertedFloatingBarShortcutStep: Bool,
+    hasMigratedPagedIntro: Bool
   ) -> Int {
     var migratedStep = currentStep
 
@@ -28,6 +50,15 @@ enum OnboardingFlow {
     // Notifications step (old step 1) was removed; shift users down
     if !hasRemovedNotificationStep, migratedStep >= 1 {
       migratedStep -= 1
+    }
+
+    // FloatingBarShortcut step inserted at index 1; shift users at 1+ up
+    if !hasInsertedFloatingBarShortcutStep, migratedStep >= 1 {
+      migratedStep += 1
+    }
+
+    if !hasMigratedPagedIntro, migratedStep > 0 {
+      migratedStep += legacyPostIntroOffset
     }
 
     return min(max(0, migratedStep), lastStepIndex)

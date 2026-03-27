@@ -33,14 +33,14 @@ struct GoalsWidget: View {
                 }
 
                 // AI goal generation button (when there are goals but room for more)
-                if goals.count > 0 && goals.count < 3 {
+                if goals.count > 0 && goals.count < 4 {
                     GoalHeaderButton(icon: "sparkles", tooltip: "Generate AI goal", color: OmiColors.purplePrimary.opacity(0.8), isLoading: isGeneratingGoal) {
                         triggerGoalGeneration()
                     }
                 }
 
                 // Add goal button (only if less than 3 goals)
-                if goals.count < 3 {
+                if goals.count < 4 {
                     GoalHeaderButton(icon: "plus", tooltip: "Add goal", color: OmiColors.textTertiary) {
                         showingCreateSheet = true
                     }

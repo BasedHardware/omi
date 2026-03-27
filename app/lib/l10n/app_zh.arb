@@ -443,7 +443,7 @@
     "exportConfiguration": "导出配置",
     "bringYourOwn": "自带",
     "payYourSttProvider": "免费使用 Omi。您只需直接向 STT 提供商付费。",
-    "freeMinutesMonth": "包含 4,800 免费分钟/月。",
+    "freeMinutesMonth": "包含 1,200 免费分钟/月。",
     "omiUnlimited": "Omi 无限版",
     "hostRequired": "需要主机",
     "validPortRequired": "需要有效端口",
@@ -1460,7 +1460,7 @@
     "accessesAndTriggeredBy": "{accessDescription}，{triggerDescription}。",
     "isTriggeredBy": "{triggerDescription}。",
     "noSpecificDataAccessConfigured": "未配置特定数据访问。",
-    "basicPlanDescription": "4,800 高级分钟 + 设备端无限",
+    "basicPlanDescription": "1,200 高级分钟 + 设备端无限",
     "minutes": "分钟",
     "omiHas": "Omi 拥有：",
     "premiumMinutesUsed": "高级分钟已用完。",
@@ -1930,7 +1930,7 @@
     "deviceMayWarmUp": "长时间使用时设备可能会发热。",
     "speedAccuracyLower": "速度和准确度可能低于云端模型。",
     "cloudProvider": "云服务提供商",
-    "premiumMinutesMonth": "每月4,800分钟高级配额。设备端选项卡提供无限免费转录。",
+    "premiumMinutesMonth": "每月1,200分钟高级配额。设备端选项卡提供无限免费转录。",
     "viewUsage": "查看使用量",
     "audioProcessedLocally": "音频在本地处理。可离线使用，更私密，但消耗更多电量。",
     "languageLabel": "语言",
@@ -2493,7 +2493,7 @@
     "noReviewsFound": "未找到评论",
     "onDeviceIntensive": "本地转录需要大量计算资源。",
     "onDeviceSlower": "本地转录在此设备上可能较慢。",
-    "premiumMinutesInfo": "每月 4,800 分钟高级时长。本地标签页提供无限免费转录。",
+    "premiumMinutesInfo": "每月 1,200 分钟高级时长。本地标签页提供无限免费转录。",
     "redownload": "重新下载",
     "reply": "回复",
     "replySentSuccessfully": "回复发送成功",
@@ -2771,5 +2771,81 @@
     "notYetSynced": "尚未同步到您的手机",
     "clearAll": "全部清除",
     "phoneKeypad": "键盘",
-    "phoneHideKeypad": "隐藏键盘"
+    "phoneHideKeypad": "隐藏键盘",
+    "transcriptionPaused": "录音中，正在重连",
+    "transcriptionPausedReconnecting": "仍在录音 — 正在重新连接转录...",
+    "fairUsePolicy": "公平使用",
+    "fairUseLoadError": "无法加载公平使用状态。请重试。",
+    "fairUseStatusNormal": "您的使用量在正常范围内。",
+    "fairUseStageNormal": "正常",
+    "fairUseStageWarning": "警告",
+    "fairUseStageThrottle": "已限制",
+    "fairUseStageRestrict": "已封锁",
+    "fairUseSpeechUsage": "语音使用量",
+    "fairUseToday": "今天",
+    "fairUse3Day": "3天滚动",
+    "fairUseWeekly": "每周滚动",
+    "fairUseAboutTitle": "关于公平使用",
+    "fairUseAboutBody": "Omi 专为个人对话、会议和实时互动而设计。使用量按检测到的实际语音时间衡量，而非连接时间。如果使用量明显超出非个人内容的正常模式，可能会进行调整。",
+    "fairUseCaseRefCopied": "{caseRef} 已复制",
+    "@fairUseCaseRefCopied": {
+        "description": "Snackbar message when case reference is copied",
+        "placeholders": {
+            "caseRef": {
+                "type": "String"
+            }
+        }
+    },
+    "fairUseDailyTranscription": "每日转写",
+    "fairUseBudgetExhausted": "已达到每日转写限额",
+    "fairUseBudgetResetsAt": "重置时间 {time}",
+    "fairUseBudgetUsed": "{used}分 / {limit}分",
+    "@fairUseBudgetUsed": {
+        "placeholders": {
+            "used": {
+                "type": "String"
+            },
+            "limit": {
+                "type": "String"
+            }
+        }
+    },
+    "@fairUseBudgetResetsAt": {
+        "placeholders": {
+            "time": {
+                "type": "String"
+            }
+        }
+    },
+    "fairUseBannerStatus": "公平使用：{status}",
+    "@fairUseBannerStatus": {
+        "placeholders": {
+            "status": {
+                "type": "String"
+            }
+        }
+    },
+    "improveConnectionTitle": "改善连接",
+    "improveConnectionContent": "我们改进了 Omi 与您设备保持连接的方式。要激活此功能，请前往设备信息页面，点击\"断开设备\"，然后重新配对您的设备。",
+    "improveConnectionAction": "知道了",
+    "clockSkewWarning": "您的设备时钟偏差约{minutes}分钟。请检查日期和时间设置。",
+    "omisStorage": "Omi 存储",
+    "phoneStorage": "手机存储",
+    "cloudStorage": "云存储",
+    "howSyncingWorks": "同步如何运作",
+    "noSyncedRecordings": "暂无已同步的录音",
+    "recordingsSyncAutomatically": "录音自动同步 — 无需任何操作。",
+    "filesDownloadedUploadedNextTime": "已下载的文件将在下次上传。",
+    "nConversationsCreated": "{count, plural, =1{已创建 1 个对话} other{已创建 {count} 个对话}}",
+    "tapToView": "点击查看",
+    "syncFailed": "同步失败",
+    "keepSyncing": "继续同步",
+    "cancelSyncQuestion": "取消同步？",
+    "omisStorageDesc": "当 Omi 未连接到手机时，它会将音频存储在内置存储器中。您永远不会丢失任何录音。",
+    "phoneStorageDesc": "当 Omi 重新连接时，录音会自动传输到手机，然后再上传。",
+    "cloudStorageDesc": "上传后，您的录音将被处理和转录。对话将在一分钟内可用。",
+    "storageSection": "存储",
+    "tipKeepPhoneNearby": "将手机放在附近以加快同步速度",
+    "tipStableInternet": "稳定的网络可加快云上传速度",
+    "tipAutoSync": "录音自动同步"
 }

@@ -5,6 +5,7 @@ import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/models/sync_state.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/services/wals/wal.dart';
@@ -367,6 +368,8 @@ class LocalWalSyncImpl implements LocalWalSync {
     int batchesCompleted = 0;
     int batchesFailed = 0;
     int corruptedCount = 0;
+    int filesUploaded = 0;
+    final totalFilesToUpload = wals.length;
 
     var steps = 3;
     for (var i = wals.length - 1; i >= 0; i -= steps) {
@@ -443,7 +446,9 @@ class LocalWalSyncImpl implements LocalWalSync {
         continue;
       }
 
-      progress?.onWalSyncedProgress(1.0 - (left).toDouble() / wals.length);
+      // Report file-count progress
+      progress?.onWalSyncedProgress(filesUploaded / totalFilesToUpload,
+          phase: SyncPhase.uploadingToCloud, currentFile: filesUploaded, totalFiles: totalFilesToUpload);
 
       listener.onWalUpdated();
       try {
@@ -458,21 +463,41 @@ class LocalWalSyncImpl implements LocalWalSync {
           ),
         );
 
+        if (partialRes.hasPartialFailure) {
+          Logger.debug(
+            'WAL batch partial failure: ${partialRes.failedSegments}/${partialRes.totalSegments} segments failed',
+          );
+          DebugLogManager.logWarning('Local upload batch partial failure', {
+            'failedSegments': partialRes.failedSegments,
+            'totalSegments': partialRes.totalSegments,
+            'errors': partialRes.errors.take(3).toList(),
+          });
+        }
+
         batchesCompleted++;
 
         for (var j = left; j <= right; j++) {
           if (j < wals.length) {
             var wal = wals[j];
-            wals[j].status = WalStatus.synced;
-            wals[j].isSyncing = false;
-            wals[j].syncStartedAt = null;
-            wals[j].syncEtaSeconds = null;
-
-            listener.onWalSynced(wal);
+            if (partialRes.hasPartialFailure) {
+              // Keep WALs retryable on partial failure so failed segments get
+              // another chance. Backend dedup prevents duplicate transcripts.
+              wals[j].isSyncing = false;
+              wals[j].syncStartedAt = null;
+              wals[j].syncEtaSeconds = null;
+            } else {
+              wals[j].status = WalStatus.synced;
+              wals[j].isSyncing = false;
+              wals[j].syncStartedAt = null;
+              wals[j].syncEtaSeconds = null;
+              listener.onWalSynced(wal);
+            }
           }
         }
+        // Count actual unique synced WALs (batch ranges overlap, so don't accumulate files.length)
+        filesUploaded = wals.where((w) => w.status == WalStatus.synced).length;
       } catch (e) {
-        Logger.debug('Local WAL sync batch failed: $e, continuing with remaining files');
+        print('Local WAL sync batch failed: $e, continuing with remaining files');
         batchesFailed++;
         DebugLogManager.logError(e, null, 'Local upload batch failed: ${e.toString()}', {
           'batchIndex': (wals.length - 1 - i) ~/ steps,
@@ -546,7 +571,7 @@ class LocalWalSyncImpl implements LocalWalSync {
       }
     } catch (e) {
       wal.status = WalStatus.corrupted;
-      Logger.debug(e.toString());
+      print(e.toString());
       DebugLogManager.logError(e, null, 'Single WAL corrupted: unexpected error - ${e.toString()}', {'walId': wal.id});
     }
 
@@ -563,13 +588,31 @@ class LocalWalSyncImpl implements LocalWalSync {
         ),
       );
 
-      walToSync.status = WalStatus.synced;
-      walToSync.isSyncing = false;
-      walToSync.syncStartedAt = null;
-      walToSync.syncEtaSeconds = null;
+      if (partialRes.hasPartialFailure) {
+        Logger.debug(
+          'Single WAL partial failure: ${partialRes.failedSegments}/${partialRes.totalSegments} segments failed',
+        );
+        DebugLogManager.logWarning('Single WAL upload partial failure', {
+          'walId': wal.id,
+          'failedSegments': partialRes.failedSegments,
+          'totalSegments': partialRes.totalSegments,
+          'errors': partialRes.errors.take(3).toList(),
+        });
+      }
 
-      DebugLogManager.logInfo('Single WAL upload succeeded', {'walId': wal.id});
-      listener.onWalSynced(wal);
+      if (partialRes.hasPartialFailure) {
+        // Keep WAL retryable so failed segments get another chance
+        walToSync.isSyncing = false;
+        walToSync.syncStartedAt = null;
+        walToSync.syncEtaSeconds = null;
+      } else {
+        walToSync.status = WalStatus.synced;
+        walToSync.isSyncing = false;
+        walToSync.syncStartedAt = null;
+        walToSync.syncEtaSeconds = null;
+        DebugLogManager.logInfo('Single WAL upload succeeded', {'walId': wal.id});
+        listener.onWalSynced(wal);
+      }
     } catch (e) {
       Logger.debug('Single WAL sync failed: $e');
       DebugLogManager.logError(e, null, 'Single WAL upload failed: ${e.toString()}', {'walId': wal.id});

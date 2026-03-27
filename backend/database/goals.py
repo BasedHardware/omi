@@ -54,7 +54,7 @@ def get_user_goals(uid: str, limit: int = 3) -> List[Dict[str, Any]]:
     return goals
 
 
-def create_goal(uid: str, goal_data: Dict[str, Any], max_goals: int = 3) -> Dict[str, Any]:
+def create_goal(uid: str, goal_data: Dict[str, Any], max_goals: int = 4) -> Dict[str, Any]:
     """Create a new goal for a user. Supports up to max_goals active goals."""
     user_ref = db.collection(users_collection).document(uid)
     goals_ref = user_ref.collection(goals_collection)

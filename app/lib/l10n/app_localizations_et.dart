@@ -1459,7 +1459,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get payYourSttProvider => 'Kasutage Omi-d vabalt. Maksite ainult oma STT pakkujale otse.';
 
   @override
-  String get freeMinutesMonth => '4800 tasuta minutit kuus kaasa arvatud. Piiramatu koos ';
+  String get freeMinutesMonth => '1200 tasuta minutit kuus kaasa arvatud. Piiramatu koos ';
 
   @override
   String get omiUnlimited => 'Omi Unlimited';
@@ -1708,7 +1708,12 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'SEADET', one: 'SEADE');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'SEADET',
+      one: 'SEADE',
+    );
     return '$count $_temp0 LEITUD LÄHEDALT';
   }
 
@@ -4757,7 +4762,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get noSpecificDataAccessConfigured => 'Konkreetset andmetele juurdepääsu pole seadistatud.';
 
   @override
-  String get basicPlanDescription => '4800 premium minutit + piiramatu seadmes';
+  String get basicPlanDescription => '1200 premium minutit + piiramatu seadmes';
 
   @override
   String get minutes => 'minutit';
@@ -6085,7 +6090,7 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get premiumMinutesInfo =>
-      '4800 premium minutit kuus. Seadmesisene vahekaart pakub piiramatut tasuta transkriptsiooni.';
+      '1200 premium minutit kuus. Seadmesisene vahekaart pakub piiramatut tasuta transkriptsiooni.';
 
   @override
   String get viewUsage => 'Vaata kasutust';
@@ -6167,7 +6172,7 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get premiumMinutesMonth =>
-      '4800 premium minutit/kuus. Seadmes vahekaart pakub piiramatut tasuta transkriptsiooni. ';
+      '1200 premium minutit/kuus. Seadmes vahekaart pakub piiramatut tasuta transkriptsiooni. ';
 
   @override
   String get audioProcessedLocally =>
@@ -8552,4 +8557,159 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get phoneHideKeypad => 'Peida klahvistik';
+
+  @override
+  String get fairUsePolicy => 'Õiglane kasutus';
+
+  @override
+  String get fairUseLoadError => 'Õiglase kasutuse olekut ei õnnestunud laadida. Palun proovige uuesti.';
+
+  @override
+  String get fairUseStatusNormal => 'Teie kasutus on tavapiirides.';
+
+  @override
+  String get fairUseStageNormal => 'Tavaline';
+
+  @override
+  String get fairUseStageWarning => 'Hoiatus';
+
+  @override
+  String get fairUseStageThrottle => 'Piiratud';
+
+  @override
+  String get fairUseStageRestrict => 'Keelatud';
+
+  @override
+  String get fairUseSpeechUsage => 'Kõne kasutus';
+
+  @override
+  String get fairUseToday => 'Täna';
+
+  @override
+  String get fairUse3Day => '3-päevane periood';
+
+  @override
+  String get fairUseWeekly => 'Nädalane periood';
+
+  @override
+  String get fairUseAboutTitle => 'Õiglase kasutuse kohta';
+
+  @override
+  String get fairUseAboutBody =>
+      'Omi on loodud isiklikeks vestlusteks, koosolekuteks ja reaalajas suhtluseks. Kasutust mõõdetakse tuvastatud tegeliku kõneaja, mitte ühenduse aja järgi. Kui kasutus ületab oluliselt tavapäraseid mustreid mitteisikliku sisu puhul, võidakse rakendada kohandusi.';
+
+  @override
+  String fairUseCaseRefCopied(String caseRef) {
+    return '$caseRef kopeeritud';
+  }
+
+  @override
+  String get fairUseDailyTranscription => 'Daily Transcription';
+
+  @override
+  String fairUseBudgetUsed(String used, String limit) {
+    return '${used}m / ${limit}m';
+  }
+
+  @override
+  String get fairUseBudgetExhausted => 'Daily transcription limit reached';
+
+  @override
+  String fairUseBudgetResetsAt(String time) {
+    return 'Resets $time';
+  }
+
+  @override
+  String get transcriptionPaused => 'Salvestamine, taasühendamine';
+
+  @override
+  String get transcriptionPausedReconnecting => 'Salvestamine jätkub — ühenduse taastamine transkriptsiooniga...';
+
+  @override
+  String fairUseBannerStatus(String status) {
+    return 'Õiglane kasutus: $status';
+  }
+
+  @override
+  String get improveConnectionTitle => 'Ühenduse parandamine';
+
+  @override
+  String get improveConnectionContent =>
+      'Oleme parandanud, kuidas Omi jääb teie seadmega ühendusse. Selle aktiveerimiseks minge seadme teabe lehele, puudutage \"Katkesta seadme ühendus\" ja ühendage seade uuesti.';
+
+  @override
+  String get improveConnectionAction => 'Selge';
+
+  @override
+  String clockSkewWarning(int minutes) {
+    return 'Teie seadme kell erineb ~$minutes min. Kontrollige kuupäeva ja kellaaja seadeid.';
+  }
+
+  @override
+  String get omisStorage => 'Omi salvestusruum';
+
+  @override
+  String get phoneStorage => 'Telefoni salvestusruum';
+
+  @override
+  String get cloudStorage => 'Pilvsalvestus';
+
+  @override
+  String get howSyncingWorks => 'Kuidas sünkroonimine töötab';
+
+  @override
+  String get noSyncedRecordings => 'Sünkroonitud salvestusi veel pole';
+
+  @override
+  String get recordingsSyncAutomatically => 'Salvestised sünkroonitakse automaatselt — tegevust pole vaja.';
+
+  @override
+  String get filesDownloadedUploadedNextTime => 'Juba allalaaditud failid laaditakse üles järgmisel korral.';
+
+  @override
+  String nConversationsCreated(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count vestlust loodud',
+      one: '1 vestlus loodud',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get tapToView => 'Puudutage vaatamiseks';
+
+  @override
+  String get syncFailed => 'Sünkroonimine ebaõnnestus';
+
+  @override
+  String get keepSyncing => 'Jätka sünkroonimist';
+
+  @override
+  String get cancelSyncQuestion => 'Tühista sünkroonimine?';
+
+  @override
+  String get omisStorageDesc =>
+      'Kui teie Omi pole telefoniga ühendatud, salvestab see heli kohalikult sisseehitatud mällu. Te ei kaota kunagi salvestist.';
+
+  @override
+  String get phoneStorageDesc =>
+      'Kui Omi uuesti ühendub, kantakse salvestised automaatselt teie telefoni enne üleslaadimist.';
+
+  @override
+  String get cloudStorageDesc =>
+      'Pärast üleslaadimist töödeldakse ja transkribeeritakse teie salvestised. Vestlused on saadaval minuti jooksul.';
+
+  @override
+  String get tipKeepPhoneNearby => 'Hoidke telefon lähedal kiiremaks sünkroonimiseks';
+
+  @override
+  String get tipStableInternet => 'Stabiilne internet kiirendab pilveüleslaadimist';
+
+  @override
+  String get tipAutoSync => 'Salvestised sünkroonitakse automaatselt';
+
+  @override
+  String get storageSection => 'SALVESTUSRUUM';
 }

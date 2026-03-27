@@ -1471,7 +1471,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get payYourSttProvider => 'Szabadon használd az omi-t. Csak az STT szolgáltatódnak fizetsz közvetlenül.';
 
   @override
-  String get freeMinutesMonth => '4800 ingyenes perc/hónap tartalmazza. Korlátlan a következővel: ';
+  String get freeMinutesMonth => '1200 ingyenes perc/hónap tartalmazza. Korlátlan a következővel: ';
 
   @override
   String get omiUnlimited => 'Omi Unlimited';
@@ -1720,7 +1720,12 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'ESZKÖZ', one: 'ESZKÖZ');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'ESZKÖZ',
+      one: 'ESZKÖZ',
+    );
     return '$count $_temp0 TALÁLHATÓ A KÖZELBEN';
   }
 
@@ -4781,7 +4786,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get noSpecificDataAccessConfigured => 'Nincs beállítva specifikus adathozzáférés.';
 
   @override
-  String get basicPlanDescription => '4800 prémium perc + korlátlan eszközön';
+  String get basicPlanDescription => '1200 prémium perc + korlátlan eszközön';
 
   @override
   String get minutes => 'perc';
@@ -6115,7 +6120,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get cloudProvider => 'Felhő szolgáltató';
 
   @override
-  String get premiumMinutesInfo => '4800 prémium perc/hónap. Az Eszközön fül korlátlan ingyenes átírást kínál.';
+  String get premiumMinutesInfo => '1200 prémium perc/hónap. Az Eszközön fül korlátlan ingyenes átírást kínál.';
 
   @override
   String get viewUsage => 'Használat megtekintése';
@@ -6196,7 +6201,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get batteryDrainSignificantly => 'Az akkumulátor-lemerülés jelentősen növekedni fog.';
 
   @override
-  String get premiumMinutesMonth => '4800 prémium perc/hónap. Az Eszközön fül korlátlan ingyenes átírást kínál. ';
+  String get premiumMinutesMonth => '1200 prémium perc/hónap. Az Eszközön fül korlátlan ingyenes átírást kínál. ';
 
   @override
   String get audioProcessedLocally =>
@@ -8592,4 +8597,159 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get phoneHideKeypad => 'Billentyűzet elrejtése';
+
+  @override
+  String get fairUsePolicy => 'Méltányos használat';
+
+  @override
+  String get fairUseLoadError => 'Nem sikerült betölteni a méltányos használat állapotát. Kérjük, próbálja újra.';
+
+  @override
+  String get fairUseStatusNormal => 'Használata a normális határokon belül van.';
+
+  @override
+  String get fairUseStageNormal => 'Normál';
+
+  @override
+  String get fairUseStageWarning => 'Figyelmeztetés';
+
+  @override
+  String get fairUseStageThrottle => 'Korlátozott';
+
+  @override
+  String get fairUseStageRestrict => 'Letiltva';
+
+  @override
+  String get fairUseSpeechUsage => 'Beszédhasználat';
+
+  @override
+  String get fairUseToday => 'Ma';
+
+  @override
+  String get fairUse3Day => '3 napos gördülő';
+
+  @override
+  String get fairUseWeekly => 'Heti gördülő';
+
+  @override
+  String get fairUseAboutTitle => 'A méltányos használatról';
+
+  @override
+  String get fairUseAboutBody =>
+      'Az Omi személyes beszélgetésekhez, megbeszélésekhez és élő interakciókhoz készült. A használatot a ténylegesen észlelt beszédidő alapján mérik, nem a csatlakozási idő alapján. Ha a használat jelentősen meghaladja a nem személyes tartalom normális mintáit, módosítások alkalmazhatók.';
+
+  @override
+  String fairUseCaseRefCopied(String caseRef) {
+    return '$caseRef másolva';
+  }
+
+  @override
+  String get fairUseDailyTranscription => 'Daily Transcription';
+
+  @override
+  String fairUseBudgetUsed(String used, String limit) {
+    return '${used}m / ${limit}m';
+  }
+
+  @override
+  String get fairUseBudgetExhausted => 'Daily transcription limit reached';
+
+  @override
+  String fairUseBudgetResetsAt(String time) {
+    return 'Resets $time';
+  }
+
+  @override
+  String get transcriptionPaused => 'Felvétel, újrakapcsolódás';
+
+  @override
+  String get transcriptionPausedReconnecting => 'A felvétel folytatódik — újrakapcsolódás az átíráshoz...';
+
+  @override
+  String fairUseBannerStatus(String status) {
+    return 'Méltányos használat: $status';
+  }
+
+  @override
+  String get improveConnectionTitle => 'Kapcsolat javítása';
+
+  @override
+  String get improveConnectionContent =>
+      'Javítottuk, hogyan marad az Omi csatlakozva az eszközödhöz. Az aktiváláshoz menj az Eszközinfo oldalra, koppints az \"Eszköz leválasztása\" gombra, majd párosítsd újra az eszközödet.';
+
+  @override
+  String get improveConnectionAction => 'Értem';
+
+  @override
+  String clockSkewWarning(int minutes) {
+    return 'Az eszköz órája ~$minutes perccel eltér. Ellenőrizze a dátum- és időbeállításokat.';
+  }
+
+  @override
+  String get omisStorage => 'Omi tárhelye';
+
+  @override
+  String get phoneStorage => 'Telefon tárhelye';
+
+  @override
+  String get cloudStorage => 'Felhő tárhely';
+
+  @override
+  String get howSyncingWorks => 'Hogyan működik a szinkronizálás';
+
+  @override
+  String get noSyncedRecordings => 'Még nincsenek szinkronizált felvételek';
+
+  @override
+  String get recordingsSyncAutomatically => 'A felvételek automatikusan szinkronizálódnak — nincs teendő.';
+
+  @override
+  String get filesDownloadedUploadedNextTime => 'A már letöltött fájlok legközelebb feltöltődnek.';
+
+  @override
+  String nConversationsCreated(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count beszélgetés létrehozva',
+      one: '1 beszélgetés létrehozva',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get tapToView => 'Koppintson a megtekintéshez';
+
+  @override
+  String get syncFailed => 'Szinkronizálás sikertelen';
+
+  @override
+  String get keepSyncing => 'Szinkronizálás folytatása';
+
+  @override
+  String get cancelSyncQuestion => 'Szinkronizálás megszakítása?';
+
+  @override
+  String get omisStorageDesc =>
+      'Amikor az Omi nincs csatlakoztatva a telefonjához, a hangot helyileg tárolja a beépített memóriájában. Soha nem veszít el egy felvételt sem.';
+
+  @override
+  String get phoneStorageDesc =>
+      'Amikor az Omi újra csatlakozik, a felvételek automatikusan átkerülnek a telefonjára feltöltés előtt.';
+
+  @override
+  String get cloudStorageDesc =>
+      'Feltöltés után a felvételei feldolgozásra és átírásra kerülnek. A beszélgetések egy percen belül elérhetők lesznek.';
+
+  @override
+  String get tipKeepPhoneNearby => 'Tartsa a telefonját a közelben a gyorsabb szinkronizáláshoz';
+
+  @override
+  String get tipStableInternet => 'Stabil internet gyorsítja a felhőbe feltöltést';
+
+  @override
+  String get tipAutoSync => 'A felvételek automatikusan szinkronizálódnak';
+
+  @override
+  String get storageSection => 'TÁRHELY';
 }

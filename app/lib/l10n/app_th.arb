@@ -448,7 +448,7 @@
     "exportConfiguration": "ส่งออกการกำหนดค่า",
     "bringYourOwn": "นำของคุณเองมาใช้",
     "payYourSttProvider": "ใช้ Omi ได้อย่างอิสระ คุณจ่ายเฉพาะผู้ให้บริการ STT ของคุณโดยตรง",
-    "freeMinutesMonth": "รวม 4,800 นาทีฟรี/เดือน ไม่จำกัดด้วย ",
+    "freeMinutesMonth": "รวม 1,200 นาทีฟรี/เดือน ไม่จำกัดด้วย ",
     "omiUnlimited": "Omi Unlimited",
     "hostRequired": "ต้องระบุ Host",
     "validPortRequired": "ต้องระบุพอร์ตที่ถูกต้อง",
@@ -1459,7 +1459,7 @@
     "accessesAndTriggeredBy": "{accessDescription} และ {triggerDescription}",
     "isTriggeredBy": "{triggerDescription}",
     "noSpecificDataAccessConfigured": "ไม่มีการกำหนดค่าการเข้าถึงข้อมูลเฉพาะ",
-    "basicPlanDescription": "4,800 นาทีพรีเมียม + ไม่จำกัดบนอุปกรณ์",
+    "basicPlanDescription": "1,200 นาทีพรีเมียม + ไม่จำกัดบนอุปกรณ์",
     "minutes": "นาที",
     "omiHas": "Omi มี:",
     "premiumMinutesUsed": "ใช้นาทีพรีเมียมแล้ว",
@@ -1929,7 +1929,7 @@
     "deviceMayWarmUp": "อุปกรณ์อาจร้อนขึ้นระหว่างการใช้งานเป็นเวลานาน",
     "speedAccuracyLower": "ความเร็วและความแม่นยำอาจต่ำกว่าโมเดลคลาวด์",
     "cloudProvider": "ผู้ให้บริการคลาวด์",
-    "premiumMinutesMonth": "4,800 นาทีพรีเมียม/เดือน แท็บบนอุปกรณ์ให้การถอดความฟรีไม่จำกัด ",
+    "premiumMinutesMonth": "1,200 นาทีพรีเมียม/เดือน แท็บบนอุปกรณ์ให้การถอดความฟรีไม่จำกัด ",
     "viewUsage": "ดูการใช้งาน",
     "audioProcessedLocally": "เสียงถูกประมวลผลในเครื่อง ใช้งานแบบออฟไลน์ได้ มีความเป็นส่วนตัวมากขึ้น แต่ใช้แบตเตอรี่มากขึ้น",
     "languageLabel": "ภาษา",
@@ -2471,7 +2471,7 @@
     "noReviewsFound": "ไม่พบรีวิว",
     "onDeviceIntensive": "การถอดเสียงบนอุปกรณ์ต้องใช้การประมวลผลสูง",
     "onDeviceSlower": "การถอดเสียงบนอุปกรณ์อาจช้ากว่าบนอุปกรณ์นี้",
-    "premiumMinutesInfo": "4,800 นาทีพรีเมียม/เดือน แท็บบนอุปกรณ์มีการถอดเสียงฟรีไม่จำกัด",
+    "premiumMinutesInfo": "1,200 นาทีพรีเมียม/เดือน แท็บบนอุปกรณ์มีการถอดเสียงฟรีไม่จำกัด",
     "redownload": "ดาวน์โหลดอีกครั้ง",
     "reply": "ตอบกลับ",
     "replySentSuccessfully": "ส่งการตอบกลับสำเร็จ",
@@ -2749,5 +2749,81 @@
     "notYetSynced": "ยังไม่ได้ซิงค์กับโทรศัพท์ของคุณ",
     "clearAll": "ล้างทั้งหมด",
     "phoneKeypad": "แป้นกด",
-    "phoneHideKeypad": "ซ่อนแป้นกด"
+    "phoneHideKeypad": "ซ่อนแป้นกด",
+    "transcriptionPaused": "กำลังบันทึก, กำลังเชื่อมต่อใหม่",
+    "transcriptionPausedReconnecting": "ยังคงบันทึกอยู่ — กำลังเชื่อมต่อกับการถอดเสียงใหม่...",
+    "fairUsePolicy": "การใช้งานอย่างเป็นธรรม",
+    "fairUseLoadError": "ไม่สามารถโหลดสถานะการใช้งานอย่างเป็นธรรมได้ กรุณาลองอีกครั้ง",
+    "fairUseStatusNormal": "การใช้งานของคุณอยู่ในขีดจำกัดปกติ",
+    "fairUseStageNormal": "ปกติ",
+    "fairUseStageWarning": "คำเตือน",
+    "fairUseStageThrottle": "ถูกจำกัด",
+    "fairUseStageRestrict": "ถูกระงับ",
+    "fairUseSpeechUsage": "การใช้งานเสียงพูด",
+    "fairUseToday": "วันนี้",
+    "fairUse3Day": "3 วันต่อเนื่อง",
+    "fairUseWeekly": "รายสัปดาห์ต่อเนื่อง",
+    "fairUseAboutTitle": "เกี่ยวกับการใช้งานอย่างเป็นธรรม",
+    "fairUseAboutBody": "Omi ออกแบบมาสำหรับการสนทนาส่วนตัว การประชุม และการโต้ตอบสด การใช้งานวัดจากเวลาพูดจริงที่ตรวจพบ ไม่ใช่เวลาเชื่อมต่อ หากการใช้งานเกินรูปแบบปกติอย่างมากสำหรับเนื้อหาที่ไม่ใช่ส่วนบุคคล อาจมีการปรับเปลี่ยน",
+    "fairUseCaseRefCopied": "คัดลอก {caseRef} แล้ว",
+    "@fairUseCaseRefCopied": {
+        "description": "Snackbar message when case reference is copied",
+        "placeholders": {
+            "caseRef": {
+                "type": "String"
+            }
+        }
+    },
+    "fairUseDailyTranscription": "Daily Transcription",
+    "fairUseBudgetExhausted": "Daily transcription limit reached",
+    "fairUseBudgetResetsAt": "Resets {time}",
+    "fairUseBudgetUsed": "{used}m / {limit}m",
+    "@fairUseBudgetUsed": {
+        "placeholders": {
+            "used": {
+                "type": "String"
+            },
+            "limit": {
+                "type": "String"
+            }
+        }
+    },
+    "@fairUseBudgetResetsAt": {
+        "placeholders": {
+            "time": {
+                "type": "String"
+            }
+        }
+    },
+    "fairUseBannerStatus": "การใช้งานอย่างเป็นธรรม: {status}",
+    "@fairUseBannerStatus": {
+        "placeholders": {
+            "status": {
+                "type": "String"
+            }
+        }
+    },
+    "improveConnectionTitle": "ปรับปรุงการเชื่อมต่อ",
+    "improveConnectionContent": "เราได้ปรับปรุงวิธีที่ Omi เชื่อมต่อกับอุปกรณ์ของคุณ เพื่อเปิดใช้งาน ให้ไปที่หน้าข้อมูลอุปกรณ์ แตะ \"ยกเลิกการเชื่อมต่ออุปกรณ์\" แล้วจับคู่อุปกรณ์อีกครั้ง",
+    "improveConnectionAction": "เข้าใจแล้ว",
+    "clockSkewWarning": "นาฬิกาอุปกรณ์ของคุณคลาดเคลื่อน ~{minutes} นาที ตรวจสอบการตั้งค่าวันที่และเวลา",
+    "omisStorage": "พื้นที่จัดเก็บของ Omi",
+    "phoneStorage": "พื้นที่จัดเก็บโทรศัพท์",
+    "cloudStorage": "พื้นที่จัดเก็บคลาวด์",
+    "howSyncingWorks": "การซิงค์ทำงานอย่างไร",
+    "noSyncedRecordings": "ยังไม่มีการบันทึกที่ซิงค์แล้ว",
+    "recordingsSyncAutomatically": "การบันทึกจะซิงค์โดยอัตโนมัติ — ไม่ต้องดำเนินการใดๆ",
+    "filesDownloadedUploadedNextTime": "ไฟล์ที่ดาวน์โหลดแล้วจะถูกอัปโหลดในครั้งถัดไป",
+    "nConversationsCreated": "{count, plural, =1{สร้าง 1 บทสนทนา} other{สร้าง {count} บทสนทนา}}",
+    "tapToView": "แตะเพื่อดู",
+    "syncFailed": "การซิงค์ล้มเหลว",
+    "keepSyncing": "ซิงค์ต่อ",
+    "cancelSyncQuestion": "ยกเลิกการซิงค์?",
+    "omisStorageDesc": "เมื่อ Omi ของคุณไม่ได้เชื่อมต่อกับโทรศัพท์ มันจะเก็บเสียงไว้ในหน่วยความจำภายใน คุณจะไม่สูญเสียการบันทึกใดๆ",
+    "phoneStorageDesc": "เมื่อ Omi เชื่อมต่ออีกครั้ง การบันทึกจะถูกโอนไปยังโทรศัพท์โดยอัตโนมัติก่อนอัปโหลด",
+    "cloudStorageDesc": "เมื่ออัปโหลดแล้ว การบันทึกของคุณจะถูกประมวลผลและถอดเสียง บทสนทนาจะพร้อมใช้งานภายในหนึ่งนาที",
+    "storageSection": "พื้นที่จัดเก็บ",
+    "tipKeepPhoneNearby": "ให้โทรศัพท์อยู่ใกล้เพื่อการซิงค์ที่เร็วขึ้น",
+    "tipStableInternet": "อินเทอร์เน็ตที่เสถียรช่วยให้อัปโหลดคลาวด์เร็วขึ้น",
+    "tipAutoSync": "การบันทึกจะซิงค์โดยอัตโนมัติ"
 }

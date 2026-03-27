@@ -1447,7 +1447,7 @@ class AppLocalizationsAr extends AppLocalizations {
   String get payYourSttProvider => 'استخدم omi بحرية. أنت تدفع فقط لموفر STT الخاص بك مباشرة.';
 
   @override
-  String get freeMinutesMonth => '4,800 دقيقة مجانية شهرياً متضمنة. غير محدود مع ';
+  String get freeMinutesMonth => '1,200 دقيقة مجانية شهرياً متضمنة. غير محدود مع ';
 
   @override
   String get omiUnlimited => 'Omi غير محدود';
@@ -1696,7 +1696,12 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'أجهزة', one: 'جهاز');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'أجهزة',
+      one: 'جهاز',
+    );
     return '$count $_temp0 تم العثور عليها بالقرب منك';
   }
 
@@ -4721,7 +4726,7 @@ class AppLocalizationsAr extends AppLocalizations {
   String get noSpecificDataAccessConfigured => 'لم يتم تكوين وصول محدد للبيانات.';
 
   @override
-  String get basicPlanDescription => '4,800 دقيقة مميزة + غير محدود على الجهاز';
+  String get basicPlanDescription => '1,200 دقيقة مميزة + غير محدود على الجهاز';
 
   @override
   String get minutes => 'دقائق';
@@ -6039,7 +6044,7 @@ class AppLocalizationsAr extends AppLocalizations {
   String get cloudProvider => 'مزود سحابي';
 
   @override
-  String get premiumMinutesInfo => '4,800 دقيقة مميزة/شهر. علامة التبويب على الجهاز توفر نسخاً مجانياً غير محدود.';
+  String get premiumMinutesInfo => '1,200 دقيقة مميزة/شهر. علامة التبويب على الجهاز توفر نسخاً مجانياً غير محدود.';
 
   @override
   String get viewUsage => 'عرض الاستخدام';
@@ -6118,7 +6123,7 @@ class AppLocalizationsAr extends AppLocalizations {
   String get batteryDrainSignificantly => 'سيزداد استنزاف البطارية بشكل كبير.';
 
   @override
-  String get premiumMinutesMonth => '4,800 دقيقة مميزة/شهر. علامة التبويب على الجهاز توفر نسخاً مجانياً غير محدود. ';
+  String get premiumMinutesMonth => '1,200 دقيقة مميزة/شهر. علامة التبويب على الجهاز توفر نسخاً مجانياً غير محدود. ';
 
   @override
   String get audioProcessedLocally =>
@@ -8496,4 +8501,158 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get phoneHideKeypad => 'إخفاء لوحة المفاتيح';
+
+  @override
+  String get fairUsePolicy => 'الاستخدام العادل';
+
+  @override
+  String get fairUseLoadError => 'تعذر تحميل حالة الاستخدام العادل. يرجى المحاولة مرة أخرى.';
+
+  @override
+  String get fairUseStatusNormal => 'استخدامك ضمن الحدود الطبيعية.';
+
+  @override
+  String get fairUseStageNormal => 'طبيعي';
+
+  @override
+  String get fairUseStageWarning => 'تحذير';
+
+  @override
+  String get fairUseStageThrottle => 'مقيّد';
+
+  @override
+  String get fairUseStageRestrict => 'محظور';
+
+  @override
+  String get fairUseSpeechUsage => 'استخدام الكلام';
+
+  @override
+  String get fairUseToday => 'اليوم';
+
+  @override
+  String get fairUse3Day => 'آخر 3 أيام';
+
+  @override
+  String get fairUseWeekly => 'أسبوعي';
+
+  @override
+  String get fairUseAboutTitle => 'حول الاستخدام العادل';
+
+  @override
+  String get fairUseAboutBody =>
+      'تم تصميم Omi للمحادثات الشخصية والاجتماعات والتفاعلات المباشرة. يُقاس الاستخدام بوقت الكلام الفعلي المكتشف وليس بوقت الاتصال. إذا تجاوز الاستخدام بشكل كبير الأنماط الطبيعية لمحتوى غير شخصي، فقد يتم تطبيق تعديلات.';
+
+  @override
+  String fairUseCaseRefCopied(String caseRef) {
+    return 'تم نسخ $caseRef';
+  }
+
+  @override
+  String get fairUseDailyTranscription => 'النسخ اليومي';
+
+  @override
+  String fairUseBudgetUsed(String used, String limit) {
+    return '$usedد / $limitد';
+  }
+
+  @override
+  String get fairUseBudgetExhausted => 'تم الوصول إلى حد النسخ اليومي';
+
+  @override
+  String fairUseBudgetResetsAt(String time) {
+    return 'يُعاد التعيين $time';
+  }
+
+  @override
+  String get transcriptionPaused => 'جارٍ التسجيل، إعادة الاتصال';
+
+  @override
+  String get transcriptionPausedReconnecting => 'لا يزال التسجيل جاريًا — إعادة الاتصال بالنسخ...';
+
+  @override
+  String fairUseBannerStatus(String status) {
+    return 'الاستخدام العادل: $status';
+  }
+
+  @override
+  String get improveConnectionTitle => 'تحسين الاتصال';
+
+  @override
+  String get improveConnectionContent =>
+      'لقد حسّنا طريقة بقاء Omi متصلاً بجهازك. لتفعيل ذلك، يرجى الانتقال إلى صفحة معلومات الجهاز، والضغط على \"فصل الجهاز\"، ثم إعادة إقران جهازك.';
+
+  @override
+  String get improveConnectionAction => 'فهمت';
+
+  @override
+  String clockSkewWarning(int minutes) {
+    return 'ساعة جهازك متأخرة بـ ~$minutes دقيقة. تحقق من إعدادات التاريخ والوقت.';
+  }
+
+  @override
+  String get omisStorage => 'تخزين Omi';
+
+  @override
+  String get phoneStorage => 'تخزين الهاتف';
+
+  @override
+  String get cloudStorage => 'التخزين السحابي';
+
+  @override
+  String get howSyncingWorks => 'كيف يعمل المزامنة';
+
+  @override
+  String get noSyncedRecordings => 'لا توجد تسجيلات مزامنة بعد';
+
+  @override
+  String get recordingsSyncAutomatically => 'تتم مزامنة التسجيلات تلقائيًا — لا حاجة لأي إجراء.';
+
+  @override
+  String get filesDownloadedUploadedNextTime => 'سيتم رفع الملفات التي تم تنزيلها بالفعل في المرة القادمة.';
+
+  @override
+  String nConversationsCreated(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count محادثات تم إنشاؤها',
+      one: 'محادثة واحدة تم إنشاؤها',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get tapToView => 'اضغط للعرض';
+
+  @override
+  String get syncFailed => 'فشلت المزامنة';
+
+  @override
+  String get keepSyncing => 'متابعة المزامنة';
+
+  @override
+  String get cancelSyncQuestion => 'إلغاء المزامنة؟';
+
+  @override
+  String get omisStorageDesc =>
+      'عندما لا يكون Omi متصلاً بهاتفك، يخزن الصوت محليًا في ذاكرته المدمجة. لن تفقد أي تسجيل أبدًا.';
+
+  @override
+  String get phoneStorageDesc =>
+      'عند إعادة اتصال Omi، يتم نقل التسجيلات تلقائيًا إلى هاتفك كمنطقة تخزين مؤقتة قبل الرفع.';
+
+  @override
+  String get cloudStorageDesc => 'بمجرد الرفع، تتم معالجة تسجيلاتك ونسخها. ستكون المحادثات متاحة في غضون دقيقة.';
+
+  @override
+  String get tipKeepPhoneNearby => 'أبقِ هاتفك قريبًا للمزامنة الأسرع';
+
+  @override
+  String get tipStableInternet => 'اتصال إنترنت مستقر يسرّع الرفع السحابي';
+
+  @override
+  String get tipAutoSync => 'التسجيلات تتم مزامنتها تلقائيًا';
+
+  @override
+  String get storageSection => 'التخزين';
 }

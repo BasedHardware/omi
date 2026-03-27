@@ -1,0 +1,49 @@
+version: 2
+name: apps
+description: Apps/Integrations marketplace flow — browse apps, filter by category, search, view app details
+app: com.omi.computer-macos
+covers:
+  - desktop/Desktop/Sources/MainWindow/Pages/IntegrationsPage.swift
+preconditions:
+  - auth_ready
+
+steps:
+  - id: S1
+    name: Navigate to Apps page
+    do: "Click the Apps sidebar icon (identifier: sidebar_apps) to navigate to the Apps/Integrations page. Verify the marketplace loads with app cards, search bar, category filter, and Installed/Create App buttons."
+    expect:
+      interactive_count: { min: 10 }
+      text_visible:
+        - Apps
+
+  - id: S2
+    name: Filter by category
+    do: "Click the 'Category' menu button to open the category dropdown. Select a category (e.g., 'Productivity' or 'Memory') to filter the app list."
+    expect:
+      interactive_count: { min: 5 }
+
+  - id: S3
+    name: Search for an app
+    do: "Click the search text field at the top of the Apps page. Type 'note' to search for note-taking apps. Verify the app list filters to matching results."
+    expect:
+      interactive_count: { min: 3 }
+
+  - id: S4
+    name: View Installed apps
+    do: "Click the 'Installed' button to switch to the installed apps view. Verify the view shows currently installed/enabled integrations."
+    expect:
+      interactive_count: { min: 3 }
+
+  - id: S5
+    name: Return to all apps
+    do: "Click 'All' or navigate back to the full app marketplace listing. Verify all app cards are visible again."
+    expect:
+      interactive_count: { min: 5 }
+
+  - id: S6
+    name: Return to Dashboard
+    do: "Click the Dashboard sidebar icon (identifier: sidebar_dashboard) to return to the Dashboard page."
+    expect:
+      interactive_count: { min: 5 }
+      text_visible:
+        - Dashboard

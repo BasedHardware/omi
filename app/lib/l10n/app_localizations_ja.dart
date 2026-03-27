@@ -1439,7 +1439,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get payYourSttProvider => 'omiを無料で使用。STTプロバイダーに直接支払います。';
 
   @override
-  String get freeMinutesMonth => '月4,800分無料。無制限は';
+  String get freeMinutesMonth => '月1,200分無料。無制限は';
 
   @override
   String get omiUnlimited => 'Omi Unlimited';
@@ -4676,7 +4676,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get noSpecificDataAccessConfigured => '特定のデータアクセスは設定されていません。';
 
   @override
-  String get basicPlanDescription => '4,800プレミアム分 + デバイス無制限';
+  String get basicPlanDescription => '1,200プレミアム分 + デバイス無制限';
 
   @override
   String get minutes => '分';
@@ -5982,7 +5982,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get cloudProvider => 'クラウドプロバイダー';
 
   @override
-  String get premiumMinutesInfo => '月間4,800分のプレミアム利用可能。オンデバイスタブでは無制限の無料文字起こしが可能です。';
+  String get premiumMinutesInfo => '月間1,200分のプレミアム利用可能。オンデバイスタブでは無制限の無料文字起こしが可能です。';
 
   @override
   String get viewUsage => '使用状況を表示';
@@ -6060,7 +6060,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get batteryDrainSignificantly => 'バッテリー消費が大幅に増加します。';
 
   @override
-  String get premiumMinutesMonth => '月間4,800プレミアム分。オンデバイスタブでは無制限の無料文字起こしを提供。';
+  String get premiumMinutesMonth => '月間1,200プレミアム分。オンデバイスタブでは無制限の無料文字起こしを提供。';
 
   @override
   String get audioProcessedLocally => '音声はローカルで処理されます。オフラインで動作し、よりプライベートですが、バッテリー消費が増えます。';
@@ -8415,4 +8415,156 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get phoneHideKeypad => 'キーパッドを隠す';
+
+  @override
+  String get fairUsePolicy => 'フェアユース';
+
+  @override
+  String get fairUseLoadError => 'フェアユースの状態を読み込めませんでした。もう一度お試しください。';
+
+  @override
+  String get fairUseStatusNormal => 'ご利用は通常の範囲内です。';
+
+  @override
+  String get fairUseStageNormal => '通常';
+
+  @override
+  String get fairUseStageWarning => '警告';
+
+  @override
+  String get fairUseStageThrottle => '制限中';
+
+  @override
+  String get fairUseStageRestrict => '利用停止';
+
+  @override
+  String get fairUseSpeechUsage => '音声使用量';
+
+  @override
+  String get fairUseToday => '今日';
+
+  @override
+  String get fairUse3Day => '3日間';
+
+  @override
+  String get fairUseWeekly => '週間';
+
+  @override
+  String get fairUseAboutTitle => 'フェアユースについて';
+
+  @override
+  String get fairUseAboutBody =>
+      'Omiは個人的な会話、会議、ライブのやり取りのために設計されています。使用量は接続時間ではなく、検出された実際の発話時間で測定されます。非個人的なコンテンツに対して通常のパターンを大幅に超える使用がある場合、調整が適用されることがあります。';
+
+  @override
+  String fairUseCaseRefCopied(String caseRef) {
+    return '$caseRef をコピーしました';
+  }
+
+  @override
+  String get fairUseDailyTranscription => '日次文字起こし';
+
+  @override
+  String fairUseBudgetUsed(String used, String limit) {
+    return '$used分 / $limit分';
+  }
+
+  @override
+  String get fairUseBudgetExhausted => '日次文字起こし上限に達しました';
+
+  @override
+  String fairUseBudgetResetsAt(String time) {
+    return 'リセット $time';
+  }
+
+  @override
+  String get transcriptionPaused => '録音中、再接続中';
+
+  @override
+  String get transcriptionPausedReconnecting => '録音は継続中 — 文字起こしに再接続しています...';
+
+  @override
+  String fairUseBannerStatus(String status) {
+    return '公正使用：$status';
+  }
+
+  @override
+  String get improveConnectionTitle => '接続を改善';
+
+  @override
+  String get improveConnectionContent =>
+      'Omiがデバイスとの接続を維持する方法を改善しました。これを有効にするには、デバイス情報ページに移動し、「デバイスを切断」をタップしてから、デバイスを再度ペアリングしてください。';
+
+  @override
+  String get improveConnectionAction => '了解';
+
+  @override
+  String clockSkewWarning(int minutes) {
+    return 'デバイスの時計が約$minutes分ずれています。日付と時刻の設定を確認してください。';
+  }
+
+  @override
+  String get omisStorage => 'Omiのストレージ';
+
+  @override
+  String get phoneStorage => '電話のストレージ';
+
+  @override
+  String get cloudStorage => 'クラウドストレージ';
+
+  @override
+  String get howSyncingWorks => '同期の仕組み';
+
+  @override
+  String get noSyncedRecordings => '同期済みの録音はまだありません';
+
+  @override
+  String get recordingsSyncAutomatically => '録音は自動的に同期されます — 操作は不要です。';
+
+  @override
+  String get filesDownloadedUploadedNextTime => 'ダウンロード済みのファイルは次回アップロードされます。';
+
+  @override
+  String nConversationsCreated(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count件の会話を作成',
+      one: '1件の会話を作成',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get tapToView => 'タップして表示';
+
+  @override
+  String get syncFailed => '同期に失敗しました';
+
+  @override
+  String get keepSyncing => '同期を続ける';
+
+  @override
+  String get cancelSyncQuestion => '同期をキャンセルしますか？';
+
+  @override
+  String get omisStorageDesc => 'Omiがスマートフォンに接続されていない時、内蔵メモリにオーディオをローカル保存します。録音を失うことはありません。';
+
+  @override
+  String get phoneStorageDesc => 'Omiが再接続すると、録音はアップロード前に自動的にスマートフォンに転送されます。';
+
+  @override
+  String get cloudStorageDesc => 'アップロード後、録音は処理・文字起こしされます。会話は1分以内に利用可能になります。';
+
+  @override
+  String get tipKeepPhoneNearby => 'より速い同期のためにスマートフォンを近くに置いてください';
+
+  @override
+  String get tipStableInternet => '安定したインターネットでクラウドアップロードが高速化します';
+
+  @override
+  String get tipAutoSync => '録音は自動的に同期されます';
+
+  @override
+  String get storageSection => 'ストレージ';
 }

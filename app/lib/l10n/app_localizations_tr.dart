@@ -1465,7 +1465,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String get payYourSttProvider => 'Omi\'yi özgürce kullanın. Sadece STT sağlayıcınıza doğrudan ödeme yaparsınız.';
 
   @override
-  String get freeMinutesMonth => 'Ayda 4.800 ücretsiz dakika dahildir. ';
+  String get freeMinutesMonth => 'Ayda 1.200 ücretsiz dakika dahildir. ';
 
   @override
   String get omiUnlimited => 'Omi Sınırsız';
@@ -1714,7 +1714,12 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'CİHAZ', one: 'CİHAZ');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'CİHAZ',
+      one: 'CİHAZ',
+    );
     return '$count $_temp0 YAKINLARDA BULUNDU';
   }
 
@@ -4768,7 +4773,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String get noSpecificDataAccessConfigured => 'Belirli veri erişimi yapılandırılmamış.';
 
   @override
-  String get basicPlanDescription => '4.800 premium dakika + cihazda sınırsız';
+  String get basicPlanDescription => '1.200 premium dakika + cihazda sınırsız';
 
   @override
   String get minutes => 'dakika';
@@ -6097,7 +6102,7 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get premiumMinutesInfo =>
-      'Ayda 4.800 premium dakika. Cihaz Üzerinde sekmesi sınırsız ücretsiz transkripsiyon sunar.';
+      'Ayda 1.200 premium dakika. Cihaz Üzerinde sekmesi sınırsız ücretsiz transkripsiyon sunar.';
 
   @override
   String get viewUsage => 'Kullanımı görüntüle';
@@ -6178,7 +6183,7 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get premiumMinutesMonth =>
-      'Ayda 4.800 premium dakika. Cihaz Üzerinde sekmesi sınırsız ücretsiz transkripsiyon sunar. ';
+      'Ayda 1.200 premium dakika. Cihaz Üzerinde sekmesi sınırsız ücretsiz transkripsiyon sunar. ';
 
   @override
   String get audioProcessedLocally =>
@@ -8567,4 +8572,159 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get phoneHideKeypad => 'Tuş takımını gizle';
+
+  @override
+  String get fairUsePolicy => 'Adil Kullanım';
+
+  @override
+  String get fairUseLoadError => 'Adil kullanım durumu yüklenemedi. Lütfen tekrar deneyin.';
+
+  @override
+  String get fairUseStatusNormal => 'Kullanımınız normal sınırlar içinde.';
+
+  @override
+  String get fairUseStageNormal => 'Normal';
+
+  @override
+  String get fairUseStageWarning => 'Uyarı';
+
+  @override
+  String get fairUseStageThrottle => 'Kısıtlı';
+
+  @override
+  String get fairUseStageRestrict => 'Engelli';
+
+  @override
+  String get fairUseSpeechUsage => 'Konuşma Kullanımı';
+
+  @override
+  String get fairUseToday => 'Bugün';
+
+  @override
+  String get fairUse3Day => '3 günlük süre';
+
+  @override
+  String get fairUseWeekly => 'Haftalık süre';
+
+  @override
+  String get fairUseAboutTitle => 'Adil Kullanım Hakkında';
+
+  @override
+  String get fairUseAboutBody =>
+      'Omi kişisel konuşmalar, toplantılar ve canlı etkileşimler için tasarlanmıştır. Kullanım, bağlantı süresine değil, tespit edilen gerçek konuşma süresine göre ölçülür. Kullanım, kişisel olmayan içerik için normal kalıpları önemli ölçüde aşarsa, düzenlemeler uygulanabilir.';
+
+  @override
+  String fairUseCaseRefCopied(String caseRef) {
+    return '$caseRef kopyalandı';
+  }
+
+  @override
+  String get fairUseDailyTranscription => 'Günlük transkripsiyon';
+
+  @override
+  String fairUseBudgetUsed(String used, String limit) {
+    return '${used}dk / ${limit}dk';
+  }
+
+  @override
+  String get fairUseBudgetExhausted => 'Günlük transkripsiyon limiti doldu';
+
+  @override
+  String fairUseBudgetResetsAt(String time) {
+    return 'Sıfırlanma $time';
+  }
+
+  @override
+  String get transcriptionPaused => 'Kaydediyor, yeniden bağlanıyor';
+
+  @override
+  String get transcriptionPausedReconnecting => 'Hâlâ kaydediyor — transkripsiyona yeniden bağlanıyor...';
+
+  @override
+  String fairUseBannerStatus(String status) {
+    return 'Adil Kullanım: $status';
+  }
+
+  @override
+  String get improveConnectionTitle => 'Bağlantıyı İyileştir';
+
+  @override
+  String get improveConnectionContent =>
+      'Omi\'nin cihazınıza bağlı kalma şeklini iyileştirdik. Bunu etkinleştirmek için Cihaz Bilgileri sayfasına gidin, \"Cihazı Kes\" seçeneğine dokunun ve cihazınızı tekrar eşleştirin.';
+
+  @override
+  String get improveConnectionAction => 'Anladım';
+
+  @override
+  String clockSkewWarning(int minutes) {
+    return 'Cihazınızın saati ~$minutes dk. farklı. Tarih ve saat ayarlarınızı kontrol edin.';
+  }
+
+  @override
+  String get omisStorage => 'Omi\'nin Depolaması';
+
+  @override
+  String get phoneStorage => 'Telefon Depolaması';
+
+  @override
+  String get cloudStorage => 'Bulut Depolaması';
+
+  @override
+  String get howSyncingWorks => 'Senkronizasyon nasıl çalışır';
+
+  @override
+  String get noSyncedRecordings => 'Henüz senkronize kayıt yok';
+
+  @override
+  String get recordingsSyncAutomatically => 'Kayıtlar otomatik olarak senkronize edilir — herhangi bir işlem gerekmez.';
+
+  @override
+  String get filesDownloadedUploadedNextTime => 'Zaten indirilen dosyalar bir dahaki sefere yüklenecektir.';
+
+  @override
+  String nConversationsCreated(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count konuşma oluşturuldu',
+      one: '1 konuşma oluşturuldu',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get tapToView => 'Görüntülemek için dokunun';
+
+  @override
+  String get syncFailed => 'Senkronizasyon başarısız';
+
+  @override
+  String get keepSyncing => 'Senkronizasyona devam et';
+
+  @override
+  String get cancelSyncQuestion => 'Senkronizasyon iptal edilsin mi?';
+
+  @override
+  String get omisStorageDesc =>
+      'Omi\'niz telefonunuza bağlı olmadığında, sesi yerleşik belleğinde yerel olarak saklar. Hiçbir kaydı kaybetmezsiniz.';
+
+  @override
+  String get phoneStorageDesc =>
+      'Omi yeniden bağlandığında, kayıtlar yüklenmeden önce otomatik olarak telefonunuza aktarılır.';
+
+  @override
+  String get cloudStorageDesc =>
+      'Yüklendikten sonra kayıtlarınız işlenir ve yazıya dökülür. Konuşmalar bir dakika içinde kullanılabilir olacaktır.';
+
+  @override
+  String get tipKeepPhoneNearby => 'Daha hızlı senkronizasyon için telefonunuzu yakında tutun';
+
+  @override
+  String get tipStableInternet => 'Kararlı internet bulut yüklemelerini hızlandırır';
+
+  @override
+  String get tipAutoSync => 'Kayıtlar otomatik olarak senkronize edilir';
+
+  @override
+  String get storageSection => 'DEPOLAMA';
 }

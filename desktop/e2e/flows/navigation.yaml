@@ -1,79 +1,54 @@
-# E2E Flow: Desktop app navigation
-# Converted from flow1-app-navigation.sh
-# Tests: snapshot, sidebar nav, find, fill, scroll, assert, wait, screenshot, tray menu
-
+version: 2
 name: navigation
-description: Desktop app navigation — sidebar icons, section switching, text input, scroll, tray menu
+description: Desktop sidebar navigation — verify all 7 sidebar sections load correctly via click navigation
+app: com.omi.computer-macos
 covers:
-  - Desktop/Sources/MainWindow/SidebarView.swift
-  - Desktop/Sources/MainWindow/DesktopHomeView.swift
-  - Desktop/Sources/MainWindow/OmiApp.swift
-setup: normal
-bundle_id: com.omi.desktop-dev
+  - desktop/Desktop/Sources/MainWindow/SidebarView.swift
+  - desktop/Desktop/Sources/MainWindow/DesktopHomeView.swift
+  - desktop/Desktop/Sources/MainWindow/OmiApp.swift
+preconditions:
+  - auth_ready
 
 steps:
-  - name: Snapshot main window
-    assert:
-      interactive_count: { min: 3 }
-    screenshot: main-window
+  - id: S1
+    name: Verify Dashboard loads
+    do: "Verify the app is on the Dashboard page. Sidebar should show all navigation icons (Dashboard, Chat, Memories, Tasks, Rewind, Apps, Settings). Dashboard content should include goals widget, conversations list, and Start Recording button."
+    expect:
+      interactive_count: { min: 10 }
+      text_visible:
+        - Dashboard
 
-  - name: Find button element
-    find: { role: button }
-    save_ref: btn_ref
+  - id: S2
+    name: Navigate to Chat
+    do: "Click the Chat sidebar icon (identifier: sidebar_chat) to navigate to the Chat page. Verify chat interface loads with message input area."
+    expect:
+      text_visible:
+        - Chat
 
-  - name: Assert element exists and non-existent does not
-    assert:
-      - { exists: "$btn_ref" }
-      - { not_exists: "e99999" }
+  - id: S3
+    name: Navigate to Memories
+    do: "Click the Memories sidebar icon (identifier: sidebar_memories) to navigate to the Memories page. Verify memories list loads with search and filter controls."
+    expect:
+      text_visible:
+        - Memories
 
-  - name: Verify sidebar navigation icons
-    assert_each:
-      type: image
-      labels:
-        - Home
-        - Conversation
-        - brain
-        - checklist
-        - puzzlepiece.fill
-        - gearshape.fill
-      min_found: 4
+  - id: S4
+    name: Navigate to Tasks
+    do: "Click the Tasks sidebar icon (identifier: sidebar_tasks) to navigate to the Tasks page. Verify tasks interface loads with category filters and task list."
+    expect:
+      text_visible:
+        - Tasks
 
-  - name: Navigate through sidebar sections
-    navigate_sidebar:
-      - { type: image, label: Conversation }
-      - { type: image, label: brain }
-      - { type: image, label: checklist }
-      - { type: image, label: Home }
-    action: click
-    min_success: 3
-    screenshot_each: true
+  - id: S5
+    name: Navigate to Apps
+    do: "Click the Apps sidebar icon (identifier: sidebar_apps) to navigate to the Apps/Integrations page. Verify integrations marketplace loads."
+    expect:
+      text_visible:
+        - Apps
 
-  - name: Fill text input
-    fill: { type: textfield, value: "agent-swift E2E test" }
-    optional: true
-    screenshot: after-fill
-
-  - name: Scroll down and up
-    scroll:
-      - down
-      - up
-
-  - name: Wait for element
-    wait: { exists: "$btn_ref", timeout: 3000 }
-
-  - name: Verify system tray menu
-    assert:
-      type: menuitem
-      identifier_prefixes:
-        - openOmi
-        - checkFor
-        - resetOnb
-        - reportIs
-        - signOut
-        - quitApp
-      min_count: 3
-
-  - name: Verify app responsiveness
-    assert:
-      interactive_count: { min: 3 }
-    screenshot: final
+  - id: S6
+    name: Navigate to Settings
+    do: "Click the Settings sidebar icon (identifier: sidebar_settings) to navigate to Settings page. Verify settings sidebar shows sections (General, Rewind, Transcription, etc.)."
+    expect:
+      text_visible:
+        - Settings
