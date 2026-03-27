@@ -38,8 +38,8 @@ class BleCompanionService : CompanionDeviceService() {
 
     private fun handleDeviceAppeared(address: String) {
         Log.i(TAG, "Device appeared: $address")
-        if (OmiBleManager.instance.appClosed) {
-            Log.i(TAG, "App is closed, skipping reconnect")
+        if (!OmiBleManager.isInitialized || OmiBleManager.instance.appClosed) {
+            Log.i(TAG, "App is not running, skipping reconnect")
             return
         }
         if (OmiBleManager.instance.isManuallyDisconnected(address)) {
@@ -77,7 +77,7 @@ class BleCompanionService : CompanionDeviceService() {
     override fun onCreate() {
         super.onCreate()
         Log.i(TAG, "onCreate")
-        if (hasBluetoothPermission() && !OmiBleManager.instance.appClosed) {
+        if (OmiBleManager.isInitialized && hasBluetoothPermission() && !OmiBleManager.instance.appClosed) {
             startForegroundServiceFallback()
         }
     }

@@ -39,6 +39,9 @@ class OmiBleManager private constructor(private val application: Application) {
         val instance: OmiBleManager
             get() = _instance ?: throw IllegalStateException("OmiBleManager not initialized")
 
+        val isInitialized: Boolean
+            get() = _instance != null
+
         fun initialize(application: Application) {
             if (_instance == null) {
                 synchronized(this) {
