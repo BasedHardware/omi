@@ -127,7 +127,6 @@ sys.modules["dependencies"].get_uid_with_goals_write = MagicMock()
 from routers.developer import _add_folder_names_to_conversations
 from utils.webhooks import _add_folder_name_to_payload
 
-
 # ---------------------------------------------------------------------------
 # Tests
 # ---------------------------------------------------------------------------
