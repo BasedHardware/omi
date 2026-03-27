@@ -109,6 +109,13 @@ abstract class BleHostApi {
   @SwiftFunction('reconnectKnownPeripheral(uuid:)')
   void reconnectKnownPeripheral(String uuid);
 
+  /// Request bonding/pairing for a connected peripheral.
+  /// Only needed for devices that require encrypted links (e.g. Limitless).
+  /// Waits for bond to complete or timeout. Returns true if bonded.
+  @async
+  @SwiftFunction('requestBond(uuid:)')
+  bool requestBond(String uuid);
+
   // Characteristic operations
   @async
   @SwiftFunction('readCharacteristic(peripheralUuid:serviceUuid:characteristicUuid:)')
