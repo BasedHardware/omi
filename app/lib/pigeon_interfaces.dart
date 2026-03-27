@@ -109,10 +109,6 @@ abstract class BleHostApi {
   @SwiftFunction('reconnectKnownPeripheral(uuid:)')
   void reconnectKnownPeripheral(String uuid);
 
-  // Service discovery
-  @SwiftFunction('discoverServices(peripheralUuid:)')
-  void discoverServices(String peripheralUuid);
-
   // Characteristic operations
   @async
   @SwiftFunction('readCharacteristic(peripheralUuid:serviceUuid:characteristicUuid:)')
