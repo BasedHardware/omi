@@ -2,6 +2,7 @@ import asyncio
 import io
 import re
 import wave
+from functools import lru_cache
 from typing import List, Optional
 
 import av
@@ -230,13 +231,135 @@ for lang_patterns in SPEAKER_IDENTIFICATION_PATTERNS.values():
     patterns_to_check.extend(lang_patterns)
 
 
+# --- spaCy NER-based speaker detection (Issue #3039) ---
+# Lazy-loaded spaCy NLP model for multilingual PERSON entity recognition.
+# Uses en_core_web_sm (fast, ~12MB) with support for PERSON entities.
+# Falls back to regex patterns if spaCy is unavailable or fails.
+
+_nlp_model: Optional["spacy.Language"] = None
+_ner_load_error: Optional[str] = None
+
+
+def _get_spacy_model() -> Optional["spacy.Language"]:
+    """
+    Lazily load and cache the spaCy NER model.
+    Returns None if spaCy or the model is not available.
+    Model: en_core_web_sm — fast, multilingual-aware, supports PERSON entities.
+    """
+    global _nlp_model, _ner_load_error
+    if _nlp_model is not None or _ner_load_error == "unavailable":
+        return _nlp_model
+
+    try:
+        import spacy
+        # Try to load the small English model (fast, supports NER PERSON)
+        # This model has reasonable multilingual support for common names.
+        model_name = "en_core_web_sm"
+        try:
+            _nlp_model = spacy.load(model_name)
+        except OSError:
+            # Model not installed — try to download it
+            import subprocess
+            result = subprocess.run(
+                ["python", "-m", "spacy", "download", model_name],
+                capture_output=True, text=True, timeout=60
+            )
+            if result.returncode == 0:
+                _nlp_model = spacy.load(model_name)
+            else:
+                _ner_load_error = "download_failed"
+                logger.warning(
+                    f"spaCy NER model download failed for {model_name}: {result.stderr[:200]}"
+                )
+                return None
+
+        logger.info(f"spaCy NER model loaded: {model_name}")
+        return _nlp_model
+    except ImportError:
+        _ner_load_error = "unavailable"
+        logger.debug("spaCy not installed — NER speaker detection unavailable")
+        return None
+    except Exception as e:
+        _ner_load_error = str(e)
+        logger.warning(f"spaCy NER model load error: {e}")
+        return None
+
+
+def _detect_speaker_ner(text: str) -> Optional[str]:
+    """
+    Detect speaker name using spaCy Named Entity Recognition (PERSON entities).
+    This is more accurate than regex patterns for natural conversation where
+    people introduce themselves without fixed phrase patterns.
+
+    Args:
+        text: Transcript text to analyze
+
+    Returns:
+        Detected speaker name (capitalized) or None if not found.
+    """
+    nlp = _get_spacy_model()
+    if nlp is None:
+        return None
+
+    try:
+        # Process with spaCy — entity recognition runs in C for speed
+        doc = nlp(text[:1000])  # Truncate to first 1000 chars for performance
+
+        # Collect all PERSON entities, sorted by position in text
+        persons = [(ent.text, ent.start_char) for ent in doc.ents if ent.label_ == "PERSON"]
+
+        if not persons:
+            return None
+
+        # Return the first PERSON entity (earliest in the transcript)
+        name = persons[0][0].strip()
+        # Clean up: remove titles, suffixes, and extra whitespace
+        name = re.sub(r"\b(Mr|Mrs|Ms|Miss|Dr|Prof)\.?\s*", "", name, flags=re.IGNORECASE)
+        name = re.sub(r"\s+", " ", name).strip()
+
+        if len(name) >= 2:
+            # Capitalize properly (handle "john doe" -> "John Doe")
+            return name.title()
+        return None
+
+    except Exception as e:
+        logger.warning(f"spaCy NER failed: {e}")
+        return None
+
+
 def detect_speaker_from_text(text: str) -> Optional[str]:
+    """
+    Detect speaker name from transcript text using NER + regex fallback.
+
+    Strategy (issue #3039):
+    1. Try spaCy NER first — catches natural introductions without fixed patterns
+    2. Fall back to regex patterns for scripted/self-identified names
+
+    Args:
+        text: Transcript text to analyze
+
+    Returns:
+        Detected speaker name (capitalized) or None if not found.
+    """
+    if not text or not text.strip():
+        return None
+
+    text = text.strip()
+
+    # Strategy 1: spaCy NER (primary) — handles natural conversation
+    ner_name = _detect_speaker_ner(text)
+    if ner_name:
+        logger.debug(f"NER detected speaker: {ner_name}")
+        return ner_name
+
+    # Strategy 2: Regex patterns (fallback) — handles scripted introductions
     for pattern in patterns_to_check:
         match = re.search(pattern, text)
         if match:
             name = match.groups()[-1]
             if name and len(name) >= 2:
                 return name.capitalize()
+
     return None
 
 
