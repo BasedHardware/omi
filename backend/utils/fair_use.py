@@ -27,6 +27,8 @@ from models.fair_use import UsageType, FairUseStage, SoftCapTrigger
 # Moving to top-level would break any context where this module loads before env/Firebase init.
 _classify_user_purpose = None
 _send_notification = None
+_has_transcription_credits = None
+_is_paid_plan = None
 
 
 def _get_classify_user_purpose():
@@ -45,6 +47,24 @@ def _get_send_notification():
 
         _send_notification = send_notification
     return _send_notification
+
+
+def _get_has_transcription_credits():
+    global _has_transcription_credits
+    if _has_transcription_credits is None:
+        from utils.subscription import has_transcription_credits
+
+        _has_transcription_credits = has_transcription_credits
+    return _has_transcription_credits
+
+
+def _get_is_paid_plan():
+    global _is_paid_plan
+    if _is_paid_plan is None:
+        from utils.subscription import is_paid_plan
+
+        _is_paid_plan = is_paid_plan
+    return _is_paid_plan
 
 
 logger = logging.getLogger(__name__)
@@ -287,6 +307,22 @@ def invalidate_enforcement_cache(uid: str) -> None:
         pass
 
 
+def is_free_credits_exhausted(uid: str) -> bool:
+    """Check if a user is on a free (basic) plan with exhausted transcription credits.
+
+    Returns True only for non-paid users who have used all monthly credits.
+    Paid users and users with remaining credits return False.
+    """
+    try:
+        subscription = users_db.get_user_valid_subscription(uid)
+        if subscription and _get_is_paid_plan()(subscription.plan):
+            return False
+        return not _get_has_transcription_credits()(uid)
+    except Exception as e:
+        logger.error(f'fair_use: error checking free credits for {uid}: {e}')
+        return False
+
+
 def escalate_enforcement(uid: str, triggered_caps: list, classifier_result: dict = None) -> dict:
     """Escalate enforcement based on violations and classifier result.
 
@@ -302,20 +338,27 @@ def escalate_enforcement(uid: str, triggered_caps: list, classifier_result: dict
         misuse_score = classifier_result.get('misuse_score', 0.0)
         usage_type = classifier_result.get('usage_type', 'none')
 
+    # Free users with exhausted credits bypass the classifier score requirement (#6083).
+    # They escalate on violation count alone — the LLM classifier is designed to detect
+    # content-type abuse (audiobooks, podcasts), not volume abuse from legitimate users
+    # who have simply exceeded their free-tier quota.
+    free_exhausted = classifier_result.get('free_credits_exhausted', False) if classifier_result else False
+    passes_score_gate = free_exhausted or misuse_score >= FAIR_USE_CLASSIFIER_MISUSE_THRESHOLD
+
     # Determine new stage based on current + violation history
     new_stage = current_stage
     action = 'none'
 
     if current_stage == 'none':
-        if misuse_score >= FAIR_USE_CLASSIFIER_MISUSE_THRESHOLD:
+        if passes_score_gate:
             new_stage = 'warning'
             action = 'warning'
     elif current_stage == 'warning':
-        if counts['violation_count_7d'] >= 2 and misuse_score >= FAIR_USE_CLASSIFIER_MISUSE_THRESHOLD:
+        if counts['violation_count_7d'] >= 2 and passes_score_gate:
             new_stage = 'throttle'
             action = 'throttle'
     elif current_stage == 'throttle':
-        if counts['violation_count_7d'] >= 3 and misuse_score >= FAIR_USE_CLASSIFIER_MISUSE_THRESHOLD:
+        if counts['violation_count_7d'] >= 3 and passes_score_gate:
             new_stage = 'restrict'
             action = 'restrict'
 
@@ -497,14 +540,22 @@ async def trigger_classifier_if_needed(uid: str, triggered_caps: list, session_i
 
     Uses a Redis lock to prevent concurrent runs for the same user.
     Runs asynchronously — does not block the WebSocket path.
+
+    For free-tier users with exhausted credits (#6083), skips the LLM classifier
+    entirely and uses a synthetic result. The classifier is designed for content-type
+    detection (audiobooks, podcasts) which is irrelevant for volume-based enforcement.
     """
+    # Check if this is a free user with exhausted credits (#6083)
+    free_exhausted = is_free_credits_exhausted(uid)
+
     lock_key = _classifier_lock_key(uid)
     lock_token = str(uuid.uuid4())
 
+    # Free-exhausted users use a shorter cooldown (1h) since no LLM cost is involved
+    cooldown = 3600 if free_exhausted else FAIR_USE_CLASSIFIER_COOLDOWN_SECONDS
+
     try:
-        # Acquire lock with cooldown TTL (default 12h — classifier looks at 7d of convos,
-        # so re-running every few minutes adds no value; 12h gives ~7% new data per run)
-        acquired = redis_client.set(lock_key, lock_token, nx=True, ex=FAIR_USE_CLASSIFIER_COOLDOWN_SECONDS)
+        acquired = redis_client.set(lock_key, lock_token, nx=True, ex=cooldown)
         if not acquired:
             logger.info(f'fair_use: classifier already running/recent for {uid}')
             return
@@ -513,7 +564,17 @@ async def trigger_classifier_if_needed(uid: str, triggered_caps: list, session_i
         return
 
     try:
-        classifier_result = await _get_classify_user_purpose()(uid)
+        if free_exhausted:
+            # Synthetic result: skip LLM call, escalate on violation count alone (#6083)
+            classifier_result = {
+                'misuse_score': 0.0,
+                'usage_type': 'free_exhausted',
+                'free_credits_exhausted': True,
+            }
+            logger.info(f'fair_use: free credits exhausted for {uid}, skipping LLM classifier')
+        else:
+            classifier_result = await _get_classify_user_purpose()(uid)
+
         escalation = escalate_enforcement(uid, triggered_caps, classifier_result)
 
         logger.info(
@@ -536,7 +597,7 @@ async def trigger_classifier_if_needed(uid: str, triggered_caps: list, session_i
     except Exception as e:
         logger.error(f'fair_use: classifier/escalation error for {uid}: {e}')
         # Only release lock on error so we can retry sooner;
-        # on success, let the 5-minute TTL act as a cooldown to prevent repeated LLM calls
+        # on success, let the cooldown TTL prevent repeated runs
         try:
             _release_lock(lock_key, lock_token)
         except Exception:
