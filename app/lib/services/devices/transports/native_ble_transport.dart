@@ -58,12 +58,10 @@ class NativeBleTransport extends DeviceTransport {
       await _connectCompleter!.future.timeout(const Duration(seconds: 30));
       _connectCompleter = null;
 
-      // If services already arrived (from already-connected path), use them
-      if (_servicesCompleter!.isCompleted || _services.isNotEmpty) {
-        if (!_servicesCompleter!.isCompleted) _servicesCompleter!.complete(_services);
-      } else {
-        // Trigger discovery — native hasn't sent services yet (fresh connection)
-        _hostApi.discoverServices(_peripheralUuid);
+      // Native owns the full pipeline: connectGatt → discoverServices → onServicesDiscovered.
+      // If services already arrived (from already-connected path), use them.
+      if (_services.isNotEmpty && !_servicesCompleter!.isCompleted) {
+        _servicesCompleter!.complete(_services);
       }
 
       _services = await _servicesCompleter!.future.timeout(const Duration(seconds: 15));
