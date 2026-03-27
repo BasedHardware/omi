@@ -13,25 +13,35 @@ struct OnboardingTrustStepView: View {
       graphViewModel: graphViewModel,
       stepIndex: stepIndex,
       totalSteps: totalSteps,
-      eyebrow: "",
-      title: "Trust",
+      eyebrow: "Before we continue",
+      title: "I’m going to ask for a few permissions.",
       description:
-        "In onboarding, Omi needs to learn about you and access a few permissions to be useful. Without them, Omi cannot help much. Can we proceed?",
+        "Omi is open source and private by design. During setup, we’ll ask for these permissions to understand your work and help in the right places:",
       layoutMode: .centered
     ) {
       VStack(spacing: 18) {
+        VStack(alignment: .leading, spacing: 12) {
+          permissionRow(icon: "display", title: "Screen + files", detail: "Build context from what you’re working on.")
+          permissionRow(icon: "mic.fill", title: "Microphone", detail: "Capture voice notes and meeting context.")
+          permissionRow(icon: "sparkles", title: "Accessibility + automation", detail: "Know the active app and act when you ask.")
+          permissionRow(icon: "bell.badge.fill", title: "Notifications", detail: "Send useful reminders instead of generic noise.")
+        }
+        .frame(maxWidth: 560, alignment: .leading)
+
         HStack(spacing: 12) {
-          Button("Yes, let's go") {
+          Button("Continue") {
             coordinator.clearLastActionError()
             onContinue()
           }
           .buttonStyle(OnboardingCardButtonStyle(isPrimary: true))
 
-          Button("No, show the source code") {
+          Button("Read the source code") {
             guard let url = URL(string: "https://github.com/BasedHardware/omi") else { return }
             NSWorkspace.shared.open(url)
           }
-          .buttonStyle(OnboardingCardButtonStyle(isPrimary: false))
+          .buttonStyle(.plain)
+          .foregroundColor(OmiColors.textSecondary)
+          .font(.system(size: 13, weight: .medium))
         }
       }
       .frame(maxWidth: .infinity, alignment: .center)
@@ -39,5 +49,34 @@ struct OnboardingTrustStepView: View {
         coordinator.clearLastActionError()
       }
     }
+  }
+
+  private func permissionRow(icon: String, title: String, detail: String) -> some View {
+    HStack(alignment: .top, spacing: 12) {
+      Image(systemName: icon)
+        .font(.system(size: 14, weight: .semibold))
+        .foregroundColor(.white.opacity(0.85))
+        .frame(width: 28, height: 28)
+        .background(
+          RoundedRectangle(cornerRadius: 8, style: .continuous)
+            .fill(OmiColors.backgroundSecondary)
+        )
+
+      VStack(alignment: .leading, spacing: 2) {
+        Text(title)
+          .font(.system(size: 14, weight: .semibold))
+          .foregroundColor(OmiColors.textPrimary)
+        Text(detail)
+          .font(.system(size: 13))
+          .foregroundColor(OmiColors.textSecondary)
+      }
+
+      Spacer()
+    }
+    .padding(14)
+    .background(
+      RoundedRectangle(cornerRadius: 14, style: .continuous)
+        .fill(OmiColors.backgroundTertiary.opacity(0.55))
+    )
   }
 }

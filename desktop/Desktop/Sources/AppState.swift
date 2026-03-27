@@ -793,8 +793,19 @@ class AppState: ObservableObject {
   /// Check screen recording permission status
   func checkScreenRecordingPermission() {
     let tccGranted = CGPreflightScreenCaptureAccess()
+    let shouldForceActualTest = screenRecordingGrantAttempts > 0 || hasScreenRecordingPermission
 
     if !tccGranted {
+      let actualPermission = ScreenCaptureService.checkPermission(
+        forceActualTestIfPreflightDenied: shouldForceActualTest)
+      if actualPermission {
+        hasScreenRecordingPermission = true
+        isScreenCaptureKitBroken = false
+        isScreenRecordingStale = false
+        screenRecordingGrantAttempts = 0
+        return
+      }
+
       hasScreenRecordingPermission = false
       isScreenCaptureKitBroken = false
       // If user already tried Grant once and permission is still not granted,

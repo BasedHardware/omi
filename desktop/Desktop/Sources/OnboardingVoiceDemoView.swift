@@ -60,7 +60,9 @@ struct OnboardingVoiceDemoView: View {
                             .foregroundColor(OmiColors.textTertiary)
 
                         HStack(spacing: 6) {
-                            keyCap(shortcutSettings.pttKey.symbol)
+                            ForEach(Array(shortcutSettings.pttShortcut.displayTokens.enumerated()), id: \.offset) { _, token in
+                                keyCap(token)
+                            }
                             Text("hold")
                                 .font(.system(size: 13, weight: .medium))
                                 .foregroundColor(OmiColors.textTertiary)

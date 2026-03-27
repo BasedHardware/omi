@@ -69,6 +69,13 @@ struct OnboardingPermissionStepView: View {
             .foregroundColor(OmiColors.textSecondary)
             .lineSpacing(4)
 
+          if permissionType == "screen_recording", appState.isScreenRecordingStale {
+            Text("macOS still isn’t granting screen capture to this build. In Screen & System Audio Recording, toggle Omi Dev off, then on again, then quit and reopen the app.")
+              .font(.system(size: 13, weight: .medium))
+              .foregroundColor(OmiColors.warning)
+              .fixedSize(horizontal: false, vertical: true)
+          }
+
           if permissionType == "full_disk_access", let email = coordinator.userEmail() {
             Text(email)
               .font(.system(size: 13, weight: .medium))
@@ -175,7 +182,7 @@ struct OnboardingPermissionStepView: View {
 
     screenRecordingRefreshTask = Task {
       let granted = await Task.detached(priority: .utility) {
-        ScreenCaptureService.checkPermission()
+        ScreenCaptureService.checkPermission(forceActualTestIfPreflightDenied: true)
       }.value
 
       guard !Task.isCancelled else { return }

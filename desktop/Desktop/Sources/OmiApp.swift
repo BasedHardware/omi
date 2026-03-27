@@ -80,6 +80,10 @@ struct OMIApp: App {
   /// Launch mode determined at startup from command-line arguments
   static let launchMode = LaunchMode.fromCommandLine()
 
+  init() {
+    AppBuild.syncUpdateChannelWithInstalledApp()
+  }
+
   /// Window title with version number (different for rewind mode)
   private var windowTitle: String {
     // Keep a distinct title in non-production builds so custom test apps are easy to identify.
@@ -1085,16 +1089,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     // Mark clean shutdown so next launch skips expensive DB integrity check
     RewindDatabase.markCleanShutdown()
-
-    // If terminated mid-onboarding (e.g. macOS "Quit & Reopen" after granting FDA),
-    // schedule a relaunch so the user doesn't have to manually reopen the app.
-    if OnboardingChatPersistence.isMidOnboarding {
-      let bundleURL = Bundle.main.bundleURL
-      let task = Process()
-      task.executableURL = URL(fileURLWithPath: "/bin/sh")
-      task.arguments = ["-c", "sleep 1 && open \"\(bundleURL.path)\""]
-      try? task.run()
-    }
 
     // Report final resources before termination
     ResourceMonitor.shared.reportResourcesNow(context: "app_terminating")

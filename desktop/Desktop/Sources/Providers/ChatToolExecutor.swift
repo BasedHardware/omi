@@ -521,6 +521,7 @@ class ChatToolExecutor {
 
         switch type {
         case "screen_recording":
+            appState.screenRecordingGrantAttempts += 1
             appState.triggerScreenRecordingPermission()
             if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture") {
                 NSWorkspace.shared.open(url)

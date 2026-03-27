@@ -16,6 +16,7 @@ struct OnboardingView: View {
   @AppStorage("onboardingNotificationStepRemoved") private var hasRemovedNotificationStep = false
   @AppStorage("onboardingFloatingBarShortcutStepInserted") private
     var hasInsertedFloatingBarShortcutStep = false
+  @AppStorage("onboardingTrustStepReordered") private var hasReorderedTrustStep = false
   @StateObject private var introCoordinator = OnboardingPagedIntroCoordinator()
   @StateObject private var graphViewModel = MemoryGraphViewModel()
 
@@ -57,7 +58,8 @@ struct OnboardingView: View {
         hasMergedVoiceInputStep: hasMergedVoiceInputStep,
         hasRemovedNotificationStep: hasRemovedNotificationStep,
         hasInsertedFloatingBarShortcutStep: hasInsertedFloatingBarShortcutStep,
-        hasMigratedPagedIntro: hasMigratedPagedIntro
+        hasMigratedPagedIntro: hasMigratedPagedIntro,
+        hasReorderedTrustStep: hasReorderedTrustStep
       )
       hasMigratedPagedIntro = true
       hasMigratedOnboardingSteps = true
@@ -65,6 +67,7 @@ struct OnboardingView: View {
       hasMergedVoiceInputStep = true
       hasRemovedNotificationStep = true
       hasInsertedFloatingBarShortcutStep = true
+      hasReorderedTrustStep = true
       introCoordinator.prepare(appState: appState)
     }
     .task {
@@ -84,35 +87,35 @@ struct OnboardingView: View {
   private var onboardingContent: some View {
     Group {
       if currentStep == 0 {
-        OnboardingTrustStepView(
+        OnboardingWelcomeStepView(
           coordinator: introCoordinator,
           graphViewModel: graphViewModel,
           stepIndex: 0,
           totalSteps: OnboardingFlow.introStepCount,
           onContinue: {
-            AnalyticsManager.shared.onboardingStepCompleted(step: 0, stepName: "Trust")
+            AnalyticsManager.shared.onboardingStepCompleted(step: 0, stepName: "Name")
             currentStep = 1
           }
         )
       } else if currentStep == 1 {
-        OnboardingWelcomeStepView(
+        OnboardingLanguageStepView(
           coordinator: introCoordinator,
           graphViewModel: graphViewModel,
           stepIndex: 1,
           totalSteps: OnboardingFlow.introStepCount,
           onContinue: {
-            AnalyticsManager.shared.onboardingStepCompleted(step: 1, stepName: "Name")
+            AnalyticsManager.shared.onboardingStepCompleted(step: 1, stepName: "Language")
             currentStep = 2
           }
         )
       } else if currentStep == 2 {
-        OnboardingLanguageStepView(
+        OnboardingTrustStepView(
           coordinator: introCoordinator,
           graphViewModel: graphViewModel,
           stepIndex: 2,
           totalSteps: OnboardingFlow.introStepCount,
           onContinue: {
-            AnalyticsManager.shared.onboardingStepCompleted(step: 2, stepName: "Language")
+            AnalyticsManager.shared.onboardingStepCompleted(step: 2, stepName: "Trust")
             currentStep = 3
           }
         )
@@ -396,6 +399,7 @@ struct OnboardingView: View {
     // Navigate to Tasks page after transition
     UserDefaults.standard.set(true, forKey: "onboardingJustCompleted")
     UserDefaults.standard.set(true, forKey: "hasCompletedFileIndexing")
+    PostOnboardingPromptSuggestions.save(OnboardingPromptSuggestionBuilder.build(from: introCoordinator))
 
     // Clean up onboarding state and persisted chat data
     chatProvider.isOnboarding = false

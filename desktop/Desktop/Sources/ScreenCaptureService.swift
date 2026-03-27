@@ -40,11 +40,22 @@ final class ScreenCaptureService: Sendable {
 
   /// Check if we have screen recording permission by actually testing capture
   /// CGPreflightScreenCaptureAccess can return stale data after code signing changes
-  static func checkPermission() -> Bool {
-    // First quick check - if CGPreflight says no, definitely no permission
-    if !CGPreflightScreenCaptureAccess() {
+  static func checkPermission(forceActualTestIfPreflightDenied: Bool = false) -> Bool {
+    let preflightGranted = CGPreflightScreenCaptureAccess()
+
+    if !preflightGranted {
       log("Screen capture: CGPreflight says no permission")
-      return false
+
+      guard forceActualTestIfPreflightDenied else {
+        return false
+      }
+
+      log("Screen capture: running forced actual capture test despite denied preflight")
+      let actualPermission = testCapturePermission()
+      if actualPermission {
+        log("Screen capture: actual capture succeeded even though CGPreflight returned false")
+      }
+      return actualPermission
     }
 
     // CGPreflight can return stale data after rebuilds, so test actual capture

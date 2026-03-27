@@ -51,9 +51,13 @@ class GlobalShortcutManager {
         if let ref = hotKeyRefs.removeValue(forKey: .askOmi) {
             UnregisterEventHotKey(ref)
         }
-        let askOmiKey = MainActor.assumeIsolated { ShortcutSettings.shared.askOmiKey }
-        registerHotKey(keyCode: Int(askOmiKey.keyCode), modifiers: askOmiKey.carbonModifiers, id: .askOmi)
-        NSLog("GlobalShortcutManager: Registered Ask Omi shortcut: \(askOmiKey.rawValue)")
+        let askOmiShortcut = MainActor.assumeIsolated { ShortcutSettings.shared.askOmiShortcut }
+        guard askOmiShortcut.supportsGlobalHotKey, let keyCode = askOmiShortcut.keyCode else {
+            NSLog("GlobalShortcutManager: Ask Omi shortcut is not a registerable hotkey")
+            return
+        }
+        registerHotKey(keyCode: Int(keyCode), modifiers: askOmiShortcut.carbonModifiers, id: .askOmi)
+        NSLog("GlobalShortcutManager: Registered Ask Omi shortcut: \(askOmiShortcut.displayLabel)")
     }
 
     private func registerHotKey(keyCode: Int, modifiers: Int, id: HotKeyID) {

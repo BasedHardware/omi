@@ -94,8 +94,8 @@ struct DesktopHomeView: View {
             .onAppear {
               if UserDefaults.standard.bool(forKey: "onboardingJustCompleted") {
                 UserDefaults.standard.removeObject(forKey: "onboardingJustCompleted")
-                log("DesktopHomeView: Onboarding just completed — navigating to Tasks page")
-                selectedIndex = SidebarNavItem.tasks.rawValue
+                log("DesktopHomeView: Onboarding just completed — navigating to Dashboard")
+                selectedIndex = SidebarNavItem.dashboard.rawValue
               }
             }
           mainContent
