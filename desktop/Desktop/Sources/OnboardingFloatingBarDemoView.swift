@@ -65,7 +65,7 @@ struct OnboardingFloatingBarDemoView: View {
                 if !barActivated {
                     VStack(spacing: 12) {
                         HStack(spacing: 6) {
-                            ForEach(Array(shortcutSettings.askOmiKey.hintKeys.enumerated()), id: \.offset) { index, symbol in
+                            ForEach(Array(shortcutSettings.askOmiShortcut.displayTokens.enumerated()), id: \.offset) { index, symbol in
                                 if index > 0 {
                                     Text("+")
                                         .font(.system(size: 15, weight: .medium))

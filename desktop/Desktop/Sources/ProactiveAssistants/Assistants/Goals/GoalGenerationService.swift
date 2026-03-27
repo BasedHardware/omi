@@ -65,7 +65,7 @@ class GoalGenerationService {
 
         if lastDate == nil {
             log("GoalGenerationService: First run, generating immediately")
-            await generateGoalIfNeeded()
+            _ = await generateGoalIfNeeded()
             return
         }
 
@@ -76,11 +76,11 @@ class GoalGenerationService {
         }
 
         log("GoalGenerationService: New day — last generation was \(lastDate), triggering generation")
-        await generateGoalIfNeeded()
+        _ = await generateGoalIfNeeded()
     }
 
     /// Generate a goal if the user has room for more
-    private func generateGoalIfNeeded() async {
+    private func generateGoalIfNeeded() async -> Bool {
         do {
             let goals = try await APIClient.shared.getGoals()
             let activeGoals = goals.filter { $0.isActive }
@@ -88,7 +88,7 @@ class GoalGenerationService {
             if activeGoals.count >= maxActiveGoals {
                 log("GoalGenerationService: User already has \(activeGoals.count) active goals (max \(maxActiveGoals)), skipping")
                 UserDefaults.standard.set(Date(), forKey: Self.kLastGenerationDate)
-                return
+                return true
             }
 
             log("GoalGenerationService: User has \(activeGoals.count)/\(maxActiveGoals) goals, generating one...")
@@ -105,16 +105,37 @@ class GoalGenerationService {
             )
 
             NotificationCenter.default.post(name: .goalAutoCreated, object: goal)
+            return true
 
         } catch {
             log("GoalGenerationService: Failed to generate goal: \(error.localizedDescription)")
+            return false
         }
     }
 
     /// Manual trigger that bypasses the daily check
     func generateNow() async {
         log("GoalGenerationService: Manual generation triggered")
+        await waitForPrerequisites()
         await removeStaleGoals()
-        await generateGoalIfNeeded()
+        for attempt in 0..<3 {
+            if await generateGoalIfNeeded() {
+                return
+            }
+            guard attempt < 2 else { return }
+            try? await Task.sleep(nanoseconds: 5_000_000_000)
+        }
+    }
+
+    private func waitForPrerequisites() async {
+        for _ in 0..<20 {
+            let authReady = await MainActor.run {
+                AuthState.shared.isSignedIn && !AuthState.shared.isRestoringAuth
+            }
+            if authReady && APIKeyService.keysAvailable {
+                return
+            }
+            try? await Task.sleep(nanoseconds: 500_000_000)
+        }
     }
 }
