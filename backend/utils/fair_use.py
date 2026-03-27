@@ -99,6 +99,10 @@ FAIR_USE_CHECK_INTERVAL_SECONDS = int(os.getenv('FAIR_USE_CHECK_INTERVAL_SECONDS
 # 0 = no budget cap (disabled). Only enforced when stage == 'restrict'.
 FAIR_USE_RESTRICT_DAILY_DG_MS = int(os.getenv('FAIR_USE_RESTRICT_DAILY_DG_MS', '1800000'))  # 30 min
 
+# Free-tier daily Deepgram budget (#6083) — daily DG cap for free users with exhausted credits
+# Same mechanism as restrict-stage budget. 0 = disabled (full block).
+FAIR_USE_FREE_DAILY_DG_MS = int(os.getenv('FAIR_USE_FREE_DAILY_DG_MS', '1800000'))  # 30 min
+
 
 def _redis_key(uid: str) -> str:
     """Redis sorted set key for a user's speech minute buckets."""
@@ -462,8 +466,8 @@ def _dg_budget_key(uid: str) -> str:
 
 
 def record_dg_usage_ms(uid: str, ms: int) -> None:
-    """Atomically increment today's DG usage for a restricted user."""
-    if not FAIR_USE_ENABLED or FAIR_USE_RESTRICT_DAILY_DG_MS <= 0 or ms <= 0:
+    """Atomically increment today's DG usage counter (restrict-stage or free-exhausted)."""
+    if not FAIR_USE_ENABLED or (FAIR_USE_RESTRICT_DAILY_DG_MS <= 0 and FAIR_USE_FREE_DAILY_DG_MS <= 0) or ms <= 0:
         return
     try:
         key = _dg_budget_key(uid)
@@ -513,20 +517,22 @@ def get_dg_budget_status(uid: str) -> dict:
     return result
 
 
-def is_dg_budget_exhausted(uid: str) -> bool:
-    """Fast check: is the restricted user's daily DG budget used up?
+def is_dg_budget_exhausted(uid: str, limit_ms: int = 0) -> bool:
+    """Fast check: is the user's daily DG budget used up?
 
-    Only meaningful when stage == 'restrict'. Callers should check stage first.
+    Works for both restrict-stage users and free-exhausted users (#6083).
+    ``limit_ms`` overrides the default restrict-stage limit when provided.
     Returns False on Redis errors (fail-open).
     """
-    if not FAIR_USE_ENABLED or FAIR_USE_RESTRICT_DAILY_DG_MS <= 0:
+    effective_limit = limit_ms if limit_ms > 0 else FAIR_USE_RESTRICT_DAILY_DG_MS
+    if not FAIR_USE_ENABLED or effective_limit <= 0:
         return False
     try:
         key = _dg_budget_key(uid)
         used = redis_client.get(key)
         if used is None:
             return False
-        return int(used) >= FAIR_USE_RESTRICT_DAILY_DG_MS
+        return int(used) >= effective_limit
     except Exception:
         return False
 
