@@ -392,19 +392,17 @@ class TestClassifierSpoofProtection:
 
 
 # ---------------------------------------------------------------------------
-# Sync early-return test (credits exhausted skips Deepgram)
+# Sync DG budget gate test (credits exhausted → daily budget throttle)
 # ---------------------------------------------------------------------------
 
 
-class TestSyncCreditsExhaustedEarlyReturn:
-    """Test that the sync endpoint returns early when credits are exhausted."""
+class TestSyncDgBudgetGate:
+    """Test that the sync endpoint uses daily DG budget for free-exhausted users."""
 
-    def test_sync_response_structure_on_credits_exhausted(self):
-        """Verify the JSONResponse structure returned when should_lock is True."""
-        # Import JSONResponse to verify it's the correct type
+    def test_sync_budget_exhausted_response_structure(self):
+        """Verify the JSONResponse structure when DG budget is exhausted."""
         from starlette.responses import JSONResponse
 
-        # The sync early-return creates this exact response
         total_segments = 5
         response = JSONResponse(
             status_code=200,
@@ -412,6 +410,7 @@ class TestSyncCreditsExhaustedEarlyReturn:
                 'new_memories': [],
                 'updated_memories': [],
                 'credits_exhausted': True,
+                'dg_budget_exhausted': True,
                 'skipped_segments': total_segments,
             },
         )
@@ -421,6 +420,7 @@ class TestSyncCreditsExhaustedEarlyReturn:
 
         body = json.loads(response.body)
         assert body['credits_exhausted'] is True
+        assert body['dg_budget_exhausted'] is True
         assert body['skipped_segments'] == 5
         assert body['new_memories'] == []
         assert body['updated_memories'] == []
@@ -428,22 +428,84 @@ class TestSyncCreditsExhaustedEarlyReturn:
     def test_is_free_credits_exhausted_matches_should_lock_logic(self):
         """Verify that is_free_credits_exhausted produces the same result as the sync endpoint's
         should_lock = not has_transcription_credits(uid) for free users."""
-        # Reset lazy import caches
         fair_use_mod._has_transcription_credits = None
         fair_use_mod._is_paid_plan = None
 
-        # Simulate: free user, no credits
         mock_sub = MagicMock()
         mock_sub.plan = 'basic'
         fair_use_mod.users_db.get_user_valid_subscription = MagicMock(return_value=mock_sub)
         _subscription_mod.is_paid_plan = MagicMock(return_value=False)
         _subscription_mod.has_transcription_credits = MagicMock(return_value=False)
 
-        # is_free_credits_exhausted should be True (matching should_lock = not has_transcription_credits)
         assert fair_use_mod.is_free_credits_exhausted('test-uid') is True
 
-        # Now simulate: free user WITH credits
         _subscription_mod.has_transcription_credits = MagicMock(return_value=True)
-        fair_use_mod._has_transcription_credits = None  # Reset cache
+        fair_use_mod._has_transcription_credits = None
 
         assert fair_use_mod.is_free_credits_exhausted('test-uid') is False
+
+
+# ---------------------------------------------------------------------------
+# DG budget for free-exhausted users
+# ---------------------------------------------------------------------------
+
+
+class TestDgBudgetFreeTier:
+    """Test is_dg_budget_exhausted with free-tier limit_ms parameter."""
+
+    def setup_method(self):
+        _mock_redis.reset_mock()
+
+    @patch.object(fair_use_mod, 'FAIR_USE_ENABLED', True)
+    @patch.object(fair_use_mod, 'FAIR_USE_FREE_DAILY_DG_MS', 1800000)
+    def test_free_budget_not_exhausted(self):
+        """Under-budget returns False."""
+        _mock_redis.get.return_value = b'900000'  # 15 min used, 30 min limit
+        assert fair_use_mod.is_dg_budget_exhausted('test-uid', 1800000) is False
+
+    @patch.object(fair_use_mod, 'FAIR_USE_ENABLED', True)
+    @patch.object(fair_use_mod, 'FAIR_USE_FREE_DAILY_DG_MS', 1800000)
+    def test_free_budget_exhausted(self):
+        """At-or-over budget returns True."""
+        _mock_redis.get.return_value = b'1800000'  # exactly 30 min
+        assert fair_use_mod.is_dg_budget_exhausted('test-uid', 1800000) is True
+
+    @patch.object(fair_use_mod, 'FAIR_USE_ENABLED', True)
+    def test_free_budget_no_usage_returns_false(self):
+        """No Redis key (first use today) returns False."""
+        _mock_redis.get.return_value = None
+        assert fair_use_mod.is_dg_budget_exhausted('test-uid', 1800000) is False
+
+    @patch.object(fair_use_mod, 'FAIR_USE_ENABLED', True)
+    @patch.object(fair_use_mod, 'FAIR_USE_RESTRICT_DAILY_DG_MS', 1800000)
+    def test_restrict_budget_uses_default_when_no_limit_ms(self):
+        """When limit_ms=0, falls back to FAIR_USE_RESTRICT_DAILY_DG_MS."""
+        _mock_redis.get.return_value = b'1800000'
+        assert fair_use_mod.is_dg_budget_exhausted('test-uid') is True
+
+
+class TestRecordDgUsageMsFreeTier:
+    """Test that record_dg_usage_ms works when only free budget is configured."""
+
+    def setup_method(self):
+        _mock_redis.reset_mock()
+        _mock_redis.pipeline.return_value = MagicMock()
+
+    @patch.object(fair_use_mod, 'FAIR_USE_ENABLED', True)
+    @patch.object(fair_use_mod, 'FAIR_USE_RESTRICT_DAILY_DG_MS', 0)
+    @patch.object(fair_use_mod, 'FAIR_USE_FREE_DAILY_DG_MS', 1800000)
+    def test_records_when_only_free_budget_configured(self):
+        """DG usage is recorded when restrict budget is 0 but free budget is set."""
+        fair_use_mod.record_dg_usage_ms('test-uid', 5000)
+        # Pipeline should have been created and executed
+        _mock_redis.pipeline.assert_called_once()
+        pipe = _mock_redis.pipeline.return_value
+        pipe.execute.assert_called_once()
+
+    @patch.object(fair_use_mod, 'FAIR_USE_ENABLED', True)
+    @patch.object(fair_use_mod, 'FAIR_USE_RESTRICT_DAILY_DG_MS', 0)
+    @patch.object(fair_use_mod, 'FAIR_USE_FREE_DAILY_DG_MS', 0)
+    def test_skips_when_no_budget_configured(self):
+        """DG usage is not recorded when both budgets are 0."""
+        fair_use_mod.record_dg_usage_ms('test-uid', 5000)
+        _mock_redis.pipeline.assert_not_called()
