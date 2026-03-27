@@ -102,7 +102,7 @@ final class OmiBleManager: NSObject {
 
         if let peripheral = peripherals[uuid] {
             if peripheral.state == .connected {
-                flutterApi?.onPeripheralConnected(peripheralUuid: uuid) { _ in }
+                NSLog("[OmiBle] connectPeripheral: \(uuid) already connected, skipping")
                 return
             }
             centralManager.connect(peripheral, options: nil)
