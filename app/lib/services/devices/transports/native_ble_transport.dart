@@ -144,7 +144,9 @@ class NativeBleTransport extends DeviceTransport {
 
     if (!_streamControllers.containsKey(key)) {
       _streamControllers[key] = StreamController<List<int>>.broadcast();
-      _subscribeCharacteristic(serviceUuid, characteristicUuid);
+      if (_hasCharacteristic(serviceUuid, characteristicUuid)) {
+        _subscribeCharacteristic(serviceUuid, characteristicUuid);
+      }
     }
 
     return _streamControllers[key]!.stream;
@@ -158,8 +160,20 @@ class NativeBleTransport extends DeviceTransport {
     }
   }
 
+  bool _hasCharacteristic(String serviceUuid, String characteristicUuid) {
+    final sUuid = serviceUuid.toLowerCase();
+    final cUuid = characteristicUuid.toLowerCase();
+    for (final service in _services) {
+      if (service.uuid.toLowerCase() == sUuid) {
+        return service.characteristicUuids.any((c) => c.toLowerCase() == cUuid);
+      }
+    }
+    return false;
+  }
+
   @override
   Future<List<int>> readCharacteristic(String serviceUuid, String characteristicUuid) async {
+    if (!_hasCharacteristic(serviceUuid, characteristicUuid)) return [];
     try {
       final data = await _hostApi.readCharacteristic(_peripheralUuid, serviceUuid, characteristicUuid);
       return data.toList();
@@ -171,6 +185,9 @@ class NativeBleTransport extends DeviceTransport {
 
   @override
   Future<void> writeCharacteristic(String serviceUuid, String characteristicUuid, List<int> data) async {
+    if (!_hasCharacteristic(serviceUuid, characteristicUuid)) {
+      throw Exception('Characteristic not available: $characteristicUuid');
+    }
     try {
       await _hostApi.writeCharacteristic(_peripheralUuid, serviceUuid, characteristicUuid, Uint8List.fromList(data));
     } catch (e) {
