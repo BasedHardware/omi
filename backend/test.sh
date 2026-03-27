@@ -58,6 +58,7 @@ pytest tests/unit/test_fair_use_async.py -v
 pytest tests/unit/test_dg_usage_batch.py -v
 pytest tests/unit/test_sync_fair_use_gate.py -v
 pytest tests/unit/test_sync_silent_failure.py -v
+pytest tests/unit/test_fair_use_free_tier.py -v
 pytest tests/unit/test_timeout_middleware.py -v
 pytest tests/unit/test_pusher_circuit_breaker.py -v
 
