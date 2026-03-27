@@ -514,6 +514,10 @@ class OmiBleManager private constructor(private val application: Application) {
         val addr = address.uppercase()
         servicesDiscoveredFor.remove(addr)
         stopRssiKeepAlive()
+        bondTimeoutRunnable?.let { mainHandler.removeCallbacks(it) }
+        bondTimeoutRunnable = null
+        bondCompletionCallback?.invoke(false)
+        bondCompletionCallback = null
 
         for (key in readCompletions.keys().toList().filter { it.startsWith(addr.lowercase()) }) {
             readCompletions.remove(key)?.invoke(Result.failure(Exception("Peripheral disconnected")))
@@ -556,8 +560,8 @@ class OmiBleManager private constructor(private val application: Application) {
 
                     startStabilityTimer(address)
 
-                    // Always discover services immediately — bond after discovery.
-                    // discoverServices() is bond-independent; bonding is initiated after onServicesDiscovered.
+                    // Always discover services immediately — no bonding in the connection pipeline.
+                    // Bonding is only done on-demand via requestBond() for devices that need it.
                     enqueueCommand {
                         if (!gatt.discoverServices()) {
                             Log.e(TAG, "discoverServices returned false for $address")
@@ -679,11 +683,6 @@ class OmiBleManager private constructor(private val application: Application) {
                     }
                 }
             }, MTU_REQUEST_DELAY_MS)
-
-            // Bonding is NOT initiated here. The device does not require bonding
-            // to function. Bonding only happens during initial CompanionDeviceManager
-            // association. Attempting createBond() on reconnection (after device
-            // power cycle) causes status=5 stale bond loops.
         }
 
         override fun onCharacteristicChanged(gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic, value: ByteArray) {

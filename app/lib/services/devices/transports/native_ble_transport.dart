@@ -126,6 +126,7 @@ class NativeBleTransport extends DeviceTransport {
 
   /// Request bonding for devices that require encrypted links (e.g. Limitless).
   /// Returns true if bonded, false if bond failed or timed out.
+  @override
   Future<bool> requestBond() async {
     try {
       return await _hostApi.requestBond(_peripheralUuid);
