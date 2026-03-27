@@ -28,8 +28,9 @@ final class BleHostApiImpl: BleHostApi {
         bleManager.reconnectKnownPeripheral(uuid: uuid)
     }
 
-    func discoverServices(peripheralUuid: String) throws {
-        bleManager.discoverServices(peripheralUuid: peripheralUuid)
+    func requestBond(uuid: String, completion: @escaping (Result<Bool, Error>) -> Void) {
+        // iOS handles bonding automatically at the OS level
+        completion(.success(true))
     }
 
     func readCharacteristic(

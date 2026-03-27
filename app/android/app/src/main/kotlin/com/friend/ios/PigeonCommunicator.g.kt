@@ -617,7 +617,12 @@ interface BleHostApi {
    * handles reconnection at the chipset level (iOS: retrievePeripherals, Android: autoConnect).
    */
   fun reconnectKnownPeripheral(uuid: String)
-  fun discoverServices(peripheralUuid: String)
+  /**
+   * Request bonding/pairing for a connected peripheral.
+   * Only needed for devices that require encrypted links (e.g. Limitless).
+   * Waits for bond to complete or timeout. Returns true if bonded.
+   */
+  fun requestBond(uuid: String, callback: (Result<Boolean>) -> Unit)
   fun readCharacteristic(peripheralUuid: String, serviceUuid: String, characteristicUuid: String, callback: (Result<ByteArray>) -> Unit)
   fun writeCharacteristic(peripheralUuid: String, serviceUuid: String, characteristicUuid: String, data: ByteArray, callback: (Result<Unit>) -> Unit)
   fun subscribeCharacteristic(peripheralUuid: String, serviceUuid: String, characteristicUuid: String)
@@ -736,18 +741,20 @@ interface BleHostApi {
         }
       }
       run {
-        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.omi_pigeon.BleHostApi.discoverServices$separatedMessageChannelSuffix", codec)
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.omi_pigeon.BleHostApi.requestBond$separatedMessageChannelSuffix", codec)
         if (api != null) {
           channel.setMessageHandler { message, reply ->
             val args = message as List<Any?>
-            val peripheralUuidArg = args[0] as String
-            val wrapped: List<Any?> = try {
-              api.discoverServices(peripheralUuidArg)
-              listOf(null)
-            } catch (exception: Throwable) {
-              PigeonCommunicatorPigeonUtils.wrapError(exception)
+            val uuidArg = args[0] as String
+            api.requestBond(uuidArg) { result: Result<Boolean> ->
+              val error = result.exceptionOrNull()
+              if (error != null) {
+                reply.reply(PigeonCommunicatorPigeonUtils.wrapError(error))
+              } else {
+                val data = result.getOrNull()
+                reply.reply(PigeonCommunicatorPigeonUtils.wrapResult(data))
+              }
             }
-            reply.reply(wrapped)
           }
         } else {
           channel.setMessageHandler(null)
