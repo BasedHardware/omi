@@ -1955,8 +1955,8 @@ class _ManualFirmwareFlashPageState extends State<_ManualFirmwareFlashPage> with
                 color: const Color(0xFF1C1C1E),
                 borderRadius: BorderRadius.circular(12),
               ),
-              child: Row( 
-                children: [
+              child: Row(
+                children: [ 
                   const FaIcon(FontAwesomeIcons.file, color: Colors.deepPurple, size: 20),
                   const SizedBox(width: 12),
                   Expanded(
