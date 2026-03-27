@@ -541,14 +541,16 @@ async def _stream_handler(
 
                 # Free-tier credit gate (#6083): block DG when free credits exhausted
                 # Re-check periodically in case user upgrades mid-session
+                # Note: uses is_free_credits_exhausted() directly (not user_has_credits)
+                # because user_has_credits is refreshed later in the loop and would
+                # create a 1-tick delay allowing audio to leak to DG.
                 try:
-                    if not user_has_credits:
-                        was_blocked = free_credits_dg_blocked
-                        free_credits_dg_blocked = is_free_credits_exhausted(uid)
-                        if free_credits_dg_blocked and not was_blocked:
-                            logger.info(f'fair_use: free credits exhausted, DG blocked for {uid} session={session_id}')
-                    else:
-                        free_credits_dg_blocked = False
+                    was_blocked = free_credits_dg_blocked
+                    free_credits_dg_blocked = is_free_credits_exhausted(uid)
+                    if free_credits_dg_blocked and not was_blocked:
+                        logger.info(f'fair_use: free credits exhausted, DG blocked for {uid} session={session_id}')
+                    elif not free_credits_dg_blocked and was_blocked:
+                        logger.info(f'fair_use: credits restored, DG unblocked for {uid} session={session_id}')
                 except Exception as e:
                     logger.error(f'fair_use: free credit check error for {uid}: {e}')
 
