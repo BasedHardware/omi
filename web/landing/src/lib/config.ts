@@ -9,7 +9,7 @@ export const brand = {
   address: '',
   email: 'help@togodynamics.com',
   links: {
-    download: '#',
+    download: '/download',
     tryBrowser: '#',
     order: '#',
     product: '/product',
@@ -35,7 +35,7 @@ export const brand = {
     products: [
       { label: 'Nooto', href: '#' },
       { label: 'Nooto Glass', href: '#' },
-      { label: 'Download', href: '#' },
+      { label: 'Download', href: '/download' },
     ],
     resources: [
       { label: 'Help Center', href: '#' },

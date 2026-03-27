@@ -19,7 +19,7 @@ export function Navbar() {
   const t = useTranslations('navbar');
 
   return (
-    <nav className="fixed top-0 left-0 right-0 z-50 bg-bg-primary/80 backdrop-blur-xl border-b border-white/5">
+    <nav className="fixed top-0 left-0 right-0 z-50 bg-transparent backdrop-blur-md border-b border-white/[0.02]">
       <div className="mx-auto max-w-7xl px-6 flex items-center justify-between h-16">
         {/* Logo */}
         <Link href="/" className="font-display font-bold text-2xl tracking-tight text-white">
@@ -30,22 +30,20 @@ export function Navbar() {
         <div className="hidden md:flex items-center gap-8">
           <NavDropdown label={t('products')}>
             <DropdownLink href="/product">{brand.name}</DropdownLink>
-            <DropdownLink href={brand.links.glass}>{t('glass')}</DropdownLink>
+            <DropdownLink href="/apps">{t('appStore')}</DropdownLink>
+            <DropdownLink href="/download">{t('download')}</DropdownLink>
           </NavDropdown>
-          <NavDropdown label={t('useCases')}>
-            <DropdownLink href="#">{t('meetings')}</DropdownLink>
-            <DropdownLink href="#">{t('noteTaking')}</DropdownLink>
-            <DropdownLink href="#">{t('voiceMemos')}</DropdownLink>
+          <NavDropdown label={t('resources')}>
+            <DropdownLink href="/docs">{t('docs')}</DropdownLink>
+            <DropdownLink href="/faq">FAQ</DropdownLink>
+            <DropdownLink href="/privacy">{t('privacy')}</DropdownLink>
           </NavDropdown>
-          <Link href={brand.links.manifesto} className="text-sm text-text-secondary hover:text-white transition-colors">
-            {t('manifesto')}
-          </Link>
           <LanguageSwitcher />
           <Link
-            href={brand.links.order}
+            href="/download"
             className="bg-brand hover:bg-brand-dark text-white text-sm font-medium px-5 py-2 rounded-full transition-colors"
           >
-            {t('buyNow')}
+            {t('getStarted')}
           </Link>
         </div>
 
@@ -61,15 +59,18 @@ export function Navbar() {
           <Link href="/product" className="block text-text-secondary hover:text-white transition-colors">
             {t('products')}
           </Link>
-          <Link href="#" className="block text-text-secondary hover:text-white transition-colors">
-            {t('useCases')}
+          <Link href="/apps" className="block text-text-secondary hover:text-white transition-colors">
+            {t('appStore')}
           </Link>
-          <Link href={brand.links.manifesto} className="block text-text-secondary hover:text-white transition-colors">
-            {t('manifesto')}
+          <Link href="/docs" className="block text-text-secondary hover:text-white transition-colors">
+            {t('docs')}
+          </Link>
+          <Link href="/faq" className="block text-text-secondary hover:text-white transition-colors">
+            FAQ
           </Link>
           <LanguageSwitcher />
           <Link
-            href={brand.links.order}
+            href="/download"
             className="inline-block bg-brand text-white text-sm font-medium px-5 py-2 rounded-full"
           >
             {t('buyNow')}

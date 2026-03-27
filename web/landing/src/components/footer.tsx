@@ -17,22 +17,20 @@ export function Footer() {
 
   const companyLinks = [
     { label: t('privacy'), href: '/privacy' },
-    { label: t('manifesto'), href: '#' },
+    { label: 'FAQ', href: '/faq' },
   ];
 
   const productLinks = [
-    { label: 'Nooto', href: '#' },
-    { label: 'Nooto Glass', href: '#' },
-    { label: t('download'), href: '#' },
+    { label: 'Nooto', href: '/product' },
+    { label: t('download'), href: '/download' },
+    { label: t('appStore'), href: '/apps' },
   ];
 
   const resourceLinks = [
-    { label: t('helpCenter'), href: '#' },
     { label: t('docs'), href: '/docs' },
-    { label: t('appStore'), href: '#' },
-    { label: t('feedback'), href: '#' },
+    { label: 'FAQ', href: '/faq' },
     { label: 'GitHub', href: 'https://github.com/BasedHardware/omi' },
-    { label: t('community'), href: '#' },
+    { label: `${brand.email}`, href: `mailto:${brand.email}` },
   ];
 
   return (
