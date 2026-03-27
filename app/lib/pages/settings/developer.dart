@@ -1943,8 +1943,8 @@ class _ManualFirmwareFlashPageState extends State<_ManualFirmwareFlashPage> with
         iconTheme: const IconThemeData(color: Colors.white),
         elevation: 0,
       ),
-      body: Padding( 
-        padding: const EdgeInsets.all(24),
+      body: Padding(
+        padding: const EdgeInsets.all(24), 
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
