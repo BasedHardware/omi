@@ -312,9 +312,10 @@ class TestTriggerClassifierFreeTier:
         finally:
             loop.close()
 
-        # Redis lock should use 1h (3600s) cooldown, not 12h
-        set_call = _mock_redis.set.call_args
-        assert set_call.kwargs.get('ex') == 3600
+        # Lock acquired with default TTL, then shortened to 1h via expire()
+        _mock_redis.expire.assert_called_once()
+        expire_args = _mock_redis.expire.call_args[0]
+        assert expire_args[1] == 3600
 
     @patch.object(fair_use_mod, 'FAIR_USE_ENABLED', True)
     @patch.object(

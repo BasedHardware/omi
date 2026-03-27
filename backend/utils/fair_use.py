@@ -546,17 +546,12 @@ async def trigger_classifier_if_needed(uid: str, triggered_caps: list, session_i
     entirely and uses a synthetic result. The classifier is designed for content-type
     detection (audiobooks, podcasts) which is irrelevant for volume-based enforcement.
     """
-    # Check if this is a free user with exhausted credits (#6083)
-    free_exhausted = is_free_credits_exhausted(uid)
-
     lock_key = _classifier_lock_key(uid)
     lock_token = str(uuid.uuid4())
 
-    # Free-exhausted users use a shorter cooldown (1h) since no LLM cost is involved
-    cooldown = 3600 if free_exhausted else FAIR_USE_CLASSIFIER_COOLDOWN_SECONDS
-
+    # Acquire lock BEFORE the Firestore read to avoid wasted DB calls (#6083)
     try:
-        acquired = redis_client.set(lock_key, lock_token, nx=True, ex=cooldown)
+        acquired = redis_client.set(lock_key, lock_token, nx=True, ex=FAIR_USE_CLASSIFIER_COOLDOWN_SECONDS)
         if not acquired:
             logger.info(f'fair_use: classifier already running/recent for {uid}')
             return
@@ -565,7 +560,15 @@ async def trigger_classifier_if_needed(uid: str, triggered_caps: list, session_i
         return
 
     try:
+        # Check free status only after lock is acquired (avoids Firestore reads on cooldown hits)
+        free_exhausted = is_free_credits_exhausted(uid)
+
         if free_exhausted:
+            # Shorten the lock TTL — no LLM cost, allow re-check in 1h (#6083)
+            try:
+                redis_client.expire(lock_key, 3600)
+            except Exception:
+                pass  # non-critical, lock will expire at the default TTL
             # Synthetic result: skip LLM call, escalate on violation count alone (#6083)
             classifier_result = {
                 'misuse_score': 0.0,
