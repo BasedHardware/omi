@@ -93,14 +93,15 @@ class TestEscalateEnforcementFreeTier:
     @patch.object(
         fair_use_mod, 'get_rolling_speech_ms', return_value={'daily_ms': 0, 'three_day_ms': 0, 'weekly_ms': 0}
     )
-    def test_free_exhausted_escalates_none_to_warning(self, _mock_speech):
+    @patch.object(fair_use_mod, 'is_free_credits_exhausted', return_value=True)
+    def test_free_exhausted_escalates_none_to_warning(self, _mock_free, _mock_speech):
         _fair_use_db.get_fair_use_state.return_value = {'stage': 'none'}
         _fair_use_db.get_violation_counts.return_value = {'violation_count_7d': 1, 'violation_count_30d': 1}
 
         result = fair_use_mod.escalate_enforcement(
             'test-uid',
             _make_trigger(),
-            _make_classifier_result(misuse_score=0.1, usage_type='free_exhausted', free_credits_exhausted=True),
+            _make_classifier_result(misuse_score=0.1, usage_type='free_exhausted'),
         )
 
         assert result['action'] == 'warning'
@@ -110,14 +111,15 @@ class TestEscalateEnforcementFreeTier:
     @patch.object(
         fair_use_mod, 'get_rolling_speech_ms', return_value={'daily_ms': 0, 'three_day_ms': 0, 'weekly_ms': 0}
     )
-    def test_free_exhausted_escalates_warning_to_throttle(self, _mock_speech):
+    @patch.object(fair_use_mod, 'is_free_credits_exhausted', return_value=True)
+    def test_free_exhausted_escalates_warning_to_throttle(self, _mock_free, _mock_speech):
         _fair_use_db.get_fair_use_state.return_value = {'stage': 'warning'}
         _fair_use_db.get_violation_counts.return_value = {'violation_count_7d': 2, 'violation_count_30d': 2}
 
         result = fair_use_mod.escalate_enforcement(
             'test-uid',
             _make_trigger(),
-            _make_classifier_result(misuse_score=0.1, usage_type='free_exhausted', free_credits_exhausted=True),
+            _make_classifier_result(misuse_score=0.1, usage_type='free_exhausted'),
         )
 
         assert result['action'] == 'throttle'
@@ -127,14 +129,15 @@ class TestEscalateEnforcementFreeTier:
     @patch.object(
         fair_use_mod, 'get_rolling_speech_ms', return_value={'daily_ms': 0, 'three_day_ms': 0, 'weekly_ms': 0}
     )
-    def test_free_exhausted_escalates_throttle_to_restrict(self, _mock_speech):
+    @patch.object(fair_use_mod, 'is_free_credits_exhausted', return_value=True)
+    def test_free_exhausted_escalates_throttle_to_restrict(self, _mock_free, _mock_speech):
         _fair_use_db.get_fair_use_state.return_value = {'stage': 'throttle'}
         _fair_use_db.get_violation_counts.return_value = {'violation_count_7d': 3, 'violation_count_30d': 3}
 
         result = fair_use_mod.escalate_enforcement(
             'test-uid',
             _make_trigger(),
-            _make_classifier_result(misuse_score=0.1, usage_type='free_exhausted', free_credits_exhausted=True),
+            _make_classifier_result(misuse_score=0.1, usage_type='free_exhausted'),
         )
 
         assert result['action'] == 'restrict'
@@ -144,14 +147,15 @@ class TestEscalateEnforcementFreeTier:
     @patch.object(
         fair_use_mod, 'get_rolling_speech_ms', return_value={'daily_ms': 0, 'three_day_ms': 0, 'weekly_ms': 0}
     )
-    def test_paid_user_still_requires_misuse_score(self, _mock_speech):
+    @patch.object(fair_use_mod, 'is_free_credits_exhausted', return_value=False)
+    def test_paid_user_still_requires_misuse_score(self, _mock_free, _mock_speech):
         _fair_use_db.get_fair_use_state.return_value = {'stage': 'none'}
         _fair_use_db.get_violation_counts.return_value = {'violation_count_7d': 1, 'violation_count_30d': 1}
 
         result = fair_use_mod.escalate_enforcement(
             'test-uid',
             _make_trigger(),
-            _make_classifier_result(misuse_score=0.1, usage_type='personal', free_credits_exhausted=False),
+            _make_classifier_result(misuse_score=0.1, usage_type='personal'),
         )
 
         assert result['action'] == 'none'
@@ -161,14 +165,15 @@ class TestEscalateEnforcementFreeTier:
     @patch.object(
         fair_use_mod, 'get_rolling_speech_ms', return_value={'daily_ms': 0, 'three_day_ms': 0, 'weekly_ms': 0}
     )
-    def test_paid_user_escalates_with_high_score(self, _mock_speech):
+    @patch.object(fair_use_mod, 'is_free_credits_exhausted', return_value=False)
+    def test_paid_user_escalates_with_high_score(self, _mock_free, _mock_speech):
         _fair_use_db.get_fair_use_state.return_value = {'stage': 'none'}
         _fair_use_db.get_violation_counts.return_value = {'violation_count_7d': 1, 'violation_count_30d': 1}
 
         result = fair_use_mod.escalate_enforcement(
             'test-uid',
             _make_trigger(),
-            _make_classifier_result(misuse_score=0.8, usage_type='audiobook', free_credits_exhausted=False),
+            _make_classifier_result(misuse_score=0.8, usage_type='audiobook'),
         )
 
         assert result['action'] == 'warning'
@@ -178,14 +183,15 @@ class TestEscalateEnforcementFreeTier:
     @patch.object(
         fair_use_mod, 'get_rolling_speech_ms', return_value={'daily_ms': 0, 'three_day_ms': 0, 'weekly_ms': 0}
     )
-    def test_free_exhausted_insufficient_violations_no_escalate(self, _mock_speech):
+    @patch.object(fair_use_mod, 'is_free_credits_exhausted', return_value=True)
+    def test_free_exhausted_insufficient_violations_no_escalate(self, _mock_free, _mock_speech):
         _fair_use_db.get_fair_use_state.return_value = {'stage': 'warning'}
         _fair_use_db.get_violation_counts.return_value = {'violation_count_7d': 1, 'violation_count_30d': 1}
 
         result = fair_use_mod.escalate_enforcement(
             'test-uid',
             _make_trigger(),
-            _make_classifier_result(misuse_score=0.1, usage_type='free_exhausted', free_credits_exhausted=True),
+            _make_classifier_result(misuse_score=0.1, usage_type='free_exhausted'),
         )
 
         assert result['action'] == 'none'
