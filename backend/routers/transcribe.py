@@ -98,6 +98,7 @@ from utils.fair_use import (
     trigger_classifier_if_needed,
     get_enforcement_stage,
     is_dg_budget_exhausted,
+    is_free_credits_exhausted,
     record_dg_usage_ms,
 )
 from utils.subscription import has_transcription_credits, get_remaining_transcription_seconds
@@ -423,6 +424,8 @@ async def _stream_handler(
     fair_use_last_check_ts: float = 0.0
     # DG budget gate for restricted users — checked at session start + per cap-check interval
     fair_use_dg_budget_exhausted: bool = False
+    # Free-tier credit gate (#6083) — blocks DG sends when free user has exhausted monthly credits
+    free_credits_dg_blocked: bool = False
     # DG usage accumulator: batch Redis writes every 60s instead of per-chunk (#5854)
     dg_usage_ms_pending: int = 0
 
@@ -440,12 +443,21 @@ async def _stream_handler(
     elif FAIR_USE_ENABLED:
         logger.info(f'fair_use: session start uid={uid} session={session_id} (no DG budget cap configured)')
 
+    # Free-tier credit gate at session start (#6083) — block DG for free users with no credits
+    if FAIR_USE_ENABLED and not user_has_credits and not use_custom_stt:
+        try:
+            free_credits_dg_blocked = is_free_credits_exhausted(uid)
+            if free_credits_dg_blocked:
+                logger.info(f'fair_use: free credits exhausted, DG blocked at session start for {uid}')
+        except Exception as e:
+            logger.error(f'fair_use: free credit check error at session start for {uid}: {e}')
+
     async def _record_usage_periodically():
         nonlocal websocket_active, last_usage_record_timestamp, words_transcribed_since_last_record
         nonlocal last_audio_received_time, last_transcript_time, user_has_credits
         nonlocal freemium_threshold_sent
         nonlocal remaining_seconds_cache, remaining_seconds_cache_ts, remaining_seconds_cache_initialized
-        nonlocal fair_use_last_check_ts, fair_use_dg_budget_exhausted
+        nonlocal fair_use_last_check_ts, fair_use_dg_budget_exhausted, free_credits_dg_blocked
         nonlocal dg_usage_ms_pending
 
         while websocket_active:
@@ -526,6 +538,19 @@ async def _stream_handler(
                             fair_use_dg_budget_exhausted = False
                     except Exception as e:
                         logger.error(f'fair_use: DG budget check error for {uid}: {e}')
+
+                # Free-tier credit gate (#6083): block DG when free credits exhausted
+                # Re-check periodically in case user upgrades mid-session
+                try:
+                    if not user_has_credits:
+                        was_blocked = free_credits_dg_blocked
+                        free_credits_dg_blocked = is_free_credits_exhausted(uid)
+                        if free_credits_dg_blocked and not was_blocked:
+                            logger.info(f'fair_use: free credits exhausted, DG blocked for {uid} session={session_id}')
+                    else:
+                        free_credits_dg_blocked = False
+                except Exception as e:
+                    logger.error(f'fair_use: free credit check error for {uid}: {e}')
 
             # Freemium: Check remaining credits with local cache (#5439)
             # Refresh from Firestore only every CREDITS_REFRESH_SECONDS; decrement locally between refreshes
@@ -2519,8 +2544,9 @@ async def _stream_handler(
             if dg_socket is not None:
                 if profile_complete or not deepgram_profile_socket:
                     # DG budget gate: skip sending if restricted user's daily budget is exhausted (#5746)
-                    if fair_use_dg_budget_exhausted:
-                        pass  # Audio not forwarded to DG — budget exhausted
+                    # or if free-tier user's monthly credits are exhausted (#6083)
+                    if fair_use_dg_budget_exhausted or free_credits_dg_blocked:
+                        pass  # Audio not forwarded to DG — budget/credits exhausted
                     else:
                         dg_socket.send(chunk)
                         # Accumulate DG usage locally, flushed every 60s (#5854)
@@ -2553,7 +2579,7 @@ async def _stream_handler(
                 # Main socket dead but profile socket still alive — keep routing (#5870)
                 deepgram_profile_socket.send(chunk)
 
-            if soniox_sock is not None and not fair_use_dg_budget_exhausted:
+            if soniox_sock is not None and not fair_use_dg_budget_exhausted and not free_credits_dg_blocked:
                 if profile_complete or not soniox_profile_socket:
                     await soniox_sock.send(chunk)
                     # Accumulate DG usage locally, flushed every 60s (#5854)
@@ -2574,7 +2600,7 @@ async def _stream_handler(
                 else:
                     await soniox_profile_socket.send(chunk)
 
-            if speechmatics_sock is not None and not fair_use_dg_budget_exhausted:
+            if speechmatics_sock is not None and not fair_use_dg_budget_exhausted and not free_credits_dg_blocked:
                 await speechmatics_sock.send(chunk)
                 # Accumulate DG usage locally, flushed every 60s (#5854)
                 if FAIR_USE_ENABLED and FAIR_USE_RESTRICT_DAILY_DG_MS > 0:
@@ -2631,8 +2657,12 @@ async def _stream_handler(
                         # Resample to TARGET_SAMPLE_RATE for STT
                         pcm_16k = resample_pcm(bytes(audio_data), sample_rate, TARGET_SAMPLE_RATE)
 
-                        # Send to per-channel STT (budget-gated for restricted users)
-                        if stt_sockets_multi[ch_idx] and not fair_use_dg_budget_exhausted:
+                        # Send to per-channel STT (budget-gated for restricted/exhausted users)
+                        if (
+                            stt_sockets_multi[ch_idx]
+                            and not fair_use_dg_budget_exhausted
+                            and not free_credits_dg_blocked
+                        ):
                             try:
                                 if stt_service == STTService.deepgram:
                                     stt_sockets_multi[ch_idx].send(pcm_16k)
