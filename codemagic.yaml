@@ -563,7 +563,6 @@ workflows:
       vars:
         APP_ID: 6502156163
         BUNDLE_ID: "com.friend-app-with-wearable.ios12"
-        STAGING_API_URL: "https://api.omiapi.com/"
       flutter: 3.35.3
       xcode: 26.0.1
       cocoapods: 1.16.2
@@ -1063,7 +1062,6 @@ workflows:
       vars:
         PLATFORM: "macos"
         BUNDLE_ID: "com.friend-app-with-wearable.ios12"
-        STAGING_API_URL: "https://api.omiapi.com/"
       flutter: 3.35.3
       xcode: 26.0.1
       cocoapods: 1.16.2
@@ -1883,7 +1881,6 @@ workflows:
         CLOUD_RUN_SERVICE: "desktop-backend"
         BACKEND_IMAGE: "gcr.io/based-hardware/desktop-backend"
         GCS_DESKTOP_UPDATES_BUCKET: "gs://omi_macos_updates"
-        STAGING_API_URL: "https://api.omiapi.com/"
       xcode: 16.4
     triggering:
       events:
@@ -2555,7 +2552,6 @@ workflows:
       vars:
         GCS_BUCKET: "gs://based-hardware-agent"
         GCP_PROJECT: "based-hardware"
-        STAGING_API_URL: "https://api.omiapi.com/"
     triggering:
       events:
         - push
