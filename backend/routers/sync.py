@@ -41,7 +41,13 @@ from utils.fair_use import (
     check_soft_caps,
     is_hard_restricted,
     trigger_classifier_if_needed,
+    is_dg_budget_exhausted,
+    is_free_credits_exhausted,
+    record_dg_usage_ms,
     FAIR_USE_ENABLED,
+    FAIR_USE_RESTRICT_DAILY_DG_MS,
+    FAIR_USE_FREE_DAILY_DG_MS,
+    get_enforcement_stage,
 )
 from utils.subscription import has_transcription_credits
 
@@ -829,10 +835,21 @@ async def sync_local_files(files: List[UploadFile] = File(...), uid: str = Depen
         segment_lock = threading.Lock()
         total_segments = len(segmented_paths)
 
-        # Skip Deepgram when credits are exhausted (#6083) — don't send audio to cloud STT
-        # for conversations that would be locked anyway. Audio stays on device for re-sync after upgrade.
-        if should_lock:
-            logger.info(f'sync: skipping Deepgram for {total_segments} segments (credits exhausted) uid={uid}')
+        # DG budget gate (#6083): throttle cloud STT for free-exhausted / restrict-stage users
+        # Instead of full block, check daily DG budget — same mechanism as live transcription.
+        dg_budget_blocked = False
+        if FAIR_USE_ENABLED and should_lock:
+            try:
+                stage = get_enforcement_stage(uid)
+                if stage == 'restrict' and FAIR_USE_RESTRICT_DAILY_DG_MS > 0:
+                    dg_budget_blocked = is_dg_budget_exhausted(uid)
+                elif FAIR_USE_FREE_DAILY_DG_MS > 0:
+                    dg_budget_blocked = is_dg_budget_exhausted(uid, FAIR_USE_FREE_DAILY_DG_MS)
+            except Exception as e:
+                logger.error(f'sync: DG budget check error for {uid}: {e}')
+
+        if dg_budget_blocked:
+            logger.info(f'sync: DG budget exhausted, skipping {total_segments} segments uid={uid}')
             _cleanup_files(list(segmented_paths))
             return JSONResponse(
                 status_code=200,
@@ -840,6 +857,7 @@ async def sync_local_files(files: List[UploadFile] = File(...), uid: str = Depen
                     'new_memories': [],
                     'updated_memories': [],
                     'credits_exhausted': True,
+                    'dg_budget_exhausted': True,
                     'skipped_segments': total_segments,
                 },
             )
@@ -860,6 +878,12 @@ async def sync_local_files(files: List[UploadFile] = File(...), uid: str = Depen
             for path in segmented_paths
         ]
         chunk_threads(threads)
+
+        # Record DG usage for budget tracking (#6083)
+        if FAIR_USE_ENABLED and (FAIR_USE_RESTRICT_DAILY_DG_MS > 0 or FAIR_USE_FREE_DAILY_DG_MS > 0):
+            dg_ms = int(total_speech_seconds * 1000)
+            if dg_ms > 0:
+                record_dg_usage_ms(uid, dg_ms)
 
         # Build JSON-serializable response
         result = {
