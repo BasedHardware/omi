@@ -342,7 +342,8 @@ def escalate_enforcement(uid: str, triggered_caps: list, classifier_result: dict
     # They escalate on violation count alone — the LLM classifier is designed to detect
     # content-type abuse (audiobooks, podcasts), not volume abuse from legitimate users
     # who have simply exceeded their free-tier quota.
-    free_exhausted = classifier_result.get('free_credits_exhausted', False) if classifier_result else False
+    # Derived from trusted account state, NOT from classifier_result dict.
+    free_exhausted = is_free_credits_exhausted(uid)
     passes_score_gate = free_exhausted or misuse_score >= FAIR_USE_CLASSIFIER_MISUSE_THRESHOLD
 
     # Determine new stage based on current + violation history
