@@ -829,6 +829,21 @@ async def sync_local_files(files: List[UploadFile] = File(...), uid: str = Depen
         segment_lock = threading.Lock()
         total_segments = len(segmented_paths)
 
+        # Skip Deepgram when credits are exhausted (#6083) — don't send audio to cloud STT
+        # for conversations that would be locked anyway. Audio stays on device for re-sync after upgrade.
+        if should_lock:
+            logger.info(f'sync: skipping Deepgram for {total_segments} segments (credits exhausted) uid={uid}')
+            _cleanup_files(list(segmented_paths))
+            return JSONResponse(
+                status_code=200,
+                content={
+                    'new_memories': [],
+                    'updated_memories': [],
+                    'credits_exhausted': True,
+                    'skipped_segments': total_segments,
+                },
+            )
+
         threads = [
             threading.Thread(
                 target=process_segment,
