@@ -43,11 +43,13 @@ class LimitlessDeviceConnection extends DeviceConnection {
   Future<void> connect({Function(String deviceId, DeviceConnectionState state)? onConnectionStateChanged}) async {
     await super.connect(onConnectionStateChanged: onConnectionStateChanged);
 
+    // Limitless requires an encrypted link — bond before accessing characteristics
+    await transport.requestBond();
+
     await Future.delayed(const Duration(seconds: 1));
 
-    _rxSubscription = transport
-        .getCharacteristicStream(limitlessServiceUuid, limitlessRxCharUuid)
-        .listen(_handleNotification);
+    _rxSubscription =
+        transport.getCharacteristicStream(limitlessServiceUuid, limitlessRxCharUuid).listen(_handleNotification);
 
     await Future.delayed(const Duration(seconds: 1));
 
@@ -1601,7 +1603,8 @@ class LimitlessDeviceConnection extends DeviceConnection {
   @override
   Future<StreamSubscription?> performGetBleStorageBytesListener({
     required void Function(List<int>) onStorageBytesReceived,
-  }) async => null;
+  }) async =>
+      null;
 
   @override
   Future performCameraStartPhotoController() async {}
@@ -1615,7 +1618,8 @@ class LimitlessDeviceConnection extends DeviceConnection {
   @override
   Future<StreamSubscription?> performGetImageListener({
     required void Function(OrientedImage orientedImage) onImageReceived,
-  }) async => null;
+  }) async =>
+      null;
 
   @override
   Future<StreamSubscription<List<int>>?> performGetAccelListener({void Function(int)? onAccelChange}) async => null;
