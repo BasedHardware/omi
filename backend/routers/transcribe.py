@@ -68,7 +68,7 @@ from utils.apps import is_audio_bytes_app_enabled
 from utils.conversations.process_conversation import retrieve_in_progress_conversation
 from utils.notifications import send_credit_limit_notification, send_silent_user_notification
 from utils.other import endpoints as auth
-from utils.other.storage import get_user_has_speech_profile
+from utils.other.storage import get_profile_audio_if_exists, get_user_has_speech_profile
 from utils.pusher import connect_to_trigger_pusher, PusherCircuitBreakerOpen, get_circuit_breaker, CircuitState
 from utils.speaker_identification import detect_speaker_from_text
 from utils.stt.streaming import (
@@ -1804,6 +1804,8 @@ async def _stream_handler(
             return
 
         # Load user's own embedding from Firestore (extracted at profile creation time)
+        # Fallback: if user has a speech profile but no stored embedding (pre-deployment profiles),
+        # extract from the WAV file and store it in Firestore for future sessions.
         if has_speech_profile:
             try:
                 embedding_list = await asyncio.to_thread(user_db.get_user_speaker_embedding, uid)
@@ -1815,7 +1817,24 @@ async def _stream_handler(
                     }
                     logger.info(f"Speaker ID: loaded user speaker embedding from Firestore {uid} {session_id}")
                 else:
-                    logger.warning(f"Speaker ID: no speaker embedding stored for user {uid} {session_id}")
+                    logger.info(f"Speaker ID: no stored embedding, extracting from speech profile {uid} {session_id}")
+                    file_path = await asyncio.to_thread(get_profile_audio_if_exists, uid)
+                    if file_path:
+                        with open(file_path, 'rb') as f:
+                            profile_bytes = f.read()
+                        user_embedding = await asyncio.to_thread(
+                            extract_embedding_from_bytes, profile_bytes, "speech_profile.wav"
+                        )
+                        del profile_bytes
+                        person_embeddings_cache[USER_SELF_PERSON_ID] = {
+                            'embedding': user_embedding,
+                            'name': 'User',
+                        }
+                        # Store in Firestore so future sessions load directly
+                        await asyncio.to_thread(
+                            user_db.set_user_speaker_embedding, uid, user_embedding.flatten().tolist()
+                        )
+                        logger.info(f"Speaker ID: extracted and stored user embedding {uid} {session_id}")
             except Exception as e:
                 logger.error(f"Speaker ID: failed to load user embedding: {e} {uid} {session_id}")
 
