@@ -18,35 +18,60 @@ class SinglePressStep extends StatefulWidget {
 
 class _SinglePressStepState extends State<SinglePressStep> with SingleTickerProviderStateMixin {
   late AnimationController _pulseController;
+  late MessageProvider _messageProvider;
   bool _showContinue = false;
-  int _previousMessageCount = 0;
+
+  // Snapshot of message count when voice session starts, to find the specific response
+  int _messageCountAtSessionStart = -1;
+  String? _userQuestion;
+  String? _aiResponse;
 
   @override
   void initState() {
     super.initState();
     _pulseController = AnimationController(vsync: this, duration: const Duration(milliseconds: 1200))..repeat(reverse: true);
-    _previousMessageCount = context.read<MessageProvider>().messages.length;
-    context.read<MessageProvider>().addListener(_onMessagesChanged);
+    _messageProvider = context.read<MessageProvider>();
+    _messageProvider.addListener(_onMessagesChanged);
   }
 
   void _onMessagesChanged() {
-    final messageProvider = context.read<MessageProvider>();
+    if (!mounted || _aiResponse != null) return;
+
     final onboardingProvider = context.read<DeviceOnboardingProvider>();
 
-    if (messageProvider.messages.length > _previousMessageCount && onboardingProvider.questionSent) {
-      final latestMessage = messageProvider.messages.last;
-      if (latestMessage.sender == MessageSender.ai) {
-        onboardingProvider.onVoiceResponseReceived(latestMessage.text);
-        setState(() => _showContinue = true);
+    // Snapshot message count when voice session first starts
+    if (onboardingProvider.voiceSessionActive && _messageCountAtSessionStart == -1) {
+      _messageCountAtSessionStart = _messageProvider.messages.length;
+    }
+
+    // Only look for responses after question was sent
+    if (!onboardingProvider.questionSent || _messageCountAtSessionStart == -1) return;
+
+    // Look through messages added since the voice session started
+    final newMessages = _messageProvider.messages.sublist(_messageCountAtSessionStart);
+
+    // Find the user's question (human message added by sendVoiceMessageStreamToServer)
+    for (final msg in newMessages) {
+      if (msg.sender == MessageSender.human && _userQuestion == null) {
+        _userQuestion = msg.text;
       }
     }
-    _previousMessageCount = messageProvider.messages.length;
+
+    // Find the AI response — must be a non-empty response with no appId (direct Omi response, not an app notification)
+    for (final msg in newMessages) {
+      if (msg.sender == MessageSender.ai && msg.text.isNotEmpty && msg.id != '0000' && !msg.fromIntegration) {
+        _aiResponse = msg.text;
+        onboardingProvider.onVoiceResponseReceived(msg.text);
+        setState(() => _showContinue = true);
+        return;
+      }
+    }
   }
 
   @override
   void dispose() {
     _pulseController.dispose();
-    context.read<MessageProvider>().removeListener(_onMessagesChanged);
+    _messageProvider.removeListener(_onMessagesChanged);
     super.dispose();
   }
 
@@ -73,23 +98,56 @@ class _SinglePressStepState extends State<SinglePressStep> with SingleTickerProv
   }
 
   Widget _buildStatusContent(DeviceOnboardingProvider provider) {
-    if (provider.aiResponse != null) {
+    if (_aiResponse != null) {
       return Column(
         children: [
           const Icon(Icons.check_circle, color: Color(0xFF4CAF50), size: 48),
           const SizedBox(height: 16),
+          if (_userQuestion != null && _userQuestion!.isNotEmpty) ...[
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.05),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Icon(Icons.person, color: Color(0xFF9E9E9E), size: 18),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      _userQuestion!,
+                      style: const TextStyle(color: Color(0xFF9E9E9E), fontSize: 14, height: 1.3),
+                      maxLines: 3,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+          ],
           Container(
-            padding: const EdgeInsets.all(20),
+            padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
               color: Colors.white.withValues(alpha: 0.08),
-              borderRadius: BorderRadius.circular(16),
+              borderRadius: BorderRadius.circular(12),
             ),
-            child: Text(
-              provider.aiResponse!,
-              style: const TextStyle(color: Colors.white, fontSize: 16, height: 1.4),
-              textAlign: TextAlign.center,
-              maxLines: 8,
-              overflow: TextOverflow.ellipsis,
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Icon(Icons.smart_toy, color: Colors.white, size: 18),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    _aiResponse!,
+                    style: const TextStyle(color: Colors.white, fontSize: 15, height: 1.4),
+                    maxLines: 8,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
             ),
           ),
         ],
@@ -97,11 +155,21 @@ class _SinglePressStepState extends State<SinglePressStep> with SingleTickerProv
     }
 
     if (provider.questionSent) {
-      return const Column(
+      return Column(
         children: [
-          SizedBox(width: 48, height: 48, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 3)),
-          SizedBox(height: 16),
-          Text('Processing...', style: TextStyle(color: Colors.white, fontSize: 18)),
+          const SizedBox(width: 48, height: 48, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 3)),
+          const SizedBox(height: 16),
+          const Text('Processing...', style: TextStyle(color: Colors.white, fontSize: 18)),
+          if (_userQuestion != null && _userQuestion!.isNotEmpty) ...[
+            const SizedBox(height: 16),
+            Text(
+              '"$_userQuestion"',
+              style: const TextStyle(color: Color(0xFF9E9E9E), fontSize: 14, fontStyle: FontStyle.italic),
+              textAlign: TextAlign.center,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ],
         ],
       );
     }
