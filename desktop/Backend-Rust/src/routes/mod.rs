@@ -27,6 +27,7 @@ pub mod stats;
 pub mod users;
 pub mod webhooks;
 pub mod proxy;
+pub mod rate_limit;
 pub mod screen_activity;
 
 pub use action_items::action_items_routes;
