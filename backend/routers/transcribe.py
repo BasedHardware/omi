@@ -78,8 +78,6 @@ from utils.stt.streaming import (
     STTService,
     get_stt_service_for_language,
     process_audio_dg,
-    process_audio_soniox,
-    process_audio_speechmatics,
     send_initial_file_path,
 )
 from utils.stt.vad_gate import VADStreamingGate, VAD_GATE_MODE, is_gate_enabled
@@ -219,7 +217,7 @@ async def _stream_handler(
     codec: str = 'pcm8',
     channels: int = 1,
     include_speech_profile: bool = True,
-    stt_service: Optional[STTService] = None,
+    stt_service: Optional[str] = None,
     conversation_timeout: int = 120,
     source: Optional[str] = None,
     custom_stt_mode: CustomSttMode = CustomSttMode.disabled,
@@ -910,9 +908,6 @@ async def _stream_handler(
         return
 
     # Process STT
-    soniox_socket = None
-    soniox_profile_socket = None  # Temporary socket for speech profile phase
-    speechmatics_socket = None
     deepgram_socket = None
     deepgram_profile_socket = None  # Temporary socket for speech profile phase
     speech_profile_complete = asyncio.Event()  # Signals when speech profile send is done
@@ -926,9 +921,6 @@ async def _stream_handler(
 
     async def _process_stt():
         nonlocal websocket_close_code
-        nonlocal soniox_socket
-        nonlocal soniox_profile_socket
-        nonlocal speechmatics_socket
         nonlocal deepgram_socket
         nonlocal deepgram_profile_socket
         try:
@@ -952,23 +944,14 @@ async def _stream_handler(
                         return cb
 
                     callback = make_multi_channel_callback(ch_config)
-                    if stt_service == STTService.deepgram:
-                        stt_sockets_multi[i] = await process_audio_dg(
-                            callback,
-                            stt_language,
-                            TARGET_SAMPLE_RATE,
-                            1,
-                            preseconds=0,
-                            model=stt_model,
-                        )
-                    elif stt_service == STTService.soniox:
-                        stt_sockets_multi[i] = await process_audio_soniox(
-                            callback, TARGET_SAMPLE_RATE, stt_language, uid, preseconds=0
-                        )
-                    elif stt_service == STTService.speechmatics:
-                        stt_sockets_multi[i] = await process_audio_speechmatics(
-                            callback, TARGET_SAMPLE_RATE, stt_language, preseconds=0
-                        )
+                    stt_sockets_multi[i] = await process_audio_dg(
+                        callback,
+                        stt_language,
+                        TARGET_SAMPLE_RATE,
+                        1,
+                        preseconds=0,
+                        model=stt_model,
+                    )
                 logger.info(
                     f"Multi-channel STT connections established ({len(channel_configs)} channels) {uid} {session_id}"
                 )
@@ -1000,11 +983,7 @@ async def _stream_handler(
             nonlocal vad_gate
             gate_enabled_by_override = vad_gate_override == 'enabled'
             gate_disabled_by_override = vad_gate_override == 'disabled'
-            if (
-                not gate_disabled_by_override
-                and (is_gate_enabled() or gate_enabled_by_override)
-                and stt_service == STTService.deepgram
-            ):
+            if not gate_disabled_by_override and (is_gate_enabled() or gate_enabled_by_override):
                 gate_mode = 'active' if gate_enabled_by_override else VAD_GATE_MODE
                 if speech_profile_preseconds > 0 and gate_mode == 'active':
                     gate_mode = 'shadow'  # Shadow during profile, activate later
@@ -1029,61 +1008,26 @@ async def _stream_handler(
                     logger.exception('VAD gate init failed, continuing without gate uid=%s session=%s', uid, session_id)
                     vad_gate = None
 
-            # DEEPGRAM
-            if stt_service == STTService.deepgram:
-                deepgram_socket = await process_audio_dg(
+            deepgram_socket = await process_audio_dg(
+                stream_transcript,
+                stt_language,
+                sample_rate,
+                1,
+                preseconds=speech_profile_preseconds,
+                model=stt_model,
+                keywords=vocabulary[:100] if vocabulary else None,
+                vad_gate=vad_gate,
+                is_active=lambda: websocket_active,
+            )
+            if has_speech_profile:
+                deepgram_profile_socket = await process_audio_dg(
                     stream_transcript,
                     stt_language,
                     sample_rate,
                     1,
-                    preseconds=speech_profile_preseconds,
                     model=stt_model,
                     keywords=vocabulary[:100] if vocabulary else None,
-                    vad_gate=vad_gate,
                     is_active=lambda: websocket_active,
-                )
-                if has_speech_profile:
-                    deepgram_profile_socket = await process_audio_dg(
-                        stream_transcript,
-                        stt_language,
-                        sample_rate,
-                        1,
-                        model=stt_model,
-                        keywords=vocabulary[:100] if vocabulary else None,
-                        is_active=lambda: websocket_active,
-                    )
-
-            # SONIOX
-            elif stt_service == STTService.soniox:
-                # For multi-language detection, provide language hints if available
-                hints = None
-                if stt_language == 'multi' and language != 'multi':
-                    # Include the original language as a hint for multi-language detection
-                    hints = [language]
-
-                soniox_socket = await process_audio_soniox(
-                    stream_transcript,
-                    sample_rate,
-                    stt_language,
-                    uid if include_speech_profile else None,
-                    preseconds=speech_profile_preseconds,
-                    language_hints=hints,
-                )
-
-                # Create a second socket for initial speech profile if needed
-                if has_speech_profile:
-                    soniox_profile_socket = await process_audio_soniox(
-                        stream_transcript,
-                        sample_rate,
-                        stt_language,
-                        uid if include_speech_profile else None,
-                        language_hints=hints,
-                    )
-
-            # SPEECHMATICS
-            elif stt_service == STTService.speechmatics:
-                speechmatics_socket = await process_audio_speechmatics(
-                    stream_transcript, sample_rate, stt_language, preseconds=speech_profile_preseconds
                 )
 
             # Return background task to load and send speech profile
@@ -1118,8 +1062,8 @@ async def _stream_handler(
                     logger.info(f'fair_use: skipping speech profile send (credits exhausted) {uid} {session_id}')
                     return
 
-                # Send to appropriate STT socket with fixed duration padding
-                if stt_service == STTService.deepgram and deepgram_socket:
+                # Send to Deepgram socket with fixed duration padding
+                if deepgram_socket:
 
                     async def deepgram_socket_send(data):
                         return deepgram_socket.send(data)
@@ -1127,22 +1071,6 @@ async def _stream_handler(
                     await send_initial_file_path(
                         file_path,
                         deepgram_socket_send,
-                        is_active,
-                        sample_rate=audio_sample_rate,
-                        target_duration=SPEECH_PROFILE_FIXED_DURATION,
-                    )
-                elif stt_service == STTService.soniox and soniox_socket:
-                    await send_initial_file_path(
-                        file_path,
-                        soniox_socket.send,
-                        is_active,
-                        sample_rate=audio_sample_rate,
-                        target_duration=SPEECH_PROFILE_FIXED_DURATION,
-                    )
-                elif stt_service == STTService.speechmatics and speechmatics_socket:
-                    await send_initial_file_path(
-                        file_path,
-                        speechmatics_socket.send,
                         is_active,
                         sample_rate=audio_sample_rate,
                         target_duration=SPEECH_PROFILE_FIXED_DURATION,
@@ -2431,10 +2359,10 @@ async def _stream_handler(
     elif codec == 'lc3':
         lc3_decoder = lc3.Decoder(lc3_frame_duration_us, sample_rate)
 
-    async def receive_data(dg_socket, dg_profile_socket, soniox_sock, soniox_profile_sock, speechmatics_sock):
+    async def receive_data(dg_socket, dg_profile_socket):
         nonlocal websocket_active, websocket_close_code, last_audio_received_time, last_activity_time, current_conversation_id
         nonlocal realtime_photo_buffers, speaker_to_person_map, first_audio_byte_timestamp, last_usage_record_timestamp
-        nonlocal soniox_profile_socket, deepgram_profile_socket, audio_ring_buffer, dg_usage_ms_pending
+        nonlocal deepgram_profile_socket, audio_ring_buffer, dg_usage_ms_pending
         timer_start = time.time()
         last_audio_received_time = timer_start
         last_activity_time = timer_start
@@ -2444,7 +2372,7 @@ async def _stream_handler(
         stt_buffer_flush_size = int(sample_rate * 2 * 0.03)  # 30ms at 16-bit mono (e.g., 6400 bytes at 16kHz)
 
         async def flush_stt_buffer(force: bool = False):
-            nonlocal stt_audio_buffer, soniox_profile_socket, deepgram_profile_socket, dg_usage_ms_pending, dg_socket
+            nonlocal stt_audio_buffer, deepgram_profile_socket, dg_usage_ms_pending, dg_socket
 
             if not stt_audio_buffer:
                 return
@@ -2508,35 +2436,6 @@ async def _stream_handler(
                 if not fair_use_dg_budget_exhausted:
                     deepgram_profile_socket.send(chunk)
 
-            if soniox_sock is not None and not fair_use_dg_budget_exhausted:
-                if profile_complete or not soniox_profile_socket:
-                    await soniox_sock.send(chunk)
-                    # Accumulate DG usage locally, flushed every 60s (#5854)
-                    if fair_use_track_dg_usage:
-                        chunk_ms = len(chunk) * 1000 // (sample_rate * 2)
-                        dg_usage_ms_pending += chunk_ms
-                    if soniox_profile_socket:
-                        logger.info(f'Scheduling delayed close of soniox_profile_socket {uid} {session_id}')
-                        socket_to_close = soniox_profile_socket
-                        soniox_profile_socket = None  # Stop sending immediately
-
-                        async def close_soniox_profile():
-                            await asyncio.sleep(5)
-                            await socket_to_close.close()
-                            logger.info(f'Closed soniox_profile_socket after 5s delay {uid} {session_id}')
-
-                        spawn(close_soniox_profile())
-                else:
-                    if not fair_use_dg_budget_exhausted:
-                        await soniox_profile_socket.send(chunk)
-
-            if speechmatics_sock is not None and not fair_use_dg_budget_exhausted:
-                await speechmatics_sock.send(chunk)
-                # Accumulate DG usage locally, flushed every 60s (#5854)
-                if fair_use_track_dg_usage:
-                    chunk_ms = len(chunk) * 1000 // (sample_rate * 2)
-                    dg_usage_ms_pending += chunk_ms
-
         try:
             while websocket_active:
                 message = await websocket.receive()
@@ -2590,10 +2489,7 @@ async def _stream_handler(
                         # Send to per-channel STT (budget-gated for restricted/exhausted users)
                         if stt_sockets_multi[ch_idx] and not fair_use_dg_budget_exhausted:
                             try:
-                                if stt_service == STTService.deepgram:
-                                    stt_sockets_multi[ch_idx].send(pcm_16k)
-                                else:
-                                    await stt_sockets_multi[ch_idx].send(pcm_16k)
+                                stt_sockets_multi[ch_idx].send(pcm_16k)
                                 # Accumulate DG usage locally, flushed every 60s (#5854)
                                 if fair_use_track_dg_usage:
                                     mc_chunk_ms = len(pcm_16k) * 1000 // (TARGET_SAMPLE_RATE * 2)
@@ -2803,11 +2699,7 @@ async def _stream_handler(
             pusher_tasks.append(asyncio.create_task(pusher_heartbeat()))
 
         # Tasks
-        data_process_task = asyncio.create_task(
-            receive_data(
-                deepgram_socket, deepgram_profile_socket, soniox_socket, soniox_profile_socket, speechmatics_socket
-            )
-        )
+        data_process_task = asyncio.create_task(receive_data(deepgram_socket, deepgram_profile_socket))
         stream_transcript_task = asyncio.create_task(stream_transcript_process())
         record_usage_task = asyncio.create_task(_record_usage_periodically())
 
@@ -2878,22 +2770,13 @@ async def _stream_handler(
             if is_multi_channel:
                 for mc_stt_socket in stt_sockets_multi:
                     if mc_stt_socket:
-                        if stt_service == STTService.deepgram:
-                            mc_stt_socket.finish()
-                        else:
-                            await mc_stt_socket.close()
+                        mc_stt_socket.finish()
             else:
                 if deepgram_socket:
                     # GatedDeepgramSocket.finish() handles finalize automatically
                     deepgram_socket.finish()
                 if deepgram_profile_socket:
                     deepgram_profile_socket.finish()
-                if soniox_socket:
-                    await soniox_socket.close()
-                if soniox_profile_socket:
-                    await soniox_profile_socket.close()
-                if speechmatics_socket:
-                    await speechmatics_socket.close()
         except Exception as e:
             logger.error(f"Error closing STT sockets: {e} {uid} {session_id}")
 
@@ -2985,7 +2868,7 @@ async def _listen(
     codec: str = 'pcm8',
     channels: int = 1,
     include_speech_profile: bool = True,
-    stt_service: Optional[STTService] = None,
+    stt_service: Optional[str] = None,
     conversation_timeout: int = 120,
     source: Optional[str] = None,
     custom_stt_mode: CustomSttMode = CustomSttMode.disabled,
@@ -3033,7 +2916,7 @@ async def listen_handler(
     codec: str = 'pcm8',
     channels: int = 1,
     include_speech_profile: bool = True,
-    stt_service: Optional[STTService] = None,
+    stt_service: Optional[str] = None,
     conversation_timeout: int = 120,
     source: Optional[str] = None,
     custom_stt: str = 'disabled',
