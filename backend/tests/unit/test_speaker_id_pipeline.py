@@ -366,6 +366,15 @@ class TestSpeakerEmbeddingMath:
         assert is_match is False
         assert distance >= SPEAKER_MATCH_THRESHOLD
 
+    def test_is_same_speaker_exact_threshold_boundary(self):
+        """Distance exactly at threshold returns False (strict < comparison)."""
+        # is_same_speaker uses distance < threshold, so equality means no match
+        emb = self._random_embedding(seed=42)
+        # Use distance=0.0 (identical), threshold=0.0 → 0 < 0 is False
+        is_match, distance = is_same_speaker(emb, emb, threshold=0.0)
+        assert distance == pytest.approx(0.0, abs=1e-6)
+        assert is_match is False  # strict <, not <=
+
     def test_is_same_speaker_custom_threshold(self):
         """Custom threshold is respected."""
         emb = self._random_embedding(seed=42)
