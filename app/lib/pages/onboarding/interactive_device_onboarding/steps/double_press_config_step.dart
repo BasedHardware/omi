@@ -21,9 +21,7 @@ class _DoublePressConfigStepState extends State<DoublePressConfigStep> {
       builder: (context, provider, _) {
         return OnboardingStepScaffold(
           title: 'Customize Double Tap',
-          subtitle: provider.doublePressDetected
-              ? 'Double tap detected! You\'re all set.'
-              : 'Choose what happens when you double tap your Omi',
+          subtitle: '',
           currentStep: 3,
           content: Column(
             children: [
@@ -32,7 +30,7 @@ class _DoublePressConfigStepState extends State<DoublePressConfigStep> {
                 action: 0,
                 icon: Icons.stop_circle_outlined,
                 title: 'End Conversation',
-                description: 'Double tap to end and save the current conversation',
+                description: 'Save and end current conversation',
               ),
               const SizedBox(height: 12),
               _buildOptionCard(
@@ -40,7 +38,7 @@ class _DoublePressConfigStepState extends State<DoublePressConfigStep> {
                 action: 1,
                 icon: Icons.mic_off,
                 title: 'Mute / Unmute',
-                description: 'Double tap to toggle microphone on/off',
+                description: 'Toggle microphone on or off',
               ),
               const SizedBox(height: 12),
               _buildOptionCard(
@@ -48,7 +46,7 @@ class _DoublePressConfigStepState extends State<DoublePressConfigStep> {
                 action: 2,
                 icon: Icons.star_outline,
                 title: 'Star Conversation',
-                description: 'Double tap to mark the current conversation as important',
+                description: 'Mark conversation as important',
               ),
               const Spacer(),
               if (!provider.doublePressDetected) ...[
@@ -58,7 +56,7 @@ class _DoublePressConfigStepState extends State<DoublePressConfigStep> {
                     color: provider.showSingleTapHint
                         ? const Color(0xFFFFA726).withValues(alpha: 0.12)
                         : Colors.white.withValues(alpha: 0.06),
-                    borderRadius: BorderRadius.circular(16),
+                    borderRadius: BorderRadius.circular(100),
                   ),
                   child: Row(
                     children: [
@@ -80,9 +78,21 @@ class _DoublePressConfigStepState extends State<DoublePressConfigStep> {
                   ),
                 ),
               ] else ...[
-                const Icon(Icons.check_circle, color: Color(0xFF4CAF50), size: 48),
-                const SizedBox(height: 8),
-                const Text('Double tap detected!', style: TextStyle(color: Color(0xFF4CAF50), fontSize: 16)),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF4CAF50).withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(100),
+                  ),
+                  child: const Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.check_circle, color: Color(0xFF4CAF50), size: 22),
+                      SizedBox(width: 10),
+                      Text('Double tap detected!', style: TextStyle(color: Color(0xFF4CAF50), fontSize: 16, fontWeight: FontWeight.w600)),
+                    ],
+                  ),
+                ),
               ],
             ],
           ),
@@ -110,7 +120,7 @@ class _DoublePressConfigStepState extends State<DoublePressConfigStep> {
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
           color: isSelected ? Colors.white.withValues(alpha: 0.1) : Colors.white.withValues(alpha: 0.04),
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(100),
           border: Border.all(
             color: isSelected ? Colors.white.withValues(alpha: 0.4) : Colors.white.withValues(alpha: 0.1),
             width: isSelected ? 2 : 1,

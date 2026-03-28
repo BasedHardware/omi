@@ -33,12 +33,14 @@ class OnboardingStepScaffold extends StatelessWidget {
               style: const TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.bold),
               textAlign: TextAlign.center,
             ),
-            const SizedBox(height: 12),
-            Text(
-              subtitle,
-              style: const TextStyle(color: Color(0xFF9E9E9E), fontSize: 16, height: 1.4),
-              textAlign: TextAlign.center,
-            ),
+            if (subtitle.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              Text(
+                subtitle,
+                style: const TextStyle(color: Color(0xFF9E9E9E), fontSize: 16, height: 1.4),
+                textAlign: TextAlign.center,
+              ),
+            ],
             const SizedBox(height: 40),
             Expanded(child: content),
             if (bottomAction != null) ...[
