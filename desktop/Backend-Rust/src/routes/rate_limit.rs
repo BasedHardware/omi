@@ -409,10 +409,13 @@ mod tests {
 
     #[test]
     fn rate_limit_error_json_format() {
-        let json = rate_limit_error_json("Rate limit exceeded.");
+        let json =
+            rate_limit_error_json("Resource exhausted: rate limit exceeded. Please try again later.");
         let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
         assert_eq!(parsed["error"]["code"], 429);
         assert_eq!(parsed["error"]["status"], "RESOURCE_EXHAUSTED");
-        assert_eq!(parsed["error"]["message"], "Rate limit exceeded.");
+        // Message must contain "resource exhausted" for Swift GeminiClient retry detection
+        let msg = parsed["error"]["message"].as_str().unwrap();
+        assert!(msg.to_lowercase().contains("resource exhausted"));
     }
 }
