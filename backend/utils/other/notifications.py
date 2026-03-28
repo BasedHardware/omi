@@ -8,6 +8,7 @@ import pytz
 import database.chat as chat_db
 import database.conversations as conversations_db
 import database.notifications as notification_db
+from database._client import db
 from database.redis_db import try_acquire_daily_summary_lock
 from models.notification_message import NotificationMessage
 from models.conversation import Conversation
@@ -35,6 +36,50 @@ async def start_cron_job():
     logger.info(f'start_cron_job at UTC hour {datetime.now(pytz.utc).hour}')
     await send_daily_notification()
     await send_daily_summary_notification()
+    cleanup_old_offline_sync_jobs()
+    cleanup_stale_offline_sync_jobs()
+
+
+def cleanup_old_offline_sync_jobs():
+    """Delete completed/failed offline sync job docs older than 7 days."""
+    cutoff = datetime.now(pytz.utc) - timedelta(days=7)
+    batch_limit = 500
+
+    for status in ('completed', 'failed'):
+        docs = (
+            db.collection('offline_sync_jobs')
+            .where('status', '==', status)
+            .where('completed_at', '<', cutoff)
+            .limit(batch_limit)
+            .stream()
+        )
+        deleted = 0
+        for doc in docs:
+            doc.reference.delete()
+            deleted += 1
+        if deleted > 0:
+            logger.info(f'Cleaned up {deleted} old offline_sync_jobs (status={status})')
+
+
+def cleanup_stale_offline_sync_jobs():
+    """Mark offline sync jobs stuck in 'processing' for >1 hour as failed."""
+    cutoff = datetime.now(pytz.utc) - timedelta(hours=1)
+    docs = (
+        db.collection('offline_sync_jobs')
+        .where('status', '==', 'processing')
+        .where('started_at', '<', cutoff)
+        .limit(100)
+        .stream()
+    )
+    for doc in docs:
+        doc.reference.update(
+            {
+                'status': 'failed',
+                'error': 'Processing timed out after 1 hour',
+                'completed_at': datetime.now(pytz.utc),
+            }
+        )
+        logger.warning(f'Marked stale offline sync job {doc.id} as failed')
 
 
 async def send_daily_summary_notification():
