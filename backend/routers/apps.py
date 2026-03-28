@@ -1146,7 +1146,9 @@ def generate_description_and_emoji_endpoint(data: dict, uid: str = Depends(auth.
 
 
 @router.get('/v1/app/generate-prompts', tags=['v1'])
-async def generate_sample_prompts_endpoint(uid: str = Depends(auth.get_current_user_uid)):
+async def generate_sample_prompts_endpoint(
+    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "apps:generate_prompts")),
+):
     """
     Generate sample app prompts for the AI app generator.
     Uses a fast model to generate creative suggestions.

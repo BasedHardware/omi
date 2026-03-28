@@ -52,7 +52,7 @@ class TestRatePolicies(unittest.TestCase):
 
     def test_policy_count(self):
         """Ensure we have a reasonable number of policies."""
-        self.assertGreaterEqual(len(RATE_POLICIES), 20)
+        self.assertGreaterEqual(len(RATE_POLICIES), 25)
 
     def test_expensive_endpoints_have_low_limits(self):
         """Expensive endpoints should have lower limits."""
@@ -98,11 +98,12 @@ class TestBoostFactor(unittest.TestCase):
 class TestShadowMode(unittest.TestCase):
     """Test shadow mode env var parsing."""
 
-    def test_shadow_mode_default_off(self):
+    def test_shadow_mode_default_on(self):
+        """Shadow mode defaults to ON (safe-first rollout)."""
         from utils.rate_limit_config import RATE_LIMIT_SHADOW
 
-        # Default is False (env var not set or empty)
         self.assertIsInstance(RATE_LIMIT_SHADOW, bool)
+        self.assertTrue(RATE_LIMIT_SHADOW)
 
     def test_shadow_mode_env_true(self):
         with patch.dict(os.environ, {"RATE_LIMIT_SHADOW_MODE": "true"}):
@@ -156,6 +157,7 @@ class TestRouterPolicyMapping(unittest.TestCase):
             "file:upload",
             "agent:execute_tool",
             "mcp:sse",
+            "memories:create",
             "goals:suggest",
             "goals:advice",
             "goals:extract",
@@ -166,6 +168,8 @@ class TestRouterPolicyMapping(unittest.TestCase):
             "wrapped:generate",
             "integration:conversations",
             "integration:memories",
+            "test:prompt",
+            "apps:generate_prompts",
         ]
         for policy in used_policies:
             self.assertIn(policy, RATE_POLICIES, f"Policy '{policy}' used in router but missing from config")

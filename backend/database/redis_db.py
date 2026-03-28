@@ -771,7 +771,8 @@ def remove_conversation_summary_app_id(app_id: str) -> bool:
 # ******************************************************
 
 # Lua script: atomic increment + TTL in a single round-trip.
-# Returns [current_count, ttl_remaining].  Sets TTL only on first hit.
+# Returns [current_count, ttl_remaining].  Sets TTL on first hit
+# and self-heals any key that lost its TTL (prevents permanent buckets).
 _RATE_LIMIT_LUA = r.register_script("""
 local key = KEYS[1]
 local limit = tonumber(ARGV[1])
@@ -781,6 +782,10 @@ if current == 1 then
     redis.call('EXPIRE', key, window)
 end
 local ttl = redis.call('TTL', key)
+if ttl < 0 then
+    redis.call('EXPIRE', key, window)
+    ttl = window
+end
 return {current, ttl}
 """)
 
