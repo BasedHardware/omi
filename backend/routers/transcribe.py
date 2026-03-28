@@ -605,15 +605,17 @@ async def _stream_handler(
             conversation = Conversation(**conversation_data)
             _send_message_event(ConversationEvent(event_type="memory_processing_started", memory=conversation))
 
-    # Fallback for when pusher is not available
     async def cleanup_processing_conversations():
         processing = conversations_db.get_processing_conversations(uid)
         logger.info(f'finalize_processing_conversations len(processing): {len(processing)} {uid} {session_id}')
         if not processing or len(processing) == 0:
             return
+        if not request_conversation_processing:
+            logger.warning(f"Pusher not enabled, cannot reprocess {len(processing)} conversations {uid} {session_id}")
+            return
 
         for conversation in processing:
-            # Always route to pusher — buffer if disconnected, send when connected (#6061)
+            # Route to pusher — buffer if disconnected, send when connected (#6061)
             await request_conversation_processing(conversation['id'])
 
     async def process_pending_conversations(timed_out_id: Optional[str]):
@@ -711,7 +713,12 @@ async def _stream_handler(
                 # Mark processing + buffer for pusher — never process locally (#6061)
                 conversations_db.update_conversation_status(uid, conversation_id, ConversationStatus.processing)
                 on_conversation_processing_started(conversation_id)
-                await request_conversation_processing(conversation_id)
+                if request_conversation_processing:
+                    await request_conversation_processing(conversation_id)
+                else:
+                    logger.warning(
+                        f"Pusher not enabled, conversation {conversation_id} stuck in processing {uid} {session_id}"
+                    )
             else:
                 logger.info(f'Clean up the conversation {conversation_id}, reason: no content {uid} {session_id}')
                 conversations_db.delete_conversation(uid, conversation_id)
