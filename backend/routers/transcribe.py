@@ -38,16 +38,12 @@ import database.calendar_meetings as calendar_db
 import database.users as user_db
 from database.users import get_user_transcription_preferences
 from database import redis_db
-from database.redis_db import (
-    check_credits_invalidation,
-    get_cached_user_geolocation,
-)
+from database.redis_db import check_credits_invalidation
 from models.conversation import (
     Conversation,
     ConversationPhoto,
     ConversationSource,
     ConversationStatus,
-    Geolocation,
     Structured,
     TranscriptSegment,
 )
@@ -67,10 +63,9 @@ from models.message_event import (
 from models.transcript_segment import Translation
 from models.users import PlanType
 from utils.analytics import record_usage
-from utils.app_integrations import trigger_external_integrations, trigger_realtime_integrations
+from utils.app_integrations import trigger_realtime_integrations
 from utils.apps import is_audio_bytes_app_enabled
-from utils.conversations.location import get_google_maps_location
-from utils.conversations.process_conversation import process_conversation, retrieve_in_progress_conversation
+from utils.conversations.process_conversation import retrieve_in_progress_conversation
 from utils.notifications import send_credit_limit_notification, send_silent_user_notification
 from utils.other import endpoints as auth
 from utils.other.storage import get_profile_audio_if_exists, get_user_has_speech_profile
@@ -714,47 +709,21 @@ async def _stream_handler(
             conversation = Conversation(**conversation_data)
             _send_message_event(ConversationEvent(event_type="memory_processing_started", memory=conversation))
 
-    # Fallback for when pusher is not available
-    async def _create_conversation_fallback(conversation_data: dict):
-        conversation = Conversation(**conversation_data)
-        if conversation.status != ConversationStatus.processing:
-            _send_message_event(ConversationEvent(event_type="memory_processing_started", memory=conversation))
-            conversations_db.update_conversation_status(uid, conversation.id, ConversationStatus.processing)
-            conversation.status = ConversationStatus.processing
-
-        try:
-            # Geolocation
-            geolocation = get_cached_user_geolocation(uid)
-            if geolocation:
-                geolocation = Geolocation(**geolocation)
-                conversation.geolocation = get_google_maps_location(geolocation.latitude, geolocation.longitude)
-
-            conversation = process_conversation(uid, language, conversation)
-            messages = trigger_external_integrations(uid, conversation)
-        except Exception as e:
-            logger.error(f"Error processing conversation: {e} {uid} {session_id}")
-            conversations_db.set_conversation_as_discarded(uid, conversation.id)
-            conversation.discarded = True
-            messages = []
-
-        _send_message_event(ConversationEvent(event_type="memory_created", memory=conversation, messages=messages))
-
     async def cleanup_processing_conversations():
         processing = conversations_db.get_processing_conversations(uid)
+        if not processing:
+            logger.info(f'finalize_processing_conversations len(processing): 0 {uid} {session_id}')
+            return
         logger.info(f'finalize_processing_conversations len(processing): {len(processing)} {uid} {session_id}')
-        if not processing or len(processing) == 0:
+        if len(processing) == 0:
+            return
+        if not request_conversation_processing:
+            logger.warning(f"Pusher not enabled, cannot reprocess {len(processing)} conversations {uid} {session_id}")
             return
 
         for conversation in processing:
-            if PUSHER_ENABLED and pusher_is_connected is not None and pusher_is_connected():
-                await request_conversation_processing(conversation['id'])
-            elif PUSHER_ENABLED and pusher_is_degraded is not None and pusher_is_degraded():
-                await _create_conversation_fallback(conversation)
-            elif not PUSHER_ENABLED:
-                await _create_conversation_fallback(conversation)
-            else:
-                # PUSHER_ENABLED but handler not yet initialized — try pusher
-                await request_conversation_processing(conversation['id'])
+            # Route to pusher — buffer if disconnected, send when connected (#6061)
+            await request_conversation_processing(conversation['id'])
 
     async def process_pending_conversations(timed_out_id: Optional[str]):
         await asyncio.sleep(7.0)
@@ -847,21 +816,15 @@ async def _stream_handler(
         if conversation:
             has_content = conversation.get('transcript_segments') or conversation.get('photos')
             if has_content:
-                # Use pusher if enabled AND connected, otherwise fallback
-                if PUSHER_ENABLED and pusher_is_connected is not None and pusher_is_connected():
-                    on_conversation_processing_started(conversation_id)
-                    await request_conversation_processing(conversation_id)
-                elif PUSHER_ENABLED and pusher_is_degraded is not None and pusher_is_degraded():
-                    logger.info(
-                        f"Pusher degraded, using fallback for conversation {conversation_id} {uid} {session_id}"
+                if not request_conversation_processing:
+                    logger.warning(
+                        f"Pusher not enabled, skipping conversation {conversation_id} (stays in_progress) {uid} {session_id}"
                     )
-                    await _create_conversation_fallback(conversation)
-                elif not PUSHER_ENABLED:
-                    await _create_conversation_fallback(conversation)
-                else:
-                    # PUSHER_ENABLED but handler not yet initialized — try pusher
-                    on_conversation_processing_started(conversation_id)
-                    await request_conversation_processing(conversation_id)
+                    return
+                # Mark processing + buffer for pusher — never process locally (#6061)
+                conversations_db.update_conversation_status(uid, conversation_id, ConversationStatus.processing)
+                on_conversation_processing_started(conversation_id)
+                await request_conversation_processing(conversation_id)
             else:
                 logger.info(f'Clean up the conversation {conversation_id}, reason: no content {uid} {session_id}')
                 conversations_db.delete_conversation(uid, conversation_id)
@@ -1218,7 +1181,6 @@ async def _stream_handler(
         reconnect_attempts = 0
         reconnect_task = None  # single task per session
         degraded_since: float = 0.0
-        fallback_processed_ids: set = set()  # guard against duplicate processing
 
         # Transcript (bounded to prevent memory growth when pusher is down)
         segment_buffers: deque = deque(maxlen=MAX_SEGMENT_BUFFER_SIZE)
@@ -1447,13 +1409,12 @@ async def _stream_handler(
                     if not info:
                         continue
                     if info['retries'] >= MAX_RETRIES_PER_REQUEST:
-                        logger.error(
-                            f"Conversation {cid} failed after {MAX_RETRIES_PER_REQUEST} retries, giving up {uid} {session_id}"
+                        logger.warning(
+                            f"Conversation {cid} retry limit reached, keeping buffered for pusher recovery {uid} {session_id}"
                         )
-                        # Route to fallback if in degraded mode
-                        if reconnect_state == PusherReconnectState.DEGRADED:
-                            await _fallback_process_conversation(cid)
-                        pending_conversation_requests.pop(cid, None)
+                        # Don't drop — conversation is marked processing in Firestore,
+                        # cleanup_processing_conversations() will pick it up on next session (#6061)
+                        info['sent_at'] = now  # Reset timeout to avoid tight retry loop
                         continue
                     info['retries'] += 1
                     logger.warning(
@@ -1478,20 +1439,6 @@ async def _stream_handler(
             if reconnect_task is None or reconnect_task.done():
                 reconnect_task = asyncio.create_task(_pusher_reconnect_loop())
 
-        async def _fallback_process_conversation(conversation_id: str):
-            """Route conversation to fallback processing (degraded mode)."""
-            nonlocal fallback_processed_ids
-            if conversation_id in fallback_processed_ids:
-                logger.info(
-                    f"Conversation {conversation_id} already processed via fallback, skipping {uid} {session_id}"
-                )
-                return
-            conversation_data = conversations_db.get_conversation(uid, conversation_id)
-            if conversation_data:
-                fallback_processed_ids.add(conversation_id)
-                logger.info(f"Routing conversation {conversation_id} to fallback (degraded mode) {uid} {session_id}")
-                await _create_conversation_fallback(conversation_data)
-
         async def _pusher_reconnect_loop():
             """Single reconnect loop per session — replaces 3 scattered auto-reconnect calls.
 
@@ -1513,10 +1460,11 @@ async def _stream_handler(
                                 f"Pusher reconnect exhausted ({PUSHER_MAX_RECONNECT_ATTEMPTS} attempts), "
                                 f"entering DEGRADED mode {uid} {session_id}"
                             )
-                            # Route pending conversations to fallback (pop each to avoid race)
-                            for cid in list(pending_conversation_requests.keys()):
-                                pending_conversation_requests.pop(cid, None)
-                                await _fallback_process_conversation(cid)
+                            # Keep pending conversations buffered — will resend when pusher recovers (#6061)
+                            if pending_conversation_requests:
+                                logger.info(
+                                    f"Keeping {len(pending_conversation_requests)} conversations buffered for pusher recovery {uid} {session_id}"
+                                )
                             continue
 
                         # Exponential backoff: 1s, 2s, 4s, 8s, 16s, 32s (capped at 60s)
@@ -1548,9 +1496,7 @@ async def _stream_handler(
                             degraded_since = time.monotonic()
                             reconnect_attempts = 0
                             logger.warning(f"Circuit breaker open, skipping to DEGRADED {uid} {session_id}")
-                            for cid in list(pending_conversation_requests.keys()):
-                                pending_conversation_requests.pop(cid, None)
-                                await _fallback_process_conversation(cid)
+                            # Keep pending conversations buffered — will resend when pusher recovers (#6061)
                             continue
                         except Exception:
                             pass  # _connect already logged the error
@@ -1614,7 +1560,7 @@ async def _stream_handler(
             nonlocal pusher_ws
             nonlocal pusher_connected
             nonlocal current_conversation_id
-            nonlocal reconnect_state, reconnect_attempts, fallback_processed_ids
+            nonlocal reconnect_state, reconnect_attempts
 
             try:
                 pusher_sample_rate = TARGET_SAMPLE_RATE if is_multi_channel else sample_rate
@@ -1628,19 +1574,13 @@ async def _stream_handler(
                 reconnect_state = PusherReconnectState.CONNECTED
                 reconnect_attempts = 0
                 # Re-send any pending conversation requests after reconnect
-                # (skip conversations already processed via fallback to avoid duplication)
                 if pending_conversation_requests:
                     logger.info(
                         f"Reconnected to pusher, re-sending {len(pending_conversation_requests)} pending requests {uid} {session_id}"
                     )
                     for cid in list(pending_conversation_requests.keys()):
-                        if cid in fallback_processed_ids:
-                            pending_conversation_requests.pop(cid, None)
-                            continue
                         pending_conversation_requests[cid]['sent_at'] = time.time()
                         await request_conversation_processing(cid)
-                # Clear fallback tracking after processing pending queue
-                fallback_processed_ids.clear()
             except PusherCircuitBreakerOpen:
                 raise  # Let caller handle circuit breaker
             except Exception as e:
