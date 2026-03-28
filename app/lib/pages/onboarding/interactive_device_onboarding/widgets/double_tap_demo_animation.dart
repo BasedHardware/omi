@@ -151,8 +151,8 @@ class EndConversationDemo extends StatefulWidget {
 
 class _EndConversationDemoState extends State<EndConversationDemo> with SingleTickerProviderStateMixin {
   late AnimationController _controller;
-  bool _showNewConversation = false;
   double _cutPhase = 0;
+  double _splitPosition = 0.5; // 0-1 where the split happens
 
   @override
   void initState() {
@@ -165,10 +165,7 @@ class _EndConversationDemoState extends State<EndConversationDemo> with SingleTi
     super.didUpdateWidget(oldWidget);
     if (widget.doubleTapped && !oldWidget.doubleTapped) {
       _cutPhase = _controller.value * 2 * pi * 3;
-      setState(() => _showNewConversation = false);
-      Future.delayed(const Duration(milliseconds: 600), () {
-        if (mounted) setState(() => _showNewConversation = true);
-      });
+      _splitPosition = 0.35 + (_controller.value * 0.3); // varies based on when they tapped
     }
   }
 
@@ -184,26 +181,86 @@ class _EndConversationDemoState extends State<EndConversationDemo> with SingleTi
       animation: _controller,
       builder: (context, _) {
         final phase = _controller.value * 2 * pi * 3;
-        return Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // First conversation - fades out after double tap
-            AnimatedOpacity(
-              duration: const Duration(milliseconds: 400),
-              opacity: widget.doubleTapped ? 0.3 : 1.0,
-              child: _ConversationCard(
-                wavePhase: widget.doubleTapped ? _cutPhase : phase,
-                waveAmplitude: widget.doubleTapped ? 0.0 : 1.0,
+        return Container(
+          height: 64,
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.08),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 8,
+                height: 8,
+                decoration: const BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: Color(0xFF4CAF50),
+                ),
               ),
-            ),
-            if (_showNewConversation) ...[
-              const SizedBox(height: 8),
-              _ConversationCard(
-                wavePhase: phase,
-                waveAmplitude: 0.3 + (_controller.value * 0.7),
-                waveColor: const Color(0xFF81C784),
+              const SizedBox(width: 12),
+              Expanded(
+                child: widget.doubleTapped
+                    ? _buildSplitWaveform(phase)
+                    : CustomPaint(
+                        painter: _WaveformPainter(phase: phase, color: Colors.white.withValues(alpha: 0.6)),
+                        size: const Size(double.infinity, 32),
+                      ),
               ),
             ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildSplitWaveform(double livePhase) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final totalWidth = constraints.maxWidth;
+        final leftWidth = totalWidth * _splitPosition;
+        final gapWidth = 12.0;
+        final rightWidth = totalWidth - leftWidth - gapWidth;
+
+        return Row(
+          children: [
+            // Old conversation - frozen waveform, faded
+            SizedBox(
+              width: leftWidth,
+              height: 32,
+              child: CustomPaint(
+                painter: _WaveformPainter(
+                  phase: _cutPhase,
+                  color: Colors.white.withValues(alpha: 0.2),
+                ),
+              ),
+            ),
+            // Gap / divider
+            SizedBox(
+              width: gapWidth,
+              child: Center(
+                child: Container(
+                  width: 2,
+                  height: 24,
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.3),
+                    borderRadius: BorderRadius.circular(1),
+                  ),
+                ),
+              ),
+            ),
+            // New conversation - live waveform, green tint
+            SizedBox(
+              width: rightWidth > 0 ? rightWidth : 0,
+              height: 32,
+              child: CustomPaint(
+                painter: _WaveformPainter(
+                  phase: livePhase,
+                  color: const Color(0xFF81C784).withValues(alpha: 0.7),
+                ),
+              ),
+            ),
           ],
         );
       },
