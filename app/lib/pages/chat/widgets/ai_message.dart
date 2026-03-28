@@ -32,6 +32,8 @@ import 'package:omi/utils/other/temp.dart';
 import 'package:omi/widgets/extensions/string.dart';
 import 'package:omi/widgets/text_selection_controls.dart';
 import 'chart_message_widget.dart';
+import 'genui_message_parser.dart';
+import 'genui_message_widget.dart';
 import 'markdown_message_widget.dart';
 
 /// Parse app_id from thinking text (format: "text|app_id:app_id")
@@ -264,6 +266,7 @@ Widget buildMessageWidget(
       thinkings: message.thinkings,
       messageText: message.text.decodeString,
       message: message,
+      sendMessage: sendMessage,
       setMessageNps: sendMessageNps,
       createdAt: message.createdAt,
       onAskOmi: onAskOmi,
@@ -399,6 +402,7 @@ class NormalMessageWidget extends StatefulWidget {
   final String messageText;
   final List<String> thinkings;
   final ServerMessage message;
+  final FutureOr<void> Function(String) sendMessage;
   final Function(int, {String? reason}) setMessageNps;
   final DateTime createdAt;
   final Function(String)? onAskOmi;
@@ -408,6 +412,7 @@ class NormalMessageWidget extends StatefulWidget {
     required this.showTypingIndicator,
     required this.messageText,
     required this.message,
+    required this.sendMessage,
     required this.setMessageNps,
     required this.createdAt,
     this.showThinkingAfterText = false,
@@ -465,6 +470,7 @@ class _NormalMessageWidgetState extends State<NormalMessageWidget> {
   @override
   Widget build(BuildContext context) {
     var thinkingTextRaw = widget.message.thinkings.isNotEmpty ? widget.message.thinkings.last.decodeString : null;
+    final parsedGenUi = parseGenUiMessage(widget.messageText);
 
     // Parse app_id and display text from thinking messages
     String? currentAppId = thinkingTextRaw != null ? parseAppIdFromThinking(thinkingTextRaw) : null;
@@ -540,7 +546,7 @@ class _NormalMessageWidgetState extends State<NormalMessageWidget> {
         //         ),
         //       )
         //     : const SizedBox.shrink(),
-        widget.messageText.isEmpty
+        parsedGenUi.markdownText.isEmpty
             ? const SizedBox.shrink()
             : Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
@@ -556,11 +562,13 @@ class _NormalMessageWidgetState extends State<NormalMessageWidget> {
                           widget.onAskOmi?.call(text);
                         }, selectedText: selectedText);
                       },
-                      child: getMarkdownWidget(context, widget.messageText, onAskOmi: widget.onAskOmi),
+                      child: getMarkdownWidget(context, parsedGenUi.markdownText, onAskOmi: widget.onAskOmi),
                     );
                   },
                 ),
               ),
+        if (parsedGenUi.card != null)
+          GenUiMessageWidget(card: parsedGenUi.card!, onSubmitMessage: widget.sendMessage),
         if (widget.showTypingIndicator && widget.messageText.isNotEmpty && widget.showThinkingAfterText)
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
@@ -597,9 +605,9 @@ class _NormalMessageWidgetState extends State<NormalMessageWidget> {
           )
         else if (widget.showTypingIndicator && widget.message.thinkings.any((t) => t.toLowerCase().contains('chart')))
           _buildChartShimmer(),
-        if (widget.messageText.isNotEmpty && !widget.showTypingIndicator)
+        if (parsedGenUi.markdownText.isNotEmpty && !widget.showTypingIndicator)
           MessageActionBar(
-            messageText: widget.messageText,
+            messageText: parsedGenUi.markdownText,
             setMessageNps: widget.setMessageNps,
             currentNps: widget.message.rating,
           ),
