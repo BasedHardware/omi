@@ -23,7 +23,12 @@ sys.modules.setdefault("utils.other.storage", MagicMock())
 sys.modules.setdefault("utils.stt.pre_recorded", MagicMock())
 
 from utils.audio import AudioRingBuffer
-from utils.speaker_identification import detect_speaker_from_text, SPEAKER_IDENTIFICATION_PATTERNS, _pcm_to_wav_bytes
+from utils.speaker_identification import (
+    detect_speaker_from_text,
+    normalize_person_name_key,
+    SPEAKER_IDENTIFICATION_PATTERNS,
+    _pcm_to_wav_bytes,
+)
 from utils.stt.speaker_embedding import (
     compare_embeddings,
     is_same_speaker,
@@ -277,6 +282,30 @@ class TestDetectSpeakerFromText:
         result = detect_speaker_from_text("I am John")
         assert result == "John"
         assert result[0].isupper()
+
+    def test_known_name_detection_handles_lowercase_asr(self):
+        """Known names can be detected from lowercase ASR transcripts."""
+        result = detect_speaker_from_text("uh this is bob", known_names=["Bob"])
+        assert result == "Bob"
+
+    def test_known_name_detection_supports_multiword_names(self):
+        """Known names preserve multi-word formatting when matched from text."""
+        result = detect_speaker_from_text("hello, this is mary jane watson", known_names=["Mary Jane Watson"])
+        assert result == "Mary Jane Watson"
+
+    def test_known_name_detection_supports_hyphen_and_apostrophe_names(self):
+        """Known names with punctuation are matched safely."""
+        result = detect_speaker_from_text("it's anne-marie o'neill speaking", known_names=["Anne-Marie O'Neill"])
+        assert result == "Anne-Marie O'Neill"
+
+    def test_known_name_detection_rejects_addressee_mentions(self):
+        """Addressing someone else should not be interpreted as self-identification."""
+        result = detect_speaker_from_text("hey bob, can you join?", known_names=["Bob"])
+        assert result is None
+
+    def test_normalize_person_name_key_casefolds_and_collapses_spaces(self):
+        """Normalized lookup keys ignore case and repeated whitespace."""
+        assert normalize_person_name_key("  Mary   Jane ") == "mary jane"
 
     def test_all_languages_have_patterns(self):
         """Verify all 33 language codes have patterns defined."""

@@ -2,7 +2,7 @@ import asyncio
 import io
 import re
 import wave
-from typing import List, Optional
+from typing import Iterable, List, Optional
 
 import av
 import numpy as np
@@ -230,13 +230,64 @@ for lang_patterns in SPEAKER_IDENTIFICATION_PATTERNS.values():
     patterns_to_check.extend(lang_patterns)
 
 
-def detect_speaker_from_text(text: str) -> Optional[str]:
+SELF_REFERENCE_KNOWN_NAME_PATTERNS = [
+    r"(?:i am|i'm|my name is|this is|it is|it's|call me|name is)\s+{name}",
+    r"{name}\s+(?:here|speaking)",
+]
+
+
+def normalize_person_name_key(name: str) -> str:
+    normalized = re.sub(r"\s+", " ", name).strip().casefold()
+    return normalized
+
+
+def _normalize_detected_name(name: str) -> str:
+    name = re.sub(r"\s+", " ", name).strip(" \t\r\n,.;:!?-")
+    if not name:
+        return ""
+
+    def _normalize_part(part: str) -> str:
+        if not part:
+            return part
+        return part[:1].upper() + part[1:]
+
+    words = []
+    for word in name.split(" "):
+        chunks = [_normalize_part(chunk) for chunk in word.split("-")]
+        word = "-".join(chunks)
+        chunks = [_normalize_part(chunk) for chunk in word.split("'")]
+        words.append("'".join(chunks))
+    return " ".join(words)
+
+
+def _detect_known_name_from_text(text: str, known_names: Iterable[str]) -> Optional[str]:
+    normalized_text = normalize_person_name_key(text)
+    if not normalized_text:
+        return None
+
+    sorted_names = sorted(
+        {name for name in known_names if normalize_person_name_key(name)},
+        key=lambda value: len(normalize_person_name_key(value)),
+        reverse=True,
+    )
+    for known_name in sorted_names:
+        escaped_name = re.escape(normalize_person_name_key(known_name))
+        for pattern in SELF_REFERENCE_KNOWN_NAME_PATTERNS:
+            if re.search(rf"\b{pattern.format(name=escaped_name)}\b", normalized_text):
+                return _normalize_detected_name(known_name)
+    return None
+
+
+def detect_speaker_from_text(text: str, known_names: Optional[Iterable[str]] = None) -> Optional[str]:
     for pattern in patterns_to_check:
         match = re.search(pattern, text)
         if match:
             name = match.groups()[-1]
             if name and len(name) >= 2:
-                return name.capitalize()
+                return _normalize_detected_name(name)
+
+    if known_names:
+        return _detect_known_name_from_text(text, known_names)
     return None
 
 

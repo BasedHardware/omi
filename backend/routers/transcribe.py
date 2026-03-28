@@ -70,7 +70,7 @@ from utils.notifications import send_credit_limit_notification, send_silent_user
 from utils.other import endpoints as auth
 from utils.other.storage import get_profile_audio_if_exists, get_user_has_speech_profile
 from utils.pusher import connect_to_trigger_pusher, PusherCircuitBreakerOpen, get_circuit_breaker, CircuitState
-from utils.speaker_identification import detect_speaker_from_text
+from utils.speaker_identification import detect_speaker_from_text, normalize_person_name_key
 from utils.stt.streaming import (
     SPEECH_PROFILE_FIXED_DURATION,
     SPEECH_PROFILE_PADDING_DURATION,
@@ -353,6 +353,7 @@ async def _stream_handler(
     audio_ring_buffer: Optional[AudioRingBuffer] = None
     speaker_id_segment_queue: asyncio.Queue[dict] = asyncio.Queue(maxsize=100)
     person_embeddings_cache: Dict[str, dict] = {}  # person_id -> {embedding, name}
+    known_people_by_name_key: Dict[str, dict] = {}
     speaker_id_enabled = False  # Will be set after private_cloud_sync_enabled is known
 
     # Track background tasks to cancel on cleanup (prevents memory leaks from fire-and-forget tasks)
@@ -405,6 +406,14 @@ async def _stream_handler(
     current_conversation_id = None
 
     freemium_threshold_sent = False  # Track if we've sent the freemium threshold notification
+
+    try:
+        for person in user_db.get_people(uid):
+            name_key = normalize_person_name_key(person.get('name', ''))
+            if name_key:
+                known_people_by_name_key[name_key] = person
+    except Exception as e:
+        logger.error(f"Speaker ID: failed to load known people cache: {e} {uid} {session_id}")
 
     # Credit cache: avoid querying ~720 Firestore docs every 60s per stream (#5439 sub-task 1)
     CREDITS_REFRESH_SECONDS = 900  # 15 min
@@ -2242,15 +2251,20 @@ async def _stream_handler(
                                 pass  # Drop if queue is full
 
                     # Text-based detection
-                    detected_name = detect_speaker_from_text(segment.text)
+                    detected_name = detect_speaker_from_text(
+                        segment.text, known_names=[person['name'] for person in known_people_by_name_key.values()]
+                    )
                     if detected_name:
-                        person = user_db.get_person_by_name(uid, detected_name)
+                        person = known_people_by_name_key.get(normalize_person_name_key(detected_name))
+                        if person is None:
+                            person = user_db.get_person_by_name(uid, detected_name)
                         if person:
                             person_id = person['id']
+                            detected_name = person['name']
                         else:
                             # Backend creates person if missing
                             person_id = str(uuid.uuid4())
-                            user_db.create_person(
+                            person = user_db.create_person(
                                 uid,
                                 {
                                     'id': person_id,
@@ -2259,6 +2273,7 @@ async def _stream_handler(
                                     'updated_at': datetime.now(timezone.utc),
                                 },
                             )
+                            known_people_by_name_key[normalize_person_name_key(detected_name)] = person
                         _send_message_event(
                             SpeakerLabelSuggestionEvent(
                                 speaker_id=segment.speaker_id,
