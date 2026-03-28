@@ -51,7 +51,7 @@ def safe_create_memory(memory_data):
 
 def get_prompt_data(uid: str) -> Tuple[str, List[Memory], List[Memory]]:
     # TODO: cache this
-    existing_memories = memories_db.get_memories(uid, limit=1000)
+    existing_memories = [m for m in memories_db.get_memories(uid, limit=1000) if not m.get('is_locked')]
 
     # Use a safer approach to create Memory objects from existing memories
     user_made = []
