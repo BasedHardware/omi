@@ -17,9 +17,34 @@ import database.fair_use as fair_use_db
 import database.users as users_db
 from database.redis_db import r as redis_client
 from models.fair_use import UsageType, FairUseStage, SoftCapTrigger
-from utils.llm.fair_use_classifier import classify_user_purpose
-from utils.notifications import send_notification
 from utils.subscription import has_transcription_credits, is_paid_plan
+
+# Deferred imports — exception to CLAUDE.md top-level import rule.
+# classify_user_purpose: fair_use_classifier.py constructs ChatOpenAI at import time,
+#   which raises openai.OpenAIError if OPENAI_API_KEY is not set.
+# send_notification: imports firebase_admin.messaging which requires Firebase app init.
+# Both are only called in async runtime paths, never at import time.
+_classify_user_purpose = None
+_send_notification = None
+
+
+def _get_classify_user_purpose():
+    global _classify_user_purpose
+    if _classify_user_purpose is None:
+        from utils.llm.fair_use_classifier import classify_user_purpose
+
+        _classify_user_purpose = classify_user_purpose
+    return _classify_user_purpose
+
+
+def _get_send_notification():
+    global _send_notification
+    if _send_notification is None:
+        from utils.notifications import send_notification
+
+        _send_notification = send_notification
+    return _send_notification
+
 
 logger = logging.getLogger(__name__)
 
@@ -514,7 +539,7 @@ async def trigger_classifier_if_needed(uid: str, triggered_caps: list, session_i
             classifier_result = {'misuse_score': 1.0, 'usage_type': 'free_exhausted'}
             logger.info(f'fair_use: free-exhausted uid={uid}, using synthetic score 1.0')
         else:
-            classifier_result = await classify_user_purpose(uid)
+            classifier_result = await _get_classify_user_purpose()(uid)
         escalation = escalate_enforcement(uid, triggered_caps, classifier_result)
 
         logger.info(
@@ -575,4 +600,4 @@ async def _send_fair_use_notification(uid: str, action: str, case_ref: str = '')
         data = {'type': 'fair_use', 'action': action}
         if case_ref:
             data['case_ref'] = case_ref
-        send_notification(uid, title, body, data=data)
+        _get_send_notification()(uid, title, body, data=data)
