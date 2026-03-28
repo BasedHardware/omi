@@ -305,11 +305,15 @@ class TestSearchRedaction:
             result = search_conversations(uid='test-uid', query='test')
 
         locked_item = result['items'][0]
+        assert locked_item['structured']['title'] == ''
+        assert locked_item['structured']['overview'] == ''
         assert locked_item['structured']['action_items'] == []
         assert locked_item['structured']['events'] == []
         assert locked_item['transcript_segments'] == []
 
         unlocked_item = result['items'][1]
+        assert unlocked_item['structured']['title'] == 'Test Conversation'
+        assert unlocked_item['structured']['overview'] == 'Test overview'
         assert len(unlocked_item['structured']['action_items']) == 1
         assert len(unlocked_item['transcript_segments']) == 1
 
@@ -779,3 +783,99 @@ class TestGoalContextLockFilter:
 
         assert 'LOCKED_SECRET_MEMORY' not in result['memory_context']
         assert 'VISIBLE_UNLOCKED_MEMORY' in result['memory_context']
+
+
+# =============================================================================
+# Test notification LLM excludes locked memories
+# =============================================================================
+
+
+class TestNotificationLlmLockFilter:
+    """Credit-limit and subscription notifications must exclude locked memories."""
+
+    @pytest.mark.asyncio
+    async def test_get_relevant_memories_filters_locked(self):
+        """get_relevant_memories must exclude locked memories from LLM context."""
+        import database.memories as memories_db
+
+        locked_mem = {'content': 'LOCKED_SECRET', 'is_locked': True}
+        unlocked_mem = {'content': 'VISIBLE_CONTENT', 'is_locked': False}
+        memories_db.get_memories = MagicMock(return_value=[locked_mem, unlocked_mem])
+
+        from utils.llm.notifications import get_relevant_memories
+
+        result = await get_relevant_memories('test-uid')
+
+        assert len(result) == 1
+        assert result[0]['content'] == 'VISIBLE_CONTENT'
+
+
+# =============================================================================
+# Test mentor proactive notifications exclude locked conversations
+# =============================================================================
+
+
+class TestMentorProactiveLockFilter:
+    """Mentor proactive notifications must exclude locked conversations from context."""
+
+    def test_mentor_proactive_filters_locked_conversations(self):
+        """_process_mentor_proactive_notification must not feed locked conversations to LLM."""
+        import database.conversations as conversations_db
+        import database.mem_db as mem_db
+        import database.redis_db as redis_db
+
+        locked_conv = _make_conversation(locked=True)
+        locked_conv['structured']['overview'] = 'SECRET_LOCKED_DATA'
+        unlocked_conv = _make_conversation(locked=False, conversation_id='conv-2')
+        unlocked_conv['structured']['overview'] = 'VISIBLE_DATA'
+
+        # Disable rate limiting by returning None (no previous send)
+        mem_db.get_proactive_noti_sent_at = MagicMock(return_value=None)
+        redis_db.get_proactive_noti_sent_at = MagicMock(return_value=None)
+
+        # Mock gate to pass
+        gate_result = MagicMock()
+        gate_result.is_relevant = True
+        gate_result.relevance_score = 0.9
+        gate_result.context_summary = 'test'
+        gate_result.reasoning = 'test'
+
+        with patch('utils.app_integrations.get_mentor_notification_frequency', return_value=5):
+            with patch('utils.app_integrations.get_daily_notification_count', return_value=0):
+                with patch('utils.app_integrations.get_prompt_memories', return_value=('Test', '')):
+                    with patch('utils.app_integrations.get_user_goals', return_value=[]):
+                        with patch('utils.app_integrations.get_app_messages', return_value=[]):
+                            with patch('utils.app_integrations.track_usage'):
+                                with patch('utils.app_integrations.evaluate_relevance', return_value=gate_result):
+                                    with patch('utils.app_integrations.generate_embedding', return_value=[0.1] * 1536):
+                                        with patch(
+                                            'utils.app_integrations.query_vectors_by_metadata',
+                                            return_value=['conv-1', 'conv-2'],
+                                        ):
+                                            conversations_db.get_conversations_by_id = MagicMock(
+                                                return_value=[locked_conv, unlocked_conv]
+                                            )
+                                            conversations_db.get_conversations = MagicMock(return_value=[])
+
+                                            with patch('utils.app_integrations.Conversation') as mock_conv_cls:
+                                                mock_conv_cls.conversations_to_string = MagicMock(return_value='')
+
+                                                draft = MagicMock()
+                                                draft.notification_text = ''
+                                                with patch(
+                                                    'utils.app_integrations.generate_notification', return_value=draft
+                                                ):
+                                                    from utils.app_integrations import (
+                                                        _process_mentor_proactive_notification,
+                                                    )
+
+                                                    _process_mentor_proactive_notification(
+                                                        uid='test-uid',
+                                                        conversation_messages=[{'text': 'hello', 'sender': 'human'}],
+                                                    )
+
+                                            # conversations_to_string called with only unlocked
+                                            mock_conv_cls.conversations_to_string.assert_called_once()
+                                            convos_passed = mock_conv_cls.conversations_to_string.call_args[0][0]
+                                            assert len(convos_passed) == 1
+                                            assert convos_passed[0].get('is_locked') is not True
