@@ -71,7 +71,7 @@ def send_message(
     data: SendMessageRequest,
     plugin_id: Optional[str] = None,
     app_id: Optional[str] = None,
-    uid: str = Depends(auth.get_current_user_uid),
+    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "chat:send_message")),
 ):
     compat_app_id = app_id or plugin_id
     logger.info(f'send_message {data.text} {compat_app_id} {uid}')
@@ -294,7 +294,9 @@ def initial_message_util(uid: str, app_id: Optional[str] = None):
 
 @router.post('/v2/initial-message', tags=['chat'], response_model=Message)
 def create_initial_message(
-    app_id: Optional[str] = None, plugin_id: Optional[str] = None, uid: str = Depends(auth.get_current_user_uid)
+    app_id: Optional[str] = None,
+    plugin_id: Optional[str] = None,
+    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "chat:initial")),
 ):
     compat_app_id = app_id or plugin_id
     return initial_message_util(uid, compat_app_id)
@@ -332,7 +334,7 @@ def get_messages(
 async def create_voice_message_stream(
     files: List[UploadFile] = File(...),
     language: Optional[str] = Form(None),
-    uid: str = Depends(auth.get_current_user_uid),
+    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "voice:message")),
 ):
     # wav
     paths = retrieve_file_paths(files, uid)
@@ -357,7 +359,7 @@ async def create_voice_message_stream(
 async def transcribe_voice_message(
     files: List[UploadFile] = File(...),
     language: Optional[str] = Form(None),
-    uid: str = Depends(auth.get_current_user_uid),
+    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "voice:transcribe")),
 ):
     # Check if files are empty
     if not files or len(files) == 0:
@@ -449,7 +451,10 @@ async def transcribe_voice_message(
 
 
 @router.post('/v2/files', response_model=List[FileChat], tags=['chat'])
-def upload_file_chat(files: List[UploadFile] = File(...), uid: str = Depends(auth.get_current_user_uid)):
+def upload_file_chat(
+    files: List[UploadFile] = File(...),
+    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "file:upload")),
+):
     thumbs_name = []
     files_chat = []
     for file in files:
@@ -597,7 +602,9 @@ def clear_chat_messages(
 
 @router.post('/v1/initial-message', tags=['chat'], response_model=Message)
 def create_initial_message(
-    plugin_id: Optional[str] = None, app_id: Optional[str] = None, uid: str = Depends(auth.get_current_user_uid)
+    plugin_id: Optional[str] = None,
+    app_id: Optional[str] = None,
+    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "chat:initial")),
 ):
     compat_app_id = app_id or plugin_id
     return initial_message_util(uid, compat_app_id)
