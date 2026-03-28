@@ -38,6 +38,15 @@ enum AppBuild {
     let display = displayName.lowercased()
     let bundle = bundleIdentifier.lowercased()
 
+    // Check for "better" channel first (installed from /better link)
+    if bundle.contains("better")
+      || display.contains("better")
+      || bundlePath.contains("/better")
+      || bundlePath.contains("omi better")
+    {
+      return "better"
+    }
+
     if bundle.contains("beta")
       || display.contains("beta")
       || bundlePath.contains("/beta")

@@ -6,11 +6,13 @@ import SwiftUI
 enum UpdateChannel: String, CaseIterable {
   case stable = "stable"
   case beta = "beta"
+  case better = "better"
 
   var displayName: String {
     switch self {
     case .stable: return "Stable"
     case .beta: return "Beta"
+    case .better: return "Better"
     }
   }
 
@@ -18,13 +20,14 @@ enum UpdateChannel: String, CaseIterable {
     switch self {
     case .stable: return "Recommended for most users"
     case .beta: return "Early access to new features"
+    case .better: return "Latest improvements, installed from /better"
     }
   }
 
-  /// App display name based on update channel: "omi" for stable, "Omi Beta" for beta
+  /// App display name based on update channel: "omi" for stable, "Omi Beta" for beta/better
   static var appDisplayName: String {
     let channel = UserDefaults.standard.string(forKey: "update_channel") ?? "stable"
-    return (channel == "beta" || channel == "staging") ? "Omi Beta" : "omi"
+    return (channel == "beta" || channel == "staging" || channel == "better") ? "Omi Beta" : "omi"
   }
 }
 
@@ -149,6 +152,9 @@ final class UpdaterDelegate: NSObject, SPUUpdaterDelegate {
   /// Channels are additive: the default (stable) channel is always included.
   func allowedChannels(for updater: SPUUpdater) -> Set<String> {
     let raw = UserDefaults.standard.string(forKey: kUpdateChannelKey) ?? "stable"
+    if raw == "better" {
+      return Set(["beta", "better"])
+    }
     if raw == "beta" || raw == "staging" {
       return Set(["beta"])
     }
@@ -328,6 +334,13 @@ final class UpdaterViewModel: ObservableObject {
     var storedChannel = UserDefaults.standard.string(forKey: kUpdateChannelKey) ?? "stable"
     if storedChannel == "staging" { storedChannel = "beta" }
     updateChannel = UpdateChannel(rawValue: storedChannel) ?? .stable
+
+    // Auto-detect channel from installed app name/path on first launch
+    AppBuild.syncUpdateChannelWithInstalledApp()
+    let synced = UserDefaults.standard.string(forKey: kUpdateChannelKey) ?? "stable"
+    if let syncedChannel = UpdateChannel(rawValue: synced) {
+      updateChannel = syncedChannel
+    }
 
     // Wire up delegate back-reference
     updaterDelegate.viewModel = self
