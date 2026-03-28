@@ -153,7 +153,8 @@ sequenceDiagram
 ## 4. Speaker ID Lifecycle (2-Session Flow)
 
 Speaker identification requires two sessions: one to store the embedding, one
-to match against it.
+to match against it. The user's own voice is also identified via their speech
+profile embedding (loaded at session start alongside person embeddings).
 
 ```mermaid
 sequenceDiagram
@@ -161,6 +162,7 @@ sequenceDiagram
     participant Backend as Backend
     participant Pusher
     participant EmbeddingAPI as Embedding API (wespeaker)
+    participant GCS as Google Cloud Storage
     participant Firestore
 
     Note over Client: SESSION 1: Assign Speaker
@@ -185,12 +187,19 @@ sequenceDiagram
 
     Client->>Backend: WS connect
     Backend->>Firestore: Load person_embeddings_cache (once at session start)
+    Backend->>GCS: Load user speech profile WAV (if exists)
+    Backend->>EmbeddingAPI: Extract user embedding from profile audio
+    Note over Backend: Cache user embedding as 'user' sentinel
     Client->>Backend: Stream audio
     Backend->>EmbeddingAPI: Extract embedding from current speech
     EmbeddingAPI-->>Backend: 256-d embedding
-    Backend->>Backend: Cosine distance vs cached embeddings
+    Backend->>Backend: Cosine distance vs cached embeddings (persons + user)
     Note over Backend: Match if distance < 0.45
-    Backend-->>Client: {type: "speaker_label_suggestion", person_id, distance}
+    alt Match is user's own voice
+        Backend->>Backend: Set is_user=True on segments via speaker_to_person_map
+    else Match is known person
+        Backend-->>Client: {type: "speaker_label_suggestion", person_id, distance}
+    end
 ```
 
 ## 5. Private Cloud Sync (Audio Upload)
