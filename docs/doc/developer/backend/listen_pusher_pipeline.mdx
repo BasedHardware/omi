@@ -71,8 +71,8 @@ sequenceDiagram
         Backend->>Firestore: Set status=processing
         Backend->>Pusher: Send process_conversation request (opcode 104)
         Backend->>Firestore: Create new stub conversation
-    else Pusher unavailable
-        Note over Backend: Skip processing — conversation stays in_progress<br/>Will be picked up by cleanup_processing_conversations on next session
+    else Pusher not configured (HOSTED_PUSHER_API_URL unset)
+        Note over Backend: Skip processing — conversation stays in_progress permanently.<br/>Pusher is required for conversation processing in production.
     end
 
     alt Pusher connected
