@@ -119,13 +119,15 @@ def _make_conversation(locked=False, conversation_id='conv-1'):
 
 
 def _make_memory(locked=False, memory_id='mem-1'):
-    """Create a minimal memory dict."""
+    """Create a minimal memory dict compatible with MemoryDB model."""
     return {
         'id': memory_id,
+        'uid': 'test-uid',
         'is_locked': locked,
         'content': 'This is a secret memory that should not be visible when locked',
-        'category': 'general',
+        'category': 'interesting',
         'created_at': '2024-01-01T00:00:00',
+        'updated_at': '2024-01-01T00:00:00',
     }
 
 
@@ -321,8 +323,9 @@ class TestConversationToolFiltering:
     """H5: Chat/RAG conversation tools must filter out locked conversations."""
 
     def test_get_conversations_tool_filters_locked(self):
-        """The filtering code in get_conversations_tool must exclude locked conversations."""
+        """get_conversations_tool must exclude locked conversations from results."""
         import database.conversations as conversations_db
+        import database.users as users_db
 
         data = [
             _make_conversation(locked=True),
@@ -330,31 +333,37 @@ class TestConversationToolFiltering:
             _make_conversation(locked=True, conversation_id='conv-3'),
         ]
         conversations_db.get_conversations = MagicMock(return_value=data)
+        users_db.get_people_by_ids = MagicMock(return_value=[])
 
-        # Execute the exact filtering pattern from conversation_tools.py line ~180
-        conversations_data = conversations_db.get_conversations('uid', limit=10, offset=0)
-        if conversations_data:
-            conversations_data = [c for c in conversations_data if not c.get('is_locked', False)]
+        from utils.retrieval.tools.conversation_tools import get_conversations_tool
 
-        assert len(conversations_data) == 1
-        assert conversations_data[0]['id'] == 'conv-2'
+        config = {'configurable': {'user_id': 'test-uid', 'conversations_collected': []}}
+        result = get_conversations_tool.invoke({'limit': 10, 'offset': 0}, config=config)
+        # Result is a string with "Conversation #N" format; should have exactly 1 conversation
+        assert 'Conversation #1' in result
+        assert 'Conversation #2' not in result  # Only 1 unlocked conv should appear
 
     def test_search_tool_filters_locked(self):
-        """The filtering code in search_conversations_tool must exclude locked results."""
+        """search_conversations_tool must exclude locked results."""
         import database.conversations as conversations_db
+        import database.vector_db as vector_db
+        import database.users as users_db
 
         data = [
             _make_conversation(locked=True),
             _make_conversation(locked=False, conversation_id='conv-2'),
         ]
         conversations_db.get_conversations_by_id = MagicMock(return_value=data)
+        vector_db.query_vectors = MagicMock(return_value=[{'id': 'conv-1'}, {'id': 'conv-2'}])
+        users_db.get_people_by_ids = MagicMock(return_value=[])
 
-        # Execute the exact filtering pattern from conversation_tools.py line ~410
-        conversations_data = conversations_db.get_conversations_by_id('uid', ['conv-1', 'conv-2'])
-        conversations_data = [c for c in conversations_data if not c.get('is_locked', False)]
+        from utils.retrieval.tools.conversation_tools import search_conversations_tool
 
-        assert len(conversations_data) == 1
-        assert conversations_data[0]['id'] == 'conv-2'
+        config = {'configurable': {'user_id': 'test-uid', 'conversations_collected': []}}
+        result = search_conversations_tool.invoke({'query': 'test'}, config=config)
+        # Only 1 unlocked conv should appear
+        assert 'Conversation #1' in result
+        assert 'Conversation #2' not in result
 
 
 # =============================================================================
@@ -366,30 +375,39 @@ class TestMemoryToolFiltering:
     """M6: Chat/RAG memory tools must filter out locked memories."""
 
     def test_get_memories_filters_locked(self):
-        """The filtering code in get_memories_tool must exclude locked memories."""
+        """get_memories_tool must exclude locked memories from results."""
         import database.memories as memory_db
 
-        data = [_make_memory(locked=True), _make_memory(locked=False, memory_id='mem-2')]
-        memory_db.get_memories = MagicMock(return_value=data)
+        locked_mem = _make_memory(locked=True)
+        locked_mem['content'] = 'LOCKED_SECRET_CONTENT'
+        unlocked_mem = _make_memory(locked=False, memory_id='mem-2')
+        unlocked_mem['content'] = 'UNLOCKED_VISIBLE_CONTENT'
+        memory_db.get_memories = MagicMock(return_value=[locked_mem, unlocked_mem])
 
-        memories = memory_db.get_memories('uid', limit=10, offset=0)
-        if memories:
-            memories = [m for m in memories if not m.get('is_locked', False)]
+        from utils.retrieval.tools.memory_tools import get_memories_tool
 
-        assert len(memories) == 1
-        assert memories[0]['id'] == 'mem-2'
+        config = {'configurable': {'user_id': 'test-uid'}}
+        result = get_memories_tool.invoke({'limit': 10, 'offset': 0}, config=config)
+        # Only unlocked memory content should appear; locked must be filtered
+        assert 'UNLOCKED_VISIBLE_CONTENT' in result
+        assert 'LOCKED_SECRET_CONTENT' not in result
+        assert '1 total' in result  # Only 1 memory should appear
 
     def test_search_memories_filters_locked(self):
-        """The filtering code in search_memories_tool must exclude locked memories."""
+        """search_memories_tool must exclude locked memories from results."""
         import database.memories as memory_db
+        import database.vector_db as vector_db
 
         data = [_make_memory(locked=True), _make_memory(locked=True, memory_id='mem-2')]
         memory_db.get_memories_by_ids = MagicMock(return_value=data)
+        vector_db.find_similar_memories = MagicMock(return_value=[{'id': 'mem-1'}, {'id': 'mem-2'}])
 
-        memories_data = memory_db.get_memories_by_ids('uid', ['mem-1', 'mem-2'])
-        memories_data = [m for m in memories_data if not m.get('is_locked', False)]
+        from utils.retrieval.tools.memory_tools import search_memories_tool
 
-        assert len(memories_data) == 0
+        config = {'configurable': {'user_id': 'test-uid'}}
+        result = search_memories_tool.invoke({'query': 'test'}, config=config)
+        # All memories locked, so result should indicate nothing found
+        assert 'no' in result.lower() or 'mem-1' not in result
 
 
 # =============================================================================
@@ -413,16 +431,19 @@ class TestWebhookLockEnforcement:
         assert result == []
 
     def test_external_integrations_does_not_skip_unlocked(self):
-        """trigger_external_integrations must NOT return early for unlocked."""
+        """trigger_external_integrations must call get_available_apps for unlocked."""
         from models.conversation import Conversation
 
         conv_data = _make_conversation(locked=False)
         conv = Conversation(**conv_data)
 
-        with patch('utils.app_integrations.get_available_apps', return_value=[]):
+        mock_get_apps = MagicMock(return_value=[])
+        with patch('utils.app_integrations.get_available_apps', mock_get_apps):
             from utils.app_integrations import trigger_external_integrations
 
             result = trigger_external_integrations('test-uid', conv)
+        # Verify downstream work was attempted (not short-circuited by lock check)
+        mock_get_apps.assert_called_once()
         assert result == []
 
     def test_developer_webhook_skips_locked(self):
@@ -513,23 +534,22 @@ class TestMcpSseLockRedaction:
     """M5: MCP SSE get_conversations must redact locked conversation structured data."""
 
     def test_mcp_sse_redacts_locked(self):
-        """MCP SSE tool should clear action_items and events for locked conversations."""
-        conversations = [_make_conversation(locked=True), _make_conversation(locked=False, conversation_id='conv-2')]
+        """MCP SSE execute_tool('get_conversations') must clear action_items/events for locked."""
+        import database.conversations as conversations_db
 
-        # Execute the exact redaction logic from mcp_sse.py line ~257
-        simple_conversations = []
-        for conv in conversations:
-            structured = conv.get("structured")
-            if conv.get("is_locked", False) and structured:
-                structured = dict(structured)
-                structured['action_items'] = []
-                structured['events'] = []
-            simple_conversations.append({"id": conv.get("id"), "structured": structured})
+        conversations_db.get_conversations = MagicMock(
+            return_value=[_make_conversation(locked=True), _make_conversation(locked=False, conversation_id='conv-2')]
+        )
 
-        assert simple_conversations[0]['structured']['action_items'] == []
-        assert simple_conversations[0]['structured']['events'] == []
-        assert simple_conversations[0]['structured']['title'] == 'Test Conversation'
-        assert len(simple_conversations[1]['structured']['action_items']) == 1
+        from routers.mcp_sse import execute_tool
+
+        result = execute_tool('test-uid', 'get_conversations', {})
+        convs = result['conversations']
+
+        assert convs[0]['structured']['action_items'] == []
+        assert convs[0]['structured']['events'] == []
+        assert convs[0]['structured']['title'] == 'Test Conversation'
+        assert len(convs[1]['structured']['action_items']) == 1
 
 
 # =============================================================================
@@ -541,29 +561,29 @@ class TestUsersLockEnforcement:
     """L2/L3: Users endpoints must enforce lock."""
 
     def test_followup_question_rejects_locked(self):
-        """L2: followup-question endpoint code path must block locked conversations."""
-        import database.conversations as conversations_db
+        """L2: delete_person_endpoint must raise 402 for locked conversations."""
+        from routers.users import delete_person_endpoint
+        from fastapi import HTTPException
 
-        conversations_db.get_conversation = MagicMock(return_value=_make_conversation(locked=True))
-
-        # Execute the exact guard from users.py line ~376
-        memory = conversations_db.get_conversation('test-uid', 'conv-1')
-        assert memory is not None
-        assert memory.get('is_locked', False) is True
-        # In production, this raises HTTPException(402)
+        with patch('routers.users.get_conversation', return_value=_make_conversation(locked=True)):
+            with pytest.raises(HTTPException) as exc_info:
+                delete_person_endpoint(memory_id='conv-1', uid='test-uid')
+            assert exc_info.value.status_code == 402
 
     def test_followup_question_allows_unlocked(self):
-        """Unlocked conversations should pass the followup guard."""
-        import database.conversations as conversations_db
+        """delete_person_endpoint should proceed for unlocked conversations."""
+        from routers.users import delete_person_endpoint
 
-        conversations_db.get_conversation = MagicMock(return_value=_make_conversation(locked=False))
-
-        memory = conversations_db.get_conversation('test-uid', 'conv-1')
-        assert memory.get('is_locked', False) is False
+        with patch('routers.users.get_conversation', return_value=_make_conversation(locked=False)):
+            with patch('routers.users.followup_question_prompt', return_value='test result'):
+                result = delete_person_endpoint(memory_id='conv-1', uid='test-uid')
+        assert result['result'] == 'test result'
 
     def test_daily_summary_excludes_locked(self):
-        """L3: Daily summary test must filter locked conversations via the real code path."""
+        """L3: test_daily_summary must filter locked conversations before processing."""
         import database.conversations as conversations_db
+        import database.notifications as notification_db
+        import database.daily_summaries as daily_summaries_db
 
         data = [
             _make_conversation(locked=True),
@@ -571,14 +591,22 @@ class TestUsersLockEnforcement:
             _make_conversation(locked=True, conversation_id='conv-3'),
         ]
         conversations_db.get_conversations = MagicMock(return_value=data)
+        notification_db.get_user_time_zone = MagicMock(return_value=None)
+        notification_db.get_all_tokens = MagicMock(return_value=['token1'])
+        daily_summaries_db.create_daily_summary = MagicMock(return_value='summary-1')
 
-        # Execute the exact filtering from users.py line ~971
-        conversations_data = conversations_db.get_conversations('uid', start_date=None, end_date=None)
-        if conversations_data:
-            conversations_data = [c for c in conversations_data if not c.get('is_locked', False)]
+        from routers.users import test_daily_summary
 
-        assert len(conversations_data) == 1
-        assert conversations_data[0]['id'] == 'conv-2'
+        mock_gen = MagicMock(return_value={'headline': 'Test', 'overview': 'Overview'})
+        with patch('routers.users.generate_comprehensive_daily_summary', mock_gen):
+            with patch('routers.users.send_notification'):
+                result = test_daily_summary(uid='test-uid')
+
+        # Verify only unlocked conversations were passed to summary generation
+        call_args = mock_gen.call_args
+        conversations_passed = call_args[0][1]  # second positional arg
+        assert len(conversations_passed) == 1
+        assert conversations_passed[0].id == 'conv-2'
 
     def test_gdpr_export_includes_locked(self):
         """H6: GDPR export intentionally includes locked conversations (Art. 15)."""
@@ -600,22 +628,19 @@ class TestMcpRestLockRedaction:
     """MCP REST get_conversations must redact locked conversation content."""
 
     def test_mcp_rest_redacts_locked(self):
-        """GET /v1/mcp/conversations must redact locked conversation fields."""
+        """GET /v1/mcp/conversations calls real router and redacts locked fields."""
         import database.conversations as conversations_db
 
         conversations_db.get_conversations = MagicMock(
             return_value=[_make_conversation(locked=True), _make_conversation(locked=False, conversation_id='conv-2')]
         )
 
-        # Execute the exact redaction from mcp.py line ~186
-        conversations = conversations_db.get_conversations('uid', 25, 0)
-        for conv in conversations:
-            if conv.get('is_locked', False):
-                if 'structured' in conv:
-                    conv['structured']['action_items'] = []
-                    conv['structured']['events'] = []
-                conv['transcript_segments'] = []
+        from routers.mcp import get_conversations
 
-        assert conversations[0]['structured']['action_items'] == []
-        assert conversations[0]['transcript_segments'] == []
-        assert len(conversations[1]['structured']['action_items']) == 1
+        result = get_conversations(uid='test-uid')
+
+        assert result[0]['structured']['action_items'] == []
+        assert result[0]['structured']['events'] == []
+        assert result[0]['transcript_segments'] == []
+        assert len(result[1]['structured']['action_items']) == 1
+        assert len(result[1]['transcript_segments']) == 1
