@@ -43,6 +43,7 @@ pub struct AppState {
     pub redis: Option<Arc<RedisService>>,
     pub config: Arc<Config>,
     pub crisp_session_cache: routes::crisp::SessionCache,
+    pub gemini_rate_limiter: routes::rate_limit::SharedRateLimiter,
 }
 
 #[tokio::main]
@@ -166,12 +167,26 @@ async fn main() {
     };
 
     // Create app state
+    let gemini_rate_limiter = routes::rate_limit::GeminiRateLimiter::new();
+
+    // Spawn background task to evict stale rate limit entries every hour
+    {
+        let limiter = gemini_rate_limiter.clone();
+        tokio::spawn(async move {
+            loop {
+                tokio::time::sleep(std::time::Duration::from_secs(3600)).await;
+                limiter.evict_stale().await;
+            }
+        });
+    }
+
     let state = AppState {
         firestore,
         integrations,
         redis,
         config: Arc::new(config.clone()),
         crisp_session_cache: routes::crisp::new_session_cache(),
+        gemini_rate_limiter,
     };
 
     // Build CORS layer
