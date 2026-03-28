@@ -200,8 +200,13 @@ class TestRouterWiring(unittest.TestCase):
 
     def test_chat_router_has_rate_limits(self):
         matches = self._grep_file("routers/chat.py", r"with_rate_limit.*chat:|voice:|file:")
-        # send_message, initial(x2), voice_message, voice_transcribe, file_upload = 6
-        self.assertGreaterEqual(len(matches), 5, "chat.py missing rate limit wiring")
+        # send_message, initial(x2), voice_message, voice_transcribe, file_upload(v1+v2) = 7
+        self.assertGreaterEqual(len(matches), 6, "chat.py missing rate limit wiring")
+
+    def test_legacy_file_upload_rate_limited(self):
+        """Legacy v1/files must also be rate limited to prevent bypass."""
+        matches = self._grep_file("routers/chat.py", r"with_rate_limit.*file:upload")
+        self.assertGreaterEqual(len(matches), 2, "v1/files legacy endpoint missing rate limit")
 
     def test_developer_router_has_rate_limits(self):
         matches = self._grep_file("routers/developer.py", r"with_rate_limit.*dev:")

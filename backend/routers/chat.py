@@ -507,7 +507,9 @@ def upload_file_chat(
 
 
 @router.post('/v1/files', response_model=List[FileChat], tags=['chat'])
-def upload_file_chat(files: List[UploadFile] = File(...), uid: str = Depends(auth.get_current_user_uid)):
+def upload_file_chat(
+    files: List[UploadFile] = File(...), uid: str = Depends(with_rate_limit(auth.get_current_user_uid, "file:upload"))
+):
     thumbs_name = []
     files_chat = []
     for file in files:
