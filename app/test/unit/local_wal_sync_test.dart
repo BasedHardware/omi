@@ -294,6 +294,48 @@ void main() {
     });
   });
 
+  group('session lifecycle (production)', () {
+    test('setDeviceInfo updates metadata without error', () {
+      sync.setDeviceInfo('phone-mic', 'Phone Microphone');
+      // Just verify no crash — metadata used during WAL creation
+    });
+
+    test('frames and synced arrays stay in sync after mixed operations', () {
+      // Add 3 frames
+      sync.onFrameCaptured(WalFrame(payload: [1], syncKey: FrameSyncKey([0])));
+      sync.onFrameCaptured(WalFrame(payload: [2], syncKey: FrameSyncKey([1])));
+      sync.onFrameCaptured(WalFrame(payload: [3], syncKey: FrameSyncKey([2])));
+
+      // Mark middle frame synced
+      sync.markFrameSynced(FrameSyncKey([1]));
+
+      // Verify parallel arrays stay consistent
+      expect(sync.testFrames.length, 3);
+      expect(sync.testFrameSynced.length, 3);
+      expect(sync.testFrameSynced[0], false);
+      expect(sync.testFrameSynced[1], true);
+      expect(sync.testFrameSynced[2], false);
+    });
+
+    test('phone mic frames with wrapping index keys', () {
+      // Simulate phone mic producing 256+ frames (index wraps at 255)
+      for (int i = 0; i < 260; i++) {
+        sync.onFrameCaptured(WalFrame(
+          payload: List.filled(320, i & 0xFF),
+          syncKey: FrameSyncKey.fromIndex(i),
+        ));
+      }
+
+      expect(sync.testFrames.length, 260);
+
+      // Mark frame index 3 (appears at position 3 and 259 due to wrapping)
+      // Reverse scan finds position 259 first
+      sync.markFrameSynced(FrameSyncKey.fromIndex(3));
+      expect(sync.testFrameSynced[3], false); // Not this one
+      expect(sync.testFrameSynced[259], true); // This one (last match)
+    });
+  });
+
   group('_chunk payload extraction', () {
     test('WalFrame.payload is used for Wal.data (not raw bytes)', () {
       // Simulate what _chunk does: extract payloads from WalFrames
