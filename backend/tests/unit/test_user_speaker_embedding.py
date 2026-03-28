@@ -292,3 +292,59 @@ class TestTranscribeFirestoreLoading:
                 }
 
         assert USER_SELF_PERSON_ID in person_embeddings_cache
+
+
+# ─── Final Assignment Pass ─────────────────────────────────────────────────
+
+
+class TestFinalAssignmentPass:
+    """Tests for the final speaker assignment pass at session end."""
+
+    def test_final_pass_corrects_last_segment(self):
+        """When embedding match happens on the last segment, final pass should correct Firestore."""
+        from utils.speaker_assignment import process_speaker_assigned_segments
+        from models.transcript_segment import TranscriptSegment
+
+        # Simulate: 3 segments, speaker 0 matched to user AFTER last batch
+        segments = [
+            TranscriptSegment(text='Hello', speaker='SPEAKER_0', speaker_id=0, is_user=False, start=0, end=1),
+            TranscriptSegment(text='Hi there', speaker='SPEAKER_1', speaker_id=1, is_user=False, start=1, end=2),
+            TranscriptSegment(text='How are you', speaker='SPEAKER_0', speaker_id=0, is_user=False, start=2, end=3),
+        ]
+        # Simulate embedding match on segment 2 (last segment)
+        segment_person_assignment_map = {segments[2].id: 'user'}
+        speaker_to_person_map = {0: ('user', 'User')}
+
+        # Run final pass (same as what stream_transcript_process does at exit)
+        process_speaker_assigned_segments(segments, segment_person_assignment_map, speaker_to_person_map)
+
+        # All speaker 0 segments should now have is_user=True
+        assert segments[0].is_user is True
+        assert segments[1].is_user is False
+        assert segments[2].is_user is True
+
+    def test_final_pass_no_op_when_no_maps(self):
+        """Final pass should be a no-op when there are no pending assignments."""
+        from utils.speaker_assignment import process_speaker_assigned_segments
+        from models.transcript_segment import TranscriptSegment
+
+        segments = [
+            TranscriptSegment(text='Hello', speaker='SPEAKER_0', speaker_id=0, is_user=False, start=0, end=1),
+        ]
+        process_speaker_assigned_segments(segments, {}, {})
+        assert segments[0].is_user is False
+
+    def test_final_pass_skips_already_assigned(self):
+        """Final pass should not override segments already marked as is_user."""
+        from utils.speaker_assignment import process_speaker_assigned_segments
+        from models.transcript_segment import TranscriptSegment
+
+        segments = [
+            TranscriptSegment(text='Hello', speaker='SPEAKER_0', speaker_id=0, is_user=True, start=0, end=1),
+            TranscriptSegment(text='Bye', speaker='SPEAKER_0', speaker_id=0, is_user=False, start=1, end=2),
+        ]
+        speaker_to_person_map = {0: ('user', 'User')}
+        process_speaker_assigned_segments(segments, {}, speaker_to_person_map)
+
+        assert segments[0].is_user is True  # was already True, unchanged
+        assert segments[1].is_user is True  # corrected by final pass
