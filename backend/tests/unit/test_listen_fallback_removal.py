@@ -10,10 +10,9 @@ deeply nested closures (not directly importable) and assert the
 NEW behavior introduced by #6061.
 """
 
-import asyncio
 import time
 from enum import Enum
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -52,18 +51,17 @@ async def _process_conversation(
     """Mirrors _process_conversation() from transcribe.py after #6061.
 
     Key contract: NEVER calls process_conversation() locally.
-    Always marks processing + routes through request_conversation_processing.
+    Checks pusher availability BEFORE marking processing to avoid stranding conversations.
     """
     conversation = conversations_db.get_conversation(uid, conversation_id)
     if conversation:
         has_content = conversation.get('transcript_segments') or conversation.get('photos')
         if has_content:
+            if not request_conversation_processing:
+                return  # Warning logged — pusher not enabled, skip (stays in_progress)
             conversations_db.update_conversation_status(uid, conversation_id, ConversationStatus.processing)
             on_conversation_processing_started(conversation_id)
-            if request_conversation_processing:
-                await request_conversation_processing(conversation_id)
-            else:
-                pass  # Warning logged — pusher not enabled
+            await request_conversation_processing(conversation_id)
         else:
             conversations_db.delete_conversation(uid, conversation_id)
 
@@ -173,8 +171,8 @@ async def test_process_conversation_never_calls_local_fallback():
 
 
 @pytest.mark.asyncio
-async def test_process_conversation_null_guard_no_crash():
-    """When request_conversation_processing is None (pusher disabled), no crash occurs."""
+async def test_process_conversation_null_guard_skips_processing():
+    """When request_conversation_processing is None (pusher disabled), conversation stays in_progress."""
     db = MagicMock()
     db.get_conversation.return_value = {'transcript_segments': [{'text': 'hello'}]}
     on_started = MagicMock()
@@ -182,9 +180,9 @@ async def test_process_conversation_null_guard_no_crash():
     # Should not raise
     await _process_conversation('conv-1', db, 'uid-1', None, on_started)
 
-    # Still marks processing in Firestore
-    db.update_conversation_status.assert_called_once_with('uid-1', 'conv-1', ConversationStatus.processing)
-    on_started.assert_called_once_with('conv-1')
+    # Must NOT mark processing — no way to process without pusher
+    db.update_conversation_status.assert_not_called()
+    on_started.assert_not_called()
 
 
 @pytest.mark.asyncio
