@@ -42,7 +42,7 @@ from utils.fair_use import (
     is_hard_restricted,
     trigger_classifier_if_needed,
     is_dg_budget_exhausted,
-    ensure_free_exhausted_restrict,
+    get_enforcement_stage,
     record_dg_usage_ms,
     FAIR_USE_ENABLED,
     FAIR_USE_RESTRICT_DAILY_DG_MS,
@@ -833,13 +833,12 @@ async def sync_local_files(files: List[UploadFile] = File(...), uid: str = Depen
         segment_lock = threading.Lock()
         total_segments = len(segmented_paths)
 
-        # DG budget gate (#6083): throttle cloud STT for free-exhausted / restrict-stage users
-        # Free-exhausted → restrict directly; restrict-stage uses daily DG budget.
+        # DG budget gate: throttle cloud STT for restrict-stage users (#6083)
         # Pre-charge DG usage before processing to prevent budget overshoot.
         dg_budget_blocked = False
         if FAIR_USE_ENABLED:
             try:
-                fair_use_stage = ensure_free_exhausted_restrict(uid)
+                fair_use_stage = get_enforcement_stage(uid)
                 if fair_use_stage == 'restrict' and FAIR_USE_RESTRICT_DAILY_DG_MS > 0:
                     # Pre-charge this request's duration, then check if budget is busted
                     dg_ms = int(total_speech_seconds * 1000)
