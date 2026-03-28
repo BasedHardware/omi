@@ -133,9 +133,8 @@ class _SpeechProfileSharingPageState extends State<SpeechProfileSharingPage> {
 
   Widget _buildProfileTile(SharedProfileInfo info, {required Widget trailing}) {
     final hasName = info.name.isNotEmpty;
-    final truncatedUid = info.uid.length > 12
-        ? '${info.uid.substring(0, 6)}...${info.uid.substring(info.uid.length - 4)}'
-        : info.uid;
+    final truncatedUid =
+        info.uid.length > 12 ? '${info.uid.substring(0, 6)}...${info.uid.substring(info.uid.length - 4)}' : info.uid;
     return Theme(
       data: Theme.of(context).copyWith(splashColor: Colors.transparent, highlightColor: Colors.transparent),
       child: ListTile(
@@ -218,9 +217,7 @@ class _SpeechProfileSharingPageState extends State<SpeechProfileSharingPage> {
                         ),
                       ),
                     ),
-
                   const SizedBox(height: 24),
-
                   _buildSectionHeader(context.l10n.sharedWithYouSection),
                   if (_sharedWithMe.isEmpty)
                     _buildEmptyState(context.l10n.noProfilesSharedWithYou, Icons.people_outline)
@@ -246,7 +243,6 @@ class _SpeechProfileSharingPageState extends State<SpeechProfileSharingPage> {
                         ),
                       ),
                     ),
-
                   const SizedBox(height: 32),
                 ],
               ),
