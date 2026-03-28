@@ -52,54 +52,30 @@ class _DoublePressConfigStepState extends State<DoublePressConfigStep> {
               const SizedBox(height: 24),
               const DoubleTapDemoAnimation(),
               const Spacer(),
-              if (!provider.doublePressDetected) ...[
+              if (provider.showSingleTapHint) ...[
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
                   decoration: BoxDecoration(
-                    color: provider.showSingleTapHint
-                        ? const Color(0xFFFFA726).withValues(alpha: 0.12)
-                        : Colors.white.withValues(alpha: 0.06),
-                    borderRadius: BorderRadius.circular(100),
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(Icons.touch_app,
-                          color: provider.showSingleTapHint ? const Color(0xFFFFA726) : Colors.white.withValues(alpha: 0.6),
-                          size: 24),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Text(
-                          provider.showSingleTapHint
-                              ? 'That was a single tap — try tapping twice quickly!'
-                              : 'Try it now! Double tap your Omi',
-                          style: TextStyle(
-                              color: provider.showSingleTapHint ? const Color(0xFFFFA726) : const Color(0xFF9E9E9E),
-                              fontSize: 15),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ] else ...[
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF4CAF50).withValues(alpha: 0.12),
+                    color: const Color(0xFFFFA726).withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(100),
                   ),
                   child: const Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(Icons.check_circle, color: Color(0xFF4CAF50), size: 22),
-                      SizedBox(width: 10),
-                      Text('Double tap detected!', style: TextStyle(color: Color(0xFF4CAF50), fontSize: 16, fontWeight: FontWeight.w600)),
+                      Icon(Icons.touch_app, color: Color(0xFFFFA726), size: 24),
+                      SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          'That was a single tap — try tapping twice quickly!',
+                          style: TextStyle(color: Color(0xFFFFA726), fontSize: 15),
+                        ),
+                      ),
                     ],
                   ),
                 ),
               ],
             ],
           ),
-          bottomAction: provider.doublePressDetected
+          bottomAction: provider.doublePressCount > 0
               ? OnboardingContinueButton(label: 'Finish', onPressed: widget.onComplete)
               : null,
         );

@@ -34,7 +34,7 @@ class DeviceOnboardingProvider extends ChangeNotifier {
 
   // Step 3: Double press config
   int selectedDoubleTapAction = 0;
-  bool doublePressDetected = false;
+  int doublePressCount = 0;
   bool showSingleTapHint = false;
 
   Timer? _hintTimer;
@@ -55,7 +55,7 @@ class DeviceOnboardingProvider extends ChangeNotifier {
     aiResponse = null;
     powerCycleState = PowerCycleSubState.waitingForOff;
     selectedDoubleTapAction = SharedPreferencesUtil().doubleTapAction;
-    doublePressDetected = false;
+    doublePressCount = 0;
     showSingleTapHint = false;
     _hintTimer?.cancel();
     _hintTimer = null;
@@ -169,7 +169,7 @@ class DeviceOnboardingProvider extends ChangeNotifier {
 
   void selectDoubleTapAction(int action) {
     selectedDoubleTapAction = action;
-    doublePressDetected = false;
+    doublePressCount = 0;
     notifyListeners();
   }
 
@@ -181,7 +181,7 @@ class DeviceOnboardingProvider extends ChangeNotifier {
     }
     if (buttonState != 2) return;
     showSingleTapHint = false;
-    doublePressDetected = true;
+    doublePressCount++;
     // Save the selected action
     SharedPreferencesUtil().doubleTapAction = selectedDoubleTapAction;
     notifyListeners();

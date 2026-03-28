@@ -20,11 +20,11 @@ class _DoubleTapDemoAnimationState extends State<DoubleTapDemoAnimation> {
       builder: (context, provider, _) {
         switch (provider.selectedDoubleTapAction) {
           case 0:
-            return EndConversationDemo(key: const ValueKey(0), doubleTapped: provider.doublePressDetected);
+            return EndConversationDemo(key: const ValueKey(0), doublePressCount: provider.doublePressCount);
           case 1:
-            return MuteUnmuteDemo(key: const ValueKey(1), doubleTapped: provider.doublePressDetected);
+            return MuteUnmuteDemo(key: const ValueKey(1), doublePressCount: provider.doublePressCount);
           case 2:
-            return StarConversationDemo(key: const ValueKey(2), doubleTapped: provider.doublePressDetected);
+            return StarConversationDemo(key: const ValueKey(2), doublePressCount: provider.doublePressCount);
           default:
             return const SizedBox.shrink();
         }
@@ -109,7 +109,7 @@ class _ConversationCard extends StatelessWidget {
               height: 8,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: isMuted ? const Color(0xFF9E9E9E) : const Color(0xFF4CAF50),
+                color: isMuted ? const Color(0xFFEF5350) : const Color(0xFF4CAF50),
               ),
             ),
             const SizedBox(width: 12),
@@ -117,7 +117,7 @@ class _ConversationCard extends StatelessWidget {
               child: CustomPaint(
                 painter: _WaveformPainter(
                   phase: wavePhase,
-                  color: isMuted ? const Color(0xFF555555) : waveColor.withValues(alpha: 0.6),
+                  color: isMuted ? const Color(0xFFEF5350).withValues(alpha: 0.4) : waveColor.withValues(alpha: 0.6),
                   amplitude: isMuted ? 0.1 : waveAmplitude,
                 ),
                 size: const Size(double.infinity, 32),
@@ -129,7 +129,7 @@ class _ConversationCard extends StatelessWidget {
             ],
             if (isMuted) ...[
               const SizedBox(width: 12),
-              const Icon(Icons.mic_off, color: Color(0xFF9E9E9E), size: 18),
+              const Icon(Icons.mic_off, color: Color(0xFFEF5350), size: 18),
             ],
           ],
         ),
@@ -141,9 +141,9 @@ class _ConversationCard extends StatelessWidget {
 // --- End Conversation Demo ---
 
 class EndConversationDemo extends StatefulWidget {
-  final bool doubleTapped;
+  final int doublePressCount;
 
-  const EndConversationDemo({super.key, required this.doubleTapped});
+  const EndConversationDemo({super.key, required this.doublePressCount});
 
   @override
   State<EndConversationDemo> createState() => _EndConversationDemoState();
@@ -152,7 +152,8 @@ class EndConversationDemo extends StatefulWidget {
 class _EndConversationDemoState extends State<EndConversationDemo> with SingleTickerProviderStateMixin {
   late AnimationController _controller;
   double _cutPhase = 0;
-  double _splitPosition = 0.5; // 0-1 where the split happens
+  double _splitPosition = 0.5;
+  bool _isSplit = false;
 
   @override
   void initState() {
@@ -163,9 +164,14 @@ class _EndConversationDemoState extends State<EndConversationDemo> with SingleTi
   @override
   void didUpdateWidget(EndConversationDemo oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.doubleTapped && !oldWidget.doubleTapped) {
+    if (widget.doublePressCount > oldWidget.doublePressCount) {
       _cutPhase = _controller.value * 2 * pi * 3;
-      _splitPosition = 0.35 + (_controller.value * 0.3); // varies based on when they tapped
+      _splitPosition = 0.35 + (_controller.value * 0.3);
+      setState(() => _isSplit = true);
+      // Reset after 2 seconds to allow another split
+      Future.delayed(const Duration(seconds: 2), () {
+        if (mounted) setState(() => _isSplit = false);
+      });
     }
   }
 
@@ -194,14 +200,11 @@ class _EndConversationDemoState extends State<EndConversationDemo> with SingleTi
               Container(
                 width: 8,
                 height: 8,
-                decoration: const BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: Color(0xFF4CAF50),
-                ),
+                decoration: const BoxDecoration(shape: BoxShape.circle, color: Color(0xFF4CAF50)),
               ),
               const SizedBox(width: 12),
               Expanded(
-                child: widget.doubleTapped
+                child: _isSplit
                     ? _buildSplitWaveform(phase)
                     : CustomPaint(
                         painter: _WaveformPainter(phase: phase, color: Colors.white.withValues(alpha: 0.6)),
@@ -220,45 +223,33 @@ class _EndConversationDemoState extends State<EndConversationDemo> with SingleTi
       builder: (context, constraints) {
         final totalWidth = constraints.maxWidth;
         final leftWidth = totalWidth * _splitPosition;
-        final gapWidth = 12.0;
+        const gapWidth = 12.0;
         final rightWidth = totalWidth - leftWidth - gapWidth;
 
         return Row(
           children: [
-            // Old conversation - frozen waveform, faded
             SizedBox(
               width: leftWidth,
               height: 32,
               child: CustomPaint(
-                painter: _WaveformPainter(
-                  phase: _cutPhase,
-                  color: Colors.white.withValues(alpha: 0.2),
-                ),
+                painter: _WaveformPainter(phase: _cutPhase, color: Colors.white.withValues(alpha: 0.2)),
               ),
             ),
-            // Gap / divider
             SizedBox(
               width: gapWidth,
               child: Center(
                 child: Container(
                   width: 2,
                   height: 24,
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.3),
-                    borderRadius: BorderRadius.circular(1),
-                  ),
+                  decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.3), borderRadius: BorderRadius.circular(1)),
                 ),
               ),
             ),
-            // New conversation - live waveform, green tint
             SizedBox(
               width: rightWidth > 0 ? rightWidth : 0,
               height: 32,
               child: CustomPaint(
-                painter: _WaveformPainter(
-                  phase: livePhase,
-                  color: const Color(0xFF81C784).withValues(alpha: 0.7),
-                ),
+                painter: _WaveformPainter(phase: livePhase, color: const Color(0xFF81C784).withValues(alpha: 0.7)),
               ),
             ),
           ],
@@ -271,9 +262,9 @@ class _EndConversationDemoState extends State<EndConversationDemo> with SingleTi
 // --- Mute/Unmute Demo ---
 
 class MuteUnmuteDemo extends StatefulWidget {
-  final bool doubleTapped;
+  final int doublePressCount;
 
-  const MuteUnmuteDemo({super.key, required this.doubleTapped});
+  const MuteUnmuteDemo({super.key, required this.doublePressCount});
 
   @override
   State<MuteUnmuteDemo> createState() => _MuteUnmuteDemoState();
@@ -281,20 +272,11 @@ class MuteUnmuteDemo extends StatefulWidget {
 
 class _MuteUnmuteDemoState extends State<MuteUnmuteDemo> with SingleTickerProviderStateMixin {
   late AnimationController _controller;
-  bool _isMuted = false;
 
   @override
   void initState() {
     super.initState();
     _controller = AnimationController(vsync: this, duration: const Duration(seconds: 3))..repeat();
-  }
-
-  @override
-  void didUpdateWidget(MuteUnmuteDemo oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (widget.doubleTapped && !oldWidget.doubleTapped) {
-      setState(() => _isMuted = !_isMuted);
-    }
   }
 
   @override
@@ -305,13 +287,14 @@ class _MuteUnmuteDemoState extends State<MuteUnmuteDemo> with SingleTickerProvid
 
   @override
   Widget build(BuildContext context) {
+    final isMuted = widget.doublePressCount.isOdd;
     return AnimatedBuilder(
       animation: _controller,
       builder: (context, _) {
         final phase = _controller.value * 2 * pi * 3;
         return _ConversationCard(
           wavePhase: phase,
-          isMuted: _isMuted,
+          isMuted: isMuted,
         );
       },
     );
@@ -321,9 +304,9 @@ class _MuteUnmuteDemoState extends State<MuteUnmuteDemo> with SingleTickerProvid
 // --- Star Conversation Demo ---
 
 class StarConversationDemo extends StatefulWidget {
-  final bool doubleTapped;
+  final int doublePressCount;
 
-  const StarConversationDemo({super.key, required this.doubleTapped});
+  const StarConversationDemo({super.key, required this.doublePressCount});
 
   @override
   State<StarConversationDemo> createState() => _StarConversationDemoState();
@@ -346,37 +329,15 @@ class _StarConversationDemoState extends State<StarConversationDemo> with Single
 
   @override
   Widget build(BuildContext context) {
+    final isStarred = widget.doublePressCount.isOdd;
     return AnimatedBuilder(
       animation: _controller,
       builder: (context, _) {
         final phase = _controller.value * 2 * pi * 3;
-        return Stack(
-          children: [
-            // Bottom card (oldest)
-            Padding(
-              padding: const EdgeInsets.only(top: 16, left: 16, right: 16),
-              child: _ConversationCard(
-                wavePhase: 0,
-                waveAmplitude: 0,
-                opacity: 0.3,
-              ),
-            ),
-            // Middle card
-            Padding(
-              padding: const EdgeInsets.only(top: 8, left: 8, right: 8),
-              child: _ConversationCard(
-                wavePhase: 0,
-                waveAmplitude: 0,
-                opacity: 0.5,
-              ),
-            ),
-            // Top card (active) with live waveform
-            _ConversationCard(
-              wavePhase: phase,
-              waveAmplitude: 1.0,
-              showStar: widget.doubleTapped,
-            ),
-          ],
+        return _ConversationCard(
+          wavePhase: phase,
+          waveAmplitude: 1.0,
+          showStar: isStarred,
         );
       },
     );
