@@ -875,7 +875,7 @@ async def _stream_handler(
                 conversation.transcript_segments, segments
             )
             process_speaker_assigned_segments(
-                updated_segments,
+                conversation.transcript_segments,
                 segment_person_assignment_map,
                 speaker_to_person_map,
             )
@@ -1991,6 +1991,18 @@ async def _stream_handler(
 
                     # Auto-assign the triggering segment so it gets corrected on next batch
                     segment_person_assignment_map[segment['id']] = USER_SELF_PERSON_ID
+
+                    # Notify client so it can retroactively update all segments with this speaker_id
+                    # to is_user=true (segments sent before the embedding match had is_user=false).
+                    # Always send 'user' directly — is_user is fundamental, not gated by auto_assign.
+                    _send_message_event(
+                        SpeakerLabelSuggestionEvent(
+                            speaker_id=speaker_id,
+                            person_id='user',
+                            person_name='User',
+                            segment_id=segment['id'],
+                        )
+                    )
                 else:
                     logger.info(
                         f"Speaker ID: speaker {speaker_id} -> {sanitize_pii(person_name)} (distance={best_distance:.3f}) {uid} {session_id}"
