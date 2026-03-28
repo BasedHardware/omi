@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'package:provider/provider.dart';
 
+import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/providers/device_onboarding_provider.dart';
 import 'package:omi/pages/onboarding/interactive_device_onboarding/widgets/onboarding_step_scaffold.dart';
 
@@ -14,26 +15,17 @@ class PowerCycleStep extends StatefulWidget {
   State<PowerCycleStep> createState() => _PowerCycleStepState();
 }
 
-class _PowerCycleStepState extends State<PowerCycleStep> with SingleTickerProviderStateMixin {
-  late AnimationController _animController;
+class _PowerCycleStepState extends State<PowerCycleStep> {
   bool _showHint = false;
   bool _showContinue = false;
 
   @override
   void initState() {
     super.initState();
-    _animController = AnimationController(vsync: this, duration: const Duration(milliseconds: 1000))..repeat(reverse: true);
-
     final provider = context.read<DeviceOnboardingProvider>();
     provider.startPowerCycleHintTimer(() {
       if (mounted) setState(() => _showHint = true);
     });
-  }
-
-  @override
-  void dispose() {
-    _animController.dispose();
-    super.dispose();
   }
 
   @override
@@ -46,26 +38,100 @@ class _PowerCycleStepState extends State<PowerCycleStep> with SingleTickerProvid
           });
         }
 
+        final isOff = provider.powerCycleState == PowerCycleSubState.deviceOff ||
+            provider.powerCycleState == PowerCycleSubState.waitingForReconnect;
+        final isReconnected = provider.powerCycleState == PowerCycleSubState.reconnected;
+
         return OnboardingStepScaffold(
-          title: 'Turn Off & On',
-          subtitle: '',
+          title: _getTitle(provider.powerCycleState),
+          subtitle: _getSubtitle(provider.powerCycleState),
           currentStep: 2,
           content: Column(
             children: [
-              const Spacer(flex: 1),
+              const SizedBox(height: 8),
+              // Device image
+              _buildDeviceImage(isConnected: !isOff),
+              const SizedBox(height: 24),
+              // Status card
               _buildStatusCard(provider),
-              const SizedBox(height: 16),
-              _buildInstructionCard(provider),
               if (_showHint && provider.powerCycleState == PowerCycleSubState.waitingForOff) ...[
                 const SizedBox(height: 12),
                 _buildHintCard(),
               ],
-              const Spacer(flex: 2),
+              const Spacer(),
             ],
           ),
-          bottomAction: _showContinue ? OnboardingContinueButton(onPressed: widget.onComplete) : null,
+          bottomAction: _showContinue && isReconnected ? OnboardingContinueButton(onPressed: widget.onComplete) : null,
         );
       },
+    );
+  }
+
+  String _getTitle(PowerCycleSubState state) {
+    switch (state) {
+      case PowerCycleSubState.waitingForOff:
+      case PowerCycleSubState.deviceOff:
+        return 'Turn Off';
+      case PowerCycleSubState.waitingForReconnect:
+      case PowerCycleSubState.reconnected:
+        return 'Turn On';
+    }
+  }
+
+  String _getSubtitle(PowerCycleSubState state) {
+    switch (state) {
+      case PowerCycleSubState.waitingForOff:
+        return 'Hold the button for 3 seconds';
+      case PowerCycleSubState.deviceOff:
+        return '';
+      case PowerCycleSubState.waitingForReconnect:
+        return 'Press the button to turn it back on';
+      case PowerCycleSubState.reconnected:
+        return '';
+    }
+  }
+
+  Widget _buildDeviceImage({required bool isConnected}) {
+    final pixelRatio = MediaQuery.of(context).devicePixelRatio;
+    const imageSize = 140.0;
+
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 300),
+      child: isConnected
+          ? Image.asset(
+              Assets.images.omiWithoutRope.path,
+              key: const ValueKey('connected'),
+              height: imageSize,
+              width: imageSize,
+              cacheHeight: (imageSize * pixelRatio).round(),
+              cacheWidth: (imageSize * pixelRatio).round(),
+            )
+          : Stack(
+              key: const ValueKey('disconnected'),
+              clipBehavior: Clip.none,
+              children: [
+                Image.asset(
+                  Assets.images.omiWithoutRopeTurnedOff.path,
+                  height: imageSize,
+                  width: imageSize,
+                  cacheHeight: (imageSize * pixelRatio).round(),
+                  cacheWidth: (imageSize * pixelRatio).round(),
+                ),
+                Positioned(
+                  bottom: -2,
+                  right: -2,
+                  child: Container(
+                    width: 28,
+                    height: 28,
+                    decoration: const BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: Color(0xFFEF5350),
+                    ),
+                    child: const Icon(Icons.close, color: Colors.white, size: 16),
+                  ),
+                ),
+              ],
+            ),
     );
   }
 
@@ -101,7 +167,7 @@ class _PowerCycleStepState extends State<PowerCycleStep> with SingleTickerProvid
 
     return AnimatedContainer(
       duration: const Duration(milliseconds: 300),
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 18),
       decoration: BoxDecoration(
         color: statusColor.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(20),
@@ -114,52 +180,6 @@ class _PowerCycleStepState extends State<PowerCycleStep> with SingleTickerProvid
           Text(
             statusText,
             style: TextStyle(color: statusColor, fontSize: 18, fontWeight: FontWeight.w600),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildInstructionCard(DeviceOnboardingProvider provider) {
-    final state = provider.powerCycleState;
-
-    String instruction;
-    IconData icon;
-
-    switch (state) {
-      case PowerCycleSubState.waitingForOff:
-        instruction = 'Hold the button for 3+ seconds to turn off';
-        icon = Icons.power_settings_new;
-        break;
-      case PowerCycleSubState.deviceOff:
-        instruction = 'Device is turning off...';
-        icon = Icons.power_settings_new;
-        break;
-      case PowerCycleSubState.waitingForReconnect:
-        instruction = 'Press the button to turn it back on';
-        icon = Icons.power_settings_new;
-        break;
-      case PowerCycleSubState.reconnected:
-        instruction = 'Your Omi is back online!';
-        icon = Icons.celebration;
-        break;
-    }
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.06),
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Row(
-        children: [
-          Icon(icon, color: Colors.white.withValues(alpha: 0.6), size: 22),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Text(
-              instruction,
-              style: const TextStyle(color: Colors.white, fontSize: 15),
-            ),
           ),
         ],
       ),
