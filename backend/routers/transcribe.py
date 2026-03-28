@@ -1792,8 +1792,8 @@ async def _stream_handler(
                 await _process_conversation(current_conversation_id)
                 await _create_new_in_progress_conversation()
 
-    # Sentinel person_id for user's own voice (not a real person in the people collection)
-    USER_SELF_PERSON_ID = '__user_self__'
+    # Sentinel person_id for user's own voice — must match speaker_assignment.py's 'user' sentinel
+    USER_SELF_PERSON_ID = 'user'
 
     async def speaker_identification_task():
         """Consume segment queue, accumulate per speaker, trigger match when ready."""
@@ -1974,6 +1974,9 @@ async def _stream_handler(
                         f"Speaker ID: speaker {speaker_id} -> USER (distance={best_distance:.3f}) {uid} {session_id}"
                     )
                     speaker_to_person_map[speaker_id] = (USER_SELF_PERSON_ID, 'User')
+
+                    # Auto-assign the triggering segment so it gets corrected on next batch
+                    segment_person_assignment_map[segment['id']] = USER_SELF_PERSON_ID
                 else:
                     logger.info(
                         f"Speaker ID: speaker {speaker_id} -> {sanitize_pii(person_name)} (distance={best_distance:.3f}) {uid} {session_id}"
