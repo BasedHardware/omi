@@ -67,6 +67,7 @@ struct SettingsContentView: View {
 
     // Updater view model
     @ObservedObject private var updaterViewModel = UpdaterViewModel.shared
+    @ObservedObject private var shortcutSettings = ShortcutSettings.shared
 
     // Master monitoring state (screen analysis)
     @State private var isMonitoring: Bool
@@ -244,6 +245,7 @@ struct SettingsContentView: View {
         case planUsage = "Plan and Usage"
         case aiChat = "AI Chat"
         case floatingBar = "Floating Bar"
+        case shortcuts = "Shortcuts"
         case advanced = "Advanced"
         case about = "About"
     }
@@ -389,6 +391,8 @@ struct SettingsContentView: View {
                     aiChatSection
                 case .floatingBar:
                     floatingBarSection
+                case .shortcuts:
+                    shortcutsSection
                 case .advanced:
                     advancedSection
                 case .about:
@@ -1730,7 +1734,6 @@ struct SettingsContentView: View {
 
     private var floatingBarSection: some View {
         VStack(spacing: 20) {
-            // Show floating bar toggle
             settingsCard(settingId: "floatingbar.show") {
                 HStack(spacing: 16) {
                     Circle()
@@ -1753,12 +1756,56 @@ struct SettingsContentView: View {
                             } else {
                                 FloatingControlBarManager.shared.hide()
                             }
-                        }
+                    }
                 }
             }
 
-            ShortcutsSettingsSection(highlightedSettingId: $highlightedSettingId)
+            settingsCard(settingId: "floatingbar.background") {
+                VStack(alignment: .leading, spacing: 16) {
+                    Text("Background Style")
+                        .scaledFont(size: 16, weight: .semibold)
+                        .foregroundColor(OmiColors.textPrimary)
+
+                    HStack(spacing: 16) {
+                        Text("Transparent")
+                            .scaledFont(size: 13, weight: shortcutSettings.solidBackground ? .regular : .semibold)
+                            .foregroundColor(shortcutSettings.solidBackground ? OmiColors.textTertiary : OmiColors.textPrimary)
+
+                        Toggle("", isOn: $shortcutSettings.solidBackground)
+                            .toggleStyle(.switch)
+                            .tint(OmiColors.purplePrimary)
+                            .labelsHidden()
+
+                        Text("Solid Dark")
+                            .scaledFont(size: 13, weight: shortcutSettings.solidBackground ? .semibold : .regular)
+                            .foregroundColor(shortcutSettings.solidBackground ? OmiColors.textPrimary : OmiColors.textTertiary)
+
+                        Spacer()
+                    }
+                }
+            }
+
+            settingsCard(settingId: "floatingbar.draggable") {
+                HStack(spacing: 16) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Draggable Floating Bar")
+                            .scaledFont(size: 16, weight: .semibold)
+                            .foregroundColor(OmiColors.textPrimary)
+                        Text("Allow repositioning the floating bar by dragging it.")
+                            .scaledFont(size: 13)
+                            .foregroundColor(OmiColors.textSecondary)
+                    }
+                    Spacer()
+                    Toggle("", isOn: $shortcutSettings.draggableBarEnabled)
+                        .toggleStyle(.switch)
+                        .tint(OmiColors.purplePrimary)
+                }
+            }
         }
+    }
+
+    private var shortcutsSection: some View {
+        ShortcutsSettingsSection(highlightedSettingId: $highlightedSettingId)
     }
 
     private var aiChatSection: some View {

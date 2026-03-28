@@ -291,6 +291,17 @@ class ShortcutSettings: ObservableObject {
         }
     }
 
+    @Published var askOmiEnabled: Bool {
+        didSet {
+            UserDefaults.standard.set(askOmiEnabled, forKey: "shortcut_askOmiEnabled")
+            NotificationCenter.default.post(name: Self.askOmiShortcutChanged, object: nil)
+        }
+    }
+
+    @Published var pttEnabled: Bool {
+        didSet { UserDefaults.standard.set(pttEnabled, forKey: "shortcut_pttEnabled") }
+    }
+
     @Published var doubleTapForLock: Bool {
         didSet { UserDefaults.standard.set(doubleTapForLock, forKey: "shortcut_doubleTapForLock") }
     }
@@ -360,6 +371,8 @@ class ShortcutSettings: ObservableObject {
             legacyMapper: Self.legacyAskOmiShortcut
         ) ?? Self.askOmiPresets[0]
 
+        self.askOmiEnabled = UserDefaults.standard.object(forKey: "shortcut_askOmiEnabled") as? Bool ?? true
+        self.pttEnabled = UserDefaults.standard.object(forKey: "shortcut_pttEnabled") as? Bool ?? true
         self.doubleTapForLock = UserDefaults.standard.object(forKey: "shortcut_doubleTapForLock") as? Bool ?? true
         self.solidBackground = UserDefaults.standard.object(forKey: "shortcut_solidBackground") as? Bool ?? true
         self.pttSoundsEnabled = UserDefaults.standard.object(forKey: "shortcut_pttSoundsEnabled") as? Bool ?? true
