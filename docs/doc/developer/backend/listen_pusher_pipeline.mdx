@@ -106,8 +106,8 @@ sequenceDiagram
         Backend->>Backend: _process_conversation(current_conversation_id)
         alt Pusher available
             Backend->>Pusher: Send process_conversation request (opcode 104)
-        else Pusher unavailable
-            Note over Backend: Conversation stays in_progress<br/>Picked up by cleanup_processing_conversations on next session
+        else Pusher not configured
+            Note over Backend: Conversation stays in_progress permanently<br/>until HOSTED_PUSHER_API_URL is configured
         end
     else Single-channel
         Note over Backend: No explicit _process_conversation() call<br/>Relies on next session to pick up as stale
@@ -117,7 +117,7 @@ sequenceDiagram
     Backend->>Backend: Close Pusher socket
     Backend->>Backend: Cleanup memory (clear caches, buffers)
 
-    Note over Backend: No local fallback processing (#6061).<br/>Conversations stay buffered or in_progress<br/>until pusher recovers or next session starts.
+    Note over Backend: No local fallback processing (#6061).<br/>Pusher is required for conversation processing.<br/>Without it, conversations stay in_progress permanently.
 ```
 
 ## 3.1 Pusher Reconnect & Pending Flush
