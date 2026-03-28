@@ -1000,11 +1000,12 @@ async def sync_upload_v2(
             }
         )
 
-    # 2. Upload raw .bin files to GCS
+    # 2. Generate job ID and upload raw .bin files to GCS
+    job_id = str(uuid.uuid4())
     gcs_paths = []
     bucket = storage_client.bucket(offline_sync_bucket)
     for f, meta in zip(files, file_metadata):
-        gcs_path = f"uploads/{uid}/{meta['filename']}"
+        gcs_path = f"uploads/{uid}/{job_id}/{meta['filename']}"
         blob = bucket.blob(gcs_path)
         blob.upload_from_file(f.file, content_type='application/octet-stream')
         gcs_paths.append(gcs_path)
@@ -1017,7 +1018,6 @@ async def sync_upload_v2(
             break
 
     # 4. Create Firestore job document
-    job_id = str(uuid.uuid4())
     job_doc = {
         'uid': uid,
         'status': 'pending',
@@ -1060,7 +1060,7 @@ async def process_sync_job(request: Request):
     """
     # 1. Authenticate — shared secret, not user auth
     secret = request.headers.get("X-Cloud-Tasks-Secret")
-    if secret != CLOUD_TASKS_SECRET:
+    if not secret or secret != CLOUD_TASKS_SECRET:
         raise HTTPException(status_code=403, detail="Forbidden")
 
     payload = await request.json()
@@ -1075,6 +1075,11 @@ async def process_sync_job(request: Request):
         return {"status": "skipped", "reason": "job not found"}
 
     job = job_snap.to_dict()
+
+    # Validate uid matches the job owner
+    if job.get('uid') != uid:
+        logger.error(f"process_sync_job uid mismatch: payload={uid} job={job.get('uid')}")
+        raise HTTPException(status_code=403, detail="Forbidden")
 
     # Already completed (idempotency — Cloud Tasks may redeliver)
     if job['status'] == 'completed':
