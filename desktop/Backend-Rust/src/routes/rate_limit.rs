@@ -50,9 +50,9 @@ impl RateSnapshot {
     fn to_decision(&self) -> RateDecision {
         if self.burst_count > BURST_PER_MINUTE {
             RateDecision::Reject
-        } else if self.daily_count > DAILY_HARD_LIMIT as u32 {
+        } else if self.daily_count >= DAILY_HARD_LIMIT {
             RateDecision::Reject
-        } else if self.daily_count > DAILY_SOFT_LIMIT as u32 {
+        } else if self.daily_count >= DAILY_SOFT_LIMIT {
             RateDecision::DegradeToFlash
         } else {
             RateDecision::Allow
@@ -217,13 +217,13 @@ mod tests {
 
     #[test]
     fn snapshot_degrade_at_soft_limit() {
-        let s = RateSnapshot { daily_count: 301, burst_count: 5 };
+        let s = RateSnapshot { daily_count: 300, burst_count: 5 };
         assert_eq!(s.to_decision(), RateDecision::DegradeToFlash);
     }
 
     #[test]
     fn snapshot_reject_at_hard_limit() {
-        let s = RateSnapshot { daily_count: 1501, burst_count: 5 };
+        let s = RateSnapshot { daily_count: 1500, burst_count: 5 };
         assert_eq!(s.to_decision(), RateDecision::Reject);
     }
 
@@ -249,10 +249,11 @@ mod tests {
             let mut counters = limiter.counters.lock().await;
             counters.insert("u1".to_string(), UserCounter {
                 day_ordinal: current_day_ordinal(),
-                daily_count: 299,
+                daily_count: 298,
                 burst_window: VecDeque::new(),
             });
         }
+        // After increment: 299, which is < 300 (DAILY_SOFT_LIMIT)
         let decision = limiter.check_and_record_local("u1").await;
         assert_eq!(decision, RateDecision::Allow);
     }
@@ -264,10 +265,11 @@ mod tests {
             let mut counters = limiter.counters.lock().await;
             counters.insert("u1".to_string(), UserCounter {
                 day_ordinal: current_day_ordinal(),
-                daily_count: 300,
+                daily_count: 299,
                 burst_window: VecDeque::new(),
             });
         }
+        // After increment: 300, which is >= DAILY_SOFT_LIMIT
         let decision = limiter.check_and_record_local("u1").await;
         assert_eq!(decision, RateDecision::DegradeToFlash);
     }
@@ -279,10 +281,11 @@ mod tests {
             let mut counters = limiter.counters.lock().await;
             counters.insert("u2".to_string(), UserCounter {
                 day_ordinal: current_day_ordinal(),
-                daily_count: 1500,
+                daily_count: 1499,
                 burst_window: VecDeque::new(),
             });
         }
+        // After increment: 1500, which is >= DAILY_HARD_LIMIT
         let decision = limiter.check_and_record_local("u2").await;
         assert_eq!(decision, RateDecision::Reject);
     }
