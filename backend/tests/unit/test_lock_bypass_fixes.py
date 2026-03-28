@@ -672,3 +672,110 @@ class TestMcpRestLockRedaction:
         assert result[0]['transcript_segments'] == []
         assert len(result[1]['structured']['action_items']) == 1
         assert len(result[1]['transcript_segments']) == 1
+
+
+# =============================================================================
+# Test scheduled daily summary excludes locked conversations
+# =============================================================================
+
+
+class TestScheduledDailySummaryLockFilter:
+    """Scheduled daily summary must exclude locked conversations from LLM context."""
+
+    def test_scheduled_summary_excludes_locked(self):
+        """_send_summary_notification filters locked conversations before generating summary."""
+        import database.conversations as conversations_db
+        import database.daily_summaries as daily_summaries_db
+
+        locked_conv = _make_conversation(locked=True)
+        unlocked_conv = _make_conversation(locked=False, conversation_id='conv-2')
+        conversations_db.get_conversations = MagicMock(return_value=[locked_conv, unlocked_conv])
+
+        with patch('utils.other.notifications.try_acquire_daily_summary_lock', return_value=True):
+            with patch(
+                'utils.other.notifications.generate_comprehensive_daily_summary',
+                return_value={'headline': 'Test', 'day_emoji': '📅', 'overview': 'ok'},
+            ) as mock_gen:
+                daily_summaries_db.create_daily_summary = MagicMock(return_value='summary-1')
+                with patch('utils.other.notifications.send_notification'):
+                    from utils.other.notifications import _send_summary_notification
+
+                    _send_summary_notification(('test-uid', 'token', 'UTC'))
+
+        # generate_comprehensive_daily_summary must be called only with unlocked conversations
+        mock_gen.assert_called_once()
+        conversations_passed = mock_gen.call_args[0][1]
+        assert len(conversations_passed) == 1
+        assert conversations_passed[0].id == 'conv-2'
+
+    def test_scheduled_summary_skips_when_all_locked(self):
+        """_send_summary_notification returns early when all conversations are locked."""
+        import database.conversations as conversations_db
+
+        conversations_db.get_conversations = MagicMock(return_value=[_make_conversation(locked=True)])
+
+        with patch('utils.other.notifications.try_acquire_daily_summary_lock', return_value=True):
+            with patch('utils.other.notifications.generate_comprehensive_daily_summary') as mock_gen:
+                from utils.other.notifications import _send_summary_notification
+
+                _send_summary_notification(('test-uid', 'token', 'UTC'))
+
+        # Should not call LLM when no unlocked conversations remain
+        mock_gen.assert_not_called()
+
+
+# =============================================================================
+# Test goal context excludes locked conversations and memories
+# =============================================================================
+
+
+class TestGoalContextLockFilter:
+    """Goal suggestion/advice must exclude locked conversations and memories."""
+
+    def test_get_goal_context_filters_locked_conversations(self):
+        """_get_goal_context excludes locked conversations from vector and recent results."""
+        import database.conversations as conversations_db
+        import database.memories as memories_db
+        import database.chat as chat_db
+
+        locked_conv = _make_conversation(locked=True)
+        locked_conv['structured']['overview'] = 'SECRET_LOCKED_OVERVIEW'
+        unlocked_conv = _make_conversation(locked=False, conversation_id='conv-2')
+        unlocked_conv['structured']['overview'] = 'VISIBLE_UNLOCKED_OVERVIEW'
+
+        # Mock vector search to return both conv IDs
+        with patch('utils.llm.goals.vector_search', return_value=['conv-1', 'conv-2']):
+            conversations_db.get_conversations_by_id = MagicMock(return_value=[locked_conv, unlocked_conv])
+            conversations_db.get_conversations = MagicMock(return_value=[])
+            chat_db.get_messages = MagicMock(return_value=[])
+            memories_db.get_memories = MagicMock(return_value=[])
+
+            from utils.llm.goals import _get_goal_context
+
+            result = _get_goal_context('test-uid', 'Exercise more')
+
+        # Locked overview must not appear in context
+        assert 'SECRET_LOCKED_OVERVIEW' not in result['conversation_context']
+        assert 'VISIBLE_UNLOCKED_OVERVIEW' in result['conversation_context']
+
+    def test_get_goal_context_filters_locked_memories(self):
+        """_get_goal_context excludes locked memories from context."""
+        import database.conversations as conversations_db
+        import database.memories as memories_db
+        import database.chat as chat_db
+
+        locked_mem = {'content': 'LOCKED_SECRET_MEMORY', 'is_locked': True}
+        unlocked_mem = {'content': 'VISIBLE_UNLOCKED_MEMORY', 'is_locked': False}
+
+        with patch('utils.llm.goals.vector_search', return_value=[]):
+            conversations_db.get_conversations_by_id = MagicMock(return_value=[])
+            conversations_db.get_conversations = MagicMock(return_value=[])
+            chat_db.get_messages = MagicMock(return_value=[])
+            memories_db.get_memories = MagicMock(return_value=[locked_mem, unlocked_mem])
+
+            from utils.llm.goals import _get_goal_context
+
+            result = _get_goal_context('test-uid', 'Read more')
+
+        assert 'LOCKED_SECRET_MEMORY' not in result['memory_context']
+        assert 'VISIBLE_UNLOCKED_MEMORY' in result['memory_context']
