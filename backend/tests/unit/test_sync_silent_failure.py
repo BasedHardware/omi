@@ -287,6 +287,98 @@ class TestDeepgramRetryBehavior:
         assert 'return []' in no_words_block
 
 
+class TestDeepgramRetryBehavioral:
+    """Behavioral tests that execute deepgram_prerecorded with mocked DG client.
+
+    Uses setup_class/teardown_class to install stubs for deepgram + related deps,
+    then imports the real function under test.
+    """
+
+    _saved_modules = {}
+    _deepgram_prerecorded = None
+    _mock_client = None
+
+    @classmethod
+    def setup_class(cls):
+        from unittest.mock import MagicMock
+        from types import ModuleType
+
+        stubs = [
+            'deepgram',
+            'fal_client',
+            'models',
+            'models.transcript_segment',
+            'utils.other.endpoints',
+        ]
+        cls._saved_modules = {name: sys.modules.get(name) for name in stubs}
+        cls._saved_modules['utils.stt.pre_recorded'] = sys.modules.get('utils.stt.pre_recorded')
+
+        for mod_name in stubs:
+            sys.modules[mod_name] = ModuleType(mod_name)
+
+        sys.modules['deepgram'].DeepgramClient = MagicMock()
+        sys.modules['deepgram'].DeepgramClientOptions = MagicMock()
+        sys.modules['fal_client'].submit = MagicMock()
+        sys.modules['models.transcript_segment'].TranscriptSegment = MagicMock()
+        sys.modules['utils.other.endpoints'].timeit = lambda f: f
+
+        # Force re-import so it picks up stubs
+        sys.modules.pop('utils.stt.pre_recorded', None)
+        from utils.stt.pre_recorded import deepgram_prerecorded
+
+        cls._deepgram_prerecorded = staticmethod(deepgram_prerecorded)
+
+    @classmethod
+    def teardown_class(cls):
+        sys.modules.pop('utils.stt.pre_recorded', None)
+        for name, orig in cls._saved_modules.items():
+            if orig is None:
+                sys.modules.pop(name, None)
+            else:
+                sys.modules[name] = orig
+        cls._saved_modules.clear()
+
+    def test_retry_exhaustion_raises_runtime_error(self):
+        """deepgram_prerecorded must raise RuntimeError when all retries fail."""
+        from unittest.mock import MagicMock, patch
+
+        mock_client = MagicMock()
+        mock_client.listen.rest.v.return_value.transcribe_url.side_effect = ConnectionError('timeout')
+
+        with patch('utils.stt.pre_recorded._deepgram_client', mock_client):
+            with pytest.raises(RuntimeError, match='Deepgram transcription failed after 3 attempts'):
+                self._deepgram_prerecorded('https://fake-audio.wav', attempts=0, return_language=True)
+
+        # Should have been called 3 times (initial + 2 retries)
+        assert mock_client.listen.rest.v.return_value.transcribe_url.call_count == 3
+
+    def test_valid_empty_transcription_returns_empty_list(self):
+        """deepgram_prerecorded must return ([], lang) when DG succeeds but finds no words."""
+        from unittest.mock import MagicMock, patch
+
+        mock_response = MagicMock()
+        mock_response.to_dict.return_value = {
+            'results': {
+                'channels': [
+                    {
+                        'alternatives': [{'words': []}],
+                        'detected_language': 'en',
+                    }
+                ]
+            }
+        }
+        mock_client = MagicMock()
+        mock_client.listen.rest.v.return_value.transcribe_url.return_value = mock_response
+
+        with patch('utils.stt.pre_recorded._deepgram_client', mock_client):
+            words, lang = self._deepgram_prerecorded('https://fake-audio.wav', return_language=True)
+
+        assert words == []
+        assert lang == 'en'
+        # Should be called exactly once (no retries for valid response)
+        assert mock_client.listen.rest.v.return_value.transcribe_url.call_count == 1
+
+
 # ---------------------------------------------------------------------------
 # 4. App-side behavior documentation (unchanged, for PR evidence)
 # ---------------------------------------------------------------------------
@@ -820,3 +912,68 @@ class TestProcessSegmentReal:
         mock_update.assert_not_called()
         assert len(errors) == 0
         assert 'conv-existing' in response['updated_memories']
+
+    def test_all_silent_segments_return_200_not_500(self):
+        """When ALL segments are silent (empty words), endpoint should return 200 — not 500.
+
+        This is the core bug in #6100: all-silent batches were treated as all-failed,
+        triggering the 500 branch. Now empty words = success, so all-silent = 200.
+        """
+        process_segment = self._import_process_segment()
+
+        response = {'updated_memories': set(), 'new_memories': set()}
+        errors = []
+        lock = threading.Lock()
+
+        # Run 3 segments that all return empty words (silence)
+        with patch('routers.sync.deepgram_prerecorded', return_value=([], 'en')), patch(
+            'routers.sync.delete_syncing_temporal_file'
+        ), patch('routers.sync.get_syncing_file_temporal_signed_url', return_value='https://fake'), patch(
+            'routers.sync.time.sleep'
+        ):
+            from models.conversation import ConversationSource
+
+            for i in range(3):
+                process_segment(f'/tmp/{i}.wav', 'uid', response, lock, errors, ConversationSource.omi, False)
+
+        # All segments returned silently — zero errors
+        total_segments = 3
+        failed_segments = len(errors)
+        successful_segments = total_segments - failed_segments
+
+        assert failed_segments == 0, f"Silent segments must not produce errors: {errors}"
+        assert successful_segments == 3
+
+        # Endpoint logic: no failures → 200 (not 207, not 500)
+        if total_segments > 0 and successful_segments == 0:
+            status = 500
+        elif failed_segments > 0:
+            status = 207
+        else:
+            status = 200
+        assert status == 200, "All-silent batch must return 200, not 500"
+
+    def test_runtime_error_from_dg_becomes_segment_error(self):
+        """When deepgram_prerecorded raises RuntimeError (retry exhaustion),
+        process_segment catches it and appends to errors list."""
+        process_segment = self._import_process_segment()
+
+        response = {'updated_memories': set(), 'new_memories': set()}
+        errors = []
+        lock = threading.Lock()
+
+        with patch(
+            'routers.sync.deepgram_prerecorded',
+            side_effect=RuntimeError('Deepgram transcription failed after 3 attempts: timeout'),
+        ), patch('routers.sync.delete_syncing_temporal_file'), patch(
+            'routers.sync.get_syncing_file_temporal_signed_url', return_value='https://fake'
+        ), patch(
+            'routers.sync.time.sleep'
+        ):
+            from models.conversation import ConversationSource
+
+            process_segment('/tmp/1700000000.wav', 'uid', response, lock, errors, ConversationSource.omi, False)
+
+        assert len(errors) == 1
+        assert 'Failed to process segment' in errors[0]
+        assert 'Deepgram transcription failed after 3 attempts' in errors[0]
