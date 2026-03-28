@@ -817,8 +817,8 @@ pub fn proactive_routes() -> Router<AppState> {
         .route("/v1/proactive/tasks/prioritize", post(prioritize_tasks))
         .route("/v1/proactive/tasks/deduplicate", post(deduplicate_tasks))
         .route("/v1/proactive/goals/generate", post(generate_goal))
-        .route("/v1/proactive/goals/{id}/advice", post(get_goal_advice))
-        .route("/v1/proactive/goals/{id}/extract-progress", post(extract_goal_progress))
+        .route("/v1/proactive/goals/:id/advice", post(get_goal_advice))
+        .route("/v1/proactive/goals/:id/extract-progress", post(extract_goal_progress))
 }
 
 // ============================================================================
