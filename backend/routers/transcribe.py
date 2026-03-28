@@ -1865,11 +1865,15 @@ async def _stream_handler(
             logger.info(f"Speaker ID: no stored embeddings, task disabled {uid} {session_id}")
             return
 
-        # Consume loop
-        while websocket_active:
+        # Consume loop — keep running until websocket closes AND queue is drained.
+        # stream_transcript_process can enqueue segments after websocket_active=False,
+        # so we must not exit on the flag alone.
+        while True:
             try:
                 seg = await asyncio.wait_for(speaker_id_segment_queue.get(), timeout=2.0)
             except asyncio.TimeoutError:
+                if not websocket_active:
+                    break  # WebSocket closed and no data for 2s — queue is drained
                 continue
 
             speaker_id = seg['speaker_id']
