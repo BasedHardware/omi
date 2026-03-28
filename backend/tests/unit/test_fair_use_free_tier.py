@@ -131,13 +131,14 @@ class TestTriggerClassifierFreeTier:
 
     @patch.object(fair_use_mod, 'FAIR_USE_ENABLED', True)
     @patch.object(fair_use_mod, 'is_free_credits_exhausted', return_value=True)
+    @patch.object(fair_use_mod, '_get_classify_user_purpose')
     @patch.object(
         fair_use_mod, 'get_rolling_speech_ms', return_value={'daily_ms': 0, 'three_day_ms': 0, 'weekly_ms': 0}
     )
-    def test_free_exhausted_uses_synthetic_score(self, _mock_speech, _mock_free):
+    def test_free_exhausted_uses_synthetic_score(self, _mock_speech, mock_get_classify, _mock_free):
         """Free-exhausted: acquires lock, skips LLM, uses synthetic score 1.0 for escalation."""
         mock_classifier = MagicMock()
-        fair_use_mod.classify_user_purpose = mock_classifier
+        mock_get_classify.return_value = mock_classifier
 
         loop = asyncio.new_event_loop()
         try:
@@ -157,14 +158,15 @@ class TestTriggerClassifierFreeTier:
 
     @patch.object(fair_use_mod, 'FAIR_USE_ENABLED', True)
     @patch.object(fair_use_mod, 'is_free_credits_exhausted', return_value=True)
+    @patch.object(fair_use_mod, '_get_classify_user_purpose')
     @patch.object(
         fair_use_mod, 'get_rolling_speech_ms', return_value={'daily_ms': 0, 'three_day_ms': 0, 'weekly_ms': 0}
     )
-    def test_free_exhausted_escalates_warning_to_throttle(self, _mock_speech, _mock_free):
+    def test_free_exhausted_escalates_warning_to_throttle(self, _mock_speech, mock_get_classify, _mock_free):
         """Free-exhausted user already at warning with enough violations → throttle."""
         _fair_use_db.get_fair_use_state.return_value = {'stage': 'warning'}
         _fair_use_db.get_violation_counts.return_value = {'violation_count_7d': 2, 'violation_count_30d': 3}
-        fair_use_mod.classify_user_purpose = MagicMock()
+        mock_get_classify.return_value = MagicMock()
 
         loop = asyncio.new_event_loop()
         try:
@@ -178,14 +180,15 @@ class TestTriggerClassifierFreeTier:
 
     @patch.object(fair_use_mod, 'FAIR_USE_ENABLED', True)
     @patch.object(fair_use_mod, 'is_free_credits_exhausted', return_value=True)
+    @patch.object(fair_use_mod, '_get_classify_user_purpose')
     @patch.object(
         fair_use_mod, 'get_rolling_speech_ms', return_value={'daily_ms': 0, 'three_day_ms': 0, 'weekly_ms': 0}
     )
-    def test_free_exhausted_escalates_throttle_to_restrict(self, _mock_speech, _mock_free):
+    def test_free_exhausted_escalates_throttle_to_restrict(self, _mock_speech, mock_get_classify, _mock_free):
         """Free-exhausted user at throttle with enough violations → restrict."""
         _fair_use_db.get_fair_use_state.return_value = {'stage': 'throttle'}
         _fair_use_db.get_violation_counts.return_value = {'violation_count_7d': 3, 'violation_count_30d': 5}
-        fair_use_mod.classify_user_purpose = MagicMock()
+        mock_get_classify.return_value = MagicMock()
 
         loop = asyncio.new_event_loop()
         try:
@@ -198,11 +201,12 @@ class TestTriggerClassifierFreeTier:
         assert stage_call[1]['stage'] == 'restrict'
 
     @patch.object(fair_use_mod, 'FAIR_USE_ENABLED', True)
+    @patch.object(fair_use_mod, '_get_classify_user_purpose')
     @patch.object(
         fair_use_mod, 'get_rolling_speech_ms', return_value={'daily_ms': 0, 'three_day_ms': 0, 'weekly_ms': 0}
     )
     @patch.object(fair_use_mod, 'is_free_credits_exhausted', return_value=False)
-    def test_non_free_user_calls_classifier(self, _mock_free, _mock_speech):
+    def test_non_free_user_calls_classifier(self, _mock_free, _mock_speech, mock_get_classify):
         """Non-free user: goes through the normal LLM classifier pipeline."""
         classify_called = {'called': False}
         _fair_use_db.create_fair_use_event.reset_mock()
@@ -211,7 +215,7 @@ class TestTriggerClassifierFreeTier:
             classify_called['called'] = True
             return {'misuse_score': 0.1, 'usage_type': 'personal'}
 
-        fair_use_mod.classify_user_purpose = mock_classify
+        mock_get_classify.return_value = mock_classify
 
         loop = asyncio.new_event_loop()
         try:
