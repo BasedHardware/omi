@@ -48,130 +48,143 @@ class _PowerCycleStepState extends State<PowerCycleStep> with SingleTickerProvid
 
         return OnboardingStepScaffold(
           title: 'Turn Off & On',
-          subtitle: _getSubtitle(provider.powerCycleState),
+          subtitle: '',
           currentStep: 2,
-          content: Center(child: _buildContent(provider)),
+          content: Column(
+            children: [
+              const Spacer(flex: 1),
+              _buildStatusCard(provider),
+              const SizedBox(height: 16),
+              _buildInstructionCard(provider),
+              if (_showHint && provider.powerCycleState == PowerCycleSubState.waitingForOff) ...[
+                const SizedBox(height: 12),
+                _buildHintCard(),
+              ],
+              const Spacer(flex: 2),
+            ],
+          ),
           bottomAction: _showContinue ? OnboardingContinueButton(onPressed: widget.onComplete) : null,
         );
       },
     );
   }
 
-  String _getSubtitle(PowerCycleSubState state) {
+  Widget _buildStatusCard(DeviceOnboardingProvider provider) {
+    final state = provider.powerCycleState;
+
+    Color statusColor;
+    String statusText;
+    IconData statusIcon;
+
     switch (state) {
       case PowerCycleSubState.waitingForOff:
-        return 'Hold the button for 3 seconds to turn off your Omi';
+        statusColor = const Color(0xFF4CAF50);
+        statusText = 'Connected';
+        statusIcon = Icons.bluetooth_connected;
+        break;
       case PowerCycleSubState.deviceOff:
-        return 'Device is turning off...';
+        statusColor = const Color(0xFFEF5350);
+        statusText = 'Turning off...';
+        statusIcon = Icons.power_off;
+        break;
       case PowerCycleSubState.waitingForReconnect:
-        return 'Now press the button to turn it back on';
+        statusColor = const Color(0xFFEF5350);
+        statusText = 'Disconnected';
+        statusIcon = Icons.bluetooth_disabled;
+        break;
       case PowerCycleSubState.reconnected:
-        return 'Your Omi is back online!';
+        statusColor = const Color(0xFF4CAF50);
+        statusText = 'Connected!';
+        statusIcon = Icons.check_circle;
+        break;
     }
+
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 300),
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+      decoration: BoxDecoration(
+        color: statusColor.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(statusIcon, color: statusColor, size: 22),
+          const SizedBox(width: 12),
+          Text(
+            statusText,
+            style: TextStyle(color: statusColor, fontSize: 18, fontWeight: FontWeight.w600),
+          ),
+        ],
+      ),
+    );
   }
 
-  Widget _buildContent(DeviceOnboardingProvider provider) {
-    switch (provider.powerCycleState) {
+  Widget _buildInstructionCard(DeviceOnboardingProvider provider) {
+    final state = provider.powerCycleState;
+
+    String instruction;
+    IconData icon;
+
+    switch (state) {
       case PowerCycleSubState.waitingForOff:
-        return _buildWaitingForOff();
+        instruction = 'Hold the button for 3+ seconds to turn off';
+        icon = Icons.power_settings_new;
+        break;
       case PowerCycleSubState.deviceOff:
-        return _buildDeviceOff();
+        instruction = 'Device is turning off...';
+        icon = Icons.power_settings_new;
+        break;
       case PowerCycleSubState.waitingForReconnect:
-        return _buildWaitingForReconnect();
+        instruction = 'Press the button to turn it back on';
+        icon = Icons.power_settings_new;
+        break;
       case PowerCycleSubState.reconnected:
-        return _buildReconnected();
+        instruction = 'Your Omi is back online!';
+        icon = Icons.celebration;
+        break;
     }
-  }
 
-  Widget _buildWaitingForOff() {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        AnimatedBuilder(
-          animation: _animController,
-          builder: (context, child) {
-            final opacity = 0.5 + (_animController.value * 0.5);
-            return Container(
-              width: 100,
-              height: 100,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: Colors.white.withValues(alpha: 0.08),
-                border: Border.all(color: Colors.white.withValues(alpha: opacity), width: 2),
-              ),
-              child: const Icon(Icons.power_settings_new, color: Colors.white, size: 48),
-            );
-          },
-        ),
-        const SizedBox(height: 24),
-        const Text('Hold the button for 3+ seconds', style: TextStyle(color: Colors.white, fontSize: 18)),
-        if (_showHint) ...[
-          const SizedBox(height: 16),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            decoration: BoxDecoration(
-              color: const Color(0xFFFFA726).withValues(alpha: 0.15),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: const Text(
-              'Hold the button firmly until the light turns off',
-              style: TextStyle(color: Color(0xFFFFA726), fontSize: 14),
-              textAlign: TextAlign.center,
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, color: Colors.white.withValues(alpha: 0.6), size: 22),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Text(
+              instruction,
+              style: const TextStyle(color: Colors.white, fontSize: 15),
             ),
           ),
         ],
-      ],
+      ),
     );
   }
 
-  Widget _buildDeviceOff() {
-    return const Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(Icons.power_off, color: Color(0xFFEF5350), size: 64),
-        SizedBox(height: 16),
-        Text('Device is off!', style: TextStyle(color: Color(0xFFEF5350), fontSize: 22, fontWeight: FontWeight.bold)),
-      ],
-    );
-  }
-
-  Widget _buildWaitingForReconnect() {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        AnimatedBuilder(
-          animation: _animController,
-          builder: (context, child) {
-            final scale = 1.0 + (_animController.value * 0.1);
-            return Transform.scale(
-              scale: scale,
-              child: Container(
-                width: 100,
-                height: 100,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: const Color(0xFF4CAF50).withValues(alpha: 0.1),
-                  border: Border.all(color: const Color(0xFF4CAF50).withValues(alpha: 0.5), width: 2),
-                ),
-                child: const Icon(Icons.power_settings_new, color: Color(0xFF4CAF50), size: 48),
-              ),
-            );
-          },
-        ),
-        const SizedBox(height: 24),
-        const Text('Press the button to turn it on', style: TextStyle(color: Colors.white, fontSize: 18)),
-      ],
-    );
-  }
-
-  Widget _buildReconnected() {
-    return const Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(Icons.check_circle, color: Color(0xFF4CAF50), size: 64),
-        SizedBox(height: 16),
-        Text('Connected!', style: TextStyle(color: Color(0xFF4CAF50), fontSize: 22, fontWeight: FontWeight.bold)),
-      ],
+  Widget _buildHintCard() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFA726).withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: const Row(
+        children: [
+          Icon(Icons.info_outline, color: Color(0xFFFFA726), size: 20),
+          SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              'Hold the button firmly until the light turns off',
+              style: TextStyle(color: Color(0xFFFFA726), fontSize: 14),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
