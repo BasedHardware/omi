@@ -2244,6 +2244,27 @@ async def _stream_handler(
                         segment_person_assignment_map[segment.id] = person_id
                         suggested_segments.add(segment.id)
 
+        # Final pass: apply any pending speaker assignments so Firestore is correct
+        # even if the embedding match completed on the last segment (no subsequent batch).
+        if (speaker_to_person_map or segment_person_assignment_map) and current_conversation_id:
+            try:
+                conversation_data = _get_cached_conversation()
+                if conversation_data:
+                    conversation = Conversation(**conversation_data)
+                    if conversation.transcript_segments:
+                        process_speaker_assigned_segments(
+                            conversation.transcript_segments,
+                            segment_person_assignment_map,
+                            speaker_to_person_map,
+                        )
+                        segments_dicts = [seg.dict() for seg in conversation.transcript_segments]
+                        conversations_db.update_conversation_segments(
+                            uid, conversation.id, segments_dicts, data_protection_level=_cached_protection_level
+                        )
+                        _update_cached_segments(segments_dicts)
+            except Exception as e:
+                logger.error(f"Error in final speaker assignment pass: {e} {uid} {session_id}")
+
     # Image chunks cache with TTL tracking: {temp_id: {'chunks': [...], 'created_at': float}}
     # Using OrderedDict for O(1) oldest removal (insertion order preserved)
     image_chunks: OrderedDict[str, dict] = OrderedDict()
