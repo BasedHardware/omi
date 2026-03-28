@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 async def get_relevant_memories(uid: str, limit: int = 100) -> List[dict]:
     """Get recent relevant memories to personalize notifications."""
     memories = get_memories(uid, limit=limit)
-    return memories
+    return [m for m in memories if not m.get('is_locked')]
 
 
 async def generate_notification_message(uid: str, name: str, plan_type: str = "basic") -> Tuple[str, str]:
