@@ -152,6 +152,16 @@ class MixpanelManager {
   void onboardingUserAcquisitionSource(String source) =>
       track('User Acquisition Source', properties: {'source': source});
 
+  // Interactive device onboarding
+  void deviceOnboardingStarted() => track('Device Onboarding Started');
+
+  void deviceOnboardingStepCompleted(String step) => track('Device Onboarding Step Completed', properties: {'step': step});
+
+  void deviceOnboardingCompleted() => track('Device Onboarding Completed');
+
+  void deviceOnboardingDoubleTapConfigured(int action) =>
+      track('Device Onboarding Double Tap Configured', properties: {'action': action});
+
   void settingsSaved({bool hasWebhookConversationCreated = false, bool hasWebhookTranscriptReceived = false}) => track(
     'Developer Settings Saved',
     properties: {
