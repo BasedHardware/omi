@@ -255,12 +255,17 @@ def execute_tool(user_id: str, tool_name: str, arguments: dict) -> dict:
         # Simplify conversation data
         simple_conversations = []
         for conv in conversations:
+            structured = conv.get("structured")
+            if conv.get("is_locked", False) and structured:
+                structured = dict(structured)
+                structured['action_items'] = []
+                structured['events'] = []
             simple_conversations.append(
                 {
                     "id": conv.get("id"),
                     "started_at": conv.get("started_at"),
                     "finished_at": conv.get("finished_at"),
-                    "structured": conv.get("structured"),
+                    "structured": structured,
                     "language": conv.get("language"),
                 }
             )
