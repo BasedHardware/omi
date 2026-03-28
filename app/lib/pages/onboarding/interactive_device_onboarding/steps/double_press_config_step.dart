@@ -119,11 +119,11 @@ class _DoublePressConfigStepState extends State<DoublePressConfigStep> {
         duration: const Duration(milliseconds: 200),
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: isSelected ? Colors.white.withValues(alpha: 0.1) : Colors.white.withValues(alpha: 0.04),
+          color: isSelected ? Colors.white : Colors.white.withValues(alpha: 0.04),
           borderRadius: BorderRadius.circular(100),
           border: Border.all(
-            color: isSelected ? Colors.white.withValues(alpha: 0.4) : Colors.white.withValues(alpha: 0.1),
-            width: isSelected ? 2 : 1,
+            color: isSelected ? Colors.white : Colors.white.withValues(alpha: 0.1),
+            width: 1,
           ),
         ),
         child: Row(
@@ -133,9 +133,9 @@ class _DoublePressConfigStepState extends State<DoublePressConfigStep> {
               height: 44,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: isSelected ? Colors.white.withValues(alpha: 0.15) : Colors.white.withValues(alpha: 0.06),
+                color: isSelected ? Colors.black.withValues(alpha: 0.1) : Colors.white.withValues(alpha: 0.06),
               ),
-              child: Icon(icon, color: isSelected ? Colors.white : const Color(0xFF9E9E9E), size: 24),
+              child: Icon(icon, color: isSelected ? Colors.black : const Color(0xFF9E9E9E), size: 24),
             ),
             const SizedBox(width: 14),
             Expanded(
@@ -145,17 +145,17 @@ class _DoublePressConfigStepState extends State<DoublePressConfigStep> {
                   Text(
                     title,
                     style: TextStyle(
-                      color: Colors.white,
+                      color: isSelected ? Colors.black : Colors.white,
                       fontSize: 16,
                       fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
                     ),
                   ),
                   const SizedBox(height: 2),
-                  Text(description, style: const TextStyle(color: Color(0xFF9E9E9E), fontSize: 13)),
+                  Text(description,
+                      style: TextStyle(color: isSelected ? Colors.black.withValues(alpha: 0.5) : const Color(0xFF9E9E9E), fontSize: 13)),
                 ],
               ),
             ),
-            if (isSelected) const Icon(Icons.check_circle, color: Colors.white, size: 22),
           ],
         ),
       ),
