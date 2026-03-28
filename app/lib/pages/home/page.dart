@@ -694,35 +694,40 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                 Positioned(
                                   right: 20,
                                   bottom: 100,
-                                  child: GestureDetector(
-                                    onTap: () {
-                                      HapticFeedback.mediumImpact();
-                                      MixpanelManager().bottomNavigationTabClicked('Chat');
-                                      Navigator.push(
-                                        context,
-                                        MaterialPageRoute(builder: (context) => const ChatPage(isPivotBottom: false)),
-                                      );
-                                    },
-                                    child: Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-                                      decoration: BoxDecoration(
-                                        borderRadius: BorderRadius.circular(32),
-                                        color: Colors.deepPurple,
-                                      ),
-                                      child: Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          const Icon(FontAwesomeIcons.solidComment, size: 22, color: Colors.white),
-                                          const SizedBox(width: 10),
-                                          Text(
-                                            context.l10n.askOmi,
-                                            style: const TextStyle(
-                                              color: Colors.white,
-                                              fontSize: 17,
-                                              fontWeight: FontWeight.w600,
+                                  child: Semantics(
+                                    identifier: 'qa_open_chat',
+                                    label: 'qa_open_chat',
+                                    button: true,
+                                    child: GestureDetector(
+                                      onTap: () {
+                                        HapticFeedback.mediumImpact();
+                                        MixpanelManager().bottomNavigationTabClicked('Chat');
+                                        Navigator.push(
+                                          context,
+                                          MaterialPageRoute(builder: (context) => const ChatPage(isPivotBottom: false)),
+                                        );
+                                      },
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                                        decoration: BoxDecoration(
+                                          borderRadius: BorderRadius.circular(32),
+                                          color: Colors.deepPurple,
+                                        ),
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            const Icon(FontAwesomeIcons.solidComment, size: 22, color: Colors.white),
+                                            const SizedBox(width: 10),
+                                            Text(
+                                              context.l10n.askOmi,
+                                              style: const TextStyle(
+                                                color: Colors.white,
+                                                fontSize: 17,
+                                                fontWeight: FontWeight.w600,
+                                              ),
                                             ),
-                                          ),
-                                        ],
+                                          ],
+                                        ),
                                       ),
                                     ),
                                   ),
@@ -1060,24 +1065,29 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                 width: 36,
                 height: 36,
                 decoration: const BoxDecoration(color: Color(0xFF1F1F25), shape: BoxShape.circle),
-                child: IconButton(
-                  padding: EdgeInsets.zero,
-                  icon: const Icon(FontAwesomeIcons.gear, size: 16, color: Colors.white70),
-                  onPressed: () {
-                    HapticFeedback.mediumImpact();
-                    MixpanelManager().pageOpened('Settings');
-                    String language = SharedPreferencesUtil().userPrimaryLanguage;
-                    bool hasSpeech = SharedPreferencesUtil().hasSpeakerProfile;
-                    String transcriptModel = SharedPreferencesUtil().transcriptionModel;
-                    SettingsDrawer.show(context);
-                    if (language != SharedPreferencesUtil().userPrimaryLanguage ||
-                        hasSpeech != SharedPreferencesUtil().hasSpeakerProfile ||
-                        transcriptModel != SharedPreferencesUtil().transcriptionModel) {
-                      if (context.mounted) {
-                        context.read<CaptureProvider>().onRecordProfileSettingChanged();
+                child: Semantics(
+                  identifier: 'qa_open_settings',
+                  label: 'qa_open_settings',
+                  button: true,
+                  child: IconButton(
+                    padding: EdgeInsets.zero,
+                    icon: const Icon(FontAwesomeIcons.gear, size: 16, color: Colors.white70),
+                    onPressed: () {
+                      HapticFeedback.mediumImpact();
+                      MixpanelManager().pageOpened('Settings');
+                      String language = SharedPreferencesUtil().userPrimaryLanguage;
+                      bool hasSpeech = SharedPreferencesUtil().hasSpeakerProfile;
+                      String transcriptModel = SharedPreferencesUtil().transcriptionModel;
+                      SettingsDrawer.show(context);
+                      if (language != SharedPreferencesUtil().userPrimaryLanguage ||
+                          hasSpeech != SharedPreferencesUtil().hasSpeakerProfile ||
+                          transcriptModel != SharedPreferencesUtil().transcriptionModel) {
+                        if (context.mounted) {
+                          context.read<CaptureProvider>().onRecordProfileSettingChanged();
+                        }
                       }
-                    }
-                  },
+                    },
+                  ),
                 ),
               ),
             ],

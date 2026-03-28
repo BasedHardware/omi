@@ -109,8 +109,9 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
     bool showBetaTag = false,
     bool showNewTag = false,
     Widget? trailingChip,
+    String? semanticsId,
   }) {
-    return GestureDetector(
+    Widget child = GestureDetector(
       onTap: onTap,
       child: Container(
         margin: const EdgeInsets.only(bottom: 1),
@@ -176,6 +177,12 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
         ),
       ),
     );
+
+    if (semanticsId != null) {
+      child = Semantics(identifier: semanticsId, label: semanticsId, button: true, child: child);
+    }
+
+    return child;
   }
 
   Widget _buildSectionContainer({required List<Widget> children}) {
@@ -479,6 +486,7 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
                 _buildSettingsItem(
                   title: context.l10n.signOut,
                   icon: const FaIcon(FontAwesomeIcons.signOutAlt, color: Color(0xFF8E8E93), size: 20),
+                  semanticsId: 'qa_sign_out',
                   onTap: () async {
                     // Capture the provider reference before any navigation
                     final personaProvider = Provider.of<PersonaProvider>(context, listen: false);
@@ -544,6 +552,7 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
             _buildSettingsItem(
               title: context.l10n.signOut,
               icon: const FaIcon(FontAwesomeIcons.signOutAlt, color: Color(0xFF8E8E93), size: 20),
+              semanticsId: 'qa_sign_out',
               onTap: () async {
                 // Capture the provider reference before any navigation
                 final personaProvider = Provider.of<PersonaProvider>(context, listen: false);
@@ -617,11 +626,16 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
                 // Done button positioned to the right
                 Positioned(
                   right: 0,
-                  child: GestureDetector(
-                    onTap: () => Navigator.pop(context),
-                    child: Text(
-                      context.l10n.done,
-                      style: const TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w400),
+                  child: Semantics(
+                    identifier: 'qa_close_settings',
+                    label: 'qa_close_settings',
+                    button: true,
+                    child: GestureDetector(
+                      onTap: () => Navigator.pop(context),
+                      child: Text(
+                        context.l10n.done,
+                        style: const TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w400),
+                      ),
                     ),
                   ),
                 ),

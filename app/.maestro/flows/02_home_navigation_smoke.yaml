@@ -1,0 +1,34 @@
+appId: ${APP_ID}
+---
+- launchApp
+- assertVisible:
+    id: qa_tab_home
+- assertVisible:
+    id: qa_open_settings
+- tapOn:
+    id: qa_tab_action_items
+- assertVisible:
+    id: qa_tab_memories
+- tapOn:
+    id: qa_tab_memories
+- assertVisible:
+    id: qa_tab_apps
+- tapOn:
+    id: qa_tab_apps
+- tapOn:
+    id: qa_tab_home
+- assertVisible:
+    id: qa_open_chat
+- tapOn:
+    id: qa_open_chat
+- assertVisible:
+    id: qa_open_settings
+- back
+- tapOn:
+    id: qa_open_settings
+- assertVisible:
+    id: qa_close_settings
+- tapOn:
+    id: qa_close_settings
+- assertVisible:
+    id: qa_tab_home

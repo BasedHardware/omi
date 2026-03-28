@@ -1,0 +1,16 @@
+appId: ${APP_ID}
+---
+- launchApp:
+    clearState: true
+- assertVisible:
+    id: qa_sign_in_google
+- tapOn:
+    id: qa_sign_in_google
+- assertVisible:
+    id: qa_continue_google
+- assertVisible:
+    id: qa_cancel_consent
+- tapOn:
+    id: qa_cancel_consent
+- assertVisible:
+    id: qa_sign_in_google

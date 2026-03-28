@@ -114,20 +114,25 @@ class ConsentBottomSheet extends StatelessWidget {
                     SizedBox(
                       width: double.infinity,
                       height: 50,
-                      child: ElevatedButton(
-                        onPressed: () {
-                          Navigator.of(context).pop();
-                          onContinue();
-                        },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.white,
-                          foregroundColor: Colors.black,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                          elevation: 0,
-                        ),
-                        child: Text(
-                          authMethod == 'apple' ? context.l10n.continueWithApple : context.l10n.continueWithGoogle,
-                          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                      child: Semantics(
+                        identifier: 'qa_continue_$authMethod',
+                        label: 'qa_continue_$authMethod',
+                        button: true,
+                        child: ElevatedButton(
+                          onPressed: () {
+                            Navigator.of(context).pop();
+                            onContinue();
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.white,
+                            foregroundColor: Colors.black,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            elevation: 0,
+                          ),
+                          child: Text(
+                            authMethod == 'apple' ? context.l10n.continueWithApple : context.l10n.continueWithGoogle,
+                            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                          ),
                         ),
                       ),
                     ),
@@ -138,17 +143,22 @@ class ConsentBottomSheet extends StatelessWidget {
                     SizedBox(
                       width: double.infinity,
                       height: 50,
-                      child: TextButton(
-                        onPressed: () {
-                          Navigator.of(context).pop();
-                        },
-                        style: TextButton.styleFrom(
-                          foregroundColor: Colors.white.withOpacity(0.7),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                        ),
-                        child: Text(
-                          context.l10n.cancel,
-                          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+                      child: Semantics(
+                        identifier: 'qa_cancel_consent',
+                        label: 'qa_cancel_consent',
+                        button: true,
+                        child: TextButton(
+                          onPressed: () {
+                            Navigator.of(context).pop();
+                          },
+                          style: TextButton.styleFrom(
+                            foregroundColor: Colors.white.withOpacity(0.7),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          ),
+                          child: Text(
+                            context.l10n.cancel,
+                            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+                          ),
                         ),
                       ),
                     ),

@@ -77,23 +77,82 @@ class _AuthComponentState extends State<AuthComponent> {
                       SizedBox(
                         width: double.infinity,
                         height: 56,
+                        child: Semantics(
+                          identifier: 'qa_sign_in_apple',
+                          label: 'qa_sign_in_apple',
+                          button: true,
+                          child: ElevatedButton(
+                            onPressed: () {
+                              HapticFeedback.mediumImpact();
+                              ConsentBottomSheet.show(
+                                context,
+                                authMethod: 'apple',
+                                onContinue: () async {
+                                  final user = FirebaseAuth.instance.currentUser;
+                                  if (user != null && user.isAnonymous && SharedPreferencesUtil().hasPersonaCreated) {
+                                    await provider.linkWithApple();
+                                    if (mounted) {
+                                      SharedPreferencesUtil().hasOmiDevice = true;
+                                      SharedPreferencesUtil().verifiedPersonaId = null;
+                                      widget.onSignIn();
+                                    }
+                                  } else {
+                                    provider.onAppleSignIn(widget.onSignIn);
+                                  }
+                                },
+                              );
+                            },
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.white,
+                              foregroundColor: Colors.black,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+                            ),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                const Icon(FontAwesomeIcons.apple, size: 24),
+                                const SizedBox(width: 8),
+                                Text(
+                                  context.l10n.signInWithApple,
+                                  style: const TextStyle(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.w600,
+                                    fontFamily: 'Manrope',
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                    ],
+
+                    // Google sign in button
+                    SizedBox(
+                      width: double.infinity,
+                      height: 56,
+                      child: Semantics(
+                        identifier: 'qa_sign_in_google',
+                        label: 'qa_sign_in_google',
+                        button: true,
                         child: ElevatedButton(
                           onPressed: () {
                             HapticFeedback.mediumImpact();
                             ConsentBottomSheet.show(
                               context,
-                              authMethod: 'apple',
+                              authMethod: 'google',
                               onContinue: () async {
                                 final user = FirebaseAuth.instance.currentUser;
                                 if (user != null && user.isAnonymous && SharedPreferencesUtil().hasPersonaCreated) {
-                                  await provider.linkWithApple();
+                                  await provider.linkWithGoogle();
                                   if (mounted) {
                                     SharedPreferencesUtil().hasOmiDevice = true;
                                     SharedPreferencesUtil().verifiedPersonaId = null;
                                     widget.onSignIn();
                                   }
                                 } else {
-                                  provider.onAppleSignIn(widget.onSignIn);
+                                  provider.onGoogleSignIn(widget.onSignIn);
                                 }
                               },
                             );
@@ -106,63 +165,15 @@ class _AuthComponentState extends State<AuthComponent> {
                           child: Row(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              const Icon(FontAwesomeIcons.apple, size: 24),
+                              const Icon(FontAwesomeIcons.google, size: 20),
                               const SizedBox(width: 8),
                               Text(
-                                context.l10n.signInWithApple,
-                                style: const TextStyle(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.w600,
-                                  fontFamily: 'Manrope',
-                                ),
+                                context.l10n.signInWithGoogle,
+                                style:
+                                    const TextStyle(fontSize: 18, fontWeight: FontWeight.w600, fontFamily: 'Manrope'),
                               ),
                             ],
                           ),
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                    ],
-
-                    // Google sign in button
-                    SizedBox(
-                      width: double.infinity,
-                      height: 56,
-                      child: ElevatedButton(
-                        onPressed: () {
-                          HapticFeedback.mediumImpact();
-                          ConsentBottomSheet.show(
-                            context,
-                            authMethod: 'google',
-                            onContinue: () async {
-                              final user = FirebaseAuth.instance.currentUser;
-                              if (user != null && user.isAnonymous && SharedPreferencesUtil().hasPersonaCreated) {
-                                await provider.linkWithGoogle();
-                                if (mounted) {
-                                  SharedPreferencesUtil().hasOmiDevice = true;
-                                  SharedPreferencesUtil().verifiedPersonaId = null;
-                                  widget.onSignIn();
-                                }
-                              } else {
-                                provider.onGoogleSignIn(widget.onSignIn);
-                              }
-                            },
-                          );
-                        },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.white,
-                          foregroundColor: Colors.black,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
-                        ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            const Icon(FontAwesomeIcons.google, size: 20),
-                            const SizedBox(width: 8),
-                            Text(
-                              context.l10n.signInWithGoogle,
-                              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600, fontFamily: 'Manrope'),
-                            ),
-                          ],
                         ),
                       ),
                     ),

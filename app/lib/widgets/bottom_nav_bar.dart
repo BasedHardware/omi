@@ -50,20 +50,25 @@ class BottomNavBar extends StatelessWidget {
                   children: [
                     // Home tab
                     Expanded(
-                      child: InkWell(
-                        onTap: () {
-                          HapticFeedback.mediumImpact();
-                          MixpanelManager().bottomNavigationTabClicked('Home');
-                          primaryFocus?.unfocus();
-                          onTabTap(0, home.selectedIndex == 0);
-                        },
-                        child: SizedBox(
-                          height: 90,
-                          child: Center(
-                            child: Icon(
-                              FontAwesomeIcons.house,
-                              color: home.selectedIndex == 0 ? Colors.white : Colors.grey,
-                              size: 26,
+                      child: Semantics(
+                        identifier: 'qa_tab_home',
+                        label: 'qa_tab_home',
+                        button: true,
+                        child: InkWell(
+                          onTap: () {
+                            HapticFeedback.mediumImpact();
+                            MixpanelManager().bottomNavigationTabClicked('Home');
+                            primaryFocus?.unfocus();
+                            onTabTap(0, home.selectedIndex == 0);
+                          },
+                          child: SizedBox(
+                            height: 90,
+                            child: Center(
+                              child: Icon(
+                                FontAwesomeIcons.house,
+                                color: home.selectedIndex == 0 ? Colors.white : Colors.grey,
+                                size: 26,
+                              ),
                             ),
                           ),
                         ),
@@ -71,20 +76,25 @@ class BottomNavBar extends StatelessWidget {
                     ),
                     // Action Items tab
                     Expanded(
-                      child: InkWell(
-                        onTap: () {
-                          HapticFeedback.mediumImpact();
-                          MixpanelManager().bottomNavigationTabClicked('Action Items');
-                          primaryFocus?.unfocus();
-                          onTabTap(1, home.selectedIndex == 1);
-                        },
-                        child: SizedBox(
-                          height: 90,
-                          child: Center(
-                            child: Icon(
-                              FontAwesomeIcons.listCheck,
-                              color: home.selectedIndex == 1 ? Colors.white : Colors.grey,
-                              size: 26,
+                      child: Semantics(
+                        identifier: 'qa_tab_action_items',
+                        label: 'qa_tab_action_items',
+                        button: true,
+                        child: InkWell(
+                          onTap: () {
+                            HapticFeedback.mediumImpact();
+                            MixpanelManager().bottomNavigationTabClicked('Action Items');
+                            primaryFocus?.unfocus();
+                            onTabTap(1, home.selectedIndex == 1);
+                          },
+                          child: SizedBox(
+                            height: 90,
+                            child: Center(
+                              child: Icon(
+                                FontAwesomeIcons.listCheck,
+                                color: home.selectedIndex == 1 ? Colors.white : Colors.grey,
+                                size: 26,
+                              ),
                             ),
                           ),
                         ),
@@ -94,20 +104,25 @@ class BottomNavBar extends StatelessWidget {
                     if (showCenterButton && !isOmiDeviceConnected && !isOnCall) const SizedBox(width: 80),
                     // Memories tab
                     Expanded(
-                      child: InkWell(
-                        onTap: () {
-                          HapticFeedback.mediumImpact();
-                          MixpanelManager().bottomNavigationTabClicked('Memories');
-                          primaryFocus?.unfocus();
-                          onTabTap(2, home.selectedIndex == 2);
-                        },
-                        child: SizedBox(
-                          height: 90,
-                          child: Center(
-                            child: Icon(
-                              FontAwesomeIcons.brain,
-                              color: home.selectedIndex == 2 ? Colors.white : Colors.grey,
-                              size: 26,
+                      child: Semantics(
+                        identifier: 'qa_tab_memories',
+                        label: 'qa_tab_memories',
+                        button: true,
+                        child: InkWell(
+                          onTap: () {
+                            HapticFeedback.mediumImpact();
+                            MixpanelManager().bottomNavigationTabClicked('Memories');
+                            primaryFocus?.unfocus();
+                            onTabTap(2, home.selectedIndex == 2);
+                          },
+                          child: SizedBox(
+                            height: 90,
+                            child: Center(
+                              child: Icon(
+                                FontAwesomeIcons.brain,
+                                color: home.selectedIndex == 2 ? Colors.white : Colors.grey,
+                                size: 26,
+                              ),
                             ),
                           ),
                         ),
@@ -115,20 +130,25 @@ class BottomNavBar extends StatelessWidget {
                     ),
                     // Apps tab
                     Expanded(
-                      child: InkWell(
-                        onTap: () {
-                          HapticFeedback.mediumImpact();
-                          MixpanelManager().bottomNavigationTabClicked('Apps');
-                          primaryFocus?.unfocus();
-                          onTabTap(3, home.selectedIndex == 3);
-                        },
-                        child: SizedBox(
-                          height: 90,
-                          child: Center(
-                            child: Icon(
-                              FontAwesomeIcons.puzzlePiece,
-                              color: home.selectedIndex == 3 ? Colors.white : Colors.grey,
-                              size: 26,
+                      child: Semantics(
+                        identifier: 'qa_tab_apps',
+                        label: 'qa_tab_apps',
+                        button: true,
+                        child: InkWell(
+                          onTap: () {
+                            HapticFeedback.mediumImpact();
+                            MixpanelManager().bottomNavigationTabClicked('Apps');
+                            primaryFocus?.unfocus();
+                            onTabTap(3, home.selectedIndex == 3);
+                          },
+                          child: SizedBox(
+                            height: 90,
+                            child: Center(
+                              child: Icon(
+                                FontAwesomeIcons.puzzlePiece,
+                                color: home.selectedIndex == 3 ? Colors.white : Colors.grey,
+                                size: 26,
+                              ),
                             ),
                           ),
                         ),
@@ -151,27 +171,32 @@ class BottomNavBar extends StatelessWidget {
                       return const SizedBox.shrink();
                     }
 
-                    return GestureDetector(
-                      onTap: () async {
-                        HapticFeedback.heavyImpact();
-                        if (isInitializing) return;
-                        await _handleRecordButtonPress(context, captureProvider);
-                      },
-                      child: Container(
-                        width: 80,
-                        height: 80,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: isRecording ? Colors.red : Colors.deepPurple,
-                          border: Border.all(color: Colors.black, width: 5),
+                    return Semantics(
+                      identifier: isRecording ? 'qa_stop_recording' : 'qa_start_recording',
+                      label: isRecording ? 'qa_stop_recording' : 'qa_start_recording',
+                      button: true,
+                      child: GestureDetector(
+                        onTap: () async {
+                          HapticFeedback.heavyImpact();
+                          if (isInitializing) return;
+                          await _handleRecordButtonPress(context, captureProvider);
+                        },
+                        child: Container(
+                          width: 80,
+                          height: 80,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: isRecording ? Colors.red : Colors.deepPurple,
+                            border: Border.all(color: Colors.black, width: 5),
+                          ),
+                          child: isInitializing
+                              ? const CircularProgressIndicator(color: Colors.white, strokeWidth: 2)
+                              : Icon(
+                                  isRecording ? FontAwesomeIcons.stop : FontAwesomeIcons.microphone,
+                                  color: Colors.white,
+                                  size: 24,
+                                ),
                         ),
-                        child: isInitializing
-                            ? const CircularProgressIndicator(color: Colors.white, strokeWidth: 2)
-                            : Icon(
-                                isRecording ? FontAwesomeIcons.stop : FontAwesomeIcons.microphone,
-                                color: Colors.white,
-                                size: 24,
-                              ),
                       ),
                     );
                   },

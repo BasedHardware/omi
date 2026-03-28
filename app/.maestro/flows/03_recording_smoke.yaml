@@ -1,0 +1,13 @@
+appId: ${APP_ID}
+---
+- launchApp
+- assertVisible:
+    id: qa_start_recording
+- tapOn:
+    id: qa_start_recording
+- assertVisible:
+    id: qa_stop_recording
+- tapOn:
+    id: qa_stop_recording
+- assertVisible:
+    id: qa_tab_home

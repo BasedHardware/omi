@@ -32,6 +32,18 @@ Before getting started, make sure your device is connected and unlocked. If you'
    flutter run --flavor dev
    ```
 
+### Functional Smoke Tests
+
+The app workspace includes a Maestro-based functional smoke suite for local device validation. It covers onboarding entry, tab navigation, settings access, chat entry, and recording start/stop checks using stable Flutter semantics identifiers.
+
+Run it from the app directory:
+
+```powershell
+.\scripts\run_functional_tests.ps1
+```
+
+More details and overrides are documented in [scripts/FUNCTIONAL_TESTS.md](./scripts/FUNCTIONAL_TESTS.md).
+
 
 ### Building and Deploying to iPhone
 
