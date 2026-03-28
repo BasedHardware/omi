@@ -1,7 +1,6 @@
 import asyncio
 import os
 import random
-import time
 from enum import Enum
 from typing import Callable, List, Optional
 
@@ -17,11 +16,6 @@ logger = logging.getLogger(__name__)
 
 
 headers = {"Authorization": f"Token {os.getenv('DEEPGRAM_API_KEY')}", "Content-Type": "audio/*"}
-
-# Speech profile constants
-SPEECH_PROFILE_FIXED_DURATION = 10
-SPEECH_PROFILE_PADDING_DURATION = 5
-SPEECH_PROFILE_STABILIZE_DELAY = 15
 
 
 class STTService(str, Enum):
@@ -148,64 +142,6 @@ def get_stt_service_for_language(language: str, multi_lang_enabled: bool = True)
     return STTService.deepgram, 'en', 'nova-3'
 
 
-async def send_initial_file_path(
-    file_path: str,
-    transcript_socket_async_send,
-    is_active: Optional[Callable] = None,
-    sample_rate: int = 16000,
-    target_duration: int = 30,
-    padding_seconds: int = 5,
-):
-    """Send speech profile file to STT socket, with silence padding.
-
-    Sends up to target_duration of audio from file, then pads with padding_seconds of silence.
-    """
-    logger.info(f'send_initial_file_path target_duration={target_duration}s padding_seconds={padding_seconds}s')
-    start = time.time()
-
-    chunk_size = 320
-    bytes_per_second = sample_rate * 2  # 16-bit PCM mono
-    max_file_bytes = target_duration * bytes_per_second
-    total_bytes = (target_duration + padding_seconds) * bytes_per_second
-    bytes_sent = 0
-
-    # Send file (up to target_duration)
-    with open(file_path, "rb") as file:
-        while bytes_sent < max_file_bytes:
-            if is_active and not is_active():
-                return bytes_sent
-            chunk = file.read(chunk_size)
-            if not chunk:
-                break
-            await transcript_socket_async_send(bytes(chunk))
-            bytes_sent += len(chunk)
-
-    # Pad with silence to reach total (covers short files + extra padding)
-    silence_chunk = bytes(chunk_size)
-    while bytes_sent < total_bytes:
-        if is_active and not is_active():
-            return bytes_sent
-        await transcript_socket_async_send(silence_chunk)
-        bytes_sent += chunk_size
-
-    logger.info(f'send_initial_file_path completed bytes_sent={bytes_sent} duration={time.time() - start:.2f}s')
-    return bytes_sent
-
-
-async def send_initial_file(data: List[List[int]], transcript_socket):
-    logger.info('send_initial_file2')
-    start = time.time()
-
-    # Reading and sending in chunks
-    for i in range(0, len(data)):
-        chunk = data[i]
-        # print('Uploading', chunk)
-        transcript_socket.send(bytes(chunk))
-        await asyncio.sleep(0.00005)  # if it takes too long to transcribe
-
-    logger.info(f'send_initial_file {time.time() - start}')
-
-
 # Initialize Deepgram client based on environment configuration
 is_dg_self_hosted = os.getenv('DEEPGRAM_SELF_HOSTED_ENABLED', '').lower() == 'true'
 deepgram_options = DeepgramClientOptions(options={"termination_exception_connect": "true"})
@@ -233,7 +169,6 @@ async def process_audio_dg(
     language: str,
     sample_rate: int,
     channels: int,
-    preseconds: int = 0,
     model: str = 'nova-2-general',
     keywords: List[str] = [],
     vad_gate=None,
@@ -246,7 +181,7 @@ async def process_audio_dg(
             GatedDeepgramSocket that handles VAD gating internally and
             remaps timestamps in the stream_transcript callback.
     """
-    logger.info(f'process_audio_dg {language} {sample_rate} {channels} {preseconds}')
+    logger.info(f'process_audio_dg {language} {sample_rate} {channels}')
 
     # If gate provided, wrap stream_transcript to remap DG timestamps
     if vad_gate is not None:
@@ -257,19 +192,11 @@ async def process_audio_dg(
             _original_stream_transcript(segments)
 
     def on_message(self, result, **kwargs):
-        # print(f"Received message from Deepgram")  # Log when message is received
         sentence = result.channel.alternatives[0].transcript
-        # print(sentence)
         if len(sentence) == 0:
             return
-        # print(sentence)
         segments = []
         for word in result.channel.alternatives[0].words:
-            is_user = True if word.speaker == 0 and preseconds > 0 else False
-            if word.start < preseconds:
-                # Skip words that are part of the speech profile
-                continue
-
             if not segments:
                 segments.append(
                     {
@@ -277,7 +204,7 @@ async def process_audio_dg(
                         'start': word.start,
                         'end': word.end,
                         'text': word.punctuated_word,
-                        'is_user': is_user,
+                        'is_user': False,
                         'person_id': None,
                     }
                 )
@@ -293,12 +220,11 @@ async def process_audio_dg(
                             'start': word.start,
                             'end': word.end,
                             'text': word.punctuated_word,
-                            'is_user': is_user,
+                            'is_user': False,
                             'person_id': None,
                         }
                     )
 
-        # stream
         stream_transcript(segments)
 
     def on_error(self, error, **kwargs):
