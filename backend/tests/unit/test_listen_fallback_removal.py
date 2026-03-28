@@ -75,9 +75,12 @@ async def cleanup_processing_conversations(
 
     Key contract: routes all processing conversations through
     request_conversation_processing. Never processes locally.
+    Guards None before calling len() to avoid TypeError.
     """
     processing = conversations_db.get_processing_conversations(uid)
-    if not processing or len(processing) == 0:
+    if not processing:
+        return
+    if len(processing) == 0:
         return
     if not request_conversation_processing:
         return
@@ -245,6 +248,19 @@ async def test_cleanup_empty_processing_is_noop():
     db.get_processing_conversations.return_value = []
     request_fn = AsyncMock()
 
+    await cleanup_processing_conversations(db, 'uid-1', request_fn)
+
+    request_fn.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_cleanup_none_processing_no_crash():
+    """cleanup_processing_conversations() handles None from get_processing_conversations without TypeError."""
+    db = MagicMock()
+    db.get_processing_conversations.return_value = None
+    request_fn = AsyncMock()
+
+    # Must not raise TypeError on len(None)
     await cleanup_processing_conversations(db, 'uid-1', request_fn)
 
     request_fn.assert_not_awaited()
