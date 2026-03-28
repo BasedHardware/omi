@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 
 CLOUD_TASKS_QUEUE = os.getenv('CLOUD_TASKS_QUEUE')
 BACKEND_PUBLIC_URL = os.getenv('BACKEND_PUBLIC_URL')
-CLOUD_TASKS_SECRET = os.getenv('CLOUD_TASKS_SECRET')
+CLOUD_TASKS_SECRET = os.getenv('CLOUD_TASKS_SECRET') or ''
 
 _client = None
 
