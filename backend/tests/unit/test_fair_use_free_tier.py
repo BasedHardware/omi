@@ -433,7 +433,7 @@ class TestSyncDgBudgetGate:
         import json
 
         response = JSONResponse(
-            status_code=200,
+            status_code=429,
             content={
                 'new_memories': [],
                 'updated_memories': [],
@@ -443,7 +443,7 @@ class TestSyncDgBudgetGate:
             },
         )
 
-        assert response.status_code == 200
+        assert response.status_code == 429
         body = json.loads(response.body)
         assert body['credits_exhausted'] is True
         assert body['dg_budget_exhausted'] is True
