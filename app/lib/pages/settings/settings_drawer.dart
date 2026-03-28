@@ -34,6 +34,7 @@ import '../conversations/auto_sync_page.dart';
 import '../conversations/sync_page.dart';
 
 enum SettingsMode { no_device, omi }
+enum _SignOutCleanup { clearAllPreferences, clearDeviceFlags }
 
 class SettingsDrawer extends StatefulWidget {
   final SettingsMode mode;
@@ -58,10 +59,9 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
   String? buildVersion;
   String? shortDeviceInfo;
 
-  Future<void> _confirmAndSignOut({
-    required bool clearAllPreferences,
-    required bool clearDeviceFlags,
-  }) async {
+  Future<void> _confirmAndSignOut({required _SignOutCleanup cleanup}) async {
+    final signOutQuestion = context.l10n.signOutQuestion;
+    final signOutConfirmation = context.l10n.signOutConfirmation;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) {
@@ -69,8 +69,8 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
           dialogContext,
           () => Navigator.of(dialogContext).pop(false),
           () => Navigator.of(dialogContext).pop(true),
-          context.l10n.signOutQuestion,
-          context.l10n.signOutConfirmation,
+          signOutQuestion,
+          signOutConfirmation,
         );
       },
     );
@@ -80,10 +80,10 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
     final personaProvider = Provider.of<PersonaProvider>(context, listen: false);
     Navigator.of(context).pop();
 
-    if (clearAllPreferences) {
+    if (cleanup == _SignOutCleanup.clearAllPreferences) {
       await SharedPreferencesUtil().clear();
     }
-    if (clearDeviceFlags) {
+    if (cleanup == _SignOutCleanup.clearDeviceFlags) {
       SharedPreferencesUtil().hasOmiDevice = null;
       SharedPreferencesUtil().verifiedPersonaId = null;
     }
@@ -521,8 +521,7 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
                   icon: const FaIcon(FontAwesomeIcons.signOutAlt, color: Color(0xFF8E8E93), size: 20),
                   onTap: () async {
                     await _confirmAndSignOut(
-                      clearAllPreferences: true,
-                      clearDeviceFlags: false,
+                      cleanup: _SignOutCleanup.clearAllPreferences,
                     );
                   },
                 ),
@@ -564,8 +563,7 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
               icon: const FaIcon(FontAwesomeIcons.signOutAlt, color: Color(0xFF8E8E93), size: 20),
               onTap: () async {
                 await _confirmAndSignOut(
-                  clearAllPreferences: false,
-                  clearDeviceFlags: true,
+                  cleanup: _SignOutCleanup.clearDeviceFlags,
                 );
               },
             ),
