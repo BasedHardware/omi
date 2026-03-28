@@ -69,16 +69,25 @@ class _InteractiveDeviceOnboardingWrapperState extends State<InteractiveDeviceOn
       child: PopScope(
         canPop: false,
         child: Scaffold(
-          backgroundColor: Colors.black,
-          body: PageView(
-            controller: _pageController,
-            physics: const NeverScrollableScrollPhysics(),
-            children: [
-              TranscriptionDemoStep(onComplete: () => _onStepComplete('transcription_demo')),
-              SinglePressStep(onComplete: () => _onStepComplete('single_press_ask_question')),
-              PowerCycleStep(onComplete: () => _onStepComplete('power_cycle')),
-              DoublePressConfigStep(onComplete: () => _onStepComplete('double_press_config')),
-            ],
+          backgroundColor: Colors.transparent,
+          body: Container(
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [Color(0xFF1A0033), Colors.black],
+              ),
+            ),
+            child: PageView(
+              controller: _pageController,
+              physics: const NeverScrollableScrollPhysics(),
+              children: [
+                TranscriptionDemoStep(onComplete: () => _onStepComplete('transcription_demo')),
+                SinglePressStep(onComplete: () => _onStepComplete('single_press_ask_question')),
+                PowerCycleStep(onComplete: () => _onStepComplete('power_cycle')),
+                DoublePressConfigStep(onComplete: () => _onStepComplete('double_press_config')),
+              ],
+            ),
           ),
         ),
       ),
