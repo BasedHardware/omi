@@ -1,26 +1,34 @@
 // Gemini proxy rate limiter — tiered per-user daily limits with graceful degradation.
 //
-// Primary: Redis-backed (shared across instances via Lua script).
-// Fallback: In-memory per-instance (when Redis unavailable).
+// Source of truth: Redis (shared across all instances via Lua script).
+// Local cache: Reduces Redis calls by caching recent decisions per user.
+//              NOT a fallback — if Redis is unavailable, requests pass through unmetered.
 //
 // Tier 1 (Allow):   < DAILY_SOFT_LIMIT requests/day — Pro model allowed as-is
 // Tier 2 (Degrade): DAILY_SOFT_LIMIT..DAILY_HARD_LIMIT — rewrite Pro → Flash
-// Tier 3 (Reject):  > DAILY_HARD_LIMIT — return 429
-// Burst cap:        > BURST_PER_MINUTE in rolling 60s window — return 429
+// Tier 3 (Reject):  >= DAILY_HARD_LIMIT — return 429
+// Burst cap:        >= BURST_PER_MINUTE in rolling 60s window — return 429
+//
+// Cache strategy:
+//   After a Redis check, cache the decision with a TTL that varies by tier:
+//     Allow  → 10s (user is far from limits, safe to skip Redis briefly)
+//     Degrade → 5s  (near hard limit, re-check sooner)
+//     Reject → 30s  (blocked, no need to re-check often)
+//   Local burst tracking provides fast per-instance rejection without Redis.
 //
 // Issue #6098 L2.
 
 use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 use tokio::sync::Mutex;
 
 use crate::services::RedisService;
 
-/// Daily soft limit — above this, Pro requests are degraded to Flash.
+/// Daily soft limit — at or above this, Pro requests are degraded to Flash.
 const DAILY_SOFT_LIMIT: u32 = 300;
 
-/// Daily hard limit — above this, all requests are rejected with 429.
+/// Daily hard limit — at or above this, all requests are rejected with 429.
 const DAILY_HARD_LIMIT: u32 = 1500;
 
 /// Burst cap — max requests per rolling 60-second window.
@@ -28,6 +36,15 @@ const BURST_PER_MINUTE: usize = 30;
 
 /// Rolling window duration for burst detection (60 seconds).
 const BURST_WINDOW_SECS: u64 = 60;
+
+/// Cache TTL when decision is Allow (user well under limits).
+const CACHE_TTL_ALLOW_SECS: u64 = 10;
+
+/// Cache TTL when decision is DegradeToFlash (near hard limit, check sooner).
+const CACHE_TTL_DEGRADE_SECS: u64 = 5;
+
+/// Cache TTL when decision is Reject (blocked, no need to re-check often).
+const CACHE_TTL_REJECT_SECS: u64 = 30;
 
 /// Rate limit decision for a single request.
 #[derive(Debug, Clone, PartialEq)]
@@ -40,7 +57,7 @@ pub enum RateDecision {
     Reject,
 }
 
-/// Snapshot of rate counters returned from Redis or in-memory.
+/// Snapshot of rate counters returned from Redis.
 struct RateSnapshot {
     daily_count: u32,
     burst_count: usize,
@@ -60,27 +77,20 @@ impl RateSnapshot {
     }
 }
 
-/// Per-user rate state for in-memory fallback.
-struct UserCounter {
-    day_ordinal: i32,
-    daily_count: u32,
-    burst_window: VecDeque<Instant>,
+/// Per-user cached rate state (reduces Redis calls).
+struct CachedEntry {
+    /// Last decision from Redis.
+    decision: RateDecision,
+    /// When this cache entry expires (must re-check Redis).
+    expires_at: Instant,
+    /// Local burst window for fast per-instance rejection.
+    local_burst: VecDeque<Instant>,
 }
 
-impl UserCounter {
-    fn new(day_ordinal: i32) -> Self {
-        Self {
-            day_ordinal,
-            daily_count: 0,
-            burst_window: VecDeque::with_capacity(BURST_PER_MINUTE + 1),
-        }
-    }
-}
-
-/// Hybrid Gemini rate limiter: Redis primary, in-memory fallback.
+/// Gemini rate limiter: Redis source of truth, local cache to reduce Redis calls.
 pub struct GeminiRateLimiter {
-    /// In-memory counters (fallback when Redis unavailable).
-    counters: Mutex<HashMap<String, UserCounter>>,
+    /// Per-user cache of recent Redis decisions + local burst tracking.
+    cache: Mutex<HashMap<String, CachedEntry>>,
 }
 
 pub type SharedRateLimiter = Arc<GeminiRateLimiter>;
@@ -88,92 +98,98 @@ pub type SharedRateLimiter = Arc<GeminiRateLimiter>;
 impl GeminiRateLimiter {
     pub fn new() -> SharedRateLimiter {
         Arc::new(Self {
-            counters: Mutex::new(HashMap::new()),
+            cache: Mutex::new(HashMap::new()),
         })
     }
 
     /// Check rate limit for a user and record the request.
-    /// Tries Redis first; falls back to in-memory if Redis unavailable.
+    ///
+    /// 1. Fast-path: if local burst >= cap, reject without Redis.
+    /// 2. Cache hit: if cached decision is fresh, return it (skip Redis).
+    /// 3. Cache miss: call Redis, cache result, return decision.
+    /// 4. No Redis configured: log warning and allow (unmetered).
     pub async fn check_and_record(
         &self,
         uid: &str,
         redis: Option<&Arc<RedisService>>,
     ) -> RateDecision {
-        // Try Redis first
-        if let Some(redis) = redis {
-            match redis.check_gemini_rate_limit(uid, BURST_PER_MINUTE, BURST_WINDOW_SECS).await {
-                Ok((daily_count, burst_count)) => {
-                    let snapshot = RateSnapshot {
-                        daily_count: daily_count as u32,
-                        burst_count: burst_count as usize,
-                    };
-                    return snapshot.to_decision();
+        let now = Instant::now();
+        let burst_cutoff = now - Duration::from_secs(BURST_WINDOW_SECS);
+
+        // Phase 1: Check local cache
+        {
+            let mut cache = self.cache.lock().await;
+            if let Some(entry) = cache.get_mut(uid) {
+                // Prune stale burst entries
+                while entry.local_burst.front().map_or(false, |&t| t < burst_cutoff) {
+                    entry.local_burst.pop_front();
                 }
-                Err(e) => {
-                    // Log once at warn, fall through to in-memory
-                    tracing::warn!("gemini rate limit: Redis unavailable, using in-memory fallback: {}", e);
+
+                // Fast reject on local burst (this instance alone has seen >= cap)
+                if entry.local_burst.len() >= BURST_PER_MINUTE {
+                    return RateDecision::Reject;
+                }
+
+                // If cache is fresh, use cached decision without calling Redis
+                if now < entry.expires_at {
+                    entry.local_burst.push_back(now);
+                    return entry.decision.clone();
                 }
             }
         }
 
-        // Fallback: in-memory per-instance limiting
-        self.check_and_record_local(uid).await
-    }
-
-    /// In-memory rate limit check (fallback).
-    async fn check_and_record_local(&self, uid: &str) -> RateDecision {
-        let now = Instant::now();
-        let today = current_day_ordinal();
-
-        let mut counters = self.counters.lock().await;
-
-        let counter = counters
-            .entry(uid.to_string())
-            .or_insert_with(|| UserCounter::new(today));
-
-        // Reset if day changed
-        if counter.day_ordinal != today {
-            counter.day_ordinal = today;
-            counter.daily_count = 0;
-        }
-
-        // Prune burst window
-        let cutoff = now - std::time::Duration::from_secs(BURST_WINDOW_SECS);
-        while counter
-            .burst_window
-            .front()
-            .map_or(false, |&t| t < cutoff)
-        {
-            counter.burst_window.pop_front();
-        }
-
-        // Check burst cap first
-        if counter.burst_window.len() >= BURST_PER_MINUTE {
-            return RateDecision::Reject;
-        }
-
-        // Record request
-        counter.burst_window.push_back(now);
-        counter.daily_count += 1;
-
-        let snapshot = RateSnapshot {
-            daily_count: counter.daily_count,
-            burst_count: counter.burst_window.len(),
+        // Phase 2: Call Redis (source of truth)
+        let Some(redis) = redis else {
+            tracing::warn!("gemini rate limit: Redis not configured, request unmetered");
+            return RateDecision::Allow;
         };
-        snapshot.to_decision()
+
+        match redis.check_gemini_rate_limit(uid, BURST_PER_MINUTE, BURST_WINDOW_SECS).await {
+            Ok((daily_count, burst_count)) => {
+                let snapshot = RateSnapshot {
+                    daily_count: daily_count as u32,
+                    burst_count: burst_count as usize,
+                };
+                let decision = snapshot.to_decision();
+
+                // Cache the decision with tier-appropriate TTL
+                let ttl = match &decision {
+                    RateDecision::Allow => Duration::from_secs(CACHE_TTL_ALLOW_SECS),
+                    RateDecision::DegradeToFlash => Duration::from_secs(CACHE_TTL_DEGRADE_SECS),
+                    RateDecision::Reject => Duration::from_secs(CACHE_TTL_REJECT_SECS),
+                };
+
+                let mut cache = self.cache.lock().await;
+                let entry = cache.entry(uid.to_string()).or_insert_with(|| CachedEntry {
+                    decision: RateDecision::Allow,
+                    expires_at: now,
+                    local_burst: VecDeque::with_capacity(BURST_PER_MINUTE + 1),
+                });
+                entry.decision = decision.clone();
+                entry.expires_at = now + ttl;
+                // Prune and record burst
+                while entry.local_burst.front().map_or(false, |&t| t < burst_cutoff) {
+                    entry.local_burst.pop_front();
+                }
+                entry.local_burst.push_back(now);
+
+                decision
+            }
+            Err(e) => {
+                tracing::error!("gemini rate limit: Redis error, request unmetered: {}", e);
+                RateDecision::Allow
+            }
+        }
     }
 
-    /// Evict stale in-memory entries.
+    /// Evict expired cache entries (called periodically from background task).
     pub async fn evict_stale(&self) {
-        let today = current_day_ordinal();
-        let mut counters = self.counters.lock().await;
-        counters.retain(|_, c| today - c.day_ordinal <= 2);
+        let now = Instant::now();
+        let mut cache = self.cache.lock().await;
+        // Remove entries whose cache expired more than 5 minutes ago
+        let stale_cutoff = now - Duration::from_secs(300);
+        cache.retain(|_, entry| entry.expires_at > stale_cutoff);
     }
-}
-
-/// Get current UTC day as ordinal (days since Unix epoch).
-fn current_day_ordinal() -> i32 {
-    (chrono::Utc::now().timestamp() / 86400) as i32
 }
 
 /// Rewrite a Gemini model path from Pro to Flash if the decision is DegradeToFlash.
@@ -240,126 +256,145 @@ mod tests {
         assert_eq!(s.to_decision(), RateDecision::Allow);
     }
 
-    // --- In-memory fallback ---
+    // --- Cache: local burst fast-reject ---
 
     #[tokio::test]
-    async fn local_tier1_allows() {
+    async fn cache_burst_rejects_without_redis() {
         let limiter = GeminiRateLimiter::new();
+        // Seed cache with a fresh Allow decision and a full burst window
         {
-            let mut counters = limiter.counters.lock().await;
-            counters.insert("u1".to_string(), UserCounter {
-                day_ordinal: current_day_ordinal(),
-                daily_count: 298,
-                burst_window: VecDeque::new(),
+            let mut cache = limiter.cache.lock().await;
+            let mut burst = VecDeque::new();
+            let now = Instant::now();
+            for i in 0..30 {
+                burst.push_back(now - Duration::from_millis(i * 100));
+            }
+            cache.insert("u1".to_string(), CachedEntry {
+                decision: RateDecision::Allow,
+                expires_at: now + Duration::from_secs(60),
+                local_burst: burst,
             });
         }
-        // After increment: 299, which is < 300 (DAILY_SOFT_LIMIT)
-        let decision = limiter.check_and_record_local("u1").await;
+        // Should reject on local burst without calling Redis
+        let decision = limiter.check_and_record("u1", None).await;
+        assert_eq!(decision, RateDecision::Reject);
+    }
+
+    // --- Cache: fresh cache returns cached decision ---
+
+    #[tokio::test]
+    async fn cache_hit_returns_cached_allow() {
+        let limiter = GeminiRateLimiter::new();
+        {
+            let mut cache = limiter.cache.lock().await;
+            cache.insert("u2".to_string(), CachedEntry {
+                decision: RateDecision::Allow,
+                expires_at: Instant::now() + Duration::from_secs(60),
+                local_burst: VecDeque::new(),
+            });
+        }
+        let decision = limiter.check_and_record("u2", None).await;
         assert_eq!(decision, RateDecision::Allow);
     }
 
     #[tokio::test]
-    async fn local_tier2_degrades() {
+    async fn cache_hit_returns_cached_degrade() {
         let limiter = GeminiRateLimiter::new();
         {
-            let mut counters = limiter.counters.lock().await;
-            counters.insert("u1".to_string(), UserCounter {
-                day_ordinal: current_day_ordinal(),
-                daily_count: 299,
-                burst_window: VecDeque::new(),
+            let mut cache = limiter.cache.lock().await;
+            cache.insert("u3".to_string(), CachedEntry {
+                decision: RateDecision::DegradeToFlash,
+                expires_at: Instant::now() + Duration::from_secs(60),
+                local_burst: VecDeque::new(),
             });
         }
-        // After increment: 300, which is >= DAILY_SOFT_LIMIT
-        let decision = limiter.check_and_record_local("u1").await;
+        let decision = limiter.check_and_record("u3", None).await;
         assert_eq!(decision, RateDecision::DegradeToFlash);
     }
 
     #[tokio::test]
-    async fn local_tier3_rejects() {
+    async fn cache_hit_returns_cached_reject() {
         let limiter = GeminiRateLimiter::new();
         {
-            let mut counters = limiter.counters.lock().await;
-            counters.insert("u2".to_string(), UserCounter {
-                day_ordinal: current_day_ordinal(),
-                daily_count: 1499,
-                burst_window: VecDeque::new(),
+            let mut cache = limiter.cache.lock().await;
+            cache.insert("u4".to_string(), CachedEntry {
+                decision: RateDecision::Reject,
+                expires_at: Instant::now() + Duration::from_secs(60),
+                local_burst: VecDeque::new(),
             });
         }
-        // After increment: 1500, which is >= DAILY_HARD_LIMIT
-        let decision = limiter.check_and_record_local("u2").await;
+        let decision = limiter.check_and_record("u4", None).await;
         assert_eq!(decision, RateDecision::Reject);
     }
 
-    #[tokio::test]
-    async fn local_burst_rejects() {
-        let limiter = GeminiRateLimiter::new();
-        for _ in 0..30 {
-            let d = limiter.check_and_record_local("u3").await;
-            assert_eq!(d, RateDecision::Allow);
-        }
-        let decision = limiter.check_and_record_local("u3").await;
-        assert_eq!(decision, RateDecision::Reject);
-    }
+    // --- Cache miss: no Redis → Allow (unmetered) ---
 
     #[tokio::test]
-    async fn local_day_rollover() {
+    async fn no_redis_allows_unmetered() {
         let limiter = GeminiRateLimiter::new();
-        {
-            let mut counters = limiter.counters.lock().await;
-            counters.insert("u4".to_string(), UserCounter {
-                day_ordinal: current_day_ordinal() - 1,
-                daily_count: 2000,
-                burst_window: VecDeque::new(),
-            });
-        }
-        let decision = limiter.check_and_record_local("u4").await;
+        let decision = limiter.check_and_record("u5", None).await;
         assert_eq!(decision, RateDecision::Allow);
     }
 
+    // --- Cache: expired entry falls through to Redis (or Allow if no Redis) ---
+
     #[tokio::test]
-    async fn local_separate_users() {
+    async fn expired_cache_falls_through() {
         let limiter = GeminiRateLimiter::new();
         {
-            let mut counters = limiter.counters.lock().await;
-            counters.insert("uA".to_string(), UserCounter {
-                day_ordinal: current_day_ordinal(),
-                daily_count: 1500,
-                burst_window: VecDeque::new(),
+            let mut cache = limiter.cache.lock().await;
+            cache.insert("u6".to_string(), CachedEntry {
+                decision: RateDecision::Reject,
+                // Already expired
+                expires_at: Instant::now() - Duration::from_secs(1),
+                local_burst: VecDeque::new(),
             });
         }
-        let decision = limiter.check_and_record_local("uB").await;
+        // No Redis → falls through to unmetered Allow
+        let decision = limiter.check_and_record("u6", None).await;
         assert_eq!(decision, RateDecision::Allow);
     }
+
+    // --- Cache: separate users don't interfere ---
+
+    #[tokio::test]
+    async fn separate_users() {
+        let limiter = GeminiRateLimiter::new();
+        {
+            let mut cache = limiter.cache.lock().await;
+            cache.insert("uA".to_string(), CachedEntry {
+                decision: RateDecision::Reject,
+                expires_at: Instant::now() + Duration::from_secs(60),
+                local_burst: VecDeque::new(),
+            });
+        }
+        let decision = limiter.check_and_record("uB", None).await;
+        assert_eq!(decision, RateDecision::Allow);
+    }
+
+    // --- Evict stale ---
 
     #[tokio::test]
     async fn evict_stale_removes_old() {
         let limiter = GeminiRateLimiter::new();
         {
-            let mut counters = limiter.counters.lock().await;
-            counters.insert("old".to_string(), UserCounter {
-                day_ordinal: current_day_ordinal() - 3,
-                daily_count: 100,
-                burst_window: VecDeque::new(),
+            let mut cache = limiter.cache.lock().await;
+            cache.insert("old".to_string(), CachedEntry {
+                decision: RateDecision::Allow,
+                // Expired 10 minutes ago (> 5 min stale cutoff)
+                expires_at: Instant::now() - Duration::from_secs(600),
+                local_burst: VecDeque::new(),
             });
-            counters.insert("recent".to_string(), UserCounter {
-                day_ordinal: current_day_ordinal(),
-                daily_count: 50,
-                burst_window: VecDeque::new(),
+            cache.insert("recent".to_string(), CachedEntry {
+                decision: RateDecision::Allow,
+                expires_at: Instant::now() + Duration::from_secs(60),
+                local_burst: VecDeque::new(),
             });
         }
         limiter.evict_stale().await;
-        let counters = limiter.counters.lock().await;
-        assert!(!counters.contains_key("old"));
-        assert!(counters.contains_key("recent"));
-    }
-
-    // --- Hybrid: falls back when Redis is None ---
-
-    #[tokio::test]
-    async fn hybrid_no_redis_uses_local() {
-        let limiter = GeminiRateLimiter::new();
-        let decision = limiter.check_and_record("u5", None).await;
-        assert_eq!(decision, RateDecision::Allow);
+        let cache = limiter.cache.lock().await;
+        assert!(!cache.contains_key("old"));
+        assert!(cache.contains_key("recent"));
     }
 
     // --- Model path rewrite ---
