@@ -9,11 +9,9 @@
 // Tier 3 (Reject):  >= DAILY_HARD_LIMIT — return 429
 // Burst cap:        >= BURST_PER_MINUTE in rolling 60s window — return 429
 //
-// Cache strategy:
-//   After a Redis check, cache the decision with a TTL that varies by tier:
-//     Allow  → 10s (user is far from limits, safe to skip Redis briefly)
-//     Degrade → 5s  (near hard limit, re-check sooner)
-//     Reject → 30s  (blocked, no need to re-check often)
+// Cache strategy (conservative — only cache rejections):
+//   Only Reject decisions are cached (TTL 30s) to skip Redis for blocked users.
+//   Allow and Degrade always call Redis so every request is recorded in shared counters.
 //   Local burst tracking provides fast per-instance rejection without Redis.
 //
 // Issue #6098 L2.
@@ -37,13 +35,8 @@ const BURST_PER_MINUTE: usize = 30;
 /// Rolling window duration for burst detection (60 seconds).
 const BURST_WINDOW_SECS: u64 = 60;
 
-/// Cache TTL when decision is Allow (user well under limits).
-const CACHE_TTL_ALLOW_SECS: u64 = 10;
-
-/// Cache TTL when decision is DegradeToFlash (near hard limit, check sooner).
-const CACHE_TTL_DEGRADE_SECS: u64 = 5;
-
-/// Cache TTL when decision is Reject (blocked, no need to re-check often).
+/// Cache TTL for Reject decisions (blocked users — skip Redis for this window).
+/// Allow/Degrade are never cached so every request is recorded in Redis.
 const CACHE_TTL_REJECT_SECS: u64 = 30;
 
 /// Rate limit decision for a single request.
@@ -104,19 +97,25 @@ impl GeminiRateLimiter {
 
     /// Check rate limit for a user and record the request.
     ///
-    /// 1. Fast-path: if local burst >= cap, reject without Redis.
-    /// 2. Cache hit: if cached decision is fresh, return it (skip Redis).
-    /// 3. Cache miss: call Redis, cache result, return decision.
-    /// 4. No Redis configured: log warning and allow (unmetered).
+    /// 1. No Redis configured → allow unmetered (no cache, no local enforcement).
+    /// 2. Local burst >= cap → reject without Redis (conservative, safe).
+    /// 3. Cached Reject still fresh → reject without Redis (user already blocked).
+    /// 4. All other cases → call Redis (ensures every request is recorded).
     pub async fn check_and_record(
         &self,
         uid: &str,
         redis: Option<&Arc<RedisService>>,
     ) -> RateDecision {
+        // Phase 1: No Redis → unmetered (skip cache entirely)
+        let Some(redis) = redis else {
+            tracing::warn!("gemini rate limit: Redis not configured, request unmetered");
+            return RateDecision::Allow;
+        };
+
         let now = Instant::now();
         let burst_cutoff = now - Duration::from_secs(BURST_WINDOW_SECS);
 
-        // Phase 1: Check local cache
+        // Phase 2: Fast-path local checks (conservative rejections only)
         {
             let mut cache = self.cache.lock().await;
             if let Some(entry) = cache.get_mut(uid) {
@@ -130,20 +129,15 @@ impl GeminiRateLimiter {
                     return RateDecision::Reject;
                 }
 
-                // If cache is fresh, use cached decision without calling Redis
-                if now < entry.expires_at {
+                // Cached Reject still fresh → skip Redis (user is blocked)
+                if entry.decision == RateDecision::Reject && now < entry.expires_at {
                     entry.local_burst.push_back(now);
-                    return entry.decision.clone();
+                    return RateDecision::Reject;
                 }
             }
         }
 
-        // Phase 2: Call Redis (source of truth)
-        let Some(redis) = redis else {
-            tracing::warn!("gemini rate limit: Redis not configured, request unmetered");
-            return RateDecision::Allow;
-        };
-
+        // Phase 3: Call Redis (source of truth — records the request)
         match redis.check_gemini_rate_limit(uid, BURST_PER_MINUTE, BURST_WINDOW_SECS).await {
             Ok((daily_count, burst_count)) => {
                 let snapshot = RateSnapshot {
@@ -152,22 +146,23 @@ impl GeminiRateLimiter {
                 };
                 let decision = snapshot.to_decision();
 
-                // Cache the decision with tier-appropriate TTL
-                let ttl = match &decision {
-                    RateDecision::Allow => Duration::from_secs(CACHE_TTL_ALLOW_SECS),
-                    RateDecision::DegradeToFlash => Duration::from_secs(CACHE_TTL_DEGRADE_SECS),
-                    RateDecision::Reject => Duration::from_secs(CACHE_TTL_REJECT_SECS),
-                };
-
                 let mut cache = self.cache.lock().await;
                 let entry = cache.entry(uid.to_string()).or_insert_with(|| CachedEntry {
                     decision: RateDecision::Allow,
                     expires_at: now,
                     local_burst: VecDeque::with_capacity(BURST_PER_MINUTE + 1),
                 });
+
+                // Only cache Reject decisions (Allow/Degrade always go to Redis)
                 entry.decision = decision.clone();
-                entry.expires_at = now + ttl;
-                // Prune and record burst
+                if decision == RateDecision::Reject {
+                    entry.expires_at = now + Duration::from_secs(CACHE_TTL_REJECT_SECS);
+                } else {
+                    // Mark expired so next request always hits Redis
+                    entry.expires_at = now;
+                }
+
+                // Track burst locally
                 while entry.local_burst.front().map_or(false, |&t| t < burst_cutoff) {
                     entry.local_burst.pop_front();
                 }
@@ -256,39 +251,23 @@ mod tests {
         assert_eq!(s.to_decision(), RateDecision::Allow);
     }
 
-    // --- Cache: local burst fast-reject ---
+    // --- No Redis → unmetered (cache bypassed entirely) ---
 
     #[tokio::test]
-    async fn cache_burst_rejects_without_redis() {
+    async fn no_redis_allows_unmetered() {
         let limiter = GeminiRateLimiter::new();
-        // Seed cache with a fresh Allow decision and a full burst window
-        {
-            let mut cache = limiter.cache.lock().await;
-            let mut burst = VecDeque::new();
-            let now = Instant::now();
-            for i in 0..30 {
-                burst.push_back(now - Duration::from_millis(i * 100));
-            }
-            cache.insert("u1".to_string(), CachedEntry {
-                decision: RateDecision::Allow,
-                expires_at: now + Duration::from_secs(60),
-                local_burst: burst,
-            });
-        }
-        // Should reject on local burst without calling Redis
         let decision = limiter.check_and_record("u1", None).await;
-        assert_eq!(decision, RateDecision::Reject);
+        assert_eq!(decision, RateDecision::Allow);
     }
 
-    // --- Cache: fresh cache returns cached decision ---
-
     #[tokio::test]
-    async fn cache_hit_returns_cached_allow() {
+    async fn no_redis_ignores_cached_reject() {
+        // Cached Reject must NOT fire when Redis is None
         let limiter = GeminiRateLimiter::new();
         {
             let mut cache = limiter.cache.lock().await;
             cache.insert("u2".to_string(), CachedEntry {
-                decision: RateDecision::Allow,
+                decision: RateDecision::Reject,
                 expires_at: Instant::now() + Duration::from_secs(60),
                 local_burst: VecDeque::new(),
             });
@@ -298,7 +277,8 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn cache_hit_returns_cached_degrade() {
+    async fn no_redis_ignores_cached_degrade() {
+        // Cached Degrade must NOT fire when Redis is None
         let limiter = GeminiRateLimiter::new();
         {
             let mut cache = limiter.cache.lock().await;
@@ -309,53 +289,49 @@ mod tests {
             });
         }
         let decision = limiter.check_and_record("u3", None).await;
-        assert_eq!(decision, RateDecision::DegradeToFlash);
-    }
-
-    #[tokio::test]
-    async fn cache_hit_returns_cached_reject() {
-        let limiter = GeminiRateLimiter::new();
-        {
-            let mut cache = limiter.cache.lock().await;
-            cache.insert("u4".to_string(), CachedEntry {
-                decision: RateDecision::Reject,
-                expires_at: Instant::now() + Duration::from_secs(60),
-                local_burst: VecDeque::new(),
-            });
-        }
-        let decision = limiter.check_and_record("u4", None).await;
-        assert_eq!(decision, RateDecision::Reject);
-    }
-
-    // --- Cache miss: no Redis → Allow (unmetered) ---
-
-    #[tokio::test]
-    async fn no_redis_allows_unmetered() {
-        let limiter = GeminiRateLimiter::new();
-        let decision = limiter.check_and_record("u5", None).await;
         assert_eq!(decision, RateDecision::Allow);
     }
 
-    // --- Cache: expired entry falls through to Redis (or Allow if no Redis) ---
-
     #[tokio::test]
-    async fn expired_cache_falls_through() {
+    async fn no_redis_ignores_local_burst() {
+        // Full local burst must NOT fire when Redis is None
         let limiter = GeminiRateLimiter::new();
         {
             let mut cache = limiter.cache.lock().await;
-            cache.insert("u6".to_string(), CachedEntry {
+            let mut burst = VecDeque::new();
+            let now = Instant::now();
+            for i in 0..30 {
+                burst.push_back(now - Duration::from_millis(i * 100));
+            }
+            cache.insert("u4".to_string(), CachedEntry {
+                decision: RateDecision::Allow,
+                expires_at: now,
+                local_burst: burst,
+            });
+        }
+        let decision = limiter.check_and_record("u4", None).await;
+        assert_eq!(decision, RateDecision::Allow);
+    }
+
+    // --- Expired Reject cache falls through to Redis ---
+
+    #[tokio::test]
+    async fn expired_reject_cache_falls_through() {
+        let limiter = GeminiRateLimiter::new();
+        {
+            let mut cache = limiter.cache.lock().await;
+            cache.insert("u5".to_string(), CachedEntry {
                 decision: RateDecision::Reject,
-                // Already expired
                 expires_at: Instant::now() - Duration::from_secs(1),
                 local_burst: VecDeque::new(),
             });
         }
         // No Redis → falls through to unmetered Allow
-        let decision = limiter.check_and_record("u6", None).await;
+        let decision = limiter.check_and_record("u5", None).await;
         assert_eq!(decision, RateDecision::Allow);
     }
 
-    // --- Cache: separate users don't interfere ---
+    // --- Separate users don't interfere ---
 
     #[tokio::test]
     async fn separate_users() {
@@ -368,6 +344,7 @@ mod tests {
                 local_burst: VecDeque::new(),
             });
         }
+        // uB has no Redis → unmetered Allow
         let decision = limiter.check_and_record("uB", None).await;
         assert_eq!(decision, RateDecision::Allow);
     }
