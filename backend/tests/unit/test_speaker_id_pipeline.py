@@ -678,6 +678,22 @@ class TestUserEmbeddingCacheIntegration:
         assert person_embeddings_cache[self.USER_SELF_PERSON_ID]['name'] == 'User'
         assert np.array_equal(person_embeddings_cache[self.USER_SELF_PERSON_ID]['embedding'], user_embedding)
 
+    def test_user_embedding_loaded_from_firestore_list(self):
+        """Embedding stored as list in Firestore is correctly reconstructed as numpy array."""
+        # Simulate what Firestore returns: a plain Python list of floats
+        original = self._random_embedding(seed=42)
+        firestore_list = original.flatten().tolist()
+
+        # Simulate the reconstruction in speaker_identification_task
+        reconstructed = np.array(firestore_list, dtype=np.float32).reshape(1, -1)
+
+        # Must be identical to original
+        np.testing.assert_array_almost_equal(reconstructed, original, decimal=6)
+
+        # Must work in cosine distance comparison
+        distance = compare_embeddings(original, reconstructed)
+        assert distance == pytest.approx(0.0, abs=1e-6)
+
     def test_user_embedding_match_routes_to_user_path(self):
         """When best match is the user sentinel, speaker_to_person_map and
         segment_person_assignment_map are updated correctly."""
