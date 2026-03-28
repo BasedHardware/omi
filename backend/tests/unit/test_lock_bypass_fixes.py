@@ -312,7 +312,73 @@ class TestSearchRedaction:
         assert unlocked_item['structured']['overview'] == 'Test overview'
         assert len(unlocked_item['structured']['action_items']) == 1
         assert len(unlocked_item['transcript_segments']) == 1
-        # total_pages must not count locked items
+        # total_pages uses page-level signal, not global found count
+        assert result['total_pages'] == 1
+
+    def test_search_total_pages_does_not_leak_locked_count(self):
+        """total_pages must not inflate from locked docs on other pages."""
+        mock_client = MagicMock()
+        # Simulate: found=6 globally, per_page=5, but only 1 unlocked on this page
+        # With 5 hits on this page (full page), has_more=True → total_pages=2
+        hits = [
+            {
+                'document': {
+                    **_make_conversation(locked=True, conversation_id=f'locked-{i}'),
+                    'created_at': 1704067200,
+                    'started_at': 1704067200,
+                    'finished_at': 1704070800,
+                }
+            }
+            for i in range(4)
+        ] + [
+            {
+                'document': {
+                    **_make_conversation(locked=False, conversation_id='unlocked-1'),
+                    'created_at': 1704067200,
+                    'started_at': 1704067200,
+                    'finished_at': 1704070800,
+                }
+            }
+        ]
+        mock_client.collections.__getitem__.return_value.documents.search.return_value = {
+            'hits': hits,
+            'found': 6,
+        }
+        with patch('utils.conversations.search.client', mock_client):
+            from utils.conversations.search import search_conversations
+
+            result = search_conversations(uid='test-uid', query='test', per_page=5)
+
+        assert len(result['items']) == 1
+        # total_pages based on page-level fullness (5 hits >= per_page=5), not found=6
+        assert result['total_pages'] == 2  # page + 1 because full page returned
+
+    def test_search_total_pages_last_page_no_leak(self):
+        """When Typesense returns fewer than per_page hits, total_pages = current page."""
+        mock_client = MagicMock()
+        # Only 2 hits (< per_page=5), all locked → 0 items, total_pages=1
+        hits = [
+            {
+                'document': {
+                    **_make_conversation(locked=True, conversation_id=f'locked-{i}'),
+                    'created_at': 1704067200,
+                    'started_at': 1704067200,
+                    'finished_at': 1704070800,
+                }
+            }
+            for i in range(2)
+        ]
+        mock_client.collections.__getitem__.return_value.documents.search.return_value = {
+            'hits': hits,
+            'found': 2,
+        }
+        with patch('utils.conversations.search.client', mock_client):
+            from utils.conversations.search import search_conversations
+
+            result = search_conversations(uid='test-uid', query='test', per_page=5)
+
+        assert len(result['items']) == 0
+        # Not a full page → total_pages = current page (1), not found/per_page
         assert result['total_pages'] == 1
 
 
