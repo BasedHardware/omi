@@ -77,8 +77,6 @@ class TestEnsureFreeExhaustedRestrict:
         _fair_use_db.get_fair_use_state.reset_mock()
         _fair_use_db.update_fair_use_state.reset_mock()
         _mock_redis.reset_mock()
-        fair_use_mod._has_transcription_credits = None
-        fair_use_mod._is_paid_plan = None
 
     @patch.object(fair_use_mod, 'FAIR_USE_ENABLED', True)
     @patch.object(fair_use_mod, 'is_free_credits_exhausted', return_value=True)
@@ -247,16 +245,12 @@ class TestIsHardRestrictedFreeExhausted:
 
 
 class TestIsFreeCreditsExhausted:
-    def setup_method(self):
-        fair_use_mod._has_transcription_credits = None
-        fair_use_mod._is_paid_plan = None
-
     def test_paid_user_returns_false(self):
         mock_sub = MagicMock()
         mock_sub.plan = 'unlimited'
         fair_use_mod.users_db.get_user_valid_subscription = MagicMock(return_value=mock_sub)
-        _subscription_mod.is_paid_plan = MagicMock(return_value=True)
-        _subscription_mod.has_transcription_credits = MagicMock(return_value=False)
+        fair_use_mod.is_paid_plan = MagicMock(return_value=True)
+        fair_use_mod.has_transcription_credits = MagicMock(return_value=False)
 
         assert fair_use_mod.is_free_credits_exhausted('test-uid') is False
 
@@ -264,8 +258,8 @@ class TestIsFreeCreditsExhausted:
         mock_sub = MagicMock()
         mock_sub.plan = 'basic'
         fair_use_mod.users_db.get_user_valid_subscription = MagicMock(return_value=mock_sub)
-        _subscription_mod.is_paid_plan = MagicMock(return_value=False)
-        _subscription_mod.has_transcription_credits = MagicMock(return_value=True)
+        fair_use_mod.is_paid_plan = MagicMock(return_value=False)
+        fair_use_mod.has_transcription_credits = MagicMock(return_value=True)
 
         assert fair_use_mod.is_free_credits_exhausted('test-uid') is False
 
@@ -273,15 +267,15 @@ class TestIsFreeCreditsExhausted:
         mock_sub = MagicMock()
         mock_sub.plan = 'basic'
         fair_use_mod.users_db.get_user_valid_subscription = MagicMock(return_value=mock_sub)
-        _subscription_mod.is_paid_plan = MagicMock(return_value=False)
-        _subscription_mod.has_transcription_credits = MagicMock(return_value=False)
+        fair_use_mod.is_paid_plan = MagicMock(return_value=False)
+        fair_use_mod.has_transcription_credits = MagicMock(return_value=False)
 
         assert fair_use_mod.is_free_credits_exhausted('test-uid') is True
 
     def test_no_subscription_no_credits_returns_true(self):
         fair_use_mod.users_db.get_user_valid_subscription = MagicMock(return_value=None)
-        _subscription_mod.is_paid_plan = MagicMock(return_value=False)
-        _subscription_mod.has_transcription_credits = MagicMock(return_value=False)
+        fair_use_mod.is_paid_plan = MagicMock(return_value=False)
+        fair_use_mod.has_transcription_credits = MagicMock(return_value=False)
 
         assert fair_use_mod.is_free_credits_exhausted('test-uid') is True
 
@@ -301,8 +295,6 @@ class TestTriggerClassifierFreeTier:
         _fair_use_db.get_violation_counts.return_value = {'violation_count_7d': 0, 'violation_count_30d': 0}
         _fair_use_db.create_fair_use_event.return_value = 'evt-123'
         _fair_use_db.get_fair_use_events.return_value = [{'case_ref': 'FU-TEST01'}]
-        fair_use_mod._has_transcription_credits = None
-        fair_use_mod._is_paid_plan = None
 
     @patch.object(fair_use_mod, 'FAIR_USE_ENABLED', True)
     @patch.object(fair_use_mod, 'is_free_credits_exhausted', return_value=True)
