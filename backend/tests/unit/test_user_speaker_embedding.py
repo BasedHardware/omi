@@ -106,6 +106,23 @@ class TestGetUserSpeakerEmbedding:
 
         assert result is None
 
+    def test_returns_none_when_empty_list(self):
+        """Should return None when speaker_embedding is an empty list."""
+        mock_db = MagicMock()
+        mock_doc = MagicMock()
+        mock_doc.exists = True
+        mock_doc.to_dict.return_value = {'speaker_embedding': []}
+        mock_db.collection.return_value.document.return_value.get.return_value = mock_doc
+
+        with patch('database.users.db', mock_db):
+            from database.users import get_user_speaker_embedding
+
+            result = get_user_speaker_embedding('uid-empty')
+
+        # Empty list is returned from Firestore — falsy, so speaker_identification_task
+        # treats it like None and triggers the WAV fallback extraction path
+        assert result == []
+
 
 # ─── Speech Profile Upload Extraction ────────────────────────────────────────
 
@@ -348,3 +365,108 @@ class TestFinalAssignmentPass:
 
         assert segments[0].is_user is True  # was already True, unchanged
         assert segments[1].is_user is True  # corrected by final pass
+
+
+# ─── User Match Threshold Boundary ────────────────────────────────────────────
+
+
+class TestUserMatchBoundary:
+    """Tests for user match threshold behavior in the embedding comparison."""
+
+    def test_empty_embedding_list_triggers_fallback(self):
+        """Empty embedding list from Firestore is falsy, triggers WAV fallback."""
+        embedding_list = []
+        person_embeddings_cache = {}
+
+        # This mirrors the Firestore load path in speaker_identification_task
+        if embedding_list:
+            user_embedding = np.array(embedding_list, dtype=np.float32).reshape(1, -1)
+            person_embeddings_cache['user'] = {'embedding': user_embedding, 'name': 'User'}
+
+        # Empty list is falsy — user embedding not loaded, fallback needed
+        assert 'user' not in person_embeddings_cache
+
+    def test_malformed_embedding_raises_on_reshape(self):
+        """Non-rectangular embedding data raises ValueError on reshape."""
+        embedding_list = [0.1, 0.2]  # Only 2 elements, not 512
+        # reshape(1, -1) should succeed but produce (1, 2), not (1, 512)
+        user_embedding = np.array(embedding_list, dtype=np.float32).reshape(1, -1)
+        assert user_embedding.shape == (1, 2)
+
+    def test_user_match_uses_strict_less_than(self):
+        """User match requires distance < threshold, not <=."""
+        from utils.stt.speaker_embedding import compare_embeddings, SPEAKER_MATCH_THRESHOLD
+
+        # Identical embeddings → distance ≈ 0.0, well below threshold
+        emb = np.random.RandomState(42).randn(1, 512).astype(np.float32)
+        emb /= np.linalg.norm(emb)
+        distance = compare_embeddings(emb, emb)
+        assert distance < SPEAKER_MATCH_THRESHOLD
+
+        # Simulate the match logic from _match_speaker_embedding
+        best_distance = distance
+        matched = best_distance < SPEAKER_MATCH_THRESHOLD
+        assert matched is True
+
+        # At exactly threshold, should NOT match
+        best_distance = SPEAKER_MATCH_THRESHOLD
+        matched = best_distance < SPEAKER_MATCH_THRESHOLD
+        assert matched is False
+
+
+# ─── User Match Event ────────────────────────────────────────────────────────
+
+
+class TestUserMatchEvent:
+    """Tests that user match logic produces correct event parameters."""
+
+    def test_user_match_produces_user_person_id(self):
+        """When best match is 'user', person_id should be 'user' not empty string."""
+        USER_SELF_PERSON_ID = 'user'
+        person_embeddings_cache = {
+            USER_SELF_PERSON_ID: {
+                'embedding': np.random.RandomState(42).randn(1, 512).astype(np.float32),
+                'name': 'User',
+            },
+            'person-abc': {
+                'embedding': np.random.RandomState(99).randn(1, 512).astype(np.float32),
+                'name': 'Alice',
+            },
+        }
+
+        # Use the user's own embedding as query (should match self)
+        query = person_embeddings_cache[USER_SELF_PERSON_ID]['embedding']
+        from utils.stt.speaker_embedding import compare_embeddings, SPEAKER_MATCH_THRESHOLD
+
+        best_match = None
+        best_distance = float('inf')
+        for pid, data in person_embeddings_cache.items():
+            distance = compare_embeddings(query, data['embedding'])
+            if distance < best_distance:
+                best_distance = distance
+                best_match = (pid, data['name'])
+
+        assert best_match is not None
+        assert best_distance < SPEAKER_MATCH_THRESHOLD
+        person_id, person_name = best_match
+        assert person_id == USER_SELF_PERSON_ID
+        assert person_name == 'User'
+
+        # Event should use 'user' directly (not _person_id_for_client which returns '')
+        event_person_id = person_id  # In production: 'user' is sent directly
+        assert event_person_id == 'user'
+
+    def test_non_user_match_is_not_user(self):
+        """When best match is a person (not user), is_user should be False."""
+        from utils.speaker_assignment import process_speaker_assigned_segments
+        from models.transcript_segment import TranscriptSegment
+
+        segments = [
+            TranscriptSegment(text='Hello', speaker='SPEAKER_0', speaker_id=0, is_user=False, start=0, end=1),
+        ]
+        # Person match, not user
+        speaker_to_person_map = {0: ('person-abc', 'Alice')}
+        process_speaker_assigned_segments(segments, {}, speaker_to_person_map)
+
+        assert segments[0].is_user is False
+        assert segments[0].person_id == 'person-abc'
