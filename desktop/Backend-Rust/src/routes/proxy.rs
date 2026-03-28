@@ -77,7 +77,7 @@ async fn gemini_proxy(
     }
 
     // Rate limit check
-    let decision = state.gemini_rate_limiter.check_and_record(&user.uid).await;
+    let decision = state.gemini_rate_limiter.check_and_record(&user.uid, state.redis.as_ref()).await;
     if decision == RateDecision::Reject {
         tracing::warn!("gemini_proxy: rate limit rejected uid={}", user.uid);
         return Err(ProxyError::RateLimited);
@@ -141,7 +141,7 @@ async fn gemini_stream_proxy(
     }
 
     // Rate limit check
-    let decision = state.gemini_rate_limiter.check_and_record(&user.uid).await;
+    let decision = state.gemini_rate_limiter.check_and_record(&user.uid, state.redis.as_ref()).await;
     if decision == RateDecision::Reject {
         tracing::warn!("gemini_stream_proxy: rate limit rejected uid={}", user.uid);
         return Err(ProxyError::RateLimited);
