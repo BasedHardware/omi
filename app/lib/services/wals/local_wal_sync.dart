@@ -9,6 +9,7 @@ import 'package:omi/models/sync_state.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/services/wals/wal.dart';
+import 'package:omi/backend/schema/conversation.dart' show SyncUploadResponse;
 import 'package:omi/services/wals/wal_interfaces.dart';
 import 'package:omi/utils/debug_log_manager.dart';
 import 'package:omi/utils/logger.dart';
@@ -362,6 +363,8 @@ class LocalWalSyncImpl implements LocalWalSync {
 
     DebugLogManager.logEvent('local_upload_started', {'walCount': wals.length});
 
+    // V2 async upload: files are uploaded to GCS and processing happens
+    // asynchronously via Cloud Tasks. Conversation results arrive via FCM.
     var resp = SyncLocalFilesResponse(newConversationIds: [], updatedConversationIds: []);
     _accumulatedResponse = resp;
 
@@ -380,7 +383,6 @@ class LocalWalSyncImpl implements LocalWalSync {
           'batchesFailed': batchesFailed,
           'walsRemaining': i + 1,
         });
-        // Clear isSyncing on all WALs that were marked for this batch
         for (final w in wals) {
           w.isSyncing = false;
           w.syncStartedAt = null;
@@ -452,49 +454,24 @@ class LocalWalSyncImpl implements LocalWalSync {
 
       listener.onWalUpdated();
       try {
-        var partialRes = await syncLocalFiles(files);
-
-        resp.newConversationIds.addAll(
-          partialRes.newConversationIds.where((id) => !resp.newConversationIds.contains(id)),
-        );
-        resp.updatedConversationIds.addAll(
-          partialRes.updatedConversationIds.where(
-            (id) => !resp.updatedConversationIds.contains(id) && !resp.newConversationIds.contains(id),
-          ),
-        );
-
-        if (partialRes.hasPartialFailure) {
-          Logger.debug(
-            'WAL batch partial failure: ${partialRes.failedSegments}/${partialRes.totalSegments} segments failed',
-          );
-          DebugLogManager.logWarning('Local upload batch partial failure', {
-            'failedSegments': partialRes.failedSegments,
-            'totalSegments': partialRes.totalSegments,
-            'errors': partialRes.errors.take(3).toList(),
-          });
-        }
+        // V2: Upload returns 202 immediately. Files are safely in GCS.
+        // Processing happens async; conversation results arrive via FCM.
+        SyncUploadResponse uploadResp = await syncUpload(files);
+        Logger.debug('syncUpload accepted: job=${uploadResp.jobId} files=${uploadResp.fileCount}');
 
         batchesCompleted++;
 
+        // Mark WALs as synced — audio is safely persisted in GCS
         for (var j = left; j <= right; j++) {
           if (j < wals.length) {
             var wal = wals[j];
-            if (partialRes.hasPartialFailure) {
-              // Keep WALs retryable on partial failure so failed segments get
-              // another chance. Backend dedup prevents duplicate transcripts.
-              wals[j].isSyncing = false;
-              wals[j].syncStartedAt = null;
-              wals[j].syncEtaSeconds = null;
-            } else {
-              wals[j].status = WalStatus.synced;
-              wals[j].isSyncing = false;
-              wals[j].syncStartedAt = null;
-              wals[j].syncEtaSeconds = null;
-              listener.onWalSynced(wal);
-            }
+            wals[j].status = WalStatus.synced;
+            wals[j].isSyncing = false;
+            wals[j].syncStartedAt = null;
+            wals[j].syncEtaSeconds = null;
+            listener.onWalSynced(wal);
           }
         }
-        // Count actual unique synced WALs (batch ranges overlap, so don't accumulate files.length)
         filesUploaded = wals.where((w) => w.status == WalStatus.synced).length;
       } catch (e) {
         print('Local WAL sync batch failed: $e, continuing with remaining files');
@@ -520,11 +497,10 @@ class LocalWalSyncImpl implements LocalWalSync {
       'batchesCompleted': batchesCompleted,
       'batchesFailed': batchesFailed,
       'corrupted': corruptedCount,
-      'newConversations': resp.newConversationIds.length,
-      'updatedConversations': resp.updatedConversationIds.length,
     });
 
     progress?.onWalSyncedProgress(1.0);
+    // Return empty response — conversation IDs will arrive via FCM
     return resp;
   }
 
@@ -577,42 +553,16 @@ class LocalWalSyncImpl implements LocalWalSync {
 
     listener.onWalUpdated();
     try {
-      var partialRes = await syncLocalFiles([walFile]);
+      // V2: Upload returns 202 immediately. Audio is safely in GCS.
+      SyncUploadResponse uploadResp = await syncUpload([walFile]);
+      Logger.debug('syncUpload accepted: job=${uploadResp.jobId}');
 
-      resp.newConversationIds.addAll(
-        partialRes.newConversationIds.where((id) => !resp.newConversationIds.contains(id)),
-      );
-      resp.updatedConversationIds.addAll(
-        partialRes.updatedConversationIds.where(
-          (id) => !resp.updatedConversationIds.contains(id) && !resp.newConversationIds.contains(id),
-        ),
-      );
-
-      if (partialRes.hasPartialFailure) {
-        Logger.debug(
-          'Single WAL partial failure: ${partialRes.failedSegments}/${partialRes.totalSegments} segments failed',
-        );
-        DebugLogManager.logWarning('Single WAL upload partial failure', {
-          'walId': wal.id,
-          'failedSegments': partialRes.failedSegments,
-          'totalSegments': partialRes.totalSegments,
-          'errors': partialRes.errors.take(3).toList(),
-        });
-      }
-
-      if (partialRes.hasPartialFailure) {
-        // Keep WAL retryable so failed segments get another chance
-        walToSync.isSyncing = false;
-        walToSync.syncStartedAt = null;
-        walToSync.syncEtaSeconds = null;
-      } else {
-        walToSync.status = WalStatus.synced;
-        walToSync.isSyncing = false;
-        walToSync.syncStartedAt = null;
-        walToSync.syncEtaSeconds = null;
-        DebugLogManager.logInfo('Single WAL upload succeeded', {'walId': wal.id});
-        listener.onWalSynced(wal);
-      }
+      walToSync.status = WalStatus.synced;
+      walToSync.isSyncing = false;
+      walToSync.syncStartedAt = null;
+      walToSync.syncEtaSeconds = null;
+      DebugLogManager.logInfo('Single WAL upload succeeded', {'walId': wal.id});
+      listener.onWalSynced(wal);
     } catch (e) {
       Logger.debug('Single WAL sync failed: $e');
       DebugLogManager.logError(e, null, 'Single WAL upload failed: ${e.toString()}', {'walId': wal.id});
@@ -626,6 +576,7 @@ class LocalWalSyncImpl implements LocalWalSync {
     listener.onWalUpdated();
 
     progress?.onWalSyncedProgress(1.0);
+    // Return empty response — conversation IDs arrive via FCM
     return resp;
   }
 }
