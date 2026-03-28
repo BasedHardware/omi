@@ -149,6 +149,8 @@ def precache_conversation_audio_endpoint(
     conversation = conversations_db.get_conversation(uid, conversation_id)
     if not conversation:
         raise HTTPException(status_code=404, detail="Conversation not found")
+    if conversation.get('is_locked', False):
+        raise HTTPException(status_code=402, detail="A paid plan is required to access this conversation.")
 
     audio_files = conversation.get('audio_files', [])
     if not audio_files:
@@ -189,6 +191,8 @@ def get_audio_signed_urls_endpoint(
     conversation = conversations_db.get_conversation(uid, conversation_id)
     if not conversation:
         raise HTTPException(status_code=404, detail="Conversation not found")
+    if conversation.get('is_locked', False):
+        raise HTTPException(status_code=402, detail="A paid plan is required to access this conversation.")
 
     audio_files = conversation.get('audio_files', [])
     if not audio_files:
@@ -301,6 +305,8 @@ def download_audio_file_endpoint(
     conversation = conversations_db.get_conversation(uid, conversation_id)
     if not conversation:
         raise HTTPException(status_code=404, detail="Conversation not found")
+    if conversation.get('is_locked', False):
+        raise HTTPException(status_code=402, detail="A paid plan is required to access this conversation.")
 
     # Find the audio file in the conversation
     audio_files = conversation.get('audio_files', [])
