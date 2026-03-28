@@ -37,6 +37,7 @@ from dependencies import (
     get_uid_with_goals_read,
     get_uid_with_goals_write,
 )
+from utils.other.endpoints import with_rate_limit
 from models.dev_api_key import DevApiKey, DevApiKeyCreate, DevApiKeyCreated
 from utils.scopes import AVAILABLE_SCOPES, validate_scopes
 from utils.apps import update_personas_async
@@ -178,7 +179,7 @@ def get_memories(
 @router.post("/v1/dev/user/memories", response_model=MemoryResponse, tags=["developer"])
 def create_memory(
     request: CreateMemoryRequest,
-    uid: str = Depends(get_uid_with_memories_write),
+    uid: str = Depends(with_rate_limit(get_uid_with_memories_write, "dev:memories")),
 ):
     """
     Create a new memory for the authenticated user.
@@ -228,7 +229,7 @@ def create_memory(
 @router.post("/v1/dev/user/memories/batch", response_model=BatchMemoriesResponse, tags=["developer"])
 def create_memories_batch(
     request: BatchMemoriesRequest,
-    uid: str = Depends(get_uid_with_memories_write),
+    uid: str = Depends(with_rate_limit(get_uid_with_memories_write, "dev:memories_batch")),
 ):
     """
     Create multiple memories in a batch.
@@ -786,7 +787,7 @@ def get_conversations(
 @router.post("/v1/dev/user/conversations", response_model=ConversationResponse, tags=["developer"])
 def create_conversation(
     request: CreateConversationRequest,
-    uid: str = Depends(get_uid_with_conversations_write),
+    uid: str = Depends(with_rate_limit(get_uid_with_conversations_write, "dev:conversations")),
 ):
     """
     Create a new conversation from text for the authenticated user.

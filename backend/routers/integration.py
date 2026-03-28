@@ -87,6 +87,11 @@ async def create_conversation_via_integration(
     if not verify_api_key(app_id, api_key):
         raise HTTPException(status_code=403, detail="Invalid integration API key")
 
+    # Rate limit per app+user
+    from utils.other.endpoints import check_rate_limit_inline
+
+    check_rate_limit_inline(f"{app_id}:{uid}", "integration:conversations")
+
     # Verify if the app exists
     app = apps_db.get_app_by_id_db(app_id)
     if not app:
@@ -161,6 +166,11 @@ async def create_memories_via_integration(
     api_key = authorization.replace('Bearer ', '')
     if not verify_api_key(app_id, api_key):
         raise HTTPException(status_code=403, detail="Invalid integrationAPI key")
+
+    # Rate limit per app+user
+    from utils.other.endpoints import check_rate_limit_inline
+
+    check_rate_limit_inline(f"{app_id}:{uid}", "integration:memories")
 
     # Verify if the app exists
     app = apps_db.get_app_by_id_db(app_id)

@@ -438,6 +438,11 @@ async def mcp_streamable_http(
     if not user_id:
         raise HTTPException(status_code=401, detail="Invalid or missing API key. Provide via Authorization header.")
 
+    # Rate limit per-user
+    from utils.other.endpoints import check_rate_limit_inline
+
+    check_rate_limit_inline(user_id, "mcp:sse")
+
     # Parse request body
     try:
         body = await request.json()

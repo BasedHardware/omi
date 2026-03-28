@@ -755,8 +755,42 @@ def remove_conversation_summary_app_id(app_id: str) -> bool:
 
 
 # ******************************************************
-# *************** LISTEN RATE LIMIT ********************
+# *************** RATE LIMITING ************************
 # ******************************************************
+
+# Lua script: atomic increment + TTL in a single round-trip.
+# Returns [current_count, ttl_remaining].  Sets TTL only on first hit.
+_RATE_LIMIT_LUA = r.register_script("""
+local key = KEYS[1]
+local limit = tonumber(ARGV[1])
+local window = tonumber(ARGV[2])
+local current = redis.call('INCR', key)
+if current == 1 then
+    redis.call('EXPIRE', key, window)
+end
+local ttl = redis.call('TTL', key)
+return {current, ttl}
+""")
+
+
+def check_rate_limit(key: str, policy: str, max_requests: int, window: int) -> tuple[bool, int, int]:
+    """Check per-key rate limit using a single atomic Lua call.
+
+    Args:
+        key: Rate limit subject (uid, ip, app_id:uid).
+        policy: Policy name (used in Redis key namespace).
+        max_requests: Maximum requests allowed in the window (after boost).
+        window: Window size in seconds.
+
+    Returns:
+        (allowed, remaining, retry_after_seconds)
+    """
+    redis_key = f'rl:{policy}:{key}'
+    current, ttl = _RATE_LIMIT_LUA(keys=[redis_key], args=[max_requests, window])
+    remaining = max(0, max_requests - current)
+    allowed = current <= max_requests
+    retry_after = max(0, ttl) if not allowed else 0
+    return allowed, remaining, retry_after
 
 
 def try_acquire_listen_lock(uid: str, ttl: int = 7) -> bool:
