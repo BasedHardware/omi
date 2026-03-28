@@ -98,7 +98,6 @@ from utils.fair_use import (
     trigger_classifier_if_needed,
     get_enforcement_stage,
     is_dg_budget_exhausted,
-    ensure_free_exhausted_restrict,
     record_dg_usage_ms,
 )
 from utils.subscription import has_transcription_credits, get_remaining_transcription_seconds
@@ -430,11 +429,10 @@ async def _stream_handler(
     # DG usage accumulator: batch Redis writes every 60s instead of per-chunk (#5854)
     dg_usage_ms_pending: int = 0
 
-    # Session-start: ensure free-exhausted users are in restrict stage (#6083)
-    # then check DG budget for restrict-stage users (#5748 reviewer fix)
+    # Session-start: check DG budget for restrict-stage users (#6083)
     if FAIR_USE_ENABLED:
         try:
-            _init_stage = ensure_free_exhausted_restrict(uid)
+            _init_stage = get_enforcement_stage(uid)
             logger.info(f'fair_use: session start uid={uid} session={session_id} stage={_init_stage}')
             if _init_stage == 'restrict' and FAIR_USE_RESTRICT_DAILY_DG_MS > 0:
                 fair_use_track_dg_usage = True
@@ -517,10 +515,9 @@ async def _stream_handler(
                 except Exception as e:
                     logger.error(f'fair_use: cap check error for {uid}: {e}')
 
-                # DG budget gate: ensure free-exhausted restriction + check restrict budget
-                # Free-exhausted → restrict directly (#6083); restrict-stage DG budget (#5746)
+                # DG budget gate: check restrict-stage budget (#6083)
                 try:
-                    stage = ensure_free_exhausted_restrict(uid)
+                    stage = get_enforcement_stage(uid)
                     if stage == 'restrict' and FAIR_USE_RESTRICT_DAILY_DG_MS > 0:
                         fair_use_track_dg_usage = True
                         was_exhausted = fair_use_dg_budget_exhausted
