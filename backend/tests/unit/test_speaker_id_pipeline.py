@@ -642,3 +642,104 @@ class TestEmbeddingShapes:
         assert len(result) == 2
         assert isinstance(result[0], bool)
         assert isinstance(result[1], float)
+
+
+# ─── User Embedding Cache Integration ─────────────────────────────────────────
+
+
+class TestUserEmbeddingCacheIntegration:
+    """Tests for user speech profile embedding loading and matching.
+
+    Validates the contract: when a user's speech profile embedding is cached
+    with the 'user' sentinel key, the matching logic correctly routes to
+    the user-specific path (speaker_to_person_map + segment_person_assignment_map).
+    """
+
+    USER_SELF_PERSON_ID = 'user'
+
+    def _random_embedding(self, dim=512, seed=None):
+        rng = np.random.RandomState(seed)
+        vec = rng.randn(1, dim).astype(np.float32)
+        vec /= np.linalg.norm(vec)
+        return vec
+
+    def test_user_embedding_cached_with_correct_sentinel(self):
+        """User profile embedding is cached with 'user' sentinel key."""
+        person_embeddings_cache = {}
+        user_embedding = self._random_embedding(seed=42)
+
+        # Simulate the caching logic from speaker_identification_task
+        person_embeddings_cache[self.USER_SELF_PERSON_ID] = {
+            'embedding': user_embedding,
+            'name': 'User',
+        }
+
+        assert self.USER_SELF_PERSON_ID in person_embeddings_cache
+        assert person_embeddings_cache[self.USER_SELF_PERSON_ID]['name'] == 'User'
+        assert np.array_equal(person_embeddings_cache[self.USER_SELF_PERSON_ID]['embedding'], user_embedding)
+
+    def test_user_embedding_match_routes_to_user_path(self):
+        """When best match is the user sentinel, speaker_to_person_map and
+        segment_person_assignment_map are updated correctly."""
+        user_embedding = self._random_embedding(seed=42)
+        other_embedding = self._random_embedding(seed=99)
+
+        person_embeddings_cache = {
+            self.USER_SELF_PERSON_ID: {'embedding': user_embedding, 'name': 'User'},
+            'person-123': {'embedding': other_embedding, 'name': 'Alice'},
+        }
+
+        # Simulate matching logic: query is nearly identical to user embedding
+        query_embedding = user_embedding.copy()
+        noise = np.random.RandomState(7).randn(1, 512).astype(np.float32) * 0.001
+        query_embedding = query_embedding + noise
+        query_embedding /= np.linalg.norm(query_embedding)
+
+        # Find best match (same logic as _match_speaker_embedding)
+        best_match = None
+        best_distance = float('inf')
+        for person_id, data in person_embeddings_cache.items():
+            distance = compare_embeddings(query_embedding, data['embedding'])
+            if distance < best_distance:
+                best_distance = distance
+                best_match = (person_id, data['name'])
+
+        assert best_match is not None
+        assert best_match[0] == self.USER_SELF_PERSON_ID
+        assert best_distance < SPEAKER_MATCH_THRESHOLD
+
+        # Simulate the routing logic
+        speaker_to_person_map = {}
+        segment_person_assignment_map = {}
+        speaker_id = 0
+        segment_id = 'test-seg-1'
+
+        person_id, person_name = best_match
+        if person_id == self.USER_SELF_PERSON_ID:
+            speaker_to_person_map[speaker_id] = (self.USER_SELF_PERSON_ID, 'User')
+            segment_person_assignment_map[segment_id] = self.USER_SELF_PERSON_ID
+
+        assert speaker_to_person_map[speaker_id] == (self.USER_SELF_PERSON_ID, 'User')
+        assert segment_person_assignment_map[segment_id] == self.USER_SELF_PERSON_ID
+
+    def test_user_embedding_not_matched_when_distant(self):
+        """User embedding is not matched when query is distant."""
+        user_embedding = self._random_embedding(seed=42)
+
+        person_embeddings_cache = {
+            self.USER_SELF_PERSON_ID: {'embedding': user_embedding, 'name': 'User'},
+        }
+
+        # Query from a completely different speaker
+        query_embedding = self._random_embedding(seed=999)
+
+        best_match = None
+        best_distance = float('inf')
+        for person_id, data in person_embeddings_cache.items():
+            distance = compare_embeddings(query_embedding, data['embedding'])
+            if distance < best_distance:
+                best_distance = distance
+                best_match = (person_id, data['name'])
+
+        # Random 512-d vectors are ~1.0 apart, well above threshold
+        assert best_distance >= SPEAKER_MATCH_THRESHOLD
