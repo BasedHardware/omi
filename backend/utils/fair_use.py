@@ -332,7 +332,9 @@ def ensure_free_exhausted_restrict(uid: str) -> str:
 
     Returns the effective enforcement stage after any adjustments.
     """
-    if not FAIR_USE_ENABLED:
+    if not FAIR_USE_ENABLED or FAIR_USE_KILL_SWITCH:
+        return 'none'
+    if uid in FAIR_USE_EXEMPT_UIDS:
         return 'none'
 
     try:
@@ -472,6 +474,10 @@ def is_hard_restricted(uid: str) -> bool:
     state = fair_use_db.get_fair_use_state(uid)
     stage = state.get('stage', 'none')
     if stage != 'restrict':
+        return False
+
+    # Free-exhausted users get DG budget throttling, not hard blocks (#6083)
+    if state.get('restrict_reason') == 'free_exhausted':
         return False
 
     # Check if restriction has expired
