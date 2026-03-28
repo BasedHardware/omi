@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:omi/app_globals.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/core/app_shell.dart';
 import 'package:omi/pages/persona/persona_provider.dart';
@@ -56,6 +57,45 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
   String? version;
   String? buildVersion;
   String? shortDeviceInfo;
+
+  Future<void> _confirmAndSignOut({
+    required bool clearAllPreferences,
+    required bool clearDeviceFlags,
+  }) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return getDialog(
+          dialogContext,
+          () => Navigator.of(dialogContext).pop(false),
+          () => Navigator.of(dialogContext).pop(true),
+          context.l10n.signOutQuestion,
+          context.l10n.signOutConfirmation,
+        );
+      },
+    );
+
+    if (confirmed != true || !mounted) return;
+
+    final personaProvider = Provider.of<PersonaProvider>(context, listen: false);
+    Navigator.of(context).pop();
+
+    if (clearAllPreferences) {
+      await SharedPreferencesUtil().clear();
+    }
+    if (clearDeviceFlags) {
+      SharedPreferencesUtil().hasOmiDevice = null;
+      SharedPreferencesUtil().verifiedPersonaId = null;
+    }
+
+    personaProvider.setRouting(PersonaProfileRouting.no_device);
+    await AuthService.instance.signOut();
+
+    globalNavigatorKey.currentState?.pushAndRemoveUntil(
+      MaterialPageRoute(builder: (_) => const AppShell()),
+      (route) => false,
+    );
+  }
 
   @override
   void initState() {
@@ -480,31 +520,9 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
                   title: context.l10n.signOut,
                   icon: const FaIcon(FontAwesomeIcons.signOutAlt, color: Color(0xFF8E8E93), size: 20),
                   onTap: () async {
-                    // Capture the provider reference before any navigation
-                    final personaProvider = Provider.of<PersonaProvider>(context, listen: false);
-                    final navigator = Navigator.of(context);
-
-                    navigator.pop(); // Close the settings drawer
-
-                    await showDialog(
-                      context: context,
-                      builder: (ctx) {
-                        return getDialog(
-                          ctx,
-                          () => Navigator.of(ctx).pop(),
-                          () async {
-                            Navigator.of(ctx).pop();
-                            await SharedPreferencesUtil().clear();
-                            await AuthService.instance.signOut();
-                            personaProvider.setRouting(PersonaProfileRouting.no_device);
-                            if (context.mounted) {
-                              routeToPage(context, const AppShell(), replace: true);
-                            }
-                          },
-                          context.l10n.signOutQuestion,
-                          context.l10n.signOutConfirmation,
-                        );
-                      },
+                    await _confirmAndSignOut(
+                      clearAllPreferences: true,
+                      clearDeviceFlags: false,
                     );
                   },
                 ),
@@ -545,32 +563,9 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
               title: context.l10n.signOut,
               icon: const FaIcon(FontAwesomeIcons.signOutAlt, color: Color(0xFF8E8E93), size: 20),
               onTap: () async {
-                // Capture the provider reference before any navigation
-                final personaProvider = Provider.of<PersonaProvider>(context, listen: false);
-                final navigator = Navigator.of(context);
-
-                navigator.pop(); // Close the settings drawer
-
-                await showDialog(
-                  context: context,
-                  builder: (ctx) {
-                    return getDialog(
-                      ctx,
-                      () => Navigator.of(ctx).pop(),
-                      () async {
-                        Navigator.of(ctx).pop(); // Close dialog first
-                        SharedPreferencesUtil().hasOmiDevice = null;
-                        SharedPreferencesUtil().verifiedPersonaId = null;
-                        personaProvider.setRouting(PersonaProfileRouting.no_device);
-                        await AuthService.instance.signOut();
-                        if (context.mounted) {
-                          routeToPage(context, const AppShell(), replace: true);
-                        }
-                      },
-                      context.l10n.signOutQuestion,
-                      context.l10n.signOutConfirmation,
-                    );
-                  },
+                await _confirmAndSignOut(
+                  clearAllPreferences: false,
+                  clearDeviceFlags: true,
                 );
               },
             ),
