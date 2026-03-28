@@ -37,8 +37,10 @@ impl IntoResponse for ProxyError {
         match self {
             ProxyError::Status(status) => status.into_response(),
             ProxyError::RateLimited => {
+                // Message must contain "resource exhausted" or "429" for Swift GeminiClient
+                // to treat it as a transient error and apply retry backoff.
                 let body = rate_limit::rate_limit_error_json(
-                    "Rate limit exceeded. Please try again later.",
+                    "Resource exhausted: rate limit exceeded. Please try again later.",
                 );
                 Response::builder()
                     .status(StatusCode::TOO_MANY_REQUESTS)
