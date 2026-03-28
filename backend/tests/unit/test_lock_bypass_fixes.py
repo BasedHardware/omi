@@ -115,6 +115,7 @@ def _make_conversation(locked=False, conversation_id='conv-1'):
         'geolocation': None,
         'language': 'en',
         'status': 'completed',
+        'source': 'friend',
     }
 
 
@@ -879,3 +880,71 @@ class TestMentorProactiveLockFilter:
                                             convos_passed = mock_conv_cls.conversations_to_string.call_args[0][0]
                                             assert len(convos_passed) == 1
                                             assert convos_passed[0].get('is_locked') is not True
+
+
+# =============================================================================
+# Test integration search redacts locked conversation title/overview
+# =============================================================================
+
+
+class TestIntegrationSearchLockRedaction:
+    """Integration search/list endpoints must redact title/overview for locked conversations."""
+
+    @pytest.mark.asyncio
+    async def test_integration_search_redacts_locked_title_overview(self):
+        """Integration search re-fetches full convos — must also blank title/overview."""
+        import database.conversations as conversations_db
+        import database.apps as apps_db
+        import database.redis_db as redis_db
+
+        locked_conv = _make_conversation(locked=True)
+        locked_conv['structured']['title'] = 'SECRET_TITLE'
+        locked_conv['structured']['overview'] = 'SECRET_OVERVIEW'
+        unlocked_conv = _make_conversation(locked=False, conversation_id='conv-2')
+
+        # Mock search + db + auth
+        with patch(
+            'routers.integration.search_conversations',
+            return_value={'items': [locked_conv, unlocked_conv], 'total_pages': 1, 'current_page': 1, 'per_page': 10},
+        ):
+            import copy
+
+            conversations_db.get_conversations_by_id = MagicMock(
+                return_value=[copy.deepcopy(locked_conv), copy.deepcopy(unlocked_conv)]
+            )
+            apps_db.get_app_by_id_db = MagicMock(return_value={'id': 'app-1', 'name': 'test'})
+            redis_db.get_enabled_apps = MagicMock(return_value=['app-1'])
+
+            with patch('routers.integration.verify_api_key', return_value=True):
+                with patch('routers.integration.apps_utils') as mock_apps_utils:
+                    mock_apps_utils.app_can_read_conversations.return_value = True
+
+                    from routers.integration import search_conversations_via_integration
+
+                    result = await search_conversations_via_integration(
+                        request=MagicMock(),
+                        app_id='app-1',
+                        uid='test-uid',
+                        search_request=MagicMock(
+                            query='test',
+                            page=1,
+                            per_page=10,
+                            include_discarded=False,
+                            start_date=None,
+                            end_date=None,
+                        ),
+                        max_transcript_segments=100,
+                        authorization='Bearer test-key',
+                    )
+
+        # result is a dict (from .dict(exclude_none=True)), conversations are dicts
+        convs = result['conversations']
+        assert len(convs) == 2
+        # The locked conversation must have redacted title/overview
+        locked_items = [c for c in convs if c['structured']['title'] == '']
+        assert len(locked_items) == 1
+        assert locked_items[0]['structured']['overview'] == ''
+        # Unlocked should preserve content
+        unlocked_items = [c for c in convs if c['structured']['title'] != '']
+        assert len(unlocked_items) == 1
+        assert unlocked_items[0]['structured']['title'] == 'Test Conversation'
