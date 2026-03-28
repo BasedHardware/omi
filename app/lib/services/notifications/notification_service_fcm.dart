@@ -11,9 +11,12 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_timezone/flutter_timezone.dart';
 
+import 'package:omi/app_globals.dart';
 import 'package:omi/backend/http/api/notifications.dart';
 import 'package:omi/backend/schema/message.dart';
+import 'package:omi/pages/home/page.dart';
 import 'package:omi/services/notifications/action_item_notification_handler.dart';
+import 'package:omi/services/notifications/daily_reflection_notification.dart';
 import 'package:omi/services/notifications/important_conversation_notification_handler.dart';
 import 'package:omi/services/notifications/merge_notification_handler.dart';
 import 'package:omi/services/notifications/notification_interface.dart';
@@ -47,6 +50,7 @@ class _FCMNotificationService implements NotificationInterface {
     // Reference: https://github.com/firebase/flutterfire/issues/12244#issuecomment-1969286794
     await _firebaseMessaging.getAPNSToken();
     listenForMessages();
+    _bindNotificationOpenHandlers();
   }
 
   Future<void> _initializeAwesomeNotifications() async {
@@ -261,6 +265,37 @@ class _FCMNotificationService implements NotificationInterface {
         return;
       }
     });
+  }
+
+  void _bindNotificationOpenHandlers() {
+    FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
+      _navigateFromPayload(message.data);
+    });
+
+    _firebaseMessaging.getInitialMessage().then((message) {
+      if (message == null || message.data.isEmpty) return;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _navigateFromPayload(message.data);
+      });
+    });
+  }
+
+  void _navigateFromPayload(Map<String, dynamic> payload) {
+    final navigateTo = payload['navigate_to']?.toString();
+    if (navigateTo == null || navigateTo.isEmpty) {
+      Logger.debug('Navigate To is null');
+      return;
+    }
+
+    String? autoMessage;
+    if (DailyReflectionNotification.isReflectionPayload(payload)) {
+      autoMessage = DailyReflectionNotification.reflectionMessage;
+    }
+
+    globalNavigatorKey.currentState?.pushAndRemoveUntil(
+      MaterialPageRoute(builder: (_) => HomePageWrapper(navigateToRoute: navigateTo, autoMessage: autoMessage)),
+      (route) => false,
+    );
   }
 
   final _serverMessageStreamController = StreamController<ServerMessage>.broadcast();

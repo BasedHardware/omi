@@ -81,10 +81,9 @@ class NotificationUtil {
       autoMessage = DailyReflectionNotification.reflectionMessage;
     }
 
-    globalNavigatorKey.currentState?.pushReplacement(
-      MaterialPageRoute(
-        builder: (context) => HomePageWrapper(navigateToRoute: navigateTo, autoMessage: autoMessage),
-      ),
+    globalNavigatorKey.currentState?.pushAndRemoveUntil(
+      MaterialPageRoute(builder: (context) => HomePageWrapper(navigateToRoute: navigateTo, autoMessage: autoMessage)),
+      (route) => false,
     );
   }
 
