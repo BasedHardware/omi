@@ -40,15 +40,17 @@ class TestProcessSegmentErrorHandling:
         assert 'try:' in func_body, "process_segment must have try/except"
         assert 'except Exception' in func_body, "process_segment must catch exceptions"
 
-    def test_process_segment_errors_on_empty_words(self):
-        """When Deepgram returns no words, treat as error (may be Deepgram failure, not just silence)."""
+    def test_process_segment_treats_empty_words_as_success(self):
+        """When Deepgram returns no words, treat it as a successful empty segment."""
         source = self._read_sync_source()
         start = source.index('def process_segment(')
         next_def = source.index('\ndef ', start + 1)
         func_body = source[start:next_def]
+        empty_words_block = func_body[func_body.index('if not words:') : func_body.index('transcript_segments')]
 
-        assert 'Deepgram returned no words' in func_body, "Must log error for empty Deepgram words"
-        assert 'errors.append' in func_body, "Must append to errors list for empty words"
+        assert 'No transcript words for segment' in empty_words_block, "Must log empty-word segments"
+        assert 'errors.append' not in empty_words_block, "Empty-word segments must not append to errors"
+        assert 'return' in empty_words_block, "Empty-word segments must short-circuit as success"
 
     def test_process_segment_warns_on_empty_postprocessed(self):
         """When words exist but postprocessing yields nothing, log warning (not error)."""
@@ -76,9 +78,9 @@ class TestProcessSegmentErrorHandling:
         func_body = source[start:next_def]
 
         assert 'with lock:' in func_body, "Must use lock for thread-safe mutations"
-        # Lock must protect both error append and response dict mutations
+        # Lock must protect the exception path and response dict mutations
         lock_sections = func_body.split('with lock:')
-        assert len(lock_sections) >= 4, "Must have lock sections for errors (2) + new_memories + updated_memories"
+        assert len(lock_sections) >= 3, "Must have lock sections for exception errors + new_memories + updated_memories"
 
     def test_process_segment_accepts_lock_and_errors_params(self):
         """process_segment must accept lock and errors as parameters."""
@@ -231,7 +233,7 @@ class TestThreadSafeErrorCollection:
 
 
 class TestDeepgramRetryBehavior:
-    """Verifies deepgram_prerecorded returns empty list on final retry failure."""
+    """Verifies retry exhaustion raises while valid empty transcriptions stay empty."""
 
     @staticmethod
     def _read_deepgram_source():
@@ -239,9 +241,8 @@ class TestDeepgramRetryBehavior:
         with open(dg_path) as f:
             return f.read()
 
-    def test_deepgram_returns_empty_list_on_final_retry(self):
-        """After 2 retries, deepgram_prerecorded returns [] (not raise).
-        This is now properly caught by process_segment's error handling."""
+    def test_deepgram_raises_runtime_error_on_final_retry(self):
+        """After 2 retries, deepgram_prerecorded must raise instead of returning []."""
         source = self._read_deepgram_source()
         start = source.index('def deepgram_prerecorded(')
         next_func_markers = ['@timeit', '\ndef ']
@@ -255,8 +256,35 @@ class TestDeepgramRetryBehavior:
                 pass
         func_body = source[start:end]
 
-        assert 'return [], ' in func_body or "return []" in func_body
+        except_body = func_body[func_body.index('except Exception as e:') :]
+
+        assert 'raise RuntimeError' in except_body
+        assert 'Deepgram transcription failed after' in except_body
         assert 'attempts < 2' in func_body
+
+    def test_deepgram_keeps_empty_words_as_success(self):
+        """A valid Deepgram response with no words must still return []."""
+        source = self._read_deepgram_source()
+        start = source.index('def deepgram_prerecorded(')
+        next_func_markers = ['@timeit', '\ndef ']
+        end = len(source)
+        for marker in next_func_markers:
+            try:
+                idx = source.index(marker, start + 100)
+                if idx < end:
+                    end = idx
+            except ValueError:
+                pass
+        func_body = source[start:end]
+        no_words_block = func_body[
+            func_body.index("dg_words = alternatives[0].get('words', [])") : func_body.index(
+                '# Convert Deepgram format'
+            )
+        ]
+
+        assert 'if not dg_words:' in no_words_block
+        assert 'return [], detected_lang or \'en\'' in no_words_block
+        assert 'return []' in no_words_block
 
 
 # ---------------------------------------------------------------------------
@@ -355,7 +383,9 @@ class TestDataLossPreventionFlow:
 
     def test_response_includes_error_details_for_debugging(self):
         """Response includes structured error info for debugging."""
-        segment_errors = ['Deepgram returned no words for segment /tmp/1700000100.wav']
+        segment_errors = [
+            'Failed to process segment /tmp/1700000100.wav: Deepgram transcription failed after 3 attempts: timeout'
+        ]
         total_segments = 3
         failed_segments = len(segment_errors)
 
@@ -370,7 +400,7 @@ class TestDataLossPreventionFlow:
         assert result['failed_segments'] == 1
         assert result['total_segments'] == 3
         assert len(result['errors']) == 1
-        assert 'Deepgram returned no words' in result['errors'][0]
+        assert 'Deepgram transcription failed after 3 attempts' in result['errors'][0]
 
 
 # ---------------------------------------------------------------------------
@@ -462,6 +492,9 @@ from types import ModuleType
 from unittest.mock import MagicMock, patch
 
 _STUB_MODULES = [
+    'models',
+    'models.conversation',
+    'models.transcript_segment',
     'database._client',
     'database.redis_db',
     'database.fair_use',
@@ -474,6 +507,7 @@ _STUB_MODULES = [
     'pydub',
     'utils.other.endpoints',
     'utils.other.storage',
+    'utils.log_sanitizer',
     'utils.encryption',
     'utils.stt.pre_recorded',
     'utils.stt.vad',
@@ -519,6 +553,7 @@ class TestProcessSegmentReal:
         sys.modules['utils.other.storage'].download_audio_chunks_and_merge = MagicMock()
         sys.modules['utils.other.storage'].get_or_create_merged_audio = MagicMock()
         sys.modules['utils.other.storage'].get_merged_audio_signed_url = MagicMock()
+        sys.modules['utils.log_sanitizer'].sanitize = lambda value: value
         sys.modules['utils.encryption'].encrypt = MagicMock()
         sys.modules['utils.stt.pre_recorded'].deepgram_prerecorded = MagicMock()
         sys.modules['utils.stt.pre_recorded'].postprocess_words = MagicMock()
@@ -531,6 +566,29 @@ class TestProcessSegmentReal:
         sys.modules['utils.fair_use'].trigger_classifier_if_needed = MagicMock()
         sys.modules['utils.subscription'].has_transcription_credits = MagicMock(return_value=True)
         sys.modules['utils.conversations.process_conversation'].process_conversation = MagicMock()
+
+        class _ConversationSource:
+            omi = 'omi'
+
+        class _CreateConversation:
+            def __init__(self, **kwargs):
+                self.__dict__.update(kwargs)
+
+        class _Conversation:
+            def __init__(self, **kwargs):
+                self.__dict__.update(kwargs)
+
+        class _TranscriptSegment:
+            def __init__(self, **kwargs):
+                self.__dict__.update(kwargs)
+
+            def dict(self):
+                return dict(self.__dict__)
+
+        sys.modules['models.conversation'].ConversationSource = _ConversationSource
+        sys.modules['models.conversation'].CreateConversation = _CreateConversation
+        sys.modules['models.conversation'].Conversation = _Conversation
+        sys.modules['models.transcript_segment'].TranscriptSegment = _TranscriptSegment
 
         # Import under stubs
         from routers.sync import process_segment
@@ -552,13 +610,8 @@ class TestProcessSegmentReal:
     def _import_process_segment(self):
         return self._process_segment
 
-    def test_empty_words_collects_error(self):
-        """Real process_segment: empty Deepgram words → error collected.
-
-        deepgram_prerecorded returns [] on both "no speech" AND "failure after retries".
-        We treat it as an error so the segment is retried — dedup prevents duplicates
-        if the segment was actually silent.
-        """
+    def test_empty_words_are_successful_noop(self):
+        """Real process_segment: empty Deepgram words → success with no memory changes."""
         process_segment = self._import_process_segment()
 
         response = {'updated_memories': set(), 'new_memories': set()}
@@ -574,8 +627,7 @@ class TestProcessSegmentReal:
 
             process_segment('/tmp/1700000000.wav', 'uid', response, lock, errors, ConversationSource.omi, False)
 
-        assert len(errors) == 1, "Empty words must be treated as an error"
-        assert 'Deepgram returned no words' in errors[0]
+        assert len(errors) == 0, "Empty words must not be treated as an error"
         assert len(response['new_memories']) == 0
         assert len(response['updated_memories']) == 0
 
