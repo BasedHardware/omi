@@ -318,8 +318,7 @@ class TestSearchRedaction:
     def test_search_total_pages_does_not_leak_locked_count(self):
         """total_pages must not inflate from locked docs on other pages."""
         mock_client = MagicMock()
-        # Simulate: found=6 globally, per_page=5, but only 1 unlocked on this page
-        # With 5 hits on this page (full page), has_more=True → total_pages=2
+        # Simulate: found=6 globally, per_page=5, 4 locked + 1 unlocked on this page
         hits = [
             {
                 'document': {
@@ -350,8 +349,8 @@ class TestSearchRedaction:
             result = search_conversations(uid='test-uid', query='test', per_page=5)
 
         assert len(result['items']) == 1
-        # total_pages based on page-level fullness (5 hits >= per_page=5), not found=6
-        assert result['total_pages'] == 2  # page + 1 because full page returned
+        # total_pages derived from visible items (1 < per_page=5), not raw hits or found count
+        assert result['total_pages'] == 1
 
     def test_search_total_pages_last_page_no_leak(self):
         """When Typesense returns fewer than per_page hits, total_pages = current page."""
