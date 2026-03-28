@@ -21,15 +21,11 @@ flowchart LR
 
     subgraph STT["🎧 STT Providers"]
         DG[Deepgram Nova-3]
-        Soniox[Soniox]
-        SM[Speechmatics]
     end
 
     Audio -->|Binary stream| WS
     WS --> Decode
     Decode --> DG
-    Decode -.->|Fallback| Soniox
-    Decode -.->|Fallback| SM
     DG -->|Transcript| WS
     WS -->|JSON segments| Audio
 ```
@@ -75,7 +71,7 @@ wss://api.omi.me/v4/listen?uid={uid}&language={lang}&sample_rate={rate}&codec={c
 
     Language code for transcription. Supports:
     - Standard codes: `'en'`, `'es'`, `'fr'`, `'de'`, `'ja'`, `'zh'`, etc.
-    - Multi-language: `'multi'` for automatic language detection (uses Soniox)
+    - Multi-language: `'multi'` for automatic language detection
   </Accordion>
 
   <Accordion title="sample_rate" icon="wave-pulse">
@@ -118,7 +114,7 @@ wss://api.omi.me/v4/listen?uid={uid}&language={lang}&sample_rate={rate}&codec={c
   <Accordion title="stt_service" icon="server">
     **Type:** `string` | **Optional**
 
-    Explicitly specify STT service. Options: `deepgram`, `soniox`, `speechmatics`. If not specified, the system selects based on language.
+    Explicitly specify STT service. Options: `deepgram`. If not specified, Deepgram is used.
   </Accordion>
 
   <Accordion title="custom_stt" icon="code">
@@ -154,16 +150,14 @@ All audio is internally converted to 16-bit linear PCM before being sent to STT 
 
 ## STT Service Selection
 
-The system automatically selects the best STT provider based on language:
+The system uses Deepgram for all transcription:
 
 ```mermaid
 flowchart TD
     Start[Incoming Audio] --> Lang{Language?}
     Lang -->|English| DG3[Deepgram Nova-3]
-    Lang -->|Multi/Auto| Soniox[Soniox<br/>95+ languages]
     Lang -->|Unsupported by Nova-3| DG2[Deepgram Nova-2]
     DG3 -->|Fallback on error| DG2
-    DG2 -->|Fallback on error| SM[Speechmatics]
 ```
 
 ### Provider Capabilities
@@ -172,8 +166,6 @@ flowchart TD
 |----------|-----------|-------|----------|
 | **Deepgram Nova-3** | 30+ | `nova-3` | Primary English, major languages |
 | **Deepgram Nova-2** | 40+ | `nova-2-general` | Broader language support |
-| **Soniox** | 95+ | Real-time | Multi-language, auto-detection |
-| **Speechmatics** | 50+ | Real-time | Additional coverage |
 
 ## Deepgram Configuration
 
@@ -315,7 +307,7 @@ sequenceDiagram
     App sends binary audio chunks. Backend decodes based on codec parameter.
   </Step>
   <Step title="STT Processing" icon="microphone">
-    Decoded audio sent to Deepgram/Soniox. Provider returns word-level transcripts with speaker IDs.
+    Decoded audio sent to Deepgram. Provider returns word-level transcripts with speaker IDs.
   </Step>
   <Step title="Segment Creation" icon="align-left">
     Words grouped into segments. Same-speaker consecutive words merged. Timing adjusted for speech profile offset.
@@ -591,7 +583,6 @@ If all STT providers fail after retries, the connection will be closed with an e
 |-----------|------|
 | WebSocket Handler | `backend/routers/transcribe.py` |
 | Deepgram Integration | `backend/utils/stt/streaming.py` |
-| Soniox Integration | `backend/utils/stt/streaming.py` |
 | Audio Decoding | `backend/routers/transcribe.py` |
 | Speech Profile | `backend/utils/stt/speech_profile.py` |
 | VAD (Voice Activity) | `backend/utils/stt/vad.py` |
