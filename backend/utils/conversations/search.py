@@ -47,10 +47,18 @@ def search_conversations(
         results = client.collections['conversations'].documents.search(search_parameters)
         memories = []
         for item in results['hits']:
-            item['document']['created_at'] = datetime.utcfromtimestamp(item['document']['created_at']).isoformat()
-            item['document']['started_at'] = datetime.utcfromtimestamp(item['document']['started_at']).isoformat()
-            item['document']['finished_at'] = datetime.utcfromtimestamp(item['document']['finished_at']).isoformat()
-            memories.append(item['document'])
+            doc = item['document']
+            # Redact locked conversation content from search results
+            if doc.get('is_locked', False):
+                structured = doc.get('structured', {})
+                if structured:
+                    structured['action_items'] = []
+                    structured['events'] = []
+                doc['transcript_segments'] = []
+            doc['created_at'] = datetime.utcfromtimestamp(doc['created_at']).isoformat()
+            doc['started_at'] = datetime.utcfromtimestamp(doc['started_at']).isoformat()
+            doc['finished_at'] = datetime.utcfromtimestamp(doc['finished_at']).isoformat()
+            memories.append(doc)
         return {
             'items': memories,
             'total_pages': math.ceil(results['found'] / per_page),
