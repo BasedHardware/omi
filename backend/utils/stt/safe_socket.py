@@ -1,7 +1,7 @@
 """SafeDeepgramSocket — connection wrapper with auto-keepalive and dead detection (#5870).
 
 This module is intentionally lightweight (no heavy imports) so that unit tests
-can import SafeDeepgramSocket without pulling in GCP/Soniox/storage dependencies.
+can import SafeDeepgramSocket without pulling in GCP/storage dependencies.
 
 Architecture: SafeDeepgramSocket is the SOLE keepalive owner for a DG connection.
 No other layer (GatedDeepgramSocket, transcribe.py) should call keep_alive() directly.
