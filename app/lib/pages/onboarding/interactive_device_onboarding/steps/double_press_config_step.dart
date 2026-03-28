@@ -55,17 +55,25 @@ class _DoublePressConfigStepState extends State<DoublePressConfigStep> {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
                   decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.06),
+                    color: provider.showSingleTapHint
+                        ? const Color(0xFFFFA726).withValues(alpha: 0.12)
+                        : Colors.white.withValues(alpha: 0.06),
                     borderRadius: BorderRadius.circular(16),
                   ),
                   child: Row(
                     children: [
-                      Icon(Icons.touch_app, color: Colors.white.withValues(alpha: 0.6), size: 24),
+                      Icon(Icons.touch_app,
+                          color: provider.showSingleTapHint ? const Color(0xFFFFA726) : Colors.white.withValues(alpha: 0.6),
+                          size: 24),
                       const SizedBox(width: 12),
-                      const Expanded(
+                      Expanded(
                         child: Text(
-                          'Try it now! Double tap your Omi',
-                          style: TextStyle(color: Color(0xFF9E9E9E), fontSize: 15),
+                          provider.showSingleTapHint
+                              ? 'That was a single tap — try tapping twice quickly!'
+                              : 'Try it now! Double tap your Omi',
+                          style: TextStyle(
+                              color: provider.showSingleTapHint ? const Color(0xFFFFA726) : const Color(0xFF9E9E9E),
+                              fontSize: 15),
                         ),
                       ),
                     ],
