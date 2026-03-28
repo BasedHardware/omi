@@ -505,6 +505,10 @@ async def _stream_handler(
                             f'fair_use: soft cap triggered for {uid} session={session_id} caps={triggered_caps}'
                         )
                         asyncio.create_task(trigger_classifier_if_needed(uid, triggered_caps, session_id))
+                        # Start DG tracking proactively — classifier may escalate to restrict
+                        # before next poll. Harmless if user isn't actually escalated.
+                        if FAIR_USE_RESTRICT_DAILY_DG_MS > 0:
+                            fair_use_track_dg_usage = True
                     else:
                         logger.info(
                             f'fair_use: cap check ok uid={uid} session={session_id}'
@@ -516,6 +520,7 @@ async def _stream_handler(
                     logger.error(f'fair_use: cap check error for {uid}: {e}')
 
                 # DG budget gate: check restrict-stage budget (#6083)
+                # Re-check stage after classifier may have escalated (fire-and-forget task above)
                 try:
                     stage = get_enforcement_stage(uid)
                     if stage == 'restrict' and FAIR_USE_RESTRICT_DAILY_DG_MS > 0:
