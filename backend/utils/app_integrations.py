@@ -334,14 +334,14 @@ def _process_mentor_proactive_notification(uid: str, conversation_messages: list
             if memory_ids:
                 vector_convos = conversations_db.get_conversations_by_id(uid, memory_ids)
                 if vector_convos:
-                    all_past.extend(vector_convos)
+                    all_past.extend([c for c in vector_convos if not c.get('is_locked')])
 
         # Also fetch recent conversations by time for additional context
         recent_convos = conversations_db.get_conversations(uid, limit=5, offset=0)
         if recent_convos:
             existing_ids = {c.get('id') for c in all_past}
             for rc in recent_convos:
-                if rc.get('id') not in existing_ids:
+                if rc.get('id') not in existing_ids and not rc.get('is_locked'):
                     all_past.append(rc)
 
         if all_past:
