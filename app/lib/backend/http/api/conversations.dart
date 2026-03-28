@@ -374,6 +374,50 @@ Future<SyncLocalFilesResponse> syncLocalFiles(List<File> files, {UploadProgressC
   }
 }
 
+/// Upload audio files for async offline sync processing (v2).
+/// Returns immediately with a job_id. Processing happens asynchronously
+/// via Cloud Tasks, and results are delivered via FCM data message.
+Future<SyncUploadResponse> syncUpload(List<File> files, {UploadProgressCallback? onUploadProgress}) async {
+  try {
+    var response = await makeMultipartApiCall(
+        url: '${Env.apiBaseUrl}v2/sync/upload', files: files, onUploadProgress: onUploadProgress);
+
+    if (response.statusCode == 202) {
+      var body = jsonDecode(response.body);
+      Logger.debug('syncUpload Response: $body');
+      return SyncUploadResponse.fromJson(body);
+    } else if (response.statusCode == 400) {
+      throw Exception('Audio file could not be processed by server');
+    } else if (response.statusCode == 413) {
+      throw Exception('Audio file is too large to upload');
+    } else if (response.statusCode == 429) {
+      throw Exception('Account temporarily restricted');
+    } else if (response.statusCode >= 500) {
+      throw Exception('Server is temporarily unavailable');
+    } else {
+      throw Exception('Upload failed unexpectedly (${response.statusCode})');
+    }
+  } catch (e) {
+    Logger.debug('syncUpload error: $e');
+    rethrow;
+  }
+}
+
+/// Fetch user's offline sync jobs (fallback for missed FCM messages).
+Future<List<SyncJobStatus>> getSyncJobs({String? status}) async {
+  var url = '${Env.apiBaseUrl}v2/sync/jobs';
+  if (status != null) {
+    url += '?status=$status';
+  }
+  var response = await makeApiCall(url: url, headers: {}, method: 'GET', body: '');
+  if (response == null) return [];
+  if (response.statusCode == 200) {
+    var body = jsonDecode(response.body);
+    return ((body['jobs'] ?? []) as List<dynamic>).map((j) => SyncJobStatus.fromJson(j)).toList();
+  }
+  return [];
+}
+
 Future<(List<ServerConversation>, int, int)> searchConversationsServer(
   String query, {
   int? page,
