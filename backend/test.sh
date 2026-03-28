@@ -15,6 +15,7 @@ pytest tests/unit/test_short_audio_embedding.py -v
 pytest tests/unit/test_users_add_sample_transaction.py -v
 pytest tests/unit/test_voice_message_language.py -v
 pytest tests/unit/test_speaker_assignment.py -v
+pytest tests/unit/test_speaker_id_pipeline.py -v
 pytest tests/unit/test_memory_leak_buffers.py -v
 pytest tests/unit/test_llm_usage_tracker.py -v
 pytest tests/unit/test_process_conversation_usage_context.py -v
@@ -47,7 +48,6 @@ pytest tests/unit/test_people_conversations_500s.py -v
 pytest tests/unit/test_firestore_read_ops_cache.py -v
 pytest tests/unit/test_ws_auth_handshake.py -v
 pytest tests/unit/test_streaming_deepgram_backoff.py -v
-pytest tests/unit/test_speaker_id_pipeline.py -v
 pytest tests/unit/test_batch_upload_storage.py -v
 pytest tests/unit/test_action_item_date_validation.py -v
 pytest tests/unit/test_kg_user_type_mismatch.py -v
