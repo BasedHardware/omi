@@ -108,6 +108,8 @@ def trigger_external_integrations(uid: str, conversation: Conversation) -> list:
     """ON CONVERSATION CREATED"""
     if not conversation or conversation.discarded:
         return []
+    if conversation.is_locked:
+        return []
 
     apps: List[App] = get_available_apps(uid)
     filtered_apps = [app for app in apps if app.triggers_on_conversation_creation() and app.enabled]
