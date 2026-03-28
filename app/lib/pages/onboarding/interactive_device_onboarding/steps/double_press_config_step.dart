@@ -46,7 +46,7 @@ class _DoublePressConfigStepState extends State<DoublePressConfigStep> {
                 provider: provider,
                 action: 2,
                 icon: Icons.star_outline,
-                title: 'Star Conversation',
+                title: 'Star Ongoing Conversation',
                 description: 'Mark conversation as important',
               ),
               const Spacer(),
