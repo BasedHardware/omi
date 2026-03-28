@@ -8,6 +8,7 @@ class PlatformService {
   static bool get isAndroid => Platform.isAndroid;
   static bool get isIOS => Platform.isIOS;
   static bool get isMobile => isAndroid || isIOS;
+  static bool get isApple => isIOS;
   static bool get isAnalyticsSupported => true;
   static bool get isNotificationSupported => true;
   static bool get isIntercomSupported => true;
