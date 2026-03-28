@@ -78,6 +78,19 @@ class SharedPreferencesUtil {
 
   String get deviceName => getString('deviceName');
 
+  // Button mappings
+  String get buttonSinglePressAction => getString('buttonSinglePressAction') ?? 'ask_question';
+  set buttonSinglePressAction(String value) => saveString('buttonSinglePressAction', value);
+
+  String get buttonDoublePressAction => getString('buttonDoublePressAction') ?? 'mute_unmute';
+  set buttonDoublePressAction(String value) => saveString('buttonDoublePressAction', value);
+
+  String get buttonLongPressAction => getString('buttonLongPressAction') ?? 'turn_on_off';
+  set buttonLongPressAction(String value) => saveString('buttonLongPressAction', value);
+
+  String get buttonTriplePressAction => getString('buttonTriplePressAction') ?? 'end_conversation';
+  set buttonTriplePressAction(String value) => saveString('buttonTriplePressAction', value);
+
   bool get deviceIsV2 => getBool('deviceIsV2');
 
   set deviceIsV2(bool value) => saveBool('deviceIsV2', value);
