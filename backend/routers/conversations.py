@@ -149,11 +149,13 @@ def get_conversations(
 
     for conv in conversations:
         if conv.get('is_locked', False):
-            conv['structured']['action_items'] = []
-            conv['structured']['events'] = []
+            if 'structured' in conv:
+                conv['structured']['action_items'] = []
+                conv['structured']['events'] = []
             conv['apps_results'] = []
             conv['plugins_results'] = []
             conv['suggested_summarization_apps'] = []
+            conv['transcript_segments'] = []
     return conversations
 
 
@@ -633,6 +635,7 @@ def get_public_conversations(offset: int = 0, limit: int = 1000):
     # TODO: sort in some way to have proper pagination
 
     conversations = conversations_db.get_public_conversations(data[offset : offset + limit])
+    conversations = [c for c in conversations if not c.get('is_locked', False)]
     for conversation in conversations:
         conversation['geolocation'] = None
     return conversations
