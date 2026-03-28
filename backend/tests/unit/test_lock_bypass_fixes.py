@@ -608,15 +608,43 @@ class TestUsersLockEnforcement:
         assert len(conversations_passed) == 1
         assert conversations_passed[0].id == 'conv-2'
 
-    def test_gdpr_export_includes_locked(self):
-        """H6: GDPR export intentionally includes locked conversations (Art. 15)."""
-        conversations = [
-            _make_conversation(locked=True),
-            _make_conversation(locked=False, conversation_id='conv-2'),
-        ]
-        # Verify no filtering occurs — all conversations included
-        assert len(conversations) == 2
-        assert conversations[0]['is_locked'] is True
+    @pytest.mark.asyncio
+    async def test_gdpr_export_includes_locked(self):
+        """H6: GDPR export must include locked conversations (Art. 15)."""
+        import database.conversations as conversations_db
+        import database.memories as memories_db
+        import database.chat as chat_db
+
+        locked_conv = _make_conversation(locked=True)
+        unlocked_conv = _make_conversation(locked=False, conversation_id='conv-2')
+        conversations_db.iter_all_conversations = MagicMock(return_value=iter([locked_conv, unlocked_conv]))
+        memories_db.get_memories = MagicMock(return_value=[])
+        chat_db.iter_all_messages = MagicMock(return_value=iter([]))
+
+        # These functions are imported via 'from database.users import *' so they live
+        # in the routers.users namespace. Use create=True since the wildcard import
+        # may not have populated them in the stub environment.
+        # Patches must stay active during body consumption since generate() is lazy.
+        with patch('routers.users.get_user_profile', return_value={'name': 'Test'}, create=True):
+            with patch('routers.users.get_people', return_value=[], create=True):
+                with patch('routers.users.get_standalone_action_items', return_value=[], create=True):
+                    from routers.users import export_all_user_data
+
+                    response = await export_all_user_data(uid='test-uid')
+
+                    # Consume body inside patches — generate() is a lazy generator
+                    body_parts = []
+                    async for chunk in response.body_iterator:
+                        body_parts.append(chunk)
+                    body = ''.join(body_parts)
+
+        import json
+
+        data = json.loads(body)
+        # Both locked and unlocked conversations must be in the export
+        assert len(data['conversations']) == 2
+        assert data['conversations'][0]['is_locked'] is True
+        assert data['conversations'][1]['id'] == 'conv-2'
 
 
 # =============================================================================
