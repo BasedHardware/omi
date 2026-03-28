@@ -10442,7 +10442,7 @@
     "removeShareFail": "Failed to remove shared profile",
     "@removeShareFail": {
         "description": "Error message when removing a shared speech profile fails"
-     },
+    },
     "omisStorage": "Omi's Storage",
     "@omisStorage": {
         "description": "Label for device storage tier in sync pipeline"
