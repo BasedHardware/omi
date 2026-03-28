@@ -1,7 +1,7 @@
 param(
   [string]$DeviceId,
   [string]$Flavor = "dev",
-  [string]$PackageName = "com.friend.ios.dev",
+  [string]$PackageName,
   [string]$OutputDir,
   [switch]$SkipBuild,
   [switch]$KeepGoing
@@ -26,6 +26,35 @@ function Get-RepoRoot {
     $current = $current.Parent
   }
   throw "Unable to locate Flutter app root from '$StartDir'."
+}
+
+function Get-AndroidApplicationId {
+  param(
+    [string]$AppRoot,
+    [string]$Flavor
+  )
+
+  $gradlePath = Join-Path $AppRoot "android\app\build.gradle"
+  if (-not (Test-Path -LiteralPath $gradlePath)) {
+    throw "Unable to resolve Android applicationId because '$gradlePath' was not found."
+  }
+
+  $gradleText = Get-Content -LiteralPath $gradlePath -Raw
+  $escapedFlavor = [regex]::Escape($Flavor)
+  $flavorPattern = "(?ms)^\s*$escapedFlavor\s*\{.*?applicationId\s+""(?<id>[^""]+)"""
+  $defaultPattern = '(?ms)defaultConfig\s*\{.*?applicationId\s+"(?<id>[^"]+)"'
+
+  $flavorMatch = [regex]::Match($gradleText, $flavorPattern)
+  if ($flavorMatch.Success) {
+    return $flavorMatch.Groups["id"].Value
+  }
+
+  $defaultMatch = [regex]::Match($gradleText, $defaultPattern)
+  if ($defaultMatch.Success) {
+    return $defaultMatch.Groups["id"].Value
+  }
+
+  throw "Unable to resolve Android applicationId for flavor '$Flavor' from '$gradlePath'."
 }
 
 function Get-ConnectedDevice {
@@ -144,6 +173,10 @@ Push-Location $appRoot
 try {
   if (-not $DeviceId) {
     $DeviceId = Get-ConnectedDevice
+  }
+
+  if ([string]::IsNullOrWhiteSpace($PackageName)) {
+    $PackageName = Get-AndroidApplicationId -AppRoot $appRoot -Flavor $Flavor
   }
 
   $resolvedOutputDir = New-RunDirectory -AppRoot $appRoot -RequestedOutputDir $OutputDir
