@@ -60,6 +60,9 @@ def _add_speaker_names_to_payload(uid, payload: dict):
 
 
 def conversation_created_webhook(uid, memory: Conversation):
+    if memory.is_locked:
+        return
+
     toggled = user_webhook_status_db(uid, WebhookType.memory_created)
 
     if toggled:
