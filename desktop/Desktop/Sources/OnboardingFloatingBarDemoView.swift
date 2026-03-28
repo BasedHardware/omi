@@ -53,7 +53,7 @@ struct OnboardingFloatingBarDemoView: View {
                             .foregroundColor(OmiColors.textSecondary)
                             .multilineTextAlignment(.center)
                     } else {
-                        Text("Type 'Which computer suits me best?'")
+                        Text("Type in the Floating Bar 'Which computer should I buy?'")
                             .font(.system(size: 24, weight: .bold))
                             .foregroundColor(OmiColors.textPrimary)
                             .multilineTextAlignment(.center)
