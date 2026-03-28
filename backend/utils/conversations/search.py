@@ -46,21 +46,21 @@ def search_conversations(
 
         results = client.collections['conversations'].documents.search(search_parameters)
         memories = []
-        locked_count = 0
         for item in results['hits']:
             doc = item['document']
             # Exclude locked conversations entirely to prevent inference leaks
             if doc.get('is_locked', False):
-                locked_count += 1
                 continue
             doc['created_at'] = datetime.utcfromtimestamp(doc['created_at']).isoformat()
             doc['started_at'] = datetime.utcfromtimestamp(doc['started_at']).isoformat()
             doc['finished_at'] = datetime.utcfromtimestamp(doc['finished_at']).isoformat()
             memories.append(doc)
-        total_found = max(results['found'] - locked_count, 0)
+        # Cannot compute exact total from Typesense since is_locked is not a filter field.
+        # Use page-level signal: if Typesense returned a full page, more may exist.
+        has_more = len(results['hits']) >= per_page
         return {
             'items': memories,
-            'total_pages': math.ceil(total_found / per_page) if total_found > 0 else 0,
+            'total_pages': page + 1 if has_more else page,
             'current_page': page,
             'per_page': per_page,
         }
