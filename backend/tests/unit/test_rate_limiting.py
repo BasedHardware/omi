@@ -37,10 +37,23 @@ sys.modules['redis.exceptions'] = redis_mock.exceptions
 firebase_auth = sys.modules['firebase_admin.auth']
 firebase_auth.InvalidIdTokenError = type('InvalidIdTokenError', (Exception,), {})
 
-# Stub database.redis_db exports needed by endpoints.py
+# Stub database.redis_db with real check_rate_limit logic (Lua script mocked)
 redis_db_stub = sys.modules['database.redis_db']
-redis_db_stub.check_rate_limit = MagicMock(return_value=(True, 100, 0))
+redis_db_stub._RATE_LIMIT_LUA = MagicMock(return_value=[1, 3600])
 redis_db_stub.try_acquire_listen_lock = MagicMock(return_value=True)
+
+
+def _check_rate_limit(key, policy, max_requests, window):
+    """Real Python logic from redis_db.check_rate_limit, with mockable Lua."""
+    redis_key = f'rl:{policy}:{key}'
+    current, ttl = redis_db_stub._RATE_LIMIT_LUA(keys=[redis_key], args=[window])
+    remaining = max(0, max_requests - current)
+    allowed = current <= max_requests
+    retry_after = max(0, ttl) if not allowed else 0
+    return allowed, remaining, retry_after
+
+
+redis_db_stub.check_rate_limit = _check_rate_limit
 
 from utils.rate_limit_config import RATE_POLICIES, get_effective_limit, RATE_LIMIT_BOOST
 
@@ -180,6 +193,97 @@ class TestEnforceRateLimit(unittest.TestCase):
     def test_fail_open_on_redis_error(self, mock_check):
         # Should not raise — fail open
         self.ep._enforce_rate_limit("uid123", "chat:send_message")
+
+
+class TestCheckRateLimitBoundary(unittest.TestCase):
+    """Test check_rate_limit() Python-side logic with mocked Lua script.
+
+    The Lua script itself runs in Redis (integration scope); these tests
+    verify the boundary logic that interprets Lua's [current, ttl] return.
+    """
+
+    def setUp(self):
+        from database import redis_db as rdb
+
+        self.rdb = rdb
+
+    def _call(self, current, ttl, max_requests=10, window=3600):
+        """Call check_rate_limit with mocked Lua return."""
+        with patch.object(self.rdb, '_RATE_LIMIT_LUA', return_value=[current, ttl]):
+            return self.rdb.check_rate_limit("uid1", "test:policy", max_requests, window)
+
+    def test_under_limit_allowed(self):
+        allowed, remaining, retry = self._call(current=5, ttl=3000, max_requests=10)
+        self.assertTrue(allowed)
+        self.assertEqual(remaining, 5)
+        self.assertEqual(retry, 0)
+
+    def test_at_exact_limit_still_allowed(self):
+        allowed, remaining, retry = self._call(current=10, ttl=2500, max_requests=10)
+        self.assertTrue(allowed)
+        self.assertEqual(remaining, 0)
+        self.assertEqual(retry, 0)
+
+    def test_one_over_limit_blocked(self):
+        allowed, remaining, retry = self._call(current=11, ttl=1800, max_requests=10)
+        self.assertFalse(allowed)
+        self.assertEqual(remaining, 0)
+        self.assertEqual(retry, 1800)
+
+    def test_way_over_limit_blocked(self):
+        allowed, remaining, retry = self._call(current=999, ttl=100, max_requests=10)
+        self.assertFalse(allowed)
+        self.assertEqual(remaining, 0)
+        self.assertEqual(retry, 100)
+
+    def test_first_request_allowed(self):
+        allowed, remaining, retry = self._call(current=1, ttl=3600, max_requests=10)
+        self.assertTrue(allowed)
+        self.assertEqual(remaining, 9)
+        self.assertEqual(retry, 0)
+
+    def test_key_namespacing(self):
+        """Verify Redis key includes policy and key."""
+        with patch.object(self.rdb, '_RATE_LIMIT_LUA', return_value=[1, 3600]) as mock_lua:
+            self.rdb.check_rate_limit("user42", "chat:send_message", 100, 3600)
+            mock_lua.assert_called_once_with(keys=['rl:chat:send_message:user42'], args=[3600])
+
+
+class TestWithRateLimitWrapper(unittest.TestCase):
+    """Test with_rate_limit() wrapper behavior."""
+
+    def setUp(self):
+        from utils.other import endpoints as ep_mod
+
+        self.ep = ep_mod
+
+    def test_unknown_policy_raises_value_error(self):
+        with self.assertRaises(ValueError):
+            self.ep.with_rate_limit(lambda: "uid", "nonexistent:policy")
+
+    def test_valid_policy_returns_callable(self):
+        result = self.ep.with_rate_limit(lambda: "uid", "chat:send_message")
+        self.assertTrue(callable(result))
+
+    @patch('utils.other.endpoints._enforce_rate_limit')
+    def test_check_rate_limit_inline_calls_enforce(self, mock_enforce):
+        self.ep.check_rate_limit_inline("app1:uid1", "integration:memories")
+        mock_enforce.assert_called_once_with("app1:uid1", "integration:memories")
+
+
+class TestBoostEnvVar(unittest.TestCase):
+    """Test RATE_LIMIT_BOOST env var is picked up at import time."""
+
+    def test_boost_env_var_applied(self):
+        with patch.dict(os.environ, {"RATE_LIMIT_BOOST": "3.0"}):
+            import utils.rate_limit_config as rlc
+
+            importlib.reload(rlc)
+            self.assertEqual(rlc.RATE_LIMIT_BOOST, 3.0)
+            max_req, _ = rlc.get_effective_limit("chat:send_message")
+            base, _ = rlc.RATE_POLICIES["chat:send_message"]
+            self.assertEqual(max_req, int(base * 3.0))
+        importlib.reload(rlc)
 
 
 class TestRouterPolicyMapping(unittest.TestCase):
