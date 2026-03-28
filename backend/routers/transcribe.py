@@ -805,16 +805,15 @@ async def _stream_handler(
         if conversation:
             has_content = conversation.get('transcript_segments') or conversation.get('photos')
             if has_content:
-                # Use pusher if enabled AND connected, otherwise fallback
+                if not request_conversation_processing:
+                    logger.warning(
+                        f"Pusher not enabled, skipping conversation {conversation_id} (stays in_progress) {uid} {session_id}"
+                    )
+                    return
                 # Mark processing + buffer for pusher — never process locally (#6061)
                 conversations_db.update_conversation_status(uid, conversation_id, ConversationStatus.processing)
                 on_conversation_processing_started(conversation_id)
-                if request_conversation_processing:
-                    await request_conversation_processing(conversation_id)
-                else:
-                    logger.warning(
-                        f"Pusher not enabled, conversation {conversation_id} stuck in processing {uid} {session_id}"
-                    )
+                await request_conversation_processing(conversation_id)
             else:
                 logger.info(f'Clean up the conversation {conversation_id}, reason: no content {uid} {session_id}')
                 conversations_db.delete_conversation(uid, conversation_id)
