@@ -532,12 +532,14 @@ async fn deduplicate_tasks(
     })?;
 
     // Validate all IDs — only keep groups where all IDs exist in our input
+    // and keep_id is not in delete_ids (prevent self-referential deletion)
     let valid_ids: std::collections::HashSet<&str> = staged.iter().map(|t| t.id.as_str()).collect();
     let validated_groups: Vec<DuplicateGroup> = parsed.duplicate_groups
         .into_iter()
         .filter(|g| {
             valid_ids.contains(g.keep_id.as_str())
                 && g.delete_ids.iter().all(|id| valid_ids.contains(id.as_str()))
+                && !g.delete_ids.contains(&g.keep_id)
         })
         .collect();
 
@@ -1000,6 +1002,26 @@ mod tests {
             .collect();
         assert_eq!(filtered.len(), 1);
         assert_eq!(filtered[0].keep_id, "a");
+    }
+
+    #[test]
+    fn reject_self_referential_dedup_group() {
+        let valid_ids: std::collections::HashSet<&str> = ["a", "b", "c"].iter().copied().collect();
+        let groups = vec![
+            DuplicateGroup { keep_id: "a".to_string(), delete_ids: vec!["a".to_string()], reason: "self-ref".to_string() },
+            DuplicateGroup { keep_id: "b".to_string(), delete_ids: vec!["a".to_string(), "b".to_string()], reason: "mixed self-ref".to_string() },
+            DuplicateGroup { keep_id: "a".to_string(), delete_ids: vec!["b".to_string()], reason: "ok".to_string() },
+        ];
+        let filtered: Vec<DuplicateGroup> = groups
+            .into_iter()
+            .filter(|g| {
+                valid_ids.contains(g.keep_id.as_str())
+                    && g.delete_ids.iter().all(|id| valid_ids.contains(id.as_str()))
+                    && !g.delete_ids.contains(&g.keep_id)
+            })
+            .collect();
+        assert_eq!(filtered.len(), 1);
+        assert_eq!(filtered[0].reason, "ok");
     }
 
     // --- Fencing ---
