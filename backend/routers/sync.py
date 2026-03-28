@@ -835,12 +835,16 @@ async def sync_local_files(files: List[UploadFile] = File(...), uid: str = Depen
 
         # DG budget gate (#6083): throttle cloud STT for free-exhausted / restrict-stage users
         # Free-exhausted → restrict directly; restrict-stage uses daily DG budget.
+        # Pre-charge DG usage before processing to prevent budget overshoot.
         dg_budget_blocked = False
-        fair_use_stage = 'none'
         if FAIR_USE_ENABLED:
             try:
                 fair_use_stage = ensure_free_exhausted_restrict(uid)
                 if fair_use_stage == 'restrict' and FAIR_USE_RESTRICT_DAILY_DG_MS > 0:
+                    # Pre-charge this request's duration, then check if budget is busted
+                    dg_ms = int(total_speech_seconds * 1000)
+                    if dg_ms > 0:
+                        record_dg_usage_ms(uid, dg_ms)
                     dg_budget_blocked = is_dg_budget_exhausted(uid)
             except Exception as e:
                 logger.error(f'sync: DG budget check error for {uid}: {e}')
@@ -875,12 +879,6 @@ async def sync_local_files(files: List[UploadFile] = File(...), uid: str = Depen
             for path in segmented_paths
         ]
         chunk_threads(threads)
-
-        # Record DG usage for budget tracking (#6083) — only when user is in restrict stage
-        if FAIR_USE_ENABLED and FAIR_USE_RESTRICT_DAILY_DG_MS > 0 and fair_use_stage == 'restrict':
-            dg_ms = int(total_speech_seconds * 1000)
-            if dg_ms > 0:
-                record_dg_usage_ms(uid, dg_ms)
 
         # Build JSON-serializable response
         result = {
