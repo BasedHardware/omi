@@ -111,6 +111,12 @@ class TestIsFreeCreditsExhausted:
 
         assert fair_use_mod.is_free_credits_exhausted('test-uid') is True
 
+    def test_exception_returns_false(self):
+        """Fail-open: any exception returns False (user keeps access)."""
+        fair_use_mod.users_db.get_user_valid_subscription = MagicMock(side_effect=Exception('DB down'))
+
+        assert fair_use_mod.is_free_credits_exhausted('test-uid') is False
+
 
 # ---------------------------------------------------------------------------
 # trigger_classifier_if_needed tests — free-exhausted synthetic score
@@ -123,8 +129,10 @@ class TestTriggerClassifierFreeTier:
     def setup_method(self):
         _mock_redis.reset_mock()
         _mock_redis.set.return_value = True
+        _fair_use_db.get_fair_use_state.reset_mock()
         _fair_use_db.get_fair_use_state.return_value = {'stage': 'none'}
         _fair_use_db.get_violation_counts.return_value = {'violation_count_7d': 0, 'violation_count_30d': 0}
+        _fair_use_db.create_fair_use_event.reset_mock()
         _fair_use_db.create_fair_use_event.return_value = 'evt-123'
         _fair_use_db.get_fair_use_events.return_value = [{'case_ref': 'FU-TEST01'}]
         _fair_use_db.update_fair_use_state.reset_mock()
@@ -155,6 +163,27 @@ class TestTriggerClassifierFreeTier:
         # First call is the stage update; last call may be last_case_ref
         stage_call = _fair_use_db.update_fair_use_state.call_args_list[0][0]
         assert stage_call[1]['stage'] == 'warning'
+
+    @patch.object(fair_use_mod, 'FAIR_USE_ENABLED', True)
+    @patch.object(fair_use_mod, 'is_free_credits_exhausted', return_value=True)
+    @patch.object(fair_use_mod, '_get_classify_user_purpose')
+    @patch.object(
+        fair_use_mod, 'get_rolling_speech_ms', return_value={'daily_ms': 0, 'three_day_ms': 0, 'weekly_ms': 0}
+    )
+    def test_free_exhausted_stores_synthetic_metadata(self, _mock_speech, mock_get_classify, _mock_free):
+        """Verify the exact synthetic classifier payload is stored in the fair-use event."""
+        mock_get_classify.return_value = MagicMock()
+
+        loop = asyncio.new_event_loop()
+        try:
+            loop.run_until_complete(fair_use_mod.trigger_classifier_if_needed('test-uid', _make_trigger()))
+        finally:
+            loop.close()
+
+        # create_fair_use_event stores the classifier result in the event payload
+        _fair_use_db.create_fair_use_event.assert_called_once()
+        event_data = _fair_use_db.create_fair_use_event.call_args[0][1]
+        assert event_data['classifier'] == {'misuse_score': 1.0, 'usage_type': 'free_exhausted'}
 
     @patch.object(fair_use_mod, 'FAIR_USE_ENABLED', True)
     @patch.object(fair_use_mod, 'is_free_credits_exhausted', return_value=True)
