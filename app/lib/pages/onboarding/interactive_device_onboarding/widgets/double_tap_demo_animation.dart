@@ -77,7 +77,11 @@ class _WaveformBar extends StatelessWidget {
             child: CustomPaint(
               painter: _WaveformPainter(
                 phase: wavePhase,
-                color: isMuted ? const Color(0xFFEF5350).withValues(alpha: 0.5) : const Color(0xFF333333).withValues(alpha: 0.5),
+                color: isMuted
+                    ? const Color(0xFFEF5350).withValues(alpha: 0.5)
+                    : showStar
+                        ? const Color(0xFFFFB300).withValues(alpha: 0.6)
+                        : const Color(0xFF333333).withValues(alpha: 0.5),
                 amplitude: isMuted ? 0.1 : 1.0,
               ),
               size: const Size(double.infinity, 28),
