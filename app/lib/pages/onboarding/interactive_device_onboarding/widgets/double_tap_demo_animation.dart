@@ -2,37 +2,6 @@ import 'dart:math';
 
 import 'package:flutter/material.dart';
 
-import 'package:provider/provider.dart';
-
-import 'package:omi/providers/device_onboarding_provider.dart';
-
-class DoubleTapDemoAnimation extends StatefulWidget {
-  const DoubleTapDemoAnimation({super.key});
-
-  @override
-  State<DoubleTapDemoAnimation> createState() => _DoubleTapDemoAnimationState();
-}
-
-class _DoubleTapDemoAnimationState extends State<DoubleTapDemoAnimation> {
-  @override
-  Widget build(BuildContext context) {
-    return Consumer<DeviceOnboardingProvider>(
-      builder: (context, provider, _) {
-        switch (provider.selectedDoubleTapAction) {
-          case 0:
-            return EndConversationDemo(key: const ValueKey(0), doublePressCount: provider.doublePressCount);
-          case 1:
-            return MuteUnmuteDemo(key: const ValueKey(1), doublePressCount: provider.doublePressCount);
-          case 2:
-            return StarConversationDemo(key: const ValueKey(2), doublePressCount: provider.doublePressCount);
-          default:
-            return const SizedBox.shrink();
-        }
-      },
-    );
-  }
-}
-
 // --- Waveform painter ---
 
 class _WaveformPainter extends CustomPainter {
@@ -71,68 +40,58 @@ class _WaveformPainter extends CustomPainter {
       phase != oldDelegate.phase || amplitude != oldDelegate.amplitude || color != oldDelegate.color;
 }
 
-// --- Conversation card ---
+// --- Inline waveform bar (inside white selected card) ---
 
-class _ConversationCard extends StatelessWidget {
+class _WaveformBar extends StatelessWidget {
   final double wavePhase;
-  final double waveAmplitude;
-  final Color waveColor;
   final bool showStar;
   final bool isMuted;
-  final double opacity;
 
-  const _ConversationCard({
+  const _WaveformBar({
     required this.wavePhase,
-    this.waveAmplitude = 1.0,
-    this.waveColor = Colors.white,
     this.showStar = false,
     this.isMuted = false,
-    this.opacity = 1.0,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Opacity(
-      opacity: opacity,
-      child: Container(
-        height: 64,
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.08),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
-        ),
-        child: Row(
-          children: [
-            Container(
-              width: 8,
-              height: 8,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: isMuted ? const Color(0xFFEF5350) : const Color(0xFF4CAF50),
-              ),
+    return Container(
+      height: 48,
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 8,
+            height: 8,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: isMuted ? const Color(0xFFEF5350) : const Color(0xFF4CAF50),
             ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: CustomPaint(
-                painter: _WaveformPainter(
-                  phase: wavePhase,
-                  color: isMuted ? const Color(0xFFEF5350).withValues(alpha: 0.4) : waveColor.withValues(alpha: 0.6),
-                  amplitude: isMuted ? 0.1 : waveAmplitude,
-                ),
-                size: const Size(double.infinity, 32),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: CustomPaint(
+              painter: _WaveformPainter(
+                phase: wavePhase,
+                color: isMuted ? const Color(0xFFEF5350).withValues(alpha: 0.5) : const Color(0xFF333333).withValues(alpha: 0.5),
+                amplitude: isMuted ? 0.1 : 1.0,
               ),
+              size: const Size(double.infinity, 28),
             ),
-            if (showStar) ...[
-              const SizedBox(width: 12),
-              const Icon(Icons.star, color: Color(0xFFFFD700), size: 22),
-            ],
-            if (isMuted) ...[
-              const SizedBox(width: 12),
-              const Icon(Icons.mic_off, color: Color(0xFFEF5350), size: 18),
-            ],
+          ),
+          if (showStar) ...[
+            const SizedBox(width: 10),
+            const Icon(Icons.star, color: Color(0xFFFFB300), size: 20),
           ],
-        ),
+          if (isMuted) ...[
+            const SizedBox(width: 10),
+            const Icon(Icons.mic_off, color: Color(0xFFEF5350), size: 16),
+          ],
+        ],
       ),
     );
   }
@@ -168,7 +127,6 @@ class _EndConversationDemoState extends State<EndConversationDemo> with SingleTi
       _cutPhase = _controller.value * 2 * pi * 3;
       _splitPosition = 0.35 + (_controller.value * 0.3);
       setState(() => _isSplit = true);
-      // Reset after 2 seconds to allow another split
       Future.delayed(const Duration(seconds: 2), () {
         if (mounted) setState(() => _isSplit = false);
       });
@@ -188,12 +146,11 @@ class _EndConversationDemoState extends State<EndConversationDemo> with SingleTi
       builder: (context, _) {
         final phase = _controller.value * 2 * pi * 3;
         return Container(
-          height: 64,
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          height: 48,
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
           decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.08),
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+            color: Colors.black.withValues(alpha: 0.06),
+            borderRadius: BorderRadius.circular(12),
           ),
           child: Row(
             children: [
@@ -202,13 +159,13 @@ class _EndConversationDemoState extends State<EndConversationDemo> with SingleTi
                 height: 8,
                 decoration: const BoxDecoration(shape: BoxShape.circle, color: Color(0xFF4CAF50)),
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: 10),
               Expanded(
                 child: _isSplit
                     ? _buildSplitWaveform(phase)
                     : CustomPaint(
-                        painter: _WaveformPainter(phase: phase, color: Colors.white.withValues(alpha: 0.6)),
-                        size: const Size(double.infinity, 32),
+                        painter: _WaveformPainter(phase: phase, color: const Color(0xFF333333).withValues(alpha: 0.5)),
+                        size: const Size(double.infinity, 28),
                       ),
               ),
             ],
@@ -230,9 +187,9 @@ class _EndConversationDemoState extends State<EndConversationDemo> with SingleTi
           children: [
             SizedBox(
               width: leftWidth,
-              height: 32,
+              height: 28,
               child: CustomPaint(
-                painter: _WaveformPainter(phase: _cutPhase, color: Colors.white.withValues(alpha: 0.2)),
+                painter: _WaveformPainter(phase: _cutPhase, color: Colors.black.withValues(alpha: 0.15)),
               ),
             ),
             SizedBox(
@@ -240,16 +197,16 @@ class _EndConversationDemoState extends State<EndConversationDemo> with SingleTi
               child: Center(
                 child: Container(
                   width: 2,
-                  height: 24,
-                  decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.3), borderRadius: BorderRadius.circular(1)),
+                  height: 20,
+                  decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.2), borderRadius: BorderRadius.circular(1)),
                 ),
               ),
             ),
             SizedBox(
               width: rightWidth > 0 ? rightWidth : 0,
-              height: 32,
+              height: 28,
               child: CustomPaint(
-                painter: _WaveformPainter(phase: livePhase, color: const Color(0xFF81C784).withValues(alpha: 0.7)),
+                painter: _WaveformPainter(phase: livePhase, color: const Color(0xFF4CAF50).withValues(alpha: 0.6)),
               ),
             ),
           ],
@@ -292,10 +249,7 @@ class _MuteUnmuteDemoState extends State<MuteUnmuteDemo> with SingleTickerProvid
       animation: _controller,
       builder: (context, _) {
         final phase = _controller.value * 2 * pi * 3;
-        return _ConversationCard(
-          wavePhase: phase,
-          isMuted: isMuted,
-        );
+        return _WaveformBar(wavePhase: phase, isMuted: isMuted);
       },
     );
   }
@@ -334,11 +288,7 @@ class _StarConversationDemoState extends State<StarConversationDemo> with Single
       animation: _controller,
       builder: (context, _) {
         final phase = _controller.value * 2 * pi * 3;
-        return _ConversationCard(
-          wavePhase: phase,
-          waveAmplitude: 1.0,
-          showStar: isStarred,
-        );
+        return _WaveformBar(wavePhase: phase, showStar: isStarred);
       },
     );
   }

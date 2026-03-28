@@ -49,8 +49,6 @@ class _DoublePressConfigStepState extends State<DoublePressConfigStep> {
                 title: 'Star Conversation',
                 description: 'Mark conversation as important',
               ),
-              const SizedBox(height: 24),
-              const DoubleTapDemoAnimation(),
               const Spacer(),
               if (provider.showSingleTapHint) ...[
                 Container(
@@ -99,45 +97,68 @@ class _DoublePressConfigStepState extends State<DoublePressConfigStep> {
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
           color: isSelected ? Colors.white : Colors.white.withValues(alpha: 0.04),
-          borderRadius: BorderRadius.circular(100),
+          borderRadius: BorderRadius.circular(24),
           border: Border.all(
             color: isSelected ? Colors.white : Colors.white.withValues(alpha: 0.1),
             width: 1,
           ),
         ),
-        child: Row(
+        child: Column(
           children: [
-            Container(
-              width: 44,
-              height: 44,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: isSelected ? Colors.black.withValues(alpha: 0.1) : Colors.white.withValues(alpha: 0.06),
-              ),
-              child: Icon(icon, color: isSelected ? Colors.black : const Color(0xFF9E9E9E), size: 24),
-            ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: TextStyle(
-                      color: isSelected ? Colors.black : Colors.white,
-                      fontSize: 16,
-                      fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
-                    ),
+            Row(
+              children: [
+                Container(
+                  width: 44,
+                  height: 44,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: isSelected ? Colors.black.withValues(alpha: 0.1) : Colors.white.withValues(alpha: 0.06),
                   ),
-                  const SizedBox(height: 2),
-                  Text(description,
-                      style: TextStyle(color: isSelected ? Colors.black.withValues(alpha: 0.5) : const Color(0xFF9E9E9E), fontSize: 13)),
-                ],
-              ),
+                  child: Icon(icon, color: isSelected ? Colors.black : const Color(0xFF9E9E9E), size: 24),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        style: TextStyle(
+                          color: isSelected ? Colors.black : Colors.white,
+                          fontSize: 16,
+                          fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(description,
+                          style: TextStyle(
+                              color: isSelected ? Colors.black.withValues(alpha: 0.5) : const Color(0xFF9E9E9E),
+                              fontSize: 13)),
+                    ],
+                  ),
+                ),
+              ],
             ),
+            if (isSelected) ...[
+              const SizedBox(height: 12),
+              _buildInlineDemo(action, provider.doublePressCount),
+            ],
           ],
         ),
       ),
     );
+  }
+
+  Widget _buildInlineDemo(int action, int doublePressCount) {
+    switch (action) {
+      case 0:
+        return EndConversationDemo(doublePressCount: doublePressCount);
+      case 1:
+        return MuteUnmuteDemo(doublePressCount: doublePressCount);
+      case 2:
+        return StarConversationDemo(doublePressCount: doublePressCount);
+      default:
+        return const SizedBox.shrink();
+    }
   }
 }
