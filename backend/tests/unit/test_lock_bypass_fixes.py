@@ -948,3 +948,69 @@ class TestIntegrationSearchLockRedaction:
         unlocked_items = [c for c in convs if c['structured']['title'] != '']
         assert len(unlocked_items) == 1
         assert unlocked_items[0]['structured']['title'] == 'Test Conversation'
+
+
+# =============================================================================
+# Test get_prompt_data excludes locked memories
+# =============================================================================
+
+
+class TestPromptDataLockFilter:
+    """get_prompt_data (shared utility) must exclude locked memories."""
+
+    def test_get_prompt_data_filters_locked_memories(self):
+        """get_prompt_data must not include locked memories in prompt context."""
+        import database.memories as memories_db
+
+        locked_mem = {
+            'id': 'mem-1',
+            'content': 'LOCKED_SECRET',
+            'is_locked': True,
+            'manually_added': False,
+            'category': 'interesting',
+        }
+        unlocked_mem = {
+            'id': 'mem-2',
+            'content': 'VISIBLE_CONTENT',
+            'is_locked': False,
+            'manually_added': False,
+            'category': 'interesting',
+        }
+        memories_db.get_memories = MagicMock(return_value=[locked_mem, unlocked_mem])
+
+        with patch('utils.llms.memory.get_user_name', return_value='Test'):
+            from utils.llms.memory import get_prompt_data
+
+            _, user_made, generated = get_prompt_data('test-uid')
+
+        # Only unlocked memory should appear
+        all_mems = user_made + generated
+        assert len(all_mems) == 1
+        assert all_mems[0].content == 'VISIBLE_CONTENT'
+
+
+# =============================================================================
+# Test _retrieve_contextual_memories excludes locked conversations
+# =============================================================================
+
+
+class TestRetrieveContextualMemoriesLockFilter:
+    """_retrieve_contextual_memories must exclude locked conversations."""
+
+    def test_retrieve_contextual_memories_filters_locked(self):
+        """_retrieve_contextual_memories must not return locked conversations."""
+        import database.conversations as conversations_db
+
+        locked_conv = _make_conversation(locked=True)
+        unlocked_conv = _make_conversation(locked=False, conversation_id='conv-2')
+
+        with patch('utils.app_integrations.generate_embedding', return_value=[0.1] * 3072):
+            with patch('utils.app_integrations.query_vectors_by_metadata', return_value=['conv-1', 'conv-2']):
+                conversations_db.get_conversations_by_id = MagicMock(return_value=[locked_conv, unlocked_conv])
+
+                from utils.app_integrations import _retrieve_contextual_memories
+
+                result = _retrieve_contextual_memories('test-uid', {'question': 'test'})
+
+        assert len(result) == 1
+        assert result[0]['id'] == 'conv-2'
