@@ -17,24 +17,22 @@ import database.fair_use as fair_use_db
 import database.users as users_db
 from database.redis_db import r as redis_client
 from models.fair_use import UsageType, FairUseStage, SoftCapTrigger
+from utils.subscription import has_transcription_credits, is_paid_plan
 
-# Lazy imports — NOT circular deps, but import-time side-effect avoidance.
+# Lazy imports — import-time side-effect avoidance (not circular deps).
 # classify_user_purpose → database.conversations → utils.encryption
 #   encryption.py raises ValueError at import if ENCRYPTION_SECRET env var is missing/short.
 # send_notification → firebase_admin.messaging
 #   Requires Firebase app to be initialized before import.
 # Both are only called in async runtime paths, never at import time.
-# Moving to top-level would break any context where this module loads before env/Firebase init.
 _classify_user_purpose = None
 _send_notification = None
-_has_transcription_credits = None
-_is_paid_plan = None
 
 
 def _get_classify_user_purpose():
     global _classify_user_purpose
     if _classify_user_purpose is None:
-        from utils.llm.fair_use_classifier import classify_user_purpose
+        from utils.llm.fair_use_classifier import classify_user_purpose  # noqa: E402 — side-effect avoidance
 
         _classify_user_purpose = classify_user_purpose
     return _classify_user_purpose
@@ -43,28 +41,10 @@ def _get_classify_user_purpose():
 def _get_send_notification():
     global _send_notification
     if _send_notification is None:
-        from utils.notifications import send_notification
+        from utils.notifications import send_notification  # noqa: E402 — side-effect avoidance
 
         _send_notification = send_notification
     return _send_notification
-
-
-def _get_has_transcription_credits():
-    global _has_transcription_credits
-    if _has_transcription_credits is None:
-        from utils.subscription import has_transcription_credits
-
-        _has_transcription_credits = has_transcription_credits
-    return _has_transcription_credits
-
-
-def _get_is_paid_plan():
-    global _is_paid_plan
-    if _is_paid_plan is None:
-        from utils.subscription import is_paid_plan
-
-        _is_paid_plan = is_paid_plan
-    return _is_paid_plan
 
 
 logger = logging.getLogger(__name__)
@@ -315,9 +295,9 @@ def is_free_credits_exhausted(uid: str) -> bool:
     """
     try:
         subscription = users_db.get_user_valid_subscription(uid)
-        if subscription and _get_is_paid_plan()(subscription.plan):
+        if subscription and is_paid_plan(subscription.plan):
             return False
-        return not _get_has_transcription_credits()(uid)
+        return not has_transcription_credits(uid)
     except Exception as e:
         logger.error(f'fair_use: error checking free credits for {uid}: {e}')
         return False
