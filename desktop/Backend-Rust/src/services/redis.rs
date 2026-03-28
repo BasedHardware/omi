@@ -214,6 +214,63 @@ impl RedisService {
     }
 
     // ============================================================================
+    // GEMINI RATE LIMITING — atomic burst + daily counters via Lua
+    // Issue #6098 L2
+    // ============================================================================
+
+    /// Check and record a Gemini API request for rate limiting.
+    /// Uses a Lua script for atomic burst (sorted set) + daily (counter) in one round-trip.
+    /// Returns (daily_count, burst_count) so the caller can decide Allow/Degrade/Reject.
+    pub async fn check_gemini_rate_limit(
+        &self,
+        uid: &str,
+        _burst_limit: usize,
+        burst_window_secs: u64,
+    ) -> Result<(i64, i64), redis::RedisError> {
+        let mut conn = self.get_connection().await?;
+
+        let now_ms = chrono::Utc::now().timestamp_millis();
+        let day_ordinal = (now_ms / 86_400_000).to_string();
+        let cutoff_ms = now_ms - (burst_window_secs as i64 * 1000);
+
+        let burst_key = format!("gemini_rl:{}:burst", uid);
+        let daily_key = format!("gemini_rl:{}:daily:{}", uid, day_ordinal);
+
+        // Lua script: prune old burst entries, add new one, count burst, increment daily.
+        // KEYS[1] = burst_key, KEYS[2] = daily_key
+        // ARGV[1] = cutoff_ms, ARGV[2] = now_ms, ARGV[3] = burst_ttl, ARGV[4] = daily_ttl
+        let script = r#"
+redis.call('ZREMRANGEBYSCORE', KEYS[1], '-inf', ARGV[1])
+redis.call('ZADD', KEYS[1], ARGV[2], ARGV[2])
+local burst = redis.call('ZCARD', KEYS[1])
+redis.call('EXPIRE', KEYS[1], ARGV[3])
+local daily = redis.call('INCR', KEYS[2])
+redis.call('EXPIRE', KEYS[2], ARGV[4])
+return {daily, burst}
+"#;
+
+        let burst_ttl = (burst_window_secs * 2) as i64; // 2x window for safety
+        let daily_ttl: i64 = 172_800; // 48h
+
+        let result: Vec<i64> = redis::cmd("EVAL")
+            .arg(script)
+            .arg(2) // num keys
+            .arg(&burst_key)
+            .arg(&daily_key)
+            .arg(cutoff_ms)
+            .arg(now_ms)
+            .arg(burst_ttl)
+            .arg(daily_ttl)
+            .query_async(&mut conn)
+            .await?;
+
+        let daily_count = result.first().copied().unwrap_or(0);
+        let burst_count = result.get(1).copied().unwrap_or(0);
+
+        Ok((daily_count, burst_count))
+    }
+
+    // ============================================================================
     // APP INSTALLS - matches Python backend redis_db.py
     // ============================================================================
 
