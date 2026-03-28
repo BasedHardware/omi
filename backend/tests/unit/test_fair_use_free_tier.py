@@ -93,6 +93,7 @@ class TestEnsureFreeExhaustedRestrict:
         assert call_args[0] == 'test-uid'
         assert call_args[1]['stage'] == 'restrict'
         assert call_args[1]['restrict_reason'] == 'free_exhausted'
+        assert call_args[1]['previous_stage'] == 'none'
 
     @patch.object(fair_use_mod, 'FAIR_USE_ENABLED', True)
     @patch.object(fair_use_mod, 'is_free_credits_exhausted', return_value=True)
@@ -116,10 +117,11 @@ class TestEnsureFreeExhaustedRestrict:
     @patch.object(fair_use_mod, 'is_free_credits_exhausted', return_value=False)
     @patch.object(fair_use_mod, 'get_enforcement_stage', return_value='restrict')
     def test_credits_restored_clears_free_exhausted_restrict(self, _mock_stage, _mock_free):
-        """When credits return and restrict_reason is 'free_exhausted', clear to 'none'."""
+        """When credits return and restrict_reason is 'free_exhausted', restore to previous stage."""
         _fair_use_db.get_fair_use_state.return_value = {
             'stage': 'restrict',
             'restrict_reason': 'free_exhausted',
+            'previous_stage': 'none',
         }
 
         result = fair_use_mod.ensure_free_exhausted_restrict('test-uid')
@@ -129,6 +131,23 @@ class TestEnsureFreeExhaustedRestrict:
         call_args = _fair_use_db.update_fair_use_state.call_args[0]
         assert call_args[1]['stage'] == 'none'
         assert call_args[1]['restrict_reason'] is None
+
+    @patch.object(fair_use_mod, 'FAIR_USE_ENABLED', True)
+    @patch.object(fair_use_mod, 'is_free_credits_exhausted', return_value=False)
+    @patch.object(fair_use_mod, 'get_enforcement_stage', return_value='restrict')
+    def test_credits_restored_restores_previous_abuse_stage(self, _mock_stage, _mock_free):
+        """When credits return and user was in 'warning' before, restore to 'warning' not 'none'."""
+        _fair_use_db.get_fair_use_state.return_value = {
+            'stage': 'restrict',
+            'restrict_reason': 'free_exhausted',
+            'previous_stage': 'warning',
+        }
+
+        result = fair_use_mod.ensure_free_exhausted_restrict('test-uid')
+
+        assert result == 'warning'
+        call_args = _fair_use_db.update_fair_use_state.call_args[0]
+        assert call_args[1]['stage'] == 'warning'
 
     @patch.object(fair_use_mod, 'FAIR_USE_ENABLED', True)
     @patch.object(fair_use_mod, 'is_free_credits_exhausted', return_value=False)
