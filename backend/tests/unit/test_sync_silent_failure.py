@@ -977,3 +977,151 @@ class TestProcessSegmentReal:
         assert len(errors) == 1
         assert 'Failed to process segment' in errors[0]
         assert 'Deepgram transcription failed after 3 attempts' in errors[0]
+
+
+# ---------------------------------------------------------------------------
+# Voice message callers — verify chat.py handles RuntimeError gracefully
+# ---------------------------------------------------------------------------
+
+_CHAT_STUB_MODULES = [
+    'deepgram',
+    'fal_client',
+    'models',
+    'models.chat',
+    'models.conversation',
+    'models.notification_message',
+    'models.app',
+    'models.transcript_segment',
+    'database',
+    'database._client',
+    'database.chat',
+    'database.notifications',
+    'database.users',
+    'database.apps',
+    'database.redis_db',
+    'firebase_admin',
+    'utils.other.endpoints',
+    'utils.other.storage',
+    'utils.notifications',
+    'utils.retrieval.graph',
+    'utils.stt.pre_recorded',
+    'utils.llm.usage_tracker',
+    'utils.log_sanitizer',
+]
+
+
+class TestVoiceMessageRuntimeErrorHandling:
+    """Tests that voice message functions in utils/chat.py handle RuntimeError from deepgram_prerecorded."""
+
+    _saved_modules = {}
+    _transcribe_fn = None
+    _process_fn = None
+    _process_stream_fn = None
+
+    @classmethod
+    def setup_class(cls):
+        cls._saved_modules = {name: sys.modules.get(name) for name in _CHAT_STUB_MODULES}
+        cls._saved_modules['utils.chat'] = sys.modules.get('utils.chat')
+
+        for mod_name in _CHAT_STUB_MODULES:
+            sys.modules[mod_name] = ModuleType(mod_name)
+
+        sys.modules['deepgram'].DeepgramClient = MagicMock()
+        sys.modules['deepgram'].DeepgramClientOptions = MagicMock()
+        sys.modules['fal_client'].submit = MagicMock()
+        sys.modules['utils.other.endpoints'].timeit = lambda f: f
+        sys.modules['utils.other.storage'].get_syncing_file_temporal_signed_url = MagicMock(return_value='https://fake')
+        sys.modules['utils.other.storage'].delete_syncing_temporal_file = MagicMock()
+        sys.modules['utils.notifications'].send_notification = MagicMock()
+        sys.modules['utils.retrieval.graph'].execute_graph_chat = MagicMock()
+        sys.modules['utils.retrieval.graph'].execute_graph_chat_stream = MagicMock()
+        sys.modules['utils.log_sanitizer'].sanitize = lambda v: v
+        sys.modules['database._client'].db = MagicMock()
+        sys.modules['database.redis_db'].r = MagicMock()
+        sys.modules['database.chat'].add_message = MagicMock()
+        sys.modules['database.chat'].get_messages = MagicMock(return_value=[])
+        sys.modules['database.chat'].get_chat_session = MagicMock(return_value=None)
+        sys.modules['database.notifications'].get_token_only = MagicMock(return_value=None)
+        sys.modules['database.users'].get_user_store_recording_permission = MagicMock(return_value=False)
+        sys.modules['database.users'].get_user_transcription_preferences = MagicMock(return_value={})
+        sys.modules['database.apps'].record_app_usage = MagicMock()
+
+        # Model stubs
+        sys.modules['models.chat'].ChatSession = MagicMock()
+        sys.modules['models.chat'].Message = MagicMock()
+        sys.modules['models.chat'].ResponseMessage = MagicMock()
+        sys.modules['models.chat'].MessageConversation = MagicMock()
+        sys.modules['models.conversation'].Conversation = MagicMock()
+        sys.modules['models.notification_message'].NotificationMessage = MagicMock()
+        sys.modules['models.app'].UsageHistoryType = MagicMock()
+        sys.modules['models.transcript_segment'].TranscriptSegment = MagicMock()
+
+        # STT stubs
+        sys.modules['utils.stt.pre_recorded'].deepgram_prerecorded = MagicMock()
+        sys.modules['utils.stt.pre_recorded'].postprocess_words = MagicMock()
+        sys.modules['utils.stt.pre_recorded'].get_deepgram_model_for_language = MagicMock(return_value=('en', 'nova-3'))
+
+        # Usage tracker stub
+        sys.modules['utils.llm.usage_tracker'].track_usage = MagicMock()
+        sys.modules['utils.llm.usage_tracker'].set_usage_context = MagicMock()
+        sys.modules['utils.llm.usage_tracker'].reset_usage_context = MagicMock()
+        sys.modules['utils.llm.usage_tracker'].Features = MagicMock()
+
+        # Force re-import
+        sys.modules.pop('utils.chat', None)
+        from utils.chat import (
+            transcribe_voice_message_segment,
+            process_voice_message_segment,
+            process_voice_message_segment_stream,
+        )
+
+        cls._transcribe_fn = staticmethod(transcribe_voice_message_segment)
+        cls._process_fn = staticmethod(process_voice_message_segment)
+        cls._process_stream_fn = staticmethod(process_voice_message_segment_stream)
+
+    @classmethod
+    def teardown_class(cls):
+        sys.modules.pop('utils.chat', None)
+        for name, orig in cls._saved_modules.items():
+            if orig is None:
+                sys.modules.pop(name, None)
+            else:
+                sys.modules[name] = orig
+        cls._saved_modules.clear()
+
+    def test_transcribe_voice_message_handles_runtime_error(self):
+        """transcribe_voice_message_segment returns (None, lang) on RuntimeError, not crash."""
+        with patch(
+            'utils.chat.deepgram_prerecorded',
+            side_effect=RuntimeError('Deepgram transcription failed after 3 attempts: timeout'),
+        ), patch('utils.chat.time.sleep'):
+            result = self._transcribe_fn('/tmp/test.wav', 'uid', language='en')
+
+        assert result == (None, 'en'), f"Expected (None, 'en'), got {result}"
+
+    def test_process_voice_message_handles_runtime_error(self):
+        """process_voice_message_segment returns [] on RuntimeError, not crash."""
+        with patch(
+            'utils.chat.deepgram_prerecorded',
+            side_effect=RuntimeError('Deepgram transcription failed after 3 attempts: timeout'),
+        ), patch('utils.chat.time.sleep'):
+            result = self._process_fn('/tmp/test.wav', 'uid', language='en')
+
+        assert result == [], f"Expected [], got {result}"
+
+    def test_process_voice_message_stream_handles_runtime_error(self):
+        """process_voice_message_segment_stream returns (no yield) on RuntimeError, not crash."""
+        import asyncio
+
+        async def run():
+            chunks = []
+            with patch(
+                'utils.chat.deepgram_prerecorded',
+                side_effect=RuntimeError('Deepgram transcription failed after 3 attempts: timeout'),
+            ), patch('utils.chat.time.sleep'):
+                async for chunk in self._process_stream_fn('/tmp/test.wav', 'uid', language='en'):
+                    chunks.append(chunk)
+            return chunks
+
+        result = asyncio.get_event_loop().run_until_complete(run())
+        assert result == [], f"Expected no chunks, got {result}"
