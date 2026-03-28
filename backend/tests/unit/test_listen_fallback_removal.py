@@ -110,15 +110,23 @@ def check_timed_out_requests_6061(pending_requests: dict, now: float):
     return actions
 
 
-def degraded_transition_6061(pending_conversation_requests: dict, reconnect_state: PusherReconnectState):
+def degraded_transition_6061(
+    pending_conversation_requests: dict,
+    reconnect_state: PusherReconnectState,
+    reconnect_attempts: int = 0,
+    circuit_breaker_open: bool = False,
+):
     """Mirrors the DEGRADED transition logic from _pusher_reconnect_loop() after #6061.
 
     Key contract: pending conversations are KEPT buffered when entering DEGRADED.
     Never popped + fallback-processed.
+    Transitions to DEGRADED when: attempts >= cap OR circuit breaker open.
     """
     if reconnect_state == PusherReconnectState.RECONNECT_BACKOFF:
-        # Transition to DEGRADED — keep pending buffered
-        return PusherReconnectState.DEGRADED, dict(pending_conversation_requests)
+        if circuit_breaker_open or reconnect_attempts >= PUSHER_MAX_RECONNECT_ATTEMPTS:
+            return PusherReconnectState.DEGRADED, dict(pending_conversation_requests)
+        # Still in backoff, not yet at cap
+        return PusherReconnectState.RECONNECT_BACKOFF, pending_conversation_requests
     return reconnect_state, pending_conversation_requests
 
 
@@ -293,7 +301,9 @@ def test_degraded_transition_preserves_pending():
         "conv-2": {"sent_at": time.time(), "retries": 2},
     }
 
-    new_state, remaining = degraded_transition_6061(pending, PusherReconnectState.RECONNECT_BACKOFF)
+    new_state, remaining = degraded_transition_6061(
+        pending, PusherReconnectState.RECONNECT_BACKOFF, reconnect_attempts=PUSHER_MAX_RECONNECT_ATTEMPTS
+    )
 
     assert new_state == PusherReconnectState.DEGRADED
     assert "conv-1" in remaining
@@ -306,7 +316,9 @@ def test_degraded_transition_never_pops_pending():
     pending = {"conv-1": {"sent_at": time.time(), "retries": MAX_RETRIES_PER_REQUEST}}
     original_keys = set(pending.keys())
 
-    degraded_transition_6061(pending, PusherReconnectState.RECONNECT_BACKOFF)
+    degraded_transition_6061(
+        pending, PusherReconnectState.RECONNECT_BACKOFF, reconnect_attempts=PUSHER_MAX_RECONNECT_ATTEMPTS
+    )
 
     assert set(pending.keys()) == original_keys
 
@@ -349,3 +361,95 @@ def test_reconnect_resets_sent_at():
     reconnect_resend_6061(pending)
 
     assert pending["conv-1"]["sent_at"] > old_time
+
+
+# ---------------------------------------------------------------------------
+# Tests: DEGRADED transition — reconnect cap and circuit breaker boundaries
+# ---------------------------------------------------------------------------
+
+
+def test_degraded_at_exact_reconnect_cap():
+    """Transition to DEGRADED when reconnect_attempts == PUSHER_MAX_RECONNECT_ATTEMPTS."""
+    pending = {"conv-1": {"sent_at": time.time(), "retries": 0}}
+
+    new_state, remaining = degraded_transition_6061(
+        pending, PusherReconnectState.RECONNECT_BACKOFF, reconnect_attempts=PUSHER_MAX_RECONNECT_ATTEMPTS
+    )
+
+    assert new_state == PusherReconnectState.DEGRADED
+    assert "conv-1" in remaining
+
+
+def test_no_degraded_below_reconnect_cap():
+    """Stay in RECONNECT_BACKOFF when reconnect_attempts < PUSHER_MAX_RECONNECT_ATTEMPTS."""
+    pending = {"conv-1": {"sent_at": time.time(), "retries": 0}}
+
+    new_state, remaining = degraded_transition_6061(
+        pending, PusherReconnectState.RECONNECT_BACKOFF, reconnect_attempts=PUSHER_MAX_RECONNECT_ATTEMPTS - 1
+    )
+
+    assert new_state == PusherReconnectState.RECONNECT_BACKOFF
+
+
+def test_degraded_on_circuit_breaker_open():
+    """Transition to DEGRADED immediately when circuit breaker is open, regardless of attempt count."""
+    pending = {"conv-1": {"sent_at": time.time(), "retries": 0}}
+
+    new_state, remaining = degraded_transition_6061(
+        pending, PusherReconnectState.RECONNECT_BACKOFF, reconnect_attempts=0, circuit_breaker_open=True
+    )
+
+    assert new_state == PusherReconnectState.DEGRADED
+    assert "conv-1" in remaining
+
+
+def test_circuit_breaker_degraded_preserves_all_pending():
+    """Circuit breaker triggered DEGRADED keeps all pending conversations."""
+    pending = {
+        "conv-1": {"sent_at": time.time(), "retries": 0},
+        "conv-2": {"sent_at": time.time(), "retries": MAX_RETRIES_PER_REQUEST},
+    }
+
+    new_state, remaining = degraded_transition_6061(
+        pending, PusherReconnectState.RECONNECT_BACKOFF, reconnect_attempts=1, circuit_breaker_open=True
+    )
+
+    assert len(remaining) == 2
+    assert "conv-1" in remaining
+    assert "conv-2" in remaining
+
+
+# ---------------------------------------------------------------------------
+# Tests: TTL boundary — exact and just-below timeout threshold
+# ---------------------------------------------------------------------------
+
+
+def test_timeout_exact_boundary_not_timed_out():
+    """Request at exactly PENDING_REQUEST_TIMEOUT is NOT timed out (uses strict >)."""
+    now = time.time()
+    pending = {"conv-1": {"sent_at": now - PENDING_REQUEST_TIMEOUT, "retries": 0}}
+
+    actions = check_timed_out_requests_6061(pending, now)
+
+    assert len(actions) == 0, "Exact boundary should not trigger timeout (strict >)"
+
+
+def test_timeout_just_below_threshold_not_timed_out():
+    """Request 1 second before timeout threshold is not timed out."""
+    now = time.time()
+    pending = {"conv-1": {"sent_at": now - PENDING_REQUEST_TIMEOUT + 1, "retries": 0}}
+
+    actions = check_timed_out_requests_6061(pending, now)
+
+    assert len(actions) == 0
+
+
+def test_timeout_just_above_threshold_triggers():
+    """Request 1 second past timeout threshold triggers retry."""
+    now = time.time()
+    pending = {"conv-1": {"sent_at": now - PENDING_REQUEST_TIMEOUT - 1, "retries": 0}}
+
+    actions = check_timed_out_requests_6061(pending, now)
+
+    assert len(actions) == 1
+    assert actions[0] == ('retry', 'conv-1', 1)
