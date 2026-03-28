@@ -894,7 +894,7 @@ def get_conversation_endpoint(
 @router.post("/v1/dev/user/conversations/from-segments", response_model=ConversationResponse, tags=["developer"])
 def create_conversation_from_segments(
     request: CreateConversationFromTranscriptRequest,
-    uid: str = Depends(get_uid_with_conversations_write),
+    uid: str = Depends(with_rate_limit(get_uid_with_conversations_write, "dev:conversations")),
 ):
     """
     Create a new conversation from structured transcript segments.

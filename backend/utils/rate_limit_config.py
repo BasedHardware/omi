@@ -25,7 +25,7 @@ import os
 # ---------------------------------------------------------------------------
 
 RATE_LIMIT_BOOST: float = float(os.getenv("RATE_LIMIT_BOOST", "1.0"))
-RATE_LIMIT_SHADOW: bool = os.getenv("RATE_LIMIT_SHADOW_MODE", "").lower() == "true"
+RATE_LIMIT_SHADOW: bool = os.getenv("RATE_LIMIT_SHADOW_MODE", "true").lower() == "true"
 
 # ---------------------------------------------------------------------------
 # Policies: "name" -> (max_requests, window_seconds)
@@ -40,12 +40,12 @@ RATE_POLICIES: dict[str, tuple[int, int]] = {
     "conversations:reprocess": (3, 3600),
     "conversations:merge": (5, 3600),
     # Chat — 2-6 LLM calls per message
-    "chat:send_message": (30, 3600),
-    "chat:initial": (15, 3600),
+    "chat:send_message": (120, 3600),
+    "chat:initial": (60, 3600),
     # Voice — Deepgram + LLM
-    "voice:transcribe": (20, 3600),
-    "voice:message": (20, 3600),
-    "file:upload": (15, 3600),
+    "voice:transcribe": (60, 3600),
+    "voice:message": (60, 3600),
+    "file:upload": (40, 3600),
     # Agent/MCP — bursty tool calls
     "agent:execute_tool": (120, 3600),
     "mcp:sse": (200, 3600),
@@ -73,6 +73,8 @@ RATE_POLICIES: dict[str, tuple[int, int]] = {
     "dev:memories_batch": (15, 3600),
     # Test
     "test:prompt": (30, 3600),
+    # Apps
+    "apps:generate_prompts": (30, 3600),
 }
 
 

@@ -703,7 +703,11 @@ def get_conversation_suggested_apps(conversation_id: str, uid: str = Depends(aut
 
 
 @router.post("/v1/conversations/{conversation_id}/test-prompt", response_model=dict, tags=['conversations'])
-def test_prompt(conversation_id: str, request: TestPromptRequest, uid: str = Depends(auth.get_current_user_uid)):
+def test_prompt(
+    conversation_id: str,
+    request: TestPromptRequest,
+    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "test:prompt")),
+):
     conversation_data = _get_valid_conversation_by_id(uid, conversation_id)
     conversation = Conversation(**conversation_data)
 
