@@ -5,9 +5,11 @@ All conversation processing is routed through pusher via
 request_conversation_processing(). When pusher is unavailable,
 conversations stay buffered in pending_conversation_requests.
 
-These tests mirror the behavioral contracts from transcribe.py's
-deeply nested closures (not directly importable) and assert the
-NEW behavior introduced by #6061.
+Architecture note: transcribe.py's handlers are deeply nested closures
+inside websocket_endpoint() and cannot be imported directly. These tests
+mirror the behavioral contracts and verify the logic in isolation.
+Live integration tests (CP9) verify the actual production closures via
+WebSocket connections to a running backend.
 """
 
 import time
