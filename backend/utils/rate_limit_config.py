@@ -51,7 +51,6 @@ RATE_POLICIES: dict[str, tuple[int, int]] = {
     "mcp:sse": (200, 3600),
     # Memories — single LLM call each
     "memories:create": (60, 3600),
-    "memories:batch": (15, 3600),
     # Goals — single LLM call
     "goals:suggest": (30, 3600),
     "goals:advice": (30, 3600),
@@ -64,9 +63,8 @@ RATE_POLICIES: dict[str, tuple[int, int]] = {
     # Integration (key = app_id:uid)
     "integration:conversations": (10, 3600),
     "integration:memories": (60, 3600),
-    # Phone verification (per-UID)
-    "phone:verify": (5, 3600),
-    "phone:verify_check": (30, 60),
+    # Phone verification uses IP-based rate_limit_dependency (pre-auth, no UID).
+    # Not migrated to per-UID Lua limiter intentionally.
     # Dev API
     "dev:conversations": (25, 3600),
     "dev:memories": (120, 3600),

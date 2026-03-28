@@ -52,7 +52,7 @@ class TestRatePolicies(unittest.TestCase):
 
     def test_policy_count(self):
         """Ensure we have a reasonable number of policies."""
-        self.assertGreaterEqual(len(RATE_POLICIES), 25)
+        self.assertGreaterEqual(len(RATE_POLICIES), 20)
 
     def test_expensive_endpoints_have_low_limits(self):
         """Expensive endpoints should have lower limits."""
