@@ -289,7 +289,7 @@ class TestTriggerClassifierFreeTier:
     @patch.object(fair_use_mod, 'is_free_credits_exhausted', return_value=True)
     @patch.object(fair_use_mod, 'ensure_free_exhausted_restrict', return_value='restrict')
     def test_free_exhausted_skips_classifier(self, _mock_ensure, _mock_free):
-        """Free-exhausted: calls ensure_free_exhausted_restrict, no LLM classifier."""
+        """Free-exhausted: acquires lock, calls ensure_free_exhausted_restrict, no LLM classifier."""
         mock_classifier = MagicMock()
         fair_use_mod._classify_user_purpose = mock_classifier
 
@@ -301,8 +301,8 @@ class TestTriggerClassifierFreeTier:
 
         _mock_ensure.assert_called_once_with('test-uid')
         mock_classifier.assert_not_called()
-        # No Redis lock should be acquired (skipped entirely)
-        _mock_redis.set.assert_not_called()
+        # Lock is acquired first (cheap Redis check), then released after free-exhausted path
+        _mock_redis.set.assert_called_once()
 
     @patch.object(fair_use_mod, 'FAIR_USE_ENABLED', True)
     @patch.object(
