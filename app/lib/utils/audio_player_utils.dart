@@ -72,7 +72,6 @@ class AudioPlayerUtils extends ChangeNotifier {
   /// Lazily initialize the audio player only when needed
   Future<void> _ensurePlayerInitialized() async {
     if (_audioPlayer != null) return;
-    if (Platform.isMacOS) return;
 
     _audioPlayer = FlutterSoundPlayer();
 

@@ -684,16 +684,15 @@ class AddAppProvider extends ChangeNotifier {
     try {
       Logger.debug('🖼️ Attempting to pick image from gallery...');
 
-      // Use file_picker for desktop platforms, image_picker for mobile
-      if (kIsWeb || Platform.isMacOS || Platform.isWindows || Platform.isLinux) {
-        Logger.debug('🖼️ Using file_picker for desktop platform');
+      if (kIsWeb) {
+        Logger.debug('🖼️ Using file_picker for web platform');
         try {
           FilePickerResult? result = await FilePicker.platform.pickFiles(
             type: FileType.custom,
             allowedExtensions: ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp'],
             allowMultiple: false,
             dialogTitle: 'Select an image file',
-            withData: false, // Only get file path, not data
+            withData: false,
             withReadStream: false,
           );
 
@@ -752,9 +751,8 @@ class AddAppProvider extends ChangeNotifier {
 
       File? thumbnailFile;
 
-      // Use file_picker for desktop platforms, image_picker for mobile
-      if (kIsWeb || Platform.isMacOS || Platform.isWindows || Platform.isLinux) {
-        Logger.debug('🖼️ Using file_picker for desktop platform (thumbnail)');
+      if (kIsWeb) {
+        Logger.debug('🖼️ Using file_picker for web platform (thumbnail)');
         try {
           FilePickerResult? result = await FilePicker.platform.pickFiles(
             type: FileType.custom,
@@ -844,8 +842,7 @@ class AddAppProvider extends ChangeNotifier {
 
   Future updateImage() async {
     try {
-      // Use file_picker for desktop platforms, image_picker for mobile
-      if (kIsWeb || Platform.isMacOS || Platform.isWindows || Platform.isLinux) {
+      if (kIsWeb) {
         FilePickerResult? result = await FilePicker.platform.pickFiles(
           type: FileType.custom,
           allowedExtensions: ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp'],

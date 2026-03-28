@@ -80,7 +80,6 @@ import 'package:omi/utils/environment_detector.dart';
 import 'package:omi/pages/settings/developer.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
-import 'package:omi/utils/platform/platform_service.dart';
 
 /// Background message handler for FCM data messages
 @pragma('vm:entry-point')
@@ -121,15 +120,10 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
 
 Future _init() async {
   // Env
-  if (PlatformService.isWindows) {
-    // Windows does not support flavors`
+  if (F.env == Environment.prod) {
     Env.init(ProdEnv());
   } else {
-    if (F.env == Environment.prod) {
-      Env.init(ProdEnv());
-    } else {
-      Env.init(DevEnv());
-    }
+    Env.init(DevEnv());
   }
 
   FlutterForegroundTask.initCommunicationPort();
@@ -139,7 +133,7 @@ Future _init() async {
 
   // Firebase
   if (Firebase.apps.isEmpty) {
-    final options = (PlatformService.isWindows || F.env == Environment.prod)
+    final options = F.env == Environment.prod
         ? prod.DefaultFirebaseOptions.currentPlatform
         : dev.DefaultFirebaseOptions.currentPlatform;
     await Firebase.initializeApp(options: options);
@@ -191,22 +185,15 @@ Future _init() async {
       print('DEBUG main: After restore - onboardingCompleted=${SharedPreferencesUtil().onboardingCompleted}');
     }
   }
-  if (PlatformService.isMobile) initOpus(await opus_flutter.load());
+  initOpus(await opus_flutter.load());
 
   await GrowthbookUtil.init();
-  if (!PlatformService.isWindows && !PlatformService.isMobile) {
-    ble.FlutterBluePlus.setOptions(restoreState: true);
-    ble.FlutterBluePlus.setLogLevel(ble.LogLevel.info, color: true);
-  }
-
   // Register native BLE bridge
-  if (PlatformService.isMobile) {
-    BleFlutterApi.setUp(BleBridge.instance);
+  BleFlutterApi.setUp(BleBridge.instance);
 
-    BleBridge.instance.stateRestoredCallback = (List<String> peripheralUuids) {
-      Logger.debug('main: restored ${peripheralUuids.length} BLE peripherals');
-    };
-  }
+  BleBridge.instance.stateRestoredCallback = (List<String> peripheralUuids) {
+    Logger.debug('main: restored ${peripheralUuids.length} BLE peripherals');
+  };
 
   await CrashlyticsManager.init();
   if (isAuth) {
@@ -305,8 +292,13 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
           update: (BuildContext context, value, MessageProvider? previous) =>
               (previous?..updateAppProvider(value)) ?? MessageProvider(),
         ),
-        ChangeNotifierProxyProvider4<ConversationProvider, MessageProvider, PeopleProvider, UsageProvider,
-            CaptureProvider>(
+        ChangeNotifierProxyProvider4<
+          ConversationProvider,
+          MessageProvider,
+          PeopleProvider,
+          UsageProvider,
+          CaptureProvider
+        >(
           create: (context) => CaptureProvider(),
           update: (BuildContext context, conversation, message, people, usage, CaptureProvider? previous) =>
               (previous?..updateProviderInstances(conversation, message, people, usage)) ?? CaptureProvider(),
