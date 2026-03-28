@@ -8720,4 +8720,73 @@ class AppLocalizationsDe extends AppLocalizations {
   String clockSkewWarning(int minutes) {
     return 'Die Uhr deines Geräts weicht um ~$minutes Min. ab. Überprüfe deine Datums- und Uhrzeiteinstellungen.';
   }
+
+  @override
+  String get omisStorage => 'Omis Speicher';
+
+  @override
+  String get phoneStorage => 'Telefonspeicher';
+
+  @override
+  String get cloudStorage => 'Cloud-Speicher';
+
+  @override
+  String get howSyncingWorks => 'So funktioniert die Synchronisierung';
+
+  @override
+  String get noSyncedRecordings => 'Noch keine synchronisierten Aufnahmen';
+
+  @override
+  String get recordingsSyncAutomatically => 'Aufnahmen werden automatisch synchronisiert — kein Handeln erforderlich.';
+
+  @override
+  String get filesDownloadedUploadedNextTime =>
+      'Bereits heruntergeladene Dateien werden beim nächsten Mal hochgeladen.';
+
+  @override
+  String nConversationsCreated(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count Gespräche erstellt',
+      one: '1 Gespräch erstellt',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get tapToView => 'Tippen zum Anzeigen';
+
+  @override
+  String get syncFailed => 'Synchronisierung fehlgeschlagen';
+
+  @override
+  String get keepSyncing => 'Weiter synchronisieren';
+
+  @override
+  String get cancelSyncQuestion => 'Synchronisierung abbrechen?';
+
+  @override
+  String get omisStorageDesc =>
+      'Wenn Ihr Omi nicht mit Ihrem Telefon verbunden ist, speichert es Audio lokal im eingebauten Speicher. Sie verlieren nie eine Aufnahme.';
+
+  @override
+  String get phoneStorageDesc =>
+      'Wenn Omi sich wieder verbindet, werden Aufnahmen automatisch auf Ihr Telefon übertragen, bevor sie hochgeladen werden.';
+
+  @override
+  String get cloudStorageDesc =>
+      'Nach dem Hochladen werden Ihre Aufnahmen verarbeitet und transkribiert. Gespräche sind innerhalb einer Minute verfügbar.';
+
+  @override
+  String get tipKeepPhoneNearby => 'Halten Sie Ihr Telefon in der Nähe für schnellere Synchronisierung';
+
+  @override
+  String get tipStableInternet => 'Stabiles Internet beschleunigt Cloud-Uploads';
+
+  @override
+  String get tipAutoSync => 'Aufnahmen werden automatisch synchronisiert';
+
+  @override
+  String get storageSection => 'SPEICHER';
 }

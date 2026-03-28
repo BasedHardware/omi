@@ -6,8 +6,10 @@ import 'package:provider/provider.dart';
 
 import 'package:omi/pages/conversation_capturing/page.dart';
 import 'package:omi/providers/capture_provider.dart';
+import 'package:omi/backend/schema/phone_call.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/home_provider.dart';
+import 'package:omi/providers/phone_call_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/enums.dart';
 import 'package:omi/utils/logger.dart';
@@ -23,6 +25,10 @@ class BottomNavBar extends StatelessWidget {
     return Consumer2<HomeProvider, DeviceProvider>(
       builder: (context, home, deviceProvider, child) {
         final isOmiDeviceConnected = deviceProvider.isConnected && deviceProvider.connectedDevice != null;
+        final phoneCallState = context.watch<PhoneCallProvider>().callState;
+        final isOnCall = phoneCallState == PhoneCallState.active ||
+            phoneCallState == PhoneCallState.connecting ||
+            phoneCallState == PhoneCallState.ringing;
 
         return Stack(
           children: [
@@ -84,8 +90,8 @@ class BottomNavBar extends StatelessWidget {
                         ),
                       ),
                     ),
-                    // Center space for record button - only when no OMI device is connected
-                    if (showCenterButton && !isOmiDeviceConnected) const SizedBox(width: 80),
+                    // Center space for record button - only when no OMI device is connected and not on a call
+                    if (showCenterButton && !isOmiDeviceConnected && !isOnCall) const SizedBox(width: 80),
                     // Memories tab
                     Expanded(
                       child: InkWell(
@@ -132,8 +138,8 @@ class BottomNavBar extends StatelessWidget {
                 ),
               ),
             ),
-            // Central Record Button - Only show when no OMI device is connected
-            if (!isOmiDeviceConnected)
+            // Central Record Button - Only show when no OMI device is connected and not on a call
+            if (!isOmiDeviceConnected && !isOnCall)
               Positioned(
                 left: MediaQuery.of(context).size.width / 2 - 40,
                 bottom: 40,

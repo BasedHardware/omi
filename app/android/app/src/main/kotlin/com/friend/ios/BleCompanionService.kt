@@ -50,7 +50,7 @@ class BleCompanionService : CompanionDeviceService() {
             Log.w(TAG, "No Bluetooth permission, cannot start foreground service")
             return
         }
-        OmiBleForegroundService.startService(applicationContext, address, shouldConnect = true)
+        OmiBleForegroundService.startService(applicationContext, address, shouldConnect = true, caller = "CompanionSvc.deviceAppeared")
     }
 
     private fun handleDeviceDisappeared() {
@@ -69,7 +69,7 @@ class BleCompanionService : CompanionDeviceService() {
         val address = association.deviceMacAddress?.toString()?.uppercase(Locale.ROOT) ?: return
 
         Log.i(TAG, "Fallback: starting foreground service with $address")
-        OmiBleForegroundService.startService(applicationContext, address, shouldConnect = true)
+        OmiBleForegroundService.startService(applicationContext, address, shouldConnect = true, caller = "CompanionSvc.fallback")
     }
 
     // ---- Lifecycle ----

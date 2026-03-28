@@ -31,7 +31,7 @@ class BleHostApiImpl(private val getActivity: () -> Activity?) : BleHostApi {
     }
 
     override fun connectPeripheral(uuid: String) {
-        bleManager.connectPeripheral(uuid)
+        bleManager.connectPeripheral(uuid, caller = "Dart")
     }
 
     override fun disconnectPeripheral(uuid: String) {
@@ -42,8 +42,8 @@ class BleHostApiImpl(private val getActivity: () -> Activity?) : BleHostApi {
         bleManager.reconnectKnownPeripheral(uuid)
     }
 
-    override fun discoverServices(peripheralUuid: String) {
-        bleManager.discoverServices(peripheralUuid)
+    override fun requestBond(uuid: String, callback: (Result<Boolean>) -> Unit) {
+        bleManager.requestBond(uuid, callback)
     }
 
     override fun readCharacteristic(

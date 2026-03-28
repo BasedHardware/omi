@@ -793,8 +793,19 @@ class AppState: ObservableObject {
   /// Check screen recording permission status
   func checkScreenRecordingPermission() {
     let tccGranted = CGPreflightScreenCaptureAccess()
+    let shouldForceActualTest = screenRecordingGrantAttempts > 0 || hasScreenRecordingPermission
 
     if !tccGranted {
+      let actualPermission = ScreenCaptureService.checkPermission(
+        forceActualTestIfPreflightDenied: shouldForceActualTest)
+      if actualPermission {
+        hasScreenRecordingPermission = true
+        isScreenCaptureKitBroken = false
+        isScreenRecordingStale = false
+        screenRecordingGrantAttempts = 0
+        return
+      }
+
       hasScreenRecordingPermission = false
       isScreenCaptureKitBroken = false
       // If user already tried Grant once and permission is still not granted,
@@ -2642,10 +2653,16 @@ class AppState: ObservableObject {
     OnboardingChatPersistence.clear()
     log("Cleared onboarding chat persistence")
 
-    // Clear local knowledge graph so the onboarding chart starts fresh
+    // Clear knowledge graph (local + server) so the onboarding chart starts fresh
     Task {
       await KnowledgeGraphStorage.shared.clearAll()
       log("Cleared local knowledge graph storage")
+      do {
+        try await APIClient.shared.deleteKnowledgeGraph()
+        log("Cleared server knowledge graph")
+      } catch {
+        logError("Failed to clear server knowledge graph during onboarding reset", error: error)
+      }
     }
 
     // Clear persisted backend chat messages so onboarding does not resume old history.

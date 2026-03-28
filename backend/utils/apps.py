@@ -621,12 +621,12 @@ def get_omi_personas_by_uid(uid: str):
 async def generate_persona_prompt(uid: str, persona: dict):
     """Generate a persona prompt based on user memories and conversations."""
 
-    # Get latest memories and user info
-    memories = get_memories(uid, limit=250)
+    # Get latest memories and user info — exclude locked content
+    memories = [m for m in get_memories(uid, limit=250) if not m.get('is_locked')]
     user_name = get_user_name(uid)
 
-    # Get and condense recent conversations
-    conversations = get_conversations(uid, limit=10)
+    # Get and condense recent conversations — exclude locked content
+    conversations = [c for c in get_conversations(uid, limit=10) if not c.get('is_locked')]
     conversation_history = Conversation.conversations_to_string(conversations)
     with track_usage(uid, Features.PERSONA):
         conversation_history = condense_conversations([conversation_history])

@@ -8674,4 +8674,72 @@ class AppLocalizationsNl extends AppLocalizations {
   String clockSkewWarning(int minutes) {
     return 'De klok van je apparaat wijkt ~$minutes min. af. Controleer je datum- en tijdinstellingen.';
   }
+
+  @override
+  String get omisStorage => 'Omi\'s opslag';
+
+  @override
+  String get phoneStorage => 'Telefoonopslag';
+
+  @override
+  String get cloudStorage => 'Cloudopslag';
+
+  @override
+  String get howSyncingWorks => 'Hoe synchronisatie werkt';
+
+  @override
+  String get noSyncedRecordings => 'Nog geen gesynchroniseerde opnames';
+
+  @override
+  String get recordingsSyncAutomatically => 'Opnames worden automatisch gesynchroniseerd — geen actie nodig.';
+
+  @override
+  String get filesDownloadedUploadedNextTime => 'Reeds gedownloade bestanden worden de volgende keer geüpload.';
+
+  @override
+  String nConversationsCreated(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count gesprekken aangemaakt',
+      one: '1 gesprek aangemaakt',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get tapToView => 'Tik om te bekijken';
+
+  @override
+  String get syncFailed => 'Synchronisatie mislukt';
+
+  @override
+  String get keepSyncing => 'Doorgaan met synchroniseren';
+
+  @override
+  String get cancelSyncQuestion => 'Synchronisatie annuleren?';
+
+  @override
+  String get omisStorageDesc =>
+      'Wanneer uw Omi niet verbonden is met uw telefoon, slaat het audio lokaal op in het ingebouwde geheugen. U verliest nooit een opname.';
+
+  @override
+  String get phoneStorageDesc =>
+      'Wanneer Omi opnieuw verbinding maakt, worden opnames automatisch naar uw telefoon overgebracht voor het uploaden.';
+
+  @override
+  String get cloudStorageDesc =>
+      'Na het uploaden worden uw opnames verwerkt en getranscribeerd. Gesprekken zijn binnen een minuut beschikbaar.';
+
+  @override
+  String get tipKeepPhoneNearby => 'Houd uw telefoon dichtbij voor snellere synchronisatie';
+
+  @override
+  String get tipStableInternet => 'Stabiel internet versnelt cloud-uploads';
+
+  @override
+  String get tipAutoSync => 'Opnames worden automatisch gesynchroniseerd';
+
+  @override
+  String get storageSection => 'OPSLAG';
 }

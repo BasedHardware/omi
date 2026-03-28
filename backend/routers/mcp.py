@@ -183,7 +183,13 @@ def get_conversations(
         categories=[c.value for c in category_list],
     )
 
-    # Paywall is enforced on the detail endpoint, list view can show basic data.
+    # Redact locked conversation content in list view
+    for conv in conversations:
+        if conv.get('is_locked', False):
+            if 'structured' in conv:
+                conv['structured']['action_items'] = []
+                conv['structured']['events'] = []
+            conv['transcript_segments'] = []
     return conversations
 
 

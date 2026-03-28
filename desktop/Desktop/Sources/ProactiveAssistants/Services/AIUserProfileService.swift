@@ -34,7 +34,6 @@ extension AIUserProfileRecord: TableDocumented {
 actor AIUserProfileService {
     static let shared = AIUserProfileService()
 
-    private let model = "gemini-pro-latest"
     private let maxProfileLength = 10000
 
     /// Whether profile generation is currently in progress
@@ -236,7 +235,7 @@ actor AIUserProfileService {
         let prompt = buildPrompt(memories: memories, tasks: tasks, goals: goals, conversations: conversations, messages: messages)
 
         // 4. Call Gemini
-        let gemini = try GeminiClient(model: model)
+        let gemini = try GeminiClient()
         let systemPrompt = """
         You are generating a structured user profile that will be injected as context into AI pipelines \
         (task extraction, goal extraction, memory extraction) that analyze the user's screen and audio activity.

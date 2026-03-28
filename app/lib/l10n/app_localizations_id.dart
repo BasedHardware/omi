@@ -8656,4 +8656,72 @@ class AppLocalizationsId extends AppLocalizations {
   String clockSkewWarning(int minutes) {
     return 'Jam perangkat Anda melenceng ~$minutes menit. Periksa pengaturan tanggal & waktu.';
   }
+
+  @override
+  String get omisStorage => 'Penyimpanan Omi';
+
+  @override
+  String get phoneStorage => 'Penyimpanan Telepon';
+
+  @override
+  String get cloudStorage => 'Penyimpanan Cloud';
+
+  @override
+  String get howSyncingWorks => 'Cara kerja sinkronisasi';
+
+  @override
+  String get noSyncedRecordings => 'Belum ada rekaman yang disinkronkan';
+
+  @override
+  String get recordingsSyncAutomatically => 'Rekaman disinkronkan secara otomatis — tidak perlu tindakan.';
+
+  @override
+  String get filesDownloadedUploadedNextTime => 'File yang sudah diunduh akan diunggah lain kali.';
+
+  @override
+  String nConversationsCreated(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count percakapan dibuat',
+      one: '1 percakapan dibuat',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get tapToView => 'Ketuk untuk melihat';
+
+  @override
+  String get syncFailed => 'Sinkronisasi gagal';
+
+  @override
+  String get keepSyncing => 'Lanjutkan sinkronisasi';
+
+  @override
+  String get cancelSyncQuestion => 'Batalkan sinkronisasi?';
+
+  @override
+  String get omisStorageDesc =>
+      'Saat Omi tidak terhubung ke ponsel Anda, ia menyimpan audio secara lokal di memori bawaannya. Anda tidak akan pernah kehilangan rekaman.';
+
+  @override
+  String get phoneStorageDesc =>
+      'Saat Omi terhubung kembali, rekaman ditransfer otomatis ke ponsel Anda sebelum diunggah.';
+
+  @override
+  String get cloudStorageDesc =>
+      'Setelah diunggah, rekaman Anda diproses dan ditranskripsikan. Percakapan akan tersedia dalam satu menit.';
+
+  @override
+  String get tipKeepPhoneNearby => 'Jaga ponsel Anda dekat untuk sinkronisasi lebih cepat';
+
+  @override
+  String get tipStableInternet => 'Internet stabil mempercepat unggahan cloud';
+
+  @override
+  String get tipAutoSync => 'Rekaman disinkronkan secara otomatis';
+
+  @override
+  String get storageSection => 'PENYIMPANAN';
 }

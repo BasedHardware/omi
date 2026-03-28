@@ -32,4 +32,27 @@ enum AppBuild {
     let raw = UserDefaults.standard.string(forKey: updateChannelDefaultsKey) ?? "stable"
     return raw == "staging" ? "beta" : raw
   }
+
+  static var inferredUpdateChannel: String {
+    let bundlePath = Bundle.main.bundleURL.path.lowercased()
+    let display = displayName.lowercased()
+    let bundle = bundleIdentifier.lowercased()
+
+    if bundle.contains("beta")
+      || display.contains("beta")
+      || bundlePath.contains("/beta")
+      || bundlePath.contains("omi beta")
+    {
+      return "beta"
+    }
+
+    return "stable"
+  }
+
+  static func syncUpdateChannelWithInstalledApp() {
+    let inferred = inferredUpdateChannel
+    if currentUpdateChannel != inferred {
+      UserDefaults.standard.set(inferred, forKey: updateChannelDefaultsKey)
+    }
+  }
 }

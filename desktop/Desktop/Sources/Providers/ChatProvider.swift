@@ -282,6 +282,8 @@ class ChatProvider: ObservableObject {
 🚨 FLOATING BAR MODE — READ THIS FIRST BEFORE ANYTHING ELSE 🚨
 ================================================================================
 If the question contains a product name, software name, or proper noun — search the web for it before answering, even if you think you know what it is.
+If a screenshot is attached and the user asks a deictic question like "which one", "which option", "which suits me", "what should I choose", or "what's on my screen", ground the answer in the visible options first and prefer what is actually on screen over unrelated context.
+If the screenshot already clearly shows the relevant options, do not ignore it just because the query is short or ambiguous.
 Respond in exactly 1 sentence. No lists. No headers. No follow-up questions.
 A screenshot may be attached — use it silently only if relevant. Never mention or acknowledge it.
 ================================================================================
@@ -565,6 +567,12 @@ A screenshot may be attached — use it silently only if relevant. Never mention
             }
         }
         guard !acpBridgeStarted else { return true }
+        // Wait for API keys before starting the bridge — the subprocess reads
+        // ANTHROPIC_API_KEY from environment on launch. Without this, Mode B
+        // (no key / OAuth) is used even when the user should be on Mode A.
+        if acpBridge.passApiKey {
+            await APIKeyService.shared.waitForKeys()
+        }
         do {
             try await acpBridge.start()
             acpBridgeStarted = true
@@ -597,6 +605,8 @@ A screenshot may be attached — use it silently only if relevant. Never mention
             return true
         } catch {
             logError("Failed to start ACP bridge", error: error)
+            let rawError = String(describing: error)
+            AnalyticsManager.shared.chatAgentError(error: "AI not available: bridge failed to start", rawError: rawError)
             errorMessage = "AI not available: \(error.localizedDescription)"
             return false
         }
@@ -1892,6 +1902,13 @@ A screenshot may be attached — use it silently only if relevant. Never mention
                 sender: .user
             )
             messages.append(userMessage)
+
+            // Track onboarding user messages with full content
+            if isOnboarding {
+                AnalyticsManager.shared.onboardingChatMessageDetailed(
+                    role: "user", text: trimmedText, step: "chat"
+                )
+            }
         }
 
         // Create a placeholder AI message shown immediately in the UI while
@@ -2099,6 +2116,18 @@ A screenshot may be attached — use it silently only if relevant. Never mention
 
             log("Chat response complete")
 
+            // Track onboarding AI responses with full content and tool calls
+            if isOnboarding {
+                let aiText = messages.first(where: { $0.id == aiMessageId })?.text ?? queryResult.text
+                AnalyticsManager.shared.onboardingChatMessageDetailed(
+                    role: "assistant",
+                    text: aiText,
+                    step: "chat",
+                    toolCalls: toolNames.isEmpty ? nil : toolNames,
+                    model: model ?? modelOverride
+                )
+            }
+
             // Persist the ACP session ID during onboarding so we can resume after app restart
             if isOnboarding && !queryResult.sessionId.isEmpty {
                 OnboardingChatPersistence.saveSessionId(queryResult.sessionId)
@@ -2191,7 +2220,22 @@ A screenshot may be attached — use it silently only if relevant. Never mention
             }
 
             logError("Failed to get AI response", error: error)
-            AnalyticsManager.shared.chatAgentError(error: error.localizedDescription)
+            // Send both user-friendly and raw error to analytics for remote debugging
+            let rawError: String
+            if let bridgeError = error as? BridgeError {
+                rawError = String(describing: bridgeError)
+            } else {
+                rawError = "\(error)"
+            }
+            AnalyticsManager.shared.chatAgentError(error: error.localizedDescription, rawError: rawError)
+
+            // Track onboarding errors with full context
+            if isOnboarding {
+                AnalyticsManager.shared.onboardingChatMessageDetailed(
+                    role: "error", text: trimmedText, step: "chat",
+                    error: rawError
+                )
+            }
 
             // Show error to user (unless they intentionally stopped)
             if let bridgeError = error as? BridgeError, case .stopped = bridgeError {

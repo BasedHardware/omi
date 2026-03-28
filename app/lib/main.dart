@@ -164,8 +164,13 @@ Future _init() async {
     if (isTestFlight) {
       Env.isTestFlight = true;
       if (SharedPreferencesUtil().testFlightUseStagingApi) {
-        Env.overrideApiBaseUrl(Env.stagingApiUrl);
-        debugPrint('TestFlight detected: using staging backend (${Env.stagingApiUrl})');
+        final staging = Env.stagingApiUrl;
+        if (staging != null) {
+          Env.overrideApiBaseUrl(staging);
+          debugPrint('TestFlight detected: using staging backend ($staging)');
+        } else {
+          debugPrint('TestFlight detected: staging preferred but STAGING_API_URL not configured, using production');
+        }
       } else {
         debugPrint('TestFlight detected: user chose production backend');
       }

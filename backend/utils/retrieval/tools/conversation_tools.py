@@ -177,6 +177,10 @@ def get_conversations_tool(
         statuses=status_list,
     )
 
+    # Filter out locked conversations (paid plan required)
+    if conversations_data:
+        conversations_data = [c for c in conversations_data if not c.get('is_locked', False)]
+
     logger.info(
         f"📊 get_conversations_tool - found {len(conversations_data) if conversations_data else 0} conversations"
     )
@@ -405,6 +409,12 @@ def search_conversations_tool(
 
         # Get full conversation data
         conversations_data = conversations_db.get_conversations_by_id(uid, conversation_ids)
+
+        if not conversations_data:
+            return f"No conversations found matching query: '{query}'"
+
+        # Filter out locked conversations (paid plan required)
+        conversations_data = [c for c in conversations_data if not c.get('is_locked', False)]
 
         if not conversations_data:
             return f"No conversations found matching query: '{query}'"

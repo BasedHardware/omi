@@ -27,9 +27,11 @@ import 'package:omi/pages/chat/page.dart';
 import 'package:omi/pages/conversation_capturing/page.dart';
 import 'package:omi/pages/conversation_detail/page.dart';
 import 'package:omi/pages/conversations/conversations_page.dart';
+import 'package:omi/pages/conversations/auto_sync_page.dart';
 import 'package:omi/pages/conversations/sync_page.dart';
 import 'package:omi/pages/conversations/widgets/merge_action_bar.dart';
 import 'package:omi/pages/memories/page.dart';
+import 'package:omi/pages/phone_calls/active_call_banner.dart';
 import 'package:omi/pages/phone_calls/phone_calls_page.dart';
 import 'package:omi/pages/phone_calls/phone_calls_upsell_sheet.dart';
 import 'package:omi/models/subscription.dart';
@@ -83,7 +85,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> {
   void initState() {
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (mounted) {
-        context.read<DeviceProvider>().periodicConnect('coming from HomePageWrapper', boundDeviceOnly: true);
+        context.read<DeviceProvider>().initiateConnection('HomePageWrapper', boundDeviceOnly: true);
       }
       if (SharedPreferencesUtil().notificationsEnabled) {
         NotificationService.instance.register();
@@ -429,6 +431,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
     _listenToMessagesFromNotification();
     _listenToFreemiumThreshold();
     _checkForAnnouncements();
+    _registerAutoSyncCallback();
     super.initState();
 
     // After init
@@ -453,6 +456,20 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
 
       // Register callback for device connection to check firmware announcements
       deviceProvider.onDeviceConnected = _onDeviceConnectedForAnnouncements;
+    });
+  }
+
+  void _registerAutoSyncCallback() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final deviceProvider = Provider.of<DeviceProvider>(context, listen: false);
+      final syncProvider = Provider.of<SyncProvider>(context, listen: false);
+      deviceProvider.onOfflineDataDetected = (device, fileCount, totalBytes) {
+        if (!syncProvider.isSyncing) {
+          Logger.debug('HomePage: Auto-sync triggered ($fileCount files, $totalBytes bytes)');
+          syncProvider.syncWals();
+        }
+      };
     });
   }
 
@@ -614,6 +631,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                     children: [
                       Column(
                         children: [
+                          // Show slim green call bar on non-home tabs when a call is active
+                          if (homeProvider.selectedIndex != 0) const ActiveCallTopBar(),
                           Expanded(
                             child: IndexedStack(index: context.watch<HomeProvider>().selectedIndex, children: _pages),
                           ),
@@ -784,7 +803,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                     return GestureDetector(
                       onTap: () {
                         HapticFeedback.mediumImpact();
-                        Navigator.push(context, MaterialPageRoute(builder: (context) => const SyncPage()));
+                        final page = deviceProvider.supportsMultiFileSync ? const AutoSyncPage() : const SyncPage();
+                        Navigator.push(context, MaterialPageRoute(builder: (context) => page));
                       },
                       child: Container(
                         width: 36,
@@ -1091,6 +1111,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
     try {
       final deviceProvider = Provider.of<DeviceProvider>(context, listen: false);
       deviceProvider.onDeviceConnected = null;
+      deviceProvider.onOfflineDataDetected = null;
     } catch (_) {}
     // Clean up freemium handler
     _freemiumHandler.dispose();

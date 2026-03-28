@@ -1671,8 +1671,8 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                     ),
                   ),
 
-                  // API Environment Section (TestFlight only)
-                  if (Env.isTestFlight) ...[
+                  // API Environment Section (TestFlight only, requires STAGING_API_URL env var)
+                  if (Env.isTestFlight && Env.isStagingConfigured) ...[
                     const SizedBox(height: 32),
                     _buildSectionHeader(context.l10n.apiEnvironment, subtitle: context.l10n.apiEnvironmentDescription),
                     Container(
@@ -1760,7 +1760,7 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                                           ),
                                           const SizedBox(height: 2),
                                           Text(
-                                            Uri.parse(Env.stagingApiUrl).host,
+                                            Uri.parse(Env.stagingApiUrl!).host,
                                             style: TextStyle(
                                               color: SharedPreferencesUtil().testFlightUseStagingApi
                                                   ? Colors.white70

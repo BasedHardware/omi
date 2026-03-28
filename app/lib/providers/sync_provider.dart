@@ -144,6 +144,37 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
 
   void _initializeProvider() async {
     await refreshWals();
+    _autoUploadPendingPhoneFiles();
+  }
+
+  bool _isAutoUploading = false;
+
+  /// Auto-upload phone WALs to cloud on app open when device is not connected
+  /// and no sync is already in progress.
+  void _autoUploadPendingPhoneFiles() async {
+    await Future.delayed(const Duration(seconds: 3));
+    if (_syncState.isProcessing) return;
+    if (_walService.getSyncs().isStorageSyncing || _walService.getSyncs().isSdCardSyncing) return;
+    final phoneWals = _allWals
+        .where((w) => w.status == WalStatus.miss && (w.storage == WalStorage.disk || w.storage == WalStorage.mem))
+        .toList();
+    if (phoneWals.isEmpty) return;
+    Logger.debug('SyncProvider: Auto-uploading ${phoneWals.length} pending phone files to cloud');
+    _isAutoUploading = true;
+    await _performSync(
+      operation: () => _walService.getSyncs().phone.syncAll(progress: this),
+      context: 'auto-upload phone files',
+    );
+    _isAutoUploading = false;
+  }
+
+  /// Cancel auto-upload if running. Called before device-triggered sync.
+  void _cancelAutoUploadIfNeeded() {
+    if (_isAutoUploading) {
+      Logger.debug('SyncProvider: Cancelling auto-upload for device sync');
+      _walService.getSyncs().phone.cancelSync();
+      _isAutoUploading = false;
+    }
   }
 
   void _onAudioPlayerStateChanged() {
@@ -186,6 +217,7 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
   }
 
   Future<void> syncWals({IWifiConnectionListener? connectionListener}) async {
+    _cancelAutoUploadIfNeeded();
     _updateSyncState(_syncState.toIdle());
     _totalWalsToProcess = missingWals.length;
     _walsProcessedCount = 0;
@@ -196,6 +228,7 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
   }
 
   Future<void> syncWal(Wal wal, {IWifiConnectionListener? connectionListener}) async {
+    _cancelAutoUploadIfNeeded();
     _updateSyncState(_syncState.toIdle());
     await _performSync(
       operation: () => _walService.getSyncs().syncWal(wal: wal, progress: this, connectionListener: connectionListener),
@@ -323,6 +356,8 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
       updatedConversationIds: result.updatedConversationIds,
     );
     _updateSyncState(_syncState.toCompleted(conversations: conversations));
+    // Refresh WAL list so home screen cloud icon updates (clears synced WALs)
+    await refreshWals();
   }
 
   // Audio playback delegate methods
@@ -396,9 +431,22 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
   }
 
   @override
-  void onWalSyncedProgress(double percentage, {double? speedKBps, SyncPhase? phase}) {
+  void onWalSyncedProgress(double percentage,
+      {double? speedKBps,
+      SyncPhase? phase,
+      int? currentFile,
+      int? totalFiles,
+      int? uploadedBytes,
+      int? totalBytesToUpload}) {
     if (_syncState.isSyncing) {
-      _updateSyncState(_syncState.toSyncing(progress: percentage, speedKBps: speedKBps, phase: phase));
+      _updateSyncState(_syncState.toSyncing(
+          progress: percentage,
+          speedKBps: speedKBps,
+          phase: phase,
+          currentFile: currentFile,
+          totalFiles: totalFiles,
+          uploadedBytes: uploadedBytes,
+          totalBytesToUpload: totalBytesToUpload));
     }
   }
 

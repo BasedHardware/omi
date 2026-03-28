@@ -61,9 +61,8 @@ Future<List<ServerConversation>> getConversations({
   if (response.statusCode == 200) {
     // decode body bytes to utf8 string and then parse json so as to avoid utf8 char issues
     var body = utf8.decode(response.bodyBytes);
-    var memories = (jsonDecode(body) as List<dynamic>)
-        .map((conversation) => ServerConversation.fromJson(conversation))
-        .toList();
+    var memories =
+        (jsonDecode(body) as List<dynamic>).map((conversation) => ServerConversation.fromJson(conversation)).toList();
     Logger.debug('getConversations length: ${memories.length}');
     return memories;
   } else {
@@ -172,9 +171,8 @@ class TranscriptsResponse {
       deepgram: (json['deepgram'] as List<dynamic>).map((segment) => TranscriptSegment.fromJson(segment)).toList(),
       soniox: (json['soniox'] as List<dynamic>).map((segment) => TranscriptSegment.fromJson(segment)).toList(),
       whisperx: (json['whisperx'] as List<dynamic>).map((segment) => TranscriptSegment.fromJson(segment)).toList(),
-      speechmatics: (json['speechmatics'] as List<dynamic>)
-          .map((segment) => TranscriptSegment.fromJson(segment))
-          .toList(),
+      speechmatics:
+          (json['speechmatics'] as List<dynamic>).map((segment) => TranscriptSegment.fromJson(segment)).toList(),
     );
   }
 }
@@ -345,13 +343,22 @@ Future<List<ServerConversation>> sendStorageToBackend(File file, String sdCardDa
   }
 }
 
-Future<SyncLocalFilesResponse> syncLocalFiles(List<File> files) async {
+Future<SyncLocalFilesResponse> syncLocalFiles(List<File> files, {UploadProgressCallback? onUploadProgress}) async {
   try {
-    var response = await makeMultipartApiCall(url: '${Env.apiBaseUrl}v1/sync-local-files', files: files);
+    var response = await makeMultipartApiCall(
+        url: '${Env.apiBaseUrl}v1/sync-local-files', files: files, onUploadProgress: onUploadProgress);
 
-    if (response.statusCode == 200) {
-      Logger.debug('syncLocalFile Response body: ${jsonDecode(response.body)}');
-      return SyncLocalFilesResponse.fromJson(jsonDecode(response.body));
+    if (response.statusCode == 200 || response.statusCode == 207) {
+      var result = SyncLocalFilesResponse.fromJson(jsonDecode(response.body));
+      if (response.statusCode == 207) {
+        Logger.debug(
+          'syncLocalFiles partial failure: ${result.failedSegments}/${result.totalSegments} segments failed, '
+          'errors: ${result.errors}',
+        );
+      } else {
+        Logger.debug('syncLocalFile Response body: ${jsonDecode(response.body)}');
+      }
+      return result;
     } else if (response.statusCode == 400) {
       throw Exception('Audio file could not be processed by server');
     } else if (response.statusCode == 413) {

@@ -8649,4 +8649,71 @@ class AppLocalizationsVi extends AppLocalizations {
   String clockSkewWarning(int minutes) {
     return 'Đồng hồ thiết bị của bạn lệch ~$minutes phút. Kiểm tra cài đặt ngày và giờ.';
   }
+
+  @override
+  String get omisStorage => 'Bộ nhớ Omi';
+
+  @override
+  String get phoneStorage => 'Bộ nhớ điện thoại';
+
+  @override
+  String get cloudStorage => 'Bộ nhớ đám mây';
+
+  @override
+  String get howSyncingWorks => 'Cách đồng bộ hoạt động';
+
+  @override
+  String get noSyncedRecordings => 'Chưa có bản ghi đã đồng bộ';
+
+  @override
+  String get recordingsSyncAutomatically => 'Bản ghi tự động đồng bộ — không cần thao tác.';
+
+  @override
+  String get filesDownloadedUploadedNextTime => 'Các tệp đã tải xuống sẽ được tải lên lần sau.';
+
+  @override
+  String nConversationsCreated(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Đã tạo $count cuộc trò chuyện',
+      one: 'Đã tạo 1 cuộc trò chuyện',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get tapToView => 'Nhấn để xem';
+
+  @override
+  String get syncFailed => 'Đồng bộ thất bại';
+
+  @override
+  String get keepSyncing => 'Tiếp tục đồng bộ';
+
+  @override
+  String get cancelSyncQuestion => 'Hủy đồng bộ?';
+
+  @override
+  String get omisStorageDesc =>
+      'Khi Omi không kết nối với điện thoại, nó lưu trữ âm thanh cục bộ trong bộ nhớ tích hợp. Bạn sẽ không bao giờ mất bản ghi.';
+
+  @override
+  String get phoneStorageDesc => 'Khi Omi kết nối lại, bản ghi tự động chuyển sang điện thoại trước khi tải lên.';
+
+  @override
+  String get cloudStorageDesc =>
+      'Sau khi tải lên, bản ghi của bạn được xử lý và chuyển thành văn bản. Cuộc trò chuyện sẽ có trong vòng một phút.';
+
+  @override
+  String get tipKeepPhoneNearby => 'Giữ điện thoại gần để đồng bộ nhanh hơn';
+
+  @override
+  String get tipStableInternet => 'Internet ổn định giúp tải lên đám mây nhanh hơn';
+
+  @override
+  String get tipAutoSync => 'Bản ghi tự động đồng bộ';
+
+  @override
+  String get storageSection => 'BỘ NHỚ';
 }

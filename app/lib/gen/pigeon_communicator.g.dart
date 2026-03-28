@@ -929,14 +929,17 @@ class BleHostApi {
     }
   }
 
-  Future<void> discoverServices(String peripheralUuid) async {
-    final String pigeonVar_channelName = 'dev.flutter.pigeon.omi_pigeon.BleHostApi.discoverServices$pigeonVar_messageChannelSuffix';
+  /// Request bonding/pairing for a connected peripheral.
+  /// Only needed for devices that require encrypted links (e.g. Limitless).
+  /// Waits for bond to complete or timeout. Returns true if bonded.
+  Future<bool> requestBond(String uuid) async {
+    final String pigeonVar_channelName = 'dev.flutter.pigeon.omi_pigeon.BleHostApi.requestBond$pigeonVar_messageChannelSuffix';
     final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
       binaryMessenger: pigeonVar_binaryMessenger,
     );
-    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[peripheralUuid]);
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[uuid]);
     final List<Object?>? pigeonVar_replyList =
         await pigeonVar_sendFuture as List<Object?>?;
     if (pigeonVar_replyList == null) {
@@ -947,8 +950,13 @@ class BleHostApi {
         message: pigeonVar_replyList[1] as String?,
         details: pigeonVar_replyList[2],
       );
+    } else if (pigeonVar_replyList[0] == null) {
+      throw PlatformException(
+        code: 'null-error',
+        message: 'Host platform returned null value for non-null return value.',
+      );
     } else {
-      return;
+      return (pigeonVar_replyList[0] as bool?)!;
     }
   }
 

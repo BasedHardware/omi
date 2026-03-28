@@ -21,6 +21,8 @@ import 'package:omi/utils/enums.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/platform/platform_service.dart';
+import 'package:omi/backend/schema/phone_call.dart';
+import 'package:omi/providers/phone_call_provider.dart';
 
 class ConversationCaptureWidget extends StatefulWidget {
   const ConversationCaptureWidget({super.key});
@@ -34,6 +36,14 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
 
   @override
   Widget build(BuildContext context) {
+    // Hide capture widget when a phone call is in progress (banner replaces it)
+    var phoneCallState = context.watch<PhoneCallProvider>().callState;
+    if (phoneCallState == PhoneCallState.active ||
+        phoneCallState == PhoneCallState.connecting ||
+        phoneCallState == PhoneCallState.ringing) {
+      return const SizedBox.shrink();
+    }
+
     return Consumer<CaptureProvider>(
       builder: (context, provider, child) {
         var topConvoId = (provider.conversationProvider?.conversations ?? []).isNotEmpty

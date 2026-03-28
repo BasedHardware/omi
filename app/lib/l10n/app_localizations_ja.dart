@@ -8502,4 +8502,69 @@ class AppLocalizationsJa extends AppLocalizations {
   String clockSkewWarning(int minutes) {
     return 'デバイスの時計が約$minutes分ずれています。日付と時刻の設定を確認してください。';
   }
+
+  @override
+  String get omisStorage => 'Omiのストレージ';
+
+  @override
+  String get phoneStorage => '電話のストレージ';
+
+  @override
+  String get cloudStorage => 'クラウドストレージ';
+
+  @override
+  String get howSyncingWorks => '同期の仕組み';
+
+  @override
+  String get noSyncedRecordings => '同期済みの録音はまだありません';
+
+  @override
+  String get recordingsSyncAutomatically => '録音は自動的に同期されます — 操作は不要です。';
+
+  @override
+  String get filesDownloadedUploadedNextTime => 'ダウンロード済みのファイルは次回アップロードされます。';
+
+  @override
+  String nConversationsCreated(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count件の会話を作成',
+      one: '1件の会話を作成',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get tapToView => 'タップして表示';
+
+  @override
+  String get syncFailed => '同期に失敗しました';
+
+  @override
+  String get keepSyncing => '同期を続ける';
+
+  @override
+  String get cancelSyncQuestion => '同期をキャンセルしますか？';
+
+  @override
+  String get omisStorageDesc => 'Omiがスマートフォンに接続されていない時、内蔵メモリにオーディオをローカル保存します。録音を失うことはありません。';
+
+  @override
+  String get phoneStorageDesc => 'Omiが再接続すると、録音はアップロード前に自動的にスマートフォンに転送されます。';
+
+  @override
+  String get cloudStorageDesc => 'アップロード後、録音は処理・文字起こしされます。会話は1分以内に利用可能になります。';
+
+  @override
+  String get tipKeepPhoneNearby => 'より速い同期のためにスマートフォンを近くに置いてください';
+
+  @override
+  String get tipStableInternet => '安定したインターネットでクラウドアップロードが高速化します';
+
+  @override
+  String get tipAutoSync => '録音は自動的に同期されます';
+
+  @override
+  String get storageSection => 'ストレージ';
 }

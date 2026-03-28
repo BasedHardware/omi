@@ -58,8 +58,8 @@ class MainActivity: FlutterActivity() {
         // Handle CompanionDeviceManager chooser result
         val address = bleHostApiImpl?.onActivityResult(requestCode, resultCode, data)
         if (address != null) {
-            // Device selected — start foreground service and connect
-            OmiBleForegroundService.startService(this, address)
+            // Device selected — start foreground service (no connect — Dart calls connectPeripheral)
+            OmiBleForegroundService.startService(this, address, caller = "MainActivity.onActivityResult")
         }
     }
 

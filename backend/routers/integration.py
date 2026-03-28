@@ -341,6 +341,8 @@ async def get_conversations_via_integration(
     for conv in conversations_data:
         try:
             if conv.get('is_locked', False):
+                conv['structured']['title'] = ''
+                conv['structured']['overview'] = ''
                 conv['structured']['action_items'] = []
                 conv['structured']['events'] = []
                 conv['transcript_segments'] = []
@@ -472,6 +474,8 @@ async def search_conversations_via_integration(
     for conv in full_conversations:
         try:
             if conv.get('is_locked', False):
+                conv['structured']['title'] = ''
+                conv['structured']['overview'] = ''
                 conv['structured']['action_items'] = []
                 conv['structured']['events'] = []
                 conv['transcript_segments'] = []

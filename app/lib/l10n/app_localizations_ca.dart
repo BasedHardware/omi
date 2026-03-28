@@ -8698,4 +8698,72 @@ class AppLocalizationsCa extends AppLocalizations {
   String clockSkewWarning(int minutes) {
     return 'El rellotge del dispositiu va desajustat ~$minutes min. Comproveu la configuració de data i hora.';
   }
+
+  @override
+  String get omisStorage => 'Emmagatzematge d\'Omi';
+
+  @override
+  String get phoneStorage => 'Emmagatzematge del telèfon';
+
+  @override
+  String get cloudStorage => 'Emmagatzematge al núvol';
+
+  @override
+  String get howSyncingWorks => 'Com funciona la sincronització';
+
+  @override
+  String get noSyncedRecordings => 'Encara no hi ha enregistraments sincronitzats';
+
+  @override
+  String get recordingsSyncAutomatically => 'Els enregistraments es sincronitzen automàticament — no cal fer res.';
+
+  @override
+  String get filesDownloadedUploadedNextTime => 'Els fitxers ja descarregats es pujaran la propera vegada.';
+
+  @override
+  String nConversationsCreated(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count converses creades',
+      one: '1 conversa creada',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get tapToView => 'Toca per veure';
+
+  @override
+  String get syncFailed => 'Error de sincronització';
+
+  @override
+  String get keepSyncing => 'Continuar sincronitzant';
+
+  @override
+  String get cancelSyncQuestion => 'Cancel·lar la sincronització?';
+
+  @override
+  String get omisStorageDesc =>
+      'Quan el vostre Omi no està connectat al telèfon, emmagatzema l\'àudio localment a la seva memòria integrada. Mai perdreu cap enregistrament.';
+
+  @override
+  String get phoneStorageDesc =>
+      'Quan l\'Omi es reconnecta, els enregistraments es transfereixen automàticament al telèfon com a àrea temporal abans de pujar-los.';
+
+  @override
+  String get cloudStorageDesc =>
+      'Un cop pujats, els vostres enregistraments es processen i transcriuen. Les converses estaran disponibles en un minut.';
+
+  @override
+  String get tipKeepPhoneNearby => 'Manteniu el telèfon a prop per a una sincronització més ràpida';
+
+  @override
+  String get tipStableInternet => 'Un internet estable accelera les pujades al núvol';
+
+  @override
+  String get tipAutoSync => 'Els enregistraments es sincronitzen automàticament';
+
+  @override
+  String get storageSection => 'EMMAGATZEMATGE';
 }

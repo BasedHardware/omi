@@ -8664,4 +8664,72 @@ class AppLocalizationsEs extends AppLocalizations {
   String clockSkewWarning(int minutes) {
     return 'El reloj de tu dispositivo está desfasado ~$minutes min. Revisa la configuración de fecha y hora.';
   }
+
+  @override
+  String get omisStorage => 'Almacenamiento de Omi';
+
+  @override
+  String get phoneStorage => 'Almacenamiento del teléfono';
+
+  @override
+  String get cloudStorage => 'Almacenamiento en la nube';
+
+  @override
+  String get howSyncingWorks => 'Cómo funciona la sincronización';
+
+  @override
+  String get noSyncedRecordings => 'Aún no hay grabaciones sincronizadas';
+
+  @override
+  String get recordingsSyncAutomatically => 'Las grabaciones se sincronizan automáticamente — no se requiere acción.';
+
+  @override
+  String get filesDownloadedUploadedNextTime => 'Los archivos ya descargados se subirán la próxima vez.';
+
+  @override
+  String nConversationsCreated(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count conversaciones creadas',
+      one: '1 conversación creada',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get tapToView => 'Toca para ver';
+
+  @override
+  String get syncFailed => 'Error de sincronización';
+
+  @override
+  String get keepSyncing => 'Seguir sincronizando';
+
+  @override
+  String get cancelSyncQuestion => '¿Cancelar sincronización?';
+
+  @override
+  String get omisStorageDesc =>
+      'Cuando tu Omi no está conectado a tu teléfono, almacena el audio localmente en su memoria integrada. Nunca perderás una grabación.';
+
+  @override
+  String get phoneStorageDesc =>
+      'Cuando Omi se reconecta, las grabaciones se transfieren automáticamente a tu teléfono antes de subirlas.';
+
+  @override
+  String get cloudStorageDesc =>
+      'Una vez subidas, tus grabaciones se procesan y transcriben. Las conversaciones estarán disponibles en un minuto.';
+
+  @override
+  String get tipKeepPhoneNearby => 'Mantén tu teléfono cerca para una sincronización más rápida';
+
+  @override
+  String get tipStableInternet => 'Internet estable acelera las subidas a la nube';
+
+  @override
+  String get tipAutoSync => 'Las grabaciones se sincronizan automáticamente';
+
+  @override
+  String get storageSection => 'ALMACENAMIENTO';
 }
