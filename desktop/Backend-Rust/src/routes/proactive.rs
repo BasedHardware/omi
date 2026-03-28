@@ -18,6 +18,8 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 
+use serde::de::DeserializeOwned;
+
 use crate::auth::AuthUser;
 use crate::llm::LlmClient;
 use crate::llm::proactive_prompts;
@@ -130,6 +132,60 @@ pub struct ProgressExtraction {
 // ============================================================================
 // Helpers
 // ============================================================================
+
+/// Fence user-supplied data to mitigate prompt injection.
+/// Wraps content in XML delimiters that help the model distinguish
+/// system instructions from user data.
+fn fence(tag: &str, content: &str) -> String {
+    format!("<{tag}>\n{content}\n</{tag}>")
+}
+
+/// Parse JSON with truncation repair. Mirrors parse_or_repair_json in llm/client.rs.
+fn parse_json_repairing<T: DeserializeOwned>(response: &str, label: &str) -> Result<T, String> {
+    // 1. Try as-is
+    if let Ok(result) = serde_json::from_str::<T>(response) {
+        return Ok(result);
+    }
+    // 2. Try balancing braces/brackets
+    let trimmed = response.trim();
+    if !trimmed.is_empty() {
+        let mut in_string = false;
+        let mut escape_next = false;
+        let mut stack: Vec<char> = Vec::new();
+        for ch in trimmed.chars() {
+            if escape_next { escape_next = false; continue; }
+            if ch == '\\' && in_string { escape_next = true; continue; }
+            if ch == '"' { in_string = !in_string; continue; }
+            if in_string { continue; }
+            match ch {
+                '{' => stack.push('}'),
+                '[' => stack.push(']'),
+                '}' | ']' => { stack.pop(); }
+                _ => {}
+            }
+        }
+        let mut suffix = String::new();
+        if in_string { suffix.push('"'); }
+        for closer in stack.iter().rev() { suffix.push(*closer); }
+        if !suffix.is_empty() {
+            let repaired = format!("{}{}", trimmed, suffix);
+            if let Ok(result) = serde_json::from_str::<T>(&repaired) {
+                tracing::info!("Repaired truncated {} JSON (added {:?})", label, suffix);
+                return Ok(result);
+            }
+        }
+    }
+    Err(format!("Failed to parse {} response: {}", label, &response[..response.len().min(200)]))
+}
+
+/// Truncate string to max_len on a valid char boundary (no panics on multi-byte).
+fn truncate_chars(s: &str, max_len: usize) -> &str {
+    if s.len() <= max_len { return s; }
+    // Find the largest char boundary <= max_len
+    let mut end = max_len;
+    while !s.is_char_boundary(end) && end > 0 { end -= 1; }
+    &s[..end]
+}
 
 /// Create an LlmClient configured for Flash model, or return 503.
 fn flash_client(config: &crate::config::Config) -> Result<LlmClient, (StatusCode, String)> {
@@ -256,7 +312,7 @@ async fn generate_user_profile(
     }
 
     let user_data = data_parts.join("\n\n");
-    let prompt = proactive_prompts::USER_PROFILE_GENERATE.replace("{user_data}", &user_data);
+    let prompt = proactive_prompts::USER_PROFILE_GENERATE.replace("{user_data}", &fence("user_data", &user_data));
 
     let profile_text = client
         .call_with_schema(&prompt, Some(0.5), Some(2000), None)
@@ -270,8 +326,8 @@ async fn generate_user_profile(
     let final_profile = if !request.previous_profiles.is_empty() {
         let history = request.previous_profiles.join("\n---\n");
         let consolidate_prompt = proactive_prompts::USER_PROFILE_CONSOLIDATE
-            .replace("{new_profile}", &profile_text)
-            .replace("{history}", &history);
+            .replace("{new_profile}", &fence("new_profile", &profile_text))
+            .replace("{history}", &fence("history", &history));
 
         check_rate_limit(&state, &user.uid).await?;
 
@@ -283,12 +339,8 @@ async fn generate_user_profile(
         profile_text
     };
 
-    // Truncate to 10000 chars (safety limit matching Swift)
-    let truncated = if final_profile.len() > 10000 {
-        final_profile[..10000].to_string()
-    } else {
-        final_profile
-    };
+    // Truncate to 10000 chars (safety limit matching Swift), char-boundary-safe
+    let truncated = truncate_chars(&final_profile, 10000).to_string();
 
     Ok(Json(UserProfileResponse {
         profile_text: truncated,
@@ -308,10 +360,11 @@ async fn prioritize_tasks(
     check_rate_limit(&state, &user.uid).await?;
     let client = flash_client(&state.config)?;
 
-    // Fetch staged tasks, user profile context, and goals
-    let (staged_result, goals_result) = tokio::join!(
+    // Fetch staged tasks, user profile context, goals, and persona (matches Swift behavior)
+    let (staged_result, goals_result, persona_result) = tokio::join!(
         state.firestore.get_staged_tasks(&user.uid, 10000, 0),
         state.firestore.get_user_goals(&user.uid, 50),
+        state.firestore.get_user_persona(&user.uid),
     );
 
     let staged = staged_result.map_err(|e| {
@@ -338,8 +391,11 @@ async fn prioritize_tasks(
         .collect::<Vec<_>>()
         .join("\n");
 
-    // Build context
+    // Build context (persona + goals, matching Swift TaskPrioritizationService)
     let mut context_parts: Vec<String> = Vec::new();
+    if let Ok(Some(p)) = &persona_result {
+        context_parts.push(format!("USER PROFILE:\n{}: {}", p.name, p.description.as_str()));
+    }
     if let Ok(goals) = &goals_result {
         if !goals.is_empty() {
             let goals_str: Vec<String> = goals.iter()
@@ -351,8 +407,8 @@ async fn prioritize_tasks(
     let context = if context_parts.is_empty() { "No additional context.".to_string() } else { context_parts.join("\n\n") };
 
     let prompt = proactive_prompts::TASK_PRIORITIZE
-        .replace("{context}", &context)
-        .replace("{task_list}", &task_list);
+        .replace("{context}", &fence("context", &context))
+        .replace("{task_list}", &fence("task_list", &task_list));
 
     let schema = serde_json::json!({
         "type": "object",
@@ -381,8 +437,8 @@ async fn prioritize_tasks(
             (StatusCode::INTERNAL_SERVER_ERROR, format!("Prioritization failed: {}", e))
         })?;
 
-    let parsed: PrioritizeResponse = serde_json::from_str(&response).map_err(|e| {
-        tracing::error!("proactive: failed to parse prioritization response: {} — raw: {}", e, &response);
+    let parsed: PrioritizeResponse = parse_json_repairing(&response, "task prioritization").map_err(|e| {
+        tracing::error!("proactive: {}", e);
         (StatusCode::INTERNAL_SERVER_ERROR, "Failed to parse AI response".to_string())
     })?;
 
@@ -437,7 +493,7 @@ async fn deduplicate_tasks(
         .collect::<Vec<_>>()
         .join("\n");
 
-    let prompt = proactive_prompts::TASK_DEDUPLICATE.replace("{task_list}", &task_list);
+    let prompt = proactive_prompts::TASK_DEDUPLICATE.replace("{task_list}", &fence("task_list", &task_list));
 
     let schema = serde_json::json!({
         "type": "object",
@@ -470,8 +526,8 @@ async fn deduplicate_tasks(
             (StatusCode::INTERNAL_SERVER_ERROR, format!("Deduplication failed: {}", e))
         })?;
 
-    let parsed: DeduplicateResponse = serde_json::from_str(&response).map_err(|e| {
-        tracing::error!("proactive: failed to parse dedup response: {} — raw: {}", e, &response);
+    let parsed: DeduplicateResponse = parse_json_repairing(&response, "task deduplication").map_err(|e| {
+        tracing::error!("proactive: {}", e);
         (StatusCode::INTERNAL_SERVER_ERROR, "Failed to parse AI response".to_string())
     })?;
 
@@ -507,7 +563,7 @@ async fn generate_goal(
     let (memories, conversations, tasks, persona, goals, completed_goals) = tokio::join!(
         state.firestore.get_memories(&user.uid, 500),
         state.firestore.get_conversations(&user.uid, 100, 0, false, &[], None, None, None, None),
-        state.firestore.get_action_items(&user.uid, 100, 0, None, None, None, None, None, None, None, None),
+        state.firestore.get_action_items(&user.uid, 100, 0, Some(false), None, None, None, None, None, None, None),
         state.firestore.get_user_persona(&user.uid),
         state.firestore.get_user_goals(&user.uid, 50),
         state.firestore.get_completed_goals(&user.uid, 50),
@@ -556,12 +612,21 @@ async fn generate_goal(
         }
     }
 
-    if let Ok(completed) = &completed_goals {
-        if !completed.is_empty() {
-            let done_str: Vec<String> = completed.iter()
-                .map(|g| format!("- {} (achieved {}/{})", g.title, g.current_value, g.target_value))
-                .collect();
-            context_parts.push(format!("COMPLETED GOALS:\n{}", done_str.join("\n")));
+    if let Ok(inactive) = &completed_goals {
+        // Separate completed (has completed_at) from abandoned (no completed_at)
+        let completed_str: Vec<String> = inactive.iter()
+            .filter(|g| g.completed_at.is_some())
+            .map(|g| format!("- {} (achieved {}/{})", g.title, g.current_value, g.target_value))
+            .collect();
+        let abandoned_str: Vec<String> = inactive.iter()
+            .filter(|g| g.completed_at.is_none())
+            .map(|g| format!("- {} (stopped at {}/{})", g.title, g.current_value, g.target_value))
+            .collect();
+        if !completed_str.is_empty() {
+            context_parts.push(format!("COMPLETED GOALS:\n{}", completed_str.join("\n")));
+        }
+        if !abandoned_str.is_empty() {
+            context_parts.push(format!("ABANDONED GOALS:\n{}", abandoned_str.join("\n")));
         }
     }
 
@@ -570,7 +635,7 @@ async fn generate_goal(
     }
 
     let context = context_parts.join("\n\n");
-    let prompt = proactive_prompts::GOAL_GENERATE.replace("{context}", &context);
+    let prompt = proactive_prompts::GOAL_GENERATE.replace("{context}", &fence("context", &context));
 
     let schema = serde_json::json!({
         "type": "object",
@@ -598,8 +663,8 @@ async fn generate_goal(
             (StatusCode::INTERNAL_SERVER_ERROR, format!("Goal generation failed: {}", e))
         })?;
 
-    let mut suggestion: GoalSuggestion = serde_json::from_str(&response).map_err(|e| {
-        tracing::error!("proactive: failed to parse goal suggestion: {} — raw: {}", e, &response);
+    let mut suggestion: GoalSuggestion = parse_json_repairing(&response, "goal suggestion").map_err(|e| {
+        tracing::error!("proactive: {}", e);
         (StatusCode::INTERNAL_SERVER_ERROR, "Failed to parse AI response".to_string())
     })?;
 
@@ -664,11 +729,11 @@ async fn get_goal_advice(
     };
 
     let prompt = proactive_prompts::GOAL_ADVICE
-        .replace("{goal_title}", &goal.title)
+        .replace("{goal_title}", &fence("goal_title", &goal.title))
         .replace("{current_value}", &goal.current_value.to_string())
         .replace("{target_value}", &goal.target_value.to_string())
         .replace("{progress_pct}", &progress_pct.to_string())
-        .replace("{context}", &context_parts.join("\n\n"));
+        .replace("{context}", &fence("context", &context_parts.join("\n\n")));
 
     let advice = client
         .call_with_schema(&prompt, Some(0.7), Some(500), None)
@@ -678,8 +743,9 @@ async fn get_goal_advice(
             (StatusCode::INTERNAL_SERVER_ERROR, format!("Goal advice failed: {}", e))
         })?;
 
-    // Clean up response (remove quotes if JSON-wrapped)
-    let cleaned = advice.trim().trim_matches('"').to_string();
+    // Properly decode JSON string (Gemini returns JSON-encoded text when no schema given)
+    let cleaned = serde_json::from_str::<String>(&advice)
+        .unwrap_or_else(|_| advice.trim().trim_matches('"').to_string());
 
     Ok(Json(GoalAdviceResponse { advice: cleaned }))
 }
@@ -707,11 +773,11 @@ async fn extract_goal_progress(
 
     let goal_type = format!("{:?}", goal.goal_type).to_lowercase();
     let prompt = proactive_prompts::GOAL_EXTRACT_PROGRESS
-        .replace("{goal_title}", &goal.title)
+        .replace("{goal_title}", &fence("goal_title", &goal.title))
         .replace("{goal_type}", &goal_type)
         .replace("{current_value}", &goal.current_value.to_string())
         .replace("{target_value}", &goal.target_value.to_string())
-        .replace("{text}", &request.text);
+        .replace("{text}", &fence("user_message", &request.text));
 
     let schema = serde_json::json!({
         "type": "object",
@@ -731,8 +797,8 @@ async fn extract_goal_progress(
             (StatusCode::INTERNAL_SERVER_ERROR, format!("Progress extraction failed: {}", e))
         })?;
 
-    let extraction: ProgressExtraction = serde_json::from_str(&response).map_err(|e| {
-        tracing::error!("proactive: failed to parse progress extraction: {} — raw: {}", e, &response);
+    let extraction: ProgressExtraction = parse_json_repairing(&response, "progress extraction").map_err(|e| {
+        tracing::error!("proactive: {}", e);
         (StatusCode::INTERNAL_SERVER_ERROR, "Failed to parse AI response".to_string())
     })?;
 
@@ -934,5 +1000,90 @@ mod tests {
             .collect();
         assert_eq!(filtered.len(), 1);
         assert_eq!(filtered[0].keep_id, "a");
+    }
+
+    // --- Fencing ---
+
+    #[test]
+    fn fence_wraps_data_with_xml_tags() {
+        let fenced = fence("user_data", "some content\nwith lines");
+        assert_eq!(fenced, "<user_data>\nsome content\nwith lines\n</user_data>");
+    }
+
+    #[test]
+    fn fence_handles_empty_content() {
+        let fenced = fence("tag", "");
+        assert_eq!(fenced, "<tag>\n\n</tag>");
+    }
+
+    // --- Truncation safety ---
+
+    #[test]
+    fn truncate_chars_ascii() {
+        let s = "hello world";
+        assert_eq!(truncate_chars(s, 5), "hello");
+        assert_eq!(truncate_chars(s, 100), "hello world");
+    }
+
+    #[test]
+    fn truncate_chars_multibyte_no_panic() {
+        // U+00E9 (é) is 2 bytes in UTF-8
+        let s = "caf\u{00e9} latte";
+        // "café" = 5 bytes (c=1, a=1, f=1, é=2). Truncating at byte 4 is mid-char.
+        let result = truncate_chars(s, 4);
+        assert_eq!(result, "caf"); // should back up to byte 3
+        assert!(result.is_char_boundary(result.len()));
+    }
+
+    #[test]
+    fn truncate_chars_emoji_no_panic() {
+        // U+1F600 (😀) is 4 bytes
+        let s = "hi\u{1F600}there";
+        // "hi" = 2 bytes, emoji = 4 bytes (starts at 2, ends at 6)
+        let result = truncate_chars(s, 3); // mid-emoji
+        assert_eq!(result, "hi");
+    }
+
+    // --- JSON repair ---
+
+    #[test]
+    fn parse_json_repair_truncated_object() {
+        let truncated = r#"{"reranked_tasks": [{"task_id": "a", "new_position": 1}], "reasoning": "test"#;
+        let parsed: PrioritizeResponse = parse_json_repairing(truncated, "test").unwrap();
+        assert_eq!(parsed.reranked_tasks.len(), 1);
+        assert_eq!(parsed.reasoning, "test");
+    }
+
+    #[test]
+    fn parse_json_repair_valid_passes_through() {
+        let valid = r#"{"found": true, "value": 10.0}"#;
+        let parsed: ProgressExtraction = parse_json_repairing(valid, "test").unwrap();
+        assert!(parsed.found);
+        assert_eq!(parsed.value, Some(10.0));
+    }
+
+    #[test]
+    fn parse_json_repair_returns_error_on_garbage() {
+        let garbage = "this is not json at all";
+        let result: Result<ProgressExtraction, _> = parse_json_repairing(garbage, "test");
+        assert!(result.is_err());
+    }
+
+    // --- JSON string decoding for advice ---
+
+    #[test]
+    fn advice_json_string_decoding() {
+        let json_string = r#""Focus on reading 30 minutes before bed each night.""#;
+        let decoded = serde_json::from_str::<String>(json_string)
+            .unwrap_or_else(|_| json_string.trim().trim_matches('"').to_string());
+        assert_eq!(decoded, "Focus on reading 30 minutes before bed each night.");
+    }
+
+    #[test]
+    fn advice_plain_text_fallback() {
+        let plain = "Focus on reading more";
+        let decoded = serde_json::from_str::<String>(plain)
+            .unwrap_or_else(|_| plain.trim().trim_matches('"').to_string());
+        assert_eq!(decoded, "Focus on reading more");
     }
 }
