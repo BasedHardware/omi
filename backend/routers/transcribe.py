@@ -13,7 +13,7 @@ from collections import deque, OrderedDict
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from enum import Enum
-from typing import Dict, List, Optional, Set, Tuple, Callable
+from typing import Dict, List, Optional, Set, Tuple
 
 import av
 import numpy as np
@@ -72,13 +72,9 @@ from utils.other.storage import get_profile_audio_if_exists, get_user_has_speech
 from utils.pusher import connect_to_trigger_pusher, PusherCircuitBreakerOpen, get_circuit_breaker, CircuitState
 from utils.speaker_identification import detect_speaker_from_text
 from utils.stt.streaming import (
-    SPEECH_PROFILE_FIXED_DURATION,
-    SPEECH_PROFILE_PADDING_DURATION,
-    SPEECH_PROFILE_STABILIZE_DELAY,
     STTService,
     get_stt_service_for_language,
     process_audio_dg,
-    send_initial_file_path,
 )
 from utils.stt.vad_gate import VADStreamingGate, VAD_GATE_MODE, is_gate_enabled
 from utils.fair_use import (
@@ -680,8 +676,11 @@ async def _stream_handler(
     # Create or get conversation ID early for audio chunk storage
     private_cloud_sync_enabled = user_db.get_user_private_cloud_sync_enabled(uid)
 
-    # Enable speaker identification if not custom STT and private cloud sync is enabled
-    speaker_id_enabled = not use_custom_stt and private_cloud_sync_enabled
+    # Enable speaker identification when user has speech profile or private cloud sync
+    has_speech_profile = False
+    if not use_custom_stt and not is_multi_channel and include_speech_profile:
+        has_speech_profile = get_user_has_speech_profile(uid)
+    speaker_id_enabled = not use_custom_stt and (private_cloud_sync_enabled or has_speech_profile)
     if speaker_id_enabled:
         audio_ring_buffer = AudioRingBuffer(RING_BUFFER_DURATION, sample_rate)
 
@@ -909,8 +908,6 @@ async def _stream_handler(
 
     # Process STT
     deepgram_socket = None
-    deepgram_profile_socket = None  # Temporary socket for speech profile phase
-    speech_profile_complete = asyncio.Event()  # Signals when speech profile send is done
 
     vad_gate = None
 
@@ -922,15 +919,12 @@ async def _stream_handler(
     async def _process_stt():
         nonlocal websocket_close_code
         nonlocal deepgram_socket
-        nonlocal deepgram_profile_socket
         try:
             if use_custom_stt:
-                speech_profile_complete.set()  # No speech profile needed
                 logger.info(f"Custom STT mode enabled - using suggested transcripts from app {uid} {session_id}")
                 return None
 
             if is_multi_channel:
-                speech_profile_complete.set()  # No speech profile for multi-channel
                 # Create one STT connection per channel
                 for i, ch_config in enumerate(channel_configs):
 
@@ -949,7 +943,6 @@ async def _stream_handler(
                         stt_language,
                         TARGET_SAMPLE_RATE,
                         1,
-                        preseconds=0,
                         model=stt_model,
                     )
                 logger.info(
@@ -957,36 +950,16 @@ async def _stream_handler(
                 )
                 return None
 
-            speech_profile_preseconds = 0
-            has_speech_profile = False
-            if (
-                (language == 'en' or language == 'auto')
-                and (codec == 'opus' or codec == 'pcm16')
-                and include_speech_profile
-            ):
-                has_speech_profile = get_user_has_speech_profile(uid)
-                if has_speech_profile:
-                    speech_profile_preseconds = SPEECH_PROFILE_FIXED_DURATION + SPEECH_PROFILE_PADDING_DURATION
-
-            # If no speech profile, mark as complete immediately
-            if not has_speech_profile:
-                speech_profile_complete.set()
-
             # Initialize VAD gate for all eligible DG sessions.
-            # Guard: gate requires PCM16 LE (linear16). All codecs (opus, aac, lc3)
+            # Gate requires PCM16 LE (linear16). All codecs (opus, aac, lc3)
             # decode to int16 before buffering. pcm8/pcm16 are linear16 from hardware
             # (the "8"/"16" refers to sample rate kHz, not bit depth).
             # DG always receives mono (channels=1), so clamp gate channels to 1.
-            # When speech profile is active (preseconds > 0), start in shadow mode
-            # so preseconds filtering uses uncompressed DG timestamps. After profile
-            # completes, switch to active mode to start saving cost.
             nonlocal vad_gate
             gate_enabled_by_override = vad_gate_override == 'enabled'
             gate_disabled_by_override = vad_gate_override == 'disabled'
             if not gate_disabled_by_override and (is_gate_enabled() or gate_enabled_by_override):
                 gate_mode = 'active' if gate_enabled_by_override else VAD_GATE_MODE
-                if speech_profile_preseconds > 0 and gate_mode == 'active':
-                    gate_mode = 'shadow'  # Shadow during profile, activate later
                 try:
                     vad_gate = VADStreamingGate(
                         sample_rate=sample_rate,
@@ -996,9 +969,8 @@ async def _stream_handler(
                         session_id=session_id,
                     )
                     logger.info(
-                        'VAD gate initialized mode=%s preseconds=%s codec=%s sample_rate=%s uid=%s session=%s',
+                        'VAD gate initialized mode=%s codec=%s sample_rate=%s uid=%s session=%s',
                         gate_mode,
-                        speech_profile_preseconds,
                         codec,
                         sample_rate,
                         uid,
@@ -1013,26 +985,11 @@ async def _stream_handler(
                 stt_language,
                 sample_rate,
                 1,
-                preseconds=speech_profile_preseconds,
                 model=stt_model,
                 keywords=vocabulary[:100] if vocabulary else None,
                 vad_gate=vad_gate,
                 is_active=lambda: websocket_active,
             )
-            if has_speech_profile:
-                deepgram_profile_socket = await process_audio_dg(
-                    stream_transcript,
-                    stt_language,
-                    sample_rate,
-                    1,
-                    model=stt_model,
-                    keywords=vocabulary[:100] if vocabulary else None,
-                    is_active=lambda: websocket_active,
-                )
-
-            # Return background task to load and send speech profile
-            if has_speech_profile:
-                return _create_speech_profile_loader_task(lambda: websocket_active, sample_rate)
             return None
 
         except Exception as e:
@@ -1040,59 +997,6 @@ async def _stream_handler(
             websocket_close_code = 1011
             await websocket.close(code=websocket_close_code)
             return None
-
-    def _create_speech_profile_loader_task(is_active: Callable, audio_sample_rate: int):
-        """Create async task to load speech profile and send to STT in background."""
-
-        async def _process_speech_profile():
-            try:
-                # Check if we should stop before doing any work
-                if not is_active():
-                    return
-
-                # Download file in background thread (not blocking main flow)
-                file_path = await asyncio.to_thread(get_profile_audio_if_exists, uid)
-
-                if not file_path:
-                    logger.warning(f"Speech profile file not found for {uid} {session_id}")
-                    return
-
-                # Skip sending speech profile when DG budget is exhausted (#6083)
-                if fair_use_dg_budget_exhausted:
-                    logger.info(f'fair_use: skipping speech profile send (credits exhausted) {uid} {session_id}')
-                    return
-
-                # Send to Deepgram socket with fixed duration padding
-                if deepgram_socket:
-
-                    async def deepgram_socket_send(data):
-                        return deepgram_socket.send(data)
-
-                    await send_initial_file_path(
-                        file_path,
-                        deepgram_socket_send,
-                        is_active,
-                        sample_rate=audio_sample_rate,
-                        target_duration=SPEECH_PROFILE_FIXED_DURATION,
-                    )
-
-                # Stabilization delay before switching to main socket
-                # SafeDeepgramSocket's auto-keepalive thread keeps the main DG socket
-                # alive during this idle window — no manual keepalive needed (#5870)
-                if is_active():
-                    logger.info(
-                        f"Speech profile sent, waiting {SPEECH_PROFILE_STABILIZE_DELAY}s for stabilization {uid} {session_id}"
-                    )
-                    await asyncio.sleep(SPEECH_PROFILE_STABILIZE_DELAY)
-
-            except Exception as e:
-                logger.error(f"Error loading speech profile in background: {e} {uid} {session_id}")
-            finally:
-                # Always signal completion so main socket routing can proceed
-                speech_profile_complete.set()
-                logger.info(f"Speech profile complete flag set {uid} {session_id}")
-
-        return asyncio.create_task(_process_speech_profile())
 
     # Pusher
     #
@@ -1888,6 +1792,9 @@ async def _stream_handler(
                 await _process_conversation(current_conversation_id)
                 await _create_new_in_progress_conversation()
 
+    # Sentinel person_id for user's own voice (not a real person in the people collection)
+    USER_SELF_PERSON_ID = '__user_self__'
+
     async def speaker_identification_task():
         """Consume segment queue, accumulate per speaker, trigger match when ready."""
         nonlocal websocket_active, speaker_to_person_map
@@ -1895,6 +1802,27 @@ async def _stream_handler(
 
         if not speaker_id_enabled:
             return
+
+        # Load user's own embedding from speech profile WAV
+        if has_speech_profile:
+            try:
+                file_path = await asyncio.to_thread(get_profile_audio_if_exists, uid)
+                if file_path:
+                    with open(file_path, 'rb') as f:
+                        profile_bytes = f.read()
+                    user_embedding = await asyncio.to_thread(
+                        extract_embedding_from_bytes, profile_bytes, "speech_profile.wav"
+                    )
+                    del profile_bytes
+                    person_embeddings_cache[USER_SELF_PERSON_ID] = {
+                        'embedding': user_embedding,
+                        'name': 'User',
+                    }
+                    logger.info(f"Speaker ID: loaded user speech profile embedding {uid} {session_id}")
+                else:
+                    logger.warning(f"Speaker ID: speech profile file not found {uid} {session_id}")
+            except Exception as e:
+                logger.error(f"Speaker ID: failed to load user embedding: {e} {uid} {session_id}")
 
         # Load person embeddings (migrate if needed for v2 API compatibility)
         try:
@@ -2039,25 +1967,33 @@ async def _stream_handler(
 
             if best_match and best_distance < SPEAKER_MATCH_THRESHOLD:
                 person_id, person_name = best_match
-                logger.info(
-                    f"Speaker ID: speaker {speaker_id} -> {sanitize_pii(person_name)} (distance={best_distance:.3f}) {uid} {session_id}"
-                )
 
-                # Store for session consistency
-                speaker_to_person_map[speaker_id] = (person_id, person_name)
-
-                # Auto-assign processed segment
-                segment_person_assignment_map[segment['id']] = person_id
-
-                # Notify client (gated for backward compatibility)
-                _send_message_event(
-                    SpeakerLabelSuggestionEvent(
-                        speaker_id=speaker_id,
-                        person_id=_person_id_for_client(person_id),
-                        person_name=person_name,
-                        segment_id=segment['id'],
+                if person_id == USER_SELF_PERSON_ID:
+                    # User's own voice matched — mark speaker as user for session consistency
+                    logger.info(
+                        f"Speaker ID: speaker {speaker_id} -> USER (distance={best_distance:.3f}) {uid} {session_id}"
                     )
-                )
+                    speaker_to_person_map[speaker_id] = (USER_SELF_PERSON_ID, 'User')
+                else:
+                    logger.info(
+                        f"Speaker ID: speaker {speaker_id} -> {sanitize_pii(person_name)} (distance={best_distance:.3f}) {uid} {session_id}"
+                    )
+
+                    # Store for session consistency
+                    speaker_to_person_map[speaker_id] = (person_id, person_name)
+
+                    # Auto-assign processed segment
+                    segment_person_assignment_map[segment['id']] = person_id
+
+                    # Notify client (gated for backward compatibility)
+                    _send_message_event(
+                        SpeakerLabelSuggestionEvent(
+                            speaker_id=speaker_id,
+                            person_id=_person_id_for_client(person_id),
+                            person_name=person_name,
+                            segment_id=segment['id'],
+                        )
+                    )
             else:
                 logger.info(f"Speaker ID: speaker {speaker_id} no match (best={best_distance:.3f}) {uid} {session_id}")
 
@@ -2152,7 +2088,7 @@ async def _stream_handler(
 
                 newly_processed_segments = []
                 for s in segments_to_process:
-                    segment = TranscriptSegment(**s, speech_profile_processed=speech_profile_complete.is_set())
+                    segment = TranscriptSegment(**s, speech_profile_processed=True)
                     # In onboarding mode, force is_user=True for non-Omi segments (user's answers)
                     if onboarding_mode and s.get('speaker_id') != OnboardingHandler.OMI_SPEAKER_ID:
                         segment.is_user = True
@@ -2202,19 +2138,23 @@ async def _stream_handler(
                         continue
 
                     # Session consistency speaker identification
-                    if speech_profile_complete.is_set():
-                        if segment.speaker_id in speaker_to_person_map:
-                            person_id, person_name = speaker_to_person_map[segment.speaker_id]
-                            _send_message_event(
-                                SpeakerLabelSuggestionEvent(
-                                    speaker_id=segment.speaker_id,
-                                    person_id=_person_id_for_client(person_id),
-                                    person_name=person_name,
-                                    segment_id=segment.id,
-                                )
-                            )
+                    if segment.speaker_id in speaker_to_person_map:
+                        person_id, person_name = speaker_to_person_map[segment.speaker_id]
+                        if person_id == USER_SELF_PERSON_ID:
+                            # User's own voice — set is_user flag
+                            segment.is_user = True
                             suggested_segments.add(segment.id)
                             continue
+                        _send_message_event(
+                            SpeakerLabelSuggestionEvent(
+                                speaker_id=segment.speaker_id,
+                                person_id=_person_id_for_client(person_id),
+                                person_name=person_name,
+                                segment_id=segment.id,
+                            )
+                        )
+                        suggested_segments.add(segment.id)
+                        continue
 
                     # Embeding id speaker indentification
                     if speaker_id_enabled and person_embeddings_cache:
@@ -2359,10 +2299,10 @@ async def _stream_handler(
     elif codec == 'lc3':
         lc3_decoder = lc3.Decoder(lc3_frame_duration_us, sample_rate)
 
-    async def receive_data(dg_socket, dg_profile_socket):
+    async def receive_data(dg_socket):
         nonlocal websocket_active, websocket_close_code, last_audio_received_time, last_activity_time, current_conversation_id
         nonlocal realtime_photo_buffers, speaker_to_person_map, first_audio_byte_timestamp, last_usage_record_timestamp
-        nonlocal deepgram_profile_socket, audio_ring_buffer, dg_usage_ms_pending
+        nonlocal audio_ring_buffer, dg_usage_ms_pending
         timer_start = time.time()
         last_audio_received_time = timer_start
         last_activity_time = timer_start
@@ -2372,7 +2312,7 @@ async def _stream_handler(
         stt_buffer_flush_size = int(sample_rate * 2 * 0.03)  # 30ms at 16-bit mono (e.g., 6400 bytes at 16kHz)
 
         async def flush_stt_buffer(force: bool = False):
-            nonlocal stt_audio_buffer, deepgram_profile_socket, dg_usage_ms_pending, dg_socket
+            nonlocal stt_audio_buffer, dg_usage_ms_pending, dg_socket
 
             if not stt_audio_buffer:
                 return
@@ -2382,11 +2322,7 @@ async def _stream_handler(
             chunk = bytes(stt_audio_buffer)
             stt_audio_buffer.clear()
 
-            # Use event-based routing instead of time-based
-            profile_complete = speech_profile_complete.is_set()
-
             # Check if DG connection died (keepalive or send failure) (#5870)
-            # Separated from routing so profile socket still receives audio if main dies.
             if dg_socket is not None and dg_socket.is_connection_dead:
                 close_reason = dg_socket.death_reason or 'unknown'
                 logger.error(
@@ -2398,43 +2334,15 @@ async def _stream_handler(
                 dg_socket = None  # Stop sending to dead connection
 
             if dg_socket is not None:
-                if profile_complete or not deepgram_profile_socket:
-                    # DG budget gate: skip sending if daily budget is exhausted (#5746, #6083)
-                    if fair_use_dg_budget_exhausted:
-                        pass  # Audio not forwarded to DG — budget/credits exhausted
-                    else:
-                        dg_socket.send(chunk)
-                        # Accumulate DG usage locally, flushed every 60s (#5854)
-                        if fair_use_track_dg_usage:
-                            chunk_ms = len(chunk) * 1000 // (sample_rate * 2)  # 16-bit mono
-                            dg_usage_ms_pending += chunk_ms
-                    if deepgram_profile_socket:
-                        logger.info(f'Scheduling delayed close of deepgram_profile_socket {uid} {session_id}')
-                        socket_to_close = deepgram_profile_socket
-                        deepgram_profile_socket = None  # Stop sending immediately
-
-                        # Activate VAD gate now that speech profile phase is done
-                        if (
-                            vad_gate is not None
-                            and (VAD_GATE_MODE == 'active' or vad_gate_override == 'enabled')
-                            and vad_gate.mode == 'shadow'
-                        ):
-                            vad_gate.activate()
-                            logger.info('VAD gate activated after speech profile uid=%s session=%s', uid, session_id)
-
-                        async def close_dg_profile():
-                            await asyncio.sleep(5)
-                            socket_to_close.finish()
-                            logger.info(f'Closed deepgram_profile_socket after 5s delay {uid} {session_id}')
-
-                        spawn(close_dg_profile())
+                # DG budget gate: skip sending if daily budget is exhausted (#5746, #6083)
+                if fair_use_dg_budget_exhausted:
+                    pass  # Audio not forwarded to DG — budget/credits exhausted
                 else:
-                    if not fair_use_dg_budget_exhausted:
-                        deepgram_profile_socket.send(chunk)
-            elif deepgram_profile_socket and not profile_complete:
-                # Main socket dead but profile socket still alive — keep routing (#5870)
-                if not fair_use_dg_budget_exhausted:
-                    deepgram_profile_socket.send(chunk)
+                    dg_socket.send(chunk)
+                    # Accumulate DG usage locally, flushed every 60s (#5854)
+                    if fair_use_track_dg_usage:
+                        chunk_ms = len(chunk) * 1000 // (sample_rate * 2)  # 16-bit mono
+                        dg_usage_ms_pending += chunk_ms
 
         try:
             while websocket_active:
@@ -2651,9 +2559,9 @@ async def _stream_handler(
     # Start
     #
     try:
-        # Init STT (fast - profile file loads and sends in background)
+        # Init STT
         _send_message_event(MessageServiceStatusEvent(status="stt_initiating", status_text="STT Service Starting"))
-        speech_profile_task = await _process_stt()
+        await _process_stt()
 
         # Init pusher
         pusher_tasks = []
@@ -2699,7 +2607,7 @@ async def _stream_handler(
             pusher_tasks.append(asyncio.create_task(pusher_heartbeat()))
 
         # Tasks
-        data_process_task = asyncio.create_task(receive_data(deepgram_socket, deepgram_profile_socket))
+        data_process_task = asyncio.create_task(receive_data(deepgram_socket))
         stream_transcript_task = asyncio.create_task(stream_transcript_process())
         record_usage_task = asyncio.create_task(_record_usage_periodically())
 
@@ -2718,10 +2626,6 @@ async def _stream_handler(
             pending_conversations_task = asyncio.create_task(process_pending_conversations(timed_out_conversation_id))
             speaker_id_task = asyncio.create_task(speaker_identification_task())
             tasks.extend([lifecycle_manager_task, pending_conversations_task, speaker_id_task])
-
-        # Add speech profile task to run concurrently (sends profile audio in background)
-        if speech_profile_task:
-            tasks.append(speech_profile_task)
 
         await asyncio.gather(*tasks)
 
@@ -2775,8 +2679,6 @@ async def _stream_handler(
                 if deepgram_socket:
                     # GatedDeepgramSocket.finish() handles finalize automatically
                     deepgram_socket.finish()
-                if deepgram_profile_socket:
-                    deepgram_profile_socket.finish()
         except Exception as e:
             logger.error(f"Error closing STT sockets: {e} {uid} {session_id}")
 
