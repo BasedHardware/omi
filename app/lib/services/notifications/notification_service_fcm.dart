@@ -16,7 +16,6 @@ import 'package:omi/backend/http/api/notifications.dart';
 import 'package:omi/backend/schema/message.dart';
 import 'package:omi/pages/home/page.dart';
 import 'package:omi/services/notifications/action_item_notification_handler.dart';
-import 'package:omi/services/notifications/daily_reflection_notification.dart';
 import 'package:omi/services/notifications/important_conversation_notification_handler.dart';
 import 'package:omi/services/notifications/merge_notification_handler.dart';
 import 'package:omi/services/notifications/notification_interface.dart';
@@ -42,6 +41,8 @@ class _FCMNotificationService implements NotificationInterface {
   );
 
   final AwesomeNotifications _awesomeNotifications = AwesomeNotifications();
+  StreamSubscription<String>? _tokenRefreshSubscription;
+  StreamSubscription<RemoteMessage>? _notificationOpenedSubscription;
 
   @override
   Future<void> initialize() async {
@@ -177,7 +178,8 @@ class _FCMNotificationService implements NotificationInterface {
     } catch (e) {
       Logger.debug('Failed to save notification token: $e');
     } finally {
-      _firebaseMessaging.onTokenRefresh.listen(saveFcmToken);
+      _tokenRefreshSubscription?.cancel();
+      _tokenRefreshSubscription = _firebaseMessaging.onTokenRefresh.listen(saveFcmToken);
     }
   }
 
@@ -268,16 +270,23 @@ class _FCMNotificationService implements NotificationInterface {
   }
 
   void _bindNotificationOpenHandlers() {
-    FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
+    _notificationOpenedSubscription?.cancel();
+    _notificationOpenedSubscription = FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
       _navigateFromPayload(message.data);
     });
 
-    _firebaseMessaging.getInitialMessage().then((message) {
-      if (message == null || message.data.isEmpty) return;
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        _navigateFromPayload(message.data);
-      });
-    });
+    _firebaseMessaging
+        .getInitialMessage()
+        .then((message) {
+          if (message == null || message.data.isEmpty) return;
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            _navigateFromPayload(message.data);
+          });
+        })
+        .catchError((error, stackTrace) {
+          Logger.debug('Failed to process initial FCM message: $error');
+          return null;
+        });
   }
 
   void _navigateFromPayload(Map<String, dynamic> payload) {
@@ -287,13 +296,8 @@ class _FCMNotificationService implements NotificationInterface {
       return;
     }
 
-    String? autoMessage;
-    if (DailyReflectionNotification.isReflectionPayload(payload)) {
-      autoMessage = DailyReflectionNotification.reflectionMessage;
-    }
-
     globalNavigatorKey.currentState?.pushAndRemoveUntil(
-      MaterialPageRoute(builder: (_) => HomePageWrapper(navigateToRoute: navigateTo, autoMessage: autoMessage)),
+      MaterialPageRoute(builder: (_) => HomePageWrapper(navigateToRoute: navigateTo)),
       (route) => false,
     );
   }
