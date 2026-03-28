@@ -210,7 +210,8 @@ def _retrieve_contextual_memories(uid: str, user_context):
         entities=filters.get("entities", []),
         dates=filters.get("dates", []),
     )
-    return conversations_db.get_conversations_by_id(uid, memories_id)
+    convos = conversations_db.get_conversations_by_id(uid, memories_id)
+    return [c for c in convos if not c.get('is_locked')]
 
 
 def _hit_proactive_notification_rate_limits(uid: str, app: App):
