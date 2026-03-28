@@ -32,6 +32,16 @@ Before getting started, make sure your device is connected and unlocked. If you'
    flutter run --flavor dev
    ```
 
+### Performance Test Runner
+
+The app already includes several profile-mode integration tests under `integration_test/` for animation, CPU, and rebuild profiling. On Windows you can run the full suite and generate a consolidated report with:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\run_performance_tests.ps1
+```
+
+Detailed usage and report layout are documented in [scripts/PERFORMANCE_TESTS.md](./scripts/PERFORMANCE_TESTS.md).
+
 
 ### Building and Deploying to iPhone
 
