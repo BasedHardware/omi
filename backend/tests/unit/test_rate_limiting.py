@@ -37,6 +37,11 @@ sys.modules['redis.exceptions'] = redis_mock.exceptions
 firebase_auth = sys.modules['firebase_admin.auth']
 firebase_auth.InvalidIdTokenError = type('InvalidIdTokenError', (Exception,), {})
 
+# Stub database.redis_db exports needed by endpoints.py
+redis_db_stub = sys.modules['database.redis_db']
+redis_db_stub.check_rate_limit = MagicMock(return_value=(True, 100, 0))
+redis_db_stub.try_acquire_listen_lock = MagicMock(return_value=True)
+
 from utils.rate_limit_config import RATE_POLICIES, get_effective_limit, RATE_LIMIT_BOOST
 
 
@@ -139,6 +144,44 @@ class TestGetEffectiveLimit(unittest.TestCase):
             self.assertGreater(window, 0)
 
 
+class TestEnforceRateLimit(unittest.TestCase):
+    """Test runtime enforcement logic (429, shadow mode, fail-open)."""
+
+    def setUp(self):
+        # Import here after stubs are in place
+        from utils.other import endpoints as ep_mod
+
+        self.ep = ep_mod
+
+    @patch('utils.other.endpoints.check_rate_limit', return_value=(True, 50, 0))
+    def test_allowed_request_passes(self, mock_check):
+        # Should not raise
+        self.ep._enforce_rate_limit("uid123", "chat:send_message")
+        mock_check.assert_called_once()
+
+    @patch('utils.other.endpoints.check_rate_limit', return_value=(False, 0, 42))
+    @patch('utils.other.endpoints.RATE_LIMIT_SHADOW', False)
+    def test_blocked_request_raises_429(self, mock_check):
+        from fastapi import HTTPException
+
+        with self.assertRaises(HTTPException) as ctx:
+            self.ep._enforce_rate_limit("uid123", "chat:send_message")
+        self.assertEqual(ctx.exception.status_code, 429)
+        self.assertIn("42", ctx.exception.detail)
+        self.assertEqual(ctx.exception.headers["Retry-After"], "42")
+
+    @patch('utils.other.endpoints.check_rate_limit', return_value=(False, 0, 42))
+    @patch('utils.other.endpoints.RATE_LIMIT_SHADOW', True)
+    def test_shadow_mode_logs_instead_of_blocking(self, mock_check):
+        # Should not raise even though rate limit exceeded
+        self.ep._enforce_rate_limit("uid123", "chat:send_message")
+
+    @patch('utils.other.endpoints.check_rate_limit', side_effect=_RedisError("connection lost"))
+    def test_fail_open_on_redis_error(self, mock_check):
+        # Should not raise — fail open
+        self.ep._enforce_rate_limit("uid123", "chat:send_message")
+
+
 class TestRouterPolicyMapping(unittest.TestCase):
     """Verify all policies referenced in routers exist in config."""
 
@@ -199,7 +242,7 @@ class TestRouterWiring(unittest.TestCase):
         self.assertGreaterEqual(len(matches), 4, "conversations.py missing rate limit wiring")
 
     def test_chat_router_has_rate_limits(self):
-        matches = self._grep_file("routers/chat.py", r"with_rate_limit.*chat:|voice:|file:")
+        matches = self._grep_file("routers/chat.py", r"with_rate_limit.*(?:chat:|voice:|file:)")
         # send_message, initial(x2), voice_message, voice_transcribe, file_upload(v1+v2) = 7
         self.assertGreaterEqual(len(matches), 6, "chat.py missing rate limit wiring")
 

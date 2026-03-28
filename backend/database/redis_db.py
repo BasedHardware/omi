@@ -763,8 +763,7 @@ def remove_conversation_summary_app_id(app_id: str) -> bool:
 # and self-heals any key that lost its TTL (prevents permanent buckets).
 _RATE_LIMIT_LUA = r.register_script("""
 local key = KEYS[1]
-local limit = tonumber(ARGV[1])
-local window = tonumber(ARGV[2])
+local window = tonumber(ARGV[1])
 local current = redis.call('INCR', key)
 if current == 1 then
     redis.call('EXPIRE', key, window)
@@ -791,7 +790,7 @@ def check_rate_limit(key: str, policy: str, max_requests: int, window: int) -> t
         (allowed, remaining, retry_after_seconds)
     """
     redis_key = f'rl:{policy}:{key}'
-    current, ttl = _RATE_LIMIT_LUA(keys=[redis_key], args=[max_requests, window])
+    current, ttl = _RATE_LIMIT_LUA(keys=[redis_key], args=[window])
     remaining = max(0, max_requests - current)
     allowed = current <= max_requests
     retry_after = max(0, ttl) if not allowed else 0
