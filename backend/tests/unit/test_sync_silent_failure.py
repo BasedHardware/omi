@@ -40,15 +40,17 @@ class TestProcessSegmentErrorHandling:
         assert 'try:' in func_body, "process_segment must have try/except"
         assert 'except Exception' in func_body, "process_segment must catch exceptions"
 
-    def test_process_segment_errors_on_empty_words(self):
-        """When Deepgram returns no words, treat as error (may be Deepgram failure, not just silence)."""
+    def test_process_segment_treats_empty_words_as_success(self):
+        """When Deepgram returns no words, treat it as a successful empty segment."""
         source = self._read_sync_source()
         start = source.index('def process_segment(')
         next_def = source.index('\ndef ', start + 1)
         func_body = source[start:next_def]
+        empty_words_block = func_body[func_body.index('if not words:') : func_body.index('transcript_segments')]
 
-        assert 'Deepgram returned no words' in func_body, "Must log error for empty Deepgram words"
-        assert 'errors.append' in func_body, "Must append to errors list for empty words"
+        assert 'No transcript words for segment' in empty_words_block, "Must log empty-word segments"
+        assert 'errors.append' not in empty_words_block, "Empty-word segments must not append to errors"
+        assert 'return' in empty_words_block, "Empty-word segments must short-circuit as success"
 
     def test_process_segment_warns_on_empty_postprocessed(self):
         """When words exist but postprocessing yields nothing, log warning (not error)."""
@@ -76,9 +78,9 @@ class TestProcessSegmentErrorHandling:
         func_body = source[start:next_def]
 
         assert 'with lock:' in func_body, "Must use lock for thread-safe mutations"
-        # Lock must protect both error append and response dict mutations
+        # Lock must protect the exception path and response dict mutations
         lock_sections = func_body.split('with lock:')
-        assert len(lock_sections) >= 4, "Must have lock sections for errors (2) + new_memories + updated_memories"
+        assert len(lock_sections) >= 3, "Must have lock sections for exception errors + new_memories + updated_memories"
 
     def test_process_segment_accepts_lock_and_errors_params(self):
         """process_segment must accept lock and errors as parameters."""
@@ -231,7 +233,7 @@ class TestThreadSafeErrorCollection:
 
 
 class TestDeepgramRetryBehavior:
-    """Verifies deepgram_prerecorded returns empty list on final retry failure."""
+    """Verifies retry exhaustion raises while valid empty transcriptions stay empty."""
 
     @staticmethod
     def _read_deepgram_source():
@@ -239,9 +241,8 @@ class TestDeepgramRetryBehavior:
         with open(dg_path) as f:
             return f.read()
 
-    def test_deepgram_returns_empty_list_on_final_retry(self):
-        """After 2 retries, deepgram_prerecorded returns [] (not raise).
-        This is now properly caught by process_segment's error handling."""
+    def test_deepgram_raises_runtime_error_on_final_retry(self):
+        """After 2 retries, deepgram_prerecorded must raise instead of returning []."""
         source = self._read_deepgram_source()
         start = source.index('def deepgram_prerecorded(')
         next_func_markers = ['@timeit', '\ndef ']
@@ -255,8 +256,127 @@ class TestDeepgramRetryBehavior:
                 pass
         func_body = source[start:end]
 
-        assert 'return [], ' in func_body or "return []" in func_body
+        except_body = func_body[func_body.index('except Exception as e:') :]
+
+        assert 'raise RuntimeError' in except_body
+        assert 'Deepgram transcription failed after' in except_body
         assert 'attempts < 2' in func_body
+
+    def test_deepgram_keeps_empty_words_as_success(self):
+        """A valid Deepgram response with no words must still return []."""
+        source = self._read_deepgram_source()
+        start = source.index('def deepgram_prerecorded(')
+        next_func_markers = ['@timeit', '\ndef ']
+        end = len(source)
+        for marker in next_func_markers:
+            try:
+                idx = source.index(marker, start + 100)
+                if idx < end:
+                    end = idx
+            except ValueError:
+                pass
+        func_body = source[start:end]
+        no_words_block = func_body[
+            func_body.index("dg_words = alternatives[0].get('words', [])") : func_body.index(
+                '# Convert Deepgram format'
+            )
+        ]
+
+        assert 'if not dg_words:' in no_words_block
+        assert 'return [], detected_lang or \'en\'' in no_words_block
+        assert 'return []' in no_words_block
+
+
+class TestDeepgramRetryBehavioral:
+    """Behavioral tests that execute deepgram_prerecorded with mocked DG client.
+
+    Uses setup_class/teardown_class to install stubs for deepgram + related deps,
+    then imports the real function under test.
+    """
+
+    _saved_modules = {}
+    _deepgram_prerecorded = None
+    _mock_client = None
+
+    @classmethod
+    def setup_class(cls):
+        from unittest.mock import MagicMock
+        from types import ModuleType
+
+        stubs = [
+            'deepgram',
+            'fal_client',
+            'models',
+            'models.transcript_segment',
+            'utils.other.endpoints',
+        ]
+        cls._saved_modules = {name: sys.modules.get(name) for name in stubs}
+        cls._saved_modules['utils.stt.pre_recorded'] = sys.modules.get('utils.stt.pre_recorded')
+
+        for mod_name in stubs:
+            sys.modules[mod_name] = ModuleType(mod_name)
+
+        sys.modules['deepgram'].DeepgramClient = MagicMock()
+        sys.modules['deepgram'].DeepgramClientOptions = MagicMock()
+        sys.modules['fal_client'].submit = MagicMock()
+        sys.modules['models.transcript_segment'].TranscriptSegment = MagicMock()
+        sys.modules['utils.other.endpoints'].timeit = lambda f: f
+
+        # Force re-import so it picks up stubs
+        sys.modules.pop('utils.stt.pre_recorded', None)
+        from utils.stt.pre_recorded import deepgram_prerecorded
+
+        cls._deepgram_prerecorded = staticmethod(deepgram_prerecorded)
+
+    @classmethod
+    def teardown_class(cls):
+        sys.modules.pop('utils.stt.pre_recorded', None)
+        for name, orig in cls._saved_modules.items():
+            if orig is None:
+                sys.modules.pop(name, None)
+            else:
+                sys.modules[name] = orig
+        cls._saved_modules.clear()
+
+    def test_retry_exhaustion_raises_runtime_error(self):
+        """deepgram_prerecorded must raise RuntimeError when all retries fail."""
+        from unittest.mock import MagicMock, patch
+
+        mock_client = MagicMock()
+        mock_client.listen.rest.v.return_value.transcribe_url.side_effect = ConnectionError('timeout')
+
+        with patch('utils.stt.pre_recorded._deepgram_client', mock_client):
+            with pytest.raises(RuntimeError, match='Deepgram transcription failed after 3 attempts'):
+                self._deepgram_prerecorded('https://fake-audio.wav', attempts=0, return_language=True)
+
+        # Should have been called 3 times (initial + 2 retries)
+        assert mock_client.listen.rest.v.return_value.transcribe_url.call_count == 3
+
+    def test_valid_empty_transcription_returns_empty_list(self):
+        """deepgram_prerecorded must return ([], lang) when DG succeeds but finds no words."""
+        from unittest.mock import MagicMock, patch
+
+        mock_response = MagicMock()
+        mock_response.to_dict.return_value = {
+            'results': {
+                'channels': [
+                    {
+                        'alternatives': [{'words': []}],
+                        'detected_language': 'en',
+                    }
+                ]
+            }
+        }
+        mock_client = MagicMock()
+        mock_client.listen.rest.v.return_value.transcribe_url.return_value = mock_response
+
+        with patch('utils.stt.pre_recorded._deepgram_client', mock_client):
+            words, lang = self._deepgram_prerecorded('https://fake-audio.wav', return_language=True)
+
+        assert words == []
+        assert lang == 'en'
+        # Should be called exactly once (no retries for valid response)
+        assert mock_client.listen.rest.v.return_value.transcribe_url.call_count == 1
 
 
 # ---------------------------------------------------------------------------
@@ -355,7 +475,9 @@ class TestDataLossPreventionFlow:
 
     def test_response_includes_error_details_for_debugging(self):
         """Response includes structured error info for debugging."""
-        segment_errors = ['Deepgram returned no words for segment /tmp/1700000100.wav']
+        segment_errors = [
+            'Failed to process segment /tmp/1700000100.wav: Deepgram transcription failed after 3 attempts: timeout'
+        ]
         total_segments = 3
         failed_segments = len(segment_errors)
 
@@ -370,7 +492,7 @@ class TestDataLossPreventionFlow:
         assert result['failed_segments'] == 1
         assert result['total_segments'] == 3
         assert len(result['errors']) == 1
-        assert 'Deepgram returned no words' in result['errors'][0]
+        assert 'Deepgram transcription failed after 3 attempts' in result['errors'][0]
 
 
 # ---------------------------------------------------------------------------
@@ -462,6 +584,9 @@ from types import ModuleType
 from unittest.mock import MagicMock, patch
 
 _STUB_MODULES = [
+    'models',
+    'models.conversation',
+    'models.transcript_segment',
     'database._client',
     'database.redis_db',
     'database.fair_use',
@@ -474,6 +599,7 @@ _STUB_MODULES = [
     'pydub',
     'utils.other.endpoints',
     'utils.other.storage',
+    'utils.log_sanitizer',
     'utils.encryption',
     'utils.stt.pre_recorded',
     'utils.stt.vad',
@@ -519,6 +645,7 @@ class TestProcessSegmentReal:
         sys.modules['utils.other.storage'].download_audio_chunks_and_merge = MagicMock()
         sys.modules['utils.other.storage'].get_or_create_merged_audio = MagicMock()
         sys.modules['utils.other.storage'].get_merged_audio_signed_url = MagicMock()
+        sys.modules['utils.log_sanitizer'].sanitize = lambda value: value
         sys.modules['utils.encryption'].encrypt = MagicMock()
         sys.modules['utils.stt.pre_recorded'].deepgram_prerecorded = MagicMock()
         sys.modules['utils.stt.pre_recorded'].postprocess_words = MagicMock()
@@ -531,6 +658,29 @@ class TestProcessSegmentReal:
         sys.modules['utils.fair_use'].trigger_classifier_if_needed = MagicMock()
         sys.modules['utils.subscription'].has_transcription_credits = MagicMock(return_value=True)
         sys.modules['utils.conversations.process_conversation'].process_conversation = MagicMock()
+
+        class _ConversationSource:
+            omi = 'omi'
+
+        class _CreateConversation:
+            def __init__(self, **kwargs):
+                self.__dict__.update(kwargs)
+
+        class _Conversation:
+            def __init__(self, **kwargs):
+                self.__dict__.update(kwargs)
+
+        class _TranscriptSegment:
+            def __init__(self, **kwargs):
+                self.__dict__.update(kwargs)
+
+            def dict(self):
+                return dict(self.__dict__)
+
+        sys.modules['models.conversation'].ConversationSource = _ConversationSource
+        sys.modules['models.conversation'].CreateConversation = _CreateConversation
+        sys.modules['models.conversation'].Conversation = _Conversation
+        sys.modules['models.transcript_segment'].TranscriptSegment = _TranscriptSegment
 
         # Import under stubs
         from routers.sync import process_segment
@@ -552,13 +702,8 @@ class TestProcessSegmentReal:
     def _import_process_segment(self):
         return self._process_segment
 
-    def test_empty_words_collects_error(self):
-        """Real process_segment: empty Deepgram words → error collected.
-
-        deepgram_prerecorded returns [] on both "no speech" AND "failure after retries".
-        We treat it as an error so the segment is retried — dedup prevents duplicates
-        if the segment was actually silent.
-        """
+    def test_empty_words_are_successful_noop(self):
+        """Real process_segment: empty Deepgram words → success with no memory changes."""
         process_segment = self._import_process_segment()
 
         response = {'updated_memories': set(), 'new_memories': set()}
@@ -574,8 +719,7 @@ class TestProcessSegmentReal:
 
             process_segment('/tmp/1700000000.wav', 'uid', response, lock, errors, ConversationSource.omi, False)
 
-        assert len(errors) == 1, "Empty words must be treated as an error"
-        assert 'Deepgram returned no words' in errors[0]
+        assert len(errors) == 0, "Empty words must not be treated as an error"
         assert len(response['new_memories']) == 0
         assert len(response['updated_memories']) == 0
 
@@ -768,3 +912,216 @@ class TestProcessSegmentReal:
         mock_update.assert_not_called()
         assert len(errors) == 0
         assert 'conv-existing' in response['updated_memories']
+
+    def test_all_silent_segments_return_200_not_500(self):
+        """When ALL segments are silent (empty words), endpoint should return 200 — not 500.
+
+        This is the core bug in #6100: all-silent batches were treated as all-failed,
+        triggering the 500 branch. Now empty words = success, so all-silent = 200.
+        """
+        process_segment = self._import_process_segment()
+
+        response = {'updated_memories': set(), 'new_memories': set()}
+        errors = []
+        lock = threading.Lock()
+
+        # Run 3 segments that all return empty words (silence)
+        with patch('routers.sync.deepgram_prerecorded', return_value=([], 'en')), patch(
+            'routers.sync.delete_syncing_temporal_file'
+        ), patch('routers.sync.get_syncing_file_temporal_signed_url', return_value='https://fake'), patch(
+            'routers.sync.time.sleep'
+        ):
+            from models.conversation import ConversationSource
+
+            for i in range(3):
+                process_segment(f'/tmp/{i}.wav', 'uid', response, lock, errors, ConversationSource.omi, False)
+
+        # All segments returned silently — zero errors
+        total_segments = 3
+        failed_segments = len(errors)
+        successful_segments = total_segments - failed_segments
+
+        assert failed_segments == 0, f"Silent segments must not produce errors: {errors}"
+        assert successful_segments == 3
+
+        # Endpoint logic: no failures → 200 (not 207, not 500)
+        if total_segments > 0 and successful_segments == 0:
+            status = 500
+        elif failed_segments > 0:
+            status = 207
+        else:
+            status = 200
+        assert status == 200, "All-silent batch must return 200, not 500"
+
+    def test_runtime_error_from_dg_becomes_segment_error(self):
+        """When deepgram_prerecorded raises RuntimeError (retry exhaustion),
+        process_segment catches it and appends to errors list."""
+        process_segment = self._import_process_segment()
+
+        response = {'updated_memories': set(), 'new_memories': set()}
+        errors = []
+        lock = threading.Lock()
+
+        with patch(
+            'routers.sync.deepgram_prerecorded',
+            side_effect=RuntimeError('Deepgram transcription failed after 3 attempts: timeout'),
+        ), patch('routers.sync.delete_syncing_temporal_file'), patch(
+            'routers.sync.get_syncing_file_temporal_signed_url', return_value='https://fake'
+        ), patch(
+            'routers.sync.time.sleep'
+        ):
+            from models.conversation import ConversationSource
+
+            process_segment('/tmp/1700000000.wav', 'uid', response, lock, errors, ConversationSource.omi, False)
+
+        assert len(errors) == 1
+        assert 'Failed to process segment' in errors[0]
+        assert 'Deepgram transcription failed after 3 attempts' in errors[0]
+
+
+# ---------------------------------------------------------------------------
+# Voice message callers — verify chat.py handles RuntimeError gracefully
+# ---------------------------------------------------------------------------
+
+_CHAT_STUB_MODULES = [
+    'deepgram',
+    'fal_client',
+    'models',
+    'models.chat',
+    'models.conversation',
+    'models.notification_message',
+    'models.app',
+    'models.transcript_segment',
+    'database',
+    'database._client',
+    'database.chat',
+    'database.notifications',
+    'database.users',
+    'database.apps',
+    'database.redis_db',
+    'firebase_admin',
+    'utils.other.endpoints',
+    'utils.other.storage',
+    'utils.notifications',
+    'utils.retrieval.graph',
+    'utils.stt.pre_recorded',
+    'utils.llm.usage_tracker',
+    'utils.log_sanitizer',
+]
+
+
+class TestVoiceMessageRuntimeErrorHandling:
+    """Tests that voice message functions in utils/chat.py handle RuntimeError from deepgram_prerecorded."""
+
+    _saved_modules = {}
+    _transcribe_fn = None
+    _process_fn = None
+    _process_stream_fn = None
+
+    @classmethod
+    def setup_class(cls):
+        cls._saved_modules = {name: sys.modules.get(name) for name in _CHAT_STUB_MODULES}
+        cls._saved_modules['utils.chat'] = sys.modules.get('utils.chat')
+
+        for mod_name in _CHAT_STUB_MODULES:
+            sys.modules[mod_name] = ModuleType(mod_name)
+
+        sys.modules['deepgram'].DeepgramClient = MagicMock()
+        sys.modules['deepgram'].DeepgramClientOptions = MagicMock()
+        sys.modules['fal_client'].submit = MagicMock()
+        sys.modules['utils.other.endpoints'].timeit = lambda f: f
+        sys.modules['utils.other.storage'].get_syncing_file_temporal_signed_url = MagicMock(return_value='https://fake')
+        sys.modules['utils.other.storage'].delete_syncing_temporal_file = MagicMock()
+        sys.modules['utils.notifications'].send_notification = MagicMock()
+        sys.modules['utils.retrieval.graph'].execute_graph_chat = MagicMock()
+        sys.modules['utils.retrieval.graph'].execute_graph_chat_stream = MagicMock()
+        sys.modules['utils.log_sanitizer'].sanitize = lambda v: v
+        sys.modules['database._client'].db = MagicMock()
+        sys.modules['database.redis_db'].r = MagicMock()
+        sys.modules['database.chat'].add_message = MagicMock()
+        sys.modules['database.chat'].get_messages = MagicMock(return_value=[])
+        sys.modules['database.chat'].get_chat_session = MagicMock(return_value=None)
+        sys.modules['database.notifications'].get_token_only = MagicMock(return_value=None)
+        sys.modules['database.users'].get_user_store_recording_permission = MagicMock(return_value=False)
+        sys.modules['database.users'].get_user_transcription_preferences = MagicMock(return_value={})
+        sys.modules['database.apps'].record_app_usage = MagicMock()
+
+        # Model stubs
+        sys.modules['models.chat'].ChatSession = MagicMock()
+        sys.modules['models.chat'].Message = MagicMock()
+        sys.modules['models.chat'].ResponseMessage = MagicMock()
+        sys.modules['models.chat'].MessageConversation = MagicMock()
+        sys.modules['models.conversation'].Conversation = MagicMock()
+        sys.modules['models.notification_message'].NotificationMessage = MagicMock()
+        sys.modules['models.app'].UsageHistoryType = MagicMock()
+        sys.modules['models.transcript_segment'].TranscriptSegment = MagicMock()
+
+        # STT stubs
+        sys.modules['utils.stt.pre_recorded'].deepgram_prerecorded = MagicMock()
+        sys.modules['utils.stt.pre_recorded'].postprocess_words = MagicMock()
+        sys.modules['utils.stt.pre_recorded'].get_deepgram_model_for_language = MagicMock(return_value=('en', 'nova-3'))
+
+        # Usage tracker stub
+        sys.modules['utils.llm.usage_tracker'].track_usage = MagicMock()
+        sys.modules['utils.llm.usage_tracker'].set_usage_context = MagicMock()
+        sys.modules['utils.llm.usage_tracker'].reset_usage_context = MagicMock()
+        sys.modules['utils.llm.usage_tracker'].Features = MagicMock()
+
+        # Force re-import
+        sys.modules.pop('utils.chat', None)
+        from utils.chat import (
+            transcribe_voice_message_segment,
+            process_voice_message_segment,
+            process_voice_message_segment_stream,
+        )
+
+        cls._transcribe_fn = staticmethod(transcribe_voice_message_segment)
+        cls._process_fn = staticmethod(process_voice_message_segment)
+        cls._process_stream_fn = staticmethod(process_voice_message_segment_stream)
+
+    @classmethod
+    def teardown_class(cls):
+        sys.modules.pop('utils.chat', None)
+        for name, orig in cls._saved_modules.items():
+            if orig is None:
+                sys.modules.pop(name, None)
+            else:
+                sys.modules[name] = orig
+        cls._saved_modules.clear()
+
+    def test_transcribe_voice_message_handles_runtime_error(self):
+        """transcribe_voice_message_segment returns (None, lang) on RuntimeError, not crash."""
+        with patch(
+            'utils.chat.deepgram_prerecorded',
+            side_effect=RuntimeError('Deepgram transcription failed after 3 attempts: timeout'),
+        ), patch('utils.chat.time.sleep'):
+            result = self._transcribe_fn('/tmp/test.wav', 'uid', language='en')
+
+        assert result == (None, 'en'), f"Expected (None, 'en'), got {result}"
+
+    def test_process_voice_message_handles_runtime_error(self):
+        """process_voice_message_segment returns [] on RuntimeError, not crash."""
+        with patch(
+            'utils.chat.deepgram_prerecorded',
+            side_effect=RuntimeError('Deepgram transcription failed after 3 attempts: timeout'),
+        ), patch('utils.chat.time.sleep'):
+            result = self._process_fn('/tmp/test.wav', 'uid', language='en')
+
+        assert result == [], f"Expected [], got {result}"
+
+    def test_process_voice_message_stream_handles_runtime_error(self):
+        """process_voice_message_segment_stream returns (no yield) on RuntimeError, not crash."""
+        import asyncio
+
+        async def run():
+            chunks = []
+            with patch(
+                'utils.chat.deepgram_prerecorded',
+                side_effect=RuntimeError('Deepgram transcription failed after 3 attempts: timeout'),
+            ), patch('utils.chat.time.sleep'):
+                async for chunk in self._process_stream_fn('/tmp/test.wav', 'uid', language='en'):
+                    chunks.append(chunk)
+            return chunks
+
+        result = asyncio.get_event_loop().run_until_complete(run())
+        assert result == [], f"Expected no chunks, got {result}"

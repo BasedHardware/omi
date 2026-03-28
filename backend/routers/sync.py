@@ -658,12 +658,9 @@ def process_segment(
 
         words, language = deepgram_prerecorded(url, speakers_count=3, attempts=0, return_language=True)
         if not words:
-            # deepgram_prerecorded returns [] on both "no speech" AND "failure after retries".
-            # Treat as error so the segment is retried — dedup prevents duplicates.
-            error_msg = f'Deepgram returned no words for segment {path}'
-            logger.error(error_msg)
-            with lock:
-                errors.append(error_msg)
+            # DG processed audio successfully but found no speech (silence/noise).
+            # Real DG failures now raise RuntimeError and are caught by the except block.
+            logger.info(f'No transcript words for segment {path} (silence or noise-only audio)')
             return
         transcript_segments: List[TranscriptSegment] = postprocess_words(words, 0)
         if not transcript_segments:

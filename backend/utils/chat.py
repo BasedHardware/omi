@@ -70,13 +70,19 @@ def transcribe_voice_message_segment(
     stt_language, stt_model = get_deepgram_model_for_language(language)
 
     is_multi = stt_language == 'multi'
-    if is_multi:
-        words, detected_language = deepgram_prerecorded(
-            url, diarize=False, language=stt_language, return_language=True, model=stt_model
-        )
-    else:
-        words = deepgram_prerecorded(url, diarize=False, language=stt_language, return_language=False, model=stt_model)
-        detected_language = stt_language
+    try:
+        if is_multi:
+            words, detected_language = deepgram_prerecorded(
+                url, diarize=False, language=stt_language, return_language=True, model=stt_model
+            )
+        else:
+            words = deepgram_prerecorded(
+                url, diarize=False, language=stt_language, return_language=False, model=stt_model
+            )
+            detected_language = stt_language
+    except RuntimeError as e:
+        logger.error(f'Voice message transcription failed for {path}: {e}')
+        return None, stt_language if not is_multi else 'en'
     if not words:
         logger.info('no words')
         return None, detected_language
@@ -114,7 +120,11 @@ def process_voice_message_segment(
     # Get the appropriate Deepgram model for this language
     stt_language, stt_model = get_deepgram_model_for_language(language)
 
-    words = deepgram_prerecorded(url, diarize=False, language=stt_language, model=stt_model)
+    try:
+        words = deepgram_prerecorded(url, diarize=False, language=stt_language, model=stt_model)
+    except RuntimeError as e:
+        logger.error(f'Voice message transcription failed for {path}: {e}')
+        return []
     transcript_segments: List[TranscriptSegment] = postprocess_words(words, 0)
     del words
     if not transcript_segments:
@@ -193,7 +203,11 @@ async def process_voice_message_segment_stream(
     # Get the appropriate Deepgram model for this language
     stt_language, stt_model = get_deepgram_model_for_language(language)
 
-    words = deepgram_prerecorded(url, diarize=False, language=stt_language, model=stt_model)
+    try:
+        words = deepgram_prerecorded(url, diarize=False, language=stt_language, model=stt_model)
+    except RuntimeError as e:
+        logger.error(f'Voice message transcription failed for {path}: {e}')
+        return
     transcript_segments: List[TranscriptSegment] = postprocess_words(words, 0)
     del words
     if not transcript_segments:
