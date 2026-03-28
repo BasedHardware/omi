@@ -41,7 +41,15 @@ _users_db = MagicMock()
 sys.modules.setdefault('database.users', _users_db)
 
 # Stub notifications
-sys.modules.setdefault('utils.notifications', MagicMock())
+_notifications_mod = types.ModuleType('utils.notifications')
+_notifications_mod.send_notification = MagicMock()
+sys.modules.setdefault('utils.notifications', _notifications_mod)
+
+# Stub LLM classifier
+_classifier_mod = types.ModuleType('utils.llm.fair_use_classifier')
+_classifier_mod.classify_user_purpose = MagicMock()
+sys.modules.setdefault('utils.llm', types.ModuleType('utils.llm'))
+sys.modules.setdefault('utils.llm.fair_use_classifier', _classifier_mod)
 
 # Stub subscription
 _subscription_mod = types.ModuleType('utils.subscription')
@@ -129,7 +137,7 @@ class TestTriggerClassifierFreeTier:
     def test_free_exhausted_uses_synthetic_score(self, _mock_speech, _mock_free):
         """Free-exhausted: acquires lock, skips LLM, uses synthetic score 1.0 for escalation."""
         mock_classifier = MagicMock()
-        fair_use_mod._classify_user_purpose = mock_classifier
+        fair_use_mod.classify_user_purpose = mock_classifier
 
         loop = asyncio.new_event_loop()
         try:
@@ -156,7 +164,7 @@ class TestTriggerClassifierFreeTier:
         """Free-exhausted user already at warning with enough violations → throttle."""
         _fair_use_db.get_fair_use_state.return_value = {'stage': 'warning'}
         _fair_use_db.get_violation_counts.return_value = {'violation_count_7d': 2, 'violation_count_30d': 3}
-        fair_use_mod._classify_user_purpose = MagicMock()
+        fair_use_mod.classify_user_purpose = MagicMock()
 
         loop = asyncio.new_event_loop()
         try:
@@ -177,7 +185,7 @@ class TestTriggerClassifierFreeTier:
         """Free-exhausted user at throttle with enough violations → restrict."""
         _fair_use_db.get_fair_use_state.return_value = {'stage': 'throttle'}
         _fair_use_db.get_violation_counts.return_value = {'violation_count_7d': 3, 'violation_count_30d': 5}
-        fair_use_mod._classify_user_purpose = MagicMock()
+        fair_use_mod.classify_user_purpose = MagicMock()
 
         loop = asyncio.new_event_loop()
         try:
@@ -203,7 +211,7 @@ class TestTriggerClassifierFreeTier:
             classify_called['called'] = True
             return {'misuse_score': 0.1, 'usage_type': 'personal'}
 
-        fair_use_mod._classify_user_purpose = mock_classify
+        fair_use_mod.classify_user_purpose = mock_classify
 
         loop = asyncio.new_event_loop()
         try:
