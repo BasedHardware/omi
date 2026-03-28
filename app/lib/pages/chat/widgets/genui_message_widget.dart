@@ -10,6 +10,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import 'package:omi/pages/chat/widgets/genui_message_parser.dart';
 import 'package:omi/pages/conversation_detail/maps_util.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 
 class GenUiMessageWidget extends StatefulWidget {
   final GenUiMessageCard card;
@@ -33,6 +34,30 @@ class _GenUiMessageWidgetState extends State<GenUiMessageWidget> {
     );
   }
 
+  String _resolvedCardTitle(BuildContext context) {
+    if (widget.card.title.trim().isNotEmpty) {
+      return widget.card.title;
+    }
+
+    return switch (widget.card.type) {
+      GenUiCardType.locationRequest => context.l10n.locationAccess,
+      GenUiCardType.locationResult => context.l10n.locationAccess,
+      GenUiCardType.info => context.l10n.open,
+    };
+  }
+
+  String _resolvedActionLabel(BuildContext context, GenUiAction action) {
+    if (action.label.trim().isNotEmpty) {
+      return action.label;
+    }
+
+    return switch (action.type) {
+      GenUiActionType.shareLocation => context.l10n.share,
+      GenUiActionType.openMap => context.l10n.open,
+      GenUiActionType.openUrl => context.l10n.open,
+    };
+  }
+
   Future<void> _handleAction(GenUiAction action) async {
     final actionKey = _actionKey(action);
     if (_runningActions.contains(actionKey)) return;
@@ -43,7 +68,7 @@ class _GenUiMessageWidgetState extends State<GenUiMessageWidget> {
         case GenUiActionType.shareLocation:
           final serviceEnabled = await Geolocator.isLocationServiceEnabled();
           if (!serviceEnabled) {
-            throw Exception('Location services are disabled.');
+            throw Exception(context.l10n.locationServiceDisabled);
           }
 
           var permission = await Geolocator.checkPermission();
@@ -51,7 +76,7 @@ class _GenUiMessageWidgetState extends State<GenUiMessageWidget> {
             permission = await Geolocator.requestPermission();
           }
           if (permission == LocationPermission.denied || permission == LocationPermission.deniedForever) {
-            throw Exception('Location permission was not granted.');
+            throw Exception(context.l10n.backgroundLocationDenied);
           }
 
           final position = await Geolocator.getCurrentPosition();
@@ -147,7 +172,7 @@ class _GenUiMessageWidgetState extends State<GenUiMessageWidget> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            widget.card.title,
+            _resolvedCardTitle(context),
             style: const TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w600),
           ),
           if ((widget.card.description ?? '').isNotEmpty) ...[
@@ -189,7 +214,7 @@ class _GenUiMessageWidgetState extends State<GenUiMessageWidget> {
                           },
                           size: 16,
                         ),
-                  label: Text(action.label),
+                  label: Text(_resolvedActionLabel(context, action)),
                 );
               }).toList(),
             ),

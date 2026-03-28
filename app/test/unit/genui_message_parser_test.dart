@@ -46,8 +46,9 @@ Here is the nearest place.
     final parsed = parseGenUiMessage(raw);
 
     expect(parsed.card, isNotNull);
-    expect(parsed.card!.title, 'Share your location');
+    expect(parsed.card!.title, isEmpty);
     expect(parsed.card!.actions.single.type, GenUiActionType.shareLocation);
+    expect(parsed.card!.actions.single.label, isEmpty);
   });
 
   test('parses nested coordinates and adds open map action', () {
@@ -63,5 +64,6 @@ Here is the nearest place.
     expect(parsed.card!.latitude, 37.77);
     expect(parsed.card!.longitude, -122.42);
     expect(parsed.card!.actions.single.type, GenUiActionType.openMap);
+    expect(parsed.card!.actions.single.label, isEmpty);
   });
 }

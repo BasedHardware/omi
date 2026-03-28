@@ -30,7 +30,7 @@ class GenUiAction {
       _ => GenUiActionType.openUrl,
     };
 
-    return GenUiAction(label: (json['label'] ?? 'Open').toString(), type: type, url: json['url']?.toString());
+    return GenUiAction(label: (json['label'] ?? '').toString(), type: type, url: json['url']?.toString());
   }
 }
 
@@ -72,11 +72,11 @@ class GenUiMessageCard {
     if (actions.isEmpty) {
       switch (type) {
         case GenUiCardType.locationRequest:
-          actions.add(const GenUiAction(label: 'Share location', type: GenUiActionType.shareLocation));
+          actions.add(const GenUiAction(label: '', type: GenUiActionType.shareLocation));
           break;
         case GenUiCardType.locationResult:
           if (latitude != null && longitude != null) {
-            actions.add(const GenUiAction(label: 'Open map', type: GenUiActionType.openMap));
+            actions.add(const GenUiAction(label: '', type: GenUiActionType.openMap));
           }
           break;
         case GenUiCardType.info:
@@ -86,13 +86,7 @@ class GenUiMessageCard {
 
     return GenUiMessageCard(
       type: type,
-      title: (json['title'] ??
-              switch (type) {
-                GenUiCardType.locationRequest => 'Share your location',
-                GenUiCardType.locationResult => 'Location',
-                GenUiCardType.info => 'Details',
-              })
-          .toString(),
+      title: (json['title'] ?? '').toString(),
       description: json['description']?.toString(),
       latitude: latitude,
       longitude: longitude,
