@@ -73,7 +73,7 @@ class _DoublePressConfigStepState extends State<DoublePressConfigStep> {
               ],
             ],
           ),
-          bottomAction: provider.doublePressCount > 0
+          bottomAction: provider.doublePressCount > 0 && !provider.showSingleTapHint
               ? OnboardingContinueButton(label: 'Finish', onPressed: widget.onComplete)
               : null,
         );

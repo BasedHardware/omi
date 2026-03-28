@@ -185,11 +185,32 @@ class _EndConversationDemoState extends State<EndConversationDemo> with SingleTi
 
         return Row(
           children: [
+            // Summary lines graphic (replaces frozen waveform)
             SizedBox(
               width: leftWidth,
               height: 28,
-              child: CustomPaint(
-                painter: _WaveformPainter(phase: _cutPhase, color: Colors.black.withValues(alpha: 0.15)),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    height: 3,
+                    width: leftWidth * 0.9,
+                    decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(2)),
+                  ),
+                  const SizedBox(height: 4),
+                  Container(
+                    height: 3,
+                    width: leftWidth * 0.6,
+                    decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(2)),
+                  ),
+                  const SizedBox(height: 4),
+                  Container(
+                    height: 3,
+                    width: leftWidth * 0.75,
+                    decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.08), borderRadius: BorderRadius.circular(2)),
+                  ),
+                ],
               ),
             ),
             SizedBox(
@@ -202,6 +223,7 @@ class _EndConversationDemoState extends State<EndConversationDemo> with SingleTi
                 ),
               ),
             ),
+            // New conversation - live waveform
             SizedBox(
               width: rightWidth > 0 ? rightWidth : 0,
               height: 28,
