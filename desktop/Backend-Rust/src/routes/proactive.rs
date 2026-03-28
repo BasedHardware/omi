@@ -1108,4 +1108,97 @@ mod tests {
             .unwrap_or_else(|_| plain.trim().trim_matches('"').to_string());
         assert_eq!(decoded, "Focus on reading more");
     }
+
+    // --- Boundary tests ---
+
+    #[test]
+    fn truncate_at_exact_profile_limit() {
+        let s: String = "a".repeat(10000);
+        assert_eq!(truncate_chars(&s, 10000).len(), 10000);
+
+        let over: String = "a".repeat(10001);
+        assert_eq!(truncate_chars(&over, 10000).len(), 10000);
+
+        let under: String = "a".repeat(9999);
+        assert_eq!(truncate_chars(&under, 10000).len(), 9999);
+    }
+
+    #[test]
+    fn truncate_multibyte_at_profile_limit() {
+        // Build a string with multi-byte chars that crosses the 10000-byte boundary
+        let base: String = "a".repeat(9999) + "\u{00e9}"; // 10001 bytes
+        let result = truncate_chars(&base, 10000);
+        assert_eq!(result.len(), 9999); // backed up past the 2-byte char
+        assert!(result.is_char_boundary(result.len()));
+    }
+
+    // --- Consolidation prompt ---
+
+    #[test]
+    fn consolidation_prompt_replaces_both_placeholders() {
+        let prompt = proactive_prompts::USER_PROFILE_CONSOLIDATE
+            .replace("{new_profile}", &fence("new_profile", "new data"))
+            .replace("{history}", &fence("history", "old data"));
+        assert!(prompt.contains("<new_profile>"));
+        assert!(prompt.contains("new data"));
+        assert!(prompt.contains("<history>"));
+        assert!(prompt.contains("old data"));
+        assert!(!prompt.contains("{new_profile}"));
+        assert!(!prompt.contains("{history}"));
+    }
+
+    // --- Fencing in prompt assembly ---
+
+    #[test]
+    fn fenced_user_profile_prompt_has_xml_tags() {
+        let user_data = "MEMORIES:\nsome content";
+        let prompt = proactive_prompts::USER_PROFILE_GENERATE
+            .replace("{user_data}", &fence("user_data", user_data));
+        assert!(prompt.contains("<user_data>"));
+        assert!(prompt.contains("</user_data>"));
+        assert!(prompt.contains("some content"));
+    }
+
+    #[test]
+    fn fenced_goal_extract_prompt_wraps_user_text() {
+        let prompt = proactive_prompts::GOAL_EXTRACT_PROGRESS
+            .replace("{goal_title}", &fence("goal_title", "Run marathon"))
+            .replace("{goal_type}", "numeric")
+            .replace("{current_value}", "15")
+            .replace("{target_value}", "42")
+            .replace("{text}", &fence("user_message", "I ran 20km today"));
+        assert!(prompt.contains("<user_message>"));
+        assert!(prompt.contains("I ran 20km today"));
+        assert!(prompt.contains("</user_message>"));
+        assert!(prompt.contains("<goal_title>"));
+    }
+
+    // --- JSON repair edge cases ---
+
+    #[test]
+    fn parse_json_repair_truncated_array() {
+        let truncated = r#"{"has_duplicates": true, "duplicate_groups": [{"keep_id": "a", "delete_ids": ["b"], "reason": "same"#;
+        let parsed: DeduplicateResponse = parse_json_repairing(truncated, "test").unwrap();
+        assert!(parsed.has_duplicates);
+        assert_eq!(parsed.duplicate_groups.len(), 1);
+    }
+
+    #[test]
+    fn parse_json_repair_truncated_inside_string() {
+        // Truncated mid-string value
+        let truncated = r#"{"found": true, "reasoning": "The user mentioned rea"#;
+        let parsed: ProgressExtraction = parse_json_repairing(truncated, "test").unwrap();
+        assert!(parsed.found);
+        assert!(parsed.reasoning.unwrap().starts_with("The user"));
+    }
+
+    // --- Empty/minimal input ---
+
+    #[test]
+    fn parse_empty_progress_text() {
+        // Empty text is valid — model should return found=false
+        let json = r#"{"found": false, "reasoning": "No progress mentioned"}"#;
+        let parsed: ProgressExtraction = parse_json_repairing(json, "test").unwrap();
+        assert!(!parsed.found);
+    }
 }
