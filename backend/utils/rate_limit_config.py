@@ -21,11 +21,11 @@ Redis efficiency:
 import os
 
 # ---------------------------------------------------------------------------
-# Global knobs (read at import time; boost can also be overridden via Redis)
+# Global knobs (read at import time from env vars)
 # ---------------------------------------------------------------------------
 
 RATE_LIMIT_BOOST: float = float(os.getenv("RATE_LIMIT_BOOST", "1.0"))
-RATE_LIMIT_SHADOW: bool = os.getenv("RATE_LIMIT_SHADOW_MODE", "true").lower() == "true"
+RATE_LIMIT_SHADOW: bool = os.getenv("RATE_LIMIT_SHADOW_MODE", "").lower() == "true"
 
 # ---------------------------------------------------------------------------
 # Policies: "name" -> (max_requests, window_seconds)

@@ -98,12 +98,12 @@ class TestBoostFactor(unittest.TestCase):
 class TestShadowMode(unittest.TestCase):
     """Test shadow mode env var parsing."""
 
-    def test_shadow_mode_default_on(self):
-        """Shadow mode defaults to ON (safe-first rollout)."""
+    def test_shadow_mode_default_off(self):
+        """Shadow mode defaults to OFF (enforcement active unless explicitly opted in)."""
         from utils.rate_limit_config import RATE_LIMIT_SHADOW
 
         self.assertIsInstance(RATE_LIMIT_SHADOW, bool)
-        self.assertTrue(RATE_LIMIT_SHADOW)
+        self.assertFalse(RATE_LIMIT_SHADOW)
 
     def test_shadow_mode_env_true(self):
         with patch.dict(os.environ, {"RATE_LIMIT_SHADOW_MODE": "true"}):
