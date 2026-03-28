@@ -350,6 +350,7 @@ async def _stream_handler(
     speaker_id_segment_queue: asyncio.Queue[dict] = asyncio.Queue(maxsize=100)
     person_embeddings_cache: Dict[str, dict] = {}  # person_id -> {embedding, name}
     speaker_id_enabled = False  # Will be set after private_cloud_sync_enabled is known
+    speaker_id_done = asyncio.Event()  # Set when speaker_identification_task finishes
 
     # Track background tasks to cancel on cleanup (prevents memory leaks from fire-and-forget tasks)
     bg_tasks: Set[asyncio.Task] = set()
@@ -1801,6 +1802,7 @@ async def _stream_handler(
         nonlocal person_embeddings_cache, audio_ring_buffer
 
         if not speaker_id_enabled:
+            speaker_id_done.set()
             return
 
         # Load user's own embedding from Firestore (extracted at profile creation time)
@@ -1859,10 +1861,12 @@ async def _stream_handler(
             logger.info(f"Speaker ID: loaded {len(person_embeddings_cache)} person embeddings {uid} {session_id}")
         except Exception as e:
             logger.error(f"Speaker ID: failed to load embeddings: {e} {uid} {session_id}")
+            speaker_id_done.set()
             return
 
         if not person_embeddings_cache:
             logger.info(f"Speaker ID: no stored embeddings, task disabled {uid} {session_id}")
+            speaker_id_done.set()
             return
 
         # Consume loop — keep running until websocket closes AND queue is drained.
@@ -1887,6 +1891,7 @@ async def _stream_handler(
                 spawn(_match_speaker_embedding(speaker_id, seg))
 
         logger.info(f"Speaker ID task ended {uid} {session_id}")
+        speaker_id_done.set()
 
     async def _match_speaker_embedding(speaker_id: int, segment: dict):
         """Extract audio from ring buffer and match against stored embeddings."""
@@ -2248,15 +2253,19 @@ async def _stream_handler(
                         segment_person_assignment_map[segment.id] = person_id
                         suggested_segments.add(segment.id)
 
-        # Drain in-flight embedding match tasks so speaker maps are fully populated
-        # before the final Firestore flush. Without this, a match spawned on the last
-        # segment could still be running, leaving the maps empty during the final pass.
+        # Wait for speaker_identification_task to finish consuming its queue and spawning
+        # all _match_speaker_embedding tasks, then drain those tasks so speaker maps are
+        # fully populated before the final Firestore flush.
+        try:
+            await asyncio.wait_for(speaker_id_done.wait(), timeout=15.0)
+        except asyncio.TimeoutError:
+            logger.warning(f"Timeout waiting for speaker ID task to finish {uid} {session_id}")
         if bg_tasks:
             pending = list(bg_tasks)
             try:
                 await asyncio.wait_for(asyncio.gather(*pending, return_exceptions=True), timeout=10.0)
             except asyncio.TimeoutError:
-                logger.warning(f"Timeout waiting for background tasks before final pass {uid} {session_id}")
+                logger.warning(f"Timeout waiting for embedding tasks before final pass {uid} {session_id}")
 
         # Final pass: apply any pending speaker assignments so Firestore is correct
         # even if the embedding match completed on the last segment (no subsequent batch).
@@ -2683,6 +2692,10 @@ async def _stream_handler(
             heartbeat_task,
             record_usage_task,
         ] + pusher_tasks
+
+        if is_multi_channel:
+            # Multi-channel doesn't run speaker_identification_task
+            speaker_id_done.set()
 
         if not is_multi_channel:
             # Single-channel: conversation lifecycle (timeout splitting), pending processing, speaker ID
