@@ -327,6 +327,16 @@ class _DeviceSettingsState extends State<DeviceSettings> {
             copyValue: manufacturer,
             showChevron: false,
           ),
+          // WiFi Sync
+          if (_isWifiSupported) ...[
+            const Divider(height: 1, color: Color(0xFF3C3C43)),
+            _buildProfileStyleItem(
+              icon: FontAwesomeIcons.wifi,
+              title: context.l10n.wifiSync,
+              chipValue: context.l10n.available,
+              showChevron: false,
+            ),
+          ],
         ],
       ),
     );
@@ -697,16 +707,6 @@ class _DeviceSettingsState extends State<DeviceSettings> {
               title: context.l10n.micGain,
               chipValue: _getMicGainLabel(_micGain.round()),
               onTap: _showMicGainSheet,
-            ),
-          ],
-          // WiFi Sync
-          if (_isWifiSupported) ...[
-            const Divider(height: 1, color: Color(0xFF3C3C43)),
-            _buildProfileStyleItem(
-              icon: FontAwesomeIcons.wifi,
-              title: context.l10n.wifiSync,
-              chipValue: context.l10n.available,
-              showChevron: false,
             ),
           ],
         ],
