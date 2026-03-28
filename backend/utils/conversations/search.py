@@ -55,9 +55,9 @@ def search_conversations(
             doc['started_at'] = datetime.utcfromtimestamp(doc['started_at']).isoformat()
             doc['finished_at'] = datetime.utcfromtimestamp(doc['finished_at']).isoformat()
             memories.append(doc)
-        # Cannot compute exact total from Typesense since is_locked is not a filter field.
-        # Use page-level signal: if Typesense returned a full page, more may exist.
-        has_more = len(results['hits']) >= per_page
+        # Derive total_pages only from visible (unlocked) items to prevent inference leaks.
+        # is_locked is not a Typesense filter field, so exact global count is unavailable.
+        has_more = len(memories) >= per_page
         return {
             'items': memories,
             'total_pages': page + 1 if has_more else page,
