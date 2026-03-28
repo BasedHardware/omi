@@ -74,12 +74,13 @@ class TestTriggerClassifierIfNeeded:
 
     @pytest.mark.asyncio
     @patch.object(fair_use_mod, 'FAIR_USE_ENABLED', True)
-    @patch.object(fair_use_mod, 'classify_user_purpose', new_callable=AsyncMock)
+    @patch.object(fair_use_mod, '_get_classify_user_purpose')
     @patch.object(fair_use_mod, 'escalate_enforcement')
     @patch.object(fair_use_mod, '_send_fair_use_notification', new_callable=AsyncMock)
-    async def test_runs_classifier_and_escalates(self, mock_notify, mock_escalate, mock_classify):
+    async def test_runs_classifier_and_escalates(self, mock_notify, mock_escalate, mock_get_classify):
+        mock_classify = AsyncMock(return_value={'misuse_score': 0.9, 'usage_type': 'audiobook'})
+        mock_get_classify.return_value = mock_classify
         _redis().set.return_value = True  # Lock acquired
-        mock_classify.return_value = {'misuse_score': 0.9, 'usage_type': 'audiobook'}
         mock_escalate.return_value = {'action': 'warning', 'previous_stage': 'none', 'new_stage': 'warning'}
 
         triggered = [{'trigger': SoftCapTrigger.DAILY, 'speech_ms': 8000000, 'threshold_ms': 7200000}]
@@ -103,12 +104,13 @@ class TestTriggerClassifierIfNeeded:
 
     @pytest.mark.asyncio
     @patch.object(fair_use_mod, 'FAIR_USE_ENABLED', True)
-    @patch.object(fair_use_mod, 'classify_user_purpose', new_callable=AsyncMock)
+    @patch.object(fair_use_mod, '_get_classify_user_purpose')
     @patch.object(fair_use_mod, 'escalate_enforcement')
     @patch.object(fair_use_mod, '_send_fair_use_notification', new_callable=AsyncMock)
-    async def test_no_notification_when_no_action(self, mock_notify, mock_escalate, mock_classify):
+    async def test_no_notification_when_no_action(self, mock_notify, mock_escalate, mock_get_classify):
+        mock_classify = AsyncMock(return_value={'misuse_score': 0.1, 'usage_type': 'none'})
+        mock_get_classify.return_value = mock_classify
         _redis().set.return_value = True
-        mock_classify.return_value = {'misuse_score': 0.1, 'usage_type': 'none'}
         mock_escalate.return_value = {'action': 'none', 'previous_stage': 'none', 'new_stage': 'none'}
 
         triggered = [{'trigger': SoftCapTrigger.DAILY, 'speech_ms': 8000000, 'threshold_ms': 7200000}]
@@ -118,10 +120,11 @@ class TestTriggerClassifierIfNeeded:
 
     @pytest.mark.asyncio
     @patch.object(fair_use_mod, 'FAIR_USE_ENABLED', True)
-    @patch.object(fair_use_mod, 'classify_user_purpose', new_callable=AsyncMock)
-    async def test_releases_lock_on_classifier_error(self, mock_classify):
+    @patch.object(fair_use_mod, '_get_classify_user_purpose')
+    async def test_releases_lock_on_classifier_error(self, mock_get_classify):
+        mock_classify = AsyncMock(side_effect=Exception('LLM timeout'))
+        mock_get_classify.return_value = mock_classify
         _redis().set.return_value = True
-        mock_classify.side_effect = Exception('LLM timeout')
 
         triggered = [{'trigger': SoftCapTrigger.DAILY, 'speech_ms': 8000000, 'threshold_ms': 7200000}]
         await fair_use_mod.trigger_classifier_if_needed('user1', triggered)
@@ -143,8 +146,10 @@ class TestSendFairUseNotification:
     """Test notification dispatch for each enforcement stage."""
 
     @pytest.mark.asyncio
-    @patch.object(fair_use_mod, 'send_notification')
-    async def test_sends_warning_notification(self, mock_send):
+    @patch.object(fair_use_mod, '_get_send_notification')
+    async def test_sends_warning_notification(self, mock_get_send):
+        mock_send = MagicMock()
+        mock_get_send.return_value = mock_send
         await fair_use_mod._send_fair_use_notification('user1', 'warning')
 
         mock_send.assert_called_once()
@@ -153,24 +158,30 @@ class TestSendFairUseNotification:
         assert 'Fair Use Notice' in args[0][1]
 
     @pytest.mark.asyncio
-    @patch.object(fair_use_mod, 'send_notification')
-    async def test_sends_throttle_notification(self, mock_send):
+    @patch.object(fair_use_mod, '_get_send_notification')
+    async def test_sends_throttle_notification(self, mock_get_send):
+        mock_send = MagicMock()
+        mock_get_send.return_value = mock_send
         await fair_use_mod._send_fair_use_notification('user1', 'throttle')
 
         mock_send.assert_called_once()
         assert 'Transcription Quality Reduced' in mock_send.call_args[0][1]
 
     @pytest.mark.asyncio
-    @patch.object(fair_use_mod, 'send_notification')
-    async def test_sends_restrict_notification(self, mock_send):
+    @patch.object(fair_use_mod, '_get_send_notification')
+    async def test_sends_restrict_notification(self, mock_get_send):
+        mock_send = MagicMock()
+        mock_get_send.return_value = mock_send
         await fair_use_mod._send_fair_use_notification('user1', 'restrict')
 
         mock_send.assert_called_once()
         assert 'Transcription Limit Reached' in mock_send.call_args[0][1]
 
     @pytest.mark.asyncio
-    @patch.object(fair_use_mod, 'send_notification')
-    async def test_no_notification_for_unknown_action(self, mock_send):
+    @patch.object(fair_use_mod, '_get_send_notification')
+    async def test_no_notification_for_unknown_action(self, mock_get_send):
+        mock_send = MagicMock()
+        mock_get_send.return_value = mock_send
         await fair_use_mod._send_fair_use_notification('user1', 'unknown_action')
 
         mock_send.assert_not_called()
