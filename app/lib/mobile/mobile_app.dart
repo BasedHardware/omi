@@ -16,11 +16,12 @@ class MobileApp extends StatelessWidget {
 
   bool _needsPermissionsOnboarding() {
     final preferences = SharedPreferencesUtil();
-    if (!preferences.notificationsEnabled || !preferences.locationEnabled) {
-      return true;
-    }
+    final needsNotifications = !preferences.notificationsEnabled;
+    final needsLocation = !preferences.locationEnabled;
+    final needsBackground = Platform.isAndroid && !preferences.backgroundPermissionEnabled;
 
-    return Platform.isAndroid && !preferences.backgroundPermissionEnabled;
+    final missingRequiredPermission = needsNotifications || needsLocation || needsBackground;
+    return missingRequiredPermission && !preferences.hasSeenForcedPermissionsOnboarding;
   }
 
   @override

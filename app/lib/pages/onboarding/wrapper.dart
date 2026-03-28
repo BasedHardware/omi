@@ -98,6 +98,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
         if (mounted) {
           context.read<HomeProvider>().setupHasSpeakerProfile();
           if (widget.forcePermissionsStep) {
+            SharedPreferencesUtil().hasSeenForcedPermissionsOnboarding = true;
             await context.read<OnboardingProvider>().updatePermissions();
             _controller!.animateTo(kPermissionsPage);
           } else if (SharedPreferencesUtil().onboardingCompleted) {
@@ -384,7 +385,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
                   // Page component (no transition for content)
                   pages[_controller!.index],
                   // Progress dots (hidden on complete page)
-                  if (_controller!.index != kCompletePage)
+                  if (_controller!.index != kCompletePage && !widget.forcePermissionsStep)
                     Padding(
                       padding: const EdgeInsets.fromLTRB(16, 56, 16, 0),
                       child: Row(
@@ -406,7 +407,9 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
                       ),
                     ),
                   // Back button (hidden on complete page)
-                  if (_controller!.index > kNamePage && _controller!.index != kCompletePage)
+                  if (!widget.forcePermissionsStep &&
+                      _controller!.index > kNamePage &&
+                      _controller!.index != kCompletePage)
                     Padding(
                       padding: const EdgeInsets.fromLTRB(16, 40, 0, 0),
                       child: Align(
@@ -484,7 +487,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
                         ],
                       ),
                     ),
-                    if (_controller!.index > kNamePage)
+                    if (!widget.forcePermissionsStep && _controller!.index > kNamePage)
                       Padding(
                         padding: const EdgeInsets.fromLTRB(16, 40, 0, 0),
                         child: Align(
@@ -509,7 +512,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
                           ),
                         ),
                       ),
-                    if (_controller!.index != kAuthPage)
+                    if (!widget.forcePermissionsStep && _controller!.index != kAuthPage)
                       Padding(
                         padding: const EdgeInsets.fromLTRB(16, 56, 16, 0),
                         child: Row(

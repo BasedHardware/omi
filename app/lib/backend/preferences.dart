@@ -140,7 +140,9 @@ class SharedPreferencesUtil {
   set backgroundPermissionEnabled(bool value) => saveBool('backgroundPermissionEnabled', value);
 
   bool get backgroundPermissionEnabled => getBool('backgroundPermissionEnabled');
+  set hasSeenForcedPermissionsOnboarding(bool value) => saveBool('hasSeenForcedPermissionsOnboarding', value);
 
+  bool get hasSeenForcedPermissionsOnboarding => getBool('hasSeenForcedPermissionsOnboarding');
   //---------------------- Developer Settings ---------------------------------//
 
   String get webhookOnConversationCreated => getString('webhookOnConversationCreated');

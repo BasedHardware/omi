@@ -45,6 +45,12 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
   bool hasMicrophonePermission = false;
   bool isLoading = false;
 
+  bool _hasAllRequiredPermissions() {
+    return hasNotificationPermission &&
+        hasLocationPermission &&
+        (!Platform.isAndroid || hasBackgroundPermission);
+  }
+
   Future updatePermissions() async {
     hasBluetoothPermission = await Permission.bluetooth.isGranted;
     hasLocationPermission = await Permission.location.isGranted;
@@ -55,6 +61,9 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
     SharedPreferencesUtil().notificationsEnabled = hasNotificationPermission;
     SharedPreferencesUtil().locationEnabled = hasLocationPermission;
     SharedPreferencesUtil().backgroundPermissionEnabled = hasBackgroundPermission;
+    if (_hasAllRequiredPermissions()) {
+      SharedPreferencesUtil().hasSeenForcedPermissionsOnboarding = false;
+    }
     notifyListeners();
   }
 
@@ -85,6 +94,9 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
   void updateBackgroundPermission(bool value) {
     hasBackgroundPermission = value;
     SharedPreferencesUtil().backgroundPermissionEnabled = value;
+    if (value && _hasAllRequiredPermissions()) {
+      SharedPreferencesUtil().hasSeenForcedPermissionsOnboarding = false;
+    }
     AnalyticsManager().setUserAttribute('Background Permission Enabled', hasBackgroundPermission);
     notifyListeners();
   }
