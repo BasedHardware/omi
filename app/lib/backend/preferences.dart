@@ -137,6 +137,10 @@ class SharedPreferencesUtil {
 
   bool get locationEnabled => getBool('locationEnabled');
 
+  set backgroundPermissionEnabled(bool value) => saveBool('backgroundPermissionEnabled', value);
+
+  bool get backgroundPermissionEnabled => getBool('backgroundPermissionEnabled');
+
   //---------------------- Developer Settings ---------------------------------//
 
   String get webhookOnConversationCreated => getString('webhookOnConversationCreated');

@@ -50,9 +50,11 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
     hasLocationPermission = await Permission.location.isGranted;
     hasNotificationPermission = await Permission.notification.isGranted;
     hasMicrophonePermission = await Permission.microphone.isGranted;
+    hasBackgroundPermission = Platform.isAndroid ? await ForegroundUtil().isIgnoringBatteryOptimizations : true;
 
     SharedPreferencesUtil().notificationsEnabled = hasNotificationPermission;
     SharedPreferencesUtil().locationEnabled = hasLocationPermission;
+    SharedPreferencesUtil().backgroundPermissionEnabled = hasBackgroundPermission;
     notifyListeners();
   }
 
@@ -82,6 +84,7 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
 
   void updateBackgroundPermission(bool value) {
     hasBackgroundPermission = value;
+    SharedPreferencesUtil().backgroundPermissionEnabled = value;
     AnalyticsManager().setUserAttribute('Background Permission Enabled', hasBackgroundPermission);
     notifyListeners();
   }

@@ -31,7 +31,9 @@ import 'package:omi/utils/other/temp.dart';
 import 'package:omi/widgets/device_widget.dart';
 
 class OnboardingWrapper extends StatefulWidget {
-  const OnboardingWrapper({super.key});
+  final bool forcePermissionsStep;
+
+  const OnboardingWrapper({super.key, this.forcePermissionsStep = false});
 
   @override
   State<OnboardingWrapper> createState() => _OnboardingWrapperState();
@@ -92,16 +94,13 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
     // Start initial animations
     _backgroundAnimationController.forward();
     WidgetsBinding.instance.addPostFrameCallback((_) async {
-      // Let's not update permissions here because of Apple's review process
-      // if (mounted) {
-      //   context.read<OnboardingProvider>().updatePermissions();
-      // }
-
       if (AuthService.instance.isSignedIn()) {
-        // && !SharedPreferencesUtil().onboardingCompleted
         if (mounted) {
           context.read<HomeProvider>().setupHasSpeakerProfile();
-          if (SharedPreferencesUtil().onboardingCompleted) {
+          if (widget.forcePermissionsStep) {
+            await context.read<OnboardingProvider>().updatePermissions();
+            _controller!.animateTo(kPermissionsPage);
+          } else if (SharedPreferencesUtil().onboardingCompleted) {
             routeToPage(context, const HomePageWrapper(), replace: true);
           } else {
             _controller!.animateTo(kNamePage);
@@ -273,7 +272,11 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
       ),
       PermissionsWidget(
         goNext: () {
-          _goNext(); // Go to User Review page
+          if (widget.forcePermissionsStep) {
+            routeToPage(context, const HomePageWrapper(), replace: true);
+          } else {
+            _goNext(); // Go to User Review page
+          }
           MixpanelManager().onboardingStepCompleted('Permissions');
         },
       ),
