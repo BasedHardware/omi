@@ -81,7 +81,7 @@ struct OMIApp: App {
   static let launchMode = LaunchMode.fromCommandLine()
 
   init() {
-    AppBuild.syncUpdateChannelWithInstalledApp()
+    AppBuild.syncUpdateChannelOnFirstLaunch()
   }
 
   /// Window title with version number (different for rewind mode)
