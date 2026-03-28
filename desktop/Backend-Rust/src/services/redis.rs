@@ -236,16 +236,20 @@ impl RedisService {
         let burst_key = format!("gemini_rl:{}:burst", uid);
         let daily_key = format!("gemini_rl:{}:daily:{}", uid, day_ordinal);
 
-        // Lua script: prune old burst entries, add new one, count burst, increment daily.
+        // Lua script: increment daily first (for unique member), prune burst, add, count.
         // KEYS[1] = burst_key, KEYS[2] = daily_key
         // ARGV[1] = cutoff_ms, ARGV[2] = now_ms, ARGV[3] = burst_ttl, ARGV[4] = daily_ttl
+        //
+        // The daily counter doubles as a nonce for the burst sorted set member.
+        // Without it, concurrent requests in the same millisecond would overwrite the
+        // same member (score=now_ms, member=now_ms) and ZCARD would undercount.
         let script = r#"
-redis.call('ZREMRANGEBYSCORE', KEYS[1], '-inf', ARGV[1])
-redis.call('ZADD', KEYS[1], ARGV[2], ARGV[2])
-local burst = redis.call('ZCARD', KEYS[1])
-redis.call('EXPIRE', KEYS[1], ARGV[3])
 local daily = redis.call('INCR', KEYS[2])
 redis.call('EXPIRE', KEYS[2], ARGV[4])
+redis.call('ZREMRANGEBYSCORE', KEYS[1], '-inf', ARGV[1])
+redis.call('ZADD', KEYS[1], ARGV[2], ARGV[2] .. ':' .. tostring(daily))
+local burst = redis.call('ZCARD', KEYS[1])
+redis.call('EXPIRE', KEYS[1], ARGV[3])
 return {daily, burst}
 "#;
 
