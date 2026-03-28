@@ -703,8 +703,11 @@ async def _stream_handler(
 
     async def cleanup_processing_conversations():
         processing = conversations_db.get_processing_conversations(uid)
+        if not processing:
+            logger.info(f'finalize_processing_conversations len(processing): 0 {uid} {session_id}')
+            return
         logger.info(f'finalize_processing_conversations len(processing): {len(processing)} {uid} {session_id}')
-        if not processing or len(processing) == 0:
+        if len(processing) == 0:
             return
         if not request_conversation_processing:
             logger.warning(f"Pusher not enabled, cannot reprocess {len(processing)} conversations {uid} {session_id}")
