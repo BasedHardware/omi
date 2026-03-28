@@ -597,12 +597,6 @@ async def trigger_classifier_if_needed(uid: str, triggered_caps: list, session_i
     ensure_free_exhausted_restrict() — no LLM classifier, no graduated escalation.
     Non-free users go through the normal classifier + escalation pipeline.
     """
-    # Free-exhausted users: set restrict directly, no lock/classifier needed (#6083)
-    if is_free_credits_exhausted(uid):
-        stage = ensure_free_exhausted_restrict(uid)
-        logger.info(f'fair_use: free-exhausted uid={uid} stage={stage} (classifier skipped)')
-        return
-
     lock_key = _classifier_lock_key(uid)
     lock_token = str(uuid.uuid4())
 
@@ -613,6 +607,17 @@ async def trigger_classifier_if_needed(uid: str, triggered_caps: list, session_i
             return
     except Exception as e:
         logger.error(f'fair_use: Redis lock error for {uid}: {e}')
+        return
+
+    # Free-exhausted users: set restrict directly, no classifier needed (#6083)
+    # Checked after lock to avoid Firestore read on every soft-cap trigger.
+    if is_free_credits_exhausted(uid):
+        stage = ensure_free_exhausted_restrict(uid)
+        logger.info(f'fair_use: free-exhausted uid={uid} stage={stage} (classifier skipped)')
+        try:
+            _release_lock(lock_key, lock_token)
+        except Exception:
+            pass
         return
 
     try:
