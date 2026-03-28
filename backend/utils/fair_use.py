@@ -99,10 +99,6 @@ FAIR_USE_CHECK_INTERVAL_SECONDS = int(os.getenv('FAIR_USE_CHECK_INTERVAL_SECONDS
 # 0 = no budget cap (disabled). Only enforced when stage == 'restrict'.
 FAIR_USE_RESTRICT_DAILY_DG_MS = int(os.getenv('FAIR_USE_RESTRICT_DAILY_DG_MS', '1800000'))  # 30 min
 
-# Free-tier daily Deepgram budget (#6083) — daily DG cap for free users with exhausted credits
-# Same mechanism as restrict-stage budget. 0 = disabled (full block).
-FAIR_USE_FREE_DAILY_DG_MS = int(os.getenv('FAIR_USE_FREE_DAILY_DG_MS', '1800000'))  # 30 min
-
 
 def _redis_key(uid: str) -> str:
     """Redis sorted set key for a user's speech minute buckets."""
@@ -327,8 +323,60 @@ def is_free_credits_exhausted(uid: str) -> bool:
         return False
 
 
+def ensure_free_exhausted_restrict(uid: str) -> str:
+    """Set restrict stage for free-exhausted users; auto-clear when credits return (#6083).
+
+    Free users who exhaust monthly credits go directly to restrict stage,
+    which activates the daily DG budget (FAIR_USE_RESTRICT_DAILY_DG_MS).
+    When credits return (month rollover or upgrade), the restriction is cleared.
+
+    Returns the effective enforcement stage after any adjustments.
+    """
+    if not FAIR_USE_ENABLED:
+        return 'none'
+
+    try:
+        free_exhausted = is_free_credits_exhausted(uid)
+        stage = get_enforcement_stage(uid)
+
+        if free_exhausted and stage != 'restrict':
+            fair_use_db.update_fair_use_state(
+                uid,
+                {
+                    'stage': 'restrict',
+                    'restrict_reason': 'free_exhausted',
+                },
+            )
+            invalidate_enforcement_cache(uid)
+            logger.info(f'fair_use: free-exhausted, set restrict for {uid}')
+            return 'restrict'
+
+        if not free_exhausted and stage == 'restrict':
+            state = fair_use_db.get_fair_use_state(uid)
+            if state.get('restrict_reason') == 'free_exhausted':
+                fair_use_db.update_fair_use_state(
+                    uid,
+                    {
+                        'stage': 'none',
+                        'restrict_reason': None,
+                        'restrict_until': None,
+                    },
+                )
+                invalidate_enforcement_cache(uid)
+                logger.info(f'fair_use: credits restored, cleared free-exhausted restrict for {uid}')
+                return 'none'
+
+        return stage
+    except Exception as e:
+        logger.error(f'fair_use: ensure_free_exhausted_restrict error for {uid}: {e}')
+        return get_enforcement_stage(uid)
+
+
 def escalate_enforcement(uid: str, triggered_caps: list, classifier_result: dict = None) -> dict:
     """Escalate enforcement based on violations and classifier result.
+
+    Only for non-free users (abuse detection). Free-exhausted users are handled
+    by ensure_free_exhausted_restrict() which sets restrict directly.
 
     Returns dict describing the action taken.
     """
@@ -342,13 +390,7 @@ def escalate_enforcement(uid: str, triggered_caps: list, classifier_result: dict
         misuse_score = classifier_result.get('misuse_score', 0.0)
         usage_type = classifier_result.get('usage_type', 'none')
 
-    # Free users with exhausted credits bypass the classifier score requirement (#6083).
-    # They escalate on violation count alone — the LLM classifier is designed to detect
-    # content-type abuse (audiobooks, podcasts), not volume abuse from legitimate users
-    # who have simply exceeded their free-tier quota.
-    # Derived from trusted account state, NOT from classifier_result dict.
-    free_exhausted = is_free_credits_exhausted(uid)
-    passes_score_gate = free_exhausted or misuse_score >= FAIR_USE_CLASSIFIER_MISUSE_THRESHOLD
+    passes_score_gate = misuse_score >= FAIR_USE_CLASSIFIER_MISUSE_THRESHOLD
 
     # Determine new stage based on current + violation history
     new_stage = current_stage
@@ -466,8 +508,8 @@ def _dg_budget_key(uid: str) -> str:
 
 
 def record_dg_usage_ms(uid: str, ms: int) -> None:
-    """Atomically increment today's DG usage counter (restrict-stage or free-exhausted)."""
-    if not FAIR_USE_ENABLED or (FAIR_USE_RESTRICT_DAILY_DG_MS <= 0 and FAIR_USE_FREE_DAILY_DG_MS <= 0) or ms <= 0:
+    """Atomically increment today's DG usage counter."""
+    if not FAIR_USE_ENABLED or FAIR_USE_RESTRICT_DAILY_DG_MS <= 0 or ms <= 0:
         return
     try:
         key = _dg_budget_key(uid)
@@ -517,22 +559,19 @@ def get_dg_budget_status(uid: str) -> dict:
     return result
 
 
-def is_dg_budget_exhausted(uid: str, limit_ms: int = 0) -> bool:
+def is_dg_budget_exhausted(uid: str) -> bool:
     """Fast check: is the user's daily DG budget used up?
 
-    Works for both restrict-stage users and free-exhausted users (#6083).
-    ``limit_ms`` overrides the default restrict-stage limit when provided.
     Returns False on Redis errors (fail-open).
     """
-    effective_limit = limit_ms if limit_ms > 0 else FAIR_USE_RESTRICT_DAILY_DG_MS
-    if not FAIR_USE_ENABLED or effective_limit <= 0:
+    if not FAIR_USE_ENABLED or FAIR_USE_RESTRICT_DAILY_DG_MS <= 0:
         return False
     try:
         key = _dg_budget_key(uid)
         used = redis_client.get(key)
         if used is None:
             return False
-        return int(used) >= effective_limit
+        return int(used) >= FAIR_USE_RESTRICT_DAILY_DG_MS
     except Exception:
         return False
 
@@ -548,14 +587,19 @@ async def trigger_classifier_if_needed(uid: str, triggered_caps: list, session_i
     Uses a Redis lock to prevent concurrent runs for the same user.
     Runs asynchronously — does not block the WebSocket path.
 
-    For free-tier users with exhausted credits (#6083), skips the LLM classifier
-    entirely and uses a synthetic result. The classifier is designed for content-type
-    detection (audiobooks, podcasts) which is irrelevant for volume-based enforcement.
+    Free-exhausted users (#6083) go directly to restrict via
+    ensure_free_exhausted_restrict() — no LLM classifier, no graduated escalation.
+    Non-free users go through the normal classifier + escalation pipeline.
     """
+    # Free-exhausted users: set restrict directly, no lock/classifier needed (#6083)
+    if is_free_credits_exhausted(uid):
+        stage = ensure_free_exhausted_restrict(uid)
+        logger.info(f'fair_use: free-exhausted uid={uid} stage={stage} (classifier skipped)')
+        return
+
     lock_key = _classifier_lock_key(uid)
     lock_token = str(uuid.uuid4())
 
-    # Acquire lock BEFORE the Firestore read to avoid wasted DB calls (#6083)
     try:
         acquired = redis_client.set(lock_key, lock_token, nx=True, ex=FAIR_USE_CLASSIFIER_COOLDOWN_SECONDS)
         if not acquired:
@@ -566,25 +610,7 @@ async def trigger_classifier_if_needed(uid: str, triggered_caps: list, session_i
         return
 
     try:
-        # Check free status only after lock is acquired (avoids Firestore reads on cooldown hits)
-        free_exhausted = is_free_credits_exhausted(uid)
-
-        if free_exhausted:
-            # Shorten the lock TTL — no LLM cost, allow re-check in 1h (#6083)
-            try:
-                redis_client.expire(lock_key, 3600)
-            except Exception:
-                pass  # non-critical, lock will expire at the default TTL
-            # Synthetic result: skip LLM call, escalate on violation count alone (#6083)
-            classifier_result = {
-                'misuse_score': 0.0,
-                'usage_type': 'free_exhausted',
-                'free_credits_exhausted': True,
-            }
-            logger.info(f'fair_use: free credits exhausted for {uid}, skipping LLM classifier')
-        else:
-            classifier_result = await _get_classify_user_purpose()(uid)
-
+        classifier_result = await _get_classify_user_purpose()(uid)
         escalation = escalate_enforcement(uid, triggered_caps, classifier_result)
 
         logger.info(
@@ -599,15 +625,12 @@ async def trigger_classifier_if_needed(uid: str, triggered_caps: list, session_i
 
         # Send notification if action was taken
         if escalation['action'] != 'none':
-            # Fetch the case_ref from the just-created event
             latest_events = fair_use_db.get_fair_use_events(uid, limit=1)
             case_ref = latest_events[0].get('case_ref', '') if latest_events else ''
             await _send_fair_use_notification(uid, escalation['action'], case_ref=case_ref)
 
     except Exception as e:
         logger.error(f'fair_use: classifier/escalation error for {uid}: {e}')
-        # Only release lock on error so we can retry sooner;
-        # on success, let the cooldown TTL prevent repeated runs
         try:
             _release_lock(lock_key, lock_token)
         except Exception:
