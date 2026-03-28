@@ -29,6 +29,7 @@ import 'package:omi/models/custom_stt_config.dart';
 import 'package:omi/models/stt_provider.dart';
 import 'package:omi/providers/calendar_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
+import 'package:omi/providers/device_onboarding_provider.dart';
 import 'package:omi/providers/message_provider.dart';
 import 'package:omi/providers/people_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
@@ -69,6 +70,7 @@ class CaptureProvider extends ChangeNotifier
   PeopleProvider? peopleProvider;
   UsageProvider? usageProvider;
   CalendarProvider? calendarProvider;
+  DeviceOnboardingProvider? deviceOnboardingProvider;
 
   // Cache refresh for backend-created persons
   Future<void>? _peopleRefreshFuture;
@@ -534,6 +536,17 @@ class CaptureProvider extends ChangeNotifier
           Uint8List.fromList(snapshot.sublist(0, 4).reversed.toList()).buffer,
         ).getUint32(0);
         Logger.debug("device button $buttonState");
+
+        // Intercept for interactive device onboarding
+        if (deviceOnboardingProvider?.isOnboardingActive == true) {
+          deviceOnboardingProvider!.onButtonEvent(buttonState);
+          // For step 1 (ask question), let single-tap fall through to normal voice command handling
+          if (deviceOnboardingProvider!.currentStep == 1 && buttonState == 1) {
+            // Fall through to normal single-tap handling below
+          } else {
+            return;
+          }
+        }
 
         // double tap
         if (buttonState == 2) {
@@ -1731,6 +1744,10 @@ class CaptureProvider extends ChangeNotifier
 
   @override
   void onSegmentReceived(List<TranscriptSegment> newSegments) {
+    // Forward to interactive device onboarding if active on transcription step
+    if (deviceOnboardingProvider?.isOnboardingActive == true && deviceOnboardingProvider!.currentStep == 0) {
+      deviceOnboardingProvider!.onTranscriptSegments(newSegments);
+    }
     _processNewSegmentReceived(newSegments);
   }
 
