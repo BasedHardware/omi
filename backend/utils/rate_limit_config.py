@@ -8,7 +8,7 @@ prevents abuse and protects backend resources.
 Tuning knobs:
     RATE_LIMIT_BOOST: float multiplier on all limits (default 1.0).
         Set > 1.0 during events to relax limits, < 1.0 to tighten.
-        Read from env var RATE_LIMIT_BOOST or Redis key 'rate_limit:boost'.
+        Read from env var RATE_LIMIT_BOOST at startup.
 
     RATE_LIMIT_SHADOW: when "true", log violations but don't reject (429).
         Read from env var RATE_LIMIT_SHADOW_MODE.

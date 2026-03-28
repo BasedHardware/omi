@@ -175,5 +175,77 @@ class TestRouterPolicyMapping(unittest.TestCase):
             self.assertIn(policy, RATE_POLICIES, f"Policy '{policy}' used in router but missing from config")
 
 
+class TestRouterWiring(unittest.TestCase):
+    """Verify rate limit wiring in actual router source files.
+
+    Grep router source code for with_rate_limit / check_rate_limit_inline
+    references to ensure wiring isn't accidentally removed.
+    """
+
+    def _grep_file(self, filepath: str, pattern: str) -> list[str]:
+        """Return lines matching pattern in file."""
+        import re
+
+        matches = []
+        with open(filepath) as f:
+            for line in f:
+                if re.search(pattern, line):
+                    matches.append(line.strip())
+        return matches
+
+    def test_conversations_router_has_rate_limits(self):
+        matches = self._grep_file("routers/conversations.py", r"with_rate_limit.*conversations:")
+        # create, reprocess, search, merge = 4 endpoints
+        self.assertGreaterEqual(len(matches), 4, "conversations.py missing rate limit wiring")
+
+    def test_chat_router_has_rate_limits(self):
+        matches = self._grep_file("routers/chat.py", r"with_rate_limit.*chat:|voice:|file:")
+        # send_message, initial(x2), voice_message, voice_transcribe, file_upload = 6
+        self.assertGreaterEqual(len(matches), 5, "chat.py missing rate limit wiring")
+
+    def test_developer_router_has_rate_limits(self):
+        matches = self._grep_file("routers/developer.py", r"with_rate_limit.*dev:")
+        # create_memory, batch, create_conversation, from_segments = 4
+        self.assertGreaterEqual(len(matches), 4, "developer.py missing rate limit wiring")
+
+    def test_goals_router_has_rate_limits(self):
+        matches = self._grep_file("routers/goals.py", r"with_rate_limit.*goals:")
+        # suggest, advice(x2), extract = 4
+        self.assertGreaterEqual(len(matches), 3, "goals.py missing rate limit wiring")
+
+    def test_mcp_sse_router_has_rate_limit(self):
+        matches = self._grep_file("routers/mcp_sse.py", r"check_rate_limit_inline.*mcp:")
+        self.assertGreaterEqual(len(matches), 1, "mcp_sse.py missing rate limit wiring")
+
+    def test_mcp_router_has_rate_limit(self):
+        matches = self._grep_file("routers/mcp.py", r"with_rate_limit.*memories:")
+        self.assertGreaterEqual(len(matches), 1, "mcp.py missing rate limit wiring")
+
+    def test_integration_router_has_rate_limits(self):
+        matches = self._grep_file("routers/integration.py", r"check_rate_limit_inline.*integration:")
+        # conversations + memories = 2
+        self.assertGreaterEqual(len(matches), 2, "integration.py missing rate limit wiring")
+
+    def test_apps_router_has_rate_limit(self):
+        matches = self._grep_file("routers/apps.py", r"with_rate_limit.*apps:")
+        self.assertGreaterEqual(len(matches), 1, "apps.py missing rate limit wiring")
+
+    def test_knowledge_graph_router_has_rate_limit(self):
+        matches = self._grep_file("routers/knowledge_graph.py", r"with_rate_limit.*knowledge_graph:")
+        self.assertGreaterEqual(len(matches), 1, "knowledge_graph.py missing rate limit wiring")
+
+    def test_wrapped_router_has_rate_limit(self):
+        matches = self._grep_file("routers/wrapped.py", r"with_rate_limit.*wrapped:")
+        self.assertGreaterEqual(len(matches), 1, "wrapped.py missing rate limit wiring")
+
+    def test_test_prompt_wired(self):
+        matches = self._grep_file("routers/conversations.py", r'with_rate_limit.*test:prompt')
+        self.assertGreaterEqual(len(matches), 1, "test-prompt endpoint missing rate limit")
+
+    def test_agent_tools_wired(self):
+        matches = self._grep_file("routers/agent_tools.py", r"with_rate_limit.*agent:")
+        self.assertGreaterEqual(len(matches), 1, "agent_tools.py missing rate limit wiring")
+
+
 if __name__ == '__main__':
     unittest.main()
