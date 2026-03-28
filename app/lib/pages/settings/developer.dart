@@ -1965,8 +1965,8 @@ class _ManualFirmwareFlashPageState extends State<_ManualFirmwareFlashPage> with
                       children: [
                         Text(widget.fileName, style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600)),
                         const SizedBox(height: 4),
-                        Text('Target: ${widget.device.name}', style: TextStyle(color: Colors.grey.shade400, fontSize: 13)), 
-                      ],
+                        Text('Target: ${widget.device.name}', style: TextStyle(color: Colors.grey.shade400, fontSize: 13)),
+                      ], 
                     ),
                   ),
                 ],
