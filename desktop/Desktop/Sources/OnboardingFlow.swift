@@ -62,7 +62,9 @@ enum OnboardingFlow {
       migratedStep += legacyPostIntroOffset
     }
 
-    if !hasReorderedTrustStep {
+    // Only reorder for existing users who already had the old Trust-first layout.
+    // New users (all flags false) start with the correct Name-first order.
+    if !hasReorderedTrustStep && hasMigratedPagedIntro {
       switch migratedStep {
       case 0:
         migratedStep = 2
