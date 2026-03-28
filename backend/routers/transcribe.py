@@ -92,14 +92,13 @@ from utils.fair_use import (
     FAIR_USE_ENABLED,
     FAIR_USE_CHECK_INTERVAL_SECONDS,
     FAIR_USE_RESTRICT_DAILY_DG_MS,
-    FAIR_USE_FREE_DAILY_DG_MS,
     record_speech_ms,
     get_rolling_speech_ms,
     check_soft_caps,
     trigger_classifier_if_needed,
     get_enforcement_stage,
     is_dg_budget_exhausted,
-    is_free_credits_exhausted,
+    ensure_free_exhausted_restrict,
     record_dg_usage_ms,
 )
 from utils.subscription import has_transcription_credits, get_remaining_transcription_seconds
@@ -429,20 +428,16 @@ async def _stream_handler(
     # DG usage accumulator: batch Redis writes every 60s instead of per-chunk (#5854)
     dg_usage_ms_pending: int = 0
 
-    # Session-start DG budget check: prevent reconnect bypass (#5748 reviewer fix)
-    # Covers restrict-stage (#5746) and free-exhausted (#6083) daily DG budgets
+    # Session-start: ensure free-exhausted users are in restrict stage (#6083)
+    # then check DG budget for restrict-stage users (#5748 reviewer fix)
     if FAIR_USE_ENABLED:
         try:
-            _init_stage = get_enforcement_stage(uid)
+            _init_stage = ensure_free_exhausted_restrict(uid)
             logger.info(f'fair_use: session start uid={uid} session={session_id} stage={_init_stage}')
             if _init_stage == 'restrict' and FAIR_USE_RESTRICT_DAILY_DG_MS > 0:
                 fair_use_dg_budget_exhausted = is_dg_budget_exhausted(uid)
                 if fair_use_dg_budget_exhausted:
                     logger.info(f'fair_use: DG budget already exhausted at session start for {uid}')
-            elif FAIR_USE_FREE_DAILY_DG_MS > 0 and is_free_credits_exhausted(uid):
-                fair_use_dg_budget_exhausted = is_dg_budget_exhausted(uid, FAIR_USE_FREE_DAILY_DG_MS)
-                if fair_use_dg_budget_exhausted:
-                    logger.info(f'fair_use: free-tier DG budget exhausted at session start for {uid}')
         except Exception as e:
             logger.error(f'fair_use: session-start budget check error for {uid}: {e}')
 
@@ -461,11 +456,7 @@ async def _stream_handler(
 
             # Flush batched DG usage to Redis (#5854 — was per-chunk, now every 60s)
             # Placed before use_custom_stt guard so all STT paths get flushed
-            if (
-                FAIR_USE_ENABLED
-                and (FAIR_USE_RESTRICT_DAILY_DG_MS > 0 or FAIR_USE_FREE_DAILY_DG_MS > 0)
-                and dg_usage_ms_pending > 0
-            ):
+            if FAIR_USE_ENABLED and FAIR_USE_RESTRICT_DAILY_DG_MS > 0 and dg_usage_ms_pending > 0:
                 record_dg_usage_ms(uid, dg_usage_ms_pending)
                 dg_usage_ms_pending = 0
 
@@ -523,22 +514,15 @@ async def _stream_handler(
                 except Exception as e:
                     logger.error(f'fair_use: cap check error for {uid}: {e}')
 
-                # DG budget gate: check if user's daily DG budget is exhausted
-                # Covers restrict-stage (#5746) and free-exhausted (#6083)
+                # DG budget gate: ensure free-exhausted restriction + check restrict budget
+                # Free-exhausted → restrict directly (#6083); restrict-stage DG budget (#5746)
                 try:
-                    stage = get_enforcement_stage(uid)
+                    stage = ensure_free_exhausted_restrict(uid)
                     if stage == 'restrict' and FAIR_USE_RESTRICT_DAILY_DG_MS > 0:
                         was_exhausted = fair_use_dg_budget_exhausted
                         fair_use_dg_budget_exhausted = is_dg_budget_exhausted(uid)
                         if fair_use_dg_budget_exhausted and not was_exhausted:
                             logger.info(f'fair_use: DG budget exhausted for {uid} session={session_id}')
-                    elif FAIR_USE_FREE_DAILY_DG_MS > 0 and is_free_credits_exhausted(uid):
-                        was_exhausted = fair_use_dg_budget_exhausted
-                        fair_use_dg_budget_exhausted = is_dg_budget_exhausted(uid, FAIR_USE_FREE_DAILY_DG_MS)
-                        if fair_use_dg_budget_exhausted and not was_exhausted:
-                            logger.info(f'fair_use: free-tier DG budget exhausted for {uid} session={session_id}')
-                        elif not fair_use_dg_budget_exhausted and was_exhausted:
-                            logger.info(f'fair_use: free-tier DG budget restored for {uid} session={session_id}')
                     else:
                         fair_use_dg_budget_exhausted = False
                 except Exception as e:
@@ -2546,7 +2530,7 @@ async def _stream_handler(
                     else:
                         dg_socket.send(chunk)
                         # Accumulate DG usage locally, flushed every 60s (#5854)
-                        if FAIR_USE_ENABLED and (FAIR_USE_RESTRICT_DAILY_DG_MS > 0 or FAIR_USE_FREE_DAILY_DG_MS > 0):
+                        if FAIR_USE_ENABLED and (FAIR_USE_RESTRICT_DAILY_DG_MS > 0):
                             chunk_ms = len(chunk) * 1000 // (sample_rate * 2)  # 16-bit mono
                             dg_usage_ms_pending += chunk_ms
                     if deepgram_profile_socket:
@@ -2581,7 +2565,7 @@ async def _stream_handler(
                 if profile_complete or not soniox_profile_socket:
                     await soniox_sock.send(chunk)
                     # Accumulate DG usage locally, flushed every 60s (#5854)
-                    if FAIR_USE_ENABLED and (FAIR_USE_RESTRICT_DAILY_DG_MS > 0 or FAIR_USE_FREE_DAILY_DG_MS > 0):
+                    if FAIR_USE_ENABLED and (FAIR_USE_RESTRICT_DAILY_DG_MS > 0):
                         chunk_ms = len(chunk) * 1000 // (sample_rate * 2)
                         dg_usage_ms_pending += chunk_ms
                     if soniox_profile_socket:
@@ -2602,7 +2586,7 @@ async def _stream_handler(
             if speechmatics_sock is not None and not fair_use_dg_budget_exhausted:
                 await speechmatics_sock.send(chunk)
                 # Accumulate DG usage locally, flushed every 60s (#5854)
-                if FAIR_USE_ENABLED and (FAIR_USE_RESTRICT_DAILY_DG_MS > 0 or FAIR_USE_FREE_DAILY_DG_MS > 0):
+                if FAIR_USE_ENABLED and (FAIR_USE_RESTRICT_DAILY_DG_MS > 0):
                     chunk_ms = len(chunk) * 1000 // (sample_rate * 2)
                     dg_usage_ms_pending += chunk_ms
 
@@ -2664,9 +2648,7 @@ async def _stream_handler(
                                 else:
                                     await stt_sockets_multi[ch_idx].send(pcm_16k)
                                 # Accumulate DG usage locally, flushed every 60s (#5854)
-                                if FAIR_USE_ENABLED and (
-                                    FAIR_USE_RESTRICT_DAILY_DG_MS > 0 or FAIR_USE_FREE_DAILY_DG_MS > 0
-                                ):
+                                if FAIR_USE_ENABLED and (FAIR_USE_RESTRICT_DAILY_DG_MS > 0):
                                     mc_chunk_ms = len(pcm_16k) * 1000 // (TARGET_SAMPLE_RATE * 2)
                                     dg_usage_ms_pending += mc_chunk_ms
                             except Exception as e:
@@ -2924,11 +2906,7 @@ async def _stream_handler(
                     logger.debug(f'fair_use: session end flush {speech_ms}ms speech uid={uid} session={session_id}')
 
             # Flush pending DG usage accumulator (#5854)
-            if (
-                FAIR_USE_ENABLED
-                and (FAIR_USE_RESTRICT_DAILY_DG_MS > 0 or FAIR_USE_FREE_DAILY_DG_MS > 0)
-                and dg_usage_ms_pending > 0
-            ):
+            if FAIR_USE_ENABLED and FAIR_USE_RESTRICT_DAILY_DG_MS > 0 and dg_usage_ms_pending > 0:
                 record_dg_usage_ms(uid, dg_usage_ms_pending)
                 dg_usage_ms_pending = 0
 
