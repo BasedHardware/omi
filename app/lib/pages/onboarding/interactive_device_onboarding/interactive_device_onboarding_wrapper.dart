@@ -20,6 +20,7 @@ class InteractiveDeviceOnboardingWrapper extends StatefulWidget {
 class _InteractiveDeviceOnboardingWrapperState extends State<InteractiveDeviceOnboardingWrapper> {
   late DeviceOnboardingProvider _onboardingProvider;
   late PageController _pageController;
+  CaptureProvider? _captureProvider;
 
   @override
   void initState() {
@@ -28,8 +29,8 @@ class _InteractiveDeviceOnboardingWrapperState extends State<InteractiveDeviceOn
     _pageController = PageController();
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      final captureProvider = context.read<CaptureProvider>();
-      captureProvider.deviceOnboardingProvider = _onboardingProvider;
+      _captureProvider = context.read<CaptureProvider>();
+      _captureProvider!.deviceOnboardingProvider = _onboardingProvider;
       _onboardingProvider.startOnboarding();
       MixpanelManager().deviceOnboardingStarted();
     });
@@ -37,8 +38,7 @@ class _InteractiveDeviceOnboardingWrapperState extends State<InteractiveDeviceOn
 
   @override
   void dispose() {
-    final captureProvider = context.read<CaptureProvider>();
-    captureProvider.deviceOnboardingProvider = null;
+    _captureProvider?.deviceOnboardingProvider = null;
     _onboardingProvider.dispose();
     _pageController.dispose();
     super.dispose();
