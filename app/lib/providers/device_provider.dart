@@ -119,7 +119,6 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
       connectedDevice = connectedDevice?.copyWith(name: trimmedName);
     }
 
-    SharedPreferencesUtil().btDevice = renamedDevice;
     SharedPreferencesUtil().deviceName = trimmedName;
     notifyListeners();
   }

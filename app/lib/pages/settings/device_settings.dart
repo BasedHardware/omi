@@ -237,9 +237,11 @@ class _DeviceSettingsState extends State<DeviceSettings> {
                                 ? null
                                 : () async {
                                     final trimmedName = controller.text.trim();
+                                    final nameCannotBeEmptyText = dialogBuilderContext.l10n.nameCannotBeEmpty;
+                                    final savedText = dialogBuilderContext.l10n.saved;
                                     if (trimmedName.isEmpty) {
                                       ScaffoldMessenger.of(this.context).showSnackBar(
-                                        SnackBar(content: Text(dialogBuilderContext.l10n.nameCannotBeEmpty)),
+                                        SnackBar(content: Text(nameCannotBeEmptyText)),
                                       );
                                       return;
                                     }
@@ -248,9 +250,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
                                     await provider.renameDevice(trimmedName);
                                     if (!mounted) return;
                                     Navigator.of(dialogContext).pop();
-                                    ScaffoldMessenger.of(this.context).showSnackBar(
-                                      SnackBar(content: Text(dialogBuilderContext.l10n.saved)),
-                                    );
+                                    ScaffoldMessenger.of(this.context).showSnackBar(SnackBar(content: Text(savedText)));
                                   },
                             child: Container(
                               padding: const EdgeInsets.symmetric(vertical: 14),
