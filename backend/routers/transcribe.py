@@ -104,6 +104,7 @@ from utils.metrics import (
     PUSHER_SESSION_DEGRADED,
 )
 from utils.stt.speaker_embedding import (
+    extract_embedding_from_bytes,
     compare_embeddings,
     SPEAKER_MATCH_THRESHOLD,
 )
