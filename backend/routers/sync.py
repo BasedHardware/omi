@@ -42,12 +42,10 @@ from utils.fair_use import (
     is_hard_restricted,
     trigger_classifier_if_needed,
     is_dg_budget_exhausted,
-    is_free_credits_exhausted,
+    ensure_free_exhausted_restrict,
     record_dg_usage_ms,
     FAIR_USE_ENABLED,
     FAIR_USE_RESTRICT_DAILY_DG_MS,
-    FAIR_USE_FREE_DAILY_DG_MS,
-    get_enforcement_stage,
 )
 from utils.subscription import has_transcription_credits
 
@@ -836,15 +834,13 @@ async def sync_local_files(files: List[UploadFile] = File(...), uid: str = Depen
         total_segments = len(segmented_paths)
 
         # DG budget gate (#6083): throttle cloud STT for free-exhausted / restrict-stage users
-        # Instead of full block, check daily DG budget — same mechanism as live transcription.
+        # Free-exhausted → restrict directly; restrict-stage uses daily DG budget.
         dg_budget_blocked = False
-        if FAIR_USE_ENABLED and should_lock:
+        if FAIR_USE_ENABLED:
             try:
-                stage = get_enforcement_stage(uid)
+                stage = ensure_free_exhausted_restrict(uid)
                 if stage == 'restrict' and FAIR_USE_RESTRICT_DAILY_DG_MS > 0:
                     dg_budget_blocked = is_dg_budget_exhausted(uid)
-                elif FAIR_USE_FREE_DAILY_DG_MS > 0:
-                    dg_budget_blocked = is_dg_budget_exhausted(uid, FAIR_USE_FREE_DAILY_DG_MS)
             except Exception as e:
                 logger.error(f'sync: DG budget check error for {uid}: {e}')
 
@@ -880,7 +876,7 @@ async def sync_local_files(files: List[UploadFile] = File(...), uid: str = Depen
         chunk_threads(threads)
 
         # Record DG usage for budget tracking (#6083)
-        if FAIR_USE_ENABLED and (FAIR_USE_RESTRICT_DAILY_DG_MS > 0 or FAIR_USE_FREE_DAILY_DG_MS > 0):
+        if FAIR_USE_ENABLED and FAIR_USE_RESTRICT_DAILY_DG_MS > 0:
             dg_ms = int(total_speech_seconds * 1000)
             if dg_ms > 0:
                 record_dg_usage_ms(uid, dg_ms)
