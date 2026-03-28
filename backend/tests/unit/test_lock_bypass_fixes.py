@@ -1076,3 +1076,213 @@ class TestRetrieveContextualMemoriesLockFilter:
 
         assert len(result) == 1
         assert result[0]['id'] == 'conv-2'
+
+
+# =============================================================================
+# Test generate_persona_prompt excludes locked content
+# =============================================================================
+
+
+class TestPersonaGenerationLockFilter:
+    """generate_persona_prompt must exclude locked memories and conversations."""
+
+    @pytest.mark.asyncio
+    async def test_generate_persona_prompt_filters_locked(self):
+        """generate_persona_prompt lock filter must exclude locked memories/conversations.
+
+        utils.apps is fully stubbed due to deep import chains, so we reload it
+        inside the test to get the real function with all deps pre-stubbed.
+        """
+        import importlib
+
+        # Temporarily remove the stub so we can load the real module
+        old_mod = sys.modules.pop('utils.apps', None)
+        # Add missing transitive stubs
+        for dep in ['database.cache', 'database.llm_usage', 'utils.stripe', 'utils.social', 'utils.llm.persona']:
+            if dep not in sys.modules:
+                sys.modules[dep] = _AutoMockModule(dep)
+
+        import database.memories as memories_db
+        import database.conversations as conversations_db
+        import database.auth as auth_db
+
+        locked_mem = _make_memory(locked=True)
+        locked_mem['content'] = 'LOCKED_SECRET'
+        unlocked_mem = _make_memory(locked=False, memory_id='mem-2')
+        unlocked_mem['content'] = 'visible memory'
+
+        locked_conv = _make_conversation(locked=True)
+        unlocked_conv = _make_conversation(locked=False, conversation_id='conv-2')
+
+        memories_db.get_memories = MagicMock(return_value=[locked_mem, unlocked_mem])
+        conversations_db.get_conversations = MagicMock(return_value=[locked_conv, unlocked_conv])
+        auth_db.get_user_name = MagicMock(return_value='TestUser')
+
+        persona = {'connected_accounts': [], 'twitter': None}
+
+        try:
+            import utils.apps as real_apps
+
+            mock_track = MagicMock()
+            mock_track.__enter__ = MagicMock(return_value=None)
+            mock_track.__exit__ = MagicMock(return_value=False)
+            real_apps.track_usage = MagicMock(return_value=mock_track)
+            real_apps.condense_conversations = MagicMock(return_value='condensed convos')
+            real_apps.condense_memories = MagicMock(return_value='condensed mems')
+
+            result = await real_apps.generate_persona_prompt('test-uid', persona)
+
+            # condense_memories should only receive unlocked memory content
+            call_args = real_apps.condense_memories.call_args[0]
+            memory_contents = call_args[0]
+            assert 'LOCKED_SECRET' not in memory_contents
+            assert 'visible memory' in memory_contents
+        finally:
+            # Restore the stub
+            if old_mod is not None:
+                sys.modules['utils.apps'] = old_mod
+
+
+# =============================================================================
+# Test integration list endpoint redacts locked conversations
+# =============================================================================
+
+
+class TestIntegrationListLockRedaction:
+    """get_conversations_via_integration must redact locked conversation content."""
+
+    @pytest.mark.asyncio
+    async def test_integration_list_redacts_locked_title_overview(self):
+        """Integration list must blank title/overview/action_items/events/transcript for locked."""
+        import copy
+        import database.conversations as conversations_db
+        import database.apps as apps_db
+        import database.redis_db as redis_db
+
+        locked_conv = _make_conversation(locked=True)
+        locked_conv['structured']['title'] = 'SECRET_TITLE'
+        locked_conv['structured']['overview'] = 'SECRET_OVERVIEW'
+        unlocked_conv = _make_conversation(locked=False, conversation_id='conv-2')
+
+        conversations_db.get_conversations = MagicMock(
+            return_value=[copy.deepcopy(locked_conv), copy.deepcopy(unlocked_conv)]
+        )
+        apps_db.get_app_by_id_db = MagicMock(return_value={'id': 'app-1', 'name': 'test'})
+        redis_db.get_enabled_apps = MagicMock(return_value=['app-1'])
+
+        with patch('routers.integration.verify_api_key', return_value=True):
+            with patch('routers.integration.apps_utils') as mock_apps_utils:
+                mock_apps_utils.app_can_read_conversations.return_value = True
+
+                from routers.integration import get_conversations_via_integration
+
+                result = await get_conversations_via_integration(
+                    request=MagicMock(),
+                    app_id='app-1',
+                    uid='test-uid',
+                    limit=100,
+                    offset=0,
+                    include_discarded=False,
+                    statuses=[],
+                    start_date=None,
+                    end_date=None,
+                    max_transcript_segments=100,
+                    authorization='Bearer test-key',
+                )
+
+        convs = result['conversations']
+        assert len(convs) == 2
+        locked_items = [c for c in convs if c['structured']['title'] == '']
+        assert len(locked_items) == 1
+        assert locked_items[0]['structured']['overview'] == ''
+        unlocked_items = [c for c in convs if c['structured']['title'] != '']
+        assert len(unlocked_items) == 1
+        assert unlocked_items[0]['structured']['title'] == 'Test Conversation'
+
+
+# =============================================================================
+# Test conversations list endpoint redacts locked conversations
+# =============================================================================
+
+
+class TestConversationListRedaction:
+    """get_conversations router endpoint must redact locked conversation content."""
+
+    def test_conversation_list_redacts_locked(self):
+        """Main conversation list must clear action_items/events/transcript for locked."""
+        import database.conversations as conversations_db
+
+        locked_conv = _make_conversation(locked=True)
+        unlocked_conv = _make_conversation(locked=False, conversation_id='conv-2')
+
+        conversations_db.get_conversations_without_photos = MagicMock(return_value=[locked_conv, unlocked_conv])
+
+        with patch('routers.conversations.auth') as mock_auth:
+            mock_auth.get_current_user_uid = MagicMock(return_value='test-uid')
+
+            from routers.conversations import get_conversations
+
+            result = get_conversations(
+                limit=100,
+                offset=0,
+                statuses='completed',
+                include_discarded=False,
+                start_date=None,
+                end_date=None,
+                folder_id=None,
+                starred=None,
+                uid='test-uid',
+            )
+
+        assert len(result) == 2
+        locked = [c for c in result if c.get('is_locked')]
+        assert len(locked) == 1
+        assert locked[0]['structured']['action_items'] == []
+        assert locked[0]['structured']['events'] == []
+        assert locked[0]['transcript_segments'] == []
+
+        unlocked = [c for c in result if not c.get('is_locked')]
+        assert len(unlocked) == 1
+        assert len(unlocked[0]['structured']['action_items']) == 1
+        assert len(unlocked[0]['transcript_segments']) == 1
+
+
+# =============================================================================
+# Test suggest_goal excludes locked memories
+# =============================================================================
+
+
+class TestSuggestGoalLockFilter:
+    """suggest_goal must exclude locked memories from context."""
+
+    def test_suggest_goal_filters_locked_memories(self):
+        """suggest_goal must not include locked memories in AI prompt context."""
+        import database.memories as memories_db
+
+        locked_mem = _make_memory(locked=True)
+        locked_mem['content'] = 'LOCKED_SECRET'
+        unlocked_mem = _make_memory(locked=False, memory_id='mem-2')
+        unlocked_mem['content'] = 'visible goal-related memory'
+
+        memories_db.get_memories = MagicMock(return_value=[locked_mem, unlocked_mem])
+
+        mock_llm_response = MagicMock()
+        mock_llm_response.content = '{"suggested_title": "Test Goal", "suggested_type": "scale", "suggested_target": 10, "suggested_min": 0, "suggested_max": 10, "reasoning": "test"}'
+
+        mock_track = MagicMock()
+        mock_track.__enter__ = MagicMock(return_value=None)
+        mock_track.__exit__ = MagicMock(return_value=False)
+
+        with patch('utils.llm.goals.track_usage', return_value=mock_track):
+            with patch('utils.llm.goals.llm_mini') as mock_llm:
+                mock_llm.invoke.return_value = mock_llm_response
+
+                from utils.llm.goals import suggest_goal
+
+                result = suggest_goal('test-uid')
+
+        # Verify the prompt sent to the LLM did not contain locked content
+        call_args = mock_llm.invoke.call_args[0][0]
+        prompt_text = str(call_args)
+        assert 'LOCKED_SECRET' not in prompt_text
+        assert 'visible goal-related memory' in prompt_text
