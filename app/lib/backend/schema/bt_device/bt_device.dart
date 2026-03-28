@@ -290,6 +290,12 @@ class BtDevice {
 
   String getShortId() => BtDevice.shortId(id);
 
+  static String resolveDisplayName({required String id, required String fallbackName}) {
+    return SharedPreferencesUtil().getCustomDeviceName(id, fallback: fallbackName);
+  }
+
+  BtDevice withPersistedName() => copyWith(name: resolveDisplayName(id: id, fallbackName: name));
+
   static shortId(String id) {
     try {
       if (id == 'apple-watch') {
@@ -687,7 +693,12 @@ class BtDevice {
   // from BluetoothDevice
   Future fromBluetoothDevice(BluetoothDevice device) async {
     var rssi = await device.readRssi();
-    return BtDevice(name: device.platformName, id: device.remoteId.str, type: DeviceType.omi, rssi: rssi);
+    return BtDevice(
+      name: resolveDisplayName(id: device.remoteId.str, fallbackName: device.platformName),
+      id: device.remoteId.str,
+      type: DeviceType.omi,
+      rssi: rssi,
+    );
   }
 
   // Check if a scan result is from a supported device
@@ -831,7 +842,7 @@ class BtDevice {
       deviceType = cachedDevicesMap[result.device.remoteId.toString()];
     }
     return BtDevice(
-      name: result.device.platformName,
+      name: resolveDisplayName(id: result.device.remoteId.str, fallbackName: result.device.platformName),
       id: result.device.remoteId.str,
       type: deviceType ?? DeviceType.omi,
       rssi: result.rssi,
@@ -842,7 +853,7 @@ class BtDevice {
   // from json
   static fromJson(Map<String, dynamic> json) {
     return BtDevice(
-      name: json['name'],
+      name: resolveDisplayName(id: json['id'], fallbackName: json['name']),
       id: json['id'],
       type: DeviceType.values[json['type']],
       rssi: json['rssi'],

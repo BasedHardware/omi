@@ -157,6 +157,137 @@ class _DeviceSettingsState extends State<DeviceSettings> {
     }
   }
 
+  Future<void> _showRenameDeviceDialog(DeviceProvider provider) async {
+    final device = provider.pairedDevice ?? provider.connectedDevice;
+    if (device == null || device.id.isEmpty) return;
+
+    final controller = TextEditingController(text: device.name);
+    var isSaving = false;
+
+    await showDialog(
+      context: context,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (dialogBuilderContext, setDialogState) {
+            return Dialog(
+              backgroundColor: const Color(0xFF1C1C1E),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      dialogBuilderContext.l10n.deviceName,
+                      style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w600),
+                    ),
+                    const SizedBox(height: 16),
+                    Container(
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF2C2C2E),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: TextField(
+                        controller: controller,
+                        autofocus: true,
+                        style: const TextStyle(color: Colors.white, fontSize: 16),
+                        decoration: InputDecoration(
+                          hintText: dialogBuilderContext.l10n.deviceName,
+                          hintStyle: TextStyle(color: Colors.grey.shade600, fontSize: 16),
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                          border: InputBorder.none,
+                          enabledBorder: InputBorder.none,
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10),
+                            borderSide: const BorderSide(color: Colors.white24, width: 1),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: GestureDetector(
+                            onTap: () => Navigator.of(dialogContext).pop(),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF2A2A2E),
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: Center(
+                                child: Text(
+                                  dialogBuilderContext.l10n.cancel,
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: GestureDetector(
+                            onTap: isSaving
+                                ? null
+                                : () async {
+                                    final trimmedName = controller.text.trim();
+                                    if (trimmedName.isEmpty) {
+                                      ScaffoldMessenger.of(this.context).showSnackBar(
+                                        SnackBar(content: Text(dialogBuilderContext.l10n.nameCannotBeEmpty)),
+                                      );
+                                      return;
+                                    }
+
+                                    setDialogState(() => isSaving = true);
+                                    await provider.renameDevice(trimmedName);
+                                    if (!mounted) return;
+                                    Navigator.of(dialogContext).pop();
+                                    ScaffoldMessenger.of(this.context).showSnackBar(
+                                      SnackBar(content: Text(dialogBuilderContext.l10n.saved)),
+                                    );
+                                  },
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                              decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(10)),
+                              child: Center(
+                                child: isSaving
+                                    ? const SizedBox(
+                                        width: 20,
+                                        height: 20,
+                                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black),
+                                      )
+                                    : Text(
+                                        dialogBuilderContext.l10n.save,
+                                        style: const TextStyle(
+                                          color: Colors.black,
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+
+    controller.dispose();
+  }
+
   Widget _buildSectionHeader(String title, {String? subtitle}) {
     return Padding(
       padding: const EdgeInsets.only(left: 4, right: 4, bottom: 12),
@@ -249,8 +380,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
             icon: FontAwesomeIcons.microchip,
             title: context.l10n.deviceName,
             chipValue: deviceName,
-            copyValue: deviceName,
-            showChevron: false,
+            onTap: () => _showRenameDeviceDialog(provider),
           ),
           const Divider(height: 1, color: Color(0xFF3C3C43)),
           _buildProfileStyleItem(

@@ -75,8 +75,8 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   }
 
   Future<void> setConnectedDevice(BtDevice? device) async {
-    connectedDevice = device;
-    pairedDevice = device;
+    connectedDevice = device?.withPersistedName();
+    pairedDevice = connectedDevice;
     await getDeviceInfo();
     Logger.debug('setConnectedDevice: $device');
     notifyListeners();
@@ -86,18 +86,41 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     if (connectedDevice != null) {
       if (pairedDevice?.firmwareRevision != null && pairedDevice?.firmwareRevision != 'Unknown') {
         SharedPreferencesUtil().btDevice = pairedDevice!;
+        SharedPreferencesUtil().deviceName = pairedDevice!.name;
         return;
       }
       var connection = await ServiceManager.instance().device.ensureConnection(connectedDevice!.id);
-      pairedDevice = await connectedDevice?.getDeviceInfo(connection);
+      pairedDevice = (await connectedDevice?.getDeviceInfo(connection))?.withPersistedName();
+      connectedDevice = connectedDevice?.withPersistedName();
       SharedPreferencesUtil().btDevice = pairedDevice!;
+      SharedPreferencesUtil().deviceName = pairedDevice!.name;
     } else {
       if (SharedPreferencesUtil().btDevice.id.isEmpty) {
         pairedDevice = BtDevice.empty();
       } else {
-        pairedDevice = SharedPreferencesUtil().btDevice;
+        pairedDevice = SharedPreferencesUtil().btDevice.withPersistedName();
       }
     }
+    notifyListeners();
+  }
+
+  Future<void> renameDevice(String name) async {
+    final currentDevice = pairedDevice ?? connectedDevice;
+    if (currentDevice == null || currentDevice.id.isEmpty) return;
+
+    final trimmedName = name.trim();
+    if (trimmedName.isEmpty) return;
+
+    await SharedPreferencesUtil().saveCustomDeviceName(currentDevice.id, trimmedName);
+
+    final renamedDevice = currentDevice.copyWith(name: trimmedName);
+    pairedDevice = renamedDevice;
+    if (connectedDevice?.id == currentDevice.id) {
+      connectedDevice = connectedDevice?.copyWith(name: trimmedName);
+    }
+
+    SharedPreferencesUtil().btDevice = renamedDevice;
+    SharedPreferencesUtil().deviceName = trimmedName;
     notifyListeners();
   }
 
@@ -285,9 +308,10 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     try {
       var connection = await ServiceManager.instance().device.ensureConnection(pairedDeviceId, force: true);
       if (connection != null) {
-        await setConnectedDevice(connection.device);
+        final device = connection.device.withPersistedName();
+        await setConnectedDevice(device);
         setisDeviceStorageSupport();
-        SharedPreferencesUtil().deviceName = connection.device.name;
+        SharedPreferencesUtil().deviceName = device.name;
         MixpanelManager().deviceConnected();
         setIsConnected(true);
       }
@@ -386,25 +410,26 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
 
   void _onDeviceConnected(BtDevice device) async {
     Logger.debug('_onConnected inside: $connectedDevice');
+    final resolvedDevice = device.withPersistedName();
     _disconnectNotificationTimer?.cancel();
     NotificationService.instance.clearNotification(1);
-    setConnectedDevice(device);
+    setConnectedDevice(resolvedDevice);
 
     if (captureProvider != null) {
-      captureProvider?.updateRecordingDevice(device);
+      captureProvider?.updateRecordingDevice(resolvedDevice);
     }
 
     setisDeviceStorageSupport();
     setIsConnected(true);
 
     // Read initial battery level
-    int currentLevel = await _retrieveBatteryLevel(device.id);
+    int currentLevel = await _retrieveBatteryLevel(resolvedDevice.id);
     if (currentLevel != -1) {
       batteryLevel = currentLevel;
       BatteryWidgetService().updateBatteryInfo(
-        deviceName: device.name,
+        deviceName: resolvedDevice.name,
         batteryLevel: currentLevel,
-        deviceType: device.type.name,
+        deviceType: resolvedDevice.type.name,
         isConnected: true,
       );
     }
@@ -415,18 +440,18 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
       _hasLowBatteryAlerted = false;
     }
     updateConnectingStatus(false);
-    await captureProvider?.streamDeviceRecording(device: device);
+    await captureProvider?.streamDeviceRecording(device: resolvedDevice);
 
     await getDeviceInfo();
-    SharedPreferencesUtil().deviceName = device.name;
+    SharedPreferencesUtil().deviceName = pairedDevice?.name ?? resolvedDevice.name;
 
     // Wals
-    ServiceManager.instance().wal.getSyncs().sdcard.setDevice(device);
-    ServiceManager.instance().wal.getSyncs().flashPage.setDevice(device);
-    ServiceManager.instance().wal.getSyncs().storage.setDevice(device);
+    ServiceManager.instance().wal.getSyncs().sdcard.setDevice(resolvedDevice);
+    ServiceManager.instance().wal.getSyncs().flashPage.setDevice(resolvedDevice);
+    ServiceManager.instance().wal.getSyncs().storage.setDevice(resolvedDevice);
 
     // Auto-sync: check if device has offline files (new multi-file firmware)
-    _checkAndStartAutoSync(device);
+    _checkAndStartAutoSync(resolvedDevice);
 
     notifyListeners();
 
@@ -434,10 +459,10 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     _checkFirmwareUpdates();
 
     if (Platform.isAndroid) {
-      _ensureCompanionAssociation(device);
+      _ensureCompanionAssociation(resolvedDevice);
     }
 
-    onDeviceConnected?.call(device);
+    onDeviceConnected?.call(resolvedDevice);
   }
 
   /// Check firmware version to determine multi-file sync support.

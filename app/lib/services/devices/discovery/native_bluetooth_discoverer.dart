@@ -131,7 +131,7 @@ class NativeBluetoothDiscoverer extends DeviceDiscoverer {
     }
 
     return BtDevice(
-      name: p.name,
+      name: BtDevice.resolveDisplayName(id: p.uuid, fallbackName: p.name),
       id: p.uuid,
       type: type,
       rssi: p.rssi,

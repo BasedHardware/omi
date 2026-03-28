@@ -78,6 +78,39 @@ class SharedPreferencesUtil {
 
   String get deviceName => getString('deviceName');
 
+  static const _customDeviceNamesKey = 'customDeviceNames';
+
+  Map<String, String> get customDeviceNames {
+    final encoded = getString(_customDeviceNamesKey);
+    if (encoded.isEmpty) return {};
+    try {
+      final decoded = jsonDecode(encoded) as Map<String, dynamic>;
+      return decoded.map((key, value) => MapEntry(key, value.toString()));
+    } catch (e, stack) {
+      Logger.debug('Error parsing customDeviceNames: $e');
+      Logger.debug('Stack: $stack');
+      return {};
+    }
+  }
+
+  String getCustomDeviceName(String deviceId, {String fallback = ''}) {
+    final savedName = customDeviceNames[deviceId]?.trim() ?? '';
+    return savedName.isNotEmpty ? savedName : fallback;
+  }
+
+  Future<bool> saveCustomDeviceName(String deviceId, String value) async {
+    final names = customDeviceNames;
+    final trimmedValue = value.trim();
+    if (trimmedValue.isEmpty) {
+      names.remove(deviceId);
+    } else {
+      names[deviceId] = trimmedValue;
+    }
+    return saveString(_customDeviceNamesKey, jsonEncode(names));
+  }
+
+  Future<bool> clearCustomDeviceName(String deviceId) async => saveCustomDeviceName(deviceId, '');
+
   bool get deviceIsV2 => getBool('deviceIsV2');
 
   set deviceIsV2(bool value) => saveBool('deviceIsV2', value);
