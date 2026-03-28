@@ -7,7 +7,7 @@ from fastapi import APIRouter, UploadFile, Depends, HTTPException
 from pydub import AudioSegment
 
 from database.conversations import get_conversation
-from database.redis_db import remove_user_soniox_speech_profile, set_speech_profile_duration
+from database.redis_db import set_speech_profile_duration
 from database.users import get_person
 from models.conversation import Conversation
 from models.other import UploadProfile
@@ -73,7 +73,6 @@ def upload_profile(file: UploadFile, uid: str = Depends(auth.get_current_user_ui
     set_speech_profile_duration(uid, duration)
 
     url = upload_profile_audio(file_path, uid)
-    remove_user_soniox_speech_profile(uid)
     return {"url": url}
 
 

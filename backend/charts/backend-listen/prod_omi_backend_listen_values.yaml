@@ -106,11 +106,6 @@ env:
       secretKeyRef:
         name: prod-omi-backend-secrets
         key: GROQ_API_KEY
-  - name: SONIOX_API_KEY
-    valueFrom:
-      secretKeyRef:
-        name: prod-omi-backend-secrets
-        key: SONIOX_API_KEY
   - name: HOSTED_VAD_API_URL
     value: "http://vad.omi.me:80/v1/vad"
   - name: HOSTED_SPEECH_PROFILE_API_URL

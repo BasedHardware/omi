@@ -295,18 +295,6 @@ def get_apps_installs_count(app_ids: list) -> dict:
     return {app_id: int(count) if count else 0 for app_id, count in zip(app_ids, counts)}
 
 
-def set_user_has_soniox_speech_profile(uid: str):
-    r.set(f'users:{uid}:has_soniox_speech_profile', '1')
-
-
-def get_user_has_soniox_speech_profile(uid: str) -> bool:
-    return r.exists(f'users:{uid}:has_soniox_speech_profile')
-
-
-def remove_user_soniox_speech_profile(uid: str):
-    r.delete(f'users:{uid}:has_soniox_speech_profile')
-
-
 def cache_user_name(uid: str, name: str, ttl: int = 60 * 60 * 24 * 7):
     r.set(f'users:{uid}:name', name)
     r.expire(f'users:{uid}:name', ttl)

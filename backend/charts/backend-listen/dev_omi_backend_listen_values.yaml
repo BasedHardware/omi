@@ -109,11 +109,6 @@ env:
       secretKeyRef:
         name: dev-omi-backend-secrets
         key: GITHUB_TOKEN
-  - name: SONIOX_API_KEY
-    valueFrom:
-      secretKeyRef:
-        name: dev-omi-backend-secrets
-        key: SONIOX_API_KEY
   - name: BUCKET_SPEECH_PROFILES
     value: "speech-profiles-dev"
   - name: BUCKET_TEMPORAL_SYNC_LOCAL
