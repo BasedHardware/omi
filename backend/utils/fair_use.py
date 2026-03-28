@@ -347,26 +347,31 @@ def ensure_free_exhausted_restrict(uid: str) -> str:
                 {
                     'stage': 'restrict',
                     'restrict_reason': 'free_exhausted',
+                    'previous_stage': stage,  # Preserve abuse escalation state for restore
                 },
             )
             invalidate_enforcement_cache(uid)
-            logger.info(f'fair_use: free-exhausted, set restrict for {uid}')
+            logger.info(f'fair_use: free-exhausted, set restrict for {uid} (was {stage})')
             return 'restrict'
 
         if not free_exhausted and stage == 'restrict':
             state = fair_use_db.get_fair_use_state(uid)
             if state.get('restrict_reason') == 'free_exhausted':
+                restored_stage = state.get('previous_stage', 'none')
                 fair_use_db.update_fair_use_state(
                     uid,
                     {
-                        'stage': 'none',
+                        'stage': restored_stage,
                         'restrict_reason': None,
                         'restrict_until': None,
+                        'previous_stage': None,
                     },
                 )
                 invalidate_enforcement_cache(uid)
-                logger.info(f'fair_use: credits restored, cleared free-exhausted restrict for {uid}')
-                return 'none'
+                logger.info(
+                    f'fair_use: credits restored, cleared free-exhausted restrict for {uid} (restored {restored_stage})'
+                )
+                return restored_stage
 
         return stage
     except Exception as e:
