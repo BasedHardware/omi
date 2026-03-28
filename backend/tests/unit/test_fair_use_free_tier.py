@@ -1,10 +1,8 @@
 """Tests for free-tier fair-use enforcement (#6083).
 
-Architecture: free-exhausted users go directly to 'restrict' stage via
-ensure_free_exhausted_restrict(). This skips the LLM classifier and
-graduated escalation. The restrict stage activates the daily DG budget
-(FAIR_USE_RESTRICT_DAILY_DG_MS). When credits return, the restriction
-auto-clears.
+Architecture: free-exhausted users get a synthetic score of 1.0 (instead of
+the LLM classifier) and follow the same graduated escalation pipeline as
+abuse-detected users: none → warning → throttle → restrict.
 """
 
 import asyncio
@@ -66,180 +64,6 @@ def _make_trigger(trigger_type='daily'):
 
 
 # ---------------------------------------------------------------------------
-# ensure_free_exhausted_restrict tests
-# ---------------------------------------------------------------------------
-
-
-class TestEnsureFreeExhaustedRestrict:
-    """Core function: free-exhausted → restrict directly, auto-clear on credits return."""
-
-    def setup_method(self):
-        _fair_use_db.get_fair_use_state.reset_mock()
-        _fair_use_db.update_fair_use_state.reset_mock()
-        _mock_redis.reset_mock()
-
-    @patch.object(fair_use_mod, 'FAIR_USE_ENABLED', True)
-    @patch.object(fair_use_mod, 'is_free_credits_exhausted', return_value=True)
-    @patch.object(fair_use_mod, 'get_enforcement_stage', return_value='none')
-    def test_free_exhausted_sets_restrict(self, _mock_stage, _mock_free):
-        """Free-exhausted user at stage 'none' should jump directly to 'restrict'."""
-        result = fair_use_mod.ensure_free_exhausted_restrict('test-uid')
-
-        assert result == 'restrict'
-        _fair_use_db.update_fair_use_state.assert_called_once()
-        call_args = _fair_use_db.update_fair_use_state.call_args[0]
-        assert call_args[0] == 'test-uid'
-        assert call_args[1]['stage'] == 'restrict'
-        assert call_args[1]['restrict_reason'] == 'free_exhausted'
-        assert call_args[1]['previous_stage'] == 'none'
-
-    @patch.object(fair_use_mod, 'FAIR_USE_ENABLED', True)
-    @patch.object(fair_use_mod, 'is_free_credits_exhausted', return_value=True)
-    @patch.object(fair_use_mod, 'get_enforcement_stage', return_value='warning')
-    def test_free_exhausted_from_warning_sets_restrict(self, _mock_stage, _mock_free):
-        """Free-exhausted user at any non-restrict stage should be set to 'restrict'."""
-        result = fair_use_mod.ensure_free_exhausted_restrict('test-uid')
-        assert result == 'restrict'
-        _fair_use_db.update_fair_use_state.assert_called_once()
-
-    @patch.object(fair_use_mod, 'FAIR_USE_ENABLED', True)
-    @patch.object(fair_use_mod, 'is_free_credits_exhausted', return_value=True)
-    @patch.object(fair_use_mod, 'get_enforcement_stage', return_value='restrict')
-    def test_free_exhausted_already_restrict_noop(self, _mock_stage, _mock_free):
-        """Free-exhausted user already at 'restrict' should not update state."""
-        result = fair_use_mod.ensure_free_exhausted_restrict('test-uid')
-        assert result == 'restrict'
-        _fair_use_db.update_fair_use_state.assert_not_called()
-
-    @patch.object(fair_use_mod, 'FAIR_USE_ENABLED', True)
-    @patch.object(fair_use_mod, 'is_free_credits_exhausted', return_value=False)
-    @patch.object(fair_use_mod, 'get_enforcement_stage', return_value='restrict')
-    def test_credits_restored_clears_free_exhausted_restrict(self, _mock_stage, _mock_free):
-        """When credits return and restrict_reason is 'free_exhausted', restore to previous stage."""
-        _fair_use_db.get_fair_use_state.return_value = {
-            'stage': 'restrict',
-            'restrict_reason': 'free_exhausted',
-            'previous_stage': 'none',
-        }
-
-        result = fair_use_mod.ensure_free_exhausted_restrict('test-uid')
-
-        assert result == 'none'
-        _fair_use_db.update_fair_use_state.assert_called_once()
-        call_args = _fair_use_db.update_fair_use_state.call_args[0]
-        assert call_args[1]['stage'] == 'none'
-        assert call_args[1]['restrict_reason'] is None
-
-    @patch.object(fair_use_mod, 'FAIR_USE_ENABLED', True)
-    @patch.object(fair_use_mod, 'is_free_credits_exhausted', return_value=False)
-    @patch.object(fair_use_mod, 'get_enforcement_stage', return_value='restrict')
-    def test_credits_restored_restores_previous_abuse_stage(self, _mock_stage, _mock_free):
-        """When credits return and user was in 'warning' before, restore to 'warning' not 'none'."""
-        _fair_use_db.get_fair_use_state.return_value = {
-            'stage': 'restrict',
-            'restrict_reason': 'free_exhausted',
-            'previous_stage': 'warning',
-        }
-
-        result = fair_use_mod.ensure_free_exhausted_restrict('test-uid')
-
-        assert result == 'warning'
-        call_args = _fair_use_db.update_fair_use_state.call_args[0]
-        assert call_args[1]['stage'] == 'warning'
-
-    @patch.object(fair_use_mod, 'FAIR_USE_ENABLED', True)
-    @patch.object(fair_use_mod, 'is_free_credits_exhausted', return_value=False)
-    @patch.object(fair_use_mod, 'get_enforcement_stage', return_value='restrict')
-    def test_credits_restored_does_not_clear_abuse_restrict(self, _mock_stage, _mock_free):
-        """When restrict_reason is NOT 'free_exhausted' (abuse), don't clear."""
-        _fair_use_db.get_fair_use_state.return_value = {
-            'stage': 'restrict',
-            'restrict_reason': None,  # Abuse-based restrict has no reason or different reason
-        }
-
-        result = fair_use_mod.ensure_free_exhausted_restrict('test-uid')
-
-        assert result == 'restrict'
-        _fair_use_db.update_fair_use_state.assert_not_called()
-
-    @patch.object(fair_use_mod, 'FAIR_USE_ENABLED', True)
-    @patch.object(fair_use_mod, 'is_free_credits_exhausted', return_value=False)
-    @patch.object(fair_use_mod, 'get_enforcement_stage', return_value='none')
-    def test_non_exhausted_non_restricted_noop(self, _mock_stage, _mock_free):
-        """Non-exhausted user at 'none' — no changes."""
-        result = fair_use_mod.ensure_free_exhausted_restrict('test-uid')
-        assert result == 'none'
-        _fair_use_db.update_fair_use_state.assert_not_called()
-
-    @patch.object(fair_use_mod, 'FAIR_USE_ENABLED', False)
-    def test_disabled_returns_none(self):
-        """When fair-use is disabled, always returns 'none'."""
-        result = fair_use_mod.ensure_free_exhausted_restrict('test-uid')
-        assert result == 'none'
-
-    @patch.object(fair_use_mod, 'FAIR_USE_ENABLED', True)
-    @patch.object(fair_use_mod, 'FAIR_USE_KILL_SWITCH', True)
-    def test_kill_switch_returns_none(self):
-        """When kill switch is active, always returns 'none'."""
-        result = fair_use_mod.ensure_free_exhausted_restrict('test-uid')
-        assert result == 'none'
-        _fair_use_db.update_fair_use_state.assert_not_called()
-
-    @patch.object(fair_use_mod, 'FAIR_USE_ENABLED', True)
-    @patch.object(fair_use_mod, 'FAIR_USE_EXEMPT_UIDS', {'test-uid'})
-    def test_exempt_uid_returns_none(self):
-        """Exempt UIDs are never restricted."""
-        result = fair_use_mod.ensure_free_exhausted_restrict('test-uid')
-        assert result == 'none'
-        _fair_use_db.update_fair_use_state.assert_not_called()
-
-
-# ---------------------------------------------------------------------------
-# is_hard_restricted interaction with free-exhausted
-# ---------------------------------------------------------------------------
-
-
-class TestIsHardRestrictedFreeExhausted:
-    """Free-exhausted users in restrict stage should NOT be hard-blocked."""
-
-    def setup_method(self):
-        _fair_use_db.get_fair_use_state.reset_mock()
-        _mock_redis.reset_mock()
-
-    @patch.object(fair_use_mod, 'FAIR_USE_ENABLED', True)
-    @patch.object(fair_use_mod, 'FAIR_USE_KILL_SWITCH', False)
-    @patch.object(fair_use_mod, 'FAIR_USE_EXEMPT_UIDS', set())
-    @patch.object(
-        fair_use_mod,
-        'get_rolling_speech_ms',
-        return_value={'daily_ms': 999999999, 'three_day_ms': 999999999, 'weekly_ms': 999999999},
-    )
-    def test_free_exhausted_restrict_not_hard_blocked(self, _mock_speech):
-        """Free-exhausted restrict users should not be hard-blocked even with high speech."""
-        _fair_use_db.get_fair_use_state.return_value = {
-            'stage': 'restrict',
-            'restrict_reason': 'free_exhausted',
-        }
-        assert fair_use_mod.is_hard_restricted('test-uid') is False
-
-    @patch.object(fair_use_mod, 'FAIR_USE_ENABLED', True)
-    @patch.object(fair_use_mod, 'FAIR_USE_KILL_SWITCH', False)
-    @patch.object(fair_use_mod, 'FAIR_USE_EXEMPT_UIDS', set())
-    @patch.object(
-        fair_use_mod,
-        'get_rolling_speech_ms',
-        return_value={'daily_ms': 999999999, 'three_day_ms': 999999999, 'weekly_ms': 999999999},
-    )
-    def test_abuse_restrict_still_hard_blocked(self, _mock_speech):
-        """Abuse-restricted users with high speech should still be hard-blocked."""
-        _fair_use_db.get_fair_use_state.return_value = {
-            'stage': 'restrict',
-            'restrict_reason': None,
-        }
-        assert fair_use_mod.is_hard_restricted('test-uid') is True
-
-
-# ---------------------------------------------------------------------------
 # is_free_credits_exhausted tests
 # ---------------------------------------------------------------------------
 
@@ -281,12 +105,12 @@ class TestIsFreeCreditsExhausted:
 
 
 # ---------------------------------------------------------------------------
-# trigger_classifier_if_needed tests
+# trigger_classifier_if_needed tests — free-exhausted synthetic score
 # ---------------------------------------------------------------------------
 
 
 class TestTriggerClassifierFreeTier:
-    """Free-exhausted users skip the LLM classifier entirely."""
+    """Free-exhausted users get synthetic score 1.0 and go through escalation."""
 
     def setup_method(self):
         _mock_redis.reset_mock()
@@ -295,12 +119,15 @@ class TestTriggerClassifierFreeTier:
         _fair_use_db.get_violation_counts.return_value = {'violation_count_7d': 0, 'violation_count_30d': 0}
         _fair_use_db.create_fair_use_event.return_value = 'evt-123'
         _fair_use_db.get_fair_use_events.return_value = [{'case_ref': 'FU-TEST01'}]
+        _fair_use_db.update_fair_use_state.reset_mock()
 
     @patch.object(fair_use_mod, 'FAIR_USE_ENABLED', True)
     @patch.object(fair_use_mod, 'is_free_credits_exhausted', return_value=True)
-    @patch.object(fair_use_mod, 'ensure_free_exhausted_restrict', return_value='restrict')
-    def test_free_exhausted_skips_classifier(self, _mock_ensure, _mock_free):
-        """Free-exhausted: acquires lock, calls ensure_free_exhausted_restrict, no LLM classifier."""
+    @patch.object(
+        fair_use_mod, 'get_rolling_speech_ms', return_value={'daily_ms': 0, 'three_day_ms': 0, 'weekly_ms': 0}
+    )
+    def test_free_exhausted_uses_synthetic_score(self, _mock_speech, _mock_free):
+        """Free-exhausted: acquires lock, skips LLM, uses synthetic score 1.0 for escalation."""
         mock_classifier = MagicMock()
         fair_use_mod._classify_user_purpose = mock_classifier
 
@@ -310,10 +137,57 @@ class TestTriggerClassifierFreeTier:
         finally:
             loop.close()
 
-        _mock_ensure.assert_called_once_with('test-uid')
+        # LLM classifier not called
         mock_classifier.assert_not_called()
-        # Lock is acquired first (cheap Redis check), then released after free-exhausted path
+        # Lock was acquired
         _mock_redis.set.assert_called_once()
+        # Escalation happened (none → warning with synthetic score 1.0)
+        _fair_use_db.update_fair_use_state.assert_called()
+        # First call is the stage update; last call may be last_case_ref
+        stage_call = _fair_use_db.update_fair_use_state.call_args_list[0][0]
+        assert stage_call[1]['stage'] == 'warning'
+
+    @patch.object(fair_use_mod, 'FAIR_USE_ENABLED', True)
+    @patch.object(fair_use_mod, 'is_free_credits_exhausted', return_value=True)
+    @patch.object(
+        fair_use_mod, 'get_rolling_speech_ms', return_value={'daily_ms': 0, 'three_day_ms': 0, 'weekly_ms': 0}
+    )
+    def test_free_exhausted_escalates_warning_to_throttle(self, _mock_speech, _mock_free):
+        """Free-exhausted user already at warning with enough violations → throttle."""
+        _fair_use_db.get_fair_use_state.return_value = {'stage': 'warning'}
+        _fair_use_db.get_violation_counts.return_value = {'violation_count_7d': 2, 'violation_count_30d': 3}
+        fair_use_mod._classify_user_purpose = MagicMock()
+
+        loop = asyncio.new_event_loop()
+        try:
+            loop.run_until_complete(fair_use_mod.trigger_classifier_if_needed('test-uid', _make_trigger()))
+        finally:
+            loop.close()
+
+        _fair_use_db.update_fair_use_state.assert_called()
+        stage_call = _fair_use_db.update_fair_use_state.call_args_list[0][0]
+        assert stage_call[1]['stage'] == 'throttle'
+
+    @patch.object(fair_use_mod, 'FAIR_USE_ENABLED', True)
+    @patch.object(fair_use_mod, 'is_free_credits_exhausted', return_value=True)
+    @patch.object(
+        fair_use_mod, 'get_rolling_speech_ms', return_value={'daily_ms': 0, 'three_day_ms': 0, 'weekly_ms': 0}
+    )
+    def test_free_exhausted_escalates_throttle_to_restrict(self, _mock_speech, _mock_free):
+        """Free-exhausted user at throttle with enough violations → restrict."""
+        _fair_use_db.get_fair_use_state.return_value = {'stage': 'throttle'}
+        _fair_use_db.get_violation_counts.return_value = {'violation_count_7d': 3, 'violation_count_30d': 5}
+        fair_use_mod._classify_user_purpose = MagicMock()
+
+        loop = asyncio.new_event_loop()
+        try:
+            loop.run_until_complete(fair_use_mod.trigger_classifier_if_needed('test-uid', _make_trigger()))
+        finally:
+            loop.close()
+
+        _fair_use_db.update_fair_use_state.assert_called()
+        stage_call = _fair_use_db.update_fair_use_state.call_args_list[0][0]
+        assert stage_call[1]['stage'] == 'restrict'
 
     @patch.object(fair_use_mod, 'FAIR_USE_ENABLED', True)
     @patch.object(
@@ -341,14 +215,13 @@ class TestTriggerClassifierFreeTier:
 
 
 # ---------------------------------------------------------------------------
-# escalate_enforcement tests — no free-exhausted bypass
+# escalate_enforcement tests — shared by both abuse and free-exhausted paths
 # ---------------------------------------------------------------------------
 
 
 class TestEscalateEnforcement:
-    """After architecture change, escalate_enforcement only handles abuse detection.
-    Free-exhausted users never reach this function (handled by ensure_free_exhausted_restrict).
-    The score gate (misuse_score >= threshold) is always required."""
+    """escalate_enforcement handles both abuse detection (LLM) and free-exhausted
+    (synthetic score) paths. The score gate (misuse_score >= threshold) is always required."""
 
     def setup_method(self):
         _fair_use_db.get_fair_use_state.reset_mock()
@@ -423,9 +296,25 @@ class TestEscalateEnforcement:
         assert result['action'] == 'restrict'
         assert result['new_stage'] == 'restrict'
 
+    @patch.object(fair_use_mod, 'FAIR_USE_ENABLED', True)
+    @patch.object(
+        fair_use_mod, 'get_rolling_speech_ms', return_value={'daily_ms': 0, 'three_day_ms': 0, 'weekly_ms': 0}
+    )
+    def test_free_exhausted_synthetic_score_escalates(self, _mock_speech):
+        """Free-exhausted synthetic score (1.0) should escalate same as abuse."""
+        _fair_use_db.get_fair_use_state.return_value = {'stage': 'none'}
+        _fair_use_db.get_violation_counts.return_value = {'violation_count_7d': 0, 'violation_count_30d': 0}
+
+        result = fair_use_mod.escalate_enforcement(
+            'test-uid', _make_trigger(), {'misuse_score': 1.0, 'usage_type': 'free_exhausted'}
+        )
+
+        assert result['action'] == 'warning'
+        assert result['new_stage'] == 'warning'
+
 
 # ---------------------------------------------------------------------------
-# DG budget tests (simplified — no limit_ms parameter)
+# DG budget tests
 # ---------------------------------------------------------------------------
 
 
