@@ -12,6 +12,8 @@ import 'package:omi/models/sync_state.dart';
 import 'package:omi/utils/audio_player_utils.dart';
 import 'package:omi/utils/conversation_sync_utils.dart';
 import 'package:omi/utils/waveform_utils.dart';
+import 'package:omi/services/notifications/sync_completed_notification_handler.dart';
+import 'package:omi/backend/http/api/conversations.dart' show getSyncJobs;
 
 enum WalStatusFilter { pending, synced }
 
@@ -136,15 +138,57 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
 
   IWalService get _walService => ServiceManager.instance().wal;
 
+  StreamSubscription<SyncCompletedEvent>? _syncCompletedSubscription;
+
   SyncProvider() {
     _walService.subscribe(this, this);
     _audioPlayerUtils.addListener(_onAudioPlayerStateChanged);
+    _syncCompletedSubscription = SyncCompletedNotificationHandler.onSyncCompleted.listen(_onSyncCompleted);
     _initializeProvider();
   }
 
   void _initializeProvider() async {
     await refreshWals();
     _autoUploadPendingPhoneFiles();
+    _checkForMissedSyncCompletions();
+  }
+
+  /// Handle FCM sync completed event — fetch and display the conversation results.
+  void _onSyncCompleted(SyncCompletedEvent event) async {
+    Logger.debug(
+      'SyncProvider: FCM sync completed job=${event.jobId} '
+      'new=${event.newConversationIds.length} updated=${event.updatedConversationIds.length}',
+    );
+
+    if (event.newConversationIds.isEmpty && event.updatedConversationIds.isEmpty) {
+      return;
+    }
+
+    final result = SyncLocalFilesResponse(
+      newConversationIds: event.newConversationIds,
+      updatedConversationIds: event.updatedConversationIds,
+    );
+    await _processConversationResults(result);
+  }
+
+  /// On app open, check for any completed sync jobs whose FCM was missed.
+  void _checkForMissedSyncCompletions() async {
+    try {
+      await Future.delayed(const Duration(seconds: 5));
+      final completedJobs = await getSyncJobs(status: 'completed');
+      for (final job in completedJobs) {
+        if (job.newConversationIds.isNotEmpty || job.updatedConversationIds.isNotEmpty) {
+          Logger.debug('SyncProvider: Found missed sync completion job=${job.id}');
+          final result = SyncLocalFilesResponse(
+            newConversationIds: job.newConversationIds,
+            updatedConversationIds: job.updatedConversationIds,
+          );
+          await _processConversationResults(result);
+        }
+      }
+    } catch (e) {
+      Logger.debug('SyncProvider: Error checking missed sync completions: $e');
+    }
   }
 
   bool _isAutoUploading = false;
@@ -508,6 +552,7 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
 
   @override
   void dispose() {
+    _syncCompletedSubscription?.cancel();
     _audioPlayerUtils.removeListener(_onAudioPlayerStateChanged);
     WaveformUtils.clearCache();
     _walService.unsubscribe(this);
