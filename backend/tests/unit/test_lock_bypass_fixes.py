@@ -273,10 +273,10 @@ class TestPublicConversationFilter:
 
 
 class TestSearchRedaction:
-    """M1: Search results must redact locked conversation content."""
+    """M1: Search results must exclude locked conversations entirely to prevent inference leaks."""
 
-    def test_search_redacts_locked_results(self):
-        """search_conversations must redact action_items/events/transcript from locked."""
+    def test_search_excludes_locked_results(self):
+        """search_conversations must exclude locked hits entirely (not just redact)."""
         mock_client = MagicMock()
         mock_client.collections.__getitem__.return_value.documents.search.return_value = {
             'hits': [
@@ -305,18 +305,15 @@ class TestSearchRedaction:
 
             result = search_conversations(uid='test-uid', query='test')
 
-        locked_item = result['items'][0]
-        assert locked_item['structured']['title'] == ''
-        assert locked_item['structured']['overview'] == ''
-        assert locked_item['structured']['action_items'] == []
-        assert locked_item['structured']['events'] == []
-        assert locked_item['transcript_segments'] == []
-
-        unlocked_item = result['items'][1]
+        # Locked item must be excluded entirely (prevents inference leak)
+        assert len(result['items']) == 1
+        unlocked_item = result['items'][0]
         assert unlocked_item['structured']['title'] == 'Test Conversation'
         assert unlocked_item['structured']['overview'] == 'Test overview'
         assert len(unlocked_item['structured']['action_items']) == 1
         assert len(unlocked_item['transcript_segments']) == 1
+        # total_pages must not count locked items
+        assert result['total_pages'] == 1
 
 
 # =============================================================================
