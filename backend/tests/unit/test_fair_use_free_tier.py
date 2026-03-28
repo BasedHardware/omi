@@ -160,6 +160,67 @@ class TestEnsureFreeExhaustedRestrict:
         result = fair_use_mod.ensure_free_exhausted_restrict('test-uid')
         assert result == 'none'
 
+    @patch.object(fair_use_mod, 'FAIR_USE_ENABLED', True)
+    @patch.object(fair_use_mod, 'FAIR_USE_KILL_SWITCH', True)
+    def test_kill_switch_returns_none(self):
+        """When kill switch is active, always returns 'none'."""
+        result = fair_use_mod.ensure_free_exhausted_restrict('test-uid')
+        assert result == 'none'
+        _fair_use_db.update_fair_use_state.assert_not_called()
+
+    @patch.object(fair_use_mod, 'FAIR_USE_ENABLED', True)
+    @patch.object(fair_use_mod, 'FAIR_USE_EXEMPT_UIDS', {'test-uid'})
+    def test_exempt_uid_returns_none(self):
+        """Exempt UIDs are never restricted."""
+        result = fair_use_mod.ensure_free_exhausted_restrict('test-uid')
+        assert result == 'none'
+        _fair_use_db.update_fair_use_state.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# is_hard_restricted interaction with free-exhausted
+# ---------------------------------------------------------------------------
+
+
+class TestIsHardRestrictedFreeExhausted:
+    """Free-exhausted users in restrict stage should NOT be hard-blocked."""
+
+    def setup_method(self):
+        _fair_use_db.get_fair_use_state.reset_mock()
+        _mock_redis.reset_mock()
+
+    @patch.object(fair_use_mod, 'FAIR_USE_ENABLED', True)
+    @patch.object(fair_use_mod, 'FAIR_USE_KILL_SWITCH', False)
+    @patch.object(fair_use_mod, 'FAIR_USE_EXEMPT_UIDS', set())
+    @patch.object(
+        fair_use_mod,
+        'get_rolling_speech_ms',
+        return_value={'daily_ms': 999999999, 'three_day_ms': 999999999, 'weekly_ms': 999999999},
+    )
+    def test_free_exhausted_restrict_not_hard_blocked(self, _mock_speech):
+        """Free-exhausted restrict users should not be hard-blocked even with high speech."""
+        _fair_use_db.get_fair_use_state.return_value = {
+            'stage': 'restrict',
+            'restrict_reason': 'free_exhausted',
+        }
+        assert fair_use_mod.is_hard_restricted('test-uid') is False
+
+    @patch.object(fair_use_mod, 'FAIR_USE_ENABLED', True)
+    @patch.object(fair_use_mod, 'FAIR_USE_KILL_SWITCH', False)
+    @patch.object(fair_use_mod, 'FAIR_USE_EXEMPT_UIDS', set())
+    @patch.object(
+        fair_use_mod,
+        'get_rolling_speech_ms',
+        return_value={'daily_ms': 999999999, 'three_day_ms': 999999999, 'weekly_ms': 999999999},
+    )
+    def test_abuse_restrict_still_hard_blocked(self, _mock_speech):
+        """Abuse-restricted users with high speech should still be hard-blocked."""
+        _fair_use_db.get_fair_use_state.return_value = {
+            'stage': 'restrict',
+            'restrict_reason': None,
+        }
+        assert fair_use_mod.is_hard_restricted('test-uid') is True
+
 
 # ---------------------------------------------------------------------------
 # is_free_credits_exhausted tests
