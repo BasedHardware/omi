@@ -2258,6 +2258,8 @@ async def _stream_handler(
                         person = known_people_by_name_key.get(normalize_person_name_key(detected_name))
                         if person is None:
                             person = user_db.get_person_by_name(uid, detected_name)
+                            if person is not None:
+                                known_people_by_name_key[normalize_person_name_key(person['name'])] = person
                         if person:
                             person_id = person['id']
                             detected_name = person['name']

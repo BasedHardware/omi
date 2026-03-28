@@ -261,6 +261,11 @@ def _normalize_detected_name(name: str) -> str:
 
 
 def _detect_known_name_from_text(text: str, known_names: Iterable[str]) -> Optional[str]:
+    """Match lowercase ASR self-introductions for already-known people.
+
+    This fallback intentionally stays English-only for now. The multilingual
+    regex path above remains the primary detector.
+    """
     normalized_text = normalize_person_name_key(text)
     if not normalized_text:
         return None
@@ -273,7 +278,7 @@ def _detect_known_name_from_text(text: str, known_names: Iterable[str]) -> Optio
     for known_name in sorted_names:
         escaped_name = re.escape(normalize_person_name_key(known_name))
         for pattern in SELF_REFERENCE_KNOWN_NAME_PATTERNS:
-            if re.search(rf"\b{pattern.format(name=escaped_name)}\b", normalized_text):
+            if re.search(rf"\b{pattern.format(name=escaped_name)}\b(?!['’])", normalized_text):
                 return _normalize_detected_name(known_name)
     return None
 

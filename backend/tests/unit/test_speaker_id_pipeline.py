@@ -303,6 +303,11 @@ class TestDetectSpeakerFromText:
         result = detect_speaker_from_text("hey bob, can you join?", known_names=["Bob"])
         assert result is None
 
+    def test_known_name_detection_rejects_possessive_mentions(self):
+        """Possessive references should not be treated as a speaker introduction."""
+        result = detect_speaker_from_text("this is bob's phone", known_names=["Bob"])
+        assert result is None
+
     def test_normalize_person_name_key_casefolds_and_collapses_spaces(self):
         """Normalized lookup keys ignore case and repeated whitespace."""
         assert normalize_person_name_key("  Mary   Jane ") == "mary jane"
