@@ -427,10 +427,12 @@ class NormalMessageWidget extends StatefulWidget {
 class _NormalMessageWidgetState extends State<NormalMessageWidget> {
   bool _showDots = true;
   Timer? _dotsTimer;
+  late ParsedGenUiMessage _parsedGenUi;
 
   @override
   void initState() {
     super.initState();
+    _parsedGenUi = parseGenUiMessage(widget.messageText);
     if (widget.showTypingIndicator && widget.messageText.isEmpty && widget.message.thinkings.isEmpty) {
       _dotsTimer = Timer(const Duration(milliseconds: 500), () {
         if (mounted) {
@@ -439,6 +441,14 @@ class _NormalMessageWidgetState extends State<NormalMessageWidget> {
           });
         }
       });
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant NormalMessageWidget oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.messageText != widget.messageText) {
+      _parsedGenUi = parseGenUiMessage(widget.messageText);
     }
   }
 
@@ -470,7 +480,7 @@ class _NormalMessageWidgetState extends State<NormalMessageWidget> {
   @override
   Widget build(BuildContext context) {
     var thinkingTextRaw = widget.message.thinkings.isNotEmpty ? widget.message.thinkings.last.decodeString : null;
-    final parsedGenUi = parseGenUiMessage(widget.messageText);
+    final parsedGenUi = _parsedGenUi;
 
     // Parse app_id and display text from thinking messages
     String? currentAppId = thinkingTextRaw != null ? parseAppIdFromThinking(thinkingTextRaw) : null;

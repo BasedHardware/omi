@@ -22,12 +22,22 @@ class GenUiMessageWidget extends StatefulWidget {
 }
 
 class _GenUiMessageWidgetState extends State<GenUiMessageWidget> {
-  bool _isRunningAction = false;
+  final Set<String> _runningActions = <String>{};
+
+  String _actionKey(GenUiAction action) => '${action.type.name}:${action.label}:${action.url ?? ''}';
+
+  Future<void> _showActionError(Object error) async {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(error.toString().replaceFirst('Exception: ', '')), backgroundColor: Colors.red),
+    );
+  }
 
   Future<void> _handleAction(GenUiAction action) async {
-    if (_isRunningAction) return;
+    final actionKey = _actionKey(action);
+    if (_runningActions.contains(actionKey)) return;
 
-    setState(() => _isRunningAction = true);
+    setState(() => _runningActions.add(actionKey));
     try {
       switch (action.type) {
         case GenUiActionType.shareLocation:
@@ -51,7 +61,7 @@ class _GenUiMessageWidgetState extends State<GenUiMessageWidget> {
           break;
         case GenUiActionType.openMap:
           if (widget.card.latitude != null && widget.card.longitude != null) {
-            MapsUtil.launchMap(widget.card.latitude!, widget.card.longitude!);
+            await MapsUtil.launchMap(widget.card.latitude!, widget.card.longitude!);
           }
           break;
         case GenUiActionType.openUrl:
@@ -62,14 +72,19 @@ class _GenUiMessageWidgetState extends State<GenUiMessageWidget> {
           break;
       }
     } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.toString().replaceFirst('Exception: ', '')), backgroundColor: Colors.red),
-      );
+      await _showActionError(e);
     } finally {
       if (mounted) {
-        setState(() => _isRunningAction = false);
+        setState(() => _runningActions.remove(actionKey));
       }
+    }
+  }
+
+  Future<void> _handleMapPreviewTap(double latitude, double longitude) async {
+    try {
+      await MapsUtil.launchMap(latitude, longitude);
+    } catch (e) {
+      await _showActionError(e);
     }
   }
 
@@ -81,7 +96,7 @@ class _GenUiMessageWidgetState extends State<GenUiMessageWidget> {
     return ClipRRect(
       borderRadius: BorderRadius.circular(18),
       child: GestureDetector(
-        onTap: () => MapsUtil.launchMap(latitude, longitude),
+        onTap: () => _handleMapPreviewTap(latitude, longitude),
         child: SizedBox(
           width: double.infinity,
           height: 170,
@@ -152,14 +167,15 @@ class _GenUiMessageWidgetState extends State<GenUiMessageWidget> {
               spacing: 8,
               runSpacing: 8,
               children: widget.card.actions.map((action) {
+                final isRunning = _runningActions.contains(_actionKey(action));
                 return ElevatedButton.icon(
-                  onPressed: _isRunningAction ? null : () => _handleAction(action),
+                  onPressed: isRunning ? null : () => _handleAction(action),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.deepPurpleAccent,
                     foregroundColor: Colors.white,
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                   ),
-                  icon: _isRunningAction
+                  icon: isRunning
                       ? const SizedBox(
                           width: 14,
                           height: 14,
