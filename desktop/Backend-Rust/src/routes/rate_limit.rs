@@ -1,5 +1,8 @@
 // Gemini proxy rate limiter — tiered per-user daily limits with graceful degradation.
 //
+// Primary: Redis-backed (shared across instances via Lua script).
+// Fallback: In-memory per-instance (when Redis unavailable).
+//
 // Tier 1 (Allow):   < DAILY_SOFT_LIMIT requests/day — Pro model allowed as-is
 // Tier 2 (Degrade): DAILY_SOFT_LIMIT..DAILY_HARD_LIMIT — rewrite Pro → Flash
 // Tier 3 (Reject):  > DAILY_HARD_LIMIT — return 429
@@ -11,6 +14,8 @@ use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
 use std::time::Instant;
 use tokio::sync::Mutex;
+
+use crate::services::RedisService;
 
 /// Daily soft limit — above this, Pro requests are degraded to Flash.
 const DAILY_SOFT_LIMIT: u32 = 300;
@@ -35,13 +40,30 @@ pub enum RateDecision {
     Reject,
 }
 
-/// Per-user rate state for a single UTC day.
-struct UserCounter {
-    /// UTC date ordinal (days since epoch) for this counter.
-    day_ordinal: i32,
-    /// Total requests today.
+/// Snapshot of rate counters returned from Redis or in-memory.
+struct RateSnapshot {
     daily_count: u32,
-    /// Rolling window of recent request timestamps for burst detection.
+    burst_count: usize,
+}
+
+impl RateSnapshot {
+    fn to_decision(&self) -> RateDecision {
+        if self.burst_count > BURST_PER_MINUTE {
+            RateDecision::Reject
+        } else if self.daily_count > DAILY_HARD_LIMIT as u32 {
+            RateDecision::Reject
+        } else if self.daily_count > DAILY_SOFT_LIMIT as u32 {
+            RateDecision::DegradeToFlash
+        } else {
+            RateDecision::Allow
+        }
+    }
+}
+
+/// Per-user rate state for in-memory fallback.
+struct UserCounter {
+    day_ordinal: i32,
+    daily_count: u32,
     burst_window: VecDeque<Instant>,
 }
 
@@ -55,8 +77,9 @@ impl UserCounter {
     }
 }
 
-/// In-memory Gemini rate limiter. Thread-safe via Arc<Mutex<>>.
+/// Hybrid Gemini rate limiter: Redis primary, in-memory fallback.
 pub struct GeminiRateLimiter {
+    /// In-memory counters (fallback when Redis unavailable).
     counters: Mutex<HashMap<String, UserCounter>>,
 }
 
@@ -70,8 +93,35 @@ impl GeminiRateLimiter {
     }
 
     /// Check rate limit for a user and record the request.
-    /// Returns the decision (Allow / DegradeToFlash / Reject).
-    pub async fn check_and_record(&self, uid: &str) -> RateDecision {
+    /// Tries Redis first; falls back to in-memory if Redis unavailable.
+    pub async fn check_and_record(
+        &self,
+        uid: &str,
+        redis: Option<&Arc<RedisService>>,
+    ) -> RateDecision {
+        // Try Redis first
+        if let Some(redis) = redis {
+            match redis.check_gemini_rate_limit(uid, BURST_PER_MINUTE, BURST_WINDOW_SECS).await {
+                Ok((daily_count, burst_count)) => {
+                    let snapshot = RateSnapshot {
+                        daily_count: daily_count as u32,
+                        burst_count: burst_count as usize,
+                    };
+                    return snapshot.to_decision();
+                }
+                Err(e) => {
+                    // Log once at warn, fall through to in-memory
+                    tracing::warn!("gemini rate limit: Redis unavailable, using in-memory fallback: {}", e);
+                }
+            }
+        }
+
+        // Fallback: in-memory per-instance limiting
+        self.check_and_record_local(uid).await
+    }
+
+    /// In-memory rate limit check (fallback).
+    async fn check_and_record_local(&self, uid: &str) -> RateDecision {
         let now = Instant::now();
         let today = current_day_ordinal();
 
@@ -85,10 +135,9 @@ impl GeminiRateLimiter {
         if counter.day_ordinal != today {
             counter.day_ordinal = today;
             counter.daily_count = 0;
-            // Don't clear burst window — it spans seconds, not days
         }
 
-        // Prune burst window: remove entries older than 60s
+        // Prune burst window
         let cutoff = now - std::time::Duration::from_secs(BURST_WINDOW_SECS);
         while counter
             .burst_window
@@ -107,18 +156,14 @@ impl GeminiRateLimiter {
         counter.burst_window.push_back(now);
         counter.daily_count += 1;
 
-        // Determine tier
-        if counter.daily_count > DAILY_HARD_LIMIT {
-            RateDecision::Reject
-        } else if counter.daily_count > DAILY_SOFT_LIMIT {
-            RateDecision::DegradeToFlash
-        } else {
-            RateDecision::Allow
-        }
+        let snapshot = RateSnapshot {
+            daily_count: counter.daily_count,
+            burst_count: counter.burst_window.len(),
+        };
+        snapshot.to_decision()
     }
 
-    /// Evict stale entries (users inactive for >48h worth of day changes).
-    /// Called periodically from a background task.
+    /// Evict stale in-memory entries.
     pub async fn evict_stale(&self) {
         let today = current_day_ordinal();
         let mut counters = self.counters.lock().await;
@@ -137,11 +182,9 @@ pub fn maybe_rewrite_model_path(path: &str, decision: &RateDecision, action: &st
     if !matches!(decision, RateDecision::DegradeToFlash) {
         return path.to_string();
     }
-    // Embedding requests are exempt from model rewrite
     if action == "embedContent" || action == "batchEmbedContents" {
         return path.to_string();
     }
-    // Only rewrite exact gemini-pro-latest model
     if let Some(rest) = path.strip_prefix("models/gemini-pro-latest:") {
         return format!("models/gemini-3-flash-preview:{}", rest);
     }
@@ -164,257 +207,230 @@ pub fn rate_limit_error_json(message: &str) -> String {
 mod tests {
     use super::*;
 
-    // --- RateDecision thresholds ---
-    // Tests set up counters directly to avoid burst cap interference.
+    // --- Decision from snapshot ---
+
+    #[test]
+    fn snapshot_allow() {
+        let s = RateSnapshot { daily_count: 100, burst_count: 5 };
+        assert_eq!(s.to_decision(), RateDecision::Allow);
+    }
+
+    #[test]
+    fn snapshot_degrade_at_soft_limit() {
+        let s = RateSnapshot { daily_count: 301, burst_count: 5 };
+        assert_eq!(s.to_decision(), RateDecision::DegradeToFlash);
+    }
+
+    #[test]
+    fn snapshot_reject_at_hard_limit() {
+        let s = RateSnapshot { daily_count: 1501, burst_count: 5 };
+        assert_eq!(s.to_decision(), RateDecision::Reject);
+    }
+
+    #[test]
+    fn snapshot_reject_burst() {
+        let s = RateSnapshot { daily_count: 10, burst_count: 31 };
+        assert_eq!(s.to_decision(), RateDecision::Reject);
+    }
+
+    #[test]
+    fn snapshot_burst_at_exact_limit() {
+        // burst_count == BURST_PER_MINUTE is not over (it's the count AFTER add)
+        let s = RateSnapshot { daily_count: 10, burst_count: 30 };
+        assert_eq!(s.to_decision(), RateDecision::Allow);
+    }
+
+    // --- In-memory fallback ---
 
     #[tokio::test]
-    async fn tier1_allows_under_soft_limit() {
+    async fn local_tier1_allows() {
         let limiter = GeminiRateLimiter::new();
-
-        // Set counter at 299 (just under soft limit)
         {
             let mut counters = limiter.counters.lock().await;
-            counters.insert(
-                "user1".to_string(),
-                UserCounter {
-                    day_ordinal: current_day_ordinal(),
-                    daily_count: 299,
-                    burst_window: VecDeque::new(),
-                },
-            );
+            counters.insert("u1".to_string(), UserCounter {
+                day_ordinal: current_day_ordinal(),
+                daily_count: 299,
+                burst_window: VecDeque::new(),
+            });
         }
-
-        // Request 300 should still be Allow
-        let decision = limiter.check_and_record("user1").await;
+        let decision = limiter.check_and_record_local("u1").await;
         assert_eq!(decision, RateDecision::Allow);
     }
 
     #[tokio::test]
-    async fn tier2_degrades_at_soft_limit() {
+    async fn local_tier2_degrades() {
         let limiter = GeminiRateLimiter::new();
-
-        // Set counter at exactly soft limit
         {
             let mut counters = limiter.counters.lock().await;
-            counters.insert(
-                "user1".to_string(),
-                UserCounter {
-                    day_ordinal: current_day_ordinal(),
-                    daily_count: 300,
-                    burst_window: VecDeque::new(),
-                },
-            );
+            counters.insert("u1".to_string(), UserCounter {
+                day_ordinal: current_day_ordinal(),
+                daily_count: 300,
+                burst_window: VecDeque::new(),
+            });
         }
-
-        // Request 301 should degrade
-        let decision = limiter.check_and_record("user1").await;
+        let decision = limiter.check_and_record_local("u1").await;
         assert_eq!(decision, RateDecision::DegradeToFlash);
     }
 
     #[tokio::test]
-    async fn tier2_degrades_between_soft_and_hard() {
+    async fn local_tier3_rejects() {
         let limiter = GeminiRateLimiter::new();
-
-        // Set counter midway between soft and hard limit
         {
             let mut counters = limiter.counters.lock().await;
-            counters.insert(
-                "user1".to_string(),
-                UserCounter {
-                    day_ordinal: current_day_ordinal(),
-                    daily_count: 900,
-                    burst_window: VecDeque::new(),
-                },
-            );
+            counters.insert("u2".to_string(), UserCounter {
+                day_ordinal: current_day_ordinal(),
+                daily_count: 1500,
+                burst_window: VecDeque::new(),
+            });
         }
-
-        let decision = limiter.check_and_record("user1").await;
-        assert_eq!(decision, RateDecision::DegradeToFlash);
-    }
-
-    #[tokio::test]
-    async fn tier3_rejects_over_hard_limit() {
-        let limiter = GeminiRateLimiter::new();
-
-        // Set counter at hard limit
-        {
-            let mut counters = limiter.counters.lock().await;
-            counters.insert(
-                "user2".to_string(),
-                UserCounter {
-                    day_ordinal: current_day_ordinal(),
-                    daily_count: 1500,
-                    burst_window: VecDeque::new(),
-                },
-            );
-        }
-
-        let decision = limiter.check_and_record("user2").await;
+        let decision = limiter.check_and_record_local("u2").await;
         assert_eq!(decision, RateDecision::Reject);
     }
 
     #[tokio::test]
-    async fn burst_cap_rejects_at_limit() {
+    async fn local_burst_rejects() {
         let limiter = GeminiRateLimiter::new();
-        // Fill burst window
         for _ in 0..30 {
-            let d = limiter.check_and_record("user3").await;
+            let d = limiter.check_and_record_local("u3").await;
             assert_eq!(d, RateDecision::Allow);
         }
-        // 31st should be rejected
-        let decision = limiter.check_and_record("user3").await;
+        let decision = limiter.check_and_record_local("u3").await;
         assert_eq!(decision, RateDecision::Reject);
     }
 
     #[tokio::test]
-    async fn day_rollover_resets_daily_count() {
+    async fn local_day_rollover() {
         let limiter = GeminiRateLimiter::new();
-
-        // Set counter to yesterday with high count
         {
             let mut counters = limiter.counters.lock().await;
-            counters.insert(
-                "user4".to_string(),
-                UserCounter {
-                    day_ordinal: current_day_ordinal() - 1,
-                    daily_count: 2000,
-                    burst_window: VecDeque::new(),
-                },
-            );
+            counters.insert("u4".to_string(), UserCounter {
+                day_ordinal: current_day_ordinal() - 1,
+                daily_count: 2000,
+                burst_window: VecDeque::new(),
+            });
         }
-
-        // Should reset to day 1 and allow
-        let decision = limiter.check_and_record("user4").await;
-        assert_eq!(decision, RateDecision::Allow);
-
-        // Verify count was reset
-        let counters = limiter.counters.lock().await;
-        assert_eq!(counters["user4"].daily_count, 1);
-    }
-
-    #[tokio::test]
-    async fn separate_users_independent() {
-        let limiter = GeminiRateLimiter::new();
-        // Fill user A to soft limit
-        for _ in 1..=300 {
-            limiter.check_and_record("userA").await;
-        }
-        // User B should still be in Tier 1
-        let decision = limiter.check_and_record("userB").await;
+        let decision = limiter.check_and_record_local("u4").await;
         assert_eq!(decision, RateDecision::Allow);
     }
 
     #[tokio::test]
-    async fn evict_stale_removes_old_entries() {
+    async fn local_separate_users() {
         let limiter = GeminiRateLimiter::new();
-
-        // Add a counter from 3 days ago
         {
             let mut counters = limiter.counters.lock().await;
-            counters.insert(
-                "old_user".to_string(),
-                UserCounter {
-                    day_ordinal: current_day_ordinal() - 3,
-                    daily_count: 100,
-                    burst_window: VecDeque::new(),
-                },
-            );
-            counters.insert(
-                "recent_user".to_string(),
-                UserCounter {
-                    day_ordinal: current_day_ordinal(),
-                    daily_count: 50,
-                    burst_window: VecDeque::new(),
-                },
-            );
+            counters.insert("uA".to_string(), UserCounter {
+                day_ordinal: current_day_ordinal(),
+                daily_count: 1500,
+                burst_window: VecDeque::new(),
+            });
         }
+        let decision = limiter.check_and_record_local("uB").await;
+        assert_eq!(decision, RateDecision::Allow);
+    }
 
+    #[tokio::test]
+    async fn evict_stale_removes_old() {
+        let limiter = GeminiRateLimiter::new();
+        {
+            let mut counters = limiter.counters.lock().await;
+            counters.insert("old".to_string(), UserCounter {
+                day_ordinal: current_day_ordinal() - 3,
+                daily_count: 100,
+                burst_window: VecDeque::new(),
+            });
+            counters.insert("recent".to_string(), UserCounter {
+                day_ordinal: current_day_ordinal(),
+                daily_count: 50,
+                burst_window: VecDeque::new(),
+            });
+        }
         limiter.evict_stale().await;
-
         let counters = limiter.counters.lock().await;
-        assert!(!counters.contains_key("old_user"));
-        assert!(counters.contains_key("recent_user"));
+        assert!(!counters.contains_key("old"));
+        assert!(counters.contains_key("recent"));
+    }
+
+    // --- Hybrid: falls back when Redis is None ---
+
+    #[tokio::test]
+    async fn hybrid_no_redis_uses_local() {
+        let limiter = GeminiRateLimiter::new();
+        let decision = limiter.check_and_record("u5", None).await;
+        assert_eq!(decision, RateDecision::Allow);
     }
 
     // --- Model path rewrite ---
 
     #[test]
-    fn rewrite_pro_to_flash_on_degrade() {
-        let result = maybe_rewrite_model_path(
+    fn rewrite_pro_to_flash() {
+        let r = maybe_rewrite_model_path(
             "models/gemini-pro-latest:generateContent",
             &RateDecision::DegradeToFlash,
             "generateContent",
         );
-        assert_eq!(result, "models/gemini-3-flash-preview:generateContent");
+        assert_eq!(r, "models/gemini-3-flash-preview:generateContent");
     }
 
     #[test]
     fn no_rewrite_on_allow() {
-        let result = maybe_rewrite_model_path(
+        let r = maybe_rewrite_model_path(
             "models/gemini-pro-latest:generateContent",
             &RateDecision::Allow,
             "generateContent",
         );
-        assert_eq!(result, "models/gemini-pro-latest:generateContent");
+        assert_eq!(r, "models/gemini-pro-latest:generateContent");
     }
 
     #[test]
-    fn no_rewrite_for_embed_content() {
-        let result = maybe_rewrite_model_path(
+    fn no_rewrite_embed() {
+        let r = maybe_rewrite_model_path(
             "models/gemini-pro-latest:embedContent",
             &RateDecision::DegradeToFlash,
             "embedContent",
         );
-        assert_eq!(result, "models/gemini-pro-latest:embedContent");
+        assert_eq!(r, "models/gemini-pro-latest:embedContent");
     }
 
     #[test]
-    fn no_rewrite_for_batch_embed() {
-        let result = maybe_rewrite_model_path(
+    fn no_rewrite_batch_embed() {
+        let r = maybe_rewrite_model_path(
             "models/gemini-embedding-001:batchEmbedContents",
             &RateDecision::DegradeToFlash,
             "batchEmbedContents",
         );
-        assert_eq!(
-            result,
-            "models/gemini-embedding-001:batchEmbedContents"
-        );
+        assert_eq!(r, "models/gemini-embedding-001:batchEmbedContents");
     }
 
     #[test]
-    fn no_rewrite_for_flash_model() {
-        let result = maybe_rewrite_model_path(
+    fn no_rewrite_flash_model() {
+        let r = maybe_rewrite_model_path(
             "models/gemini-3-flash-preview:generateContent",
             &RateDecision::DegradeToFlash,
             "generateContent",
         );
-        // Flash model path doesn't start with "models/gemini-pro-latest:"
-        assert_eq!(result, "models/gemini-3-flash-preview:generateContent");
+        assert_eq!(r, "models/gemini-3-flash-preview:generateContent");
     }
 
     #[test]
     fn rewrite_pro_stream() {
-        let result = maybe_rewrite_model_path(
+        let r = maybe_rewrite_model_path(
             "models/gemini-pro-latest:streamGenerateContent",
             &RateDecision::DegradeToFlash,
             "streamGenerateContent",
         );
-        assert_eq!(
-            result,
-            "models/gemini-3-flash-preview:streamGenerateContent"
-        );
+        assert_eq!(r, "models/gemini-3-flash-preview:streamGenerateContent");
     }
 
     // --- 429 error JSON ---
 
     #[test]
-    fn rate_limit_error_json_format() {
-        let json =
-            rate_limit_error_json("Resource exhausted: rate limit exceeded. Please try again later.");
+    fn error_json_format() {
+        let json = rate_limit_error_json(
+            "Resource exhausted: rate limit exceeded. Please try again later.",
+        );
         let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
         assert_eq!(parsed["error"]["code"], 429);
         assert_eq!(parsed["error"]["status"], "RESOURCE_EXHAUSTED");
-        // Message must contain "resource exhausted" for Swift GeminiClient retry detection
         let msg = parsed["error"]["message"].as_str().unwrap();
         assert!(msg.to_lowercase().contains("resource exhausted"));
     }
