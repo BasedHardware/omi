@@ -529,4 +529,30 @@ mod tests {
             "Token dg-test-key"
         );
     }
+
+    // --- ProxyError::RateLimited response ---
+
+    #[tokio::test]
+    async fn rate_limited_response_status_and_headers() {
+        let response = ProxyError::RateLimited.into_response();
+        assert_eq!(response.status(), StatusCode::TOO_MANY_REQUESTS);
+        assert_eq!(
+            response.headers().get("content-type").unwrap(),
+            "application/json"
+        );
+        assert_eq!(response.headers().get("retry-after").unwrap(), "60");
+    }
+
+    #[tokio::test]
+    async fn rate_limited_response_body() {
+        let response = ProxyError::RateLimited.into_response();
+        let body_bytes = axum::body::to_bytes(response.into_body(), 4096)
+            .await
+            .unwrap();
+        let parsed: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
+        assert_eq!(parsed["error"]["code"], 429);
+        assert_eq!(parsed["error"]["status"], "RESOURCE_EXHAUSTED");
+        let msg = parsed["error"]["message"].as_str().unwrap().to_lowercase();
+        assert!(msg.contains("resource exhausted"));
+    }
 }
