@@ -21,8 +21,8 @@ class _SinglePressStepState extends State<SinglePressStep> with SingleTickerProv
   late MessageProvider _messageProvider;
   bool _showContinue = false;
 
-  // Snapshot of message count when voice session starts, to find the specific response
-  int _messageCountAtSessionStart = -1;
+  // Snapshot of message count when step loads, to find only messages from this interaction
+  late int _messageCountAtStart;
   String? _userQuestion;
   String? _aiResponse;
 
@@ -31,6 +31,7 @@ class _SinglePressStepState extends State<SinglePressStep> with SingleTickerProv
     super.initState();
     _pulseController = AnimationController(vsync: this, duration: const Duration(milliseconds: 1200))..repeat(reverse: true);
     _messageProvider = context.read<MessageProvider>();
+    _messageCountAtStart = _messageProvider.messages.length;
     _messageProvider.addListener(_onMessagesChanged);
   }
 
@@ -38,26 +39,20 @@ class _SinglePressStepState extends State<SinglePressStep> with SingleTickerProv
     if (!mounted || _aiResponse != null) return;
 
     final onboardingProvider = context.read<DeviceOnboardingProvider>();
+    if (!onboardingProvider.questionSent) return;
 
-    // Snapshot message count when voice session first starts
-    if (onboardingProvider.voiceSessionActive && _messageCountAtSessionStart == -1) {
-      _messageCountAtSessionStart = _messageProvider.messages.length;
-    }
+    // Look through messages added since this step loaded
+    if (_messageProvider.messages.length <= _messageCountAtStart) return;
+    final newMessages = _messageProvider.messages.sublist(_messageCountAtStart);
 
-    // Only look for responses after question was sent
-    if (!onboardingProvider.questionSent || _messageCountAtSessionStart == -1) return;
-
-    // Look through messages added since the voice session started
-    final newMessages = _messageProvider.messages.sublist(_messageCountAtSessionStart);
-
-    // Find the user's question (human message added by sendVoiceMessageStreamToServer)
+    // Find the user's question (human message from the voice command)
     for (final msg in newMessages) {
       if (msg.sender == MessageSender.human && _userQuestion == null) {
         _userQuestion = msg.text;
       }
     }
 
-    // Find the AI response — must be a non-empty response with no appId (direct Omi response, not an app notification)
+    // Find the AI response — must be non-empty, finalized (not placeholder), and not from an app integration
     for (final msg in newMessages) {
       if (msg.sender == MessageSender.ai && msg.text.isNotEmpty && msg.id != '0000' && !msg.fromIntegration) {
         _aiResponse = msg.text;
