@@ -19,7 +19,6 @@ for mod_name in [
     'database._client',
     'database.users',
     'utils.other.storage',
-    'utils.stt.soniox_util',
     'deepgram',
     'deepgram.clients',
     'deepgram.clients.live',
