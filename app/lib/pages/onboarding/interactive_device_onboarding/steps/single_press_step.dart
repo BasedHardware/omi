@@ -18,12 +18,12 @@ class SinglePressStep extends StatefulWidget {
 
 String _stripMarkdown(String text) {
   return text
-      .replaceAll(RegExp(r'\*\*(.+?)\*\*'), r'$1') // bold
-      .replaceAll(RegExp(r'\*(.+?)\*'), r'$1') // italic
-      .replaceAll(RegExp(r'__(.+?)__'), r'$1') // bold alt
-      .replaceAll(RegExp(r'_(.+?)_'), r'$1') // italic alt
-      .replaceAll(RegExp(r'~~(.+?)~~'), r'$1') // strikethrough
-      .replaceAll(RegExp(r'`(.+?)`'), r'$1'); // inline code
+      .replaceAllMapped(RegExp(r'\*\*(.+?)\*\*'), (m) => m[1]!) // bold
+      .replaceAllMapped(RegExp(r'\*(.+?)\*'), (m) => m[1]!) // italic
+      .replaceAllMapped(RegExp(r'__(.+?)__'), (m) => m[1]!) // bold alt
+      .replaceAllMapped(RegExp(r'_(.+?)_'), (m) => m[1]!) // italic alt
+      .replaceAllMapped(RegExp(r'~~(.+?)~~'), (m) => m[1]!) // strikethrough
+      .replaceAllMapped(RegExp(r'`(.+?)`'), (m) => m[1]!); // inline code
 }
 
 class _SinglePressStepState extends State<SinglePressStep> with SingleTickerProviderStateMixin {
