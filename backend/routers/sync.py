@@ -848,7 +848,7 @@ async def sync_local_files(files: List[UploadFile] = File(...), uid: str = Depen
             logger.info(f'sync: DG budget exhausted, skipping {total_segments} segments uid={uid}')
             _cleanup_files(list(segmented_paths))
             return JSONResponse(
-                status_code=200,
+                status_code=429,
                 content={
                     'new_memories': [],
                     'updated_memories': [],
