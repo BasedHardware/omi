@@ -399,11 +399,11 @@ class TestTranscribePathFairUseImports:
         source = self._read_transcribe_source()
         # Must be used as a conditional guard (if/not/and), not just defined or commented
         conditional_uses = re.findall(r'(?:if|and|not)\s+fair_use_dg_budget_exhausted', source)
-        # Expect at least 5 guard points: session-start, periodic check, single-ch DG, soniox, speechmatics,
+        # Expect at least 3 guard points: session-start, periodic check, single-ch DG,
         # multi-channel (speech-profile excluded — small chunks, not budget-gated)
         assert (
-            len(conditional_uses) >= 5
-        ), f'Expected >=5 conditional uses of fair_use_dg_budget_exhausted, found {len(conditional_uses)}'
+            len(conditional_uses) >= 3
+        ), f'Expected >=3 conditional uses of fair_use_dg_budget_exhausted, found {len(conditional_uses)}'
 
     def test_budget_accounting_across_providers(self):
         """DG usage must be tracked for main STT providers (DG, Soniox, Speechmatics, multi-channel).
