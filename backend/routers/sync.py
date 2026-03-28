@@ -35,6 +35,7 @@ AUDIO_SAMPLE_RATE = 16000
 from utils import encryption
 from utils.stt.pre_recorded import deepgram_prerecorded, postprocess_words
 from utils.stt.vad import vad_is_empty
+from utils.stt.speech_profile import get_speech_profile_matching_predictions
 from utils.fair_use import (
     record_speech_ms,
     get_rolling_speech_ms,
@@ -665,6 +666,16 @@ def process_segment(
         if not transcript_segments:
             logger.warning(f'Postprocessing returned empty for segment {path} (words present but no segments)')
             return
+
+        # Speaker identification: match segments against stored person embeddings
+        # This uses the same pipeline as live recording (speaker_identification_task)
+        try:
+            matches = get_speech_profile_matching_predictions(uid, path, [s.dict() for s in transcript_segments])
+            for i, seg in enumerate(transcript_segments):
+                seg.is_user = matches[i]['is_user']
+                seg.person_id = matches[i].get('person_id')
+        except Exception as e:
+            logger.error(f'Speaker matching failed for {path}: {e}')
 
         timestamp = get_timestamp_from_path(path)
         segment_end_timestamp = timestamp + transcript_segments[-1].end
