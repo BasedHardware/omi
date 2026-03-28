@@ -51,7 +51,13 @@ class GlobalShortcutManager {
         if let ref = hotKeyRefs.removeValue(forKey: .askOmi) {
             UnregisterEventHotKey(ref)
         }
-        let askOmiShortcut = MainActor.assumeIsolated { ShortcutSettings.shared.askOmiShortcut }
+        let (askOmiEnabled, askOmiShortcut) = MainActor.assumeIsolated {
+            (ShortcutSettings.shared.askOmiEnabled, ShortcutSettings.shared.askOmiShortcut)
+        }
+        guard askOmiEnabled else {
+            NSLog("GlobalShortcutManager: Ask Omi shortcut is disabled")
+            return
+        }
         guard askOmiShortcut.supportsGlobalHotKey, let keyCode = askOmiShortcut.keyCode else {
             NSLog("GlobalShortcutManager: Ask Omi shortcut is not a registerable hotkey")
             return

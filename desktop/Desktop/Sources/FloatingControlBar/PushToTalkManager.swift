@@ -107,6 +107,7 @@ class PushToTalkManager: ObservableObject {
   // MARK: - Shortcut Handling
 
   private func handleShortcutEvent(_ event: NSEvent) {
+    guard ShortcutSettings.shared.pttEnabled else { return }
     let shortcut = ShortcutSettings.shared.pttShortcut
 
     let pttActive: Bool
