@@ -569,12 +569,12 @@ The system includes robust error handling:
 | Error Type | Handling |
 |------------|----------|
 | **STT Connection Failed** | Exponential backoff retry (1s → 32s, 3 attempts) |
-| **Provider Error** | Automatic fallback to next provider |
+| **Provider Error** | Exponential backoff retry with Deepgram |
 | **Decode Error** | Log and skip corrupted audio chunk |
 | **WebSocket Error** | Clean close with appropriate code |
 
 <Warning>
-If all STT providers fail after retries, the connection will be closed with an error message. The app should handle reconnection.
+If the STT provider fails after retries, the connection will be closed with an error message. The app should handle reconnection.
 </Warning>
 
 ## Key File Locations
