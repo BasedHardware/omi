@@ -40,32 +40,23 @@ enum OnboardingPromptSuggestionBuilder {
   static func build(from coordinator: OnboardingPagedIntroCoordinator) -> [String] {
     var suggestions: [String] = []
 
-    if let project = coordinator.scanSnapshot?.projectNames.first {
-      suggestions.append("What should I focus on today to ship \(project) faster?")
-    }
-
-    if let technology = coordinator.scanSnapshot?.technologies.first {
-      suggestions.append("Based on my recent work, what am I probably blocked on in \(technology)?")
-    }
+    // Universal first question — always relevant, not tied to a random project
+    suggestions.append("What should I focus on today to achieve my goals?")
 
     if !coordinator.emailSummary.isEmpty {
-      suggestions.append("Which follow-ups from my recent emails matter most today?")
+      suggestions.append("What email follow-ups matter most today?")
     }
 
     if !coordinator.calendarSummary.isEmpty {
-      suggestions.append("Where can I create more focus time in my calendar this week?")
+      suggestions.append("Where can I find focus time this week?")
     }
 
     if !coordinator.goalDraft.isEmpty {
-      suggestions.append("Help me break \"\(coordinator.goalDraft)\" into the next 3 steps.")
-    }
-
-    if !coordinator.webResearchSummary.isEmpty || coordinator.scanSnapshot != nil {
-      suggestions.append("What should I prioritize this week based on what you know about me?")
+      suggestions.append("Break my goal into the next 3 steps.")
     }
 
     suggestions.append("What on my screen matters most right now?")
-    suggestions.append("What is the highest-leverage thing I can do in the next 30 minutes?")
+    suggestions.append("What's the highest-leverage thing I can do next?")
 
     let deduped = Array(NSOrderedSet(array: suggestions).array as? [String] ?? suggestions)
     return Array(deduped.prefix(6))

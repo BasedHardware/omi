@@ -70,8 +70,17 @@ final class BrowserKeychainCache: @unchecked Sendable {
   private var cache: [String: String] = [:]
   private var inFlight: [String: DispatchGroup] = [:]
   private let lock = NSLock()
+  private let persistKey = "cachedBrowserKeychainPasswords"
+
+  private init() {
+    // Restore persisted passwords so we never re-prompt after the first "Always Allow"
+    if let persisted = UserDefaults.standard.dictionary(forKey: persistKey) as? [String: String] {
+      cache = persisted
+    }
+  }
 
   /// Ensures only one keychain lookup runs per browser service at a time.
+  /// Persists successful lookups so the keychain prompt only appears once ever.
   func password(for service: String, loader: () -> String?) -> String? {
     loop: while true {
       lock.lock()
@@ -96,12 +105,26 @@ final class BrowserKeychainCache: @unchecked Sendable {
 
       lock.lock()
       cache[service] = password ?? ""
+      // Persist non-empty passwords across app launches
+      if password != nil {
+        let toSave = cache.filter { !$0.value.isEmpty }
+        UserDefaults.standard.set(toSave, forKey: persistKey)
+      }
       let completedGroup = inFlight.removeValue(forKey: service)
       lock.unlock()
 
       completedGroup?.leave()
       return password
     }
+  }
+
+  /// Invalidate a cached password (e.g. if cookie decryption fails, Chrome may have rotated the key).
+  func invalidate(service: String) {
+    lock.lock()
+    cache.removeValue(forKey: service)
+    let toSave = cache.filter { !$0.value.isEmpty }
+    UserDefaults.standard.set(toSave, forKey: persistKey)
+    lock.unlock()
   }
 }
 

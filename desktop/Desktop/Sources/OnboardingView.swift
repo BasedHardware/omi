@@ -279,7 +279,7 @@ struct OnboardingView: View {
           icon: "bolt.horizontal.circle.fill",
           reasonTitle: "Automation",
           reasonDetail: "This lets Omi take actions when you ask.",
-          primaryActionLabel: "Open Automation settings",
+          primaryActionLabel: "Grant automation access",
           requiresRestart: false,
           onContinue: {
             AnalyticsManager.shared.onboardingStepCompleted(step: 9, stepName: "Automation")
