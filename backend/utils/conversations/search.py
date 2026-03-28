@@ -52,6 +52,8 @@ def search_conversations(
             if doc.get('is_locked', False):
                 structured = doc.get('structured', {})
                 if structured:
+                    structured['title'] = ''
+                    structured['overview'] = ''
                     structured['action_items'] = []
                     structured['events'] = []
                 doc['transcript_segments'] = []
