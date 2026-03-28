@@ -2244,6 +2244,16 @@ async def _stream_handler(
                         segment_person_assignment_map[segment.id] = person_id
                         suggested_segments.add(segment.id)
 
+        # Drain in-flight embedding match tasks so speaker maps are fully populated
+        # before the final Firestore flush. Without this, a match spawned on the last
+        # segment could still be running, leaving the maps empty during the final pass.
+        if bg_tasks:
+            pending = list(bg_tasks)
+            try:
+                await asyncio.wait_for(asyncio.gather(*pending, return_exceptions=True), timeout=10.0)
+            except asyncio.TimeoutError:
+                logger.warning(f"Timeout waiting for background tasks before final pass {uid} {session_id}")
+
         # Final pass: apply any pending speaker assignments so Firestore is correct
         # even if the embedding match completed on the last segment (no subsequent batch).
         if (speaker_to_person_map or segment_person_assignment_map) and current_conversation_id:
