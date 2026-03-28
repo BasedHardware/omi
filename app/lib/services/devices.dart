@@ -214,7 +214,6 @@ class DeviceService implements IDeviceService {
     }
   }
 
-  // Warn: Should use a better solution to prevent race conditions
   final Mutex _mutex = Mutex();
   @override
   Future<DeviceConnection?> ensureConnection(String deviceId, {bool force = false}) async {
@@ -222,22 +221,20 @@ class DeviceService implements IDeviceService {
     try {
       Logger.debug("ensureConnection ${_connection?.device.id} ${_connection?.status} $force");
 
-      // Not force
-      if (!force && _connection != null) {
-        if (_connection?.device.id != deviceId || _connection?.status != DeviceConnectionState.connected) {
-          return null;
-        }
-
-        // Connected
+      // Connected to this device — return it
+      if (_connection?.device.id == deviceId && _connection?.status == DeviceConnectionState.connected) {
         return _connection;
       }
 
-      // Force
-      if (deviceId == _connection?.device.id && _connection?.status == DeviceConnectionState.connected) {
-        return _connection;
+      // Transport exists for this device but disconnected — native handles reconnection.
+      // Don't dispose and recreate the transport; that would cancel native's auto-reconnect.
+      if (_connection?.device.id == deviceId) {
+        return null;
       }
 
-      // Connect
+      // No connection or different device — only connect on force (user-initiated)
+      if (!force) return null;
+
       try {
         await _connectToDevice(deviceId);
       } on DeviceConnectionException catch (e) {
