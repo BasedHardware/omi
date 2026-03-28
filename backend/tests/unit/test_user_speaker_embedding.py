@@ -239,20 +239,29 @@ class TestTranscribeFirestoreLoading:
         assert USER_SELF_PERSON_ID in person_embeddings_cache
         assert person_embeddings_cache[USER_SELF_PERSON_ID]['embedding'].shape == (1, 512)
 
-    def test_no_embedding_when_firestore_returns_none(self):
-        """When Firestore returns None, cache should not contain user entry."""
+    def test_fallback_extracts_from_wav_when_no_stored_embedding(self):
+        """When Firestore returns None, should extract from WAV and store for future sessions."""
         USER_SELF_PERSON_ID = 'user'
-        embedding_list = None
         person_embeddings_cache = {}
+        embedding_list = None  # Simulates no stored embedding
 
-        if embedding_list:
-            user_embedding = np.array(embedding_list, dtype=np.float32).reshape(1, -1)
+        # Simulate the fallback path from transcribe.py
+        fallback_embedding = np.random.RandomState(42).randn(1, 512).astype(np.float32)
+        stored_embeddings = []
+
+        if not embedding_list:
+            # Fallback: extract from WAV (simulated)
+            user_embedding = fallback_embedding
             person_embeddings_cache[USER_SELF_PERSON_ID] = {
                 'embedding': user_embedding,
                 'name': 'User',
             }
+            # Store in Firestore for future sessions (simulated)
+            stored_embeddings.append(user_embedding.flatten().tolist())
 
-        assert USER_SELF_PERSON_ID not in person_embeddings_cache
+        assert USER_SELF_PERSON_ID in person_embeddings_cache
+        assert len(stored_embeddings) == 1
+        assert len(stored_embeddings[0]) == 512
 
     def test_has_speech_profile_gate(self):
         """User embedding is only loaded when has_speech_profile is True."""
