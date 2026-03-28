@@ -270,7 +270,7 @@ actor GoalsAIService {
       .replacingOccurrences(of: "{completed_goals}", with: ctx.completedGoals)
       .replacingOccurrences(of: "{abandoned_goals}", with: ctx.abandonedGoals)
 
-    log("GoalsAI: Model: gemini-3-flash-preview (default)")
+    log("GoalsAI: Model: default (Flash)")
     log(
       "GoalsAI: Context sizes — memories: \(ctx.memories.count) chars, conversations: \(ctx.conversations.count) chars, tasks: \(ctx.actionItems.count) chars, persona: \(ctx.persona.count) chars, existing goals: \(ctx.existingGoals), completed: \(ctx.completedGoals.count) chars, abandoned: \(ctx.abandonedGoals.count) chars"
     )
