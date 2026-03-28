@@ -212,8 +212,6 @@ class OmiBleManager private constructor(private val application: Application) {
         val addr = address.uppercase()
         appClosed = false
         manuallyDisconnected.remove(addr)
-        reconnectRetryCount[addr] = 0
-        cancelPendingReconnect()
 
         connectedGatts[addr]?.let { gatt ->
             if (bluetoothManager.getConnectionState(gatt.device, BluetoothProfile.GATT) == BluetoothProfile.STATE_CONNECTED) {
@@ -222,12 +220,21 @@ class OmiBleManager private constructor(private val application: Application) {
             }
         }
 
+        // If native already has a pending reconnect (e.g. after status=5 bond removal),
+        // let it handle reconnection with autoConnect=true — don't cancel it with a
+        // competing autoConnect=false connection that may fail.
+        if (pendingReconnectRunnable != null) {
+            Log.i(TAG, "connectPeripheral($caller): $addr has pending native reconnect, skipping")
+            return
+        }
+
         // Guard: skip if a GATT connect is already in-flight for this address.
-        // Multiple callers (Dart ensureConnection, FgService, CompanionSvc) can race here.
         if (connectingAddresses.contains(addr)) {
             Log.i(TAG, "connectPeripheral($caller): $addr connect already in-flight, skipping")
             return
         }
+
+        reconnectRetryCount[addr] = 0
 
         connectedGatts[addr]?.close()
         connectedGatts.remove(addr)
