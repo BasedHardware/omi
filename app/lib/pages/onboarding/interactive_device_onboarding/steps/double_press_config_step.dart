@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/providers/device_onboarding_provider.dart';
+import 'package:omi/pages/onboarding/interactive_device_onboarding/widgets/double_tap_demo_animation.dart';
 import 'package:omi/pages/onboarding/interactive_device_onboarding/widgets/onboarding_step_scaffold.dart';
 
 class DoublePressConfigStep extends StatefulWidget {
@@ -48,6 +49,8 @@ class _DoublePressConfigStepState extends State<DoublePressConfigStep> {
                 title: 'Star Conversation',
                 description: 'Mark conversation as important',
               ),
+              const SizedBox(height: 24),
+              const DoubleTapDemoAnimation(),
               const Spacer(),
               if (!provider.doublePressDetected) ...[
                 Container(
