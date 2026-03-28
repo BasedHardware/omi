@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import 'package:provider/provider.dart';
 
+import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/providers/device_onboarding_provider.dart';
 import 'package:omi/pages/onboarding/interactive_device_onboarding/widgets/onboarding_step_scaffold.dart';
 
@@ -48,13 +49,16 @@ class _TranscriptionDemoStepState extends State<TranscriptionDemoStep> with Sing
           currentStep: 0,
           content: Column(
             children: [
-              const Spacer(flex: 1),
+              const SizedBox(height: 8),
+              // Omi device with pulsating circles
+              if (!provider.transcriptionComplete) _buildOmiWithPulse(),
+              const SizedBox(height: 24),
               // Status card
               _buildStatusCard(provider),
               const SizedBox(height: 16),
               // Transcript card
               if (provider.demoSegments.isNotEmpty) _buildTranscriptCard(provider),
-              const Spacer(flex: 2),
+              const Spacer(),
             ],
           ),
           bottomAction: _showContinue ? OnboardingContinueButton(onPressed: widget.onComplete) : null,
@@ -118,6 +122,56 @@ class _TranscriptionDemoStepState extends State<TranscriptionDemoStep> with Sing
           ),
         );
       },
+    );
+  }
+
+  Widget _buildOmiWithPulse() {
+    final pixelRatio = MediaQuery.of(context).devicePixelRatio;
+    const imageSize = 120.0;
+
+    return AnimatedBuilder(
+      animation: _waveController,
+      builder: (context, child) {
+        return SizedBox(
+          width: imageSize + 80,
+          height: imageSize + 80,
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              // Pulsating circles
+              for (int i = 0; i < 3; i++)
+                _buildPulseCircle(i, imageSize),
+              // Omi image
+              Image.asset(
+                Assets.images.omiWithoutRope.path,
+                height: imageSize,
+                width: imageSize,
+                cacheHeight: (imageSize * pixelRatio).round(),
+                cacheWidth: (imageSize * pixelRatio).round(),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildPulseCircle(int index, double imageSize) {
+    // Each circle is offset in phase
+    final progress = (_waveController.value + index * 0.33) % 1.0;
+    final scale = 1.0 + progress * 0.5;
+    final opacity = (1.0 - progress).clamp(0.0, 0.3);
+
+    return Container(
+      width: imageSize * scale,
+      height: imageSize * scale,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        border: Border.all(
+          color: Colors.white.withValues(alpha: opacity),
+          width: 1.5,
+        ),
+      ),
     );
   }
 
