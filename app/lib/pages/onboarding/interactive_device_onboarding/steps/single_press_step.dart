@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:flutter/material.dart';
 
 import 'package:provider/provider.dart';
@@ -26,7 +28,8 @@ class SinglePressStep extends StatefulWidget {
   State<SinglePressStep> createState() => _SinglePressStepState();
 }
 
-class _SinglePressStepState extends State<SinglePressStep> {
+class _SinglePressStepState extends State<SinglePressStep> with SingleTickerProviderStateMixin {
+  late AnimationController _waveController;
   late MessageProvider _messageProvider;
   bool _showContinue = false;
 
@@ -37,6 +40,7 @@ class _SinglePressStepState extends State<SinglePressStep> {
   @override
   void initState() {
     super.initState();
+    _waveController = AnimationController(vsync: this, duration: const Duration(seconds: 3))..repeat();
     _messageProvider = context.read<MessageProvider>();
     _messageCountAtStart = _messageProvider.messages.length;
     _messageProvider.addListener(_onMessagesChanged);
@@ -69,6 +73,7 @@ class _SinglePressStepState extends State<SinglePressStep> {
 
   @override
   void dispose() {
+    _waveController.dispose();
     _messageProvider.removeListener(_onMessagesChanged);
     super.dispose();
   }
@@ -163,21 +168,35 @@ class _SinglePressStepState extends State<SinglePressStep> {
 
     // Listening
     if (provider.voiceSessionActive) {
-      return Container(
-        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
-        decoration: BoxDecoration(
-          color: const Color(0xFF4CAF50).withValues(alpha: 0.1),
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: const Color(0xFF4CAF50).withValues(alpha: 0.3)),
-        ),
-        child: const Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.mic, color: Color(0xFF4CAF50), size: 22),
-            SizedBox(width: 12),
-            Text('Listening...', style: TextStyle(color: Color(0xFF4CAF50), fontSize: 17, fontWeight: FontWeight.w500)),
-          ],
-        ),
+      return AnimatedBuilder(
+        animation: _waveController,
+        builder: (context, _) {
+          return Container(
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+            decoration: BoxDecoration(
+              color: const Color(0xFF4CAF50).withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: const Color(0xFF4CAF50).withValues(alpha: 0.3)),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.mic, color: Color(0xFF4CAF50), size: 22),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: CustomPaint(
+                    painter: _StaticWaveformPainter(
+                      phase: _waveController.value * 2 * pi * 3,
+                      color: const Color(0xFF4CAF50).withValues(alpha: 0.5),
+                    ),
+                    size: const Size(double.infinity, 28),
+                  ),
+                ),
+                const SizedBox(width: 14),
+                const Text('Listening...', style: TextStyle(color: Color(0xFF4CAF50), fontSize: 14, fontWeight: FontWeight.w500)),
+              ],
+            ),
+          );
+        },
       );
     }
 
@@ -206,4 +225,38 @@ class _SinglePressStepState extends State<SinglePressStep> {
       ),
     );
   }
+}
+
+class _StaticWaveformPainter extends CustomPainter {
+  final double phase;
+  final Color color;
+
+  _StaticWaveformPainter({required this.phase, required this.color});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..strokeWidth = 2.0
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round;
+
+    final path = Path();
+    final midY = size.height / 2;
+    for (double x = 0; x < size.width; x += 1) {
+      final n = x / size.width;
+      // Amplitude pulses in place instead of scrolling
+      final ampMod = 0.6 + 0.4 * sin(phase);
+      final y = midY + sin(n * 4 * pi) * 8 * ampMod + sin(n * 11 * pi) * 4 * ampMod;
+      if (x == 0) {
+        path.moveTo(x, y);
+      } else {
+        path.lineTo(x, y);
+      }
+    }
+    canvas.drawPath(path, paint);
+  }
+
+  @override
+  bool shouldRepaint(_StaticWaveformPainter oldDelegate) => phase != oldDelegate.phase;
 }
