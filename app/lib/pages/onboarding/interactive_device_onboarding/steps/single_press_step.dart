@@ -16,6 +16,16 @@ class SinglePressStep extends StatefulWidget {
   State<SinglePressStep> createState() => _SinglePressStepState();
 }
 
+String _stripMarkdown(String text) {
+  return text
+      .replaceAll(RegExp(r'\*\*(.+?)\*\*'), r'$1') // bold
+      .replaceAll(RegExp(r'\*(.+?)\*'), r'$1') // italic
+      .replaceAll(RegExp(r'__(.+?)__'), r'$1') // bold alt
+      .replaceAll(RegExp(r'_(.+?)_'), r'$1') // italic alt
+      .replaceAll(RegExp(r'~~(.+?)~~'), r'$1') // strikethrough
+      .replaceAll(RegExp(r'`(.+?)`'), r'$1'); // inline code
+}
+
 class _SinglePressStepState extends State<SinglePressStep> with SingleTickerProviderStateMixin {
   late AnimationController _pulseController;
   late MessageProvider _messageProvider;
@@ -136,7 +146,7 @@ class _SinglePressStepState extends State<SinglePressStep> with SingleTickerProv
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    _aiResponse!,
+                    _stripMarkdown(_aiResponse!),
                     style: const TextStyle(color: Colors.white, fontSize: 15, height: 1.4),
                     maxLines: 8,
                     overflow: TextOverflow.ellipsis,
