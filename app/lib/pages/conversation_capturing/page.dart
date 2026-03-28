@@ -113,11 +113,9 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
     if (provider.segments.isNotEmpty || provider.photos.isNotEmpty) {
       // Helper function to stop recording and process conversation
       Future<void> stopRecordingAndProcess() async {
-        // Stop any active recording (phone mic or system audio)
+        // Stop any active recording (phone mic)
         if (provider.recordingState == RecordingState.record) {
           await provider.stopStreamRecording();
-        } else if (provider.recordingState == RecordingState.systemAudioRecord) {
-          await provider.stopSystemAudioRecording();
         }
         // Then process the conversation
         provider.forceProcessingCurrentConversation();
@@ -198,10 +196,10 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
                     provider.photos.isNotEmpty
                         ? "📸"
                         : _isMuted
-                        ? "🔇"
-                        : provider.transcriptServiceReady
-                        ? "🎙️"
-                        : "🎙️⚡",
+                            ? "🔇"
+                            : provider.transcriptServiceReady
+                                ? "🎙️"
+                                : "🎙️⚡",
                   ),
                   const SizedBox(width: 4),
                   Expanded(
@@ -209,10 +207,10 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
                       provider.photos.isNotEmpty
                           ? 'Capturing'
                           : (_isMuted
-                                ? context.l10n.muted
-                                : provider.transcriptServiceReady
-                                ? context.l10n.listening
-                                : context.l10n.transcriptionPaused),
+                              ? context.l10n.muted
+                              : provider.transcriptServiceReady
+                                  ? context.l10n.listening
+                                  : context.l10n.transcriptionPaused),
                     ),
                   ),
                 ],
@@ -236,62 +234,62 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
                                 ),
                               )
                             : provider.photos.isNotEmpty
-                            ? _buildChronologicalTimeline(provider)
-                            : getTranscriptWidget(
-                                false,
-                                provider.segments,
-                                provider.photos,
-                                deviceProvider.connectedDevice,
-                                bottomMargin: 150,
-                                suggestions: provider.suggestionsBySegmentId,
-                                taggingSegmentIds: provider.taggingSegmentIds,
-                                onAcceptSuggestion: (suggestion) {
-                                  provider.assignSpeakerToConversation(
-                                    suggestion.speakerId,
-                                    suggestion.personId,
-                                    suggestion.personName,
-                                    [suggestion.segmentId],
-                                  );
-                                },
-                                editSegment: (segmentId, speakerId) {
-                                  final connectivityProvider = Provider.of<ConnectivityProvider>(
-                                    context,
-                                    listen: false,
-                                  );
-                                  if (!connectivityProvider.isConnected) {
-                                    ConnectivityProvider.showNoInternetDialog(context);
-                                    return;
-                                  }
-                                  showModalBottomSheet(
-                                    context: context,
-                                    isScrollControlled: true,
-                                    backgroundColor: Colors.black,
-                                    shape: const RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-                                    ),
-                                    builder: (context) {
-                                      final suggestion = provider.suggestionsBySegmentId.values.firstWhere(
-                                        (s) => s.speakerId == speakerId,
-                                        orElse: () => SpeakerLabelSuggestionEvent.empty(),
+                                ? _buildChronologicalTimeline(provider)
+                                : getTranscriptWidget(
+                                    false,
+                                    provider.segments,
+                                    provider.photos,
+                                    deviceProvider.connectedDevice,
+                                    bottomMargin: 150,
+                                    suggestions: provider.suggestionsBySegmentId,
+                                    taggingSegmentIds: provider.taggingSegmentIds,
+                                    onAcceptSuggestion: (suggestion) {
+                                      provider.assignSpeakerToConversation(
+                                        suggestion.speakerId,
+                                        suggestion.personId,
+                                        suggestion.personName,
+                                        [suggestion.segmentId],
                                       );
-                                      return NameSpeakerBottomSheet(
-                                        speakerId: speakerId,
-                                        segmentId: segmentId,
-                                        segments: provider.segments,
-                                        suggestion: suggestion,
-                                        onSpeakerAssigned: (speakerId, personId, personName, segmentIds) async {
-                                          await provider.assignSpeakerToConversation(
-                                            speakerId,
-                                            personId,
-                                            personName,
-                                            segmentIds,
+                                    },
+                                    editSegment: (segmentId, speakerId) {
+                                      final connectivityProvider = Provider.of<ConnectivityProvider>(
+                                        context,
+                                        listen: false,
+                                      );
+                                      if (!connectivityProvider.isConnected) {
+                                        ConnectivityProvider.showNoInternetDialog(context);
+                                        return;
+                                      }
+                                      showModalBottomSheet(
+                                        context: context,
+                                        isScrollControlled: true,
+                                        backgroundColor: Colors.black,
+                                        shape: const RoundedRectangleBorder(
+                                          borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+                                        ),
+                                        builder: (context) {
+                                          final suggestion = provider.suggestionsBySegmentId.values.firstWhere(
+                                            (s) => s.speakerId == speakerId,
+                                            orElse: () => SpeakerLabelSuggestionEvent.empty(),
+                                          );
+                                          return NameSpeakerBottomSheet(
+                                            speakerId: speakerId,
+                                            segmentId: segmentId,
+                                            segments: provider.segments,
+                                            suggestion: suggestion,
+                                            onSpeakerAssigned: (speakerId, personId, personName, segmentIds) async {
+                                              await provider.assignSpeakerToConversation(
+                                                speakerId,
+                                                personId,
+                                                personName,
+                                                segmentIds,
+                                              );
+                                            },
                                           );
                                         },
                                       );
                                     },
-                                  );
-                                },
-                              ),
+                                  ),
                         // Summary Tab
                         Center(
                           child: Padding(
