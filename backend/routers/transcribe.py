@@ -354,6 +354,8 @@ async def _stream_handler(
 
     # Track background tasks to cancel on cleanup (prevents memory leaks from fire-and-forget tasks)
     bg_tasks: Set[asyncio.Task] = set()
+    # Dedicated set for speaker match tasks so the final pass can drain them independently
+    speaker_match_tasks: Set[asyncio.Task] = set()
 
     def spawn(coro) -> asyncio.Task:
         """Create a tracked background task that will be cancelled on cleanup."""
@@ -1888,7 +1890,9 @@ async def _stream_handler(
 
             duration = seg['duration']
             if duration >= SPEAKER_ID_MIN_AUDIO:
-                spawn(_match_speaker_embedding(speaker_id, seg))
+                task = spawn(_match_speaker_embedding(speaker_id, seg))
+                speaker_match_tasks.add(task)
+                task.add_done_callback(speaker_match_tasks.discard)
 
         logger.info(f"Speaker ID task ended {uid} {session_id}")
         speaker_id_done.set()
@@ -2260,8 +2264,8 @@ async def _stream_handler(
             await asyncio.wait_for(speaker_id_done.wait(), timeout=15.0)
         except asyncio.TimeoutError:
             logger.warning(f"Timeout waiting for speaker ID task to finish {uid} {session_id}")
-        if bg_tasks:
-            pending = list(bg_tasks)
+        if speaker_match_tasks:
+            pending = list(speaker_match_tasks)
             try:
                 await asyncio.wait_for(asyncio.gather(*pending, return_exceptions=True), timeout=10.0)
             except asyncio.TimeoutError:
