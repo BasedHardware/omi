@@ -48,10 +48,10 @@ class _PowerCycleStepState extends State<PowerCycleStep> {
           currentStep: 2,
           content: Column(
             children: [
-              const SizedBox(height: 8),
+              const SizedBox(height: 16),
               // Device image
               _buildDeviceImage(isConnected: !isOff),
-              const SizedBox(height: 24),
+              const SizedBox(height: 32),
               // Status card
               _buildStatusCard(provider),
               if (_showHint && provider.powerCycleState == PowerCycleSubState.waitingForOff) ...[
@@ -93,7 +93,7 @@ class _PowerCycleStepState extends State<PowerCycleStep> {
 
   Widget _buildDeviceImage({required bool isConnected}) {
     final pixelRatio = MediaQuery.of(context).devicePixelRatio;
-    const imageSize = 140.0;
+    const imageSize = 180.0;
 
     return AnimatedSwitcher(
       duration: const Duration(milliseconds: 300),
@@ -118,16 +118,16 @@ class _PowerCycleStepState extends State<PowerCycleStep> {
                   cacheWidth: (imageSize * pixelRatio).round(),
                 ),
                 Positioned(
-                  bottom: -2,
-                  right: -2,
+                  bottom: 0,
+                  right: 0,
                   child: Container(
-                    width: 28,
-                    height: 28,
+                    width: 36,
+                    height: 36,
                     decoration: const BoxDecoration(
                       shape: BoxShape.circle,
                       color: Color(0xFFEF5350),
                     ),
-                    child: const Icon(Icons.close, color: Colors.white, size: 16),
+                    child: const Icon(Icons.close, color: Colors.white, size: 20),
                   ),
                 ),
               ],
