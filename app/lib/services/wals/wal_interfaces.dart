@@ -5,16 +5,18 @@ import 'package:omi/services/audio_sources/audio_source.dart';
 import 'package:omi/services/wals/wal.dart';
 
 // Re-export for convenience
-export 'package:omi/backend/http/api/conversations.dart' show SyncLocalFilesResponse, syncLocalFiles;
+export 'package:omi/backend/http/api/conversations.dart' show SyncLocalFilesResponse, syncLocalFiles, syncLocalFilesV2;
 
 abstract class IWalSyncProgressListener {
-  void onWalSyncedProgress(double percentage,
-      {double? speedKBps,
-      SyncPhase? phase,
-      int? currentFile,
-      int? totalFiles,
-      int? uploadedBytes,
-      int? totalBytesToUpload});
+  void onWalSyncedProgress(
+    double percentage, {
+    double? speedKBps,
+    SyncPhase? phase,
+    int? currentFile,
+    int? totalFiles,
+    int? uploadedBytes,
+    int? totalBytesToUpload,
+  });
 }
 
 /// Listener for WiFi connection progress

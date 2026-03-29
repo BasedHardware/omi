@@ -61,8 +61,9 @@ Future<List<ServerConversation>> getConversations({
   if (response.statusCode == 200) {
     // decode body bytes to utf8 string and then parse json so as to avoid utf8 char issues
     var body = utf8.decode(response.bodyBytes);
-    var memories =
-        (jsonDecode(body) as List<dynamic>).map((conversation) => ServerConversation.fromJson(conversation)).toList();
+    var memories = (jsonDecode(body) as List<dynamic>)
+        .map((conversation) => ServerConversation.fromJson(conversation))
+        .toList();
     Logger.debug('getConversations length: ${memories.length}');
     return memories;
   } else {
@@ -171,8 +172,9 @@ class TranscriptsResponse {
       deepgram: (json['deepgram'] as List<dynamic>).map((segment) => TranscriptSegment.fromJson(segment)).toList(),
       soniox: (json['soniox'] as List<dynamic>).map((segment) => TranscriptSegment.fromJson(segment)).toList(),
       whisperx: (json['whisperx'] as List<dynamic>).map((segment) => TranscriptSegment.fromJson(segment)).toList(),
-      speechmatics:
-          (json['speechmatics'] as List<dynamic>).map((segment) => TranscriptSegment.fromJson(segment)).toList(),
+      speechmatics: (json['speechmatics'] as List<dynamic>)
+          .map((segment) => TranscriptSegment.fromJson(segment))
+          .toList(),
     );
   }
 }
@@ -346,7 +348,10 @@ Future<List<ServerConversation>> sendStorageToBackend(File file, String sdCardDa
 Future<SyncLocalFilesResponse> syncLocalFiles(List<File> files, {UploadProgressCallback? onUploadProgress}) async {
   try {
     var response = await makeMultipartApiCall(
-        url: '${Env.apiBaseUrl}v1/sync-local-files', files: files, onUploadProgress: onUploadProgress);
+      url: '${Env.apiBaseUrl}v1/sync-local-files',
+      files: files,
+      onUploadProgress: onUploadProgress,
+    );
 
     if (response.statusCode == 200 || response.statusCode == 207) {
       var result = SyncLocalFilesResponse.fromJson(jsonDecode(response.body));
@@ -370,6 +375,84 @@ Future<SyncLocalFilesResponse> syncLocalFiles(List<File> files, {UploadProgressC
     }
   } catch (e) {
     Logger.debug('syncLocalFiles error: $e');
+    rethrow;
+  }
+}
+
+/// v2 async sync: POST files → 202 with job_id, then poll until terminal.
+/// Returns the same SyncLocalFilesResponse as v1 once processing is confirmed complete.
+Future<SyncLocalFilesResponse> syncLocalFilesV2(List<File> files, {UploadProgressCallback? onUploadProgress}) async {
+  try {
+    // Step 1: Submit files
+    var response = await makeMultipartApiCall(
+      url: '${Env.apiBaseUrl}v2/sync-local-files',
+      files: files,
+      onUploadProgress: onUploadProgress,
+    );
+
+    // Fast-path responses (no async job created)
+    if (response.statusCode == 200) {
+      return SyncLocalFilesResponse.fromJson(jsonDecode(response.body));
+    }
+
+    if (response.statusCode != 202) {
+      if (response.statusCode == 400) {
+        throw Exception('Audio file could not be processed by server');
+      } else if (response.statusCode == 413) {
+        throw Exception('Audio file is too large to upload');
+      } else if (response.statusCode == 429) {
+        throw Exception('Rate limited or budget exhausted');
+      } else if (response.statusCode >= 500) {
+        throw Exception('Server is temporarily unavailable');
+      } else {
+        throw Exception('Upload failed unexpectedly');
+      }
+    }
+
+    // Step 2: Poll for completion
+    var startResponse = SyncJobStartResponse.fromJson(jsonDecode(response.body));
+    var jobId = startResponse.jobId;
+    var pollInterval = Duration(milliseconds: startResponse.pollAfterMs);
+
+    const maxPolls = 120; // 120 x 3s = 6 minutes max
+    for (var i = 0; i < maxPolls; i++) {
+      await Future.delayed(pollInterval);
+
+      var pollResponse = await makeApiCall(
+        url: '${Env.apiBaseUrl}v2/sync-local-files/$jobId',
+        headers: {},
+        method: 'GET',
+        body: '',
+      );
+
+      if (pollResponse == null || pollResponse.statusCode != 200) {
+        Logger.debug('syncLocalFilesV2 poll failed: ${pollResponse?.statusCode}');
+        continue; // Retry on transient errors
+      }
+
+      var jobStatus = SyncJobStatusResponse.fromJson(jsonDecode(pollResponse.body));
+
+      if (jobStatus.isTerminal) {
+        if (jobStatus.result != null) {
+          return jobStatus.result!;
+        }
+        // Terminal but no result — build a response from job status
+        if (jobStatus.status == 'failed') {
+          throw Exception(jobStatus.error ?? 'Sync job failed');
+        }
+        return SyncLocalFilesResponse(
+          newConversationIds: [],
+          updatedConversationIds: [],
+          failedSegments: jobStatus.failedSegments,
+          totalSegments: jobStatus.totalSegments,
+        );
+      }
+    }
+
+    // Polling timed out — don't mark as synced
+    throw Exception('Sync job timed out waiting for results');
+  } catch (e) {
+    Logger.debug('syncLocalFilesV2 error: $e');
     rethrow;
   }
 }
