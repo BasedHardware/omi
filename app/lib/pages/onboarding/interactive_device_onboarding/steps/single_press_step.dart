@@ -137,22 +137,42 @@ class _SinglePressStepState extends State<SinglePressStep> with SingleTickerProv
     // Processing
     if (provider.questionSent) {
       return Container(
-        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
         decoration: BoxDecoration(
           color: Colors.white.withValues(alpha: 0.06),
           borderRadius: BorderRadius.circular(20),
         ),
         child: Column(
           children: [
-            const SizedBox(
-              width: 32,
-              height: 32,
-              child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5),
+            AnimatedBuilder(
+              animation: _waveController,
+              builder: (context, _) {
+                return ShaderMask(
+                  shaderCallback: (bounds) {
+                    return LinearGradient(
+                      colors: [
+                        Colors.white.withValues(alpha: 0.3),
+                        Colors.white,
+                        Colors.white.withValues(alpha: 0.3),
+                      ],
+                      stops: [
+                        (_waveController.value - 0.3).clamp(0.0, 1.0),
+                        _waveController.value,
+                        (_waveController.value + 0.3).clamp(0.0, 1.0),
+                      ],
+                      begin: Alignment.centerLeft,
+                      end: Alignment.centerRight,
+                    ).createShader(bounds);
+                  },
+                  child: const Text(
+                    'Processing your question...',
+                    style: TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w500),
+                  ),
+                );
+              },
             ),
-            const SizedBox(height: 14),
-            const Text('Processing your question...', style: TextStyle(color: Colors.white, fontSize: 16)),
             if (_userQuestion != null && _userQuestion!.isNotEmpty) ...[
-              const SizedBox(height: 10),
+              const SizedBox(height: 12),
               Text(
                 '"$_userQuestion"',
                 style: const TextStyle(color: Color(0xFF9E9E9E), fontSize: 14, fontStyle: FontStyle.italic),
