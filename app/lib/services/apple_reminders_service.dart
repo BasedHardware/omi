@@ -16,21 +16,36 @@ class AppleRemindersService {
   void _initBackgroundSyncHandler() {
     _channel.setMethodCallHandler((call) async {
       if (call.method == 'markExportedBatch') {
-        final ids = (call.arguments['action_item_ids'] as List?)?.cast<String>() ?? [];
-        await Future.wait(ids.map(_markActionItemExported));
+        // New format: mappings with calendarItemIdentifier
+        final mappings = (call.arguments['mappings'] as List?)?.cast<Map<Object?, Object?>>() ?? [];
+        await Future.wait(
+          mappings.map((m) {
+            final actionItemId = m['actionItemId'] as String?;
+            final calendarItemId = m['calendarItemIdentifier'] as String?;
+            if (actionItemId != null) {
+              return _markActionItemExported(actionItemId, calendarItemId);
+            }
+            return Future.value();
+          }),
+        );
       } else if (call.method == 'markExported') {
         final actionItemId = call.arguments['action_item_id'] as String?;
         if (actionItemId != null) {
-          await _markActionItemExported(actionItemId);
+          await _markActionItemExported(actionItemId, null);
         }
       }
     });
   }
 
   /// Mark an action item as exported after successful Apple Reminders sync
-  Future<void> _markActionItemExported(String actionItemId) async {
+  Future<void> _markActionItemExported(String actionItemId, String? calendarItemIdentifier) async {
     try {
-      await updateActionItem(actionItemId, exported: true, exportPlatform: 'apple_reminders');
+      await updateActionItem(
+        actionItemId,
+        exported: true,
+        exportPlatform: 'apple_reminders',
+        appleReminderId: calendarItemIdentifier,
+      );
     } catch (e) {
       Logger.debug('Error marking action item as exported: $e');
     }
@@ -43,8 +58,18 @@ class AppleRemindersService {
     if (!isAvailable) return;
     try {
       final result = await _channel.invokeMethod('syncFromFCM', data);
-      final exportedIds = (result as List?)?.cast<String>() ?? [];
-      await Future.wait(exportedIds.map(_markActionItemExported));
+      // New format: list of {"actionItemId": "...", "calendarItemIdentifier": "..."}
+      final mappings = (result as List?)?.cast<Map<Object?, Object?>>() ?? [];
+      await Future.wait(
+        mappings.map((m) {
+          final actionItemId = m['actionItemId'] as String?;
+          final calendarItemId = m['calendarItemIdentifier'] as String?;
+          if (actionItemId != null) {
+            return _markActionItemExported(actionItemId, calendarItemId);
+          }
+          return Future.value();
+        }),
+      );
     } catch (e) {
       Logger.debug('Error triggering sync from FCM: $e');
     }
@@ -53,9 +78,9 @@ class AppleRemindersService {
   /// Check if Apple Reminders is available on this platform
   bool get isAvailable => PlatformService.isApple;
 
-  /// Add a task to Apple Reminders
-  /// Returns true if successful, false if failed or permission denied
-  Future<bool> addReminder({required String title, String? notes, DateTime? dueDate, String? listName}) async {
+  /// Add a task to Apple Reminders.
+  /// Returns the calendarItemIdentifier on success, null on failure.
+  Future<String?> addReminder({required String title, String? notes, DateTime? dueDate, String? listName}) async {
     if (!isAvailable) {
       throw UnsupportedError('Apple Reminders is only available on iOS and macOS');
     }
@@ -68,13 +93,14 @@ class AppleRemindersService {
         'listName': listName ?? 'Reminders',
       });
 
-      return result == true;
+      // result is now the calendarItemIdentifier string (or null on failure)
+      return result as String?;
     } on PlatformException catch (e) {
       Logger.debug('Error adding reminder: ${e.message}');
-      return false;
+      return null;
     } catch (e) {
       Logger.debug('Unexpected error adding reminder: $e');
-      return false;
+      return null;
     }
   }
 
@@ -127,7 +153,7 @@ class AppleRemindersService {
     return existingReminders.contains(title);
   }
 
-  /// Mark a reminder as completed in Apple Reminders
+  /// Mark a reminder as completed in Apple Reminders (legacy: by title match)
   Future<bool> completeReminder(String title, {String? listName}) async {
     if (!isAvailable) return false;
 
@@ -144,7 +170,70 @@ class AppleRemindersService {
     }
   }
 
-  /// Add an action item to Apple Reminders with automatic permission handling
+  /// Get completion status of reminders by their calendarItemIdentifier.
+  /// Input: map of {actionItemId: calendarItemIdentifier}
+  /// Output: map of {actionItemId: {exists: bool, completed: bool, title: String, completionDate: String?}}
+  Future<Map<String, Map<String, dynamic>>> getRemindersStatus(Map<String, String> mappings) async {
+    if (!isAvailable || mappings.isEmpty) return {};
+
+    try {
+      final result = await _channel.invokeMethod('getRemindersStatus', {'mappings': mappings});
+      if (result is Map) {
+        return result.map((key, value) => MapEntry(key.toString(), (value as Map).cast<String, dynamic>()));
+      }
+      return {};
+    } catch (e) {
+      Logger.debug('Error getting reminders status: $e');
+      return {};
+    }
+  }
+
+  /// Update a reminder by its calendarItemIdentifier
+  Future<Map<String, dynamic>> updateReminderById(
+    String calendarItemIdentifier, {
+    String? title,
+    String? notes,
+    DateTime? dueDate,
+    bool? completed,
+  }) async {
+    if (!isAvailable) return {'success': false, 'exists': false};
+
+    try {
+      final args = <String, dynamic>{'calendarItemIdentifier': calendarItemIdentifier};
+      if (title != null) args['title'] = title;
+      if (notes != null) args['notes'] = notes;
+      if (dueDate != null) args['dueDate'] = dueDate.millisecondsSinceEpoch;
+      if (completed != null) args['completed'] = completed;
+
+      final result = await _channel.invokeMethod('updateReminder', args);
+      if (result is Map) {
+        return result.cast<String, dynamic>();
+      }
+      return {'success': false, 'exists': false};
+    } catch (e) {
+      Logger.debug('Error updating reminder: $e');
+      return {'success': false, 'exists': false};
+    }
+  }
+
+  /// Delete a reminder by its calendarItemIdentifier
+  Future<Map<String, dynamic>> deleteReminderById(String calendarItemIdentifier) async {
+    if (!isAvailable) return {'success': false, 'existed': false};
+
+    try {
+      final result = await _channel.invokeMethod('deleteReminder', {'calendarItemIdentifier': calendarItemIdentifier});
+      if (result is Map) {
+        return result.cast<String, dynamic>();
+      }
+      return {'success': false, 'existed': false};
+    } catch (e) {
+      Logger.debug('Error deleting reminder: $e');
+      return {'success': false, 'existed': false};
+    }
+  }
+
+  /// Add an action item to Apple Reminders with automatic permission handling.
+  /// Returns the calendarItemIdentifier on success.
   Future<AppleRemindersResult> addActionItem(String actionItemDescription) async {
     if (!isAvailable) {
       return AppleRemindersResult.unsupported;
@@ -160,9 +249,9 @@ class AppleRemindersService {
     }
 
     // Add the reminder
-    final success = await addReminder(title: actionItemDescription, notes: 'From Omi', listName: 'Reminders');
+    final calendarItemId = await addReminder(title: actionItemDescription, notes: 'From Omi', listName: 'Reminders');
 
-    return success ? AppleRemindersResult.success : AppleRemindersResult.failed;
+    return calendarItemId != null ? AppleRemindersResult.success : AppleRemindersResult.failed;
   }
 }
 
