@@ -424,12 +424,11 @@ class TestProcessConversationKGLockEnforcement:
             # Both must be ast.Attribute
             if not all(isinstance(v, ast.Attribute) for v in test.values):
                 continue
-            # Both must reference the same base variable
-            bases = set()
-            for v in test.values:
-                if isinstance(v.value, ast.Name):
-                    bases.add(v.value.id)
-            if len(bases) != 1:
+            # Both must be ast.Name bases (not subscripts, calls, etc.)
+            if not all(isinstance(v.value, ast.Name) for v in test.values):
+                continue
+            # Both must reference the exact same variable name
+            if test.values[0].value.id != test.values[1].value.id:
                 continue
             # Attributes must be exactly {kg_extracted, is_locked}
             attrs = {v.attr for v in test.values}
