@@ -99,7 +99,7 @@ def mark_job_completed(job_id: str, result: dict) -> Optional[dict]:
     failed = result.get('failed_segments', 0)
     total = result.get('total_segments', 0)
 
-    if total > 0 and failed == total:
+    if total > 0 and failed >= total:
         status = 'failed'
     elif failed > 0:
         status = 'partial_failure'
@@ -112,7 +112,7 @@ def mark_job_completed(job_id: str, result: dict) -> Optional[dict]:
             'status': status,
             'completed_at': time.time(),
             'result': result,
-            'successful_segments': total - failed,
+            'successful_segments': max(0, total - failed),
             'failed_segments': failed,
             'processed_segments': total,
         },

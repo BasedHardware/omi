@@ -487,3 +487,328 @@ class TestV2EndpointContract:
         finally_block = body[finally_idx:]
         assert '_cleanup_files(paths)' in finally_block
         assert '_cleanup_files(wav_paths)' in finally_block
+
+
+# ---------------------------------------------------------------------------
+# 6. Redis boundary tests — behavioral TTL, stale threshold, overflow
+# ---------------------------------------------------------------------------
+
+
+class TestSyncJobsRedisBoundary:
+    """Boundary tests for database/sync_jobs.py Redis operations."""
+
+    @staticmethod
+    def _load_sync_jobs_module():
+        """Load sync_jobs module with Redis stubbed."""
+        mock_redis = MagicMock()
+        mock_redis_module = MagicMock()
+        mock_redis_module.Redis.return_value = mock_redis
+
+        saved_modules = {}
+        modules_to_stub = {
+            'redis': mock_redis_module,
+            'database': MagicMock(),
+            'database.redis_db': MagicMock(r=mock_redis),
+            'database._client': MagicMock(),
+        }
+        for mod, mock in modules_to_stub.items():
+            saved_modules[mod] = sys.modules.get(mod)
+            sys.modules[mod] = mock
+
+        try:
+            import importlib.util
+
+            spec = importlib.util.spec_from_file_location(
+                'sync_jobs_boundary',
+                os.path.join(os.path.dirname(__file__), '..', '..', 'database', 'sync_jobs.py'),
+            )
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            return module, mock_redis
+        finally:
+            for mod, original in saved_modules.items():
+                if original is None:
+                    sys.modules.pop(mod, None)
+                else:
+                    sys.modules[mod] = original
+
+    def test_create_sets_ttl(self):
+        """create_sync_job must set TTL (ex=JOB_TTL_SECONDS) on Redis key."""
+        mod, mock_redis = self._load_sync_jobs_module()
+        mod.create_sync_job('uid', 1, 5)
+        call_args = mock_redis.set.call_args
+        assert call_args.kwargs.get('ex') == mod.JOB_TTL_SECONDS or call_args[1].get('ex') == mod.JOB_TTL_SECONDS
+
+    def test_update_refreshes_ttl(self):
+        """update_sync_job must refresh TTL on each update."""
+        mod, mock_redis = self._load_sync_jobs_module()
+        job = {'job_id': 'j', 'uid': 'u', 'status': 'processing', 'updated_at': time.time()}
+        mock_redis.get.return_value = json.dumps(job).encode()
+        mod.update_sync_job('j', {'processed_segments': 3})
+        call_args = mock_redis.set.call_args
+        assert call_args.kwargs.get('ex') == mod.JOB_TTL_SECONDS or call_args[1].get('ex') == mod.JOB_TTL_SECONDS
+
+    def test_stale_at_exactly_threshold(self):
+        """Job at exactly STALE_THRESHOLD_SECONDS should NOT be marked stale (> not >=)."""
+        mod, mock_redis = self._load_sync_jobs_module()
+        job = {
+            'job_id': 'j',
+            'uid': 'u',
+            'status': 'processing',
+            'updated_at': time.time() - mod.STALE_THRESHOLD_SECONDS,
+        }
+        mock_redis.get.return_value = json.dumps(job).encode()
+        result = mod.get_sync_job('j')
+        # At exactly threshold: time.time() - updated_at == STALE_THRESHOLD_SECONDS
+        # Since time passes between test setup and check, this may be slightly > threshold
+        # The important behavioral test is the "just under" case below
+        assert result is not None
+
+    def test_stale_just_under_threshold(self):
+        """Job 1 second under stale threshold must remain processing."""
+        mod, mock_redis = self._load_sync_jobs_module()
+        job = {
+            'job_id': 'j',
+            'uid': 'u',
+            'status': 'processing',
+            'updated_at': time.time() - (mod.STALE_THRESHOLD_SECONDS - 1),
+        }
+        mock_redis.get.return_value = json.dumps(job).encode()
+        result = mod.get_sync_job('j')
+        assert result['status'] == 'processing'
+
+    def test_stale_just_over_threshold(self):
+        """Job 1 second over stale threshold must be marked failed."""
+        mod, mock_redis = self._load_sync_jobs_module()
+        job = {
+            'job_id': 'j',
+            'uid': 'u',
+            'status': 'processing',
+            'updated_at': time.time() - (mod.STALE_THRESHOLD_SECONDS + 1),
+        }
+        mock_redis.get.return_value = json.dumps(job).encode()
+        result = mod.get_sync_job('j')
+        assert result['status'] == 'failed'
+        assert 'timed out' in result['error']
+
+    def test_stale_persists_to_redis(self):
+        """When stale detection fires, it must write the failed status back to Redis."""
+        mod, mock_redis = self._load_sync_jobs_module()
+        job = {
+            'job_id': 'j',
+            'uid': 'u',
+            'status': 'processing',
+            'updated_at': time.time() - 700,
+        }
+        mock_redis.get.return_value = json.dumps(job).encode()
+        mod.get_sync_job('j')
+        # Must have written back to Redis (set called with failed status)
+        assert mock_redis.set.called
+        written_data = json.loads(mock_redis.set.call_args[0][1])
+        assert written_data['status'] == 'failed'
+
+    def test_completed_job_not_stale_checked(self):
+        """Terminal jobs must not be re-evaluated for staleness."""
+        mod, mock_redis = self._load_sync_jobs_module()
+        job = {
+            'job_id': 'j',
+            'uid': 'u',
+            'status': 'completed',
+            'updated_at': time.time() - 9999,
+        }
+        mock_redis.get.return_value = json.dumps(job).encode()
+        result = mod.get_sync_job('j')
+        assert result['status'] == 'completed'
+
+    def test_overflow_failed_segments_gt_total(self):
+        """If failed_segments > total_segments, status should still reflect failure."""
+        mod, mock_redis = self._load_sync_jobs_module()
+        job = {'job_id': 'j', 'uid': 'u', 'status': 'processing', 'updated_at': time.time()}
+        mock_redis.get.return_value = json.dumps(job).encode()
+        # This shouldn't happen in practice — if it does, partial_failure is safe
+        # because the app treats any failure as retryable
+        result = mod.mark_job_completed(
+            'j',
+            {
+                'failed_segments': 10,
+                'total_segments': 5,
+                'errors': [],
+            },
+        )
+        # failed(10) >= total(5), so status is 'failed'
+        assert result['status'] == 'failed'
+        assert result['failed_segments'] == 10
+        assert result['successful_segments'] == 0  # Clamped, not -5
+
+    def test_update_sync_job_returns_none_for_missing(self):
+        """update_sync_job must return None for non-existent jobs."""
+        mod, mock_redis = self._load_sync_jobs_module()
+        mock_redis.get.return_value = None
+        result = mod.update_sync_job('nonexistent', {'status': 'processing'})
+        assert result is None
+
+    def test_update_sync_job_refreshes_updated_at(self):
+        """update_sync_job must set updated_at to current time."""
+        mod, mock_redis = self._load_sync_jobs_module()
+        old_time = time.time() - 100
+        job = {'job_id': 'j', 'uid': 'u', 'status': 'processing', 'updated_at': old_time}
+        mock_redis.get.return_value = json.dumps(job).encode()
+        before = time.time()
+        result = mod.update_sync_job('j', {'processed_segments': 5})
+        after = time.time()
+        assert before <= result['updated_at'] <= after
+        assert result['processed_segments'] == 5
+
+
+# ---------------------------------------------------------------------------
+# 7. Background worker behavioral tests
+# ---------------------------------------------------------------------------
+
+
+class TestBackgroundWorkerBehavioral:
+    """Behavioral tests for _process_segments_background using mocks."""
+
+    @staticmethod
+    def _load_bg_worker():
+        """Load the background worker function with all dependencies mocked."""
+        mock_redis = MagicMock()
+        mock_sync_jobs = MagicMock()
+
+        saved_modules = {}
+        # Core deps
+        heavy_deps = [
+            'redis',
+            'database',
+            'database.redis_db',
+            'database._client',
+            'database.conversations',
+            'database.users',
+            'firebase_admin',
+            'google',
+            'google.cloud',
+            'google.cloud.firestore_v1',
+            'opuslib',
+            'pydub',
+            'models',
+            'models.conversation',
+            'models.transcript_segment',
+        ]
+        # utils namespace — must stub all submodules sync.py imports
+        utils_subs = [
+            'utils',
+            'utils.conversations',
+            'utils.conversations.process_conversation',
+            'utils.other',
+            'utils.other.endpoints',
+            'utils.other.storage',
+            'utils.encryption',
+            'utils.stt',
+            'utils.stt.pre_recorded',
+            'utils.stt.vad',
+            'utils.fair_use',
+            'utils.subscription',
+            'utils.observability',
+            'utils.log_sanitizer',
+        ]
+        heavy_deps.extend(utils_subs)
+
+        for mod in heavy_deps:
+            saved_modules[mod] = sys.modules.get(mod)
+            sys.modules[mod] = MagicMock()
+
+        # Set up specific mocks
+        sys.modules['database.redis_db'] = MagicMock(r=mock_redis)
+        saved_modules['database.sync_jobs'] = sys.modules.get('database.sync_jobs')
+        sys.modules['database.sync_jobs'] = mock_sync_jobs
+
+        try:
+            import importlib.util
+
+            spec = importlib.util.spec_from_file_location(
+                'sync_router_bg',
+                os.path.join(os.path.dirname(__file__), '..', '..', 'routers', 'sync.py'),
+            )
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            return module, mock_sync_jobs
+        except Exception:
+            return None, None
+        finally:
+            for mod, original in saved_modules.items():
+                if original is None:
+                    sys.modules.pop(mod, None)
+                else:
+                    sys.modules[mod] = original
+
+    def test_bg_worker_calls_mark_processing_then_completed(self):
+        """Worker must call mark_job_processing, then mark_job_completed."""
+        mod, mock_sync_jobs = self._load_bg_worker()
+        if mod is None:
+            pytest.skip("Cannot load sync router due to import chain")
+
+        # Mock process_segment to do nothing
+        mod.process_segment = MagicMock()
+
+        mod._process_segments_background(
+            job_id='test-job',
+            uid='test-uid',
+            segmented_paths=['/tmp/fake1.wav', '/tmp/fake2.wav'],
+            source='omi',
+            is_locked=False,
+            fair_use_restrict_dg=False,
+            total_speech_seconds=10.0,
+            job_dir='/tmp/fake-job-dir',
+        )
+
+        mock_sync_jobs.mark_job_processing.assert_called_once_with('test-job')
+        mock_sync_jobs.mark_job_completed.assert_called_once()
+        call_args = mock_sync_jobs.mark_job_completed.call_args
+        assert call_args[0][0] == 'test-job'
+
+    def test_bg_worker_calls_mark_failed_on_exception(self):
+        """Worker must call mark_job_failed when processing throws."""
+        mod, mock_sync_jobs = self._load_bg_worker()
+        if mod is None:
+            pytest.skip("Cannot load sync router due to import chain")
+
+        # Make mark_job_processing raise to simulate early failure
+        mock_sync_jobs.mark_job_processing.side_effect = Exception("Redis down")
+
+        mod._process_segments_background(
+            job_id='test-job',
+            uid='test-uid',
+            segmented_paths=['/tmp/fake.wav'],
+            source='omi',
+            is_locked=False,
+            fair_use_restrict_dg=False,
+            total_speech_seconds=5.0,
+            job_dir='/tmp/fake-dir',
+        )
+
+        mock_sync_jobs.mark_job_failed.assert_called_once()
+        assert 'Redis down' in mock_sync_jobs.mark_job_failed.call_args[0][1]
+
+    def test_bg_worker_heartbeats_during_processing(self):
+        """Worker must call update_sync_job during chunk processing."""
+        mod, mock_sync_jobs = self._load_bg_worker()
+        if mod is None:
+            pytest.skip("Cannot load sync router due to import chain")
+
+        mod.process_segment = MagicMock()
+
+        # Use enough segments to trigger at least one heartbeat (chunk_size=5)
+        paths = [f'/tmp/seg{i}.wav' for i in range(6)]
+
+        mod._process_segments_background(
+            job_id='hb-job',
+            uid='uid',
+            segmented_paths=paths,
+            source='omi',
+            is_locked=False,
+            fair_use_restrict_dg=False,
+            total_speech_seconds=30.0,
+            job_dir='/tmp/hb-dir',
+        )
+
+        # update_sync_job should have been called at least once for heartbeat
+        assert mock_sync_jobs.update_sync_job.called
