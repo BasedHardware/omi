@@ -52,7 +52,9 @@ import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/message_provider.dart';
 import 'package:omi/providers/sync_provider.dart';
 import 'package:omi/services/announcement_service.dart';
+import 'package:omi/services/apple_reminders_sync_service.dart';
 import 'package:omi/services/notifications.dart';
+import 'package:omi/utils/platform/platform_service.dart';
 import 'package:omi/services/notifications/daily_reflection_notification.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/audio/foreground.dart';
@@ -202,6 +204,15 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
       if (mounted && SharedPreferencesUtil().claudeAgentEnabled) {
         ensureAgentVm();
         Provider.of<MessageProvider>(context, listen: false).startVmKeepalive();
+      }
+
+      // Sync Apple Reminders on foreground resume (non-blocking, debounced)
+      if (mounted && PlatformService.isApple) {
+        AppleRemindersSyncService().syncOnForegroundResume().then((_) {
+          if (mounted) {
+            Provider.of<ActionItemsProvider>(context, listen: false).forceRefreshActionItems();
+          }
+        });
       }
     } else if (state == AppLifecycleState.hidden) {
       event = 'App is hidden';
@@ -814,8 +825,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                           color: isSyncing
                               ? Colors.deepPurple.withValues(alpha: 0.2)
                               : hasPendingOnDevice
-                                  ? Colors.orange.withValues(alpha: 0.15)
-                                  : const Color(0xFF1F1F25),
+                              ? Colors.orange.withValues(alpha: 0.15)
+                              : const Color(0xFF1F1F25),
                           shape: BoxShape.circle,
                         ),
                         child: Icon(
@@ -824,8 +835,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                           color: isSyncing
                               ? Colors.deepPurpleAccent
                               : hasPendingOnDevice
-                                  ? Colors.orangeAccent
-                                  : Colors.white70,
+                              ? Colors.orangeAccent
+                              : Colors.white70,
                         ),
                       ),
                     );
