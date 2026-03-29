@@ -1803,6 +1803,7 @@ async def _stream_handler(
                 logger.info(
                     f"Conversation {current_conversation_id} timeout reached ({seconds_since_last_update:.1f}s). Processing... {uid} {session_id}"
                 )
+                _flush_speaker_assignments(current_conversation_id)
                 await _process_conversation(current_conversation_id)
                 await _create_new_in_progress_conversation()
 
@@ -2082,6 +2083,36 @@ async def _stream_handler(
         if _cached_conversation_data is not None:
             _cached_conversation_data['transcript_segments'] = segments_dicts
 
+    def _flush_speaker_assignments(conversation_id: str):
+        """Apply any pending speaker assignments to conversation segments in Firestore.
+
+        Called before conversation rollover/processing to ensure labels are persisted
+        even if the embedding match landed after the last transcript batch.
+        """
+        nonlocal speaker_map_dirty
+        if not (speaker_to_person_map or segment_person_assignment_map) or not conversation_id:
+            return
+        try:
+            conversation_data = _get_cached_conversation(force_refresh=True)
+            if not conversation_data:
+                return
+            conversation = Conversation(**conversation_data)
+            if not conversation.transcript_segments:
+                return
+            process_speaker_assigned_segments(
+                conversation.transcript_segments,
+                segment_person_assignment_map,
+                speaker_to_person_map,
+            )
+            segments_dicts = [seg.dict() for seg in conversation.transcript_segments]
+            conversations_db.update_conversation_segments(
+                uid, conversation.id, segments_dicts, data_protection_level=_cached_protection_level
+            )
+            _update_cached_segments(segments_dicts)
+            speaker_map_dirty = False
+        except Exception as e:
+            logger.error(f"Error flushing speaker assignments for {conversation_id}: {e} {uid} {session_id}")
+
     async def stream_transcript_process():
         nonlocal websocket_active, realtime_segment_buffers, realtime_photo_buffers, websocket
         nonlocal current_conversation_id, translation_enabled, speaker_to_person_map, suggested_segments, words_transcribed_since_last_record, last_transcript_time
@@ -2286,24 +2317,7 @@ async def _stream_handler(
 
         # Final pass: apply any pending speaker assignments so Firestore is correct
         # even if the embedding match completed on the last segment (no subsequent batch).
-        if (speaker_to_person_map or segment_person_assignment_map) and current_conversation_id:
-            try:
-                conversation_data = _get_cached_conversation()
-                if conversation_data:
-                    conversation = Conversation(**conversation_data)
-                    if conversation.transcript_segments:
-                        process_speaker_assigned_segments(
-                            conversation.transcript_segments,
-                            segment_person_assignment_map,
-                            speaker_to_person_map,
-                        )
-                        segments_dicts = [seg.dict() for seg in conversation.transcript_segments]
-                        conversations_db.update_conversation_segments(
-                            uid, conversation.id, segments_dicts, data_protection_level=_cached_protection_level
-                        )
-                        _update_cached_segments(segments_dicts)
-            except Exception as e:
-                logger.error(f"Error in final speaker assignment pass: {e} {uid} {session_id}")
+        _flush_speaker_assignments(current_conversation_id)
 
     # Image chunks cache with TTL tracking: {temp_id: {'chunks': [...], 'created_at': float}}
     # Using OrderedDict for O(1) oldest removal (insertion order preserved)
@@ -2787,6 +2801,7 @@ async def _stream_handler(
         if is_multi_channel and current_conversation_id:
             try:
                 redis_db.remove_in_progress_conversation_id(uid)
+                _flush_speaker_assignments(current_conversation_id)
                 await _process_conversation(current_conversation_id)
                 logger.info(
                     f"Multi-channel conversation {current_conversation_id} submitted for processing {uid} {session_id}"
