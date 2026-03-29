@@ -14,6 +14,19 @@ class AudioDownloadService {
   final http.Client _client = http.Client();
   final List<File> _tempFiles = [];
 
+  /// Download a single file from a signed URL and return the local file path.
+  Future<String?> downloadFile(String signedUrl, String fileId) async {
+    try {
+      final tempDir = await getTemporaryDirectory();
+      final filePath = '${tempDir.path}/cloud_audio_$fileId.wav';
+      final file = await _downloadFile(signedUrl, filePath);
+      return file.path;
+    } catch (e) {
+      Logger.debug('Error downloading file: $e');
+      return null;
+    }
+  }
+
   Future<File?> downloadAndCombineAudio(
     ServerConversation conversation, {
     void Function(double)? onProgress,
