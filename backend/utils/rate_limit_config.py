@@ -10,8 +10,8 @@ Tuning knobs:
         Set > 1.0 during events to relax limits, < 1.0 to tighten.
         Read from env var RATE_LIMIT_BOOST at startup.
 
-    RATE_LIMIT_SHADOW: when "true", log violations but don't reject (429).
-        Read from env var RATE_LIMIT_SHADOW_MODE.
+    RATE_LIMIT_SHADOW: defaults ON (shadow/log-only). Set env var
+        RATE_LIMIT_SHADOW_MODE=false to enable enforcement (429 rejections).
 
 Redis efficiency:
     Each check = 1 Lua script call (atomic INCR + TTL check).
@@ -25,7 +25,7 @@ import os
 # ---------------------------------------------------------------------------
 
 RATE_LIMIT_BOOST: float = float(os.getenv("RATE_LIMIT_BOOST", "1.0"))
-RATE_LIMIT_SHADOW: bool = os.getenv("RATE_LIMIT_SHADOW_MODE", "").lower() == "true"
+RATE_LIMIT_SHADOW: bool = os.getenv("RATE_LIMIT_SHADOW_MODE", "true").lower() != "false"
 
 # ---------------------------------------------------------------------------
 # Policies: "name" -> (max_requests, window_seconds)
