@@ -288,7 +288,8 @@ def _detect_known_name_from_text(text: str, known_names: Iterable[str]) -> Optio
         escaped_name = re.escape(known_name.strip())
         for pattern in KNOWN_NAME_PATTERNS:
             candidate_pattern = pattern.format(name=escaped_name)
-            if re.search(candidate_pattern, text, flags=re.IGNORECASE):
+            # Don't treat possessive mentions like "this is bob's phone" as self-identification.
+            if re.search(rf"{candidate_pattern}(?!['\u2019]s)", text, flags=re.IGNORECASE):
                 return _normalize_detected_name(known_name)
     return None
 

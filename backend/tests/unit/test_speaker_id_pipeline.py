@@ -307,6 +307,8 @@ class TestDetectSpeakerFromText:
         """Possessive references should not be treated as a speaker introduction."""
         result = detect_speaker_from_text("this is bob's phone", known_names=["Bob"])
         assert result is None
+        result = detect_speaker_from_text("this is bob’s phone", known_names=["Bob"])
+        assert result is None
 
     def test_normalize_person_name_key_casefolds_and_collapses_spaces(self):
         """Normalized lookup keys ignore case and repeated whitespace."""
