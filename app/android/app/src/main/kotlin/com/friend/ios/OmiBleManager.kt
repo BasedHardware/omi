@@ -286,6 +286,22 @@ class OmiBleManager private constructor(private val application: Application) {
         OmiBleForegroundService.stopService(application)
     }
 
+    /** Clean up all GATT connections because Bluetooth was turned off.
+     *  Unlike disconnectAllPeripherals(), this notifies Dart and does NOT
+     *  set appClosed/manuallyDisconnected so reconnect works when BT comes back. */
+    fun handleBluetoothOff() {
+        cancelPendingReconnect()
+        for ((addr, gatt) in connectedGatts) {
+            cleanupPeripheral(addr)
+            gatt.close()
+            mainHandler.post {
+                flutterApi?.onPeripheralDisconnected(addr, "bluetooth_off") {}
+            }
+        }
+        connectedGatts.clear()
+        connectingAddresses.clear()
+    }
+
     fun isManuallyDisconnected(address: String): Boolean {
         return manuallyDisconnected.contains(address.uppercase())
     }
