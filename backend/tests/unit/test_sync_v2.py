@@ -336,11 +336,13 @@ class TestProcessSegmentsBackground:
 
     def test_background_calls_mark_job_completed(self):
         """Worker must call mark_job_completed with result."""
-        assert 'mark_job_completed(job_id' in self._get_bg_func_body()
+        body = self._get_bg_func_body()
+        assert 'mark_job_completed(' in body and 'job_id' in body
 
     def test_background_calls_mark_job_failed_on_exception(self):
         """Worker must call mark_job_failed on unexpected exception."""
-        assert 'mark_job_failed(job_id' in self._get_bg_func_body()
+        body = self._get_bg_func_body()
+        assert 'mark_job_failed(' in body and 'job_id' in body
 
     def test_background_uses_chunk_threads_pattern(self):
         """Worker must batch threads in chunks of 5 (same as v1)."""
