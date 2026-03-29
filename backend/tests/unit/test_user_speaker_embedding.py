@@ -366,6 +366,32 @@ class TestFinalAssignmentPass:
         assert segments[0].is_user is True  # was already True, unchanged
         assert segments[1].is_user is True  # corrected by final pass
 
+    def test_late_match_before_rollover_corrects_all_segments(self):
+        """Regression: embedding match after last batch but before rollover must still fix segments.
+
+        Simulates: conversation has 5 segments from speaker 0, all with is_user=False.
+        A late embedding match maps speaker 0 -> user. The flush before rollover
+        must retroactively correct all 5 segments, not just the triggering one.
+        """
+        from utils.speaker_assignment import process_speaker_assigned_segments
+        from models.transcript_segment import TranscriptSegment
+
+        # 5 segments from speaker 0, none yet marked as user
+        segments = [
+            TranscriptSegment(text=f'Seg {i}', speaker='SPEAKER_0', speaker_id=0, is_user=False, start=i, end=i + 1)
+            for i in range(5)
+        ]
+        # Late match: speaker 0 -> user (arrived after last transcript batch)
+        speaker_to_person_map = {0: ('user', 'User')}
+        segment_person_assignment_map = {segments[4].id: 'user'}  # only last segment was in match trigger
+
+        # This simulates what _flush_speaker_assignments does before rollover
+        process_speaker_assigned_segments(segments, segment_person_assignment_map, speaker_to_person_map)
+
+        # ALL speaker 0 segments must be corrected, not just the triggering one
+        for i, seg in enumerate(segments):
+            assert seg.is_user is True, f"Segment {i} should be is_user=True after flush"
+
 
 # ─── User Match Threshold Boundary ────────────────────────────────────────────
 
