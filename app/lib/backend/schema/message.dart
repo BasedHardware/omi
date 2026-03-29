@@ -118,9 +118,11 @@ class GenUiBlock {
 
   GenUiBlock({required this.type, required this.props});
 
-  static GenUiBlock fromJson(Map<String, dynamic> json) {
+  static GenUiBlock? fromJson(Map<String, dynamic> json) {
+    final type = GenUiBlockType.fromString(json['type'] ?? '');
+    if (type == null) return null;
     return GenUiBlock(
-      type: GenUiBlockType.fromString(json['type'] ?? '') ?? GenUiBlockType.map,
+      type: type,
       props: (json['props'] as Map<String, dynamic>?) ?? {},
     );
   }
@@ -254,7 +256,10 @@ class ServerMessage {
       askForNps: json['ask_for_nps'] ?? true,
       rating: json['rating'],
       chartData: json['chart_data'] != null ? ChartData.fromJson(json['chart_data']) : null,
-      uiBlocks: ((json['ui_blocks'] ?? []) as List<dynamic>).map((b) => GenUiBlock.fromJson(b)).toList(),
+      uiBlocks: ((json['ui_blocks'] ?? []) as List<dynamic>)
+          .map((b) => GenUiBlock.fromJson(b as Map<String, dynamic>))
+          .whereType<GenUiBlock>()
+          .toList(),
     );
   }
 

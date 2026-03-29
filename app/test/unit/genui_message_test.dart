@@ -13,7 +13,8 @@ void main() {
         },
       });
 
-      expect(block.type, GenUiBlockType.actionButtons);
+      expect(block, isNotNull);
+      expect(block!.type, GenUiBlockType.actionButtons);
       expect(block.props['title'], 'Quick actions');
       expect(block.props['buttons'], ['Share location', 'Find nearby coffee']);
     });
@@ -38,6 +39,30 @@ void main() {
   });
 
   group('ServerMessage', () {
+
+    test('drops unknown ui block types instead of coercing them to maps', () {
+      final message = ServerMessage.fromJson({
+        'id': 'msg-unknown',
+        'created_at': '2026-03-29T13:00:00Z',
+        'text': 'Future payload',
+        'sender': 'ai',
+        'type': 'text',
+        'plugin_id': null,
+        'from_integration': false,
+        'files': [],
+        'files_id': [],
+        'memories': [],
+        'ask_for_nps': false,
+        'ui_blocks': [
+          {
+            'type': 'image_carousel',
+            'props': {'images': []},
+          },
+        ],
+      });
+
+      expect(message.uiBlocks, isEmpty);
+    });
     test('hydrates uiBlocks from chat payload JSON', () {
       final message = ServerMessage.fromJson({
         'id': 'msg-1',

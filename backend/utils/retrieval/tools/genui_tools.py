@@ -6,15 +6,11 @@ in chat messages — maps, cards, buttons, images, and more — using the A2UI
 protocol consumed by Flutter's genui package on the client.
 """
 
-import contextvars
 from typing import List, Optional
 
 from langchain_core.tools import tool
 
-try:
-    from utils.retrieval.agentic import agent_config_context
-except ImportError:
-    agent_config_context = contextvars.ContextVar('agent_config', default=None)
+from utils.retrieval.context import agent_config_context
 
 
 def _store_ui_blocks(blocks: list):

@@ -8,14 +8,12 @@ tool use API with streaming for real-time responses.
 
 import uuid
 import asyncio
-import contextvars
 import traceback
 from typing import List, Optional, AsyncGenerator, Any, Tuple
 
 from langchain_core.runnables import RunnableConfig
 
-# Context variable to store config for tools
-agent_config_context: contextvars.ContextVar[dict] = contextvars.ContextVar('agent_config', default=None)
+from utils.retrieval.context import agent_config_context
 
 from models.app import App
 from models.chat import Message, ChatSession, PageContext
