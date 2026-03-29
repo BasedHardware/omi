@@ -137,7 +137,8 @@ class OmiBleManager private constructor(private val application: Application) {
             return
         }
 
-        if (ContextCompat.checkSelfPermission(application, android.Manifest.permission.BLUETOOTH_SCAN) != PackageManager.PERMISSION_GRANTED) {
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S &&
+            ContextCompat.checkSelfPermission(application, android.Manifest.permission.BLUETOOTH_SCAN) != PackageManager.PERMISSION_GRANTED) {
             Log.w(TAG, "BLUETOOTH_SCAN permission not granted, cannot scan")
             return
         }
