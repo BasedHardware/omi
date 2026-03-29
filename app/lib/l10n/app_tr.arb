@@ -573,7 +573,7 @@
     "tryAgain": "Tekrar Dene",
     "connectOmiOmiGlass": "Omi / OmiGlass Bağla",
     "continueWithoutDevice": "Cihaz Olmadan Devam Et",
-    "permissionsRequired": "İzinler Gerekli",
+    "permissionsRequired": "İzinler gerekli",
     "permissionsRequiredDesc": "Bu uygulamanın düzgün çalışması için Bluetooth ve Konum izinlerine ihtiyacı var. Lütfen ayarlardan bunları etkinleştirin.",
     "openSettings": "Ayarları Aç",
     "wantDifferentName": "Farklı bir isimle mi anılmak istiyorsunuz?",
@@ -2860,5 +2860,15 @@
     "storageSection": "DEPOLAMA",
     "tipKeepPhoneNearby": "Daha hızlı senkronizasyon için telefonunuzu yakında tutun",
     "tipStableInternet": "Kararlı internet bulut yüklemelerini hızlandırır",
-    "tipAutoSync": "Kayıtlar otomatik olarak senkronize edilir"
+    "tipAutoSync": "Kayıtlar otomatik olarak senkronize edilir",
+    "permissions": "İzinler",
+    "permissionEnabled": "Etkin",
+    "permissionEnable": "Etkinleştir",
+    "permissionsPageDescription": "Bu izinler Omi'nin çalışması için temeldir. Bildirimler, konum tabanlı deneyimler ve ses yakalama gibi temel özellikleri etkinleştirirler.",
+    "permissionsRequiredDescription": "Omi düzgün çalışmak için birkaç izne ihtiyaç duyar. Devam etmek için lütfen bunları verin.",
+    "permissionsSetupTitle": "En iyi deneyimi yaşayın",
+    "permissionsSetupDescription": "Omi büyüsünü gösterebilsin diye birkaç izni etkinleştirin.",
+    "permissionsChangeAnytime": "Bunları istediğiniz zaman Ayarlar > İzinler bölümünden değiştirebilirsiniz",
+    "location": "Konum",
+    "microphone": "Mikrofon"
 }

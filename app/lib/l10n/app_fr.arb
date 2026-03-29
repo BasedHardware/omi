@@ -559,7 +559,7 @@
     "allDone": "Terminé !",
     "keepGoing": "Continuez, vous vous en sortez très bien",
     "skipThisQuestion": "Passer cette question",
-    "skipForNow": "Passer pour l'instant",
+    "skipForNow": "Passer pour le moment",
     "connectionError": "Erreur de connexion",
     "connectionErrorDesc": "Échec de la connexion au serveur. Veuillez vérifier votre connexion internet et réessayer.",
     "invalidRecordingMultipleSpeakers": "Enregistrement invalide détecté",
@@ -2860,5 +2860,15 @@
     "storageSection": "STOCKAGE",
     "tipKeepPhoneNearby": "Gardez votre téléphone à proximité pour une synchronisation plus rapide",
     "tipStableInternet": "Un internet stable accélère les envois vers le cloud",
-    "tipAutoSync": "Les enregistrements se synchronisent automatiquement"
+    "tipAutoSync": "Les enregistrements se synchronisent automatiquement",
+    "permissions": "Autorisations",
+    "permissionEnabled": "Activée",
+    "permissionEnable": "Activer",
+    "permissionsPageDescription": "Ces autorisations sont essentielles au fonctionnement d'Omi. Elles activent des fonctionnalités clés comme les notifications, les expériences basées sur la localisation et la capture audio.",
+    "permissionsRequiredDescription": "Omi a besoin de quelques autorisations pour fonctionner correctement. Veuillez les accorder pour continuer.",
+    "permissionsSetupTitle": "Profitez de la meilleure expérience",
+    "permissionsSetupDescription": "Activez quelques autorisations pour qu'Omi puisse faire sa magie.",
+    "permissionsChangeAnytime": "Vous pouvez les modifier à tout moment dans Réglages > Autorisations",
+    "location": "Localisation",
+    "microphone": "Microphone"
 }

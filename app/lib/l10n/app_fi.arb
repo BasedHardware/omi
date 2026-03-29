@@ -2825,5 +2825,15 @@
     "storageSection": "TALLENNUSTILA",
     "tipKeepPhoneNearby": "Pidä puhelin lähellä nopeampaa synkronointia varten",
     "tipStableInternet": "Vakaa internet nopeuttaa pilveen lataamista",
-    "tipAutoSync": "Nauhoitukset synkronoidaan automaattisesti"
+    "tipAutoSync": "Nauhoitukset synkronoidaan automaattisesti",
+    "permissions": "Käyttöoikeudet",
+    "permissionEnabled": "Käytössä",
+    "permissionEnable": "Ota käyttöön",
+    "permissionsPageDescription": "Nämä käyttöoikeudet ovat keskeisiä Omin toiminnalle. Ne mahdollistavat keskeiset ominaisuudet kuten ilmoitukset, sijaintiin perustuvat kokemukset ja äänen tallennuksen.",
+    "permissionsRequiredDescription": "Omi tarvitsee muutamia käyttöoikeuksia toimiakseen oikein. Myönnä ne jatkaaksesi.",
+    "permissionsSetupTitle": "Saat parhaan kokemuksen",
+    "permissionsSetupDescription": "Ota käyttöön muutama lupa, jotta Omi voi tehdä taikojaan.",
+    "permissionsChangeAnytime": "Voit muuttaa näitä milloin tahansa kohdassa Asetukset > Käyttöoikeudet",
+    "location": "Sijainti",
+    "microphone": "Mikrofoni"
 }

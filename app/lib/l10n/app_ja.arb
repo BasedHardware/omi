@@ -2826,5 +2826,15 @@
     "storageSection": "ストレージ",
     "tipKeepPhoneNearby": "より速い同期のためにスマートフォンを近くに置いてください",
     "tipStableInternet": "安定したインターネットでクラウドアップロードが高速化します",
-    "tipAutoSync": "録音は自動的に同期されます"
+    "tipAutoSync": "録音は自動的に同期されます",
+    "permissions": "権限",
+    "permissionEnabled": "有効",
+    "permissionEnable": "有効にする",
+    "permissionsPageDescription": "これらの権限はOmiの動作に不可欠です。通知、位置情報に基づく体験、音声キャプチャなどの主要機能を有効にします。",
+    "permissionsRequiredDescription": "Omiが正しく動作するためにいくつかの権限が必要です。続行するには許可してください。",
+    "permissionsSetupTitle": "最高の体験を手に入れよう",
+    "permissionsSetupDescription": "いくつかの権限を有効にして、Omiの魔法を体験しましょう。",
+    "permissionsChangeAnytime": "設定 > 権限からいつでも変更できます",
+    "location": "位置情報",
+    "microphone": "マイク"
 }

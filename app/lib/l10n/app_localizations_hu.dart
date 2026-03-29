@@ -1827,7 +1827,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get skipThisQuestion => 'Kérdés kihagyása';
 
   @override
-  String get skipForNow => 'Egyelőre kihagyom';
+  String get skipForNow => 'Kihagyás most';
 
   @override
   String get connectionError => 'Kapcsolódási hiba';
@@ -8752,4 +8752,36 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get storageSection => 'TÁRHELY';
+
+  @override
+  String get permissions => 'Engedélyek';
+
+  @override
+  String get permissionEnabled => 'Engedélyezve';
+
+  @override
+  String get permissionEnable => 'Engedélyezés';
+
+  @override
+  String get permissionsPageDescription =>
+      'Ezek az engedélyek alapvetőek az Omi működéséhez. Kulcsfontosságú funkciókat tesznek lehetővé, mint az értesítések, helymeghatározáson alapuló élmények és hangfelvétel.';
+
+  @override
+  String get permissionsRequiredDescription =>
+      'Az Omi néhány engedélyre van szüksége a megfelelő működéshez. Kérjük, add meg őket a folytatáshoz.';
+
+  @override
+  String get permissionsSetupTitle => 'Szerezd meg a legjobb élményt';
+
+  @override
+  String get permissionsSetupDescription => 'Engedélyezz néhány jogosultságot, hogy az Omi varázsolhasson.';
+
+  @override
+  String get permissionsChangeAnytime => 'Ezeket bármikor módosíthatod a Beállítások > Engedélyek menüben';
+
+  @override
+  String get location => 'Helyzet';
+
+  @override
+  String get microphone => 'Mikrofon';
 }

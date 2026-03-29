@@ -8698,4 +8698,36 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get storageSection => 'LAGER';
+
+  @override
+  String get permissions => 'Tilladelser';
+
+  @override
+  String get permissionEnabled => 'Aktiveret';
+
+  @override
+  String get permissionEnable => 'Aktivér';
+
+  @override
+  String get permissionsPageDescription =>
+      'Disse tilladelser er centrale for Omis funktion. De aktiverer nøglefunktioner som notifikationer, placeringsbaserede oplevelser og lydoptagelse.';
+
+  @override
+  String get permissionsRequiredDescription =>
+      'Omi har brug for nogle tilladelser for at fungere korrekt. Giv dem venligst for at fortsætte.';
+
+  @override
+  String get permissionsSetupTitle => 'Få den bedste oplevelse';
+
+  @override
+  String get permissionsSetupDescription => 'Aktivér nogle tilladelser, så Omi kan udfolde sin magi.';
+
+  @override
+  String get permissionsChangeAnytime => 'Du kan ændre disse når som helst i Indstillinger > Tilladelser';
+
+  @override
+  String get location => 'Placering';
+
+  @override
+  String get microphone => 'Mikrofon';
 }

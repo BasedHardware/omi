@@ -1876,7 +1876,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get continueWithoutDevice => 'Συνέχεια Χωρίς Συσκευή';
 
   @override
-  String get permissionsRequired => 'Απαιτούνται Άδειες';
+  String get permissionsRequired => 'Απαιτούνται δικαιώματα';
 
   @override
   String get permissionsRequiredDesc =>
@@ -8778,4 +8778,36 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get storageSection => 'ΑΠΟΘΗΚΕΥΣΗ';
+
+  @override
+  String get permissions => 'Δικαιώματα';
+
+  @override
+  String get permissionEnabled => 'Ενεργοποιημένο';
+
+  @override
+  String get permissionEnable => 'Ενεργοποίηση';
+
+  @override
+  String get permissionsPageDescription =>
+      'Αυτές οι άδειες είναι βασικές για τη λειτουργία του Omi. Ενεργοποιούν βασικές λειτουργίες όπως ειδοποιήσεις, εμπειρίες βάσει τοποθεσίας και καταγραφή ήχου.';
+
+  @override
+  String get permissionsRequiredDescription =>
+      'Το Omi χρειάζεται μερικά δικαιώματα για να λειτουργήσει σωστά. Παρακαλώ παραχωρήστε τα για να συνεχίσετε.';
+
+  @override
+  String get permissionsSetupTitle => 'Αποκτήστε την καλύτερη εμπειρία';
+
+  @override
+  String get permissionsSetupDescription => 'Ενεργοποιήστε μερικές άδειες για να μπορεί το Omi να κάνει τα μαγικά του.';
+
+  @override
+  String get permissionsChangeAnytime => 'Μπορείτε να τα αλλάξετε ανά πάσα στιγμή στις Ρυθμίσεις > Άδειες';
+
+  @override
+  String get location => 'Τοποθεσία';
+
+  @override
+  String get microphone => 'Μικρόφωνο';
 }

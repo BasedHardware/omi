@@ -297,6 +297,10 @@ class SharedPreferencesUtil {
 
   set onboardingCompleted(bool value) => saveBool('onboardingCompleted', value);
 
+  bool get permissionsCompleted => getBool('permissionsCompleted');
+
+  set permissionsCompleted(bool value) => saveBool('permissionsCompleted', value);
+
   String gptCompletionCache(String key) => getString('gptCompletionCache:$key');
 
   setGptCompletionCache(String key, String value) => saveString('gptCompletionCache:$key', value);
