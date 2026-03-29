@@ -163,6 +163,7 @@ class TestDevApiConversationLockEnforcement:
         with pytest.raises(HTTPException) as exc_info:
             update_conversation_endpoint(conversation_id='conv-1', request=request, uid='test-uid')
         assert exc_info.value.status_code == 402
+        assert 'paid plan' in exc_info.value.detail.lower()
 
     def test_patch_conversation_allows_unlocked(self):
         """D1: PATCH should proceed for unlocked conversations."""
@@ -174,11 +175,8 @@ class TestDevApiConversationLockEnforcement:
         from routers.developer import update_conversation_endpoint, UpdateConversationRequest
 
         request = UpdateConversationRequest(title='New Title')
-        try:
-            update_conversation_endpoint(conversation_id='conv-1', request=request, uid='test-uid')
-        except Exception as e:
-            if hasattr(e, 'status_code'):
-                assert e.status_code != 402
+        update_conversation_endpoint(conversation_id='conv-1', request=request, uid='test-uid')
+        conversations_db.update_conversation_title.assert_called_once_with('test-uid', 'conv-1', 'New Title')
 
     def test_delete_conversation_rejects_locked(self):
         """D2: DELETE /v1/dev/user/conversations/{id} must raise 402 for locked."""
@@ -192,6 +190,7 @@ class TestDevApiConversationLockEnforcement:
         with pytest.raises(HTTPException) as exc_info:
             delete_conversation_endpoint(conversation_id='conv-1', uid='test-uid')
         assert exc_info.value.status_code == 402
+        assert 'paid plan' in exc_info.value.detail.lower()
 
     def test_delete_conversation_allows_unlocked(self):
         """D2: DELETE should proceed for unlocked conversations."""
@@ -228,6 +227,7 @@ class TestDevApiMemoryLockEnforcement:
         with pytest.raises(HTTPException) as exc_info:
             update_memory(memory_id='mem-1', request=request, uid='test-uid')
         assert exc_info.value.status_code == 402
+        assert 'paid plan' in exc_info.value.detail.lower()
 
     def test_patch_memory_allows_unlocked(self):
         """D3: PATCH should proceed for unlocked memories."""
@@ -239,11 +239,8 @@ class TestDevApiMemoryLockEnforcement:
         from routers.developer import update_memory, UpdateMemoryRequest
 
         request = UpdateMemoryRequest(content='New content')
-        try:
-            update_memory(memory_id='mem-1', request=request, uid='test-uid')
-        except Exception as e:
-            if hasattr(e, 'status_code'):
-                assert e.status_code != 402
+        update_memory(memory_id='mem-1', request=request, uid='test-uid')
+        memories_db.edit_memory.assert_called_once()
 
     def test_delete_memory_rejects_locked(self):
         """D4: DELETE /v1/dev/user/memories/{id} must raise 402 for locked."""
@@ -257,6 +254,7 @@ class TestDevApiMemoryLockEnforcement:
         with pytest.raises(HTTPException) as exc_info:
             delete_memory(memory_id='mem-1', uid='test-uid')
         assert exc_info.value.status_code == 402
+        assert 'paid plan' in exc_info.value.detail.lower()
 
     def test_delete_memory_allows_unlocked(self):
         """D4: DELETE should proceed for unlocked memories."""
@@ -293,6 +291,7 @@ class TestDevApiActionItemLockEnforcement:
         with pytest.raises(HTTPException) as exc_info:
             update_action_item(action_item_id='ai-1', request=request, uid='test-uid')
         assert exc_info.value.status_code == 402
+        assert 'paid plan' in exc_info.value.detail.lower()
 
     def test_patch_action_item_allows_unlocked(self):
         """D5: PATCH should proceed for unlocked action items."""
@@ -304,11 +303,8 @@ class TestDevApiActionItemLockEnforcement:
         from routers.developer import update_action_item, UpdateActionItemRequest
 
         request = UpdateActionItemRequest(description='New desc')
-        try:
-            update_action_item(action_item_id='ai-1', request=request, uid='test-uid')
-        except Exception as e:
-            if hasattr(e, 'status_code'):
-                assert e.status_code != 402
+        update_action_item(action_item_id='ai-1', request=request, uid='test-uid')
+        action_items_db.update_action_item.assert_called_once()
 
     def test_delete_action_item_rejects_locked(self):
         """D6: DELETE /v1/dev/user/action-items/{id} must raise 402 for locked."""
@@ -322,6 +318,7 @@ class TestDevApiActionItemLockEnforcement:
         with pytest.raises(HTTPException) as exc_info:
             delete_action_item(action_item_id='ai-1', uid='test-uid')
         assert exc_info.value.status_code == 402
+        assert 'paid plan' in exc_info.value.detail.lower()
 
     def test_delete_action_item_allows_unlocked(self):
         """D6: DELETE should proceed for unlocked action items."""
@@ -334,6 +331,7 @@ class TestDevApiActionItemLockEnforcement:
 
         result = delete_action_item(action_item_id='ai-1', uid='test-uid')
         assert result == {"success": True}
+        action_items_db.delete_action_item.assert_called_once_with('test-uid', 'ai-1')
 
 
 # =============================================================================
@@ -394,8 +392,27 @@ class TestKnowledgeGraphLockEnforcement:
 class TestProcessConversationKGLockEnforcement:
     """KG extraction in process_conversation must skip locked memories."""
 
+    def test_kg_extraction_guard_exists_in_source(self):
+        """Verify the is_locked guard is present in the production source code."""
+        import pathlib
+
+        src = (
+            pathlib.Path(__file__).resolve().parent.parent.parent
+            / 'utils'
+            / 'conversations'
+            / 'process_conversation.py'
+        )
+        source = src.read_text()
+        assert 'memory_db_obj.is_locked' in source, "is_locked guard missing from process_conversation.py"
+        assert 'memory_db_obj.kg_extracted' in source
+
     def test_kg_extraction_skips_locked_memory(self):
-        """Locked memories should not be sent to extract_knowledge_from_memory."""
+        """Locked memories should not be sent to extract_knowledge_from_memory.
+
+        The KG extraction loop in _memories_from_conversation has:
+            if memory_db_obj.kg_extracted or memory_db_obj.is_locked: continue
+        We verify this guard correctly skips locked memories.
+        """
         from utils.llm.knowledge_graph import extract_knowledge_from_memory
 
         extract_knowledge_from_memory.reset_mock()
@@ -406,7 +423,6 @@ class TestProcessConversationKGLockEnforcement:
         locked_memory.category.value = 'core'
         locked_memory.kg_extracted = False
         locked_memory.is_locked = True
-        locked_memory.dict.return_value = {'id': 'mem-locked', 'content': 'Secret content'}
 
         unlocked_memory = MagicMock()
         unlocked_memory.id = 'mem-unlocked'
@@ -414,21 +430,17 @@ class TestProcessConversationKGLockEnforcement:
         unlocked_memory.category.value = 'core'
         unlocked_memory.kg_extracted = False
         unlocked_memory.is_locked = False
-        unlocked_memory.dict.return_value = {'id': 'mem-unlocked', 'content': 'Public content'}
 
-        # We need to test the KG extraction loop directly.
-        # The logic is: if memory_db_obj.kg_extracted or memory_db_obj.is_locked: continue
-        # We verify by checking that the guard correctly skips locked.
-        assert locked_memory.is_locked is True
-        assert unlocked_memory.is_locked is False
+        already_extracted = MagicMock()
+        already_extracted.id = 'mem-already'
+        already_extracted.kg_extracted = True
+        already_extracted.is_locked = False
 
-        # Simulate the loop logic from process_conversation.py
+        # Replicate the production guard from process_conversation.py:478-480
         extracted = []
-        for memory_db_obj in [locked_memory, unlocked_memory]:
+        for memory_db_obj in [locked_memory, unlocked_memory, already_extracted]:
             if memory_db_obj.kg_extracted or memory_db_obj.is_locked:
                 continue
             extracted.append(memory_db_obj.id)
 
-        assert 'mem-locked' not in extracted
-        assert 'mem-unlocked' in extracted
-        assert len(extracted) == 1
+        assert extracted == ['mem-unlocked'], f"Expected only unlocked/unextracted, got {extracted}"
