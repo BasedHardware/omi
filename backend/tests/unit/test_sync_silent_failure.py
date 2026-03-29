@@ -94,7 +94,12 @@ class TestProcessSegmentErrorHandling:
 
 
 class TestSyncEndpointErrorReporting:
-    """Verify the endpoint properly reports errors."""
+    """Verify the endpoint uses background processing (#5941).
+
+    After the background processing refactor, error handling (lock, errors,
+    207/500 responses) moved from sync_local_files() into
+    _process_segments_background(). The endpoint now returns 200 immediately.
+    """
 
     @staticmethod
     def _read_sync_source():
@@ -102,50 +107,42 @@ class TestSyncEndpointErrorReporting:
         with open(sync_path) as f:
             return f.read()
 
-    def test_endpoint_creates_lock_and_errors(self):
-        """Endpoint must create segment_lock and segment_errors."""
+    def test_background_function_creates_lock_and_errors(self):
+        """Lock and errors are created in _process_segments_background."""
         source = self._read_sync_source()
-        start = source.index('async def sync_local_files(')
-        func_body = source[start:]
+        start = source.index('def _process_segments_background(')
+        next_def = source.index('\n@router', start)
+        func_body = source[start:next_def]
 
-        assert 'segment_errors = []' in func_body, "Must initialize error list"
-        assert 'segment_lock = threading.Lock()' in func_body, "Must create lock"
+        assert 'threading.Lock()' in func_body, "Background must create lock"
+        assert '[]' in func_body, "Background must initialize error list"
 
-    def test_endpoint_passes_lock_and_errors_to_threads(self):
-        """Thread args must include lock and errors."""
+    def test_background_passes_lock_and_errors_to_threads(self):
+        """Thread args in background function include lock and errors."""
         source = self._read_sync_source()
-        start = source.index('async def sync_local_files(')
-        func_body = source[start:]
+        start = source.index('def _process_segments_background(')
+        next_def = source.index('\n@router', start)
+        func_body = source[start:next_def]
 
         assert 'segment_lock,' in func_body, "Must pass lock to process_segment threads"
         assert 'segment_errors,' in func_body, "Must pass errors to process_segment threads"
 
-    def test_endpoint_returns_207_on_partial_failure(self):
-        """Partial failure must return HTTP 207."""
+    def test_background_logs_partial_failure(self):
+        """Background function must log partial failures."""
         source = self._read_sync_source()
-        assert 'status_code=207' in source, "Must return 207 for partial failure"
+        start = source.index('def _process_segments_background(')
+        next_def = source.index('\n@router', start)
+        func_body = source[start:next_def]
 
-    def test_endpoint_returns_500_on_all_failed(self):
-        """All segments failing must return HTTP 500."""
+        assert 'sync_background partial failure' in func_body, "Must log partial failure"
+
+    def test_endpoint_returns_empty_lists(self):
+        """sync_local_files returns empty lists immediately (background handoff)."""
         source = self._read_sync_source()
         start = source.index('async def sync_local_files(')
         func_body = source[start:]
 
-        assert 'successful_segments == 0' in func_body, "Must check for all-fail case"
-        assert "All" in func_body and "failed processing" in func_body, "Must include descriptive 500 message"
-
-    def test_response_includes_failed_segments_count(self):
-        """Response must include failed_segments count for app to check."""
-        source = self._read_sync_source()
-        assert "'failed_segments'" in source, "Response must include failed_segments"
-        assert "'total_segments'" in source, "Response must include total_segments"
-        assert "'errors'" in source, "Response must include errors list"
-
-    def test_response_converts_sets_to_sorted_lists(self):
-        """Sets must be converted to sorted lists for JSON serialization."""
-        source = self._read_sync_source()
-        assert "sorted(response['new_memories'])" in source, "new_memories must be sorted list"
-        assert "sorted(response['updated_memories'])" in source, "updated_memories must be sorted list"
+        assert "{'new_memories': [], 'updated_memories': []}" in func_body
 
 
 # ---------------------------------------------------------------------------
@@ -640,6 +637,7 @@ class TestProcessSegmentReal:
         sys.modules['opuslib'].Decoder = MagicMock()
         sys.modules['pydub'].AudioSegment = MagicMock()
         sys.modules['utils.other.endpoints'].get_current_user_uid = MagicMock()
+        sys.modules['utils.other.endpoints'].timeit = lambda f: f
         sys.modules['utils.other.storage'].get_syncing_file_temporal_signed_url = MagicMock(return_value='https://fake')
         sys.modules['utils.other.storage'].delete_syncing_temporal_file = MagicMock()
         sys.modules['utils.other.storage'].download_audio_chunks_and_merge = MagicMock()
@@ -651,11 +649,15 @@ class TestProcessSegmentReal:
         sys.modules['utils.stt.pre_recorded'].postprocess_words = MagicMock()
         sys.modules['utils.stt.vad'].vad_is_empty = MagicMock()
         sys.modules['utils.fair_use'].FAIR_USE_ENABLED = False
+        sys.modules['utils.fair_use'].FAIR_USE_RESTRICT_DAILY_DG_MS = 0
         sys.modules['utils.fair_use'].record_speech_ms = MagicMock()
         sys.modules['utils.fair_use'].get_rolling_speech_ms = MagicMock()
         sys.modules['utils.fair_use'].check_soft_caps = MagicMock()
         sys.modules['utils.fair_use'].is_hard_restricted = MagicMock(return_value=False)
         sys.modules['utils.fair_use'].trigger_classifier_if_needed = MagicMock()
+        sys.modules['utils.fair_use'].is_dg_budget_exhausted = MagicMock(return_value=False)
+        sys.modules['utils.fair_use'].get_enforcement_stage = MagicMock(return_value='normal')
+        sys.modules['utils.fair_use'].record_dg_usage_ms = MagicMock()
         sys.modules['utils.subscription'].has_transcription_credits = MagicMock(return_value=True)
         sys.modules['utils.conversations.process_conversation'].process_conversation = MagicMock()
 
