@@ -106,6 +106,8 @@ class _PermissionsPageState extends State<PermissionsPage> with WidgetsBindingOb
     } else {
       if (await Permission.location.serviceStatus.isDisabled) {
         await openAppSettings();
+        await _checkPermissions();
+        MixpanelManager().permissionChanged(permission: 'location', granted: _locationGranted);
         return;
       }
       final status = await Permission.locationWhenInUse.request();
