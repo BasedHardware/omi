@@ -13,6 +13,7 @@ class ActionItemWithMetadata {
   final String? exportPlatform;
   final int sortOrder;
   final int indentLevel;
+  final String? appleReminderId;
 
   ActionItemWithMetadata({
     required this.id,
@@ -29,6 +30,7 @@ class ActionItemWithMetadata {
     this.exportPlatform,
     this.sortOrder = 0,
     this.indentLevel = 0,
+    this.appleReminderId,
   });
 
   factory ActionItemWithMetadata.fromJson(Map<String, dynamic> json) {
@@ -47,6 +49,7 @@ class ActionItemWithMetadata {
       exportPlatform: json['export_platform'],
       sortOrder: json['sort_order'] as int? ?? 0,
       indentLevel: json['indent_level'] as int? ?? 0,
+      appleReminderId: json['apple_reminder_id'],
     );
   }
 
@@ -66,6 +69,7 @@ class ActionItemWithMetadata {
       'export_platform': exportPlatform,
       'sort_order': sortOrder,
       'indent_level': indentLevel,
+      'apple_reminder_id': appleReminderId,
     };
   }
 
@@ -84,6 +88,7 @@ class ActionItemWithMetadata {
     String? exportPlatform,
     int? sortOrder,
     int? indentLevel,
+    String? appleReminderId,
   }) {
     return ActionItemWithMetadata(
       id: id ?? this.id,
@@ -100,6 +105,7 @@ class ActionItemWithMetadata {
       exportPlatform: exportPlatform ?? this.exportPlatform,
       sortOrder: sortOrder ?? this.sortOrder,
       indentLevel: indentLevel ?? this.indentLevel,
+      appleReminderId: appleReminderId ?? this.appleReminderId,
     );
   }
 }
