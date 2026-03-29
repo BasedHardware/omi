@@ -70,6 +70,26 @@ class _DoublePressConfigStepState extends State<DoublePressConfigStep> {
                     ],
                   ),
                 ),
+              ] else if (provider.selectedDoubleTapAction != -1 && provider.doublePressCount == 0) ...[
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.06),
+                    borderRadius: BorderRadius.circular(100),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.touch_app, color: Colors.white.withValues(alpha: 0.6), size: 24),
+                      const SizedBox(width: 12),
+                      const Expanded(
+                        child: Text(
+                          'Try it now! Double tap your Omi',
+                          style: TextStyle(color: Color(0xFF9E9E9E), fontSize: 15),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               ],
             ],
           ),
