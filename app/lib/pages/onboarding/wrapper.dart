@@ -274,6 +274,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
       PermissionsWidget(
         goNext: () {
           if (widget.forcePermissionsStep) {
+            SharedPreferencesUtil().permissionsCompleted = true;
             routeToPage(context, const HomePageWrapper(), replace: true);
           } else {
             _goNext(); // Go to User Review page
@@ -313,6 +314,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
       OnboardingCompleteScreen(
         onComplete: () {
           SharedPreferencesUtil().onboardingCompleted = true;
+          SharedPreferencesUtil().permissionsCompleted = true;
           updateUserOnboardingState(completed: true);
           MixpanelManager().onboardingCompleted();
           PaintingBinding.instance.imageCache.clear();
@@ -337,10 +339,10 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
                         image: DecorationImage(
                           image: ResizeImage(
                             AssetImage(_currentBackgroundImage),
-                            width: (MediaQuery.of(context).size.width * MediaQuery.of(context).devicePixelRatio)
-                                .round(),
-                            height: (MediaQuery.of(context).size.height * MediaQuery.of(context).devicePixelRatio)
-                                .round(),
+                            width:
+                                (MediaQuery.of(context).size.width * MediaQuery.of(context).devicePixelRatio).round(),
+                            height:
+                                (MediaQuery.of(context).size.height * MediaQuery.of(context).devicePixelRatio).round(),
                           ),
                           fit: BoxFit.cover,
                         ),
@@ -384,7 +386,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
                     ),
                   // Page component (no transition for content)
                   pages[_controller!.index],
-                  // Progress dots (hidden on complete page)
+                  // Progress dots (hidden on complete page and forced-permissions interstitial mode)
                   if (_controller!.index != kCompletePage && !widget.forcePermissionsStep)
                     Padding(
                       padding: const EdgeInsets.fromLTRB(16, 56, 16, 0),
@@ -406,7 +408,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
                         }),
                       ),
                     ),
-                  // Back button (hidden on complete page)
+                  // Back button (hidden on complete page and forced-permissions interstitial mode)
                   if (!widget.forcePermissionsStep &&
                       _controller!.index > kNamePage &&
                       _controller!.index != kCompletePage)
@@ -466,15 +468,16 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
                                   ),
                                 ),
                           SizedBox(
-                            height: (_controller!.index == kFindDevicesPage || _controller!.index == kSpeechProfilePage)
-                                ? max(
-                                    MediaQuery.of(context).size.height - 500 - 10,
-                                    maxHeightWithTextScale(context, _controller!.index),
-                                  )
-                                : max(
-                                    MediaQuery.of(context).size.height - 500 - 30,
-                                    maxHeightWithTextScale(context, _controller!.index),
-                                  ),
+                            height:
+                                (_controller!.index == kFindDevicesPage || _controller!.index == kSpeechProfilePage)
+                                    ? max(
+                                        MediaQuery.of(context).size.height - 500 - 10,
+                                        maxHeightWithTextScale(context, _controller!.index),
+                                      )
+                                    : max(
+                                        MediaQuery.of(context).size.height - 500 - 30,
+                                        maxHeightWithTextScale(context, _controller!.index),
+                                      ),
                             child: Padding(
                               padding: EdgeInsets.only(bottom: MediaQuery.sizeOf(context).height <= 700 ? 10 : 64),
                               child: TabBarView(

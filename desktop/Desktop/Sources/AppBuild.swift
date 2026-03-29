@@ -38,15 +38,6 @@ enum AppBuild {
     let display = displayName.lowercased()
     let bundle = bundleIdentifier.lowercased()
 
-    // Check for "better" channel first (installed from /better link)
-    if bundle.contains("better")
-      || display.contains("better")
-      || bundlePath.contains("/better")
-      || bundlePath.contains("omi better")
-    {
-      return "better"
-    }
-
     if bundle.contains("beta")
       || display.contains("beta")
       || bundlePath.contains("/beta")
@@ -58,10 +49,11 @@ enum AppBuild {
     return "stable"
   }
 
-  static func syncUpdateChannelWithInstalledApp() {
+  /// Only set the channel on first launch when no preference exists yet.
+  /// Never overwrite a user-chosen channel (e.g. beta selected in settings).
+  static func syncUpdateChannelOnFirstLaunch() {
+    guard UserDefaults.standard.string(forKey: updateChannelDefaultsKey) == nil else { return }
     let inferred = inferredUpdateChannel
-    if currentUpdateChannel != inferred {
-      UserDefaults.standard.set(inferred, forKey: updateChannelDefaultsKey)
-    }
+    UserDefaults.standard.set(inferred, forKey: updateChannelDefaultsKey)
   }
 }

@@ -8733,4 +8733,36 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get storageSection => 'PAMIĘĆ';
+
+  @override
+  String get permissions => 'Uprawnienia';
+
+  @override
+  String get permissionEnabled => 'Włączone';
+
+  @override
+  String get permissionEnable => 'Włącz';
+
+  @override
+  String get permissionsPageDescription =>
+      'Te uprawnienia są kluczowe dla działania Omi. Umożliwiają kluczowe funkcje, takie jak powiadomienia, doświadczenia oparte na lokalizacji i nagrywanie dźwięku.';
+
+  @override
+  String get permissionsRequiredDescription =>
+      'Omi potrzebuje kilku uprawnień, aby działać prawidłowo. Proszę, przyznaj je, aby kontynuować.';
+
+  @override
+  String get permissionsSetupTitle => 'Uzyskaj najlepsze wrażenia';
+
+  @override
+  String get permissionsSetupDescription => 'Włącz kilka uprawnień, aby Omi mógł działać jak magia.';
+
+  @override
+  String get permissionsChangeAnytime => 'Możesz je zmienić w dowolnym momencie w Ustawienia > Uprawnienia';
+
+  @override
+  String get location => 'Lokalizacja';
+
+  @override
+  String get microphone => 'Mikrofon';
 }

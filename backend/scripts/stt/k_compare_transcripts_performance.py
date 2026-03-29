@@ -91,7 +91,7 @@ async def _execute_single(file_path: str):
         add_model_result_segments('deepgram', new_segments, result)
 
     # streaming models
-    socket = await process_audio_dg(stream_transcript_deepgram, '1', 'en', 16000, 'pcm16', 1, 0)
+    socket = await process_audio_dg(stream_transcript_deepgram, language='en', sample_rate=16000, channels=1)
     print('duration', duration)
     with open(file_path, "rb") as file:
         while True:

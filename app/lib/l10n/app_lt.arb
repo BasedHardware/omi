@@ -1921,7 +1921,7 @@
     "signUpSuccess": "Registracija sėkminga!",
     "singleLanguageModeInfo": "Įjungtas vienos kalbos režimas. Vertimas išjungtas, kad būtų didesnis tikslumas.",
     "skip": "Praleisti",
-    "skipForNow": "Kol kas praleisti",
+    "skipForNow": "Praleisti kol kas",
     "skipThisQuestion": "Praleisti šį klausimą",
     "slideToUpdate": "Slinkite norėdami atnaujinti",
     "sliderMax": "Maks.",
@@ -2825,5 +2825,15 @@
     "storageSection": "SAUGYKLA",
     "tipKeepPhoneNearby": "Laikykite telefoną šalia greitesniam sinchronizavimui",
     "tipStableInternet": "Stabilus internetas pagreitina įkėlimą į debesį",
-    "tipAutoSync": "Įrašai sinchronizuojami automatiškai"
+    "tipAutoSync": "Įrašai sinchronizuojami automatiškai",
+    "permissions": "Leidimai",
+    "permissionEnabled": "Įjungta",
+    "permissionEnable": "Įjungti",
+    "permissionsPageDescription": "Šie leidimai yra esminiai Omi veikimui. Jie įgalina pagrindines funkcijas, tokias kaip pranešimai, vieta pagrįstos patirtys ir garso įrašymas.",
+    "permissionsRequiredDescription": "Omi reikia kelių leidimų, kad tinkamai veiktų. Prašome juos suteikti, kad galėtumėte tęsti.",
+    "permissionsSetupTitle": "Gaukite geriausią patirtį",
+    "permissionsSetupDescription": "Įjunkite kelis leidimus, kad Omi galėtų atlikti savo magiją.",
+    "permissionsChangeAnytime": "Galite tai pakeisti bet kada nustatymuose > Leidimai",
+    "location": "Vieta",
+    "microphone": "Mikrofonas"
 }

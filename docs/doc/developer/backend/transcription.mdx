@@ -102,7 +102,7 @@ wss://api.omi.me/v4/listen?uid={uid}&language={lang}&sample_rate={rate}&codec={c
   <Accordion title="include_speech_profile" icon="microphone-lines">
     **Type:** `boolean` | **Default:** `true`
 
-    Enable speaker identification using the user's stored speech profile. When enabled, the system uses a dual-socket architecture for improved speaker detection.
+    Enable speaker identification using the user's stored speech profile. When enabled, the system extracts a speaker embedding from the user's speech profile and uses it to identify the user's voice via biometric matching.
   </Accordion>
 
   <Accordion title="conversation_timeout" icon="clock">
@@ -253,10 +253,10 @@ flowchart LR
 - Connection closes after **90 seconds** of inactivity.
 </Warning>
 
-## Speech Profile & Dual-Socket Architecture
+## Speech Profile & Speaker Embedding
 
 <Note>
-When a user has a speech profile, the system uses a sophisticated dual-socket architecture for improved speaker identification.
+When a user has a speech profile, the system uses speaker embedding comparison to identify the user's voice in real-time.
 </Note>
 
 ### How It Works
@@ -265,37 +265,32 @@ When a user has a speech profile, the system uses a sophisticated dual-socket ar
 sequenceDiagram
     participant App as 📱 Omi App
     participant Backend as 🖥️ Backend
-    participant Socket1 as 🎧 Deepgram Socket 1
-    participant Socket2 as 🎧 Deepgram Socket 2
+    participant DG as 🎧 Deepgram
+    participant Embed as 🧠 Embedding API
 
-    Note over Backend: User has speech profile<br/>(duration: 30 seconds)
+    Note over Backend: User has speech profile
 
     App->>Backend: Connect WebSocket
-    Backend->>Socket1: Create (for live audio)
-    Backend->>Socket2: Create (for profile training)
+    Backend->>DG: Create single socket
+    Backend->>Embed: Extract user embedding from profile WAV
 
-    loop First 30 seconds
+    loop Audio streaming
         App->>Backend: Audio chunk
-        Backend->>Socket2: Send to profile socket
-        Socket2-->>Backend: Transcript (training)
+        Backend->>DG: Forward to Deepgram
+        DG-->>Backend: Transcript with speaker IDs
     end
 
-    Note over Backend: Profile duration elapsed
-    Backend->>Socket2: Close socket
-
-    loop Remaining session
-        App->>Backend: Audio chunk
-        Backend->>Socket1: Send to live socket
-        Socket1-->>Backend: Transcript with speaker IDs
-        Backend-->>App: Segments (is_user: true/false)
-    end
+    Note over Backend: New speaker detected (2s+ audio)
+    Backend->>Embed: Extract speaker embedding from audio
+    Embed-->>Backend: Compare with user embedding
+    Backend-->>App: Segments (is_user: true/false)
 ```
 
 ### Speech Profile Benefits
 
-1. **User Identification**: Audio from the first ~30 seconds trains speaker recognition
-2. **Speaker Attribution**: System identifies which segments are from the device owner
-3. **Improved Accuracy**: Better speaker diarization in multi-person conversations
+1. **User Identification**: Speaker embedding comparison identifies the device owner by voice biometrics
+2. **No Startup Delay**: Transcription begins immediately (no profile audio prepending)
+3. **Single Socket**: One Deepgram connection per session (reduced API costs)
 
 ## Transcription Flow
 

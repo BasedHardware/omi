@@ -1865,7 +1865,7 @@ class AppLocalizationsId extends AppLocalizations {
   String get continueWithoutDevice => 'Lanjutkan Tanpa Perangkat';
 
   @override
-  String get permissionsRequired => 'Izin Diperlukan';
+  String get permissionsRequired => 'Izin diperlukan';
 
   @override
   String get permissionsRequiredDesc =>
@@ -8724,4 +8724,36 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get storageSection => 'PENYIMPANAN';
+
+  @override
+  String get permissions => 'Izin';
+
+  @override
+  String get permissionEnabled => 'Diaktifkan';
+
+  @override
+  String get permissionEnable => 'Aktifkan';
+
+  @override
+  String get permissionsPageDescription =>
+      'Izin ini penting untuk cara kerja Omi. Izin ini mengaktifkan fitur utama seperti notifikasi, pengalaman berbasis lokasi, dan perekaman audio.';
+
+  @override
+  String get permissionsRequiredDescription =>
+      'Omi memerlukan beberapa izin agar dapat berfungsi dengan baik. Silakan berikan izin untuk melanjutkan.';
+
+  @override
+  String get permissionsSetupTitle => 'Dapatkan pengalaman terbaik';
+
+  @override
+  String get permissionsSetupDescription => 'Aktifkan beberapa izin agar Omi dapat bekerja dengan maksimal.';
+
+  @override
+  String get permissionsChangeAnytime => 'Anda dapat mengubahnya kapan saja di Pengaturan > Izin';
+
+  @override
+  String get location => 'Lokasi';
+
+  @override
+  String get microphone => 'Mikrofon';
 }

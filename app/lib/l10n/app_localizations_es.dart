@@ -1807,7 +1807,7 @@ class AppLocalizationsEs extends AppLocalizations {
   String get skipThisQuestion => 'Saltar esta pregunta';
 
   @override
-  String get skipForNow => 'Saltar por ahora';
+  String get skipForNow => 'Omitir por ahora';
 
   @override
   String get connectionError => 'Error de conexión';
@@ -8732,4 +8732,36 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get storageSection => 'ALMACENAMIENTO';
+
+  @override
+  String get permissions => 'Permisos';
+
+  @override
+  String get permissionEnabled => 'Activado';
+
+  @override
+  String get permissionEnable => 'Activar';
+
+  @override
+  String get permissionsPageDescription =>
+      'Estos permisos son esenciales para el funcionamiento de Omi. Habilitan funciones clave como notificaciones, experiencias basadas en ubicación y captura de audio.';
+
+  @override
+  String get permissionsRequiredDescription =>
+      'Omi necesita algunos permisos para funcionar correctamente. Por favor, concédelos para continuar.';
+
+  @override
+  String get permissionsSetupTitle => 'Obtén la mejor experiencia';
+
+  @override
+  String get permissionsSetupDescription => 'Activa algunos permisos para que Omi pueda hacer su magia.';
+
+  @override
+  String get permissionsChangeAnytime => 'Puedes cambiar esto en cualquier momento en Ajustes > Permisos';
+
+  @override
+  String get location => 'Ubicación';
+
+  @override
+  String get microphone => 'Micrófono';
 }

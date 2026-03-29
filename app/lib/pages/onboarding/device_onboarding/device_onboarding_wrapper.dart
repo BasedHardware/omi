@@ -51,6 +51,7 @@ class _DeviceOnboardingWrapperState extends State<DeviceOnboardingWrapper> with 
   void _completeOnboarding() {
     // Mark onboarding as completed and go to homepage
     SharedPreferencesUtil().onboardingCompleted = true;
+    SharedPreferencesUtil().permissionsCompleted = true;
     updateUserOnboardingState(completed: true);
     MixpanelManager().onboardingStepCompleted('Device Onboarding Completed');
     PaintingBinding.instance.imageCache.clear();

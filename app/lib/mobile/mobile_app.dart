@@ -7,9 +7,11 @@ import 'package:provider/provider.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/pages/home/page.dart';
 import 'package:omi/pages/onboarding/device_selection.dart';
+import 'package:omi/pages/onboarding/permissions/permissions_checker.dart';
 import 'package:omi/pages/onboarding/wrapper.dart';
 import 'package:omi/pages/persona/persona_profile.dart';
 import 'package:omi/providers/auth_provider.dart';
+import 'package:omi/utils/analytics/mixpanel.dart';
 
 class MobileApp extends StatelessWidget {
   const MobileApp({super.key});
@@ -33,6 +35,9 @@ class MobileApp extends StatelessWidget {
             if (_needsPermissionsOnboarding()) {
               return const OnboardingWrapper(forcePermissionsStep: true);
             }
+            if (!SharedPreferencesUtil().permissionsCompleted) {
+              return const _PermissionsGate();
+            }
             return const HomePageWrapper();
           } else {
             return const OnboardingWrapper();
@@ -46,5 +51,49 @@ class MobileApp extends StatelessWidget {
         }
       },
     );
+  }
+}
+
+/// Checks if permissions are already granted. If so, marks as completed
+/// and shows home. Otherwise shows the permissions interstitial.
+class _PermissionsGate extends StatefulWidget {
+  const _PermissionsGate();
+
+  @override
+  State<_PermissionsGate> createState() => _PermissionsGateState();
+}
+
+class _PermissionsGateState extends State<_PermissionsGate> {
+  bool? _permissionsGranted;
+
+  @override
+  void initState() {
+    super.initState();
+    _check();
+  }
+
+  Future<void> _check() async {
+    final granted = await arePermissionsGranted();
+    if (granted) {
+      SharedPreferencesUtil().permissionsCompleted = true;
+    }
+    if (mounted) {
+      setState(() => _permissionsGranted = granted);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_permissionsGranted == null) {
+      return const Scaffold(
+        backgroundColor: Colors.black,
+        body: Center(child: CircularProgressIndicator(color: Colors.white)),
+      );
+    }
+    if (_permissionsGranted!) {
+      return const HomePageWrapper();
+    }
+    MixpanelManager().permissionsInterstitialShown();
+    return const PermissionsInterstitialPage();
   }
 }

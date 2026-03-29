@@ -559,7 +559,7 @@
     "allDone": "Hoàn tất!",
     "keepGoing": "Tiếp tục, bạn đang làm rất tốt",
     "skipThisQuestion": "Bỏ qua câu hỏi này",
-    "skipForNow": "Bỏ qua",
+    "skipForNow": "Bỏ qua lúc này",
     "connectionError": "Lỗi Kết nối",
     "connectionErrorDesc": "Không thể kết nối với máy chủ. Vui lòng kiểm tra kết nối internet và thử lại.",
     "invalidRecordingMultipleSpeakers": "Phát hiện bản ghi âm không hợp lệ",
@@ -2830,5 +2830,15 @@
     "storageSection": "BỘ NHỚ",
     "tipKeepPhoneNearby": "Giữ điện thoại gần để đồng bộ nhanh hơn",
     "tipStableInternet": "Internet ổn định giúp tải lên đám mây nhanh hơn",
-    "tipAutoSync": "Bản ghi tự động đồng bộ"
+    "tipAutoSync": "Bản ghi tự động đồng bộ",
+    "permissions": "Quyền",
+    "permissionEnabled": "Đã bật",
+    "permissionEnable": "Bật",
+    "permissionsPageDescription": "Các quyền này rất quan trọng đối với hoạt động của Omi. Chúng kích hoạt các tính năng chính như thông báo, trải nghiệm dựa trên vị trí và ghi âm.",
+    "permissionsRequiredDescription": "Omi cần một số quyền để hoạt động bình thường. Vui lòng cấp quyền để tiếp tục.",
+    "permissionsSetupTitle": "Trải nghiệm tốt nhất",
+    "permissionsSetupDescription": "Bật một vài quyền để Omi có thể phát huy hết khả năng.",
+    "permissionsChangeAnytime": "Bạn có thể thay đổi bất cứ lúc nào trong Cài đặt > Quyền",
+    "location": "Vị trí",
+    "microphone": "Micrô"
 }

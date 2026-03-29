@@ -559,7 +559,7 @@
     "allDone": "Tot fet!",
     "keepGoing": "Continueu, ho esteu fent molt bé",
     "skipThisQuestion": "Salta aquesta pregunta",
-    "skipForNow": "Ometre ara",
+    "skipForNow": "Omet per ara",
     "connectionError": "Error de connexió",
     "connectionErrorDesc": "No s'ha pogut connectar amb el servidor. Comproveu la vostra connexió a internet i torneu-ho a provar.",
     "invalidRecordingMultipleSpeakers": "S'ha detectat un enregistrament no vàlid",
@@ -2794,5 +2794,15 @@
     "storageSection": "EMMAGATZEMATGE",
     "tipKeepPhoneNearby": "Manteniu el telèfon a prop per a una sincronització més ràpida",
     "tipStableInternet": "Un internet estable accelera les pujades al núvol",
-    "tipAutoSync": "Els enregistraments es sincronitzen automàticament"
+    "tipAutoSync": "Els enregistraments es sincronitzen automàticament",
+    "permissions": "Permisos",
+    "permissionEnabled": "Activat",
+    "permissionEnable": "Activar",
+    "permissionsPageDescription": "Aquests permisos són essencials per al funcionament d'Omi. Habiliten funcions clau com notificacions, experiències basades en la ubicació i captura d'àudio.",
+    "permissionsRequiredDescription": "Omi necessita alguns permisos per funcionar correctament. Si us plau, concediu-los per continuar.",
+    "permissionsSetupTitle": "Obteniu la millor experiència",
+    "permissionsSetupDescription": "Activeu uns quants permisos perquè Omi pugui fer la seva màgia.",
+    "permissionsChangeAnytime": "Podeu canviar-ho en qualsevol moment a Configuració > Permisos",
+    "location": "Ubicació",
+    "microphone": "Micròfon"
 }

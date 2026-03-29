@@ -559,7 +559,7 @@
     "allDone": "تم كل شيء!",
     "keepGoing": "استمر، أنت تقوم بعمل رائع",
     "skipThisQuestion": "تخطي هذا السؤال",
-    "skipForNow": "تخطي الآن",
+    "skipForNow": "تخطَّ الآن",
     "connectionError": "خطأ في الاتصال",
     "connectionErrorDesc": "فشل الاتصال بالخادم. يرجى التحقق من اتصالك بالإنترنت والمحاولة مرة أخرى.",
     "invalidRecordingMultipleSpeakers": "تم اكتشاف تسجيل غير صالح",
@@ -2792,5 +2792,15 @@
     "storageSection": "التخزين",
     "tipKeepPhoneNearby": "أبقِ هاتفك قريبًا للمزامنة الأسرع",
     "tipStableInternet": "اتصال إنترنت مستقر يسرّع الرفع السحابي",
-    "tipAutoSync": "التسجيلات تتم مزامنتها تلقائيًا"
+    "tipAutoSync": "التسجيلات تتم مزامنتها تلقائيًا",
+    "permissions": "أذونات",
+    "permissionEnabled": "مفعّل",
+    "permissionEnable": "تفعيل",
+    "permissionsPageDescription": "هذه الأذونات ضرورية لعمل Omi. فهي تتيح ميزات أساسية مثل الإشعارات وتجارب الموقع والتقاط الصوت.",
+    "permissionsRequiredDescription": "يحتاج Omi إلى بعض الأذونات ليعمل بشكل صحيح. يرجى منحها للمتابعة.",
+    "permissionsSetupTitle": "احصل على أفضل تجربة",
+    "permissionsSetupDescription": "فعّل بعض الأذونات حتى يتمكن Omi من العمل بسحره.",
+    "permissionsChangeAnytime": "يمكنك تغيير هذه في أي وقت من الإعدادات > الأذونات",
+    "location": "الموقع",
+    "microphone": "الميكروفون"
 }

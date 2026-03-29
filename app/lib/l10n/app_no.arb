@@ -559,7 +559,7 @@
     "allDone": "Alt ferdig!",
     "keepGoing": "Fortsett, du gjør det bra",
     "skipThisQuestion": "Hopp over dette spørsmålet",
-    "skipForNow": "Hopp over foreløpig",
+    "skipForNow": "Hopp over for nå",
     "connectionError": "Tilkoblingsfeil",
     "connectionErrorDesc": "Kunne ikke koble til serveren. Sjekk internettforbindelsen din og prøv igjen.",
     "invalidRecordingMultipleSpeakers": "Ugyldig opptak oppdaget",
@@ -2825,5 +2825,15 @@
     "storageSection": "LAGRING",
     "tipKeepPhoneNearby": "Hold telefonen i nærheten for raskere synkronisering",
     "tipStableInternet": "Stabilt internett fremskynder skyopplasting",
-    "tipAutoSync": "Opptak synkroniseres automatisk"
+    "tipAutoSync": "Opptak synkroniseres automatisk",
+    "permissions": "Tillatelser",
+    "permissionEnabled": "Aktivert",
+    "permissionEnable": "Aktiver",
+    "permissionsPageDescription": "Disse tillatelsene er sentrale for hvordan Omi fungerer. De aktiverer nøkkelfunksjoner som varsler, plasseringsbaserte opplevelser og lydopptak.",
+    "permissionsRequiredDescription": "Omi trenger noen tillatelser for å fungere riktig. Vennligst gi dem for å fortsette.",
+    "permissionsSetupTitle": "Få den beste opplevelsen",
+    "permissionsSetupDescription": "Aktiver noen tillatelser slik at Omi kan gjøre sin magi.",
+    "permissionsChangeAnytime": "Du kan endre disse når som helst i Innstillinger > Tillatelser",
+    "location": "Posisjon",
+    "microphone": "Mikrofon"
 }

@@ -228,7 +228,8 @@ class DeviceService implements IDeviceService {
 
       // Transport exists for this device but disconnected — native handles reconnection.
       // Don't dispose and recreate the transport; that would cancel native's auto-reconnect.
-      if (_connection?.device.id == deviceId) {
+      // But if force=true (user-initiated), reconnect explicitly.
+      if (!force && _connection?.device.id == deviceId) {
         return null;
       }
 

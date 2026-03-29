@@ -1819,7 +1819,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get skipThisQuestion => 'Izlaist šo jautājumu';
 
   @override
-  String get skipForNow => 'Izlaist pagaidām';
+  String get skipForNow => 'Pagaidām izlaist';
 
   @override
   String get connectionError => 'Savienojuma kļūda';
@@ -8732,4 +8732,36 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get storageSection => 'KRĀTUVE';
+
+  @override
+  String get permissions => 'Atļaujas';
+
+  @override
+  String get permissionEnabled => 'Iespējota';
+
+  @override
+  String get permissionEnable => 'Iespējot';
+
+  @override
+  String get permissionsPageDescription =>
+      'Šīs atļaujas ir būtiskas Omi darbībai. Tās nodrošina galvenās funkcijas, piemēram, paziņojumus, uz atrašanās vietu balstītas pieredzes un audio ierakstīšanu.';
+
+  @override
+  String get permissionsRequiredDescription =>
+      'Omi ir nepieciešamas dažas atļaujas, lai pareizi darbotos. Lūdzu, piešķiriet tās, lai turpinātu.';
+
+  @override
+  String get permissionsSetupTitle => 'Iegūstiet vislabāko pieredzi';
+
+  @override
+  String get permissionsSetupDescription => 'Iespējojiet dažas atļaujas, lai Omi varētu darīt savu burvību.';
+
+  @override
+  String get permissionsChangeAnytime => 'Jūs varat tos mainīt jebkurā laikā sadaļā Iestatījumi > Atļaujas';
+
+  @override
+  String get location => 'Atrašanās vieta';
+
+  @override
+  String get microphone => 'Mikrofons';
 }

@@ -559,7 +559,7 @@
     "allDone": "Allt klart!",
     "keepGoing": "Fortsätt, du gör det bra",
     "skipThisQuestion": "Hoppa över denna fråga",
-    "skipForNow": "Hoppa över för tillfället",
+    "skipForNow": "Hoppa över för nu",
     "connectionError": "Anslutningsfel",
     "connectionErrorDesc": "Det gick inte att ansluta till servern. Kontrollera din internetanslutning och försök igen.",
     "invalidRecordingMultipleSpeakers": "Ogiltig inspelning upptäckt",
@@ -2825,5 +2825,15 @@
     "storageSection": "LAGRING",
     "tipKeepPhoneNearby": "Håll telefonen nära för snabbare synkronisering",
     "tipStableInternet": "Stabilt internet snabbar upp molnuppladdningar",
-    "tipAutoSync": "Inspelningar synkroniseras automatiskt"
+    "tipAutoSync": "Inspelningar synkroniseras automatiskt",
+    "permissions": "Behörigheter",
+    "permissionEnabled": "Aktiverad",
+    "permissionEnable": "Aktivera",
+    "permissionsPageDescription": "Dessa behörigheter är centrala för hur Omi fungerar. De aktiverar nyckelfunktioner som aviseringar, platsbaserade upplevelser och ljudinspelning.",
+    "permissionsRequiredDescription": "Omi behöver några behörigheter för att fungera korrekt. Vänligen bevilja dem för att fortsätta.",
+    "permissionsSetupTitle": "Få den bästa upplevelsen",
+    "permissionsSetupDescription": "Aktivera några behörigheter så att Omi kan göra sin magi.",
+    "permissionsChangeAnytime": "Du kan ändra dessa när som helst i Inställningar > Behörigheter",
+    "location": "Plats",
+    "microphone": "Mikrofon"
 }
