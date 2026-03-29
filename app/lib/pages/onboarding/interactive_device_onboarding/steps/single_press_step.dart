@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/backend/schema/message.dart';
+import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/providers/device_onboarding_provider.dart';
 import 'package:omi/providers/message_provider.dart';
 import 'package:omi/pages/onboarding/interactive_device_onboarding/widgets/onboarding_step_scaffold.dart';
@@ -28,8 +29,9 @@ class SinglePressStep extends StatefulWidget {
   State<SinglePressStep> createState() => _SinglePressStepState();
 }
 
-class _SinglePressStepState extends State<SinglePressStep> with SingleTickerProviderStateMixin {
-  late AnimationController _waveController;
+class _SinglePressStepState extends State<SinglePressStep> with TickerProviderStateMixin {
+  late AnimationController _animController;
+  late AnimationController _fingerController;
   late MessageProvider _messageProvider;
   bool _showContinue = false;
 
@@ -40,7 +42,8 @@ class _SinglePressStepState extends State<SinglePressStep> with SingleTickerProv
   @override
   void initState() {
     super.initState();
-    _waveController = AnimationController(vsync: this, duration: const Duration(seconds: 3))..repeat();
+    _animController = AnimationController(vsync: this, duration: const Duration(seconds: 4))..repeat();
+    _fingerController = AnimationController(vsync: this, duration: const Duration(milliseconds: 1500))..repeat();
     _messageProvider = context.read<MessageProvider>();
     _messageCountAtStart = _messageProvider.messages.length;
     _messageProvider.addListener(_onMessagesChanged);
@@ -73,7 +76,8 @@ class _SinglePressStepState extends State<SinglePressStep> with SingleTickerProv
 
   @override
   void dispose() {
-    _waveController.dispose();
+    _animController.dispose();
+    _fingerController.dispose();
     _messageProvider.removeListener(_onMessagesChanged);
     super.dispose();
   }
@@ -145,7 +149,7 @@ class _SinglePressStepState extends State<SinglePressStep> with SingleTickerProv
         child: Column(
           children: [
             AnimatedBuilder(
-              animation: _waveController,
+              animation: _animController,
               builder: (context, _) {
                 return ShaderMask(
                   shaderCallback: (bounds) {
@@ -156,9 +160,9 @@ class _SinglePressStepState extends State<SinglePressStep> with SingleTickerProv
                         Colors.white.withValues(alpha: 0.3),
                       ],
                       stops: [
-                        (_waveController.value - 0.3).clamp(0.0, 1.0),
-                        _waveController.value,
-                        (_waveController.value + 0.3).clamp(0.0, 1.0),
+                        (_animController.value - 0.3).clamp(0.0, 1.0),
+                        _animController.value,
+                        (_animController.value + 0.3).clamp(0.0, 1.0),
                       ],
                       begin: Alignment.centerLeft,
                       end: Alignment.centerRight,
@@ -186,63 +190,136 @@ class _SinglePressStepState extends State<SinglePressStep> with SingleTickerProv
       );
     }
 
-    // Listening
+    // Listening — Omi with pulsating circles + waveform
     if (provider.voiceSessionActive) {
-      return AnimatedBuilder(
-        animation: _waveController,
-        builder: (context, _) {
-          return Container(
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
-            decoration: BoxDecoration(
-              color: const Color(0xFF4CAF50).withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: const Color(0xFF4CAF50).withValues(alpha: 0.3)),
-            ),
-            child: Row(
-              children: [
-                const Icon(Icons.mic, color: Color(0xFF4CAF50), size: 22),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: CustomPaint(
-                    painter: _StaticWaveformPainter(
-                      phase: _waveController.value * 2 * pi * 3,
-                      color: const Color(0xFF4CAF50).withValues(alpha: 0.5),
-                    ),
-                    size: const Size(double.infinity, 28),
-                  ),
+      return Column(
+        children: [
+          _buildOmiWithPulse(),
+          const SizedBox(height: 24),
+          AnimatedBuilder(
+            animation: _animController,
+            builder: (context, _) {
+              return Container(
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF4CAF50).withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: const Color(0xFF4CAF50).withValues(alpha: 0.3)),
                 ),
-                const SizedBox(width: 14),
-                const Text('Listening...', style: TextStyle(color: Color(0xFF4CAF50), fontSize: 14, fontWeight: FontWeight.w500)),
-              ],
-            ),
-          );
-        },
+                child: Row(
+                  children: [
+                    const Icon(Icons.mic, color: Color(0xFF4CAF50), size: 22),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: CustomPaint(
+                        painter: _StaticWaveformPainter(
+                          phase: _animController.value * 2 * pi * 3,
+                          color: const Color(0xFF4CAF50).withValues(alpha: 0.5),
+                        ),
+                        size: const Size(double.infinity, 28),
+                      ),
+                    ),
+                    const SizedBox(width: 14),
+                    const Text('Listening...', style: TextStyle(color: Color(0xFF4CAF50), fontSize: 14, fontWeight: FontWeight.w500)),
+                  ],
+                ),
+              );
+            },
+          ),
+        ],
       );
     }
 
-    // Waiting for button press
+    // Waiting — Omi with finger tap animation
+    return _buildOmiWithFingerTap();
+  }
+
+  Widget _buildOmiWithPulse() {
+    final pixelRatio = MediaQuery.of(context).devicePixelRatio;
+    const imageSize = 140.0;
+    const containerSize = imageSize + 120.0;
+
+    return AnimatedBuilder(
+      animation: _animController,
+      builder: (context, child) {
+        return SizedBox(
+          width: containerSize,
+          height: containerSize,
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              for (int i = 0; i < 3; i++) _buildPulseCircle(i, imageSize, containerSize),
+              Image.asset(
+                Assets.images.omiWithoutRope.path,
+                height: imageSize,
+                width: imageSize,
+                cacheHeight: (imageSize * pixelRatio).round(),
+                cacheWidth: (imageSize * pixelRatio).round(),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildPulseCircle(int index, double imageSize, double containerSize) {
+    final progress = (_animController.value + index * 0.33) % 1.0;
+    final diameter = imageSize + (containerSize - imageSize) * progress;
+    final opacity = (1.0 - progress).clamp(0.0, 0.25);
+
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+      width: diameter,
+      height: diameter,
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.06),
-        borderRadius: BorderRadius.circular(20),
+        shape: BoxShape.circle,
+        border: Border.all(color: Colors.white.withValues(alpha: opacity), width: 1.5),
       ),
-      child: Column(
-        children: [
-          Icon(Icons.touch_app, color: Colors.white.withValues(alpha: 0.7), size: 40),
-          const SizedBox(height: 14),
-          const Text(
-            'Press the button on your Omi',
-            style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w500),
-            textAlign: TextAlign.center,
+    );
+  }
+
+  Widget _buildOmiWithFingerTap() {
+    final pixelRatio = MediaQuery.of(context).devicePixelRatio;
+    const imageSize = 140.0;
+
+    return AnimatedBuilder(
+      animation: _fingerController,
+      builder: (context, _) {
+        // Finger bobs down and up
+        final t = _fingerController.value;
+        final fingerY = t < 0.4
+            ? -20.0 + (20.0 * (t / 0.4)) // move down
+            : t < 0.5
+                ? 0.0 // hold
+                : -20.0 * ((t - 0.5) / 0.5); // move up
+
+        return SizedBox(
+          width: imageSize + 60,
+          height: imageSize + 80,
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              Image.asset(
+                Assets.images.omiWithoutRope.path,
+                height: imageSize,
+                width: imageSize,
+                cacheHeight: (imageSize * pixelRatio).round(),
+                cacheWidth: (imageSize * pixelRatio).round(),
+              ),
+              // Finger icon
+              Positioned(
+                top: (imageSize + 80) / 2 - 30 + fingerY,
+                right: 10,
+                child: Icon(
+                  Icons.touch_app,
+                  color: Colors.white.withValues(alpha: t < 0.5 ? 0.8 : 0.4),
+                  size: 36,
+                ),
+              ),
+            ],
           ),
-          const SizedBox(height: 6),
-          Text(
-            'Then speak your question',
-            style: TextStyle(color: Colors.white.withValues(alpha: 0.5), fontSize: 13),
-          ),
-        ],
-      ),
+        );
+      },
     );
   }
 }
@@ -265,7 +342,6 @@ class _StaticWaveformPainter extends CustomPainter {
     final midY = size.height / 2;
     for (double x = 0; x < size.width; x += 1) {
       final n = x / size.width;
-      // Amplitude pulses in place instead of scrolling
       final ampMod = 0.6 + 0.4 * sin(phase);
       final y = midY + sin(n * 4 * pi) * 8 * ampMod + sin(n * 11 * pi) * 4 * ampMod;
       if (x == 0) {
