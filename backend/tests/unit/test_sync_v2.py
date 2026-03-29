@@ -299,6 +299,8 @@ class TestSyncJobsRedis:
             },
         )
         assert result['status'] == 'failed'
+        assert result['error'] is not None
+        assert 'err1' in result['error']
 
     def test_mark_job_failed_sets_error(self):
         """mark_job_failed must set status=failed with error message."""

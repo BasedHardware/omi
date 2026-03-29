@@ -106,6 +106,15 @@ def mark_job_completed(job_id: str, result: dict) -> Optional[dict]:
     else:
         status = 'completed'
 
+    # Propagate error info when all segments fail so the app gets a meaningful message
+    error = None
+    if status == 'failed':
+        errors = result.get('errors', [])
+        if errors:
+            error = f'All {total} segments failed. First error: {errors[0]}'
+        else:
+            error = f'All {total} segments failed processing'
+
     return update_sync_job(
         job_id,
         {
@@ -115,6 +124,7 @@ def mark_job_completed(job_id: str, result: dict) -> Optional[dict]:
             'successful_segments': max(0, total - failed),
             'failed_segments': failed,
             'processed_segments': total,
+            'error': error,
         },
     )
 

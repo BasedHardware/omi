@@ -789,10 +789,11 @@ class _SyncPageState extends State<SyncPage> {
 
     // Syncing state
     if (syncProvider.isSyncing) {
-      final progress =
-          syncProvider.walBasedProgress > 0 ? syncProvider.walBasedProgress : syncProvider.walsSyncedProgress;
-      final speedKBps = syncProvider.syncSpeedKBps;
       final phase = syncProvider.syncState.phase;
+      final progress = phase == SyncPhase.processingOnServer
+          ? syncProvider.syncState.progress
+          : (syncProvider.walBasedProgress > 0 ? syncProvider.walBasedProgress : syncProvider.walsSyncedProgress);
+      final speedKBps = syncProvider.syncSpeedKBps;
 
       // Get sync method from the currently syncing WAL
       final syncingWal = syncProvider.allWals.where((w) => w.isSyncing).firstOrNull;
