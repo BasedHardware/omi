@@ -104,6 +104,7 @@ Future<ActionItemWithMetadata?> updateActionItem(
   String? exportPlatform,
   int? sortOrder,
   int? indentLevel,
+  String? appleReminderId,
 }) async {
   var requestBody = <String, dynamic>{};
 
@@ -133,6 +134,9 @@ Future<ActionItemWithMetadata?> updateActionItem(
   }
   if (indentLevel != null) {
     requestBody['indent_level'] = indentLevel;
+  }
+  if (appleReminderId != null) {
+    requestBody['apple_reminder_id'] = appleReminderId;
   }
 
   var response = await makeApiCall(
@@ -319,5 +323,36 @@ Future<List<ActionItemWithMetadata>> createActionItemsBatch(List<Map<String, dyn
   } else {
     Logger.debug('createActionItemsBatch error ${response.statusCode}');
     return [];
+  }
+}
+
+// Apple Reminders sync
+class PendingSyncResponse {
+  final List<Map<String, dynamic>> pendingExport;
+  final List<Map<String, dynamic>> syncedItems;
+
+  PendingSyncResponse({required this.pendingExport, required this.syncedItems});
+}
+
+Future<PendingSyncResponse?> getPendingSyncItems({String platform = 'apple_reminders'}) async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/action-items/pending-sync?platform=$platform',
+    headers: {},
+    method: 'GET',
+    body: '',
+  );
+
+  if (response == null) return null;
+
+  if (response.statusCode == 200) {
+    var body = utf8.decode(response.bodyBytes);
+    var data = jsonDecode(body);
+    return PendingSyncResponse(
+      pendingExport: (data['pending_export'] as List<dynamic>).cast<Map<String, dynamic>>(),
+      syncedItems: (data['synced_items'] as List<dynamic>).cast<Map<String, dynamic>>(),
+    );
+  } else {
+    Logger.debug('getPendingSyncItems error ${response.statusCode}');
+    return null;
   }
 }
