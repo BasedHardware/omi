@@ -351,6 +351,7 @@ async def _stream_handler(
     person_embeddings_cache: Dict[str, dict] = {}  # person_id -> {embedding, name}
     speaker_id_enabled = False  # Will be set after private_cloud_sync_enabled is known
     speaker_id_done = asyncio.Event()  # Set when speaker_identification_task finishes
+    speaker_map_dirty = False  # Set when a new match is added; triggers one-time full-segment pass
 
     # Track background tasks to cancel on cleanup (prevents memory leaks from fire-and-forget tasks)
     bg_tasks: Set[asyncio.Task] = set()
@@ -870,6 +871,7 @@ async def _stream_handler(
         photos: List[ConversationPhoto],
         finished_at: datetime,
     ):
+        nonlocal speaker_map_dirty
         updated_segments: List[TranscriptSegment] = []
         removed_ids: List[str] = []
 
@@ -877,11 +879,20 @@ async def _stream_handler(
             conversation.transcript_segments, updated_segments, removed_ids = TranscriptSegment.combine_segments(
                 conversation.transcript_segments, segments
             )
-            process_speaker_assigned_segments(
-                updated_segments,
-                segment_person_assignment_map,
-                speaker_to_person_map,
-            )
+            if speaker_map_dirty:
+                # A new speaker match was found — retroactively fix all earlier segments once
+                process_speaker_assigned_segments(
+                    conversation.transcript_segments,
+                    segment_person_assignment_map,
+                    speaker_to_person_map,
+                )
+                speaker_map_dirty = False
+            else:
+                process_speaker_assigned_segments(
+                    updated_segments,
+                    segment_person_assignment_map,
+                    speaker_to_person_map,
+                )
             segments_dicts = [segment.dict() for segment in conversation.transcript_segments]
             conversations_db.update_conversation_segments(
                 uid, conversation.id, segments_dicts, data_protection_level=_cached_protection_level
@@ -1899,7 +1910,7 @@ async def _stream_handler(
 
     async def _match_speaker_embedding(speaker_id: int, segment: dict):
         """Extract audio from ring buffer and match against stored embeddings."""
-        nonlocal speaker_to_person_map, segment_person_assignment_map, audio_ring_buffer
+        nonlocal speaker_to_person_map, segment_person_assignment_map, audio_ring_buffer, speaker_map_dirty
 
         try:
             seg_start = segment['abs_start']
@@ -2016,6 +2027,7 @@ async def _stream_handler(
                             segment_id=segment['id'],
                         )
                     )
+                    speaker_map_dirty = True
                 else:
                     logger.info(
                         f"Speaker ID: speaker {speaker_id} -> {sanitize_pii(person_name)} (distance={best_distance:.3f}) {uid} {session_id}"
@@ -2036,6 +2048,7 @@ async def _stream_handler(
                             segment_id=segment['id'],
                         )
                     )
+                    speaker_map_dirty = True
             else:
                 logger.info(f"Speaker ID: speaker {speaker_id} no match (best={best_distance:.3f}) {uid} {session_id}")
 
