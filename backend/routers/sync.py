@@ -1,7 +1,9 @@
 import asyncio
 import io
+import logging
 import os
 import re
+import shutil
 import struct
 import threading
 import time
@@ -39,9 +41,8 @@ from utils.other.storage import (
     get_merged_audio_signed_url,
 )
 
-# Audio constants
-AUDIO_SAMPLE_RATE = 16000
 from utils import encryption
+from utils.log_sanitizer import sanitize
 from utils.stt.pre_recorded import deepgram_prerecorded, postprocess_words
 from utils.stt.vad import vad_is_empty
 from utils.fair_use import (
@@ -57,6 +58,11 @@ from utils.fair_use import (
     FAIR_USE_RESTRICT_DAILY_DG_MS,
 )
 from utils.subscription import has_transcription_credits
+
+logger = logging.getLogger(__name__)
+
+# Audio constants
+AUDIO_SAMPLE_RATE = 16000
 
 router = APIRouter()
 
@@ -415,14 +421,6 @@ def download_audio_file_endpoint(
 # **********************************************
 # ************ SYNC LOCAL FILES ****************
 # **********************************************
-
-
-import shutil
-import wave
-import logging
-from utils.log_sanitizer import sanitize
-
-logger = logging.getLogger(__name__)
 
 
 def decode_opus_file_to_wav(opus_file_path, wav_file_path, sample_rate=16000, channels=1, frame_size: int = 160):
