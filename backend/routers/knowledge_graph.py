@@ -51,7 +51,10 @@ def _rebuild_graph_task(uid: str, user_name: str):
 
 
 @router.post('/v1/knowledge-graph/rebuild', tags=['knowledge_graph'], response_model=RebuildResponse)
-def rebuild_graph(background_tasks: BackgroundTasks, uid: str = Depends(auth.get_current_user_uid)):
+def rebuild_graph(
+    background_tasks: BackgroundTasks,
+    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "knowledge_graph:rebuild")),
+):
     user_name = get_user_name(uid)
 
     kg_db.delete_knowledge_graph(uid)

@@ -17,6 +17,7 @@ from typing import Optional, Union, List, Any
 from fastapi import APIRouter, HTTPException, Header, Request, Response
 from fastapi.responses import StreamingResponse, JSONResponse
 from pydantic import BaseModel
+from utils.other.endpoints import check_rate_limit_inline
 
 import database.memories as memories_db
 import database.conversations as conversations_db
@@ -437,6 +438,9 @@ async def mcp_streamable_http(
     user_id = authenticate_api_key(authorization)
     if not user_id:
         raise HTTPException(status_code=401, detail="Invalid or missing API key. Provide via Authorization header.")
+
+    # Rate limit per-user
+    check_rate_limit_inline(user_id, "mcp:sse")
 
     # Parse request body
     try:
