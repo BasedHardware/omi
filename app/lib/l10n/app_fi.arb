@@ -2635,6 +2635,18 @@
     "downloadingFromDevice": "Ladataan laitteesta",
     "reconnectingToInternet": "Yhdistetään uudelleen internetiin...",
     "uploadingToCloud": "Ladataan {current}/{total}",
+    "processingOnServer": "Processing on server...",
+    "processingOnServerProgress": "Processing... {current}/{total} segments",
+    "@processingOnServerProgress": {
+        "placeholders": {
+            "current": {
+                "type": "int"
+            },
+            "total": {
+                "type": "int"
+            }
+        }
+    },
     "processedStatus": "Käsitelty",
     "corruptedStatus": "Vioittunut",
     "nPending": "{count} odottaa",

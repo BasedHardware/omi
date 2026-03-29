@@ -344,9 +344,9 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
       final current = syncState.currentFile;
       final total = syncState.totalFiles;
       if (current != null && total != null && total > 0) {
-        return 'Processing... $current/$total segments';
+        return context.l10n.processingOnServerProgress(current, total);
       }
-      return 'Processing on server...';
+      return context.l10n.processingOnServer;
     }
     // During upload — show file count progress
     if (isSyncing && syncState.phase == SyncPhase.uploadingToCloud) {

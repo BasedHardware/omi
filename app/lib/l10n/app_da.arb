@@ -2644,6 +2644,18 @@
     "downloadingFromDevice": "Downloader fra enhed",
     "reconnectingToInternet": "Genopretter forbindelse til internet...",
     "uploadingToCloud": "Uploader {current} af {total}",
+    "processingOnServer": "Processing on server...",
+    "processingOnServerProgress": "Processing... {current}/{total} segments",
+    "@processingOnServerProgress": {
+        "placeholders": {
+            "current": {
+                "type": "int"
+            },
+            "total": {
+                "type": "int"
+            }
+        }
+    },
     "processedStatus": "Behandlet",
     "corruptedStatus": "Beskadiget",
     "nPending": "{count} afventende",

@@ -2670,6 +2670,18 @@
     "downloadingFromDevice": "Téléchargement depuis l'appareil",
     "reconnectingToInternet": "Reconnexion à internet...",
     "uploadingToCloud": "Envoi de {current} sur {total}",
+    "processingOnServer": "Processing on server...",
+    "processingOnServerProgress": "Processing... {current}/{total} segments",
+    "@processingOnServerProgress": {
+        "placeholders": {
+            "current": {
+                "type": "int"
+            },
+            "total": {
+                "type": "int"
+            }
+        }
+    },
     "processedStatus": "Traité",
     "corruptedStatus": "Corrompu",
     "nPending": "{count} en attente",

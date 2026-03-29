@@ -2731,6 +2731,18 @@
     "downloadingFromDevice": "Letöltés az eszközről",
     "reconnectingToInternet": "Újracsatlakozás az internethez...",
     "uploadingToCloud": "{current}/{total} feltöltése",
+    "processingOnServer": "Processing on server...",
+    "processingOnServerProgress": "Processing... {current}/{total} segments",
+    "@processingOnServerProgress": {
+        "placeholders": {
+            "current": {
+                "type": "int"
+            },
+            "total": {
+                "type": "int"
+            }
+        }
+    },
     "processedStatus": "Feldolgozva",
     "corruptedStatus": "Sérült",
     "nPending": "{count} függőben",

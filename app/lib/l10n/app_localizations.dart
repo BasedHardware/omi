@@ -15237,6 +15237,18 @@ abstract class AppLocalizations {
   /// **'Uploading {current} of {total}'**
   String uploadingToCloud(int current, int total);
 
+  /// No description provided for @processingOnServer.
+  ///
+  /// In en, this message translates to:
+  /// **'Processing on server...'**
+  String get processingOnServer;
+
+  /// No description provided for @processingOnServerProgress.
+  ///
+  /// In en, this message translates to:
+  /// **'Processing... {current}/{total} segments'**
+  String processingOnServerProgress(int current, int total);
+
   /// No description provided for @processedStatus.
   ///
   /// In en, this message translates to:

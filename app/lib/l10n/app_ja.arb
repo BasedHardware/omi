@@ -2636,6 +2636,18 @@
     "downloadingFromDevice": "デバイスからダウンロード中",
     "reconnectingToInternet": "インターネットに再接続中...",
     "uploadingToCloud": "{current}/{total}をアップロード中",
+    "processingOnServer": "Processing on server...",
+    "processingOnServerProgress": "Processing... {current}/{total} segments",
+    "@processingOnServerProgress": {
+        "placeholders": {
+            "current": {
+                "type": "int"
+            },
+            "total": {
+                "type": "int"
+            }
+        }
+    },
     "processedStatus": "処理済み",
     "corruptedStatus": "破損",
     "nPending": "{count}件が保留中",

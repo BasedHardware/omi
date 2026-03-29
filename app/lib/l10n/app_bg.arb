@@ -2604,6 +2604,18 @@
     "downloadingFromDevice": "Изтегляне от устройството",
     "reconnectingToInternet": "Повторно свързване с интернет...",
     "uploadingToCloud": "Качване на {current} от {total}",
+    "processingOnServer": "Processing on server...",
+    "processingOnServerProgress": "Processing... {current}/{total} segments",
+    "@processingOnServerProgress": {
+        "placeholders": {
+            "current": {
+                "type": "int"
+            },
+            "total": {
+                "type": "int"
+            }
+        }
+    },
     "processedStatus": "Обработено",
     "corruptedStatus": "Повредено",
     "nPending": "{count} в изчакване",

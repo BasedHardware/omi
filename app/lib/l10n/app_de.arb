@@ -2603,6 +2603,18 @@
     "downloadingFromDevice": "Wird vom Gerät heruntergeladen",
     "reconnectingToInternet": "Verbindung zum Internet wird wiederhergestellt...",
     "uploadingToCloud": "Hochladen von {current} von {total}",
+    "processingOnServer": "Processing on server...",
+    "processingOnServerProgress": "Processing... {current}/{total} segments",
+    "@processingOnServerProgress": {
+        "placeholders": {
+            "current": {
+                "type": "int"
+            },
+            "total": {
+                "type": "int"
+            }
+        }
+    },
     "processedStatus": "Verarbeitet",
     "corruptedStatus": "Beschädigt",
     "nPending": "{count} ausstehend",

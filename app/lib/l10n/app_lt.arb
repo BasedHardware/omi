@@ -2635,6 +2635,18 @@
     "downloadingFromDevice": "Atsisiunčiama iš įrenginio",
     "reconnectingToInternet": "Jungiamasi prie interneto iš naujo...",
     "uploadingToCloud": "Įkeliama {current} iš {total}",
+    "processingOnServer": "Processing on server...",
+    "processingOnServerProgress": "Processing... {current}/{total} segments",
+    "@processingOnServerProgress": {
+        "placeholders": {
+            "current": {
+                "type": "int"
+            },
+            "total": {
+                "type": "int"
+            }
+        }
+    },
     "processedStatus": "Apdorota",
     "corruptedStatus": "Sugadinta",
     "nPending": "{count} laukiančių",

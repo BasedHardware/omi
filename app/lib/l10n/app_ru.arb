@@ -2670,6 +2670,18 @@
     "downloadingFromDevice": "Загрузка с устройства",
     "reconnectingToInternet": "Повторное подключение к интернету...",
     "uploadingToCloud": "Загрузка {current} из {total}",
+    "processingOnServer": "Processing on server...",
+    "processingOnServerProgress": "Processing... {current}/{total} segments",
+    "@processingOnServerProgress": {
+        "placeholders": {
+            "current": {
+                "type": "int"
+            },
+            "total": {
+                "type": "int"
+            }
+        }
+    },
     "processedStatus": "Обработано",
     "corruptedStatus": "Повреждено",
     "nPending": "{count} ожидающих",

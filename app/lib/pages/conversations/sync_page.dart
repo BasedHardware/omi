@@ -831,8 +831,8 @@ class _SyncPageState extends State<SyncPage> {
         case SyncPhase.processingOnServer:
           final ss = syncProvider.syncState;
           phaseText = ss.currentFile != null && ss.totalFiles != null && ss.totalFiles! > 0
-              ? 'Processing on server... ${ss.currentFile}/${ss.totalFiles} segments'
-              : 'Processing on server...';
+              ? context.l10n.processingOnServerProgress(ss.currentFile!, ss.totalFiles!)
+              : context.l10n.processingOnServer;
           phaseIcon = Icons.cloud_sync;
           phaseColor = Colors.blue;
           showCancel = false;

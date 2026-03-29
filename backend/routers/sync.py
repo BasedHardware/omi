@@ -5,6 +5,7 @@ import re
 import struct
 import threading
 import time
+import uuid as _uuid
 import wave
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
@@ -18,6 +19,14 @@ from pydub import AudioSegment
 from database import conversations as conversations_db
 from database import users as users_db
 from database.conversations import get_closest_conversation_to_timestamps, update_conversation_segments
+from database.sync_jobs import (
+    create_sync_job,
+    get_sync_job,
+    update_sync_job,
+    mark_job_processing,
+    mark_job_completed,
+    mark_job_failed,
+)
 from models.conversation import CreateConversation, ConversationSource, Conversation
 from models.transcript_segment import TranscriptSegment
 from utils.conversations.process_conversation import process_conversation
@@ -987,15 +996,6 @@ async def sync_local_files(files: List[UploadFile] = File(...), uid: str = Depen
 # the job reaches a terminal status.
 # ---------------------------------------------------------------------------
 
-from database.sync_jobs import (
-    create_sync_job,
-    get_sync_job,
-    update_sync_job,
-    mark_job_processing,
-    mark_job_completed,
-    mark_job_failed,
-)
-
 
 def _retrieve_file_paths_v2(files: List[UploadFile], uid: str, job_id: str):
     """Like retrieve_file_paths but uses a job-specific directory to avoid concurrency conflicts."""
@@ -1140,8 +1140,6 @@ async def sync_local_files_v2(files: List[UploadFile] = File(...), uid: str = De
             break
 
     # Create job_id early so we have it for the directory
-    import uuid as _uuid
-
     job_id = str(_uuid.uuid4())
     job_dir = f'syncing/{uid}/{job_id}'
 

@@ -2677,6 +2677,18 @@
     "downloadingFromDevice": "Mengunduh dari perangkat",
     "reconnectingToInternet": "Menyambung kembali ke internet...",
     "uploadingToCloud": "Mengunggah {current} dari {total}",
+    "processingOnServer": "Processing on server...",
+    "processingOnServerProgress": "Processing... {current}/{total} segments",
+    "@processingOnServerProgress": {
+        "placeholders": {
+            "current": {
+                "type": "int"
+            },
+            "total": {
+                "type": "int"
+            }
+        }
+    },
     "processedStatus": "Diproses",
     "corruptedStatus": "Rusak",
     "nPending": "{count} tertunda",
