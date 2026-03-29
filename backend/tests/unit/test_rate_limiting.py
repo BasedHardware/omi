@@ -399,5 +399,87 @@ class TestRouterWiring(unittest.TestCase):
         self.assertGreaterEqual(len(matches), 1, "agent_tools.py missing rate limit wiring")
 
 
+class TestRealCheckRateLimit(unittest.TestCase):
+    """Load the real check_rate_limit from redis_db.py via importlib.
+
+    This ensures the production function (not the test stub) is exercised,
+    catching regressions in key format, return-value mapping, and Lua args.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        import importlib.util
+
+        # Mock Redis client with a fake register_script
+        mock_redis_client = MagicMock()
+        mock_lua_callable = MagicMock(return_value=[1, 3600])
+        mock_redis_client.register_script.return_value = mock_lua_callable
+
+        # Patch redis.Redis to return our mock
+        original_redis = sys.modules.get('redis')
+        fake_redis = types.ModuleType('redis')
+        fake_redis.Redis = MagicMock(return_value=mock_redis_client)
+        fake_redis.exceptions = types.ModuleType('redis.exceptions')
+        fake_redis.exceptions.RedisError = type('RedisError', (Exception,), {})
+        sys.modules['redis'] = fake_redis
+        sys.modules['redis.exceptions'] = fake_redis.exceptions
+
+        # Load redis_db.py directly (bypasses package init chain)
+        spec = importlib.util.spec_from_file_location('redis_db_real', 'database/redis_db.py')
+        cls.real_module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(cls.real_module)
+
+        # Restore original redis stub
+        if original_redis:
+            sys.modules['redis'] = original_redis
+
+        cls.mock_lua = mock_lua_callable
+
+    def test_lua_script_has_ttl_self_heal(self):
+        """Verify the registered Lua script contains TTL self-heal logic."""
+        # register_script was called with the Lua source
+        call_args = self.real_module.r.register_script.call_args
+        lua_source = call_args[0][0]
+        self.assertIn('TTL', lua_source)
+        self.assertIn('ttl < 0', lua_source)
+        self.assertIn('EXPIRE', lua_source)
+
+    def test_lua_script_uses_incr(self):
+        """Verify Lua uses INCR for atomic counter."""
+        lua_source = self.real_module.r.register_script.call_args[0][0]
+        self.assertIn('INCR', lua_source)
+
+    def test_real_check_rate_limit_key_format(self):
+        """Verify production key format is rl:{policy}:{key}."""
+        self.mock_lua.reset_mock()
+        self.mock_lua.return_value = [5, 3000]
+        self.real_module.check_rate_limit("user42", "chat:send_message", 100, 3600)
+        self.mock_lua.assert_called_once_with(keys=['rl:chat:send_message:user42'], args=[3600])
+
+    def test_real_check_rate_limit_under_limit(self):
+        """Verify real function correctly interprets under-limit response."""
+        self.mock_lua.return_value = [5, 3000]
+        allowed, remaining, retry = self.real_module.check_rate_limit("uid1", "test:policy", 10, 3600)
+        self.assertTrue(allowed)
+        self.assertEqual(remaining, 5)
+        self.assertEqual(retry, 0)
+
+    def test_real_check_rate_limit_over_limit(self):
+        """Verify real function correctly interprets over-limit response."""
+        self.mock_lua.return_value = [11, 1800]
+        allowed, remaining, retry = self.real_module.check_rate_limit("uid1", "test:policy", 10, 3600)
+        self.assertFalse(allowed)
+        self.assertEqual(remaining, 0)
+        self.assertEqual(retry, 1800)
+
+    def test_real_lua_args_only_window(self):
+        """Verify Lua receives only window (not max_requests) in args."""
+        self.mock_lua.reset_mock()
+        self.mock_lua.return_value = [1, 3600]
+        self.real_module.check_rate_limit("uid1", "p", 999, 7200)
+        _, kwargs = self.mock_lua.call_args
+        self.assertEqual(kwargs['args'], [7200], "Lua should only receive window, not max_requests")
+
+
 if __name__ == '__main__':
     unittest.main()
