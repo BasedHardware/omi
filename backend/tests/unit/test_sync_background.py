@@ -416,13 +416,296 @@ class TestProcessSegmentsBackground:
 
 
 # ---------------------------------------------------------------------------
-# 3. Stale test updates — tests from test_sync_silent_failure.py that need
-#    updating for the new background architecture
+# 3. Runtime endpoint tests — call sync_local_files with stubs
+# ---------------------------------------------------------------------------
+
+
+class TestSyncLocalFilesEndpoint:
+    """Runtime tests for sync_local_files endpoint behavior after background refactor."""
+
+    _saved_modules = {}
+
+    _STUB_MODULES = [
+        'firebase_admin',
+        'firebase_admin.auth',
+        'firebase_admin.credentials',
+        'google.cloud',
+        'google.cloud.storage',
+        'google.cloud.firestore',
+        'google.cloud.firestore_v1',
+        'google.cloud.firestore_v1.base_query',
+        'google.auth',
+        'google.auth.transport',
+        'google.auth.transport.requests',
+        'google.api_core',
+        'google.api_core.datetime_helpers',
+        'database',
+        'database._client',
+        'database.redis_db',
+        'database.auth',
+        'database.conversations',
+        'database.users',
+        'opuslib',
+        'pydub',
+        'deepgram',
+        'models',
+        'models.conversation',
+        'models.transcript_segment',
+        'utils',
+        'utils.other',
+        'utils.other.endpoints',
+        'utils.other.storage',
+        'utils.other.timeout',
+        'utils.conversations',
+        'utils.conversations.process_conversation',
+        'utils.stt',
+        'utils.stt.pre_recorded',
+        'utils.stt.vad',
+        'utils.encryption',
+        'utils.log_sanitizer',
+        'utils.fair_use',
+        'utils.subscription',
+        'utils.observability',
+        'utils.observability.langsmith',
+    ]
+
+    @classmethod
+    def setup_class(cls):
+        cls._saved_modules = {}
+        for mod_name in cls._STUB_MODULES:
+            cls._saved_modules[mod_name] = sys.modules.get(mod_name)
+
+        for mod_name in cls._STUB_MODULES:
+            sys.modules[mod_name] = ModuleType(mod_name)
+
+        sys.modules['database.redis_db'].r = MagicMock()
+        sys.modules['database._client'].db = MagicMock()
+        _mock_conv_db = sys.modules['database.conversations']
+        _mock_conv_db.get_closest_conversation_to_timestamps = MagicMock()
+        _mock_conv_db.update_conversation_segments = MagicMock()
+        sys.modules['opuslib'].Decoder = MagicMock()
+        sys.modules['pydub'].AudioSegment = MagicMock()
+        sys.modules['utils.other.endpoints'].get_current_user_uid = MagicMock()
+        sys.modules['utils.other.endpoints'].timeit = lambda f: f
+        sys.modules['utils.other.storage'].get_syncing_file_temporal_signed_url = MagicMock()
+        sys.modules['utils.other.storage'].delete_syncing_temporal_file = MagicMock()
+        sys.modules['utils.other.storage'].download_audio_chunks_and_merge = MagicMock()
+        sys.modules['utils.other.storage'].get_or_create_merged_audio = MagicMock()
+        sys.modules['utils.other.storage'].get_merged_audio_signed_url = MagicMock()
+        sys.modules['utils.log_sanitizer'].sanitize = lambda value: value
+        sys.modules['utils.encryption'].encrypt = MagicMock()
+        sys.modules['utils.stt.pre_recorded'].deepgram_prerecorded = MagicMock()
+        sys.modules['utils.stt.pre_recorded'].postprocess_words = MagicMock()
+        sys.modules['utils.stt.vad'].vad_is_empty = MagicMock()
+        sys.modules['utils.fair_use'].FAIR_USE_ENABLED = False
+        sys.modules['utils.fair_use'].FAIR_USE_RESTRICT_DAILY_DG_MS = 0
+        sys.modules['utils.fair_use'].record_speech_ms = MagicMock()
+        sys.modules['utils.fair_use'].get_rolling_speech_ms = MagicMock()
+        sys.modules['utils.fair_use'].check_soft_caps = MagicMock()
+        sys.modules['utils.fair_use'].is_hard_restricted = MagicMock(return_value=False)
+        sys.modules['utils.fair_use'].trigger_classifier_if_needed = MagicMock()
+        sys.modules['utils.fair_use'].is_dg_budget_exhausted = MagicMock(return_value=False)
+        sys.modules['utils.fair_use'].get_enforcement_stage = MagicMock(return_value='normal')
+        sys.modules['utils.fair_use'].record_dg_usage_ms = MagicMock()
+        sys.modules['utils.subscription'].has_transcription_credits = MagicMock(return_value=True)
+        sys.modules['utils.conversations.process_conversation'].process_conversation = MagicMock()
+
+        class _ConversationSource:
+            omi = 'omi'
+            limitless = 'limitless'
+
+        class _CreateConversation:
+            def __init__(self, **kwargs):
+                self.__dict__.update(kwargs)
+
+        class _Conversation:
+            def __init__(self, **kwargs):
+                self.__dict__.update(kwargs)
+
+        class _TranscriptSegment:
+            def __init__(self, **kwargs):
+                self.__dict__.update(kwargs)
+
+            def dict(self):
+                return dict(self.__dict__)
+
+        sys.modules['models.conversation'].ConversationSource = _ConversationSource
+        sys.modules['models.conversation'].CreateConversation = _CreateConversation
+        sys.modules['models.conversation'].Conversation = _Conversation
+        sys.modules['models.transcript_segment'].TranscriptSegment = _TranscriptSegment
+
+        sys.modules.pop('routers.sync', None)
+        import routers.sync
+
+        cls._sync_mod = routers.sync
+
+    @classmethod
+    def teardown_class(cls):
+        sys.modules.pop('routers.sync', None)
+        for name, orig in cls._saved_modules.items():
+            if orig is None:
+                sys.modules.pop(name, None)
+            else:
+                sys.modules[name] = orig
+        cls._saved_modules.clear()
+
+    def _make_mock_file(self, filename='test.bin'):
+        """Create a mock UploadFile."""
+        mock_file = MagicMock()
+        mock_file.filename = filename
+        mock_file.read = MagicMock(return_value=b'\x00' * 100)
+        return mock_file
+
+    def test_endpoint_returns_empty_lists_immediately(self):
+        """sync_local_files returns empty lists without blocking on processing."""
+        import asyncio
+
+        sync_mod = self._sync_mod
+
+        # Don't patch threading.Thread globally — VAD phase uses it too.
+        # Patch _process_segments_background so the background thread is a no-op.
+        with patch.object(sync_mod, 'retrieve_file_paths', return_value=['/tmp/f.bin']), patch.object(
+            sync_mod, 'decode_files_to_wav', return_value=['/tmp/f.wav']
+        ), patch.object(
+            sync_mod, 'retrieve_vad_segments', side_effect=lambda p, s, e: s.add('/tmp/seg.wav')
+        ), patch.object(
+            sync_mod, 'get_wav_duration', return_value=5.0
+        ), patch.object(
+            sync_mod, '_cleanup_files'
+        ), patch.object(
+            sync_mod, '_process_segments_background'
+        ):
+
+            result = asyncio.get_event_loop().run_until_complete(
+                sync_mod.sync_local_files(files=[self._make_mock_file()], uid='test-uid')
+            )
+
+        assert result == {'new_memories': [], 'updated_memories': []}
+
+    def test_endpoint_starts_daemon_thread(self):
+        """Background thread must be created with daemon=True."""
+        import asyncio
+
+        sync_mod = self._sync_mod
+        created_threads = []
+        _real_thread = threading.Thread
+
+        def tracking_thread(*args, **kwargs):
+            t = _real_thread(*args, **kwargs)
+            created_threads.append((kwargs.get('target'), kwargs.get('daemon'), t))
+            return t
+
+        with patch.object(sync_mod, 'retrieve_file_paths', return_value=['/tmp/f.bin']), patch.object(
+            sync_mod, 'decode_files_to_wav', return_value=['/tmp/f.wav']
+        ), patch.object(
+            sync_mod, 'retrieve_vad_segments', side_effect=lambda p, s, e: s.add('/tmp/seg.wav')
+        ), patch.object(
+            sync_mod, 'get_wav_duration', return_value=5.0
+        ), patch.object(
+            sync_mod, '_cleanup_files'
+        ), patch.object(
+            sync_mod, '_process_segments_background'
+        ), patch(
+            'threading.Thread', tracking_thread
+        ):
+
+            asyncio.get_event_loop().run_until_complete(
+                sync_mod.sync_local_files(files=[self._make_mock_file()], uid='test-uid')
+            )
+
+        # Find daemon threads (only the background thread should be daemon=True)
+        daemon_threads = [t for t in created_threads if t[1] is True]
+        assert len(daemon_threads) == 1, f"Expected 1 daemon thread, got {len(daemon_threads)}"
+
+    def test_thread_start_failure_cleans_owned_paths(self):
+        """If bg.start() raises, owned segment files must be cleaned up."""
+        import asyncio
+
+        sync_mod = self._sync_mod
+        _real_thread = threading.Thread
+
+        def failing_bg_thread(*args, **kwargs):
+            t = _real_thread(*args, **kwargs)
+            target = kwargs.get('target')
+            if target is sync_mod._process_segments_background:
+                original_start = t.start
+
+                def failing_start():
+                    raise RuntimeError("out of threads")
+
+                t.start = failing_start
+            return t
+
+        with patch.object(sync_mod, 'retrieve_file_paths', return_value=['/tmp/f.bin']), patch.object(
+            sync_mod, 'decode_files_to_wav', return_value=['/tmp/f.wav']
+        ), patch.object(
+            sync_mod, 'retrieve_vad_segments', side_effect=lambda p, s, e: s.add('/tmp/seg.wav')
+        ), patch.object(
+            sync_mod, 'get_wav_duration', return_value=5.0
+        ), patch.object(
+            sync_mod, '_cleanup_files'
+        ) as mock_cleanup, patch(
+            'threading.Thread', failing_bg_thread
+        ):
+
+            with pytest.raises(RuntimeError, match="out of threads"):
+                asyncio.get_event_loop().run_until_complete(
+                    sync_mod.sync_local_files(files=[self._make_mock_file()], uid='test-uid')
+                )
+
+        # Must clean owned_paths (the segment files)
+        cleanup_calls = mock_cleanup.call_args_list
+        all_cleaned = set()
+        for c in cleanup_calls:
+            all_cleaned.update(c[0][0] if c[0] else [])
+        assert '/tmp/seg.wav' in all_cleaned
+
+    def test_dg_budget_blocked_returns_429(self):
+        """DG budget exhausted returns 429 and cleans segments without starting background."""
+        import asyncio
+        from fastapi.responses import JSONResponse
+
+        sync_mod = self._sync_mod
+        bg_started = []
+
+        with patch.object(sync_mod, 'retrieve_file_paths', return_value=['/tmp/f.bin']), patch.object(
+            sync_mod, 'decode_files_to_wav', return_value=['/tmp/f.wav']
+        ), patch.object(
+            sync_mod, 'retrieve_vad_segments', side_effect=lambda p, s, e: s.add('/tmp/seg.wav')
+        ), patch.object(
+            sync_mod, 'get_wav_duration', return_value=5.0
+        ), patch.object(
+            sync_mod, '_cleanup_files'
+        ), patch.object(
+            sync_mod, 'FAIR_USE_ENABLED', True
+        ), patch.object(
+            sync_mod, 'check_soft_caps', return_value=[]
+        ), patch.object(
+            sync_mod, 'get_enforcement_stage', return_value='restrict'
+        ), patch.object(
+            sync_mod, 'FAIR_USE_RESTRICT_DAILY_DG_MS', 100
+        ), patch.object(
+            sync_mod, 'is_dg_budget_exhausted', return_value=True
+        ), patch.object(
+            sync_mod, '_process_segments_background', side_effect=lambda *a: bg_started.append(1)
+        ):
+
+            result = asyncio.get_event_loop().run_until_complete(
+                sync_mod.sync_local_files(files=[self._make_mock_file()], uid='test-uid')
+            )
+
+        assert isinstance(result, JSONResponse)
+        assert result.status_code == 429
+        assert len(bg_started) == 0, "Background processing should not start when DG budget blocked"
+
+
+# ---------------------------------------------------------------------------
+# 4. Structural contract tests
 # ---------------------------------------------------------------------------
 
 
 class TestSyncEndpointBackgroundContract:
-    """Verify the endpoint's new contract: immediate 200, background processing."""
+    """Structural verification of the endpoint's background processing contract."""
 
     @staticmethod
     def _read_sync_source():
@@ -457,6 +740,5 @@ class TestSyncEndpointBackgroundContract:
         start = source.index('async def sync_local_files(')
         func_body = source[start:]
 
-        # segment_lock and segment_errors should not be in the endpoint anymore
         assert 'segment_lock = threading.Lock()' not in func_body
         assert 'segment_errors = []' not in func_body
