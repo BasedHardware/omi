@@ -613,53 +613,6 @@ def test_send_after_finish_is_noop():
     mock_conn.finalize.assert_not_called()
 
 
-def test_profile_socket_routing_when_main_dies():
-    """Profile socket continues receiving audio when main DG socket dies (#5870).
-
-    Mimics the routing logic in transcribe.py flush_stt_buffer: when dg_socket
-    is_connection_dead becomes True, profile socket should still get chunks.
-    """
-    from utils.stt.safe_socket import KeepaliveConfig, SafeDeepgramSocket
-
-    # Main socket that is dead
-    mock_main_conn = MagicMock()
-    cfg = KeepaliveConfig(keepalive_interval_sec=5.0, check_period_sec=999.0)
-    main_socket = SafeDeepgramSocket(mock_main_conn, cfg=cfg)
-    main_socket._dg_dead = True  # Simulate dead connection
-
-    # Profile socket still alive
-    mock_profile_conn = MagicMock()
-    profile_socket = SafeDeepgramSocket(mock_profile_conn, cfg=cfg)
-
-    try:
-        # Simulate routing logic from transcribe.py:2308-2348
-        dg_socket = main_socket
-        deepgram_profile_socket = profile_socket
-        profile_complete = False
-        chunk = b'\x00' * 960
-
-        # Dead check (separated from routing)
-        if dg_socket is not None and dg_socket.is_connection_dead:
-            dg_socket = None
-
-        # Routing
-        if dg_socket is not None:
-            if profile_complete or not deepgram_profile_socket:
-                dg_socket.send(chunk)
-            else:
-                deepgram_profile_socket.send(chunk)
-        elif deepgram_profile_socket and not profile_complete:
-            deepgram_profile_socket.send(chunk)
-
-        # Profile socket should have received the chunk
-        mock_profile_conn.send.assert_called_once_with(chunk)
-        # Main socket should NOT have received anything
-        mock_main_conn.send.assert_not_called()
-    finally:
-        main_socket.finish()
-        profile_socket.finish()
-
-
 # ---------------------------------------------------------------------------
 # Death reason and close-reason logging tests
 # ---------------------------------------------------------------------------
