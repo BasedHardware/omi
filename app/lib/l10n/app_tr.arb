@@ -2670,8 +2670,8 @@
     "downloadingFromDevice": "Cihazdan indiriliyor",
     "reconnectingToInternet": "İnternete yeniden bağlanılıyor...",
     "uploadingToCloud": "{current}/{total} yükleniyor",
-    "processingOnServer": "Processing on server...",
-    "processingOnServerProgress": "Processing... {current}/{total} segments",
+    "processingOnServer": "Sunucuda işleniyor...",
+    "processingOnServerProgress": "İşleniyor... {current}/{total} segment",
     "@processingOnServerProgress": {
         "placeholders": {
             "current": {

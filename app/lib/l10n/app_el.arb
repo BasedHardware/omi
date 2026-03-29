@@ -2635,8 +2635,8 @@
     "downloadingFromDevice": "Λήψη από τη συσκευή",
     "reconnectingToInternet": "Επανασύνδεση στο διαδίκτυο...",
     "uploadingToCloud": "Μεταφόρτωση {current} από {total}",
-    "processingOnServer": "Processing on server...",
-    "processingOnServerProgress": "Processing... {current}/{total} segments",
+    "processingOnServer": "Επεξεργασία στον διακομιστή...",
+    "processingOnServerProgress": "Επεξεργασία... {current}/{total} τμήματα",
     "@processingOnServerProgress": {
         "placeholders": {
             "current": {

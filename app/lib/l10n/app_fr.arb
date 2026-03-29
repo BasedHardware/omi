@@ -2670,8 +2670,8 @@
     "downloadingFromDevice": "Téléchargement depuis l'appareil",
     "reconnectingToInternet": "Reconnexion à internet...",
     "uploadingToCloud": "Envoi de {current} sur {total}",
-    "processingOnServer": "Processing on server...",
-    "processingOnServerProgress": "Processing... {current}/{total} segments",
+    "processingOnServer": "Traitement sur le serveur...",
+    "processingOnServerProgress": "Traitement... {current}/{total} segments",
     "@processingOnServerProgress": {
         "placeholders": {
             "current": {

@@ -2635,8 +2635,8 @@
     "downloadingFromDevice": "Lejupielāde no ierīces",
     "reconnectingToInternet": "Atkārtota savienošana ar internetu...",
     "uploadingToCloud": "Augšupielāde {current} no {total}",
-    "processingOnServer": "Processing on server...",
-    "processingOnServerProgress": "Processing... {current}/{total} segments",
+    "processingOnServer": "Apstrāde serverī...",
+    "processingOnServerProgress": "Apstrāde... {current}/{total} segmenti",
     "@processingOnServerProgress": {
         "placeholders": {
             "current": {

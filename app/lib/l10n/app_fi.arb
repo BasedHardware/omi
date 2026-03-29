@@ -2635,8 +2635,8 @@
     "downloadingFromDevice": "Ladataan laitteesta",
     "reconnectingToInternet": "Yhdistetään uudelleen internetiin...",
     "uploadingToCloud": "Ladataan {current}/{total}",
-    "processingOnServer": "Processing on server...",
-    "processingOnServerProgress": "Processing... {current}/{total} segments",
+    "processingOnServer": "Käsitellään palvelimella...",
+    "processingOnServerProgress": "Käsitellään... {current}/{total} segmenttiä",
     "@processingOnServerProgress": {
         "placeholders": {
             "current": {

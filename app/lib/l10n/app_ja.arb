@@ -2636,8 +2636,8 @@
     "downloadingFromDevice": "デバイスからダウンロード中",
     "reconnectingToInternet": "インターネットに再接続中...",
     "uploadingToCloud": "{current}/{total}をアップロード中",
-    "processingOnServer": "Processing on server...",
-    "processingOnServerProgress": "Processing... {current}/{total} segments",
+    "processingOnServer": "サーバーで処理中...",
+    "processingOnServerProgress": "処理中... {current}/{total} セグメント",
     "@processingOnServerProgress": {
         "placeholders": {
             "current": {

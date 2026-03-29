@@ -8207,11 +8207,11 @@ class AppLocalizationsCa extends AppLocalizations {
   }
 
   @override
-  String get processingOnServer => 'Processing on server...';
+  String get processingOnServer => 'Processant al servidor...';
 
   @override
   String processingOnServerProgress(int current, int total) {
-    return 'Processing... $current/$total segments';
+    return 'Processant... $current/$total segments';
   }
 
   @override

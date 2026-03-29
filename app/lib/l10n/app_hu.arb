@@ -2731,8 +2731,8 @@
     "downloadingFromDevice": "Letöltés az eszközről",
     "reconnectingToInternet": "Újracsatlakozás az internethez...",
     "uploadingToCloud": "{current}/{total} feltöltése",
-    "processingOnServer": "Processing on server...",
-    "processingOnServerProgress": "Processing... {current}/{total} segments",
+    "processingOnServer": "Feldolgozás a szerveren...",
+    "processingOnServerProgress": "Feldolgozás... {current}/{total} szegmens",
     "@processingOnServerProgress": {
         "placeholders": {
             "current": {

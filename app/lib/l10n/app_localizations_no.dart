@@ -8153,11 +8153,11 @@ class AppLocalizationsNo extends AppLocalizations {
   }
 
   @override
-  String get processingOnServer => 'Processing on server...';
+  String get processingOnServer => 'Behandler på serveren...';
 
   @override
   String processingOnServerProgress(int current, int total) {
-    return 'Processing... $current/$total segments';
+    return 'Behandler... $current/$total segmenter';
   }
 
   @override

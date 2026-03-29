@@ -2635,8 +2635,8 @@
     "downloadingFromDevice": "Завантаження з пристрою",
     "reconnectingToInternet": "Повторне підключення до інтернету...",
     "uploadingToCloud": "Завантаження {current} з {total}",
-    "processingOnServer": "Processing on server...",
-    "processingOnServerProgress": "Processing... {current}/{total} segments",
+    "processingOnServer": "Обробка на сервері...",
+    "processingOnServerProgress": "Обробка... {current}/{total} сегментів",
     "@processingOnServerProgress": {
         "placeholders": {
             "current": {

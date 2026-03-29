@@ -2635,8 +2635,8 @@
     "downloadingFromDevice": "กำลังดาวน์โหลดจากอุปกรณ์",
     "reconnectingToInternet": "กำลังเชื่อมต่ออินเทอร์เน็ตอีกครั้ง...",
     "uploadingToCloud": "กำลังอัปโหลด {current} จาก {total}",
-    "processingOnServer": "Processing on server...",
-    "processingOnServerProgress": "Processing... {current}/{total} segments",
+    "processingOnServer": "กำลังประมวลผลบนเซิร์ฟเวอร์...",
+    "processingOnServerProgress": "กำลังประมวลผล... {current}/{total} เซ็กเมนต์",
     "@processingOnServerProgress": {
         "placeholders": {
             "current": {

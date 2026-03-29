@@ -2635,8 +2635,8 @@
     "downloadingFromDevice": "Downloaden van apparaat",
     "reconnectingToInternet": "Opnieuw verbinden met internet...",
     "uploadingToCloud": "{current} van {total} uploaden",
-    "processingOnServer": "Processing on server...",
-    "processingOnServerProgress": "Processing... {current}/{total} segments",
+    "processingOnServer": "Verwerken op de server...",
+    "processingOnServerProgress": "Verwerken... {current}/{total} segmenten",
     "@processingOnServerProgress": {
         "placeholders": {
             "current": {

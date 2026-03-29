@@ -8159,11 +8159,11 @@ class AppLocalizationsPt extends AppLocalizations {
   }
 
   @override
-  String get processingOnServer => 'Processing on server...';
+  String get processingOnServer => 'Processando no servidor...';
 
   @override
   String processingOnServerProgress(int current, int total) {
-    return 'Processing... $current/$total segments';
+    return 'Processando... $current/$total segmentos';
   }
 
   @override

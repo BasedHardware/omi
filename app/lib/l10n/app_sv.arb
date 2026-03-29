@@ -2635,8 +2635,8 @@
     "downloadingFromDevice": "Laddar ner från enhet",
     "reconnectingToInternet": "Återansluter till internet...",
     "uploadingToCloud": "Laddar upp {current} av {total}",
-    "processingOnServer": "Processing on server...",
-    "processingOnServerProgress": "Processing... {current}/{total} segments",
+    "processingOnServer": "Bearbetar på servern...",
+    "processingOnServerProgress": "Bearbetar... {current}/{total} segment",
     "@processingOnServerProgress": {
         "placeholders": {
             "current": {

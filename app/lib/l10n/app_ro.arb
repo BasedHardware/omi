@@ -2635,8 +2635,8 @@
     "downloadingFromDevice": "Se descarcă de pe dispozitiv",
     "reconnectingToInternet": "Se reconectează la internet...",
     "uploadingToCloud": "Se încarcă {current} din {total}",
-    "processingOnServer": "Processing on server...",
-    "processingOnServerProgress": "Processing... {current}/{total} segments",
+    "processingOnServer": "Procesare pe server...",
+    "processingOnServerProgress": "Procesare... {current}/{total} segmente",
     "@processingOnServerProgress": {
         "placeholders": {
             "current": {

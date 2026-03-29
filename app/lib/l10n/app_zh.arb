@@ -2657,8 +2657,8 @@
     "downloadingFromDevice": "正在从设备下载",
     "reconnectingToInternet": "正在重新连接互联网...",
     "uploadingToCloud": "正在上传 {current}/{total}",
-    "processingOnServer": "Processing on server...",
-    "processingOnServerProgress": "Processing... {current}/{total} segments",
+    "processingOnServer": "正在服务器上处理...",
+    "processingOnServerProgress": "处理中... {current}/{total} 个片段",
     "@processingOnServerProgress": {
         "placeholders": {
             "current": {

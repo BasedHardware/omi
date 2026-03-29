@@ -2604,8 +2604,8 @@
     "downloadingFromDevice": "Descarregant del dispositiu",
     "reconnectingToInternet": "Reconnectant a internet...",
     "uploadingToCloud": "Pujant {current} de {total}",
-    "processingOnServer": "Processing on server...",
-    "processingOnServerProgress": "Processing... {current}/{total} segments",
+    "processingOnServer": "Processant al servidor...",
+    "processingOnServerProgress": "Processant... {current}/{total} segments",
     "@processingOnServerProgress": {
         "placeholders": {
             "current": {

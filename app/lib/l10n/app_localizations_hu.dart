@@ -8196,11 +8196,11 @@ class AppLocalizationsHu extends AppLocalizations {
   }
 
   @override
-  String get processingOnServer => 'Processing on server...';
+  String get processingOnServer => 'Feldolgozás a szerveren...';
 
   @override
   String processingOnServerProgress(int current, int total) {
-    return 'Processing... $current/$total segments';
+    return 'Feldolgozás... $current/$total szegmens';
   }
 
   @override

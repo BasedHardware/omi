@@ -2604,8 +2604,8 @@
     "downloadingFromDevice": "Изтегляне от устройството",
     "reconnectingToInternet": "Повторно свързване с интернет...",
     "uploadingToCloud": "Качване на {current} от {total}",
-    "processingOnServer": "Processing on server...",
-    "processingOnServerProgress": "Processing... {current}/{total} segments",
+    "processingOnServer": "Обработка на сървъра...",
+    "processingOnServerProgress": "Обработка... {current}/{total} сегмента",
     "@processingOnServerProgress": {
         "placeholders": {
             "current": {

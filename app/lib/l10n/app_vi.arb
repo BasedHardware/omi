@@ -2640,8 +2640,8 @@
     "downloadingFromDevice": "Đang tải xuống từ thiết bị",
     "reconnectingToInternet": "Đang kết nối lại internet...",
     "uploadingToCloud": "Đang tải lên {current}/{total}",
-    "processingOnServer": "Processing on server...",
-    "processingOnServerProgress": "Processing... {current}/{total} segments",
+    "processingOnServer": "Đang xử lý trên máy chủ...",
+    "processingOnServerProgress": "Đang xử lý... {current}/{total} phân đoạn",
     "@processingOnServerProgress": {
         "placeholders": {
             "current": {

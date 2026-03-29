@@ -8021,11 +8021,11 @@ class AppLocalizationsKo extends AppLocalizations {
   }
 
   @override
-  String get processingOnServer => 'Processing on server...';
+  String get processingOnServer => '서버에서 처리 중...';
 
   @override
   String processingOnServerProgress(int current, int total) {
-    return 'Processing... $current/$total segments';
+    return '처리 중... $current/$total 세그먼트';
   }
 
   @override

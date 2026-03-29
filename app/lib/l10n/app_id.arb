@@ -2677,8 +2677,8 @@
     "downloadingFromDevice": "Mengunduh dari perangkat",
     "reconnectingToInternet": "Menyambung kembali ke internet...",
     "uploadingToCloud": "Mengunggah {current} dari {total}",
-    "processingOnServer": "Processing on server...",
-    "processingOnServerProgress": "Processing... {current}/{total} segments",
+    "processingOnServer": "Memproses di server...",
+    "processingOnServerProgress": "Memproses... {current}/{total} segmen",
     "@processingOnServerProgress": {
         "placeholders": {
             "current": {

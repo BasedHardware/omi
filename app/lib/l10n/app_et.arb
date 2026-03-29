@@ -2635,8 +2635,8 @@
     "downloadingFromDevice": "Seadmest allalaadimine",
     "reconnectingToInternet": "Internetiga uuesti ühendamine...",
     "uploadingToCloud": "{current}/{total} üleslaadimine",
-    "processingOnServer": "Processing on server...",
-    "processingOnServerProgress": "Processing... {current}/{total} segments",
+    "processingOnServer": "Töötlemine serveris...",
+    "processingOnServerProgress": "Töötlemine... {current}/{total} segmenti",
     "@processingOnServerProgress": {
         "placeholders": {
             "current": {

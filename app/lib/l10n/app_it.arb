@@ -2635,8 +2635,8 @@
     "downloadingFromDevice": "Download dal dispositivo",
     "reconnectingToInternet": "Riconnessione a internet...",
     "uploadingToCloud": "Caricamento di {current} di {total}",
-    "processingOnServer": "Processing on server...",
-    "processingOnServerProgress": "Processing... {current}/{total} segments",
+    "processingOnServer": "Elaborazione sul server...",
+    "processingOnServerProgress": "Elaborazione... {current}/{total} segmenti",
     "@processingOnServerProgress": {
         "placeholders": {
             "current": {

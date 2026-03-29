@@ -8116,11 +8116,11 @@ class AppLocalizationsTh extends AppLocalizations {
   }
 
   @override
-  String get processingOnServer => 'Processing on server...';
+  String get processingOnServer => 'กำลังประมวลผลบนเซิร์ฟเวอร์...';
 
   @override
   String processingOnServerProgress(int current, int total) {
-    return 'Processing... $current/$total segments';
+    return 'กำลังประมวลผล... $current/$total เซ็กเมนต์';
   }
 
   @override

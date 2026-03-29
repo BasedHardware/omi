@@ -8234,11 +8234,11 @@ class AppLocalizationsFr extends AppLocalizations {
   }
 
   @override
-  String get processingOnServer => 'Processing on server...';
+  String get processingOnServer => 'Traitement sur le serveur...';
 
   @override
   String processingOnServerProgress(int current, int total) {
-    return 'Processing... $current/$total segments';
+    return 'Traitement... $current/$total segments';
   }
 
   @override

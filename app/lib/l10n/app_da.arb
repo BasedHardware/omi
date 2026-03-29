@@ -2644,8 +2644,8 @@
     "downloadingFromDevice": "Downloader fra enhed",
     "reconnectingToInternet": "Genopretter forbindelse til internet...",
     "uploadingToCloud": "Uploader {current} af {total}",
-    "processingOnServer": "Processing on server...",
-    "processingOnServerProgress": "Processing... {current}/{total} segments",
+    "processingOnServer": "Behandler på serveren...",
+    "processingOnServerProgress": "Behandler... {current}/{total} segmenter",
     "@processingOnServerProgress": {
         "placeholders": {
             "current": {

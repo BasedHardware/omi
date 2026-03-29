@@ -2640,8 +2640,8 @@
     "downloadingFromDevice": "Sťahovanie zo zariadenia",
     "reconnectingToInternet": "Opätovné pripájanie k internetu...",
     "uploadingToCloud": "Nahrávanie {current} z {total}",
-    "processingOnServer": "Processing on server...",
-    "processingOnServerProgress": "Processing... {current}/{total} segments",
+    "processingOnServer": "Spracovanie na serveri...",
+    "processingOnServerProgress": "Spracovanie... {current}/{total} segmentov",
     "@processingOnServerProgress": {
         "placeholders": {
             "current": {

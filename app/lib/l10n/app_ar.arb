@@ -2602,8 +2602,8 @@
     "downloadingFromDevice": "جارٍ التنزيل من الجهاز",
     "reconnectingToInternet": "جارٍ إعادة الاتصال بالإنترنت...",
     "uploadingToCloud": "جارٍ رفع {current} من {total}",
-    "processingOnServer": "Processing on server...",
-    "processingOnServerProgress": "Processing... {current}/{total} segments",
+    "processingOnServer": "جاري المعالجة على الخادم...",
+    "processingOnServerProgress": "جاري المعالجة... {current}/{total} أجزاء",
     "@processingOnServerProgress": {
         "placeholders": {
             "current": {

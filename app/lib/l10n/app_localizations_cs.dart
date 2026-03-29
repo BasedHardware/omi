@@ -8155,11 +8155,11 @@ class AppLocalizationsCs extends AppLocalizations {
   }
 
   @override
-  String get processingOnServer => 'Processing on server...';
+  String get processingOnServer => 'Zpracování na serveru...';
 
   @override
   String processingOnServerProgress(int current, int total) {
-    return 'Processing... $current/$total segments';
+    return 'Zpracování... $current/$total segmentů';
   }
 
   @override

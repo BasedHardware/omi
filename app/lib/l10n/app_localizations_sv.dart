@@ -8162,11 +8162,11 @@ class AppLocalizationsSv extends AppLocalizations {
   }
 
   @override
-  String get processingOnServer => 'Processing on server...';
+  String get processingOnServer => 'Bearbetar på servern...';
 
   @override
   String processingOnServerProgress(int current, int total) {
-    return 'Processing... $current/$total segments';
+    return 'Bearbetar... $current/$total segment';
   }
 
   @override

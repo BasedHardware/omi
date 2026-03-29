@@ -2635,8 +2635,8 @@
     "downloadingFromDevice": "기기에서 다운로드 중",
     "reconnectingToInternet": "인터넷에 다시 연결 중...",
     "uploadingToCloud": "{current}/{total} 업로드 중",
-    "processingOnServer": "Processing on server...",
-    "processingOnServerProgress": "Processing... {current}/{total} segments",
+    "processingOnServer": "서버에서 처리 중...",
+    "processingOnServerProgress": "처리 중... {current}/{total} 세그먼트",
     "@processingOnServerProgress": {
         "placeholders": {
             "current": {
