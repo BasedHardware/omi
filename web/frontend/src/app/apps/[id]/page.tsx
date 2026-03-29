@@ -71,7 +71,7 @@ export function generateStructuredData(plugin: Plugin, categoryName: string) {
   const appStoreUrl = 'https://apps.apple.com/us/app/friend-ai-wearable/id6502156163';
   const playStoreUrl = 'https://play.google.com/store/apps/details?id=com.friend.ios';
   const productUrl =
-    'https://www.omi.me/';
+    'https://www.omi.me/products/omi-dev-kit-2?ref=omi_marketplace&utm_source=h.omi.me&utm_campaign=omi_marketplace_app_detail_page';
 
   return {
     __html: JSON.stringify([
@@ -114,7 +114,7 @@ export function generateStructuredData(plugin: Plugin, categoryName: string) {
         },
         offers: {
           '@type': 'Offer',
-          price: '89',
+          price: '89.00',
           priceCurrency: 'USD',
           availability: 'https://schema.org/InStock',
           url: productUrl,

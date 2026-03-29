@@ -101,9 +101,9 @@ export const categoryMetadata: Record<string, CategoryMetadata> = {
 const productInfo = {
   name: 'Omi',
   description: 'AI-powered wearable. Real-time AI voice assistant.',
-  price: '89',
+  price: '89.00',
   currency: 'USD',
-  url: 'https://www.omi.me/',
+  url: 'https://www.omi.me/products/omi-dev-kit-2?ref=omi_marketplace&utm_source=h.omi.me&utm_campaign=omi_marketplace_app_detail_page',
 };
 
 const appStoreInfo = {
