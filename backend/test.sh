@@ -66,6 +66,7 @@ pytest tests/unit/test_fair_use_free_tier.py -v
 pytest tests/unit/test_timeout_middleware.py -v
 pytest tests/unit/test_pusher_circuit_breaker.py -v
 pytest tests/unit/test_lock_bypass_fixes.py -v
+pytest tests/unit/test_dev_api_lock_bypass.py -v
 
 # Fair-use integration tests (require Redis; skip gracefully if unavailable)
 if redis-cli ping >/dev/null 2>&1; then
