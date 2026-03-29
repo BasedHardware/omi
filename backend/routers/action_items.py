@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 import database.action_items as action_items_db
 import database.conversations as conversations_db
 import database.redis_db as redis_db
+import database.users as users_db
 from utils.users import get_user_display_name
 from utils.other import endpoints as auth
 from utils.notifications import (
@@ -42,6 +43,9 @@ class UpdateActionItemRequest(BaseModel):
     export_platform: Optional[str] = Field(default=None, description="Platform the item was exported to")
     sort_order: Optional[int] = Field(default=None, description="Manual sort order within category")
     indent_level: Optional[int] = Field(default=None, ge=0, le=3, description="Indentation level (0-3)")
+    apple_reminder_id: Optional[str] = Field(
+        default=None, description="EventKit calendarItemIdentifier for Apple Reminders two-way sync"
+    )
 
 
 class ActionItemResponse(BaseModel):
@@ -59,6 +63,7 @@ class ActionItemResponse(BaseModel):
     export_platform: Optional[str] = None
     sort_order: int = 0
     indent_level: int = 0
+    apple_reminder_id: Optional[str] = None
 
 
 def _get_valid_action_item(uid: str, action_item_id: str) -> dict:
@@ -92,6 +97,56 @@ def batch_update_action_items(request: BatchUpdateActionItemsRequest, uid: str =
     """Batch update sort_order and indent_level for multiple action items."""
     action_items_db.batch_update_action_items(uid, request.items)
     return {"status": "ok", "updated_count": len(request.items)}
+
+
+# *****************************
+# ****** SYNC ROUTES *********
+# *****************************
+
+
+@router.get("/v1/action-items/pending-sync", tags=['action-items'])
+def get_pending_sync_items(
+    platform: str = Query(description="Target sync platform, e.g. 'apple_reminders'"),
+    uid: str = Depends(auth.get_current_user_uid),
+):
+    """
+    Returns action items that need syncing to the specified platform.
+
+    - pending_export: items not yet exported (need outbound sync — create reminders)
+    - synced_items: items with apple_reminder_id set (need inbound sync — check completion)
+    """
+    if platform != 'apple_reminders':
+        return {"pending_export": [], "synced_items": []}
+
+    default_app = users_db.get_default_task_integration(uid)
+    if default_app != 'apple_reminders':
+        return {"pending_export": [], "synced_items": []}
+
+    pending_export = action_items_db.get_unexported_action_items(uid, limit=50)
+    synced_items = action_items_db.get_action_items_with_reminder_id(uid, limit=50)
+
+    pending_export_response = [
+        {
+            "id": item["id"],
+            "description": item.get("description", ""),
+            "due_at": item["due_at"].isoformat() if item.get("due_at") else None,
+            "completed": item.get("completed", False),
+        }
+        for item in pending_export
+    ]
+
+    synced_items_response = [
+        {
+            "id": item["id"],
+            "description": item.get("description", ""),
+            "apple_reminder_id": item.get("apple_reminder_id", ""),
+            "completed": item.get("completed", False),
+            "updated_at": item["updated_at"].isoformat() if item.get("updated_at") else None,
+        }
+        for item in synced_items
+    ]
+
+    return {"pending_export": pending_export_response, "synced_items": synced_items_response}
 
 
 # *****************************
@@ -231,6 +286,8 @@ def update_action_item(
         update_data['sort_order'] = request.sort_order
     if request.indent_level is not None:
         update_data['indent_level'] = request.indent_level
+    if request.apple_reminder_id is not None:
+        update_data['apple_reminder_id'] = request.apple_reminder_id
 
     # Update the action item
     success = action_items_db.update_action_item(uid, action_item_id, update_data)
