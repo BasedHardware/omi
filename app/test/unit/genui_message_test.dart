@@ -39,7 +39,6 @@ void main() {
   });
 
   group('ServerMessage', () {
-
     test('drops unknown ui block types instead of coercing them to maps', () {
       final message = ServerMessage.fromJson({
         'id': 'msg-unknown',
