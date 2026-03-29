@@ -314,6 +314,11 @@ class OmiBleManager private constructor(private val application: Application) {
         Log.i(TAG, "reconnectKnownPeripheral: $addr (autoConnect=true)")
         connectingAddresses.add(addr)
         val gatt = device.connectGatt(application, true, gattCallback, BluetoothDevice.TRANSPORT_LE)
+        if (gatt == null) {
+            Log.e(TAG, "connectGatt returned null for $addr in reconnectKnownPeripheral")
+            connectingAddresses.remove(addr)
+            return
+        }
         connectedGatts[addr] = gatt
     }
 
