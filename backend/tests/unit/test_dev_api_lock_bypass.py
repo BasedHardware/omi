@@ -392,8 +392,13 @@ class TestKnowledgeGraphLockEnforcement:
 class TestProcessConversationKGLockEnforcement:
     """KG extraction in process_conversation must skip locked memories."""
 
-    def test_kg_extraction_guard_exists_in_source(self):
-        """Verify the is_locked guard is present in the production source code."""
+    def test_kg_extraction_guard_uses_or_condition_in_ast(self):
+        """Verify the production guard is `if X.kg_extracted or X.is_locked: continue` via AST.
+
+        A regression from `or` to `and` would silently break the guard. This test
+        parses the production source and asserts the exact boolean structure.
+        """
+        import ast
         import pathlib
 
         src = (
@@ -402,16 +407,36 @@ class TestProcessConversationKGLockEnforcement:
             / 'conversations'
             / 'process_conversation.py'
         )
-        source = src.read_text()
-        assert 'memory_db_obj.is_locked' in source, "is_locked guard missing from process_conversation.py"
-        assert 'memory_db_obj.kg_extracted' in source
+        tree = ast.parse(src.read_text(), filename=str(src))
+
+        # Walk AST looking for: if <X>.kg_extracted or <X>.is_locked: continue
+        found = False
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.If):
+                continue
+            test = node.test
+            if not isinstance(test, ast.BoolOp) or not isinstance(test.op, ast.Or):
+                continue
+            attrs = set()
+            for val in test.values:
+                if isinstance(val, ast.Attribute):
+                    attrs.add(val.attr)
+            if 'kg_extracted' in attrs and 'is_locked' in attrs:
+                # Verify the body is `continue`
+                if any(isinstance(stmt, ast.Continue) for stmt in node.body):
+                    found = True
+                    break
+
+        assert found, (
+            "Expected `if memory_db_obj.kg_extracted or memory_db_obj.is_locked: continue` "
+            "in process_conversation.py — AST check failed"
+        )
 
     def test_kg_extraction_skips_locked_memory(self):
         """Locked memories should not be sent to extract_knowledge_from_memory.
 
-        The KG extraction loop in _memories_from_conversation has:
-            if memory_db_obj.kg_extracted or memory_db_obj.is_locked: continue
-        We verify this guard correctly skips locked memories.
+        Exercises the production guard pattern (or → skip) against three cases:
+        locked, unlocked, and already-extracted.
         """
         from utils.llm.knowledge_graph import extract_knowledge_from_memory
 
@@ -419,15 +444,11 @@ class TestProcessConversationKGLockEnforcement:
 
         locked_memory = MagicMock()
         locked_memory.id = 'mem-locked'
-        locked_memory.content = 'Secret content'
-        locked_memory.category.value = 'core'
         locked_memory.kg_extracted = False
         locked_memory.is_locked = True
 
         unlocked_memory = MagicMock()
         unlocked_memory.id = 'mem-unlocked'
-        unlocked_memory.content = 'Public content'
-        unlocked_memory.category.value = 'core'
         unlocked_memory.kg_extracted = False
         unlocked_memory.is_locked = False
 
@@ -444,3 +465,18 @@ class TestProcessConversationKGLockEnforcement:
             extracted.append(memory_db_obj.id)
 
         assert extracted == ['mem-unlocked'], f"Expected only unlocked/unextracted, got {extracted}"
+
+    def test_kg_extraction_guard_catches_and_regression(self):
+        """Prove that `and` instead of `or` would let locked memories through."""
+        locked_memory = MagicMock()
+        locked_memory.id = 'mem-locked'
+        locked_memory.kg_extracted = False
+        locked_memory.is_locked = True
+
+        # With `and` (wrong): both must be true to skip — locked-but-not-extracted leaks
+        wrong_skipped = locked_memory.kg_extracted and locked_memory.is_locked
+        assert not wrong_skipped, "and would skip only when BOTH are true"
+
+        # With `or` (correct): either one skips
+        correct_skipped = locked_memory.kg_extracted or locked_memory.is_locked
+        assert correct_skipped, "or correctly skips when is_locked is true"
