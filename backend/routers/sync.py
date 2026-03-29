@@ -817,6 +817,62 @@ def _cleanup_files(file_paths):
             logger.error(f"Failed to cleanup file {path}: {e}")
 
 
+def _process_segments_background(segmented_paths, uid, source, is_locked, fair_use_restrict_dg, total_speech_seconds):
+    """Run transcription + LLM processing in a background thread (#5941).
+
+    Called after decode + VAD + validation pass. The HTTP response has already
+    been sent (200). Memories are created/updated asynchronously and appear
+    on the client's next refresh. Deduplication (timestamp-range matching in
+    process_segment) protects against duplicate work if the client retries.
+    """
+    response = {'updated_memories': set(), 'new_memories': set()}
+    segment_errors = []
+    segment_lock = threading.Lock()
+    total_segments = len(segmented_paths)
+
+    try:
+
+        def chunk_threads(threads):
+            chunk_size = 5
+            for i in range(0, len(threads), chunk_size):
+                [t.start() for t in threads[i : i + chunk_size]]
+                [t.join() for t in threads[i : i + chunk_size]]
+
+        threads = [
+            threading.Thread(
+                target=process_segment,
+                args=(path, uid, response, segment_lock, segment_errors, source, is_locked),
+            )
+            for path in segmented_paths
+        ]
+        chunk_threads(threads)
+
+        # Record DG usage after successful processing (not before, to avoid charging on retries)
+        if fair_use_restrict_dg:
+            try:
+                dg_ms = int(total_speech_seconds * 1000)
+                if dg_ms > 0:
+                    record_dg_usage_ms(uid, dg_ms)
+            except Exception as e:
+                logger.error(f'sync_background: DG usage record error for {uid}: {e}')
+
+        failed_segments = len(segment_errors)
+        successful_segments = total_segments - failed_segments
+        logger.info(
+            f'sync_background complete uid={uid} success={successful_segments}/{total_segments} '
+            f'new={len(response["new_memories"])} updated={len(response["updated_memories"])}'
+        )
+        if failed_segments > 0:
+            logger.error(
+                f'sync_background partial failure uid={uid} '
+                f'success={successful_segments}/{total_segments} errors={segment_errors[:3]}'
+            )
+    except Exception as e:
+        logger.error(f'sync_background failed uid={uid}: {e}')
+    finally:
+        _cleanup_files(list(segmented_paths))
+
+
 @router.post("/v1/sync-local-files")
 async def sync_local_files(files: List[UploadFile] = File(...), uid: str = Depends(auth.get_current_user_uid)):
     # Pre-check gates (#5854)
@@ -882,10 +938,6 @@ async def sync_local_files(files: List[UploadFile] = File(...), uid: str = Depen
                 asyncio.create_task(trigger_classifier_if_needed(uid, triggered_caps))
 
         is_locked = should_lock
-
-        response = {'updated_memories': set(), 'new_memories': set()}
-        segment_errors = []
-        segment_lock = threading.Lock()
         total_segments = len(segmented_paths)
 
         # DG budget gate: throttle cloud STT for restrict-stage users (#6083)
@@ -904,6 +956,7 @@ async def sync_local_files(files: List[UploadFile] = File(...), uid: str = Depen
         if dg_budget_blocked:
             logger.info(f'sync: DG budget exhausted, skipping {total_segments} segments uid={uid}')
             _cleanup_files(list(segmented_paths))
+            segmented_paths = set()  # Prevent double cleanup in finally
             return JSONResponse(
                 status_code=429,
                 content={
@@ -915,64 +968,22 @@ async def sync_local_files(files: List[UploadFile] = File(...), uid: str = Depen
                 },
             )
 
-        threads = [
-            threading.Thread(
-                target=process_segment,
-                args=(
-                    path,
-                    uid,
-                    response,
-                    segment_lock,
-                    segment_errors,
-                    source,
-                    is_locked,
-                ),
-            )
-            for path in segmented_paths
-        ]
-        chunk_threads(threads)
+        # Fire off heavy processing (transcription + LLM) in background thread (#5941).
+        # This prevents 504 timeouts on large payloads (80-180s processing).
+        # Memories are created/updated asynchronously; client sees them on next refresh.
+        # Deduplication in process_segment handles retries safely.
+        owned_paths = set(segmented_paths)
+        segmented_paths = set()  # Transfer ownership to background thread (prevent finally cleanup)
+        bg = threading.Thread(
+            target=_process_segments_background,
+            args=(owned_paths, uid, source, is_locked, fair_use_restrict_dg, total_speech_seconds),
+            daemon=True,
+        )
+        bg.start()
 
-        # Record DG usage after successful processing (not before, to avoid charging on retries)
-        if fair_use_restrict_dg:
-            try:
-                dg_ms = int(total_speech_seconds * 1000)
-                if dg_ms > 0:
-                    record_dg_usage_ms(uid, dg_ms)
-            except Exception as e:
-                logger.error(f'sync: DG usage record error for {uid}: {e}')
-
-        # Build JSON-serializable response
-        result = {
-            'new_memories': sorted(response['new_memories']),
-            'updated_memories': sorted(response['updated_memories']),
-        }
-
-        failed_segments = len(segment_errors)
-        successful_segments = total_segments - failed_segments
-
-        if failed_segments > 0:
-            result['failed_segments'] = failed_segments
-            result['total_segments'] = total_segments
-            result['errors'] = segment_errors[:10]  # Cap error details to avoid huge responses
-            logger.error(
-                f'sync_local_files partial failure uid={uid} '
-                f'success={successful_segments}/{total_segments} errors={segment_errors[:3]}'
-            )
-
-        if total_segments > 0 and successful_segments == 0:
-            # All segments failed — return 500 (consistent with VAD error behavior)
-            raise HTTPException(
-                status_code=500,
-                detail=f"All {total_segments} segment(s) failed processing: {'; '.join(segment_errors[:3])}",
-            )
-
-        if failed_segments > 0:
-            # Partial failure — return 207 Multi-Status so old clients retry the batch
-            return JSONResponse(status_code=207, content=result)
-
-        return result
+        logger.info(f'sync_local_files accepted uid={uid} segments={total_segments} (background)')
+        return {'new_memories': [], 'updated_memories': []}
     finally:
-        # Clean up any remaining temporary files
-        _cleanup_files(paths)  # .bin files (in case decode_files_to_wav didn't finish)
-        _cleanup_files(wav_paths)  # Original wav files (if VAD didn't complete)
-        _cleanup_files(segmented_paths)  # Segmented wav files after processing
+        # Clean up fast-path files (.bin, .wav). Segmented paths are owned by background thread.
+        _cleanup_files(paths)
+        _cleanup_files(wav_paths)
