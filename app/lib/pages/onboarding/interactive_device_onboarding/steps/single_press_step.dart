@@ -303,41 +303,81 @@ class _SinglePressStepState extends State<SinglePressStep> with TickerProviderSt
   Widget _buildOmiWithFingerTap() {
     final pixelRatio = MediaQuery.of(context).devicePixelRatio;
     const imageSize = 140.0;
+    const containerSize = imageSize + 80.0;
 
     return AnimatedBuilder(
-      animation: _fingerController,
+      animation: Listenable.merge([_fingerController, _pressController]),
       builder: (context, _) {
-        // Finger bobs down and up
         final t = _fingerController.value;
-        final fingerY = t < 0.4
-            ? -20.0 + (20.0 * (t / 0.4)) // move down
-            : t < 0.5
-                ? 0.0 // hold
-                : -20.0 * ((t - 0.5) / 0.5); // move up
+
+        // Finger travels from bottom-right towards the device center
+        // 0.0-0.35: move in, 0.35-0.45: press (hold), 0.45-0.7: move out, 0.7-1.0: pause
+        double fingerProgress;
+        double omiScale = 1.0;
+        double fingerOpacity = 0.7;
+
+        if (t < 0.35) {
+          // Moving in from bottom-right
+          fingerProgress = t / 0.35;
+          fingerOpacity = 0.5 + fingerProgress * 0.3;
+        } else if (t < 0.45) {
+          // Pressing — finger at destination, Omi scales down
+          fingerProgress = 1.0;
+          omiScale = 1.0 - 0.08 * ((t - 0.35) / 0.1);
+          fingerOpacity = 0.8;
+        } else if (t < 0.7) {
+          // Moving back out
+          fingerProgress = 1.0 - ((t - 0.45) / 0.25);
+          omiScale = 0.92 + 0.08 * ((t - 0.45) / 0.25); // bounce back
+          fingerOpacity = 0.8 - fingerProgress * 0.3;
+        } else {
+          // Pause — finger off screen
+          fingerProgress = 0.0;
+          fingerOpacity = 0.0;
+        }
+
+        // Finger position: starts at bottom-right corner, moves toward center-ish
+        const startX = 60.0;
+        const startY = 60.0;
+        const endX = 15.0;
+        const endY = 15.0;
+        final fingerX = startX - (startX - endX) * fingerProgress;
+        final fingerY = startY - (startY - endY) * fingerProgress;
+
+        // Also apply press-in from actual button press
+        final pressT = _pressController.value;
+        if (pressT > 0) {
+          omiScale = pressT < 0.5
+              ? 1.0 - (0.15 * (pressT / 0.5))
+              : 0.85 + (0.15 * ((pressT - 0.5) / 0.5));
+        }
 
         return SizedBox(
-          width: imageSize + 60,
-          height: imageSize + 80,
+          width: containerSize,
+          height: containerSize,
           child: Stack(
             alignment: Alignment.center,
             children: [
-              Image.asset(
-                Assets.images.omiWithoutRope.path,
-                height: imageSize,
-                width: imageSize,
-                cacheHeight: (imageSize * pixelRatio).round(),
-                cacheWidth: (imageSize * pixelRatio).round(),
-              ),
-              // Finger icon
-              Positioned(
-                top: (imageSize + 80) / 2 - 30 + fingerY,
-                right: 10,
-                child: Icon(
-                  Icons.touch_app,
-                  color: Colors.white.withValues(alpha: t < 0.5 ? 0.8 : 0.4),
-                  size: 36,
+              Transform.scale(
+                scale: omiScale,
+                child: Image.asset(
+                  Assets.images.omiWithoutRope.path,
+                  height: imageSize,
+                  width: imageSize,
+                  cacheHeight: (imageSize * pixelRatio).round(),
+                  cacheWidth: (imageSize * pixelRatio).round(),
                 ),
               ),
+              if (fingerOpacity > 0)
+                Positioned(
+                  bottom: fingerY,
+                  right: fingerX,
+                  child: Icon(
+                    Icons.touch_app,
+                    color: Colors.white.withValues(alpha: fingerOpacity),
+                    size: 32,
+                  ),
+                ),
             ],
           ),
         );
