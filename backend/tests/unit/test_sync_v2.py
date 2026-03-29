@@ -814,3 +814,454 @@ class TestBackgroundWorkerBehavioral:
 
         # update_sync_job should have been called at least once for heartbeat
         assert mock_sync_jobs.update_sync_job.called
+
+    def test_bg_worker_partial_failure_reports_correctly(self):
+        """Worker must pass failed_segments count to mark_job_completed on partial failure."""
+        mod, mock_sync_jobs = self._load_bg_worker()
+        if mod is None:
+            pytest.skip("Cannot load sync router due to import chain")
+
+        call_count = [0]
+
+        def mock_process_segment(path, uid, response, lock, errors, source, is_locked):
+            call_count[0] += 1
+            if call_count[0] % 2 == 0:
+                with lock:
+                    errors.append(f'Failed: {path}')
+            else:
+                with lock:
+                    response['new_memories'].add(f'mem-{call_count[0]}')
+
+        mod.process_segment = mock_process_segment
+
+        mod._process_segments_background(
+            job_id='partial-job',
+            uid='test-uid',
+            segmented_paths=['/tmp/s1.wav', '/tmp/s2.wav', '/tmp/s3.wav', '/tmp/s4.wav'],
+            source='omi',
+            is_locked=False,
+            fair_use_restrict_dg=False,
+            total_speech_seconds=20.0,
+            job_dir='/tmp/partial-dir',
+        )
+
+        mock_sync_jobs.mark_job_completed.assert_called_once()
+        result_arg = mock_sync_jobs.mark_job_completed.call_args[0][1]
+        assert result_arg['failed_segments'] == 2
+        assert result_arg['total_segments'] == 4
+        assert len(result_arg['errors']) == 2
+
+    def test_bg_worker_all_failed_reports_correctly(self):
+        """Worker must report all segments failed with errors."""
+        mod, mock_sync_jobs = self._load_bg_worker()
+        if mod is None:
+            pytest.skip("Cannot load sync router due to import chain")
+
+        def mock_process_segment(path, uid, response, lock, errors, source, is_locked):
+            with lock:
+                errors.append(f'Failed: {path}')
+
+        mod.process_segment = mock_process_segment
+
+        mod._process_segments_background(
+            job_id='allfail-job',
+            uid='test-uid',
+            segmented_paths=['/tmp/f1.wav', '/tmp/f2.wav'],
+            source='omi',
+            is_locked=False,
+            fair_use_restrict_dg=False,
+            total_speech_seconds=10.0,
+            job_dir='/tmp/allfail-dir',
+        )
+
+        mock_sync_jobs.mark_job_completed.assert_called_once()
+        result_arg = mock_sync_jobs.mark_job_completed.call_args[0][1]
+        assert result_arg['failed_segments'] == 2
+        assert result_arg['total_segments'] == 2
+        assert len(result_arg['errors']) == 2
+
+    def test_bg_worker_records_dg_usage_when_enabled(self):
+        """Worker must call record_dg_usage_ms when fair_use_restrict_dg=True."""
+        mod, mock_sync_jobs = self._load_bg_worker()
+        if mod is None:
+            pytest.skip("Cannot load sync router due to import chain")
+
+        mod.process_segment = MagicMock()
+        mock_record_dg = MagicMock()
+        mod.record_dg_usage_ms = mock_record_dg
+
+        mod._process_segments_background(
+            job_id='dg-job',
+            uid='test-uid',
+            segmented_paths=['/tmp/d1.wav'],
+            source='omi',
+            is_locked=False,
+            fair_use_restrict_dg=True,
+            total_speech_seconds=15.5,
+            job_dir='/tmp/dg-dir',
+        )
+
+        mock_record_dg.assert_called_once_with('test-uid', 15500)
+
+    def test_bg_worker_skips_dg_recording_when_disabled(self):
+        """Worker must NOT call record_dg_usage_ms when fair_use_restrict_dg=False."""
+        mod, mock_sync_jobs = self._load_bg_worker()
+        if mod is None:
+            pytest.skip("Cannot load sync router due to import chain")
+
+        mod.process_segment = MagicMock()
+        mock_record_dg = MagicMock()
+        mod.record_dg_usage_ms = mock_record_dg
+
+        mod._process_segments_background(
+            job_id='no-dg-job',
+            uid='test-uid',
+            segmented_paths=['/tmp/d1.wav'],
+            source='omi',
+            is_locked=False,
+            fair_use_restrict_dg=False,
+            total_speech_seconds=15.5,
+            job_dir='/tmp/no-dg-dir',
+        )
+
+        mock_record_dg.assert_not_called()
+
+    def test_bg_worker_cleans_up_job_dir(self):
+        """Worker must remove the job directory in finally block."""
+        mod, mock_sync_jobs = self._load_bg_worker()
+        if mod is None:
+            pytest.skip("Cannot load sync router due to import chain")
+
+        mod.process_segment = MagicMock()
+
+        # Create a real temp dir to verify cleanup
+        import tempfile
+
+        job_dir = tempfile.mkdtemp(prefix='sync_v2_test_')
+        assert os.path.isdir(job_dir)
+
+        mod._process_segments_background(
+            job_id='cleanup-job',
+            uid='test-uid',
+            segmented_paths=[],
+            source='omi',
+            is_locked=False,
+            fair_use_restrict_dg=False,
+            total_speech_seconds=0.0,
+            job_dir=job_dir,
+        )
+
+        assert not os.path.exists(job_dir), "Job directory must be cleaned up after processing"
+
+    def test_bg_worker_cleans_up_on_failure(self):
+        """Worker must clean up job dir even when processing fails."""
+        mod, mock_sync_jobs = self._load_bg_worker()
+        if mod is None:
+            pytest.skip("Cannot load sync router due to import chain")
+
+        mock_sync_jobs.mark_job_processing.side_effect = RuntimeError("DB failure")
+
+        import tempfile
+
+        job_dir = tempfile.mkdtemp(prefix='sync_v2_test_fail_')
+        assert os.path.isdir(job_dir)
+
+        mod._process_segments_background(
+            job_id='cleanup-fail-job',
+            uid='test-uid',
+            segmented_paths=[],
+            source='omi',
+            is_locked=False,
+            fair_use_restrict_dg=False,
+            total_speech_seconds=0.0,
+            job_dir=job_dir,
+        )
+
+        assert not os.path.exists(job_dir), "Job directory must be cleaned up even on failure"
+
+
+# ---------------------------------------------------------------------------
+# 8. v2 endpoint execution tests via FastAPI TestClient
+# ---------------------------------------------------------------------------
+
+
+class TestV2EndpointExecution:
+    """Execute v2 endpoints using FastAPI TestClient with mocked dependencies."""
+
+    @staticmethod
+    def _build_test_app():
+        """Build a minimal FastAPI app with the sync router, all deps mocked."""
+        saved_modules = {}
+        mock_sync_jobs = MagicMock()
+        mock_fair_use = MagicMock()
+
+        heavy_deps = [
+            'redis',
+            'database',
+            'database.redis_db',
+            'database._client',
+            'database.conversations',
+            'database.users',
+            'database.user_usage',
+            'firebase_admin',
+            'google',
+            'google.cloud',
+            'google.cloud.firestore_v1',
+            'opuslib',
+            'pydub',
+            'models',
+            'models.conversation',
+            'models.transcript_segment',
+            'utils',
+            'utils.conversations',
+            'utils.conversations.process_conversation',
+            'utils.other',
+            'utils.other.endpoints',
+            'utils.other.storage',
+            'utils.encryption',
+            'utils.stt',
+            'utils.stt.pre_recorded',
+            'utils.stt.vad',
+            'utils.fair_use',
+            'utils.subscription',
+            'utils.observability',
+            'utils.log_sanitizer',
+        ]
+
+        for mod_name in heavy_deps:
+            saved_modules[mod_name] = sys.modules.get(mod_name)
+            sys.modules[mod_name] = MagicMock()
+
+        sys.modules['database.redis_db'] = MagicMock(r=MagicMock())
+        saved_modules['database.sync_jobs'] = sys.modules.get('database.sync_jobs')
+        sys.modules['database.sync_jobs'] = mock_sync_jobs
+
+        # Set up fair_use defaults
+        sys.modules['utils.fair_use'].is_hard_restricted = MagicMock(return_value=False)
+        sys.modules['utils.fair_use'].is_dg_budget_exhausted = MagicMock(return_value=False)
+        sys.modules['utils.fair_use'].get_enforcement_stage = MagicMock(return_value='off')
+        sys.modules['utils.fair_use'].FAIR_USE_ENABLED = False
+        sys.modules['utils.fair_use'].FAIR_USE_RESTRICT_DAILY_DG_MS = 0
+        sys.modules['utils.subscription'].has_transcription_credits = MagicMock(return_value=True)
+
+        # Mock auth to return test uid
+        sys.modules['utils.other.endpoints'].get_current_user_uid = MagicMock(return_value='test-uid')
+
+        return saved_modules, mock_sync_jobs, mock_fair_use
+
+    @staticmethod
+    def _cleanup_modules(saved_modules):
+        sys.modules.pop('routers.sync', None)
+        for mod_name, orig in saved_modules.items():
+            if orig is None:
+                sys.modules.pop(mod_name, None)
+            else:
+                sys.modules[mod_name] = orig
+
+    def test_get_poll_404_expired_job(self):
+        """GET poll returns 404 when job not found."""
+        saved, mock_sync_jobs, _ = self._build_test_app()
+        mock_sync_jobs.get_sync_job = MagicMock(return_value=None)
+
+        try:
+            sys.modules.pop('routers.sync', None)
+            import importlib.util
+
+            spec = importlib.util.spec_from_file_location(
+                'sync_poll_404',
+                os.path.join(os.path.dirname(__file__), '..', '..', 'routers', 'sync.py'),
+            )
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+
+            from fastapi import FastAPI
+            from fastapi.testclient import TestClient
+
+            app = FastAPI()
+            app.include_router(module.router)
+
+            # Override auth dependency — use the module's reference, not the sys.modules mock
+            app.dependency_overrides[module.auth.get_current_user_uid] = lambda: 'test-uid'
+
+            client = TestClient(app)
+            resp = client.get('/v2/sync-local-files/nonexistent-job-id')
+            assert resp.status_code == 404
+            assert 'not found' in resp.json()['detail'].lower()
+        finally:
+            self._cleanup_modules(saved)
+
+    def test_get_poll_403_wrong_owner(self):
+        """GET poll returns 403 when job belongs to different user."""
+        saved, mock_sync_jobs, _ = self._build_test_app()
+        mock_sync_jobs.get_sync_job = MagicMock(
+            return_value={
+                'job_id': 'some-job',
+                'uid': 'other-user',
+                'status': 'processing',
+                'total_segments': 5,
+                'processed_segments': 0,
+                'successful_segments': 0,
+                'failed_segments': 0,
+            }
+        )
+
+        try:
+            sys.modules.pop('routers.sync', None)
+            import importlib.util
+
+            spec = importlib.util.spec_from_file_location(
+                'sync_poll_403',
+                os.path.join(os.path.dirname(__file__), '..', '..', 'routers', 'sync.py'),
+            )
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+
+            from fastapi import FastAPI
+            from fastapi.testclient import TestClient
+
+            app = FastAPI()
+            app.include_router(module.router)
+            app.dependency_overrides[module.auth.get_current_user_uid] = lambda: 'test-uid'
+
+            client = TestClient(app)
+            resp = client.get('/v2/sync-local-files/some-job')
+            assert resp.status_code == 403
+        finally:
+            self._cleanup_modules(saved)
+
+    def test_get_poll_completed_includes_result(self):
+        """GET poll returns result and error fields on terminal status."""
+        saved, mock_sync_jobs, _ = self._build_test_app()
+        mock_sync_jobs.get_sync_job = MagicMock(
+            return_value={
+                'job_id': 'done-job',
+                'uid': 'test-uid',
+                'status': 'completed',
+                'total_segments': 3,
+                'processed_segments': 3,
+                'successful_segments': 3,
+                'failed_segments': 0,
+                'result': {'new_memories': ['m1'], 'updated_memories': []},
+                'error': None,
+            }
+        )
+
+        try:
+            sys.modules.pop('routers.sync', None)
+            import importlib.util
+
+            spec = importlib.util.spec_from_file_location(
+                'sync_poll_done',
+                os.path.join(os.path.dirname(__file__), '..', '..', 'routers', 'sync.py'),
+            )
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+
+            from fastapi import FastAPI
+            from fastapi.testclient import TestClient
+
+            app = FastAPI()
+            app.include_router(module.router)
+            app.dependency_overrides[module.auth.get_current_user_uid] = lambda: 'test-uid'
+
+            client = TestClient(app)
+            resp = client.get('/v2/sync-local-files/done-job')
+            assert resp.status_code == 200
+            body = resp.json()
+            assert body['status'] == 'completed'
+            assert body['result']['new_memories'] == ['m1']
+            assert body['successful_segments'] == 3
+            assert body['failed_segments'] == 0
+        finally:
+            self._cleanup_modules(saved)
+
+    def test_get_poll_failed_includes_error(self):
+        """GET poll returns error field when all segments failed."""
+        saved, mock_sync_jobs, _ = self._build_test_app()
+        mock_sync_jobs.get_sync_job = MagicMock(
+            return_value={
+                'job_id': 'fail-job',
+                'uid': 'test-uid',
+                'status': 'failed',
+                'total_segments': 2,
+                'processed_segments': 2,
+                'successful_segments': 0,
+                'failed_segments': 2,
+                'result': {'errors': ['err1', 'err2'], 'failed_segments': 2, 'total_segments': 2},
+                'error': 'All 2 segments failed. First error: err1',
+            }
+        )
+
+        try:
+            sys.modules.pop('routers.sync', None)
+            import importlib.util
+
+            spec = importlib.util.spec_from_file_location(
+                'sync_poll_failed',
+                os.path.join(os.path.dirname(__file__), '..', '..', 'routers', 'sync.py'),
+            )
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+
+            from fastapi import FastAPI
+            from fastapi.testclient import TestClient
+
+            app = FastAPI()
+            app.include_router(module.router)
+            app.dependency_overrides[module.auth.get_current_user_uid] = lambda: 'test-uid'
+
+            client = TestClient(app)
+            resp = client.get('/v2/sync-local-files/fail-job')
+            assert resp.status_code == 200
+            body = resp.json()
+            assert body['status'] == 'failed'
+            assert 'error' in body
+            assert 'err1' in body['error']
+        finally:
+            self._cleanup_modules(saved)
+
+    def test_get_poll_processing_excludes_result(self):
+        """GET poll must NOT include result/error when job is still processing."""
+        saved, mock_sync_jobs, _ = self._build_test_app()
+        mock_sync_jobs.get_sync_job = MagicMock(
+            return_value={
+                'job_id': 'active-job',
+                'uid': 'test-uid',
+                'status': 'processing',
+                'total_segments': 5,
+                'processed_segments': 2,
+                'successful_segments': 0,
+                'failed_segments': 0,
+                'result': None,
+                'error': None,
+            }
+        )
+
+        try:
+            sys.modules.pop('routers.sync', None)
+            import importlib.util
+
+            spec = importlib.util.spec_from_file_location(
+                'sync_poll_active',
+                os.path.join(os.path.dirname(__file__), '..', '..', 'routers', 'sync.py'),
+            )
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+
+            from fastapi import FastAPI
+            from fastapi.testclient import TestClient
+
+            app = FastAPI()
+            app.include_router(module.router)
+            app.dependency_overrides[module.auth.get_current_user_uid] = lambda: 'test-uid'
+
+            client = TestClient(app)
+            resp = client.get('/v2/sync-local-files/active-job')
+            assert resp.status_code == 200
+            body = resp.json()
+            assert body['status'] == 'processing'
+            assert 'result' not in body
+            assert 'error' not in body
+            assert body['processed_segments'] == 2
+        finally:
+            self._cleanup_modules(saved)
