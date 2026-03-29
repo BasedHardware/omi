@@ -31,8 +31,7 @@ class SinglePressStep extends StatefulWidget {
 
 class _SinglePressStepState extends State<SinglePressStep> with TickerProviderStateMixin {
   late AnimationController _animController;
-  late AnimationController _fingerController;
-  late AnimationController _pressController;
+  late AnimationController _bounceController;
   late MessageProvider _messageProvider;
   bool _showContinue = false;
   bool _wasListening = false;
@@ -45,8 +44,7 @@ class _SinglePressStepState extends State<SinglePressStep> with TickerProviderSt
   void initState() {
     super.initState();
     _animController = AnimationController(vsync: this, duration: const Duration(seconds: 4))..repeat();
-    _fingerController = AnimationController(vsync: this, duration: const Duration(milliseconds: 1500))..repeat();
-    _pressController = AnimationController(vsync: this, duration: const Duration(milliseconds: 300));
+    _bounceController = AnimationController(vsync: this, duration: const Duration(milliseconds: 1200))..repeat();
     _messageProvider = context.read<MessageProvider>();
     _messageCountAtStart = _messageProvider.messages.length;
     _messageProvider.addListener(_onMessagesChanged);
@@ -80,8 +78,7 @@ class _SinglePressStepState extends State<SinglePressStep> with TickerProviderSt
   @override
   void dispose() {
     _animController.dispose();
-    _fingerController.dispose();
-    _pressController.dispose();
+    _bounceController.dispose();
     _messageProvider.removeListener(_onMessagesChanged);
     super.dispose();
   }
@@ -90,11 +87,9 @@ class _SinglePressStepState extends State<SinglePressStep> with TickerProviderSt
   Widget build(BuildContext context) {
     return Consumer<DeviceOnboardingProvider>(
       builder: (context, provider, _) {
-        // Trigger press-in animation when listening starts
         if (provider.voiceSessionActive && !_wasListening) {
           _wasListening = true;
-          _fingerController.stop();
-          _pressController.forward(from: 0);
+          _bounceController.stop();
         } else if (!provider.voiceSessionActive && _wasListening) {
           _wasListening = false;
         }
@@ -243,8 +238,8 @@ class _SinglePressStepState extends State<SinglePressStep> with TickerProviderSt
       );
     }
 
-    // Waiting — Omi with finger tap animation
-    return _buildOmiWithFingerTap();
+    // Waiting — Omi with bounce click animation
+    return _buildOmiWithBounce();
   }
 
   Widget _buildOmiWithPulse() {
@@ -253,14 +248,8 @@ class _SinglePressStepState extends State<SinglePressStep> with TickerProviderSt
     const containerSize = imageSize + 120.0;
 
     return AnimatedBuilder(
-      animation: Listenable.merge([_animController, _pressController]),
+      animation: _animController,
       builder: (context, child) {
-        // Press-in: scale down to 0.85 then bounce back
-        final pressT = _pressController.value;
-        final pressScale = pressT < 0.5
-            ? 1.0 - (0.15 * (pressT / 0.5)) // shrink
-            : 0.85 + (0.15 * ((pressT - 0.5) / 0.5)); // bounce back
-
         return SizedBox(
           width: containerSize,
           height: containerSize,
@@ -268,15 +257,12 @@ class _SinglePressStepState extends State<SinglePressStep> with TickerProviderSt
             alignment: Alignment.center,
             children: [
               for (int i = 0; i < 3; i++) _buildPulseCircle(i, imageSize, containerSize),
-              Transform.scale(
-                scale: pressScale,
-                child: Image.asset(
-                  Assets.images.omiWithoutRope.path,
-                  height: imageSize,
-                  width: imageSize,
-                  cacheHeight: (imageSize * pixelRatio).round(),
-                  cacheWidth: (imageSize * pixelRatio).round(),
-                ),
+              Image.asset(
+                Assets.images.omiWithoutRope.path,
+                height: imageSize,
+                width: imageSize,
+                cacheHeight: (imageSize * pixelRatio).round(),
+                cacheWidth: (imageSize * pixelRatio).round(),
               ),
             ],
           ),
@@ -300,85 +286,32 @@ class _SinglePressStepState extends State<SinglePressStep> with TickerProviderSt
     );
   }
 
-  Widget _buildOmiWithFingerTap() {
+  Widget _buildOmiWithBounce() {
     final pixelRatio = MediaQuery.of(context).devicePixelRatio;
     const imageSize = 140.0;
-    const containerSize = imageSize + 80.0;
 
     return AnimatedBuilder(
-      animation: Listenable.merge([_fingerController, _pressController]),
+      animation: _bounceController,
       builder: (context, _) {
-        final t = _fingerController.value;
-
-        // Finger travels from bottom-right towards the device center
-        // 0.0-0.35: move in, 0.35-0.45: press (hold), 0.45-0.7: move out, 0.7-1.0: pause
-        double fingerProgress;
-        double omiScale = 1.0;
-        double fingerOpacity = 0.7;
-
-        if (t < 0.35) {
-          // Moving in from bottom-right
-          fingerProgress = t / 0.35;
-          fingerOpacity = 0.5 + fingerProgress * 0.3;
-        } else if (t < 0.45) {
-          // Pressing — finger at destination, Omi scales down
-          fingerProgress = 1.0;
-          omiScale = 1.0 - 0.08 * ((t - 0.35) / 0.1);
-          fingerOpacity = 0.8;
-        } else if (t < 0.7) {
-          // Moving back out
-          fingerProgress = 1.0 - ((t - 0.45) / 0.25);
-          omiScale = 0.92 + 0.08 * ((t - 0.45) / 0.25); // bounce back
-          fingerOpacity = 0.8 - fingerProgress * 0.3;
+        final t = _bounceController.value;
+        // 0.0-0.3: scale down, 0.3-0.5: bounce back, 0.5-1.0: rest
+        double scale;
+        if (t < 0.3) {
+          scale = 1.0 - 0.1 * (t / 0.3);
+        } else if (t < 0.5) {
+          scale = 0.9 + 0.1 * ((t - 0.3) / 0.2);
         } else {
-          // Pause — finger off screen
-          fingerProgress = 0.0;
-          fingerOpacity = 0.0;
+          scale = 1.0;
         }
 
-        // Finger position: starts at bottom-right corner, moves toward center-ish
-        const startX = 60.0;
-        const startY = 60.0;
-        const endX = 15.0;
-        const endY = 15.0;
-        final fingerX = startX - (startX - endX) * fingerProgress;
-        final fingerY = startY - (startY - endY) * fingerProgress;
-
-        // Also apply press-in from actual button press
-        final pressT = _pressController.value;
-        if (pressT > 0) {
-          omiScale = pressT < 0.5
-              ? 1.0 - (0.15 * (pressT / 0.5))
-              : 0.85 + (0.15 * ((pressT - 0.5) / 0.5));
-        }
-
-        return SizedBox(
-          width: containerSize,
-          height: containerSize,
-          child: Stack(
-            alignment: Alignment.center,
-            children: [
-              Transform.scale(
-                scale: omiScale,
-                child: Image.asset(
-                  Assets.images.omiWithoutRope.path,
-                  height: imageSize,
-                  width: imageSize,
-                  cacheHeight: (imageSize * pixelRatio).round(),
-                  cacheWidth: (imageSize * pixelRatio).round(),
-                ),
-              ),
-              if (fingerOpacity > 0)
-                Positioned(
-                  bottom: fingerY,
-                  right: fingerX,
-                  child: Icon(
-                    Icons.touch_app,
-                    color: Colors.white.withValues(alpha: fingerOpacity),
-                    size: 32,
-                  ),
-                ),
-            ],
+        return Transform.scale(
+          scale: scale,
+          child: Image.asset(
+            Assets.images.omiWithoutRope.path,
+            height: imageSize,
+            width: imageSize,
+            cacheHeight: (imageSize * pixelRatio).round(),
+            cacheWidth: (imageSize * pixelRatio).round(),
           ),
         );
       },
