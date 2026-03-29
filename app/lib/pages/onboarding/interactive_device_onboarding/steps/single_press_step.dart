@@ -32,8 +32,10 @@ class SinglePressStep extends StatefulWidget {
 class _SinglePressStepState extends State<SinglePressStep> with TickerProviderStateMixin {
   late AnimationController _animController;
   late AnimationController _fingerController;
+  late AnimationController _pressController;
   late MessageProvider _messageProvider;
   bool _showContinue = false;
+  bool _wasListening = false;
 
   late int _messageCountAtStart;
   String? _userQuestion;
@@ -44,6 +46,7 @@ class _SinglePressStepState extends State<SinglePressStep> with TickerProviderSt
     super.initState();
     _animController = AnimationController(vsync: this, duration: const Duration(seconds: 4))..repeat();
     _fingerController = AnimationController(vsync: this, duration: const Duration(milliseconds: 1500))..repeat();
+    _pressController = AnimationController(vsync: this, duration: const Duration(milliseconds: 300));
     _messageProvider = context.read<MessageProvider>();
     _messageCountAtStart = _messageProvider.messages.length;
     _messageProvider.addListener(_onMessagesChanged);
@@ -78,6 +81,7 @@ class _SinglePressStepState extends State<SinglePressStep> with TickerProviderSt
   void dispose() {
     _animController.dispose();
     _fingerController.dispose();
+    _pressController.dispose();
     _messageProvider.removeListener(_onMessagesChanged);
     super.dispose();
   }
@@ -86,6 +90,15 @@ class _SinglePressStepState extends State<SinglePressStep> with TickerProviderSt
   Widget build(BuildContext context) {
     return Consumer<DeviceOnboardingProvider>(
       builder: (context, provider, _) {
+        // Trigger press-in animation when listening starts
+        if (provider.voiceSessionActive && !_wasListening) {
+          _wasListening = true;
+          _fingerController.stop();
+          _pressController.forward(from: 0);
+        } else if (!provider.voiceSessionActive && _wasListening) {
+          _wasListening = false;
+        }
+
         return OnboardingStepScaffold(
           title: 'Ask Omi a Question',
           subtitle: _aiResponse != null ? '' : 'Press the button once, speak your question, then press again when done',
@@ -240,8 +253,14 @@ class _SinglePressStepState extends State<SinglePressStep> with TickerProviderSt
     const containerSize = imageSize + 120.0;
 
     return AnimatedBuilder(
-      animation: _animController,
+      animation: Listenable.merge([_animController, _pressController]),
       builder: (context, child) {
+        // Press-in: scale down to 0.85 then bounce back
+        final pressT = _pressController.value;
+        final pressScale = pressT < 0.5
+            ? 1.0 - (0.15 * (pressT / 0.5)) // shrink
+            : 0.85 + (0.15 * ((pressT - 0.5) / 0.5)); // bounce back
+
         return SizedBox(
           width: containerSize,
           height: containerSize,
@@ -249,12 +268,15 @@ class _SinglePressStepState extends State<SinglePressStep> with TickerProviderSt
             alignment: Alignment.center,
             children: [
               for (int i = 0; i < 3; i++) _buildPulseCircle(i, imageSize, containerSize),
-              Image.asset(
-                Assets.images.omiWithoutRope.path,
-                height: imageSize,
-                width: imageSize,
-                cacheHeight: (imageSize * pixelRatio).round(),
-                cacheWidth: (imageSize * pixelRatio).round(),
+              Transform.scale(
+                scale: pressScale,
+                child: Image.asset(
+                  Assets.images.omiWithoutRope.path,
+                  height: imageSize,
+                  width: imageSize,
+                  cacheHeight: (imageSize * pixelRatio).round(),
+                  cacheWidth: (imageSize * pixelRatio).round(),
+                ),
               ),
             ],
           ),
