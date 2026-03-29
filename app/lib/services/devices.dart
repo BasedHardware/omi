@@ -122,12 +122,16 @@ class DeviceService implements IDeviceService {
   }
 
   Future<void> _connectToDevice(String id) async {
+    print('_connectToDevice: id=$id, existing connection=${_connection != null}');
     // Clean up existing connection — disconnect if active, then dispose transport
     if (_connection != null) {
+      print('_connectToDevice: cleaning up existing connection (status=${_connection!.status})');
       if (_connection!.status == DeviceConnectionState.connected) {
         await _connection!.disconnect();
       }
+      print('_connectToDevice: disposing transport');
       await _connection!.transport.dispose();
+      print('_connectToDevice: transport disposed');
     }
     _connection = null;
 
@@ -217,7 +221,9 @@ class DeviceService implements IDeviceService {
   final Mutex _mutex = Mutex();
   @override
   Future<DeviceConnection?> ensureConnection(String deviceId, {bool force = false}) async {
+    print('ensureConnection: waiting for mutex (force=$force, deviceId=$deviceId)');
     await _mutex.acquire();
+    print('ensureConnection: mutex acquired');
     try {
       Logger.debug("ensureConnection ${_connection?.device.id} ${_connection?.status} $force");
 
@@ -228,7 +234,8 @@ class DeviceService implements IDeviceService {
 
       // Transport exists for this device but disconnected — native handles reconnection.
       // Don't dispose and recreate the transport; that would cancel native's auto-reconnect.
-      if (_connection?.device.id == deviceId) {
+      // But if force=true (user-initiated), reconnect explicitly.
+      if (!force && _connection?.device.id == deviceId) {
         return null;
       }
 
