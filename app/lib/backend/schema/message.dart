@@ -100,19 +100,15 @@ class MessageFile {
 }
 
 enum GenUiBlockType {
-  map,
-  actionButtons,
-  ;
+  map('map'),
+  actionButtons('action_buttons');
+
+  final String wireValue;
+
+  const GenUiBlockType(this.wireValue);
 
   static GenUiBlockType? fromString(String value) {
-    switch (value) {
-      case 'map':
-        return GenUiBlockType.map;
-      case 'action_buttons':
-        return GenUiBlockType.actionButtons;
-      default:
-        return null;
-    }
+    return GenUiBlockType.values.firstWhereOrNull((type) => type.wireValue == value);
   }
 }
 
@@ -131,7 +127,7 @@ class GenUiBlock {
 
   Map<String, dynamic> toJson() {
     return {
-      'type': type.name == 'actionButtons' ? 'action_buttons' : type.name,
+      'type': type.wireValue,
       'props': props,
     };
   }

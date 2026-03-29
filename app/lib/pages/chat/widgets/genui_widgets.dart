@@ -2,6 +2,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 
 import 'package:omi/backend/schema/message.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/pages/conversation_detail/maps_util.dart';
 
 class GenUiBlocksWidget extends StatelessWidget {
@@ -116,7 +117,7 @@ class MapCardWidget extends StatelessWidget {
                       Icon(Icons.open_in_new, color: Colors.grey.shade500, size: 14),
                       const SizedBox(width: 4),
                       Text(
-                        'Tap to open in Maps',
+                        context.l10n.tapToOpenInMaps,
                         style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
                       ),
                     ],
