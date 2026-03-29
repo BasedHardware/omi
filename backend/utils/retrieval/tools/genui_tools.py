@@ -7,7 +7,6 @@ protocol consumed by Flutter's genui package on the client.
 """
 
 import contextvars
-import json
 from typing import List, Optional
 
 from langchain_core.tools import tool
