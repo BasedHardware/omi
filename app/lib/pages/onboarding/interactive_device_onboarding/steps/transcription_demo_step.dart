@@ -1,5 +1,3 @@
-import 'dart:math';
-
 import 'package:flutter/material.dart';
 
 import 'package:provider/provider.dart';
@@ -18,18 +16,18 @@ class TranscriptionDemoStep extends StatefulWidget {
 }
 
 class _TranscriptionDemoStepState extends State<TranscriptionDemoStep> with SingleTickerProviderStateMixin {
-  late AnimationController _waveController;
+  late AnimationController _pulseController;
   bool _showContinue = false;
 
   @override
   void initState() {
     super.initState();
-    _waveController = AnimationController(vsync: this, duration: const Duration(seconds: 2))..repeat();
+    _pulseController = AnimationController(vsync: this, duration: const Duration(seconds: 4))..repeat();
   }
 
   @override
   void dispose() {
-    _waveController.dispose();
+    _pulseController.dispose();
     super.dispose();
   }
 
@@ -49,16 +47,18 @@ class _TranscriptionDemoStepState extends State<TranscriptionDemoStep> with Sing
           currentStep: 0,
           content: Column(
             children: [
-              const SizedBox(height: 8),
-              // Omi device with pulsating circles
-              if (!provider.transcriptionComplete) _buildOmiWithPulse(),
-              const SizedBox(height: 24),
-              // Status card
-              _buildStatusCard(provider),
-              const SizedBox(height: 16),
-              // Transcript card
+              if (!provider.transcriptionComplete) ...[
+                const Spacer(flex: 1),
+                _buildOmiWithPulse(),
+                const SizedBox(height: 32),
+              ],
+              if (provider.transcriptionComplete) ...[
+                const SizedBox(height: 16),
+                _buildSuccessCard(),
+                const SizedBox(height: 16),
+              ],
               if (provider.demoSegments.isNotEmpty) _buildTranscriptCard(provider),
-              const Spacer(),
+              const Spacer(flex: 2),
             ],
           ),
           bottomAction: _showContinue ? OnboardingContinueButton(onPressed: widget.onComplete) : null,
@@ -67,81 +67,39 @@ class _TranscriptionDemoStepState extends State<TranscriptionDemoStep> with Sing
     );
   }
 
-  Widget _buildStatusCard(DeviceOnboardingProvider provider) {
-    if (provider.transcriptionComplete) {
-      return Container(
-        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
-        decoration: BoxDecoration(
-          color: const Color(0xFF4CAF50).withValues(alpha: 0.12),
-          borderRadius: BorderRadius.circular(20),
-        ),
-        child: const Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.check_circle, color: Color(0xFF4CAF50), size: 24),
-            SizedBox(width: 12),
-            Text('Good job!', style: TextStyle(color: Color(0xFF4CAF50), fontSize: 20, fontWeight: FontWeight.w600)),
-          ],
-        ),
-      );
-    }
-
-    // Listening state with waveform
-    return AnimatedBuilder(
-      animation: _waveController,
-      builder: (context, _) {
-        return Container(
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
-          decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.06),
-            borderRadius: BorderRadius.circular(20),
-          ),
-          child: Row(
-            children: [
-              const Icon(Icons.mic, color: Colors.white, size: 22),
-              const SizedBox(width: 14),
-              Expanded(
-                child: CustomPaint(
-                  painter: _LiveWavePainter(
-                    phase: _waveController.value * 2 * pi * 3,
-                    color: Colors.white.withValues(alpha: 0.4),
-                  ),
-                  size: const Size(double.infinity, 28),
-                ),
-              ),
-              const SizedBox(width: 14),
-              Text(
-                '${provider.wordCount}/5',
-                style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.5),
-                  fontSize: 14,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-            ],
-          ),
-        );
-      },
+  Widget _buildSuccessCard() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+      decoration: BoxDecoration(
+        color: const Color(0xFF4CAF50).withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: const Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.check_circle, color: Color(0xFF4CAF50), size: 24),
+          SizedBox(width: 12),
+          Text('Good job!', style: TextStyle(color: Color(0xFF4CAF50), fontSize: 20, fontWeight: FontWeight.w600)),
+        ],
+      ),
     );
   }
 
   Widget _buildOmiWithPulse() {
     final pixelRatio = MediaQuery.of(context).devicePixelRatio;
-    const imageSize = 120.0;
+    const imageSize = 160.0;
+    const containerSize = imageSize + 160.0;
 
     return AnimatedBuilder(
-      animation: _waveController,
+      animation: _pulseController,
       builder: (context, child) {
         return SizedBox(
-          width: imageSize + 80,
-          height: imageSize + 80,
+          width: containerSize,
+          height: containerSize,
           child: Stack(
             alignment: Alignment.center,
             children: [
-              // Pulsating circles
-              for (int i = 0; i < 3; i++)
-                _buildPulseCircle(i, imageSize),
-              // Omi image
+              for (int i = 0; i < 3; i++) _buildPulseCircle(i, imageSize, containerSize),
               Image.asset(
                 Assets.images.omiWithoutRope.path,
                 height: imageSize,
@@ -156,15 +114,14 @@ class _TranscriptionDemoStepState extends State<TranscriptionDemoStep> with Sing
     );
   }
 
-  Widget _buildPulseCircle(int index, double imageSize) {
-    // Each circle is offset in phase
-    final progress = (_waveController.value + index * 0.33) % 1.0;
-    final scale = 1.0 + progress * 0.5;
-    final opacity = (1.0 - progress).clamp(0.0, 0.3);
+  Widget _buildPulseCircle(int index, double imageSize, double containerSize) {
+    final progress = (_pulseController.value + index * 0.33) % 1.0;
+    final diameter = imageSize + (containerSize - imageSize) * progress;
+    final opacity = (1.0 - progress).clamp(0.0, 0.25);
 
     return Container(
-      width: imageSize * scale,
-      height: imageSize * scale,
+      width: diameter,
+      height: diameter,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
         border: Border.all(
@@ -191,37 +148,4 @@ class _TranscriptionDemoStepState extends State<TranscriptionDemoStep> with Sing
       ),
     );
   }
-}
-
-class _LiveWavePainter extends CustomPainter {
-  final double phase;
-  final Color color;
-
-  _LiveWavePainter({required this.phase, required this.color});
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = color
-      ..strokeWidth = 2.0
-      ..style = PaintingStyle.stroke
-      ..strokeCap = StrokeCap.round;
-
-    final path = Path();
-    final midY = size.height / 2;
-
-    for (double x = 0; x < size.width; x += 1) {
-      final n = x / size.width;
-      final y = midY + sin((n * 4 * pi) + phase) * 8 + sin((n * 11 * pi) + phase * 1.7) * 4;
-      if (x == 0) {
-        path.moveTo(x, y);
-      } else {
-        path.lineTo(x, y);
-      }
-    }
-    canvas.drawPath(path, paint);
-  }
-
-  @override
-  bool shouldRepaint(_LiveWavePainter oldDelegate) => phase != oldDelegate.phase;
 }
