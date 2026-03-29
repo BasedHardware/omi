@@ -236,6 +236,21 @@ SELF_REFERENCE_KNOWN_NAME_PATTERNS = [
 ]
 
 
+def _replace_last_capture_group(pattern: str, replacement: str) -> str:
+    return re.sub(r"\([^()]+\)(?!.*\([^()]+\))", replacement, pattern, count=1)
+
+
+def _build_known_name_patterns() -> List[str]:
+    multilingual_patterns = [
+        _replace_last_capture_group(pattern, r"(?P<name>{name})")
+        for pattern in patterns_to_check
+    ]
+    return [*SELF_REFERENCE_KNOWN_NAME_PATTERNS, *multilingual_patterns]
+
+
+KNOWN_NAME_PATTERNS = _build_known_name_patterns()
+
+
 def normalize_person_name_key(name: str) -> str:
     normalized = re.sub(r"\s+", " ", name).strip().casefold()
     return normalized
@@ -261,13 +276,7 @@ def _normalize_detected_name(name: str) -> str:
 
 
 def _detect_known_name_from_text(text: str, known_names: Iterable[str]) -> Optional[str]:
-    """Match lowercase ASR self-introductions for already-known people.
-
-    This fallback intentionally stays English-only for now. The multilingual
-    regex path above remains the primary detector.
-    """
-    normalized_text = normalize_person_name_key(text)
-    if not normalized_text:
+    if not text.strip():
         return None
 
     sorted_names = sorted(
@@ -276,9 +285,10 @@ def _detect_known_name_from_text(text: str, known_names: Iterable[str]) -> Optio
         reverse=True,
     )
     for known_name in sorted_names:
-        escaped_name = re.escape(normalize_person_name_key(known_name))
-        for pattern in SELF_REFERENCE_KNOWN_NAME_PATTERNS:
-            if re.search(rf"\b{pattern.format(name=escaped_name)}\b(?!['’])", normalized_text):
+        escaped_name = re.escape(known_name.strip())
+        for pattern in KNOWN_NAME_PATTERNS:
+            candidate_pattern = pattern.format(name=escaped_name)
+            if re.search(candidate_pattern, text, flags=re.IGNORECASE):
                 return _normalize_detected_name(known_name)
     return None
 
