@@ -1818,7 +1818,7 @@ class AppLocalizationsUk extends AppLocalizations {
   String get skipThisQuestion => 'Пропустити це питання';
 
   @override
-  String get skipForNow => 'Пропустити зараз';
+  String get skipForNow => 'Пропустити поки що';
 
   @override
   String get connectionError => 'Помилка підключення';
@@ -8728,4 +8728,36 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get storageSection => 'СХОВИЩЕ';
+
+  @override
+  String get permissions => 'Дозволи';
+
+  @override
+  String get permissionEnabled => 'Увімкнено';
+
+  @override
+  String get permissionEnable => 'Увімкнути';
+
+  @override
+  String get permissionsPageDescription =>
+      'Ці дозволи є ключовими для роботи Omi. Вони забезпечують основні функції, такі як сповіщення, функції на основі місцезнаходження та запис звуку.';
+
+  @override
+  String get permissionsRequiredDescription =>
+      'Omi потребує кількох дозволів для коректної роботи. Будь ласка, надайте їх, щоб продовжити.';
+
+  @override
+  String get permissionsSetupTitle => 'Отримайте найкращий досвід';
+
+  @override
+  String get permissionsSetupDescription => 'Увімкніть кілька дозволів, щоб Omi міг творити свою магію.';
+
+  @override
+  String get permissionsChangeAnytime => 'Ви можете змінити це будь-коли в Налаштування > Дозволи';
+
+  @override
+  String get location => 'Місцезнаходження';
+
+  @override
+  String get microphone => 'Мікрофон';
 }

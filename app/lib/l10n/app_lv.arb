@@ -559,7 +559,7 @@
     "allDone": "Viss padarīts!",
     "keepGoing": "Turpiniet, jūs darāt lieliski",
     "skipThisQuestion": "Izlaist šo jautājumu",
-    "skipForNow": "Izlaist pagaidām",
+    "skipForNow": "Pagaidām izlaist",
     "connectionError": "Savienojuma kļūda",
     "connectionErrorDesc": "Neizdevās izveidot savienojumu ar serveri. Lūdzu, pārbaudiet interneta savienojumu un mēģiniet vēlreiz.",
     "invalidRecordingMultipleSpeakers": "Atklāts nederīgs ieraksts",
@@ -2825,5 +2825,15 @@
     "storageSection": "KRĀTUVE",
     "tipKeepPhoneNearby": "Turiet tālruni tuvumā ātrākai sinhronizācijai",
     "tipStableInternet": "Stabils internets paātrina mākoņa augšupielādi",
-    "tipAutoSync": "Ieraksti tiek sinhronizēti automātiski"
+    "tipAutoSync": "Ieraksti tiek sinhronizēti automātiski",
+    "permissions": "Atļaujas",
+    "permissionEnabled": "Iespējota",
+    "permissionEnable": "Iespējot",
+    "permissionsPageDescription": "Šīs atļaujas ir būtiskas Omi darbībai. Tās nodrošina galvenās funkcijas, piemēram, paziņojumus, uz atrašanās vietu balstītas pieredzes un audio ierakstīšanu.",
+    "permissionsRequiredDescription": "Omi ir nepieciešamas dažas atļaujas, lai pareizi darbotos. Lūdzu, piešķiriet tās, lai turpinātu.",
+    "permissionsSetupTitle": "Iegūstiet vislabāko pieredzi",
+    "permissionsSetupDescription": "Iespējojiet dažas atļaujas, lai Omi varētu darīt savu burvību.",
+    "permissionsChangeAnytime": "Jūs varat tos mainīt jebkurā laikā sadaļā Iestatījumi > Atļaujas",
+    "location": "Atrašanās vieta",
+    "microphone": "Mikrofons"
 }

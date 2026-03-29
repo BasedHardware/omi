@@ -3513,7 +3513,7 @@ abstract class AppLocalizations {
   /// **'Skip this question'**
   String get skipThisQuestion;
 
-  /// Button text to skip the entire process temporarily
+  /// Link text to skip the permissions screen
   ///
   /// In en, this message translates to:
   /// **'Skip for now'**
@@ -3597,7 +3597,7 @@ abstract class AppLocalizations {
   /// **'Continue Without Device'**
   String get continueWithoutDevice;
 
-  /// Title for permissions required dialog
+  /// Title for the permissions interstitial screen shown when permissions are missing
   ///
   /// In en, this message translates to:
   /// **'Permissions Required'**
@@ -16256,6 +16256,66 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'STORAGE'**
   String get storageSection;
+
+  /// Title for the permissions settings page
+  ///
+  /// In en, this message translates to:
+  /// **'Permissions'**
+  String get permissions;
+
+  /// Status text when a permission is enabled
+  ///
+  /// In en, this message translates to:
+  /// **'Enabled'**
+  String get permissionEnabled;
+
+  /// Action text to enable a permission
+  ///
+  /// In en, this message translates to:
+  /// **'Enable'**
+  String get permissionEnable;
+
+  /// Description text shown at the bottom of the permissions page
+  ///
+  /// In en, this message translates to:
+  /// **'These permissions are core to how Omi works. They enable key features like notifications, location-based experiences, and audio capture.'**
+  String get permissionsPageDescription;
+
+  /// Description for the permissions interstitial screen
+  ///
+  /// In en, this message translates to:
+  /// **'Omi needs a few permissions to work properly. Please grant them to continue.'**
+  String get permissionsRequiredDescription;
+
+  /// Title for the permissions interstitial screen
+  ///
+  /// In en, this message translates to:
+  /// **'Get the best experience'**
+  String get permissionsSetupTitle;
+
+  /// Subtitle for the permissions interstitial screen
+  ///
+  /// In en, this message translates to:
+  /// **'Enable a few permissions so Omi can work its magic.'**
+  String get permissionsSetupDescription;
+
+  /// Reassurance note on the permissions interstitial
+  ///
+  /// In en, this message translates to:
+  /// **'You can change these anytime in Settings > Permissions'**
+  String get permissionsChangeAnytime;
+
+  /// Label for location permission
+  ///
+  /// In en, this message translates to:
+  /// **'Location'**
+  String get location;
+
+  /// Label for microphone permission
+  ///
+  /// In en, this message translates to:
+  /// **'Microphone'**
+  String get microphone;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

@@ -559,7 +559,7 @@
     "allDone": "Totul e gata!",
     "keepGoing": "Continuă așa, te descurci excelent",
     "skipThisQuestion": "Sari peste această întrebare",
-    "skipForNow": "Sari peste pentru moment",
+    "skipForNow": "Omite deocamdată",
     "connectionError": "Eroare de conexiune",
     "connectionErrorDesc": "Conectarea la server a eșuat. Te rugăm să verifici conexiunea la internet și să încerci din nou.",
     "invalidRecordingMultipleSpeakers": "Înregistrare invalidă detectată",
@@ -2825,5 +2825,15 @@
     "storageSection": "STOCARE",
     "tipKeepPhoneNearby": "Păstrați telefonul aproape pentru sincronizare mai rapidă",
     "tipStableInternet": "Internetul stabil accelerează încărcarea în cloud",
-    "tipAutoSync": "Înregistrările se sincronizează automat"
+    "tipAutoSync": "Înregistrările se sincronizează automat",
+    "permissions": "Permisiuni",
+    "permissionEnabled": "Activată",
+    "permissionEnable": "Activare",
+    "permissionsPageDescription": "Aceste permisiuni sunt esențiale pentru funcționarea Omi. Ele activează funcții cheie precum notificări, experiențe bazate pe locație și captură audio.",
+    "permissionsRequiredDescription": "Omi are nevoie de câteva permisiuni pentru a funcționa corect. Te rugăm să le acorzi pentru a continua.",
+    "permissionsSetupTitle": "Obține cea mai bună experiență",
+    "permissionsSetupDescription": "Activează câteva permisiuni pentru ca Omi să își poată face magia.",
+    "permissionsChangeAnytime": "Poți schimba oricând din Setări > Permisiuni",
+    "location": "Locație",
+    "microphone": "Microfon"
 }

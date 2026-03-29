@@ -1807,7 +1807,7 @@ class AppLocalizationsTh extends AppLocalizations {
   String get skipThisQuestion => 'ข้ามคำถามนี้';
 
   @override
-  String get skipForNow => 'ข้ามไว้ก่อน';
+  String get skipForNow => 'ข้ามไปก่อน';
 
   @override
   String get connectionError => 'ข้อผิดพลาดในการเชื่อมต่อ';
@@ -8669,4 +8669,36 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get storageSection => 'พื้นที่จัดเก็บ';
+
+  @override
+  String get permissions => 'สิทธิ์';
+
+  @override
+  String get permissionEnabled => 'เปิดใช้งานแล้ว';
+
+  @override
+  String get permissionEnable => 'เปิดใช้งาน';
+
+  @override
+  String get permissionsPageDescription =>
+      'สิทธิ์เหล่านี้มีความสำคัญต่อการทำงานของ Omi ช่วยเปิดใช้งานฟีเจอร์หลัก เช่น การแจ้งเตือน ประสบการณ์ตามตำแหน่ง และการบันทึกเสียง';
+
+  @override
+  String get permissionsRequiredDescription =>
+      'Omi ต้องการสิทธิ์บางอย่างเพื่อทำงานได้อย่างถูกต้อง กรุณาอนุญาตเพื่อดำเนินการต่อ';
+
+  @override
+  String get permissionsSetupTitle => 'รับประสบการณ์ที่ดีที่สุด';
+
+  @override
+  String get permissionsSetupDescription => 'เปิดใช้งานสิทธิ์บางอย่างเพื่อให้ Omi ทำงานได้อย่างเต็มที่';
+
+  @override
+  String get permissionsChangeAnytime => 'คุณสามารถเปลี่ยนได้ทุกเมื่อในการตั้งค่า > สิทธิ์';
+
+  @override
+  String get location => 'ตำแหน่ง';
+
+  @override
+  String get microphone => 'ไมโครโฟน';
 }

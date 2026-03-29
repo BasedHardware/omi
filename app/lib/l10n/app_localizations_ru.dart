@@ -8743,4 +8743,36 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get storageSection => 'ХРАНИЛИЩЕ';
+
+  @override
+  String get permissions => 'Разрешения';
+
+  @override
+  String get permissionEnabled => 'Включено';
+
+  @override
+  String get permissionEnable => 'Включить';
+
+  @override
+  String get permissionsPageDescription =>
+      'Эти разрешения необходимы для работы Omi. Они обеспечивают ключевые функции, такие как уведомления, функции на основе местоположения и запись звука.';
+
+  @override
+  String get permissionsRequiredDescription =>
+      'Omi нужны некоторые разрешения для правильной работы. Пожалуйста, предоставьте их, чтобы продолжить.';
+
+  @override
+  String get permissionsSetupTitle => 'Получите лучший опыт';
+
+  @override
+  String get permissionsSetupDescription => 'Включите несколько разрешений, чтобы Omi мог творить свою магию.';
+
+  @override
+  String get permissionsChangeAnytime => 'Вы можете изменить это в любое время в Настройки > Разрешения';
+
+  @override
+  String get location => 'Местоположение';
+
+  @override
+  String get microphone => 'Микрофон';
 }

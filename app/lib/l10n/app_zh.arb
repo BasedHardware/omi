@@ -2847,5 +2847,15 @@
     "storageSection": "存储",
     "tipKeepPhoneNearby": "将手机放在附近以加快同步速度",
     "tipStableInternet": "稳定的网络可加快云上传速度",
-    "tipAutoSync": "录音自动同步"
+    "tipAutoSync": "录音自动同步",
+    "permissions": "权限",
+    "permissionEnabled": "已启用",
+    "permissionEnable": "启用",
+    "permissionsPageDescription": "这些权限是Omi运作的核心。它们启用通知、基于位置的体验和音频捕获等关键功能。",
+    "permissionsRequiredDescription": "Omi 需要一些权限才能正常工作。请授予权限以继续。",
+    "permissionsSetupTitle": "获得最佳体验",
+    "permissionsSetupDescription": "启用一些权限，让 Omi 发挥它的魔力。",
+    "permissionsChangeAnytime": "您可以随时在设置 > 权限中更改",
+    "location": "位置",
+    "microphone": "麦克风"
 }

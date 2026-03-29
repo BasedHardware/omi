@@ -1860,7 +1860,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get continueWithoutDevice => 'Jätka ilma seadmeta';
 
   @override
-  String get permissionsRequired => 'Load on nõutud';
+  String get permissionsRequired => 'Õigused nõutavad';
 
   @override
   String get permissionsRequiredDesc =>
@@ -8712,4 +8712,36 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get storageSection => 'SALVESTUSRUUM';
+
+  @override
+  String get permissions => 'Õigused';
+
+  @override
+  String get permissionEnabled => 'Lubatud';
+
+  @override
+  String get permissionEnable => 'Luba';
+
+  @override
+  String get permissionsPageDescription =>
+      'Need load on Omi toimimiseks olulised. Need võimaldavad põhifunktsioone nagu teavitused, asukohapõhised kogemused ja helisalvestus.';
+
+  @override
+  String get permissionsRequiredDescription =>
+      'Omi vajab mõningaid õigusi, et korralikult töötada. Palun anna need jätkamiseks.';
+
+  @override
+  String get permissionsSetupTitle => 'Saage parim kogemus';
+
+  @override
+  String get permissionsSetupDescription => 'Lubage mõned õigused, et Omi saaks oma võlu avaldada.';
+
+  @override
+  String get permissionsChangeAnytime => 'Saate neid igal ajal muuta jaotises Seaded > Õigused';
+
+  @override
+  String get location => 'Asukoht';
+
+  @override
+  String get microphone => 'Mikrofon';
 }

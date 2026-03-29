@@ -2793,5 +2793,15 @@
     "storageSection": "SPEICHER",
     "tipKeepPhoneNearby": "Halten Sie Ihr Telefon in der Nähe für schnellere Synchronisierung",
     "tipStableInternet": "Stabiles Internet beschleunigt Cloud-Uploads",
-    "tipAutoSync": "Aufnahmen werden automatisch synchronisiert"
+    "tipAutoSync": "Aufnahmen werden automatisch synchronisiert",
+    "permissions": "Berechtigungen",
+    "permissionEnabled": "Aktiviert",
+    "permissionEnable": "Aktivieren",
+    "permissionsPageDescription": "Diese Berechtigungen sind zentral für die Funktionsweise von Omi. Sie ermöglichen wichtige Funktionen wie Benachrichtigungen, standortbasierte Erlebnisse und Audioaufnahme.",
+    "permissionsRequiredDescription": "Omi benötigt einige Berechtigungen, um richtig zu funktionieren. Bitte erteile sie, um fortzufahren.",
+    "permissionsSetupTitle": "Hol dir das beste Erlebnis",
+    "permissionsSetupDescription": "Aktiviere ein paar Berechtigungen, damit Omi seine Magie entfalten kann.",
+    "permissionsChangeAnytime": "Du kannst diese jederzeit unter Einstellungen > Berechtigungen ändern",
+    "location": "Standort",
+    "microphone": "Mikrofon"
 }

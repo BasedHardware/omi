@@ -573,7 +573,7 @@
     "tryAgain": "Cuba Lagi",
     "connectOmiOmiGlass": "Sambung Omi / OmiGlass",
     "continueWithoutDevice": "Teruskan Tanpa Peranti",
-    "permissionsRequired": "Kebenaran Diperlukan",
+    "permissionsRequired": "Kebenaran diperlukan",
     "permissionsRequiredDesc": "Aplikasi ini memerlukan kebenaran Bluetooth dan Lokasi untuk berfungsi dengan betul. Sila dayakannya dalam tetapan.",
     "openSettings": "Buka Tetapan",
     "wantDifferentName": "Mahu dipanggil dengan nama lain?",
@@ -2825,5 +2825,15 @@
     "storageSection": "STORAN",
     "tipKeepPhoneNearby": "Pastikan telefon berdekatan untuk penyegerakan lebih pantas",
     "tipStableInternet": "Internet stabil mempercepatkan muat naik awan",
-    "tipAutoSync": "Rakaman disegerakkan secara automatik"
+    "tipAutoSync": "Rakaman disegerakkan secara automatik",
+    "permissions": "Kebenaran",
+    "permissionEnabled": "Didayakan",
+    "permissionEnable": "Dayakan",
+    "permissionsPageDescription": "Kebenaran ini penting untuk cara Omi berfungsi. Ia membolehkan ciri utama seperti pemberitahuan, pengalaman berasaskan lokasi dan rakaman audio.",
+    "permissionsRequiredDescription": "Omi memerlukan beberapa kebenaran untuk berfungsi dengan betul. Sila berikan kebenaran untuk meneruskan.",
+    "permissionsSetupTitle": "Dapatkan pengalaman terbaik",
+    "permissionsSetupDescription": "Dayakan beberapa kebenaran supaya Omi boleh melakukan keajaibannya.",
+    "permissionsChangeAnytime": "Anda boleh menukarnya pada bila-bila masa di Tetapan > Kebenaran",
+    "location": "Lokasi",
+    "microphone": "Mikrofon"
 }
