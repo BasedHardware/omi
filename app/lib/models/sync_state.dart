@@ -3,7 +3,7 @@ import 'package:omi/services/wals.dart';
 
 enum SyncStatus { idle, syncing, fetchingConversations, completed, error }
 
-enum SyncPhase { idle, downloadingFromDevice, waitingForInternet, uploadingToCloud }
+enum SyncPhase { idle, downloadingFromDevice, waitingForInternet, uploadingToCloud, processingOnServer }
 
 extension SyncMethodExtension on SyncMethod {
   String get displayName {

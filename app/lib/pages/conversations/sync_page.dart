@@ -789,9 +789,8 @@ class _SyncPageState extends State<SyncPage> {
 
     // Syncing state
     if (syncProvider.isSyncing) {
-      final progress = syncProvider.walBasedProgress > 0
-          ? syncProvider.walBasedProgress
-          : syncProvider.walsSyncedProgress;
+      final progress =
+          syncProvider.walBasedProgress > 0 ? syncProvider.walBasedProgress : syncProvider.walsSyncedProgress;
       final speedKBps = syncProvider.syncSpeedKBps;
       final phase = syncProvider.syncState.phase;
 
@@ -827,6 +826,15 @@ class _SyncPageState extends State<SyncPage> {
           phaseIcon = Icons.cloud_upload;
           phaseColor = Colors.blue;
           showCancel = true;
+          showSpeed = false;
+        case SyncPhase.processingOnServer:
+          final ss = syncProvider.syncState;
+          phaseText = ss.currentFile != null && ss.totalFiles != null && ss.totalFiles! > 0
+              ? 'Processing on server... ${ss.currentFile}/${ss.totalFiles} segments'
+              : 'Processing on server...';
+          phaseIcon = Icons.cloud_sync;
+          phaseColor = Colors.blue;
+          showCancel = false;
           showSpeed = false;
         case SyncPhase.idle:
           phaseText = context.l10n.processingProgress(
@@ -1377,9 +1385,16 @@ class _PendingListItem {
   final int? count;
   final Wal? wal;
 
-  _PendingListItem.header(this.label, this.icon, this.color, this.count) : isHeader = true, wal = null;
+  _PendingListItem.header(this.label, this.icon, this.color, this.count)
+      : isHeader = true,
+        wal = null;
 
-  _PendingListItem.wal(this.wal) : isHeader = false, label = null, icon = null, color = null, count = null;
+  _PendingListItem.wal(this.wal)
+      : isHeader = false,
+        label = null,
+        icon = null,
+        color = null,
+        count = null;
 }
 
 class _ManageStorageSheet extends StatelessWidget {

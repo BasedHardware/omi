@@ -61,9 +61,8 @@ Future<List<ServerConversation>> getConversations({
   if (response.statusCode == 200) {
     // decode body bytes to utf8 string and then parse json so as to avoid utf8 char issues
     var body = utf8.decode(response.bodyBytes);
-    var memories = (jsonDecode(body) as List<dynamic>)
-        .map((conversation) => ServerConversation.fromJson(conversation))
-        .toList();
+    var memories =
+        (jsonDecode(body) as List<dynamic>).map((conversation) => ServerConversation.fromJson(conversation)).toList();
     Logger.debug('getConversations length: ${memories.length}');
     return memories;
   } else {
@@ -172,9 +171,8 @@ class TranscriptsResponse {
       deepgram: (json['deepgram'] as List<dynamic>).map((segment) => TranscriptSegment.fromJson(segment)).toList(),
       soniox: (json['soniox'] as List<dynamic>).map((segment) => TranscriptSegment.fromJson(segment)).toList(),
       whisperx: (json['whisperx'] as List<dynamic>).map((segment) => TranscriptSegment.fromJson(segment)).toList(),
-      speechmatics: (json['speechmatics'] as List<dynamic>)
-          .map((segment) => TranscriptSegment.fromJson(segment))
-          .toList(),
+      speechmatics:
+          (json['speechmatics'] as List<dynamic>).map((segment) => TranscriptSegment.fromJson(segment)).toList(),
     );
   }
 }
@@ -381,7 +379,13 @@ Future<SyncLocalFilesResponse> syncLocalFiles(List<File> files, {UploadProgressC
 
 /// v2 async sync: POST files → 202 with job_id, then poll until terminal.
 /// Returns the same SyncLocalFilesResponse as v1 once processing is confirmed complete.
-Future<SyncLocalFilesResponse> syncLocalFilesV2(List<File> files, {UploadProgressCallback? onUploadProgress}) async {
+typedef SyncJobPollCallback = void Function(SyncJobStatusResponse status);
+
+Future<SyncLocalFilesResponse> syncLocalFilesV2(
+  List<File> files, {
+  UploadProgressCallback? onUploadProgress,
+  SyncJobPollCallback? onPollProgress,
+}) async {
   try {
     // Step 1: Submit files
     var response = await makeMultipartApiCall(
@@ -443,6 +447,9 @@ Future<SyncLocalFilesResponse> syncLocalFilesV2(List<File> files, {UploadProgres
       }
 
       var jobStatus = SyncJobStatusResponse.fromJson(jsonDecode(pollResponse.body));
+
+      // Report poll progress to caller for UI updates
+      onPollProgress?.call(jobStatus);
 
       if (jobStatus.isTerminal) {
         // All segments failed → throw to match v1's 500 behavior (WAL stays retryable)
