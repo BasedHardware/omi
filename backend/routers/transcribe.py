@@ -878,7 +878,7 @@ async def _stream_handler(
                 conversation.transcript_segments, segments
             )
             process_speaker_assigned_segments(
-                conversation.transcript_segments,
+                updated_segments,
                 segment_person_assignment_map,
                 speaker_to_person_map,
             )
