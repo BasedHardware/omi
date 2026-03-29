@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 
-import 'package:omi/main.dart';
+import 'package:omi/app_globals.dart';
 
 class AppSnackbar {
   static void showSnackbar(String message, {Color? color, Duration? duration}) {
-    ScaffoldMessenger.of(MyApp.navigatorKey.currentState!.context).showSnackBar(
+    ScaffoldMessenger.of(globalNavigatorKey.currentState!.context).showSnackBar(
       SnackBar(content: Text(message), backgroundColor: color, duration: duration ?? const Duration(seconds: 2)),
     );
   }

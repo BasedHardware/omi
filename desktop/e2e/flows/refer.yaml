@@ -1,0 +1,29 @@
+version: 2
+name: refer
+description: Refer a Friend flow — navigate to referral page, verify referral link and sharing options
+app: com.omi.computer-macos
+covers:
+  - desktop/Desktop/Sources/MainWindow/Pages/ReferPage.swift
+preconditions:
+  - auth_ready
+
+steps:
+  - id: S1
+    name: Navigate to Refer a Friend page
+    do: "Click the Refer a Friend sidebar icon (identifier: sidebar_refer_a_friend) to navigate to the referral page. Verify the page loads with referral link and sharing options."
+    expect:
+      interactive_count: { min: 3 }
+
+  - id: S2
+    name: Verify referral content
+    do: "Check that the referral page shows a shareable link, copy button, and any referral statistics or rewards information."
+    expect:
+      interactive_count: { min: 2 }
+
+  - id: S3
+    name: Return to Dashboard
+    do: "Click the Dashboard sidebar icon (identifier: sidebar_dashboard) to return to the Dashboard page."
+    expect:
+      interactive_count: { min: 5 }
+      text_visible:
+        - Dashboard

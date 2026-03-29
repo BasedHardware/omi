@@ -3,9 +3,9 @@ import Foundation
 /// Fetches API keys from the backend at runtime instead of bundling them in the app.
 /// Developer overrides (set in Settings) take precedence over backend-provided keys.
 ///
-/// NOTE: The current desktop app is slopped on security — API keys were hardcoded in
-/// Swift source and env files. This service moves secrets server-side via /v1/config/api-keys.
-/// Will remove the env-var bridge once all client-side key slop is cleaned up. — CTO
+/// NOTE: Deepgram and Gemini keys are NO LONGER fetched from the backend —
+/// they are proxied server-side (issue #5861). Only Anthropic, Firebase, and
+/// Calendar keys are still served via /v1/config/api-keys.
 @MainActor
 final class APIKeyService: ObservableObject {
     static let shared = APIKeyService()
@@ -18,6 +18,25 @@ final class APIKeyService: ObservableObject {
     @Published private(set) var googleCalendarApiKey: String?
     @Published private(set) var isLoaded: Bool = false
     @Published private(set) var loadError: String?
+
+    /// The in-flight fetch task, so callers can await it instead of polling.
+    private var fetchTask: Task<Void, Never>?
+
+    /// Start fetching keys in the background. Callers can await via waitForKeys().
+    func startFetchingKeys() {
+        fetchTask = Task { await self.fetchKeys() }
+    }
+
+    /// Wait for keys to be loaded. Returns immediately if already loaded.
+    /// If no fetch is in-flight, starts one (handles app-restart-while-signed-in case).
+    func waitForKeys() async {
+        if isLoaded { return }
+        if fetchTask == nil {
+            log("APIKeyService: waitForKeys called but no fetch in-flight, starting one")
+            fetchTask = Task { await fetchKeys() }
+        }
+        await fetchTask?.value
+    }
 
     /// Effective key: developer override > backend-provided > nil
     var effectiveDeepgramKey: String? {

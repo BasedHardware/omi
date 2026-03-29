@@ -2,6 +2,14 @@ import Foundation
 
 actor APIClient {
     static let shared = APIClient()
+    // Python backend URL for subscription/payment endpoints (these don't exist on the Rust desktop backend)
+    var pythonBackendURL: String {
+        if let cString = getenv("OMI_PYTHON_API_URL"), let url = String(validatingUTF8: cString), !url.isEmpty {
+            return url.hasSuffix("/") ? url : url + "/"
+        }
+        return "https://api.omi.me/"
+    }
+
     // OMI Backend base URL — must be set via OMI_API_URL env var (in .env)
     var baseURL: String {
         // First check getenv() for values set by setenv() in loadEnvironment()
@@ -109,9 +117,11 @@ actor APIClient {
 
     func post<T: Decodable>(
         _ endpoint: String,
-        requireAuth: Bool = true
+        requireAuth: Bool = true,
+        customBaseURL: String? = nil
     ) async throws -> T {
-        let url = URL(string: baseURL + endpoint)!
+        let base = customBaseURL ?? baseURL
+        let url = URL(string: base + endpoint)!
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.allHTTPHeaderFields = try await buildHeaders(requireAuth: requireAuth)
@@ -4460,7 +4470,7 @@ struct Person: Codable, Identifiable {
 extension APIClient {
 
     func getUserSubscription() async throws -> UserSubscriptionResponse {
-        return try await get("v1/users/me/subscription")
+        return try await get("v1/users/me/subscription", customBaseURL: pythonBackendURL)
     }
 
     func createCheckoutSession(priceId: String) async throws -> CheckoutSessionResponse {
@@ -4472,11 +4482,11 @@ extension APIClient {
             }
         }
 
-        return try await post("v1/payments/checkout-session", body: Request(priceId: priceId))
+        return try await post("v1/payments/checkout-session", body: Request(priceId: priceId), customBaseURL: pythonBackendURL)
     }
 
     func createCustomerPortalSession() async throws -> CustomerPortalResponse {
-        return try await post("v1/payments/customer-portal")
+        return try await post("v1/payments/customer-portal", customBaseURL: pythonBackendURL)
     }
 
     /// Fetches all people for the current user

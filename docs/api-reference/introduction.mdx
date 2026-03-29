@@ -1,33 +1,53 @@
 ---
-title: 'Introduction'
-description: 'Example section for showcasing API endpoints'
+title: "API Reference"
+icon: "square-terminal"
+description: "Complete reference for the Omi Developer API. Build integrations with memories, conversations, action items, and more."
 ---
 
-<Note>
-  If you're not looking to build API reference documentation, you can delete
-  this section by removing the api-reference folder.
-</Note>
+## Base URL
 
-## Welcome
-
-There are two ways to build API documentation: [OpenAPI](https://mintlify.com/docs/api-playground/openapi/setup) and [MDX components](https://mintlify.com/docs/api-playground/mdx/configuration). For the starter kit, we are using the following OpenAPI specification.
-
-<Card
-  title="Plant Store Endpoints"
-  icon="leaf"
-  href="https://github.com/mintlify/starter/blob/main/api-reference/openapi.json"
->
-  View the OpenAPI specification file
-</Card>
+```
+https://api.omi.me
+```
 
 ## Authentication
 
-All API endpoints are authenticated using Bearer tokens and picked up from the specification file.
+All API requests require a Developer API key in the `Authorization` header:
 
-```json
-"security": [
-  {
-    "bearerAuth": []
-  }
-]
+```http
+Authorization: Bearer omi_dev_your_api_key_here
 ```
+
+Get your key from **Settings → Developer → Create Key** in the Omi app.
+
+## Rate Limits
+
+| Limit | Value |
+|-------|-------|
+| Per minute | 100 requests per API key |
+| Per day | 10,000 requests per user |
+
+Rate limit headers are included in every response:
+
+```http
+X-RateLimit-Limit: 100
+X-RateLimit-Remaining: 95
+X-RateLimit-Reset: 1642694400
+```
+
+## Resources
+
+<CardGroup cols={2}>
+  <Card title="Memories" icon="brain" href="/api-reference/endpoint/memories/list">
+    Timeless facts about the user — preferences, relationships, insights.
+  </Card>
+  <Card title="Conversations" icon="message" href="/api-reference/endpoint/conversations/list">
+    Conversation transcripts with AI-generated summaries and action items.
+  </Card>
+  <Card title="Action Items" icon="list-check" href="/api-reference/endpoint/action-items/list">
+    Tasks and to-dos extracted from conversations or created manually.
+  </Card>
+  <Card title="API Keys" icon="key" href="/api-reference/endpoint/keys/list">
+    Create, list, and revoke developer API keys.
+  </Card>
+</CardGroup>

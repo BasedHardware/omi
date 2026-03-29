@@ -32,4 +32,28 @@ enum AppBuild {
     let raw = UserDefaults.standard.string(forKey: updateChannelDefaultsKey) ?? "stable"
     return raw == "staging" ? "beta" : raw
   }
+
+  static var inferredUpdateChannel: String {
+    let bundlePath = Bundle.main.bundleURL.path.lowercased()
+    let display = displayName.lowercased()
+    let bundle = bundleIdentifier.lowercased()
+
+    if bundle.contains("beta")
+      || display.contains("beta")
+      || bundlePath.contains("/beta")
+      || bundlePath.contains("omi beta")
+    {
+      return "beta"
+    }
+
+    return "stable"
+  }
+
+  /// Only set the channel on first launch when no preference exists yet.
+  /// Never overwrite a user-chosen channel (e.g. beta selected in settings).
+  static func syncUpdateChannelOnFirstLaunch() {
+    guard UserDefaults.standard.string(forKey: updateChannelDefaultsKey) == nil else { return }
+    let inferred = inferredUpdateChannel
+    UserDefaults.standard.set(inferred, forKey: updateChannelDefaultsKey)
+  }
 }

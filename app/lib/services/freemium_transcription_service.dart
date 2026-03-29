@@ -68,13 +68,6 @@ class FreemiumTranscriptionService extends ChangeNotifier {
       return _readiness;
     }
 
-    // macOS: Also has native speech recognition
-    if (Platform.isMacOS) {
-      _readiness = FreemiumReadiness.ready;
-      notifyListeners();
-      return _readiness;
-    }
-
     // Android/Other: Check if any Whisper model is downloaded
     try {
       final modelPath = await _findDownloadedModelPath();
@@ -141,7 +134,7 @@ class FreemiumTranscriptionService extends ChangeNotifier {
     final userLang = SharedPreferencesUtil().userPrimaryLanguage;
     final effectiveLanguage = language ?? (userLang.isNotEmpty ? userLang : 'multi');
 
-    if (Platform.isIOS || Platform.isMacOS) {
+    if (Platform.isIOS) {
       // Use Apple's native speech recognition
       return CustomSttConfig(
         provider: SttProvider.onDeviceWhisper, // Uses OnDeviceAppleProvider on iOS

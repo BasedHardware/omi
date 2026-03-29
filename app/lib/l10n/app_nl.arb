@@ -2655,13 +2655,11 @@
   "switchApiConfirmBody": "Overschakelen naar {environment}? Je moet de app sluiten en opnieuw openen om de wijzigingen door te voeren.",
   "switchApiConfirmTitle": "API-omgeving wisselen",
   "switchRequiresRestart": "Wisselen vereist herstart van de app",
-  "officialTeamName": "Nooto Team",
-  "conversationsEmptyStateMessage": "Begin een gesprek met Nooto of neem er een op met je apparaat",
-  "tasksCleanTodayTitle": "Taken van vandaag opschonen?",
-  "tasksCleanTodayMessage": "Hiermee worden alleen deadlines verwijderd",
   "shared": "Gedeeld",
   "onlyYouCanSeeConversation": "Alleen jij kunt dit gesprek zien",
   "anyoneWithLinkCanView": "Iedereen met de link kan bekijken",
+  "tasksCleanTodayTitle": "Taken van vandaag opschonen?",
+  "tasksCleanTodayMessage": "Hiermee worden alleen deadlines verwijderd",
   "tasksOverdue": "Achterstallig",
   "answerTheCallFrom": "Beantwoord het gesprek van",
   "callAlreadyInProgress": "Er is al een gesprek gaande",
@@ -2796,5 +2794,48 @@
         "type": "String"
       }
     }
-  }
+  },
+  "fairUseBannerStatus": "Eerlijk gebruik: {status}",
+  "@fairUseBannerStatus": {
+    "placeholders": {
+      "status": {
+        "type": "String"
+      }
+    }
+  },
+  "improveConnectionTitle": "Verbinding verbeteren",
+  "improveConnectionContent": "We hebben verbeterd hoe Omi verbonden blijft met je apparaat. Om dit te activeren, ga naar de Apparaatinfo-pagina, tik op \"Apparaat loskoppelen\" en koppel je apparaat opnieuw.",
+  "improveConnectionAction": "Begrepen",
+  "clockSkewWarning": "De klok van je apparaat wijkt ~{minutes} min. af. Controleer je datum- en tijdinstellingen.",
+  "omisStorage": "Omi's opslag",
+  "phoneStorage": "Telefoonopslag",
+  "cloudStorage": "Cloudopslag",
+  "howSyncingWorks": "Hoe synchronisatie werkt",
+  "noSyncedRecordings": "Nog geen gesynchroniseerde opnames",
+  "recordingsSyncAutomatically": "Opnames worden automatisch gesynchroniseerd — geen actie nodig.",
+  "filesDownloadedUploadedNextTime": "Reeds gedownloade bestanden worden de volgende keer geüpload.",
+  "nConversationsCreated": "{count, plural, =1{1 gesprek aangemaakt} other{{count} gesprekken aangemaakt}}",
+  "tapToView": "Tik om te bekijken",
+  "syncFailed": "Synchronisatie mislukt",
+  "keepSyncing": "Doorgaan met synchroniseren",
+  "cancelSyncQuestion": "Synchronisatie annuleren?",
+  "omisStorageDesc": "Wanneer uw Omi niet verbonden is met uw telefoon, slaat het audio lokaal op in het ingebouwde geheugen. U verliest nooit een opname.",
+  "phoneStorageDesc": "Wanneer Omi opnieuw verbinding maakt, worden opnames automatisch naar uw telefoon overgebracht voor het uploaden.",
+  "cloudStorageDesc": "Na het uploaden worden uw opnames verwerkt en getranscribeerd. Gesprekken zijn binnen een minuut beschikbaar.",
+  "storageSection": "OPSLAG",
+  "tipKeepPhoneNearby": "Houd uw telefoon dichtbij voor snellere synchronisatie",
+  "tipStableInternet": "Stabiel internet versnelt cloud-uploads",
+  "tipAutoSync": "Opnames worden automatisch gesynchroniseerd",
+  "permissions": "Machtigingen",
+  "permissionEnabled": "Ingeschakeld",
+  "permissionEnable": "Inschakelen",
+  "permissionsPageDescription": "Deze machtigingen zijn essentieel voor de werking van Omi. Ze maken belangrijke functies mogelijk zoals meldingen, locatiegebaseerde ervaringen en audio-opname.",
+  "permissionsRequiredDescription": "Omi heeft een aantal machtigingen nodig om goed te werken. Verleen ze alsjeblieft om door te gaan.",
+  "permissionsSetupTitle": "Krijg de beste ervaring",
+  "permissionsSetupDescription": "Schakel een paar machtigingen in zodat Omi zijn magie kan doen.",
+  "permissionsChangeAnytime": "Je kunt deze op elk moment wijzigen in Instellingen > Machtigingen",
+  "location": "Locatie",
+  "microphone": "Microfoon",
+  "officialTeamName": "Nooto Team",
+  "conversationsEmptyStateMessage": "Begin een gesprek met Nooto of neem er een op met je apparaat"
 }

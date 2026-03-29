@@ -295,6 +295,23 @@ kill -SIGUSR2 $(pgrep -f "flutter run" | head -1)
 
 Use `SIGUSR1` for hot reload (widget/UI-only changes) or `SIGUSR2` for hot restart (logic, state, provider changes). When in doubt, use `SIGUSR2`.
 
+### agent-swift (Desktop UI Automation)
+
+**Key rules:**
+- `agent-swift doctor` verifies Accessibility permission and can check the target app.
+- Prefer `click` over `press` for SwiftUI apps — `click` sends CGEvent mouse clicks that trigger NavigationLink/gesture handlers, while `press` sends AXPress which only works for AppKit buttons.
+- Refs go stale after `click`/`press`/`fill`/`scroll` — re-snapshot before the next interaction.
+- Always use `snapshot -i` (interactive only) — full snapshots of complex apps are very verbose.
+- Argument order: `get <property> <ref>`, `is <condition> <ref>`, `wait <condition> [<target>]`, `find <locator> <value>`.
+- JSON output: `--json` flag, `AGENT_SWIFT_JSON=1` env var, or pipe to auto-detect.
+- 15 commands: `doctor`, `connect`, `disconnect`, `status`, `snapshot`, `press`, `click`, `fill`, `get`, `find`, `screenshot`, `is`, `wait`, `scroll`, `schema`.
+- Works with any macOS app (SwiftUI, AppKit, Electron) — no Marionette or app-side setup.
+- Bundle ID for dev: `com.omi.desktop-dev`. For prod: `com.omi.computer-macos`.
+- **Named test bundles**: When testing a feature or bug fix, ALWAYS create a separate named bundle with `OMI_APP_NAME="feature-name" ./run.sh`. This installs to `/Applications/feature-name.app` with bundle ID `com.omi.feature-name`, running side-by-side with "Omi Dev" and "Omi Beta". NEVER overwrite "Omi Dev" when testing a specific change — the user may have it running. Connect agent-swift with `--bundle-id com.omi.feature-name`.
+- Keep the bundle suffix and app name identical so auth callbacks reopen the correct app. Example: `1233.app` should use `com.omi.1233`, `search.app` should use `com.omi.search`, and mismatches like `1233.app` with `com.omi.desktop-dev` are not allowed.
+- **App flows & exploration skill**: See `desktop/e2e/SKILL.md` for navigation architecture, screen map, interaction patterns (click vs press), and known flows. Read this when developing features or exploring the app.
+- When asked to build or rebuild the desktop app for testing, don't stop at a successful compile: launch the named test app, interact with it programmatically to confirm it actually runs, and report any environment blocker if full interaction is impossible.
+
 ## Formatting
 
 Always format code after making changes. The pre-commit hook handles this automatically, but you can also run manually:

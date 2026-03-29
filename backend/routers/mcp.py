@@ -16,6 +16,7 @@ from models.conversation import CategoryEnum
 from utils.apps import update_personas_async
 from utils.llm.memories import identify_category_for_memory
 from dependencies import get_uid_from_mcp_api_key, get_current_user_id
+from utils.other.endpoints import with_rate_limit
 import database.mcp_api_key as mcp_api_key_db
 from models.mcp_api_key import McpApiKey, McpApiKeyCreate, McpApiKeyCreated
 import logging
@@ -46,7 +47,7 @@ def delete_key(key_id: str, uid: str = Depends(get_current_user_id)):
 
 
 @router.post("/v1/mcp/memories", tags=["mcp"], response_model=Memory)
-def create_memory(memory: Memory, uid: str = Depends(get_uid_from_mcp_api_key)):
+def create_memory(memory: Memory, uid: str = Depends(with_rate_limit(get_uid_from_mcp_api_key, "memories:create"))):
     # Auto-categorize memories from external sources
     memory.category = identify_category_for_memory(memory.content)
     memory_db = MemoryDB.from_memory(memory, uid, None, True)
@@ -183,7 +184,13 @@ def get_conversations(
         categories=[c.value for c in category_list],
     )
 
-    # Paywall is enforced on the detail endpoint, list view can show basic data.
+    # Redact locked conversation content in list view
+    for conv in conversations:
+        if conv.get('is_locked', False):
+            if 'structured' in conv:
+                conv['structured']['action_items'] = []
+                conv['structured']['events'] = []
+            conv['transcript_segments'] = []
     return conversations
 
 

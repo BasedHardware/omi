@@ -88,6 +88,14 @@ actor FileIndexerService {
             home.appendingPathComponent("Downloads"),
             home.appendingPathComponent("Documents"),
             home.appendingPathComponent("Desktop"),
+            home.appendingPathComponent("Developer"),
+            home.appendingPathComponent("Projects"),
+            home.appendingPathComponent("Code"),
+            home.appendingPathComponent("src"),
+            home.appendingPathComponent("repos"),
+            home.appendingPathComponent("Sites"),
+            URL(fileURLWithPath: "/Applications"),
+            home.appendingPathComponent("Applications"),
         ]
 
         // 1. Scan files

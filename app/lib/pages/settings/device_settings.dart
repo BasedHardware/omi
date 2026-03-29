@@ -10,6 +10,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/env/env.dart';
+import 'package:omi/pages/conversations/auto_sync_page.dart';
 import 'package:omi/pages/conversations/sync_page.dart';
 import 'package:omi/pages/home/firmware_update.dart';
 import 'package:omi/providers/device_provider.dart';
@@ -287,7 +288,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
                   ),
                 );
               } else {
-                var page = const SyncPage();
+                final page = provider.supportsMultiFileSync ? const AutoSyncPage() : const SyncPage();
                 routeToPage(context, page);
               }
             },
@@ -329,6 +330,16 @@ class _DeviceSettingsState extends State<DeviceSettings> {
             copyValue: manufacturer,
             showChevron: false,
           ),
+          // WiFi Sync
+          if (_isWifiSupported) ...[
+            const Divider(height: 1, color: Color(0xFF3C3C43)),
+            _buildProfileStyleItem(
+              icon: FontAwesomeIcons.wifi,
+              title: context.l10n.wifiSync,
+              chipValue: context.l10n.available,
+              showChevron: false,
+            ),
+          ],
         ],
       ),
     );
@@ -710,16 +721,6 @@ class _DeviceSettingsState extends State<DeviceSettings> {
               title: context.l10n.micGain,
               chipValue: _getMicGainLabel(_micGain.round()),
               onTap: _showMicGainSheet,
-            ),
-          ],
-          // WiFi Sync
-          if (_isWifiSupported) ...[
-            Divider(height: 1, color: context.appColors.dividerColor),
-            _buildProfileStyleItem(
-              icon: FontAwesomeIcons.wifi,
-              title: context.l10n.wifiSync,
-              chipValue: context.l10n.available,
-              showChevron: false,
             ),
           ],
         ],

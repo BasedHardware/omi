@@ -2655,13 +2655,11 @@
   "switchApiConfirmBody": "Byta till {environment}? Du behöver stänga och öppna appen igen för att ändringarna ska börja gälla.",
   "switchApiConfirmTitle": "Byt API-miljö",
   "switchRequiresRestart": "Byte kräver omstart av appen",
-  "officialTeamName": "Nooto Team",
-  "conversationsEmptyStateMessage": "Starta en konversation med Nooto eller spela in en med din enhet",
-  "tasksCleanTodayTitle": "Rensa dagens uppgifter?",
-  "tasksCleanTodayMessage": "Detta tar bara bort deadlines",
   "shared": "Delad",
   "onlyYouCanSeeConversation": "Bara du kan se den här konversationen",
   "anyoneWithLinkCanView": "Alla med länken kan visa",
+  "tasksCleanTodayTitle": "Rensa dagens uppgifter?",
+  "tasksCleanTodayMessage": "Detta tar bara bort deadlines",
   "tasksOverdue": "Försenade",
   "answerTheCallFrom": "Svara pa samtalet fran",
   "callAlreadyInProgress": "Ett samtal pagar redan",
@@ -2796,5 +2794,48 @@
         "type": "String"
       }
     }
-  }
+  },
+  "fairUseBannerStatus": "Rättvis användning: {status}",
+  "@fairUseBannerStatus": {
+    "placeholders": {
+      "status": {
+        "type": "String"
+      }
+    }
+  },
+  "improveConnectionTitle": "Förbättra anslutning",
+  "improveConnectionContent": "Vi har förbättrat hur Omi förblir ansluten till din enhet. För att aktivera detta, gå till sidan Enhetsinformation, tryck på \"Koppla från enhet\" och para ihop din enhet igen.",
+  "improveConnectionAction": "Förstått",
+  "clockSkewWarning": "Enhetens klocka avviker ~{minutes} min. Kontrollera dina datum- och tidsinställningar.",
+  "omisStorage": "Omis lagring",
+  "phoneStorage": "Telefonlagring",
+  "cloudStorage": "Molnlagring",
+  "howSyncingWorks": "Hur synkronisering fungerar",
+  "noSyncedRecordings": "Inga synkroniserade inspelningar ännu",
+  "recordingsSyncAutomatically": "Inspelningar synkroniseras automatiskt — ingen åtgärd krävs.",
+  "filesDownloadedUploadedNextTime": "Redan nedladdade filer laddas upp nästa gång.",
+  "nConversationsCreated": "{count, plural, =1{1 konversation skapad} other{{count} konversationer skapade}}",
+  "tapToView": "Tryck för att visa",
+  "syncFailed": "Synkronisering misslyckades",
+  "keepSyncing": "Fortsätt synkronisera",
+  "cancelSyncQuestion": "Avbryta synkronisering?",
+  "omisStorageDesc": "När din Omi inte är ansluten till din telefon lagrar den ljud lokalt i sitt inbyggda minne. Du förlorar aldrig en inspelning.",
+  "phoneStorageDesc": "När Omi återansluter överförs inspelningar automatiskt till din telefon innan uppladdning.",
+  "cloudStorageDesc": "Efter uppladdning bearbetas och transkriberas dina inspelningar. Konversationer blir tillgängliga inom en minut.",
+  "storageSection": "LAGRING",
+  "tipKeepPhoneNearby": "Håll telefonen nära för snabbare synkronisering",
+  "tipStableInternet": "Stabilt internet snabbar upp molnuppladdningar",
+  "tipAutoSync": "Inspelningar synkroniseras automatiskt",
+  "permissions": "Behörigheter",
+  "permissionEnabled": "Aktiverad",
+  "permissionEnable": "Aktivera",
+  "permissionsPageDescription": "Dessa behörigheter är centrala för hur Omi fungerar. De aktiverar nyckelfunktioner som aviseringar, platsbaserade upplevelser och ljudinspelning.",
+  "permissionsRequiredDescription": "Omi behöver några behörigheter för att fungera korrekt. Vänligen bevilja dem för att fortsätta.",
+  "permissionsSetupTitle": "Få den bästa upplevelsen",
+  "permissionsSetupDescription": "Aktivera några behörigheter så att Omi kan göra sin magi.",
+  "permissionsChangeAnytime": "Du kan ändra dessa när som helst i Inställningar > Behörigheter",
+  "location": "Plats",
+  "microphone": "Mikrofon",
+  "officialTeamName": "Nooto Team",
+  "conversationsEmptyStateMessage": "Starta en konversation med Nooto eller spela in en med din enhet"
 }

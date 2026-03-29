@@ -5,7 +5,7 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 TUNNEL_PID=""
 BACKEND_PID=""
-TUNNEL_URL="https://omi-dev.m13v.com"
+TUNNEL_URL="${TUNNEL_URL:-}"
 
 # Cleanup function to stop backend and tunnel on exit
 cleanup() {
@@ -23,7 +23,6 @@ trap cleanup EXIT
 
 # Kill existing instances
 echo "Killing existing backend/tunnel instances..."
-pkill -f "cloudflared.*omi-computer-dev" 2>/dev/null || true
 lsof -ti:8080 | xargs kill -9 2>/dev/null || true
 sleep 1
 
@@ -51,11 +50,28 @@ echo "Building Rust backend..."
 cd "$SCRIPT_DIR"
 cargo build --release
 
-# Start Cloudflare tunnel
-echo "Starting Cloudflare tunnel..."
-cloudflared tunnel run omi-computer-dev &
-TUNNEL_PID=$!
-sleep 2
+# Start Cloudflare quick tunnel (auto-generates a *.trycloudflare.com URL)
+if command -v cloudflared >/dev/null 2>&1; then
+    echo "Starting Cloudflare quick tunnel..."
+    TUNNEL_LOG=$(mktemp /tmp/cloudflared-XXXXXX.log)
+    cloudflared tunnel --url http://localhost:8080 > "$TUNNEL_LOG" 2>&1 &
+    TUNNEL_PID=$!
+    # Wait for quick tunnel URL to appear in logs
+    for i in {1..20}; do
+        TUNNEL_URL=$(grep -o 'https://[a-z0-9-]*\.trycloudflare\.com' "$TUNNEL_LOG" 2>/dev/null | head -1)
+        if [ -n "$TUNNEL_URL" ]; then break; fi
+        sleep 0.5
+    done
+    if [ -n "$TUNNEL_URL" ]; then
+        rm -f "$TUNNEL_LOG"
+    else
+        echo "Warning: Could not get tunnel URL — using localhost (see $TUNNEL_LOG for details)"
+        TUNNEL_URL="http://localhost:8080"
+    fi
+else
+    echo "cloudflared not found — skipping tunnel (using localhost)"
+    TUNNEL_URL="http://localhost:8080"
+fi
 
 # Start Rust backend
 echo "Starting Rust backend..."
@@ -79,7 +95,11 @@ done
 echo ""
 echo "=== Services Running ==="
 echo "Backend:  http://localhost:8080 (PID: $BACKEND_PID)"
-echo "Tunnel:   $TUNNEL_URL (PID: $TUNNEL_PID)"
+if [ -n "$TUNNEL_PID" ]; then
+echo "Tunnel:   ${TUNNEL_URL:-no URL captured} (PID: $TUNNEL_PID)"
+else
+echo "Tunnel:   not running"
+fi
 echo "========================"
 echo ""
 echo "Endpoints:"

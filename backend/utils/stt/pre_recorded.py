@@ -206,9 +206,7 @@ def deepgram_prerecorded(
                 language,
                 model,
             )
-        if return_language:
-            return [], 'en'
-        return []
+        raise RuntimeError(f'Deepgram transcription failed after {attempts + 1} attempts: {e}')
 
 
 @timeit

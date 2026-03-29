@@ -1,0 +1,57 @@
+version: 2
+name: audio-recording
+description: Audio recording flow — verify microphone permission, Start Recording button, transcription state, and stop recording
+app: com.omi.computer-macos
+covers:
+  - desktop/Desktop/Sources/MainWindow/Pages/ConversationsPage.swift
+  - desktop/Desktop/Sources/AudioCaptureService.swift
+  - desktop/Desktop/Sources/AppState.swift
+preconditions:
+  - auth_ready
+
+steps:
+  - id: S1
+    name: Navigate to Dashboard
+    do: "Click the Dashboard sidebar icon (identifier: sidebar_dashboard) to navigate to the Dashboard page. Verify the page loads with conversations list, Quick Note button, and Start Recording button."
+    expect:
+      interactive_count: { min: 5 }
+      text_visible:
+        - Dashboard
+
+  - id: S2
+    name: Verify Start Recording button
+    do: "Check that the 'Start Recording' button with microphone icon is visible on the Dashboard. Note its position and state. If the app is already recording, a 'Stop Recording' button should be visible instead."
+    expect:
+      interactive_count: { min: 1 }
+
+  - id: S3
+    name: Click Start Recording
+    do: "Click the 'Start Recording' button. If microphone permission is NOT granted, the app should show a permission request dialog or navigate to permission settings. If permission IS granted, the app should begin audio capture and the button should change to show recording state (e.g., 'Stop Recording' or recording indicator)."
+    expect:
+      interactive_count: { min: 1 }
+
+  - id: S4
+    name: Verify recording or permission state
+    do: "After clicking Start Recording, check the resulting state. If recording started: verify recording indicator is visible, note any waveform or timer display. If permission was requested: verify the permission dialog or settings page is shown with microphone grant options."
+    expect:
+      interactive_count: { min: 1 }
+
+  - id: S5
+    name: Check sidebar permission indicators
+    do: "Scroll the sidebar to check for any permission indicators (Grant/Fix badges). These appear below the navigation items when permissions need attention. Note which permissions are flagged."
+    expect:
+      interactive_count: { min: 3 }
+
+  - id: S6
+    name: Navigate to Settings for microphone
+    do: "Click the Settings sidebar icon (identifier: sidebar_settings) to navigate to Settings. Look for Privacy or Permissions section. Press it to view microphone permission status and available actions (Grant Access, Reset & Restart, Open Terminal, Open System Settings)."
+    expect:
+      interactive_count: { min: 3 }
+
+  - id: S7
+    name: Return to Dashboard
+    do: "Click the Back button or Dashboard sidebar icon (identifier: sidebar_dashboard) to return to the Dashboard page. Verify the Start Recording button is visible."
+    expect:
+      interactive_count: { min: 5 }
+      text_visible:
+        - Dashboard

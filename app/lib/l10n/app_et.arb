@@ -2655,13 +2655,11 @@
   "switchApiConfirmBody": "Lülituda keskkonnale {environment}? Peate rakenduse sulgema ja uuesti avama, et muudatused jõustuksid.",
   "switchApiConfirmTitle": "Vaheta API keskkonda",
   "switchRequiresRestart": "Vahetamine nõuab rakenduse taaskäivitamist",
-  "officialTeamName": "Nooto Team",
-  "conversationsEmptyStateMessage": "Alustage vestlust Nootoga või salvestage üks oma seadmega",
-  "tasksCleanTodayTitle": "Puhastada tänased ülesanded?",
-  "tasksCleanTodayMessage": "See eemaldab ainult tähtajad",
   "shared": "Jagatud",
   "onlyYouCanSeeConversation": "Ainult teie saate seda vestlust näha",
   "anyoneWithLinkCanView": "Igaüks, kellel on link, saab vaadata",
+  "tasksCleanTodayTitle": "Puhastada tänased ülesanded?",
+  "tasksCleanTodayMessage": "See eemaldab ainult tähtajad",
   "tasksOverdue": "Tähtaja ületanud",
   "answerTheCallFrom": "Vasta konesle numbrilt",
   "callAlreadyInProgress": "Kone on juba pooleli",
@@ -2796,5 +2794,48 @@
         "type": "String"
       }
     }
-  }
+  },
+  "fairUseBannerStatus": "Õiglane kasutus: {status}",
+  "@fairUseBannerStatus": {
+    "placeholders": {
+      "status": {
+        "type": "String"
+      }
+    }
+  },
+  "improveConnectionTitle": "Ühenduse parandamine",
+  "improveConnectionContent": "Oleme parandanud, kuidas Omi jääb teie seadmega ühendusse. Selle aktiveerimiseks minge seadme teabe lehele, puudutage \"Katkesta seadme ühendus\" ja ühendage seade uuesti.",
+  "improveConnectionAction": "Selge",
+  "clockSkewWarning": "Teie seadme kell erineb ~{minutes} min. Kontrollige kuupäeva ja kellaaja seadeid.",
+  "omisStorage": "Omi salvestusruum",
+  "phoneStorage": "Telefoni salvestusruum",
+  "cloudStorage": "Pilvsalvestus",
+  "howSyncingWorks": "Kuidas sünkroonimine töötab",
+  "noSyncedRecordings": "Sünkroonitud salvestusi veel pole",
+  "recordingsSyncAutomatically": "Salvestised sünkroonitakse automaatselt — tegevust pole vaja.",
+  "filesDownloadedUploadedNextTime": "Juba allalaaditud failid laaditakse üles järgmisel korral.",
+  "nConversationsCreated": "{count, plural, =1{1 vestlus loodud} other{{count} vestlust loodud}}",
+  "tapToView": "Puudutage vaatamiseks",
+  "syncFailed": "Sünkroonimine ebaõnnestus",
+  "keepSyncing": "Jätka sünkroonimist",
+  "cancelSyncQuestion": "Tühista sünkroonimine?",
+  "omisStorageDesc": "Kui teie Omi pole telefoniga ühendatud, salvestab see heli kohalikult sisseehitatud mällu. Te ei kaota kunagi salvestist.",
+  "phoneStorageDesc": "Kui Omi uuesti ühendub, kantakse salvestised automaatselt teie telefoni enne üleslaadimist.",
+  "cloudStorageDesc": "Pärast üleslaadimist töödeldakse ja transkribeeritakse teie salvestised. Vestlused on saadaval minuti jooksul.",
+  "storageSection": "SALVESTUSRUUM",
+  "tipKeepPhoneNearby": "Hoidke telefon lähedal kiiremaks sünkroonimiseks",
+  "tipStableInternet": "Stabiilne internet kiirendab pilveüleslaadimist",
+  "tipAutoSync": "Salvestised sünkroonitakse automaatselt",
+  "permissions": "Õigused",
+  "permissionEnabled": "Lubatud",
+  "permissionEnable": "Luba",
+  "permissionsPageDescription": "Need load on Omi toimimiseks olulised. Need võimaldavad põhifunktsioone nagu teavitused, asukohapõhised kogemused ja helisalvestus.",
+  "permissionsRequiredDescription": "Omi vajab mõningaid õigusi, et korralikult töötada. Palun anna need jätkamiseks.",
+  "permissionsSetupTitle": "Saage parim kogemus",
+  "permissionsSetupDescription": "Lubage mõned õigused, et Omi saaks oma võlu avaldada.",
+  "permissionsChangeAnytime": "Saate neid igal ajal muuta jaotises Seaded > Õigused",
+  "location": "Asukoht",
+  "microphone": "Mikrofon",
+  "officialTeamName": "Nooto Team",
+  "conversationsEmptyStateMessage": "Alustage vestlust Nootoga või salvestage üks oma seadmega"
 }

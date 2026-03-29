@@ -62,39 +62,61 @@ class _ActiveCallPageState extends State<ActiveCallPage> {
   Widget build(BuildContext context) {
     return Consumer<PhoneCallProvider>(
       builder: (context, provider, _) {
-        return PopScope(
-          canPop: provider.callState == PhoneCallState.idle || provider.callState == PhoneCallState.ended,
-          child: Scaffold(
-            backgroundColor: Colors.black,
-            body: SafeArea(
-              child: Column(
-                children: [
-                  const SizedBox(height: 32),
-                  _CallInfoHeader(
-                    contactName: provider.contactName,
-                    phoneNumber: provider.remoteNumber ?? '',
-                    duration: provider.callDuration,
-                    state: provider.callState,
+        bool isCallInProgress = provider.callState == PhoneCallState.active ||
+            provider.callState == PhoneCallState.connecting ||
+            provider.callState == PhoneCallState.ringing;
+
+        return Scaffold(
+          backgroundColor: Colors.black,
+          body: SafeArea(
+            child: Column(
+              children: [
+                // Top bar with minimize button — always visible so user can return to app
+                Padding(
+                  padding: const EdgeInsets.only(left: 8, right: 8, top: 4),
+                  child: Row(
+                    children: [
+                      if (isCallInProgress)
+                        IconButton(
+                          onPressed: () {
+                            MixpanelManager().track('Phone Call Minimized');
+                            Navigator.of(context).popUntil((route) => route.isFirst);
+                          },
+                          icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white, size: 22),
+                          padding: const EdgeInsets.all(12),
+                          constraints: const BoxConstraints(),
+                        )
+                      else
+                        const SizedBox(width: 46),
+                      const Spacer(),
+                    ],
                   ),
-                  const SizedBox(height: 16),
-                  Expanded(
-                    child: _LiveTranscriptView(
-                      segments: provider.transcriptSegments,
-                      getSpeakerLabel: provider.getSpeakerLabel,
-                    ),
+                ),
+                const SizedBox(height: 8),
+                _CallInfoHeader(
+                  contactName: provider.contactName,
+                  phoneNumber: provider.remoteNumber ?? '',
+                  duration: provider.callDuration,
+                  state: provider.callState,
+                ),
+                const SizedBox(height: 16),
+                Expanded(
+                  child: _LiveTranscriptView(
+                    segments: provider.transcriptSegments,
+                    getSpeakerLabel: provider.getSpeakerLabel,
                   ),
-                  _CallControls(
-                    state: provider.callState,
-                    isMuted: provider.isMuted,
-                    isSpeakerOn: provider.isSpeakerOn,
-                    onMuteToggle: provider.toggleMute,
-                    onSpeakerToggle: provider.toggleSpeaker,
-                    onEndCall: () => provider.endCall(),
-                    onKeypad: () => _showDtmfDialpad(context, provider),
-                  ),
-                  const SizedBox(height: 32),
-                ],
-              ),
+                ),
+                _CallControls(
+                  state: provider.callState,
+                  isMuted: provider.isMuted,
+                  isSpeakerOn: provider.isSpeakerOn,
+                  onMuteToggle: provider.toggleMute,
+                  onSpeakerToggle: provider.toggleSpeaker,
+                  onEndCall: () => provider.endCall(),
+                  onKeypad: () => _showDtmfDialpad(context, provider),
+                ),
+                const SizedBox(height: 32),
+              ],
             ),
           ),
         );

@@ -2690,13 +2690,11 @@
   "switchApiConfirmBody": "Passer à {environment} ? Vous devrez fermer et rouvrir l'application pour que les changements prennent effet.",
   "switchApiConfirmTitle": "Changer d'environnement API ?",
   "switchRequiresRestart": "Le changement d'environnement nécessite un redémarrage de l'application",
-  "officialTeamName": "Nooto Team",
-  "conversationsEmptyStateMessage": "Démarrez une conversation avec Nooto ou enregistrez-en une avec votre appareil",
-  "tasksCleanTodayTitle": "Nettoyer les tâches d’aujourd’hui ?",
-  "tasksCleanTodayMessage": "Cela supprimera uniquement les échéances",
   "shared": "Partagé",
   "onlyYouCanSeeConversation": "Vous seul pouvez voir cette conversation",
   "anyoneWithLinkCanView": "Toute personne disposant du lien peut voir",
+  "tasksCleanTodayTitle": "Nettoyer les tâches d’aujourd’hui ?",
+  "tasksCleanTodayMessage": "Cela supprimera uniquement les échéances",
   "tasksOverdue": "En retard",
   "answerTheCallFrom": "Repondez a l'appel de",
   "callAlreadyInProgress": "Un appel est deja en cours",
@@ -2831,5 +2829,48 @@
         "type": "String"
       }
     }
-  }
+  },
+  "fairUseBannerStatus": "Utilisation équitable : {status}",
+  "@fairUseBannerStatus": {
+    "placeholders": {
+      "status": {
+        "type": "String"
+      }
+    }
+  },
+  "improveConnectionTitle": "Améliorer la connexion",
+  "improveConnectionContent": "Nous avons amélioré la façon dont Omi reste connecté à votre appareil. Pour activer cela, allez sur la page Infos de l'appareil, appuyez sur \"Déconnecter l'appareil\", puis reconnectez votre appareil.",
+  "improveConnectionAction": "Compris",
+  "clockSkewWarning": "L'horloge de votre appareil est décalée de ~{minutes} min. Vérifiez vos paramètres de date et heure.",
+  "omisStorage": "Stockage d'Omi",
+  "phoneStorage": "Stockage du téléphone",
+  "cloudStorage": "Stockage cloud",
+  "howSyncingWorks": "Comment fonctionne la synchronisation",
+  "noSyncedRecordings": "Aucun enregistrement synchronisé pour le moment",
+  "recordingsSyncAutomatically": "Les enregistrements se synchronisent automatiquement — aucune action requise.",
+  "filesDownloadedUploadedNextTime": "Les fichiers déjà téléchargés seront envoyés la prochaine fois.",
+  "nConversationsCreated": "{count, plural, =1{1 conversation créée} other{{count} conversations créées}}",
+  "tapToView": "Appuyez pour voir",
+  "syncFailed": "Échec de la synchronisation",
+  "keepSyncing": "Continuer la synchronisation",
+  "cancelSyncQuestion": "Annuler la synchronisation ?",
+  "omisStorageDesc": "Lorsque votre Omi n'est pas connecté à votre téléphone, il stocke l'audio localement dans sa mémoire intégrée. Vous ne perdez jamais un enregistrement.",
+  "phoneStorageDesc": "Lorsqu'Omi se reconnecte, les enregistrements sont automatiquement transférés sur votre téléphone avant l'envoi.",
+  "cloudStorageDesc": "Une fois envoyés, vos enregistrements sont traités et transcrits. Les conversations seront disponibles en une minute.",
+  "storageSection": "STOCKAGE",
+  "tipKeepPhoneNearby": "Gardez votre téléphone à proximité pour une synchronisation plus rapide",
+  "tipStableInternet": "Un internet stable accélère les envois vers le cloud",
+  "tipAutoSync": "Les enregistrements se synchronisent automatiquement",
+  "permissions": "Autorisations",
+  "permissionEnabled": "Activée",
+  "permissionEnable": "Activer",
+  "permissionsPageDescription": "Ces autorisations sont essentielles au fonctionnement d'Omi. Elles activent des fonctionnalités clés comme les notifications, les expériences basées sur la localisation et la capture audio.",
+  "permissionsRequiredDescription": "Omi a besoin de quelques autorisations pour fonctionner correctement. Veuillez les accorder pour continuer.",
+  "permissionsSetupTitle": "Profitez de la meilleure expérience",
+  "permissionsSetupDescription": "Activez quelques autorisations pour qu'Omi puisse faire sa magie.",
+  "permissionsChangeAnytime": "Vous pouvez les modifier à tout moment dans Réglages > Autorisations",
+  "location": "Localisation",
+  "microphone": "Microphone",
+  "officialTeamName": "Nooto Team",
+  "conversationsEmptyStateMessage": "Démarrez une conversation avec Nooto ou enregistrez-en une avec votre appareil"
 }

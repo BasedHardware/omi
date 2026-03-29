@@ -10,6 +10,11 @@ abstract class DeviceTransport {
   Future<bool> isConnected();
   Future<bool> ping();
 
+  /// Request bonding for devices that require encrypted links.
+  /// Returns true if bonded, false if not needed or failed.
+  /// Default: no-op (most devices don't need explicit bonding).
+  Future<bool> requestBond() async => true;
+
   Stream<List<int>> getCharacteristicStream(String serviceUuid, String characteristicUuid);
 
   Future<List<int>> readCharacteristic(String serviceUuid, String characteristicUuid);

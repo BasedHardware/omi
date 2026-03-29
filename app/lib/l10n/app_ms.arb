@@ -2655,13 +2655,11 @@
   "switchApiConfirmBody": "Tukar ke {environment}? Anda perlu menutup dan membuka semula aplikasi untuk perubahan berkuat kuasa.",
   "switchApiConfirmTitle": "Tukar Persekitaran API",
   "switchRequiresRestart": "Penukaran memerlukan permulaan semula aplikasi",
-  "officialTeamName": "Nooto Team",
-  "conversationsEmptyStateMessage": "Mulakan perbualan dengan Nooto atau rakam satu dengan peranti anda",
-  "tasksCleanTodayTitle": "Bersihkan tugasan hari ini?",
-  "tasksCleanTodayMessage": "Ini hanya akan mengalih keluar tarikh akhir",
   "shared": "Dikongsi",
   "onlyYouCanSeeConversation": "Hanya anda boleh melihat perbualan ini",
   "anyoneWithLinkCanView": "Sesiapa yang mempunyai pautan boleh melihat",
+  "tasksCleanTodayTitle": "Bersihkan tugasan hari ini?",
+  "tasksCleanTodayMessage": "Ini hanya akan mengalih keluar tarikh akhir",
   "tasksOverdue": "Tertunggak",
   "answerTheCallFrom": "Jawab panggilan dari",
   "callAlreadyInProgress": "Panggilan sudah berlangsung",
@@ -2796,5 +2794,48 @@
         "type": "String"
       }
     }
-  }
+  },
+  "fairUseBannerStatus": "Penggunaan Saksama: {status}",
+  "@fairUseBannerStatus": {
+    "placeholders": {
+      "status": {
+        "type": "String"
+      }
+    }
+  },
+  "improveConnectionTitle": "Tingkatkan Sambungan",
+  "improveConnectionContent": "Kami telah meningkatkan cara Omi kekal bersambung dengan peranti anda. Untuk mengaktifkan ini, pergi ke halaman Maklumat Peranti, ketik \"Putuskan Peranti\", dan gandingkan semula peranti anda.",
+  "improveConnectionAction": "Faham",
+  "clockSkewWarning": "Jam peranti anda berbeza ~{minutes} min. Semak tetapan tarikh & masa anda.",
+  "omisStorage": "Storan Omi",
+  "phoneStorage": "Storan Telefon",
+  "cloudStorage": "Storan Awan",
+  "howSyncingWorks": "Cara penyegerakan berfungsi",
+  "noSyncedRecordings": "Belum ada rakaman yang disegerakkan",
+  "recordingsSyncAutomatically": "Rakaman disegerakkan secara automatik — tiada tindakan diperlukan.",
+  "filesDownloadedUploadedNextTime": "Fail yang telah dimuat turun akan dimuat naik lain kali.",
+  "nConversationsCreated": "{count, plural, =1{1 perbualan dicipta} other{{count} perbualan dicipta}}",
+  "tapToView": "Ketik untuk melihat",
+  "syncFailed": "Penyegerakan gagal",
+  "keepSyncing": "Teruskan penyegerakan",
+  "cancelSyncQuestion": "Batalkan penyegerakan?",
+  "omisStorageDesc": "Apabila Omi anda tidak disambungkan ke telefon, ia menyimpan audio secara tempatan dalam memori terbina dalam. Anda tidak akan kehilangan rakaman.",
+  "phoneStorageDesc": "Apabila Omi menyambung semula, rakaman dipindahkan secara automatik ke telefon anda sebelum dimuat naik.",
+  "cloudStorageDesc": "Selepas dimuat naik, rakaman anda diproses dan ditranskrip. Perbualan akan tersedia dalam satu minit.",
+  "storageSection": "STORAN",
+  "tipKeepPhoneNearby": "Pastikan telefon berdekatan untuk penyegerakan lebih pantas",
+  "tipStableInternet": "Internet stabil mempercepatkan muat naik awan",
+  "tipAutoSync": "Rakaman disegerakkan secara automatik",
+  "permissions": "Kebenaran",
+  "permissionEnabled": "Didayakan",
+  "permissionEnable": "Dayakan",
+  "permissionsPageDescription": "Kebenaran ini penting untuk cara Omi berfungsi. Ia membolehkan ciri utama seperti pemberitahuan, pengalaman berasaskan lokasi dan rakaman audio.",
+  "permissionsRequiredDescription": "Omi memerlukan beberapa kebenaran untuk berfungsi dengan betul. Sila berikan kebenaran untuk meneruskan.",
+  "permissionsSetupTitle": "Dapatkan pengalaman terbaik",
+  "permissionsSetupDescription": "Dayakan beberapa kebenaran supaya Omi boleh melakukan keajaibannya.",
+  "permissionsChangeAnytime": "Anda boleh menukarnya pada bila-bila masa di Tetapan > Kebenaran",
+  "location": "Lokasi",
+  "microphone": "Mikrofon",
+  "officialTeamName": "Nooto Team",
+  "conversationsEmptyStateMessage": "Mulakan perbualan dengan Nooto atau rakam satu dengan peranti anda"
 }

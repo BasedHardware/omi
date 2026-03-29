@@ -156,10 +156,19 @@ struct GeminiResponse: Decodable {
 
 // MARK: - GeminiClient
 
-/// Low-level client for communicating with the Gemini API
+/// Low-level client for communicating with the Gemini API via backend proxy.
+/// All requests route through the Rust backend (/v1/proxy/gemini/*) which adds
+/// the Gemini API key server-side. Auth uses Firebase Bearer token.
 actor GeminiClient {
-  private let apiKey: String
   private let model: String
+
+  /// Backend proxy base URL (from OMI_API_URL env var)
+  private static var proxyBaseURL: String {
+    if let cString = getenv("OMI_API_URL"), let url = String(validatingUTF8: cString), !url.isEmpty {
+      return url.hasSuffix("/") ? url : url + "/"
+    }
+    return ""
+  }
 
   enum GeminiClientError: LocalizedError {
     case missingAPIKey
@@ -218,13 +227,34 @@ actor GeminiClient {
   }
 
   init(apiKey: String? = nil, model: String = "gemini-3-flash-preview") throws {
-    guard let key = apiKey
-      ?? APIKeyService.currentGeminiKey
-    else {
+    // BREAKING CHANGE (issue #5861): apiKey parameter is ignored.
+    // All Gemini requests now route through the backend proxy which supplies
+    // the key server-side. Requires OMI_API_URL to be set (standard dev flow via run.sh).
+    guard !Self.proxyBaseURL.isEmpty else {
       throw GeminiClientError.missingAPIKey
     }
-    self.apiKey = key
     self.model = model
+  }
+
+  /// Get Firebase auth header for proxy requests
+  private func authHeader() async throws -> String {
+    let authService = await MainActor.run { AuthService.shared }
+    return try await authService.getAuthHeader()
+  }
+
+  /// Build proxy URL for a Gemini model action
+  private func proxyURL(action: String) -> URL {
+    URL(string: "\(Self.proxyBaseURL)v1/proxy/gemini/models/\(model):\(action)")!
+  }
+
+  /// Build streaming proxy URL for a Gemini model action
+  private func streamProxyURL(action: String, queryParams: [String: String] = [:]) -> URL {
+    var urlString = "\(Self.proxyBaseURL)v1/proxy/gemini-stream/models/\(model):\(action)"
+    if !queryParams.isEmpty {
+      let params = queryParams.map { "\($0.key)=\($0.value)" }.joined(separator: "&")
+      urlString += "?\(params)"
+    }
+    return URL(string: urlString)!
   }
 
   /// Log the raw API error message for debugging and throw a sanitized error.
@@ -323,13 +353,11 @@ actor GeminiClient {
           return try JSONEncoder().encode(request)
         }
 
-        let url = URL(
-          string:
-            "https://generativelanguage.googleapis.com/v1beta/models/\(model):generateContent?key=\(apiKey)"
-        )!
+        let url = proxyURL(action: "generateContent")
         var urlRequest = URLRequest(url: url)
         urlRequest.httpMethod = "POST"
         urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        urlRequest.setValue(try await authHeader(), forHTTPHeaderField: "Authorization")
         urlRequest.timeoutInterval = 300
         urlRequest.httpBody = requestBody
 
@@ -392,13 +420,11 @@ actor GeminiClient {
           generationConfig: nil
         )
 
-        let url = URL(
-          string:
-            "https://generativelanguage.googleapis.com/v1beta/models/\(model):generateContent?key=\(apiKey)"
-        )!
+        let url = proxyURL(action: "generateContent")
         var urlRequest = URLRequest(url: url)
         urlRequest.httpMethod = "POST"
         urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        urlRequest.setValue(try await authHeader(), forHTTPHeaderField: "Authorization")
         urlRequest.timeoutInterval = 300
         urlRequest.httpBody = try JSONEncoder().encode(request)
 
@@ -462,13 +488,11 @@ actor GeminiClient {
           )
         )
 
-        let url = URL(
-          string:
-            "https://generativelanguage.googleapis.com/v1beta/models/\(model):generateContent?key=\(apiKey)"
-        )!
+        let url = proxyURL(action: "generateContent")
         var urlRequest = URLRequest(url: url)
         urlRequest.httpMethod = "POST"
         urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        urlRequest.setValue(try await authHeader(), forHTTPHeaderField: "Authorization")
         urlRequest.timeoutInterval = 300
         urlRequest.httpBody = try JSONEncoder().encode(request)
 
@@ -530,14 +554,12 @@ actor GeminiClient {
       )
     )
 
-    // Use streamGenerateContent endpoint for streaming
-    let url = URL(
-      string:
-        "https://generativelanguage.googleapis.com/v1beta/models/\(model):streamGenerateContent?alt=sse&key=\(apiKey)"
-    )!
+    // Use streamGenerateContent endpoint for streaming (via backend proxy)
+    let url = streamProxyURL(action: "streamGenerateContent", queryParams: ["alt": "sse"])
     var urlRequest = URLRequest(url: url)
     urlRequest.httpMethod = "POST"
     urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
+    urlRequest.setValue(try await authHeader(), forHTTPHeaderField: "Authorization")
     urlRequest.timeoutInterval = 300
     urlRequest.httpBody = try JSONEncoder().encode(request)
 
@@ -902,13 +924,11 @@ extension GeminiClient {
       tools: tools ?? Self.chatTools
     )
 
-    let url = URL(
-      string:
-        "https://generativelanguage.googleapis.com/v1beta/models/\(model):generateContent?key=\(apiKey)"
-    )!
+    let url = proxyURL(action: "generateContent")
     var urlRequest = URLRequest(url: url)
     urlRequest.httpMethod = "POST"
     urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
+    urlRequest.setValue(try await authHeader(), forHTTPHeaderField: "Authorization")
     urlRequest.timeoutInterval = 300
     urlRequest.httpBody = try JSONEncoder().encode(request)
 
@@ -1008,13 +1028,11 @@ extension GeminiClient {
       tools: tools
     )
 
-    let url = URL(
-      string:
-        "https://generativelanguage.googleapis.com/v1beta/models/\(model):generateContent?key=\(apiKey)"
-    )!
+    let url = proxyURL(action: "generateContent")
     var urlRequest = URLRequest(url: url)
     urlRequest.httpMethod = "POST"
     urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
+    urlRequest.setValue(try await authHeader(), forHTTPHeaderField: "Authorization")
     urlRequest.timeoutInterval = 300
     urlRequest.httpBody = try JSONEncoder().encode(request)
 
@@ -1223,13 +1241,11 @@ extension GeminiClient {
           return try JSONEncoder().encode(request)
         }
 
-        let url = URL(
-          string:
-            "https://generativelanguage.googleapis.com/v1beta/models/\(model):generateContent?key=\(apiKey)"
-        )!
+        let url = proxyURL(action: "generateContent")
         var urlRequest = URLRequest(url: url)
         urlRequest.httpMethod = "POST"
         urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        urlRequest.setValue(try await authHeader(), forHTTPHeaderField: "Authorization")
         urlRequest.timeoutInterval = 300
         urlRequest.httpBody = requestBody
 
@@ -1316,13 +1332,11 @@ extension GeminiClient {
           return try JSONEncoder().encode(request)
         }
 
-        let url = URL(
-          string:
-            "https://generativelanguage.googleapis.com/v1beta/models/\(model):generateContent?key=\(apiKey)"
-        )!
+        let url = proxyURL(action: "generateContent")
         var urlRequest = URLRequest(url: url)
         urlRequest.httpMethod = "POST"
         urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        urlRequest.setValue(try await authHeader(), forHTTPHeaderField: "Authorization")
         urlRequest.timeoutInterval = 300
         urlRequest.httpBody = requestBody
 
@@ -1438,13 +1452,11 @@ extension GeminiClient {
           return try JSONEncoder().encode(request)
         }
 
-        let url = URL(
-          string:
-            "https://generativelanguage.googleapis.com/v1beta/models/\(model):generateContent?key=\(apiKey)"
-        )!
+        let url = proxyURL(action: "generateContent")
         var urlRequest = URLRequest(url: url)
         urlRequest.httpMethod = "POST"
         urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        urlRequest.setValue(try await authHeader(), forHTTPHeaderField: "Authorization")
         urlRequest.timeoutInterval = 300
         urlRequest.httpBody = requestBody
 

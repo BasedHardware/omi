@@ -20,7 +20,6 @@ import 'package:omi/services/notifications/notification_interface.dart';
 import 'package:omi/services/apple_reminders_service.dart';
 import 'package:omi/utils/analytics/intercom.dart';
 import 'package:omi/utils/logger.dart';
-import 'package:omi/utils/platform/platform_service.dart';
 
 /// Firebase Cloud Messaging enabled notification service
 /// Supports iOS, Android, macOS, web, and Linux with full FCM functionality
@@ -122,7 +121,6 @@ class _FCMNotificationService implements NotificationInterface {
   @override
   Future<void> register() async {
     try {
-      if (PlatformService.isDesktop) return;
       await platform.invokeMethod('setNotificationOnKillService', {
         'title': "Your Omi Device Disconnected",
         'description': "Please keep your app opened to continue using your Omi.",
@@ -156,7 +154,7 @@ class _FCMNotificationService implements NotificationInterface {
   @override
   void saveNotificationToken() async {
     try {
-      if (Platform.isIOS || Platform.isMacOS) {
+      if (Platform.isIOS) {
         String? apnsToken;
         for (int i = 0; i < 10; i++) {
           apnsToken = await _firebaseMessaging.getAPNSToken();

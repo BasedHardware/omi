@@ -21,7 +21,8 @@ import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/enums.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/other/temp.dart';
-import 'package:omi/utils/platform/platform_service.dart';
+import 'package:omi/backend/schema/phone_call.dart';
+import 'package:omi/providers/phone_call_provider.dart';
 
 class ConversationCaptureWidget extends StatefulWidget {
   const ConversationCaptureWidget({super.key});
@@ -35,6 +36,14 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
 
   @override
   Widget build(BuildContext context) {
+    // Hide capture widget when a phone call is in progress (banner replaces it)
+    var phoneCallState = context.watch<PhoneCallProvider>().callState;
+    if (phoneCallState == PhoneCallState.active ||
+        phoneCallState == PhoneCallState.connecting ||
+        phoneCallState == PhoneCallState.ringing) {
+      return const SizedBox.shrink();
+    }
+
     return Consumer<CaptureProvider>(
       builder: (context, provider, child) {
         var topConvoId = (provider.conversationProvider?.conversations ?? []).isNotEmpty
@@ -86,24 +95,7 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
   _toggleRecording(BuildContext context, CaptureProvider provider) async {
     var recordingState = provider.recordingState;
 
-    if (PlatformService.isDesktop) {
-      final onboardingProvider = context.read<OnboardingProvider>();
-      if (!onboardingProvider.hasMicrophonePermission) {
-        bool granted = await onboardingProvider.askForMicrophonePermissions();
-        if (!granted) {
-          return;
-        }
-      }
-      if (recordingState == RecordingState.systemAudioRecord) {
-        await provider.pauseSystemAudioRecording();
-      } else if (provider.isPaused) {
-        await provider.resumeSystemAudioRecording();
-      } else if (recordingState == RecordingState.initialising) {
-        Logger.debug('initialising, have to wait');
-      } else {
-        await provider.streamSystemAudioRecording();
-      }
-    } else if (provider.havingRecordingDevice) {
+    if (provider.havingRecordingDevice) {
       // Device recording logic - add pause/resume for device recording
       if (recordingState == RecordingState.deviceRecord && !provider.isPaused) {
         // Pause device recording
@@ -152,7 +144,8 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
     bool isHavingDesireDevice = SharedPreferencesUtil().btDevice.id.isNotEmpty;
     bool isHavingRecordingDevice = captureProvider.havingRecordingDevice;
 
-    bool isUsingPhoneMic = captureProvider.recordingState == RecordingState.record ||
+    bool isUsingPhoneMic =
+        captureProvider.recordingState == RecordingState.record ||
         captureProvider.recordingState == RecordingState.initialising ||
         captureProvider.recordingState == RecordingState.pause;
 
@@ -290,9 +283,11 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
   }
 
   Widget _buildUnifiedRecordingUI(CaptureProvider provider, Widget? header) {
-    bool isDeviceRecording = provider.havingRecordingDevice &&
+    bool isDeviceRecording =
+        provider.havingRecordingDevice &&
         (provider.recordingState == RecordingState.deviceRecord || provider.recordingState == RecordingState.pause);
-    bool isPhoneRecording = provider.recordingState == RecordingState.record ||
+    bool isPhoneRecording =
+        provider.recordingState == RecordingState.record ||
         provider.recordingState == RecordingState.systemAudioRecord ||
         provider.recordingState == RecordingState.initialising ||
         _isPhoneMicPaused;
@@ -312,8 +307,8 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
     String statusText = isPaused
         ? (isDeviceRecording ? context.l10n.muted : context.l10n.paused)
         : hasPhotos
-            ? 'Capturing'
-            : (transcriptServiceStateOk ? context.l10n.listening : context.l10n.transcriptionPaused);
+        ? 'Capturing'
+        : (transcriptServiceStateOk ? context.l10n.listening : context.l10n.transcriptionPaused);
 
     // When recording is active, show the unified UI design
     if (isDeviceRecording || isPhoneRecording) {
@@ -437,19 +432,19 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
                           ? const Color(0xFFFE5D50)
                           : context.accentColor
                       : isDeviceRecording
-                          ? const Color(0xFF35343B)
-                          : const Color(0xFFFF9500),
+                      ? const Color(0xFF35343B)
+                      : const Color(0xFFFF9500),
                   shape: BoxShape.circle,
                 ),
                 child: Center(
                   child: FaIcon(
                     isPaused
                         ? isDeviceRecording
-                            ? FontAwesomeIcons.microphoneSlash
-                            : FontAwesomeIcons.play
+                              ? FontAwesomeIcons.microphoneSlash
+                              : FontAwesomeIcons.play
                         : isDeviceRecording
-                            ? FontAwesomeIcons.microphone
-                            : FontAwesomeIcons.pause,
+                        ? FontAwesomeIcons.microphone
+                        : FontAwesomeIcons.pause,
                     color: Colors.white,
                     size: 12,
                   ),
@@ -608,38 +603,16 @@ getPhoneMicRecordingButton(
   RecordingState currentActualState, {
   bool isPhoneMicPaused = false,
 }) {
-  if (SharedPreferencesUtil().btDevice.id.isNotEmpty && (!PlatformService.isDesktop)) {
+  if (SharedPreferencesUtil().btDevice.id.isNotEmpty) {
     // If a BT device is configured and we are NOT on desktop, don't show this button.
     return const SizedBox.shrink();
   }
-  // If on desktop, AND a BT device is connected, this button should still be hidden
-  // as the primary interaction should be via the BT device, not system audio as a fallback to phone mic.
-  // This button is primarily for when NO BT device is the target.
-  final deviceProvider = Provider.of<DeviceProvider>(context, listen: false);
-  if (PlatformService.isDesktop &&
-      deviceProvider.connectedDevice != null &&
-      SharedPreferencesUtil().btDevice.id == deviceProvider.connectedDevice!.id) {
-    return const SizedBox.shrink();
-  }
-
-  final bool isDesktop = PlatformService.isDesktop;
   String text;
   Widget icon;
   bool isLoading = currentActualState == RecordingState.initialising;
 
-  if (isDesktop) {
-    if (isLoading) {
-      text = context.l10n.initialisingSystemAudio;
-      icon = const SizedBox(height: 8, width: 8, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white));
-    } else if (currentActualState == RecordingState.systemAudioRecord) {
-      text = context.l10n.stopRecording;
-      icon = const Icon(Icons.stop, color: Colors.red, size: 12);
-    } else {
-      text = context.l10n.continueRecording;
-      icon = const Icon(Icons.mic, size: 18);
-    }
-  } else {
-    // Phone Mic
+  // Phone Mic
+  {
     if (isLoading) {
       text = context.l10n.initialisingRecorder;
       icon = const SizedBox(height: 8, width: 8, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white));

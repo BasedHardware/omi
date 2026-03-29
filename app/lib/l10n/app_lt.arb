@@ -2655,13 +2655,11 @@
   "switchApiConfirmBody": "Perjungti į {environment}? Turėsite uždaryti ir vėl atidaryti programėlę, kad pakeitimai įsigaliotų.",
   "switchApiConfirmTitle": "Perjungti API aplinką",
   "switchRequiresRestart": "Perjungimui reikia iš naujo paleisti programėlę",
-  "officialTeamName": "Nooto Team",
-  "conversationsEmptyStateMessage": "Pradėkite pokalbį su Nooto arba įrašykite vieną savo įrenginiu",
-  "tasksCleanTodayTitle": "Išvalyti šiandienos užduotis?",
-  "tasksCleanTodayMessage": "Bus pašalinti tik terminai",
   "shared": "Bendrinamas",
   "onlyYouCanSeeConversation": "Tik jūs galite matyti šį pokalbį",
   "anyoneWithLinkCanView": "Bet kas, turintis nuorodą, gali peržiūrėti",
+  "tasksCleanTodayTitle": "Išvalyti šiandienos užduotis?",
+  "tasksCleanTodayMessage": "Bus pašalinti tik terminai",
   "tasksOverdue": "Vėluojančios",
   "answerTheCallFrom": "Atsiliepkite i skambutai is",
   "callAlreadyInProgress": "Skambutis jau vyksta",
@@ -2796,5 +2794,48 @@
         "type": "String"
       }
     }
-  }
+  },
+  "fairUseBannerStatus": "Sąžiningas naudojimas: {status}",
+  "@fairUseBannerStatus": {
+    "placeholders": {
+      "status": {
+        "type": "String"
+      }
+    }
+  },
+  "improveConnectionTitle": "Pagerinti ryšį",
+  "improveConnectionContent": "Patobulinome, kaip Omi lieka prisijungęs prie jūsų įrenginio. Norėdami tai aktyvuoti, eikite į įrenginio informacijos puslapį, bakstelėkite \"Atjungti įrenginį\" ir vėl susiekite savo įrenginį.",
+  "improveConnectionAction": "Supratau",
+  "clockSkewWarning": "Jūsų įrenginio laikrodis skiriasi ~{minutes} min. Patikrinkite datos ir laiko nustatymus.",
+  "omisStorage": "Omi saugykla",
+  "phoneStorage": "Telefono saugykla",
+  "cloudStorage": "Debesų saugykla",
+  "howSyncingWorks": "Kaip veikia sinchronizavimas",
+  "noSyncedRecordings": "Dar nėra sinchronizuotų įrašų",
+  "recordingsSyncAutomatically": "Įrašai sinchronizuojami automatiškai — jokių veiksmų nereikia.",
+  "filesDownloadedUploadedNextTime": "Jau atsisiųsti failai bus įkelti kitą kartą.",
+  "nConversationsCreated": "{count, plural, =1{1 pokalbis sukurtas} other{{count} pokalbių sukurta}}",
+  "tapToView": "Bakstelėkite, kad pamatytumėte",
+  "syncFailed": "Sinchronizavimas nepavyko",
+  "keepSyncing": "Tęsti sinchronizavimą",
+  "cancelSyncQuestion": "Atšaukti sinchronizavimą?",
+  "omisStorageDesc": "Kai jūsų Omi nėra prijungtas prie telefono, jis saugo garsą vietoje savo integruotoje atmintyje. Niekada neprarasite įrašo.",
+  "phoneStorageDesc": "Kai Omi vėl prisijungia, įrašai automatiškai perkeliami į jūsų telefoną prieš įkėlimą.",
+  "cloudStorageDesc": "Įkėlus, jūsų įrašai apdorojami ir transkribuojami. Pokalbiai bus prieinami per minutę.",
+  "storageSection": "SAUGYKLA",
+  "tipKeepPhoneNearby": "Laikykite telefoną šalia greitesniam sinchronizavimui",
+  "tipStableInternet": "Stabilus internetas pagreitina įkėlimą į debesį",
+  "tipAutoSync": "Įrašai sinchronizuojami automatiškai",
+  "permissions": "Leidimai",
+  "permissionEnabled": "Įjungta",
+  "permissionEnable": "Įjungti",
+  "permissionsPageDescription": "Šie leidimai yra esminiai Omi veikimui. Jie įgalina pagrindines funkcijas, tokias kaip pranešimai, vieta pagrįstos patirtys ir garso įrašymas.",
+  "permissionsRequiredDescription": "Omi reikia kelių leidimų, kad tinkamai veiktų. Prašome juos suteikti, kad galėtumėte tęsti.",
+  "permissionsSetupTitle": "Gaukite geriausią patirtį",
+  "permissionsSetupDescription": "Įjunkite kelis leidimus, kad Omi galėtų atlikti savo magiją.",
+  "permissionsChangeAnytime": "Galite tai pakeisti bet kada nustatymuose > Leidimai",
+  "location": "Vieta",
+  "microphone": "Mikrofonas",
+  "officialTeamName": "Nooto Team",
+  "conversationsEmptyStateMessage": "Pradėkite pokalbį su Nooto arba įrašykite vieną savo įrenginiu"
 }

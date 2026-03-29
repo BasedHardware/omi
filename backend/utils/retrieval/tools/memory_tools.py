@@ -155,6 +155,10 @@ def get_memories_tool(
     except Exception as e:
         logger.error(e)
 
+    # Filter out locked memories (paid plan required)
+    if memories:
+        memories = [m for m in memories if not m.get('is_locked', False)]
+
     memories_count = len(memories) if memories else 0
     logger.info(f"📊 get_memories_tool - found {memories_count} memories")
 
@@ -278,6 +282,12 @@ def search_memories_tool(
             return f"Found matches but no valid memory IDs for query: '{query}'"
 
         memories_data = memory_db.get_memories_by_ids(uid, memory_ids)
+
+        # Filter out locked memories (paid plan required)
+        memories_data = [m for m in memories_data if not m.get('is_locked', False)]
+
+        if not memories_data:
+            return f"No memories found matching '{query}'. The content may require a paid plan to access."
 
         # Convert to MemoryDB objects with scores
         memory_objects = []

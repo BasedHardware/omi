@@ -5,11 +5,9 @@
 # - call whisper groq (whisper-largev3)
 # - Create a table df, well printed, with each transcript result side by side
 # - prompt for computing WER using groq whisper as baseline (if better, but most likely)
-# - Run for deepgram vs soniox, and generate comparison result
+# - Run for deepgram and generate comparison result
 import asyncio
 
-# - P3
-# - Include speechmatics to the game
 import json
 import os
 import re
@@ -28,7 +26,7 @@ os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = '../../' + os.getenv('GOOGLE_APPL
 firebase_admin.initialize_app()
 
 from models.transcript_segment import TranscriptSegment
-from utils.stt.streaming import process_audio_dg, process_audio_soniox, process_audio_speechmatics
+from utils.stt.streaming import process_audio_dg
 from groq import Groq
 
 from utils.other.storage import upload_postprocessing_audio
@@ -86,24 +84,14 @@ async def _execute_single(file_path: str):
         return
 
     print('Started processing', memory_id, 'duration', aseg.duration_seconds)
-    result = {'deepgram': [], 'soniox': [], 'speechmatics': []}
+    result = {'deepgram': []}
 
     def stream_transcript_deepgram(new_segments, _):
         print('stream_transcript_deepgram', new_segments)
         add_model_result_segments('deepgram', new_segments, result)
 
-    def stream_transcript_soniox(new_segments, _):
-        print('stream_transcript_soniox', new_segments)
-        add_model_result_segments('soniox', new_segments, result)
-
-    def stream_transcript_speechmatics(new_segments, _):
-        print('stream_transcript_speechmatics', new_segments)
-        add_model_result_segments('speechmatics', new_segments, result)
-
     # streaming models
-    socket = await process_audio_dg(stream_transcript_deepgram, '1', 'en', 16000, 'pcm16', 1, 0)
-    socket_soniox = await process_audio_soniox(stream_transcript_soniox, '1', 16000, 'en', None)
-    socket_speechmatics = await process_audio_speechmatics(stream_transcript_speechmatics, '1', 16000, 'en', 0)
+    socket = await process_audio_dg(stream_transcript_deepgram, language='en', sample_rate=16000, channels=1)
     print('duration', duration)
     with open(file_path, "rb") as file:
         while True:
@@ -111,8 +99,6 @@ async def _execute_single(file_path: str):
             if not chunk:
                 break
             socket.send(bytes(chunk))
-            await socket_soniox.send(bytes(chunk))
-            await socket_speechmatics.send(bytes(chunk))
             await asyncio.sleep(0.005)
 
     print('Finished sending audio')
@@ -137,8 +123,6 @@ async def _execute_single(file_path: str):
         json.dump(result, f, indent=2)
 
     socket.finish()
-    await socket_soniox.close()
-    await socket_speechmatics.close()
 
 
 def batched(iterable, n):

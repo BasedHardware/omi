@@ -27,11 +27,11 @@ class TestDgUsageBatchingStructure:
         assert len(calls) == 2, f'Expected 2 record_dg_usage_ms calls (flush only), found {len(calls)}'
 
     def test_accumulation_covers_all_stt_providers(self):
-        """All 4 STT provider paths accumulate locally via dg_usage_ms_pending +=."""
+        """All STT provider paths accumulate locally via dg_usage_ms_pending +=."""
         source = _read_transcribe_source()
         accum = re.findall(r'^\s+dg_usage_ms_pending\s*\+=', source, re.MULTILINE)
-        # DG, Soniox, Speechmatics, multi-channel
-        assert len(accum) == 4, f'Expected 4 accumulation points, found {len(accum)}'
+        # DG single-channel + multi-channel
+        assert len(accum) == 2, f'Expected 2 accumulation points, found {len(accum)}'
 
     def test_nonlocal_declarations_complete(self):
         """All nested functions that touch dg_usage_ms_pending declare nonlocal."""

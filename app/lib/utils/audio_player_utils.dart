@@ -11,11 +11,33 @@ import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
-import 'package:omi/main.dart';
+import 'package:omi/app_globals.dart';
 import 'package:omi/services/wals.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
+
+/// Parse length-prefixed binary frames: [4-byte LE uint32 length][payload] per frame.
+/// Used by both Opus and PCM WAL binary files.
+@visibleForTesting
+List<Uint8List> parseLengthPrefixedFrames(Uint8List data) {
+  List<Uint8List> frames = [];
+  int offset = 0;
+
+  while (offset < data.length - 4) {
+    final lengthBytes = data.sublist(offset, offset + 4);
+    final length = ByteData.sublistView(Uint8List.fromList(lengthBytes)).getUint32(0, Endian.little);
+    offset += 4;
+
+    if (offset + length > data.length) break;
+
+    final frameData = data.sublist(offset, offset + length);
+    frames.add(Uint8List.fromList(frameData));
+    offset += length;
+  }
+
+  return frames;
+}
 
 class AudioPlayerUtils extends ChangeNotifier {
   // Singleton pattern
@@ -50,7 +72,6 @@ class AudioPlayerUtils extends ChangeNotifier {
   /// Lazily initialize the audio player only when needed
   Future<void> _ensurePlayerInitialized() async {
     if (_audioPlayer != null) return;
-    if (Platform.isMacOS) return;
 
     _audioPlayer = FlutterSoundPlayer();
 
@@ -71,7 +92,7 @@ class AudioPlayerUtils extends ChangeNotifier {
     if (!canPlayOrShare(wal)) {
       Logger.error('AudioPlayerUtils: Audio file not available for playback, WAL ${wal.id}');
       AppSnackbar.showSnackbarError(
-        MyApp.navigatorKey.currentContext?.l10n.audioPlaybackUnavailable ?? 'Audio file is not available for playback',
+        globalNavigatorKey.currentContext?.l10n.audioPlaybackUnavailable ?? 'Audio file is not available for playback',
       );
       return;
     }
@@ -109,7 +130,7 @@ class AudioPlayerUtils extends ChangeNotifier {
       _resetPlaybackState();
       Logger.error('AudioPlayerUtils: Unable to create playable audio file for WAL ${wal.id}');
       AppSnackbar.showSnackbarError(
-        MyApp.navigatorKey.currentContext?.l10n.audioPlaybackFailed ??
+        globalNavigatorKey.currentContext?.l10n.audioPlaybackFailed ??
             'Unable to play audio. The file may be corrupted or missing.',
       );
       return;
@@ -236,7 +257,7 @@ class AudioPlayerUtils extends ChangeNotifier {
 
     List<int> data = [];
     for (int i = 0; i < wal.data.length; i++) {
-      var frame = wal.data[i].sublist(3);
+      var frame = wal.data[i];
       final byteFrame = ByteData(frame.length);
       for (int j = 0; j < frame.length; j++) {
         byteFrame.setUint8(j, frame[j]);
@@ -255,20 +276,7 @@ class AudioPlayerUtils extends ChangeNotifier {
     if (!file.existsSync()) return null;
 
     final opusData = await file.readAsBytes();
-    List<Uint8List> opusFrames = [];
-    int offset = 0;
-
-    while (offset < opusData.length - 4) {
-      final lengthBytes = opusData.sublist(offset, offset + 4);
-      final length = ByteData.sublistView(Uint8List.fromList(lengthBytes)).getUint32(0, Endian.little);
-      offset += 4;
-
-      if (offset + length > opusData.length) break;
-
-      final frameData = opusData.sublist(offset, offset + length);
-      opusFrames.add(Uint8List.fromList(frameData));
-      offset += length;
-    }
+    final opusFrames = parseLengthPrefixedFrames(opusData);
 
     if (opusFrames.isEmpty) return null;
 
@@ -301,20 +309,7 @@ class AudioPlayerUtils extends ChangeNotifier {
     if (!file.existsSync()) return null;
 
     final pcmFileData = await file.readAsBytes();
-    List<Uint8List> pcmFrames = [];
-    int offset = 0;
-
-    while (offset < pcmFileData.length - 4) {
-      final lengthBytes = pcmFileData.sublist(offset, offset + 4);
-      final length = ByteData.sublistView(pcmFileData, offset + 4, offset + 8).getUint32(0, Endian.little);
-      offset += 4;
-
-      if (offset + length > pcmFileData.length) break;
-
-      final frameData = pcmFileData.sublist(offset, offset + length);
-      pcmFrames.add(Uint8List.fromList(frameData));
-      offset += length;
-    }
+    final pcmFrames = parseLengthPrefixedFrames(pcmFileData);
 
     if (pcmFrames.isEmpty) return null;
 

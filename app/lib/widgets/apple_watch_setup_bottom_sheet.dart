@@ -4,7 +4,7 @@ import 'package:omi/env/env.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'package:omi/gen/assets.gen.dart';
-import 'package:omi/gen/flutter_communicator.g.dart';
+import 'package:omi/gen/pigeon_communicator.g.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';

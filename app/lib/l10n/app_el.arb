@@ -2655,13 +2655,11 @@
   "switchApiConfirmBody": "Εναλλαγή σε {environment}; Θα πρέπει να κλείσετε και να ανοίξετε ξανά την εφαρμογή για να εφαρμοστούν οι αλλαγές.",
   "switchApiConfirmTitle": "Εναλλαγή περιβάλλοντος API",
   "switchRequiresRestart": "Η εναλλαγή απαιτεί επανεκκίνηση της εφαρμογής",
-  "officialTeamName": "Nooto Team",
-  "conversationsEmptyStateMessage": "Ξεκινήστε μια συνομιλία με το Nooto ή ηχογραφήστε μία με τη συσκευή σας",
-  "tasksCleanTodayTitle": "Να καθαριστούν οι σημερινές εργασίες;",
-  "tasksCleanTodayMessage": "Αυτό θα αφαιρέσει μόνο τις προθεσμίες",
   "shared": "Κοινόχρηστο",
   "onlyYouCanSeeConversation": "Μόνο εσείς μπορείτε να δείτε αυτή τη συνομιλία",
   "anyoneWithLinkCanView": "Οποιοσδήποτε έχει τον σύνδεσμο μπορεί να δει",
+  "tasksCleanTodayTitle": "Να καθαριστούν οι σημερινές εργασίες;",
+  "tasksCleanTodayMessage": "Αυτό θα αφαιρέσει μόνο τις προθεσμίες",
   "tasksOverdue": "Εκπρόθεσμα",
   "answerTheCallFrom": "Απαντήστε στην κλήση από",
   "callAlreadyInProgress": "Μια κλήση είναι ήδη σε εξέλιξη",
@@ -2796,5 +2794,48 @@
         "type": "String"
       }
     }
-  }
+  },
+  "fairUseBannerStatus": "Δίκαιη Χρήση: {status}",
+  "@fairUseBannerStatus": {
+    "placeholders": {
+      "status": {
+        "type": "String"
+      }
+    }
+  },
+  "improveConnectionTitle": "Βελτίωση σύνδεσης",
+  "improveConnectionContent": "Βελτιώσαμε τον τρόπο που το Omi παραμένει συνδεδεμένο με τη συσκευή σας. Για να το ενεργοποιήσετε, μεταβείτε στη σελίδα Πληροφορίες συσκευής, πατήστε \"Αποσύνδεση συσκευής\" και συνδέστε ξανά τη συσκευή σας.",
+  "improveConnectionAction": "Κατάλαβα",
+  "clockSkewWarning": "Το ρολόι της συσκευής σας αποκλίνει κατά ~{minutes} λεπτά. Ελέγξτε τις ρυθμίσεις ημερομηνίας και ώρας.",
+  "omisStorage": "Αποθήκευση Omi",
+  "phoneStorage": "Αποθήκευση τηλεφώνου",
+  "cloudStorage": "Αποθήκευση στο cloud",
+  "howSyncingWorks": "Πώς λειτουργεί ο συγχρονισμός",
+  "noSyncedRecordings": "Δεν υπάρχουν συγχρονισμένες εγγραφές ακόμα",
+  "recordingsSyncAutomatically": "Οι εγγραφές συγχρονίζονται αυτόματα — δεν απαιτείται ενέργεια.",
+  "filesDownloadedUploadedNextTime": "Τα ήδη ληφθέντα αρχεία θα μεταφορτωθούν την επόμενη φορά.",
+  "nConversationsCreated": "{count, plural, =1{1 συνομιλία δημιουργήθηκε} other{{count} συνομιλίες δημιουργήθηκαν}}",
+  "tapToView": "Πατήστε για προβολή",
+  "syncFailed": "Ο συγχρονισμός απέτυχε",
+  "keepSyncing": "Συνέχεια συγχρονισμού",
+  "cancelSyncQuestion": "Ακύρωση συγχρονισμού;",
+  "omisStorageDesc": "Όταν το Omi σας δεν είναι συνδεδεμένο στο τηλέφωνό σας, αποθηκεύει ήχο τοπικά στην ενσωματωμένη μνήμη του. Δεν χάνετε ποτέ μια εγγραφή.",
+  "phoneStorageDesc": "Όταν το Omi επανασυνδεθεί, οι εγγραφές μεταφέρονται αυτόματα στο τηλέφωνό σας πριν τη μεταφόρτωση.",
+  "cloudStorageDesc": "Μετά τη μεταφόρτωση, οι εγγραφές σας επεξεργάζονται και μεταγράφονται. Οι συνομιλίες θα είναι διαθέσιμες σε ένα λεπτό.",
+  "storageSection": "ΑΠΟΘΗΚΕΥΣΗ",
+  "tipKeepPhoneNearby": "Κρατήστε το τηλέφωνό σας κοντά για ταχύτερο συγχρονισμό",
+  "tipStableInternet": "Σταθερό διαδίκτυο επιταχύνει τις μεταφορτώσεις στο cloud",
+  "tipAutoSync": "Οι εγγραφές συγχρονίζονται αυτόματα",
+  "permissions": "Δικαιώματα",
+  "permissionEnabled": "Ενεργοποιημένο",
+  "permissionEnable": "Ενεργοποίηση",
+  "permissionsPageDescription": "Αυτές οι άδειες είναι βασικές για τη λειτουργία του Omi. Ενεργοποιούν βασικές λειτουργίες όπως ειδοποιήσεις, εμπειρίες βάσει τοποθεσίας και καταγραφή ήχου.",
+  "permissionsRequiredDescription": "Το Omi χρειάζεται μερικά δικαιώματα για να λειτουργήσει σωστά. Παρακαλώ παραχωρήστε τα για να συνεχίσετε.",
+  "permissionsSetupTitle": "Αποκτήστε την καλύτερη εμπειρία",
+  "permissionsSetupDescription": "Ενεργοποιήστε μερικές άδειες για να μπορεί το Omi να κάνει τα μαγικά του.",
+  "permissionsChangeAnytime": "Μπορείτε να τα αλλάξετε ανά πάσα στιγμή στις Ρυθμίσεις > Άδειες",
+  "location": "Τοποθεσία",
+  "microphone": "Μικρόφωνο",
+  "officialTeamName": "Nooto Team",
+  "conversationsEmptyStateMessage": "Ξεκινήστε μια συνομιλία με το Nooto ή ηχογραφήστε μία με τη συσκευή σας"
 }

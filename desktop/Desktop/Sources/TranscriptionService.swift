@@ -71,12 +71,22 @@ class TranscriptionService {
     private let sampleRate = 16000
     private let encoding = "linear16"
 
-    /// DeepGram base URL — configurable via DEEPGRAM_API_URL env var
+    /// Backend proxy base URL (from OMI_API_URL env var).
+    /// Deepgram requests are proxied through the Rust backend to keep API keys server-side.
+    private static let proxyBaseURL: String = {
+        if let cString = getenv("OMI_API_URL"), let url = String(validatingUTF8: cString), !url.isEmpty {
+            return url.hasSuffix("/") ? url : url + "/"
+        }
+        return ""
+    }()
+
+    /// Legacy deepgramBaseURL for backward compatibility during transition.
+    /// Reads DEEPGRAM_API_URL if set (developer override), otherwise uses proxy.
     private static let deepgramBaseURL: String = {
         if let envURL = getenv("DEEPGRAM_API_URL"), let url = String(validatingUTF8: envURL), !url.isEmpty {
             return url.hasSuffix("/") ? String(url.dropLast()) : url
         }
-        return "https://api.deepgram.com"
+        return ""  // Empty means use proxy
     }()
     private let channels: Int  // 2 = stereo (mic + system), 1 = mono (mic only for PTT)
 
@@ -103,21 +113,30 @@ class TranscriptionService {
 
     // MARK: - Initialization
 
+    /// Whether this instance uses the backend proxy (no direct Deepgram access)
+    private let useProxy: Bool
+
     /// Initialize the transcription service
     /// - Parameters:
-    ///   - apiKey: DeepGram API key (defaults to DEEPGRAM_API_KEY environment variable)
+    ///   - apiKey: DeepGram API key (ignored when backend proxy is available)
     ///   - language: Language code for transcription (e.g., "en", "uk", "ru", "multi" for auto-detect)
     ///   - vocabulary: Custom vocabulary/keyterms to improve transcription accuracy (Nova-3 limit: 500 tokens total)
     init(apiKey: String? = nil, language: String = "en", vocabulary: [String] = [], channels: Int = 2) throws {
-        guard let key = apiKey
-            ?? APIKeyService.currentDeepgramKey else {
+        // Prefer direct Deepgram if DEEPGRAM_API_URL is explicitly set (developer override)
+        if !Self.deepgramBaseURL.isEmpty, let key = apiKey ?? APIKeyService.currentDeepgramKey {
+            self.apiKey = key
+            self.useProxy = false
+        } else if !Self.proxyBaseURL.isEmpty {
+            // Backend proxy mode: no client-side API key needed
+            self.apiKey = ""
+            self.useProxy = true
+        } else {
             throw TranscriptionError.missingAPIKey
         }
-        self.apiKey = key
         self.language = language
         self.vocabulary = vocabulary
         self.channels = channels
-        log("TranscriptionService: Initialized with language=\(language), vocabulary=\(self.vocabulary.count) terms, channels=\(channels)")
+        log("TranscriptionService: Initialized with language=\(language), vocabulary=\(self.vocabulary.count) terms, channels=\(channels), proxy=\(self.useProxy)")
     }
 
     // MARK: - Public Methods
@@ -246,12 +265,41 @@ class TranscriptionService {
     // MARK: - Private Methods
 
     private func connect() {
-        // Build DeepGram WebSocket URL with parameters
-        let wsBase = Self.deepgramBaseURL.replacingOccurrences(of: "https://", with: "wss://")
+        if useProxy {
+            // Proxy mode: get Firebase auth token async, then connect
+            Task { [weak self] in
+                guard let self = self else { return }
+                do {
+                    let authService = await MainActor.run { AuthService.shared }
+                    let authHeader = try await authService.getAuthHeader()
+                    self.connectWithAuth(authHeader: authHeader)
+                } catch {
+                    logError("TranscriptionService: Failed to get auth token for proxy", error: error)
+                    self.onError?(TranscriptionError.connectionFailed(error))
+                }
+            }
+        } else {
+            // Direct Deepgram mode (legacy/developer override)
+            connectWithAuth(authHeader: "Token \(apiKey)")
+        }
+    }
+
+    private func connectWithAuth(authHeader: String) {
+        // Build WebSocket URL with parameters
+        let wsBase: String
+        if useProxy {
+            // Route through backend proxy WS endpoint
+            let base = Self.proxyBaseURL.replacingOccurrences(of: "https://", with: "wss://")
                                         .replacingOccurrences(of: "http://", with: "ws://")
-        guard var components = URLComponents(string: "\(wsBase)/v1/listen") else {
-            log("TranscriptionService: Invalid DeepGram URL: \(Self.deepgramBaseURL)")
-            onError?(TranscriptionError.connectionFailed(NSError(domain: "Invalid DeepGram URL", code: -1)))
+            wsBase = base.hasSuffix("/") ? String(base.dropLast()) : base
+        } else {
+            wsBase = Self.deepgramBaseURL.replacingOccurrences(of: "https://", with: "wss://")
+                                          .replacingOccurrences(of: "http://", with: "ws://")
+        }
+        let listenPath = useProxy ? "/v1/proxy/deepgram/ws/v1/listen" : "/v1/listen"
+        guard var components = URLComponents(string: "\(wsBase)\(listenPath)") else {
+            log("TranscriptionService: Invalid URL base: \(wsBase)")
+            onError?(TranscriptionError.connectionFailed(NSError(domain: "Invalid URL", code: -1)))
             return
         }
         var queryItems = [
@@ -287,7 +335,7 @@ class TranscriptionService {
 
         // Create URL request with authorization header
         var request = URLRequest(url: url)
-        request.setValue("Token \(apiKey)", forHTTPHeaderField: "Authorization")
+        request.setValue(authHeader, forHTTPHeaderField: "Authorization")
 
         // Create URLSession and WebSocket task
         let configuration = URLSessionConfiguration.default
@@ -527,13 +575,24 @@ extension TranscriptionService {
         language: String = "en",
         apiKey: String? = nil
     ) async throws -> String? {
-        guard let key = apiKey
-            ?? APIKeyService.currentDeepgramKey else {
-            throw TranscriptionError.missingAPIKey
+        // Determine auth and base URL
+        let authHeader: String
+        let baseURLString: String
+        if !proxyBaseURL.isEmpty && deepgramBaseURL.isEmpty {
+            // Proxy mode: use Firebase auth, route through backend
+            let authService = await MainActor.run { AuthService.shared }
+            authHeader = try await authService.getAuthHeader()
+            baseURLString = "\(proxyBaseURL)v1/proxy/deepgram/v1/listen"
+        } else {
+            guard let key = apiKey ?? APIKeyService.currentDeepgramKey else {
+                throw TranscriptionError.missingAPIKey
+            }
+            authHeader = "Token \(key)"
+            baseURLString = "\(deepgramBaseURL)/v1/listen"
         }
 
-        guard var components = URLComponents(string: "\(deepgramBaseURL)/v1/listen") else {
-            throw TranscriptionError.connectionFailed(NSError(domain: "Invalid DeepGram URL", code: -1))
+        guard var components = URLComponents(string: baseURLString) else {
+            throw TranscriptionError.connectionFailed(NSError(domain: "Invalid Deepgram URL", code: -1))
         }
         components.queryItems = [
             URLQueryItem(name: "model", value: "nova-3"),
@@ -553,7 +612,7 @@ extension TranscriptionService {
 
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
-        request.setValue("Token \(key)", forHTTPHeaderField: "Authorization")
+        request.setValue(authHeader, forHTTPHeaderField: "Authorization")
         request.setValue("application/octet-stream", forHTTPHeaderField: "Content-Type")
         request.httpBody = audioData
 
@@ -583,13 +642,23 @@ extension TranscriptionService {
         vocabulary: [String] = [],
         apiKey: String? = nil
     ) async throws -> [TranscriptSegment] {
-        guard let key = apiKey
-            ?? APIKeyService.currentDeepgramKey else {
-            throw TranscriptionError.missingAPIKey
+        // Determine auth and base URL
+        let authHeader: String
+        let baseURLString: String
+        if !proxyBaseURL.isEmpty && deepgramBaseURL.isEmpty {
+            let authService = await MainActor.run { AuthService.shared }
+            authHeader = try await authService.getAuthHeader()
+            baseURLString = "\(proxyBaseURL)v1/proxy/deepgram/v1/listen"
+        } else {
+            guard let key = apiKey ?? APIKeyService.currentDeepgramKey else {
+                throw TranscriptionError.missingAPIKey
+            }
+            authHeader = "Token \(key)"
+            baseURLString = "\(deepgramBaseURL)/v1/listen"
         }
 
-        guard var components = URLComponents(string: "\(deepgramBaseURL)/v1/listen") else {
-            throw TranscriptionError.connectionFailed(NSError(domain: "Invalid DeepGram URL", code: -1))
+        guard var components = URLComponents(string: baseURLString) else {
+            throw TranscriptionError.connectionFailed(NSError(domain: "Invalid Deepgram URL", code: -1))
         }
         var queryItems = [
             URLQueryItem(name: "model", value: "nova-3"),
@@ -617,7 +686,7 @@ extension TranscriptionService {
 
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
-        request.setValue("Token \(key)", forHTTPHeaderField: "Authorization")
+        request.setValue(authHeader, forHTTPHeaderField: "Authorization")
         request.setValue("application/octet-stream", forHTTPHeaderField: "Content-Type")
         request.httpBody = audioData
 

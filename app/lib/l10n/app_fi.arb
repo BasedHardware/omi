@@ -2655,13 +2655,11 @@
   "switchApiConfirmBody": "Vaihdetaanko ympäristöön {environment}? Sinun on suljettava ja avattava sovellus uudelleen, jotta muutokset tulevat voimaan.",
   "switchApiConfirmTitle": "Vaihda API-ympäristö",
   "switchRequiresRestart": "Vaihto vaatii sovelluksen uudelleenkäynnistyksen",
-  "officialTeamName": "Nooto Team",
-  "conversationsEmptyStateMessage": "Aloita keskustelu Nooton kanssa tai nauhoita yksi laitteellasi",
-  "tasksCleanTodayTitle": "Siivota tämän päivän tehtävät?",
-  "tasksCleanTodayMessage": "Tämä poistaa vain määräajat",
   "shared": "Jaettu",
   "onlyYouCanSeeConversation": "Vain sinä voit nähdä tämän keskustelun",
   "anyoneWithLinkCanView": "Kuka tahansa linkin haltija voi katsella",
+  "tasksCleanTodayTitle": "Siivota tämän päivän tehtävät?",
+  "tasksCleanTodayMessage": "Tämä poistaa vain määräajat",
   "tasksOverdue": "Myöhässä",
   "answerTheCallFrom": "Vastaa puheluun numerosta",
   "callAlreadyInProgress": "Puhelu on jo kaynnissa",
@@ -2796,5 +2794,48 @@
         "type": "String"
       }
     }
-  }
+  },
+  "fairUseBannerStatus": "Reilu käyttö: {status}",
+  "@fairUseBannerStatus": {
+    "placeholders": {
+      "status": {
+        "type": "String"
+      }
+    }
+  },
+  "improveConnectionTitle": "Paranna yhteyttä",
+  "improveConnectionContent": "Olemme parantaneet Omin yhteydenpitoa laitteeseesi. Aktivoidaksesi tämän, siirry Laitteen tiedot -sivulle, napauta \"Katkaise laitteen yhteys\" ja yhdistä laitteesi uudelleen.",
+  "improveConnectionAction": "Selvä",
+  "clockSkewWarning": "Laitteesi kello on ~{minutes} min. väärässä. Tarkista päivämäärä- ja aika-asetukset.",
+  "omisStorage": "Omin tallennustila",
+  "phoneStorage": "Puhelimen tallennustila",
+  "cloudStorage": "Pilvitallennustila",
+  "howSyncingWorks": "Miten synkronointi toimii",
+  "noSyncedRecordings": "Ei synkronoituja nauhoituksia vielä",
+  "recordingsSyncAutomatically": "Nauhoitukset synkronoidaan automaattisesti — toimenpiteitä ei tarvita.",
+  "filesDownloadedUploadedNextTime": "Jo ladatut tiedostot ladataan palvelimelle seuraavalla kerralla.",
+  "nConversationsCreated": "{count, plural, =1{1 keskustelu luotu} other{{count} keskustelua luotu}}",
+  "tapToView": "Napauta nähdäksesi",
+  "syncFailed": "Synkronointi epäonnistui",
+  "keepSyncing": "Jatka synkronointia",
+  "cancelSyncQuestion": "Peruuta synkronointi?",
+  "omisStorageDesc": "Kun Omi ei ole yhdistetty puhelimeesi, se tallentaa äänen paikallisesti sisäiseen muistiinsa. Et koskaan menetä nauhoitusta.",
+  "phoneStorageDesc": "Kun Omi yhdistyy uudelleen, nauhoitukset siirretään automaattisesti puhelimeesi ennen palvelimelle lataamista.",
+  "cloudStorageDesc": "Lataamisen jälkeen nauhoituksesi käsitellään ja litteroidaan. Keskustelut ovat saatavilla minuutin kuluessa.",
+  "storageSection": "TALLENNUSTILA",
+  "tipKeepPhoneNearby": "Pidä puhelin lähellä nopeampaa synkronointia varten",
+  "tipStableInternet": "Vakaa internet nopeuttaa pilveen lataamista",
+  "tipAutoSync": "Nauhoitukset synkronoidaan automaattisesti",
+  "permissions": "Käyttöoikeudet",
+  "permissionEnabled": "Käytössä",
+  "permissionEnable": "Ota käyttöön",
+  "permissionsPageDescription": "Nämä käyttöoikeudet ovat keskeisiä Omin toiminnalle. Ne mahdollistavat keskeiset ominaisuudet kuten ilmoitukset, sijaintiin perustuvat kokemukset ja äänen tallennuksen.",
+  "permissionsRequiredDescription": "Omi tarvitsee muutamia käyttöoikeuksia toimiakseen oikein. Myönnä ne jatkaaksesi.",
+  "permissionsSetupTitle": "Saat parhaan kokemuksen",
+  "permissionsSetupDescription": "Ota käyttöön muutama lupa, jotta Omi voi tehdä taikojaan.",
+  "permissionsChangeAnytime": "Voit muuttaa näitä milloin tahansa kohdassa Asetukset > Käyttöoikeudet",
+  "location": "Sijainti",
+  "microphone": "Mikrofoni",
+  "officialTeamName": "Nooto Team",
+  "conversationsEmptyStateMessage": "Aloita keskustelu Nooton kanssa tai nauhoita yksi laitteellasi"
 }

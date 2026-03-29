@@ -1,16 +1,22 @@
 {
   "openapi": "3.1.0",
   "info": {
-    "title": "OpenAPI Plant Store",
-    "description": "A sample API that uses a plant store as an example to demonstrate features in the OpenAPI specification",
-    "license": {
-      "name": "MIT"
+    "title": "Omi Developer API",
+    "description": "Programmatic access to your Omi data — memories, conversations, action items, and API keys. Build custom integrations, analytics dashboards, and automation workflows.",
+    "version": "1.0.0",
+    "contact": {
+      "name": "Omi",
+      "url": "https://omi.me"
     },
-    "version": "1.0.0"
+    "license": {
+      "name": "MIT",
+      "url": "https://github.com/BasedHardware/omi/blob/main/LICENSE"
+    }
   },
   "servers": [
     {
-      "url": "http://sandbox.mintlify.com"
+      "url": "https://api.omi.me",
+      "description": "Production"
     }
   ],
   "security": [
@@ -18,199 +24,1082 @@
       "bearerAuth": []
     }
   ],
+  "tags": [
+    { "name": "Memories", "description": "Read and write user memories — timeless facts, preferences, and insights." },
+    { "name": "Conversations", "description": "Create and retrieve conversation transcripts with AI-generated summaries." },
+    { "name": "Action Items", "description": "Manage tasks and to-dos extracted from conversations or created manually." },
+    { "name": "API Keys", "description": "Create, list, and revoke developer API keys." }
+  ],
   "paths": {
-    "/plants": {
+    "/v1/dev/user/memories": {
       "get": {
-        "description": "Returns all plants from the system that the user has access to",
+        "operationId": "listMemories",
+        "summary": "List memories",
+        "description": "Retrieve your memories with optional filtering by category. Returns memories sorted by most recent first.",
+        "tags": ["Memories"],
         "parameters": [
           {
             "name": "limit",
             "in": "query",
-            "description": "The maximum number of results to return",
-            "schema": {
-              "type": "integer",
-              "format": "int32"
-            }
+            "description": "Maximum number of memories to return.",
+            "schema": { "type": "integer", "default": 25 }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "description": "Number of memories to skip for pagination.",
+            "schema": { "type": "integer", "default": 0 }
+          },
+          {
+            "name": "categories",
+            "in": "query",
+            "description": "Comma-separated list of categories to filter by (e.g. `interesting,system`).",
+            "schema": { "type": "string" }
           }
         ],
         "responses": {
           "200": {
-            "description": "Plant response",
+            "description": "List of memories.",
             "content": {
               "application/json": {
                 "schema": {
                   "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/Plant"
+                  "items": { "$ref": "#/components/schemas/Memory" }
+                },
+                "example": [
+                  {
+                    "id": "mem_789ghi",
+                    "content": "User is building an AI fitness app with personal trainer",
+                    "category": "interesting",
+                    "visibility": "private",
+                    "tags": [],
+                    "created_at": "2025-01-15T10:30:00Z",
+                    "updated_at": "2025-01-15T10:30:00Z",
+                    "manually_added": false,
+                    "reviewed": false,
+                    "user_review": null,
+                    "edited": false
                   }
-                }
+                ]
               }
             }
           },
-          "400": {
-            "description": "Unexpected error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          }
+          "401": { "$ref": "#/components/responses/Unauthorized" }
         }
       },
       "post": {
-        "description": "Creates a new plant in the store",
+        "operationId": "createMemory",
+        "summary": "Create memory",
+        "description": "Create a new memory. Memories are timeless facts about the user — preferences, relationships, personal details, and notable insights.",
+        "tags": ["Memories"],
         "requestBody": {
-          "description": "Plant to add to the store",
+          "required": true,
           "content": {
             "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/NewPlant"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "plant response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Plant"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "unexpected error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
+              "schema": { "$ref": "#/components/schemas/CreateMemory" },
+              "example": {
+                "content": "User prefers dark mode in all applications",
+                "category": "system",
+                "tags": ["preferences", "ui"]
               }
             }
           }
+        },
+        "responses": {
+          "200": {
+            "description": "The created memory.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Memory" },
+                "example": {
+                  "id": "mem_xyz789",
+                  "content": "User prefers dark mode in all applications",
+                  "category": "system",
+                  "visibility": "private",
+                  "tags": ["preferences", "ui"],
+                  "created_at": "2025-12-06T10:35:00Z",
+                  "updated_at": "2025-12-06T10:35:00Z",
+                  "manually_added": true
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "422": { "$ref": "#/components/responses/ValidationError" }
         }
       }
     },
-    "/plants/{id}": {
+    "/v1/dev/user/memories/batch": {
+      "post": {
+        "operationId": "createMemoriesBatch",
+        "summary": "Create memories (batch)",
+        "description": "Create multiple memories in a single request. Maximum 25 memories per batch.",
+        "tags": ["Memories"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/BatchCreateMemories" },
+              "example": {
+                "memories": [
+                  { "content": "User prefers async communication over meetings", "category": "system" },
+                  { "content": "User speaks fluent Japanese and French", "category": "interesting" }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Batch creation result.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/BatchMemoriesResponse" },
+                "example": {
+                  "memories": [
+                    { "id": "mem_001", "content": "User prefers async communication over meetings", "category": "system" },
+                    { "id": "mem_002", "content": "User speaks fluent Japanese and French", "category": "interesting" }
+                  ],
+                  "created_count": 2
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "422": { "$ref": "#/components/responses/ValidationError" }
+        }
+      }
+    },
+    "/v1/dev/user/memories/{memory_id}": {
       "delete": {
-        "description": "Deletes a single plant based on the ID supplied",
+        "operationId": "deleteMemory",
+        "summary": "Delete memory",
+        "description": "Permanently delete a memory. This action cannot be undone.",
+        "tags": ["Memories"],
         "parameters": [
           {
-            "name": "id",
+            "name": "memory_id",
             "in": "path",
-            "description": "ID of plant to delete",
             "required": true,
-            "schema": {
-              "type": "integer",
-              "format": "int64"
+            "description": "The ID of the memory to delete.",
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Memory deleted.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/SuccessResponse" },
+                "example": { "success": true }
+              }
             }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      },
+      "patch": {
+        "operationId": "updateMemory",
+        "summary": "Update memory",
+        "description": "Update a memory's content or visibility. At least one field must be provided.",
+        "tags": ["Memories"],
+        "parameters": [
+          {
+            "name": "memory_id",
+            "in": "path",
+            "required": true,
+            "description": "The ID of the memory to update.",
+            "schema": { "type": "string" }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/UpdateMemory" },
+              "example": {
+                "content": "User strongly prefers dark mode in all applications",
+                "visibility": "private"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The updated memory.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Memory" }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "422": { "$ref": "#/components/responses/ValidationError" }
+        }
+      }
+    },
+    "/v1/dev/user/conversations": {
+      "get": {
+        "operationId": "listConversations",
+        "summary": "List conversations",
+        "description": "Retrieve your conversation transcripts. Only returns completed, non-discarded conversations.",
+        "tags": ["Conversations"],
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Maximum number of conversations to return.",
+            "schema": { "type": "integer", "default": 25 }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "description": "Number of conversations to skip.",
+            "schema": { "type": "integer", "default": 0 }
+          },
+          {
+            "name": "start_date",
+            "in": "query",
+            "description": "Filter by start date (inclusive). ISO 8601 format.",
+            "schema": { "type": "string", "format": "date-time" }
+          },
+          {
+            "name": "end_date",
+            "in": "query",
+            "description": "Filter by end date (inclusive). ISO 8601 format.",
+            "schema": { "type": "string", "format": "date-time" }
+          },
+          {
+            "name": "include_transcript",
+            "in": "query",
+            "description": "Include full transcript segments in the response.",
+            "schema": { "type": "boolean", "default": false }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of conversations.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": { "$ref": "#/components/schemas/Conversation" }
+                },
+                "example": [
+                  {
+                    "id": "conv_202",
+                    "created_at": "2025-01-20T13:50:00Z",
+                    "started_at": "2025-01-20T13:50:00Z",
+                    "finished_at": "2025-01-20T14:10:00Z",
+                    "language": "en",
+                    "source": "omi",
+                    "structured": {
+                      "title": "Feature Discussion",
+                      "overview": "Brainstorming session for new features",
+                      "emoji": "💼",
+                      "category": "business",
+                      "action_items": [],
+                      "events": []
+                    }
+                  }
+                ]
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      },
+      "post": {
+        "operationId": "createConversation",
+        "summary": "Create conversation from text",
+        "description": "Create a new conversation from text content. The text is processed through the full AI pipeline: discard detection, structured generation, action item extraction, memory extraction, app integration, and webhooks.",
+        "tags": ["Conversations"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/CreateConversation" },
+              "example": {
+                "text": "Meeting notes: Discussed Q1 goals. Action item: prepare budget by Friday.",
+                "text_source": "other_text",
+                "text_source_spec": "meeting_notes",
+                "started_at": "2025-12-06T14:00:00+00:00",
+                "language": "en"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Conversation created.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ConversationResponse" },
+                "example": {
+                  "id": "conv_456",
+                  "status": "completed",
+                  "discarded": false
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "422": { "$ref": "#/components/responses/ValidationError" }
+        }
+      }
+    },
+    "/v1/dev/user/conversations/{conversation_id}": {
+      "get": {
+        "operationId": "getConversation",
+        "summary": "Get conversation",
+        "description": "Retrieve a single conversation by ID, optionally including transcript segments.",
+        "tags": ["Conversations"],
+        "parameters": [
+          {
+            "name": "conversation_id",
+            "in": "path",
+            "required": true,
+            "description": "The ID of the conversation to retrieve.",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "include_transcript",
+            "in": "query",
+            "description": "Include full transcript segments.",
+            "schema": { "type": "boolean", "default": false }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The conversation.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Conversation" }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      },
+      "patch": {
+        "operationId": "updateConversation",
+        "summary": "Update conversation",
+        "description": "Update a conversation's title or discard status. At least one field must be provided.",
+        "tags": ["Conversations"],
+        "parameters": [
+          {
+            "name": "conversation_id",
+            "in": "path",
+            "required": true,
+            "description": "The ID of the conversation to update.",
+            "schema": { "type": "string" }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/UpdateConversation" },
+              "example": {
+                "title": "Q1 Planning Meeting - Budget Discussion"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The updated conversation.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Conversation" }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "422": { "$ref": "#/components/responses/ValidationError" }
+        }
+      },
+      "delete": {
+        "operationId": "deleteConversation",
+        "summary": "Delete conversation",
+        "description": "Permanently delete a conversation and its associated data. This action cannot be undone. Consider using PATCH with `discarded: true` to hide instead.",
+        "tags": ["Conversations"],
+        "parameters": [
+          {
+            "name": "conversation_id",
+            "in": "path",
+            "required": true,
+            "description": "The ID of the conversation to delete.",
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Conversation deleted.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/SuccessResponse" },
+                "example": { "success": true }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      }
+    },
+    "/v1/dev/user/conversations/from-segments": {
+      "post": {
+        "operationId": "createConversationFromSegments",
+        "summary": "Create conversation from transcript segments",
+        "description": "Create a conversation from structured transcript segments with speaker diarization. Unlike text-based conversations, transcript segments are stored and can be retrieved with `include_transcript=true`.",
+        "tags": ["Conversations"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/CreateConversationFromSegments" },
+              "example": {
+                "transcript_segments": [
+                  { "text": "Let's review the quarterly results", "speaker": "SPEAKER_00", "is_user": true, "start": 0.0, "end": 3.5 },
+                  { "text": "Revenue is up 25% from last quarter", "speaker": "SPEAKER_01", "is_user": false, "start": 4.0, "end": 7.2 }
+                ],
+                "source": "phone",
+                "language": "en"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Conversation created.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ConversationResponse" },
+                "example": {
+                  "id": "conv_789",
+                  "status": "completed",
+                  "discarded": false
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "422": { "$ref": "#/components/responses/ValidationError" }
+        }
+      }
+    },
+    "/v1/dev/user/action-items": {
+      "get": {
+        "operationId": "listActionItems",
+        "summary": "List action items",
+        "description": "Retrieve your action items (tasks/to-dos) with optional filtering.",
+        "tags": ["Action Items"],
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Maximum number of items to return.",
+            "schema": { "type": "integer", "default": 100 }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "description": "Number of items to skip.",
+            "schema": { "type": "integer", "default": 0 }
+          },
+          {
+            "name": "completed",
+            "in": "query",
+            "description": "Filter by completion status.",
+            "schema": { "type": "boolean" }
+          },
+          {
+            "name": "conversation_id",
+            "in": "query",
+            "description": "Filter by associated conversation ID.",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "start_date",
+            "in": "query",
+            "description": "Filter by creation start date (inclusive).",
+            "schema": { "type": "string", "format": "date-time" }
+          },
+          {
+            "name": "end_date",
+            "in": "query",
+            "description": "Filter by creation end date (inclusive).",
+            "schema": { "type": "string", "format": "date-time" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of action items.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": { "$ref": "#/components/schemas/ActionItem" }
+                },
+                "example": [
+                  {
+                    "id": "action_101",
+                    "description": "Review budget proposal",
+                    "completed": false,
+                    "created_at": "2025-01-20T10:15:00Z",
+                    "updated_at": "2025-01-20T10:15:00Z",
+                    "due_at": null,
+                    "completed_at": null,
+                    "conversation_id": "conv_202"
+                  }
+                ]
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      },
+      "post": {
+        "operationId": "createActionItem",
+        "summary": "Create action item",
+        "description": "Create a new action item (task/to-do). Push notifications are sent to the Omi app if a `due_at` date is provided.",
+        "tags": ["Action Items"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/CreateActionItem" },
+              "example": {
+                "description": "Review pull request #123",
+                "completed": false,
+                "due_at": "2025-12-08T15:00:00+00:00"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The created action item.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ActionItem" },
+                "example": {
+                  "id": "action_abc123",
+                  "description": "Review pull request #123",
+                  "completed": false,
+                  "created_at": "2025-12-06T10:30:00Z",
+                  "updated_at": "2025-12-06T10:30:00Z",
+                  "due_at": "2025-12-08T15:00:00+00:00",
+                  "completed_at": null,
+                  "conversation_id": null
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "422": { "$ref": "#/components/responses/ValidationError" }
+        }
+      }
+    },
+    "/v1/dev/user/action-items/batch": {
+      "post": {
+        "operationId": "createActionItemsBatch",
+        "summary": "Create action items (batch)",
+        "description": "Create multiple action items in a single request. Maximum 50 per batch.",
+        "tags": ["Action Items"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/BatchCreateActionItems" },
+              "example": {
+                "action_items": [
+                  { "description": "Review Q1 report", "due_at": "2025-12-10T17:00:00Z" },
+                  { "description": "Schedule team meeting" }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Batch creation result.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/BatchActionItemsResponse" },
+                "example": {
+                  "action_items": [
+                    { "id": "action_001", "description": "Review Q1 report" },
+                    { "id": "action_002", "description": "Schedule team meeting" }
+                  ],
+                  "created_count": 2
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "422": { "$ref": "#/components/responses/ValidationError" }
+        }
+      }
+    },
+    "/v1/dev/user/action-items/{action_item_id}": {
+      "patch": {
+        "operationId": "updateActionItem",
+        "summary": "Update action item",
+        "description": "Update an action item's description, completion status, or due date. Setting `completed: true` automatically sets `completed_at`.",
+        "tags": ["Action Items"],
+        "parameters": [
+          {
+            "name": "action_item_id",
+            "in": "path",
+            "required": true,
+            "description": "The ID of the action item to update.",
+            "schema": { "type": "string" }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/UpdateActionItem" },
+              "example": { "completed": true }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The updated action item.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ActionItem" }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "422": { "$ref": "#/components/responses/ValidationError" }
+        }
+      },
+      "delete": {
+        "operationId": "deleteActionItem",
+        "summary": "Delete action item",
+        "description": "Permanently delete an action item. This action cannot be undone.",
+        "tags": ["Action Items"],
+        "parameters": [
+          {
+            "name": "action_item_id",
+            "in": "path",
+            "required": true,
+            "description": "The ID of the action item to delete.",
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Action item deleted.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/SuccessResponse" },
+                "example": { "success": true }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      }
+    },
+    "/v1/dev/keys": {
+      "get": {
+        "operationId": "listApiKeys",
+        "summary": "List API keys",
+        "description": "Retrieve all your developer API keys. Secret key values are not returned — only the prefix is shown.",
+        "tags": ["API Keys"],
+        "responses": {
+          "200": {
+            "description": "List of API keys.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": { "$ref": "#/components/schemas/ApiKey" }
+                },
+                "example": [
+                  {
+                    "id": "key_123abc",
+                    "name": "My Analytics Dashboard",
+                    "key_prefix": "omi_dev_abc123",
+                    "created_at": "2025-01-15T10:30:00Z",
+                    "last_used_at": "2025-01-20T14:22:00Z"
+                  }
+                ]
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      },
+      "post": {
+        "operationId": "createApiKey",
+        "summary": "Create API key",
+        "description": "Create a new developer API key. The full key is only returned once — store it securely immediately.",
+        "tags": ["API Keys"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/CreateApiKey" },
+              "example": { "name": "My New Integration" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The created API key with full secret.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ApiKeyCreated" },
+                "example": {
+                  "id": "key_789ghi",
+                  "name": "My New Integration",
+                  "key_prefix": "omi_dev_ghi789",
+                  "key": "omi_dev_ghi789_full_secret_key_here",
+                  "created_at": "2025-01-20T15:00:00Z",
+                  "last_used_at": null
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "422": { "$ref": "#/components/responses/ValidationError" }
+        }
+      }
+    },
+    "/v1/dev/keys/{key_id}": {
+      "delete": {
+        "operationId": "revokeApiKey",
+        "summary": "Revoke API key",
+        "description": "Permanently revoke (delete) a specific API key. Any requests using this key will immediately stop working.",
+        "tags": ["API Keys"],
+        "parameters": [
+          {
+            "name": "key_id",
+            "in": "path",
+            "required": true,
+            "description": "The ID of the key to revoke.",
+            "schema": { "type": "string" }
           }
         ],
         "responses": {
           "204": {
-            "description": "Plant deleted",
-            "content": {}
+            "description": "Key revoked successfully."
           },
-          "400": {
-            "description": "unexpected error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          }
-        }
-      }
-    }
-  },
-  "webhooks": {
-    "/plant/webhook": {
-      "post": {
-        "description": "Information about a new plant added to the store",
-        "requestBody": {
-          "description": "Plant added to the store",
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/NewPlant"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Return a 200 status to indicate that the data was received successfully"
-          }
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "404": { "$ref": "#/components/responses/NotFound" }
         }
       }
     }
   },
   "components": {
-    "schemas": {
-      "Plant": {
-        "required": [
-          "name"
-        ],
-        "type": "object",
-        "properties": {
-          "name": {
-            "description": "The name of the plant",
-            "type": "string"
-          },
-          "tag": {
-            "description": "Tag to specify the type",
-            "type": "string"
-          }
-        }
-      },
-      "NewPlant": {
-        "allOf": [
-          {
-            "$ref": "#/components/schemas/Plant"
-          },
-          {
-            "required": [
-              "id"
-            ],
-            "type": "object",
-            "properties": {
-              "id": {
-                "description": "Identification number of the plant",
-                "type": "integer",
-                "format": "int64"
-              }
-            }
-          }
-        ]
-      },
-      "Error": {
-        "required": [
-          "error",
-          "message"
-        ],
-        "type": "object",
-        "properties": {
-          "error": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "message": {
-            "type": "string"
-          }
-        }
-      }
-    },
     "securitySchemes": {
       "bearerAuth": {
         "type": "http",
-        "scheme": "bearer"
+        "scheme": "bearer",
+        "description": "Developer API key. Get one from **Settings → Developer → Create Key** in the Omi app. Keys are prefixed with `omi_dev_`."
+      }
+    },
+    "schemas": {
+      "Memory": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string", "description": "Unique identifier." },
+          "content": { "type": "string", "description": "The memory content." },
+          "category": { "type": "string", "enum": ["interesting", "system", "manual"], "description": "Memory category." },
+          "visibility": { "type": "string", "enum": ["public", "private"], "description": "Visibility level." },
+          "tags": { "type": "array", "items": { "type": "string" }, "description": "List of tags." },
+          "created_at": { "type": "string", "format": "date-time", "description": "When the memory was created." },
+          "updated_at": { "type": "string", "format": "date-time", "description": "When the memory was last updated." },
+          "manually_added": { "type": "boolean", "description": "Whether the memory was added manually (via API or app)." },
+          "reviewed": { "type": "boolean", "description": "Whether the memory has been reviewed." },
+          "user_review": { "type": ["boolean", "null"], "description": "User's review decision." },
+          "edited": { "type": "boolean", "description": "Whether the memory has been edited." }
+        }
+      },
+      "CreateMemory": {
+        "type": "object",
+        "required": ["content"],
+        "properties": {
+          "content": { "type": "string", "minLength": 1, "maxLength": 500, "description": "The memory content." },
+          "category": { "type": "string", "enum": ["interesting", "system", "manual"], "description": "Memory category. Auto-categorized if not provided." },
+          "visibility": { "type": "string", "enum": ["public", "private"], "default": "private", "description": "Visibility level." },
+          "tags": { "type": "array", "items": { "type": "string" }, "description": "List of tags." }
+        }
+      },
+      "UpdateMemory": {
+        "type": "object",
+        "properties": {
+          "content": { "type": "string", "minLength": 1, "maxLength": 500, "description": "New memory content." },
+          "visibility": { "type": "string", "enum": ["public", "private"], "description": "New visibility level." }
+        }
+      },
+      "BatchCreateMemories": {
+        "type": "object",
+        "required": ["memories"],
+        "properties": {
+          "memories": { "type": "array", "items": { "$ref": "#/components/schemas/CreateMemory" }, "maxItems": 25, "description": "List of memories to create (max 25)." }
+        }
+      },
+      "BatchMemoriesResponse": {
+        "type": "object",
+        "properties": {
+          "memories": { "type": "array", "items": { "$ref": "#/components/schemas/Memory" } },
+          "created_count": { "type": "integer", "description": "Number of memories created." }
+        }
+      },
+      "Conversation": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string", "description": "Unique identifier." },
+          "created_at": { "type": "string", "format": "date-time", "description": "When the conversation record was created." },
+          "started_at": { "type": "string", "format": "date-time", "description": "When the conversation started." },
+          "finished_at": { "type": "string", "format": "date-time", "description": "When the conversation ended." },
+          "language": { "type": "string", "description": "Language code (e.g. `en`)." },
+          "source": { "type": "string", "description": "Source device or app." },
+          "structured": { "$ref": "#/components/schemas/StructuredData" },
+          "transcript_segments": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/TranscriptSegment" },
+            "description": "Transcript segments (only present when `include_transcript=true`)."
+          },
+          "geolocation": { "$ref": "#/components/schemas/Geolocation" }
+        }
+      },
+      "StructuredData": {
+        "type": "object",
+        "properties": {
+          "title": { "type": "string", "description": "AI-generated title." },
+          "overview": { "type": "string", "description": "Summary of the conversation." },
+          "emoji": { "type": "string", "description": "Representative emoji." },
+          "category": { "type": "string", "description": "Category (work, personal, etc.)." },
+          "action_items": { "type": "array", "items": { "$ref": "#/components/schemas/ActionItemSummary" } },
+          "events": { "type": "array", "items": { "type": "object" } }
+        }
+      },
+      "ActionItemSummary": {
+        "type": "object",
+        "properties": {
+          "description": { "type": "string" },
+          "completed": { "type": "boolean" },
+          "created_at": { "type": "string", "format": "date-time" },
+          "updated_at": { "type": "string", "format": "date-time" },
+          "due_at": { "type": ["string", "null"], "format": "date-time" },
+          "completed_at": { "type": ["string", "null"], "format": "date-time" }
+        }
+      },
+      "TranscriptSegment": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string", "description": "Segment identifier." },
+          "text": { "type": "string", "description": "The transcribed text." },
+          "speaker_id": { "type": "integer", "description": "Numeric speaker identifier." },
+          "speaker_name": { "type": "string", "description": "Human-readable speaker name." },
+          "start": { "type": "number", "description": "Start timestamp in seconds." },
+          "end": { "type": "number", "description": "End timestamp in seconds." }
+        }
+      },
+      "Geolocation": {
+        "type": "object",
+        "properties": {
+          "latitude": { "type": "number" },
+          "longitude": { "type": "number" },
+          "address": { "type": "string" },
+          "google_place_id": { "type": "string" },
+          "location_type": { "type": "string" }
+        }
+      },
+      "CreateConversation": {
+        "type": "object",
+        "required": ["text"],
+        "properties": {
+          "text": { "type": "string", "minLength": 1, "maxLength": 100000, "description": "The conversation text/transcript." },
+          "text_source": { "type": "string", "enum": ["audio_transcript", "message", "other_text"], "default": "other_text", "description": "Source type." },
+          "text_source_spec": { "type": "string", "description": "Additional source info (e.g. `email`, `slack`, `whatsapp`)." },
+          "started_at": { "type": "string", "format": "date-time", "description": "When conversation started (defaults to now)." },
+          "finished_at": { "type": "string", "format": "date-time", "description": "When conversation finished." },
+          "language": { "type": "string", "default": "en", "description": "Language code." },
+          "geolocation": { "$ref": "#/components/schemas/GeolocationInput" }
+        }
+      },
+      "CreateConversationFromSegments": {
+        "type": "object",
+        "required": ["transcript_segments"],
+        "properties": {
+          "transcript_segments": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 500,
+            "items": { "$ref": "#/components/schemas/TranscriptSegmentInput" },
+            "description": "List of transcript segments (1–500)."
+          },
+          "source": { "type": "string", "default": "external_integration", "description": "Source of conversation." },
+          "started_at": { "type": "string", "format": "date-time", "description": "When conversation started." },
+          "finished_at": { "type": "string", "format": "date-time", "description": "When conversation finished." },
+          "language": { "type": "string", "default": "en", "description": "Language code." },
+          "geolocation": { "$ref": "#/components/schemas/GeolocationInput" }
+        }
+      },
+      "TranscriptSegmentInput": {
+        "type": "object",
+        "required": ["text", "start", "end"],
+        "properties": {
+          "text": { "type": "string", "description": "The spoken text." },
+          "speaker": { "type": "string", "default": "SPEAKER_00", "description": "Speaker identifier (e.g. `SPEAKER_00`)." },
+          "speaker_id": { "type": "integer", "description": "Numeric speaker ID." },
+          "is_user": { "type": "boolean", "default": false, "description": "Whether this segment is from the user." },
+          "person_id": { "type": "string", "description": "ID of known person speaking." },
+          "start": { "type": "number", "description": "Start time in seconds." },
+          "end": { "type": "number", "description": "End time in seconds." }
+        }
+      },
+      "GeolocationInput": {
+        "type": "object",
+        "properties": {
+          "latitude": { "type": "number" },
+          "longitude": { "type": "number" }
+        }
+      },
+      "UpdateConversation": {
+        "type": "object",
+        "properties": {
+          "title": { "type": "string", "minLength": 1, "maxLength": 500, "description": "New title." },
+          "discarded": { "type": "boolean", "description": "Whether the conversation is discarded." }
+        }
+      },
+      "ConversationResponse": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string", "description": "Conversation ID." },
+          "status": { "type": "string", "description": "Processing status." },
+          "discarded": { "type": "boolean", "description": "Whether the conversation was discarded." }
+        }
+      },
+      "ActionItem": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string", "description": "Unique identifier." },
+          "description": { "type": "string", "description": "The action item text." },
+          "completed": { "type": "boolean", "description": "Whether completed." },
+          "created_at": { "type": "string", "format": "date-time" },
+          "updated_at": { "type": "string", "format": "date-time" },
+          "due_at": { "type": ["string", "null"], "format": "date-time", "description": "Due date (null if not set)." },
+          "completed_at": { "type": ["string", "null"], "format": "date-time", "description": "When completed (null if pending)." },
+          "conversation_id": { "type": ["string", "null"], "description": "Associated conversation ID." }
+        }
+      },
+      "CreateActionItem": {
+        "type": "object",
+        "required": ["description"],
+        "properties": {
+          "description": { "type": "string", "minLength": 1, "maxLength": 500, "description": "The action item description." },
+          "completed": { "type": "boolean", "default": false, "description": "Whether completed." },
+          "due_at": { "type": "string", "format": "date-time", "description": "Due date in ISO 8601 format." }
+        }
+      },
+      "UpdateActionItem": {
+        "type": "object",
+        "properties": {
+          "description": { "type": "string", "minLength": 1, "maxLength": 500, "description": "New description." },
+          "completed": { "type": "boolean", "description": "New completion status." },
+          "due_at": { "type": "string", "format": "date-time", "description": "New due date." }
+        }
+      },
+      "BatchCreateActionItems": {
+        "type": "object",
+        "required": ["action_items"],
+        "properties": {
+          "action_items": { "type": "array", "items": { "$ref": "#/components/schemas/CreateActionItem" }, "maxItems": 50, "description": "List of action items to create (max 50)." }
+        }
+      },
+      "BatchActionItemsResponse": {
+        "type": "object",
+        "properties": {
+          "action_items": { "type": "array", "items": { "$ref": "#/components/schemas/ActionItem" } },
+          "created_count": { "type": "integer", "description": "Number of action items created." }
+        }
+      },
+      "ApiKey": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string", "description": "Unique key identifier." },
+          "name": { "type": "string", "description": "Descriptive name." },
+          "key_prefix": { "type": "string", "description": "First part of the key (for identification)." },
+          "created_at": { "type": "string", "format": "date-time" },
+          "last_used_at": { "type": ["string", "null"], "format": "date-time", "description": "When the key was last used." }
+        }
+      },
+      "ApiKeyCreated": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "name": { "type": "string" },
+          "key_prefix": { "type": "string" },
+          "key": { "type": "string", "description": "The full API key. **Only returned once during creation.**" },
+          "created_at": { "type": "string", "format": "date-time" },
+          "last_used_at": { "type": ["string", "null"], "format": "date-time" }
+        }
+      },
+      "CreateApiKey": {
+        "type": "object",
+        "required": ["name"],
+        "properties": {
+          "name": { "type": "string", "description": "Descriptive name for the key." }
+        }
+      },
+      "SuccessResponse": {
+        "type": "object",
+        "properties": {
+          "success": { "type": "boolean" }
+        }
+      },
+      "ErrorResponse": {
+        "type": "object",
+        "properties": {
+          "detail": { "type": "string", "description": "Error description." }
+        }
+      }
+    },
+    "responses": {
+      "Unauthorized": {
+        "description": "Invalid or missing API key.",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/ErrorResponse" },
+            "example": { "detail": "Invalid API key" }
+          }
+        }
+      },
+      "NotFound": {
+        "description": "Resource not found.",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/ErrorResponse" },
+            "example": { "detail": "Not found" }
+          }
+        }
+      },
+      "ValidationError": {
+        "description": "Validation error.",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/ErrorResponse" },
+            "example": { "detail": "Validation error: content is required" }
+          }
+        }
       }
     }
   }

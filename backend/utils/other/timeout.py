@@ -1,5 +1,5 @@
 from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.responses import Response
+from starlette.responses import JSONResponse, Response
 from fastapi import Request
 import asyncio
 import os
@@ -12,6 +12,7 @@ class TimeoutMiddleware(BaseHTTPMiddleware):
 
         self.default_timeout = self._get_timeout_from_env("HTTP_DEFAULT_TIMEOUT", default=2 * 60)
         self.maximum_age_seconds = self._get_timeout_from_env("HTTP_MAXIMUM_AGE_SECONDS", default=5 * 60)
+        self.clock_skew_allowance = self._get_timeout_from_env("HTTP_CLOCK_SKEW_ALLOWANCE", default=5 * 60)
 
         self.methods_timeout = self._parse_methods_timeout(methods_timeout or {})
 
@@ -37,6 +38,7 @@ class TimeoutMiddleware(BaseHTTPMiddleware):
 
     async def dispatch(self, request: Request, call_next):
         # Check for stale request header first
+        # Uses clock_skew_allowance to tolerate client/server clock drift (#5929)
         request_start_header = request.headers.get("x-request-start-time")
         if request_start_header:
             try:
@@ -44,11 +46,19 @@ class TimeoutMiddleware(BaseHTTPMiddleware):
                 current_time = time.time()
                 request_age = current_time - request_start_time
 
-                if request_age > self.maximum_age_seconds:
-                    # 408 Request Timeout is a fitting status code.
-                    return Response(status_code=408, content="Request is too old and has been rejected.")
+                if request_age > self.maximum_age_seconds + self.clock_skew_allowance:
+                    return JSONResponse(
+                        status_code=408,
+                        content={
+                            "error": "clock_skew",
+                            "message": "Request rejected — your device clock may be out of sync",
+                            "server_time": current_time,
+                            "client_time": request_start_time,
+                            "skew_seconds": round(request_age, 1),
+                            "hint": "Check your device date/time settings and enable automatic time",
+                        },
+                    )
             except (ValueError, TypeError):
-                # Header is malformed, proceed as normal or reject with 400
                 pass
 
         timeout = self.methods_timeout.get(request.method, self.default_timeout)

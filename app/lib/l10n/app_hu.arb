@@ -2751,13 +2751,11 @@
   "switchApiConfirmBody": "Váltás erre: {environment}? A módosítások érvényesítéséhez be kell zárnod és újra kell nyitnod az alkalmazást.",
   "switchApiConfirmTitle": "API környezet váltása",
   "switchRequiresRestart": "A váltás az alkalmazás újraindítását igényli",
-  "officialTeamName": "Nooto Team",
-  "conversationsEmptyStateMessage": "Kezdjen beszélgetést a Nootóval, vagy rögzítsen egyet az eszközével",
-  "tasksCleanTodayTitle": "Törlöd a mai feladatokat?",
-  "tasksCleanTodayMessage": "Ez csak a határidőket távolítja el",
   "shared": "Megosztott",
   "onlyYouCanSeeConversation": "Csak Ön láthatja ezt a beszélgetést",
   "anyoneWithLinkCanView": "Bárki megtekintheti, akinek megvan a link",
+  "tasksCleanTodayTitle": "Törlöd a mai feladatokat?",
+  "tasksCleanTodayMessage": "Ez csak a határidőket távolítja el",
   "tasksOverdue": "Lejárt",
   "answerTheCallFrom": "Fogadja a hivast innen",
   "callAlreadyInProgress": "Egy hivas mar folyamatban van",
@@ -2892,5 +2890,48 @@
         "type": "String"
       }
     }
-  }
+  },
+  "fairUseBannerStatus": "Méltányos használat: {status}",
+  "@fairUseBannerStatus": {
+    "placeholders": {
+      "status": {
+        "type": "String"
+      }
+    }
+  },
+  "improveConnectionTitle": "Kapcsolat javítása",
+  "improveConnectionContent": "Javítottuk, hogyan marad az Omi csatlakozva az eszközödhöz. Az aktiváláshoz menj az Eszközinfo oldalra, koppints az \"Eszköz leválasztása\" gombra, majd párosítsd újra az eszközödet.",
+  "improveConnectionAction": "Értem",
+  "clockSkewWarning": "Az eszköz órája ~{minutes} perccel eltér. Ellenőrizze a dátum- és időbeállításokat.",
+  "omisStorage": "Omi tárhelye",
+  "phoneStorage": "Telefon tárhelye",
+  "cloudStorage": "Felhő tárhely",
+  "howSyncingWorks": "Hogyan működik a szinkronizálás",
+  "noSyncedRecordings": "Még nincsenek szinkronizált felvételek",
+  "recordingsSyncAutomatically": "A felvételek automatikusan szinkronizálódnak — nincs teendő.",
+  "filesDownloadedUploadedNextTime": "A már letöltött fájlok legközelebb feltöltődnek.",
+  "nConversationsCreated": "{count, plural, =1{1 beszélgetés létrehozva} other{{count} beszélgetés létrehozva}}",
+  "tapToView": "Koppintson a megtekintéshez",
+  "syncFailed": "Szinkronizálás sikertelen",
+  "keepSyncing": "Szinkronizálás folytatása",
+  "cancelSyncQuestion": "Szinkronizálás megszakítása?",
+  "omisStorageDesc": "Amikor az Omi nincs csatlakoztatva a telefonjához, a hangot helyileg tárolja a beépített memóriájában. Soha nem veszít el egy felvételt sem.",
+  "phoneStorageDesc": "Amikor az Omi újra csatlakozik, a felvételek automatikusan átkerülnek a telefonjára feltöltés előtt.",
+  "cloudStorageDesc": "Feltöltés után a felvételei feldolgozásra és átírásra kerülnek. A beszélgetések egy percen belül elérhetők lesznek.",
+  "storageSection": "TÁRHELY",
+  "tipKeepPhoneNearby": "Tartsa a telefonját a közelben a gyorsabb szinkronizáláshoz",
+  "tipStableInternet": "Stabil internet gyorsítja a felhőbe feltöltést",
+  "tipAutoSync": "A felvételek automatikusan szinkronizálódnak",
+  "permissions": "Engedélyek",
+  "permissionEnabled": "Engedélyezve",
+  "permissionEnable": "Engedélyezés",
+  "permissionsPageDescription": "Ezek az engedélyek alapvetőek az Omi működéséhez. Kulcsfontosságú funkciókat tesznek lehetővé, mint az értesítések, helymeghatározáson alapuló élmények és hangfelvétel.",
+  "permissionsRequiredDescription": "Az Omi néhány engedélyre van szüksége a megfelelő működéshez. Kérjük, add meg őket a folytatáshoz.",
+  "permissionsSetupTitle": "Szerezd meg a legjobb élményt",
+  "permissionsSetupDescription": "Engedélyezz néhány jogosultságot, hogy az Omi varázsolhasson.",
+  "permissionsChangeAnytime": "Ezeket bármikor módosíthatod a Beállítások > Engedélyek menüben",
+  "location": "Helyzet",
+  "microphone": "Mikrofon",
+  "officialTeamName": "Nooto Team",
+  "conversationsEmptyStateMessage": "Kezdjen beszélgetést a Nootóval, vagy rögzítsen egyet az eszközével"
 }

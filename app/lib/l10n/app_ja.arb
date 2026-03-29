@@ -2656,13 +2656,11 @@
   "switchApiConfirmBody": "{environment}に切り替えますか？変更を適用するにはアプリを閉じて再度開く必要があります。",
   "switchApiConfirmTitle": "API環境の切替",
   "switchRequiresRestart": "切替にはアプリの再起動が必要です",
-  "officialTeamName": "Nooto Team",
-  "conversationsEmptyStateMessage": "Nootoと会話を始めるか、デバイスで録音してください",
-  "tasksCleanTodayTitle": "今日のタスクを整理しますか？",
-  "tasksCleanTodayMessage": "期限のみ削除されます",
   "shared": "共有済み",
   "onlyYouCanSeeConversation": "この会話を見ることができるのはあなただけです",
   "anyoneWithLinkCanView": "リンクを知っている人は誰でも閲覧できます",
+  "tasksCleanTodayTitle": "今日のタスクを整理しますか？",
+  "tasksCleanTodayMessage": "期限のみ削除されます",
   "tasksOverdue": "期限切れ",
   "answerTheCallFrom": "この番号からの着信に応答",
   "callAlreadyInProgress": "通話中です",
@@ -2797,5 +2795,48 @@
         "type": "String"
       }
     }
-  }
+  },
+  "fairUseBannerStatus": "公正使用：{status}",
+  "@fairUseBannerStatus": {
+    "placeholders": {
+      "status": {
+        "type": "String"
+      }
+    }
+  },
+  "improveConnectionTitle": "接続を改善",
+  "improveConnectionContent": "Omiがデバイスとの接続を維持する方法を改善しました。これを有効にするには、デバイス情報ページに移動し、「デバイスを切断」をタップしてから、デバイスを再度ペアリングしてください。",
+  "improveConnectionAction": "了解",
+  "clockSkewWarning": "デバイスの時計が約{minutes}分ずれています。日付と時刻の設定を確認してください。",
+  "omisStorage": "Omiのストレージ",
+  "phoneStorage": "電話のストレージ",
+  "cloudStorage": "クラウドストレージ",
+  "howSyncingWorks": "同期の仕組み",
+  "noSyncedRecordings": "同期済みの録音はまだありません",
+  "recordingsSyncAutomatically": "録音は自動的に同期されます — 操作は不要です。",
+  "filesDownloadedUploadedNextTime": "ダウンロード済みのファイルは次回アップロードされます。",
+  "nConversationsCreated": "{count, plural, =1{1件の会話を作成} other{{count}件の会話を作成}}",
+  "tapToView": "タップして表示",
+  "syncFailed": "同期に失敗しました",
+  "keepSyncing": "同期を続ける",
+  "cancelSyncQuestion": "同期をキャンセルしますか？",
+  "omisStorageDesc": "Omiがスマートフォンに接続されていない時、内蔵メモリにオーディオをローカル保存します。録音を失うことはありません。",
+  "phoneStorageDesc": "Omiが再接続すると、録音はアップロード前に自動的にスマートフォンに転送されます。",
+  "cloudStorageDesc": "アップロード後、録音は処理・文字起こしされます。会話は1分以内に利用可能になります。",
+  "storageSection": "ストレージ",
+  "tipKeepPhoneNearby": "より速い同期のためにスマートフォンを近くに置いてください",
+  "tipStableInternet": "安定したインターネットでクラウドアップロードが高速化します",
+  "tipAutoSync": "録音は自動的に同期されます",
+  "permissions": "権限",
+  "permissionEnabled": "有効",
+  "permissionEnable": "有効にする",
+  "permissionsPageDescription": "これらの権限はOmiの動作に不可欠です。通知、位置情報に基づく体験、音声キャプチャなどの主要機能を有効にします。",
+  "permissionsRequiredDescription": "Omiが正しく動作するためにいくつかの権限が必要です。続行するには許可してください。",
+  "permissionsSetupTitle": "最高の体験を手に入れよう",
+  "permissionsSetupDescription": "いくつかの権限を有効にして、Omiの魔法を体験しましょう。",
+  "permissionsChangeAnytime": "設定 > 権限からいつでも変更できます",
+  "location": "位置情報",
+  "microphone": "マイク",
+  "officialTeamName": "Nooto Team",
+  "conversationsEmptyStateMessage": "Nootoと会話を始めるか、デバイスで録音してください"
 }

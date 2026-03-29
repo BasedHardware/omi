@@ -24,6 +24,7 @@ from utils.conversations.location import get_google_maps_location
 from utils.conversations.memories import process_external_integration_memory
 from utils.conversations.search import search_conversations
 from utils.app_integrations import send_app_notification
+from utils.other.endpoints import check_rate_limit_inline
 import logging
 
 logger = logging.getLogger(__name__)
@@ -86,6 +87,9 @@ async def create_conversation_via_integration(
     api_key = authorization.replace('Bearer ', '')
     if not verify_api_key(app_id, api_key):
         raise HTTPException(status_code=403, detail="Invalid integration API key")
+
+    # Rate limit per app+user
+    check_rate_limit_inline(f"{app_id}:{uid}", "integration:conversations")
 
     # Verify if the app exists
     app = apps_db.get_app_by_id_db(app_id)
@@ -161,6 +165,9 @@ async def create_memories_via_integration(
     api_key = authorization.replace('Bearer ', '')
     if not verify_api_key(app_id, api_key):
         raise HTTPException(status_code=403, detail="Invalid integrationAPI key")
+
+    # Rate limit per app+user
+    check_rate_limit_inline(f"{app_id}:{uid}", "integration:memories")
 
     # Verify if the app exists
     app = apps_db.get_app_by_id_db(app_id)
@@ -341,6 +348,8 @@ async def get_conversations_via_integration(
     for conv in conversations_data:
         try:
             if conv.get('is_locked', False):
+                conv['structured']['title'] = ''
+                conv['structured']['overview'] = ''
                 conv['structured']['action_items'] = []
                 conv['structured']['events'] = []
                 conv['transcript_segments'] = []
@@ -472,6 +481,8 @@ async def search_conversations_via_integration(
     for conv in full_conversations:
         try:
             if conv.get('is_locked', False):
+                conv['structured']['title'] = ''
+                conv['structured']['overview'] = ''
                 conv['structured']['action_items'] = []
                 conv['structured']['events'] = []
                 conv['transcript_segments'] = []

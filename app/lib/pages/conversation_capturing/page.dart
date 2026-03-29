@@ -19,7 +19,6 @@ import 'package:omi/theme/app_theme.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/enums.dart';
 import 'package:omi/utils/l10n_extensions.dart';
-import 'package:omi/utils/platform/platform_service.dart';
 import 'package:omi/widgets/confirmation_dialog.dart';
 import 'package:omi/widgets/photo_viewer_page.dart';
 
@@ -58,10 +57,7 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
         _isMuted = false;
       });
 
-      if (PlatformService.isDesktop) {
-        // Desktop - system audio
-        await provider.resumeSystemAudioRecording();
-      } else if (provider.havingRecordingDevice) {
+      if (provider.havingRecordingDevice) {
         // Device recording (Omi device)
         await provider.resumeDeviceRecording();
       } else {
@@ -78,10 +74,7 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
         _isMuted = true;
       });
 
-      if (PlatformService.isDesktop) {
-        // Desktop - system audio
-        await provider.pauseSystemAudioRecording();
-      } else if (provider.havingRecordingDevice) {
+      if (provider.havingRecordingDevice) {
         // Device recording (Omi device)
         await provider.pauseDeviceRecording();
       } else {
@@ -121,11 +114,9 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
     if (provider.segments.isNotEmpty || provider.photos.isNotEmpty) {
       // Helper function to stop recording and process conversation
       Future<void> stopRecordingAndProcess() async {
-        // Stop any active recording (phone mic or system audio)
+        // Stop any active recording (phone mic)
         if (provider.recordingState == RecordingState.record) {
           await provider.stopStreamRecording();
-        } else if (provider.recordingState == RecordingState.systemAudioRecord) {
-          await provider.stopSystemAudioRecording();
         }
         // Then process the conversation
         provider.forceProcessingCurrentConversation();

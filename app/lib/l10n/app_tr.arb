@@ -2690,13 +2690,11 @@
   "switchApiConfirmBody": "{environment} ortamına geçilsin mi? Değişikliklerin geçerli olması için uygulamayı kapatıp yeniden açmanız gerekecek.",
   "switchApiConfirmTitle": "API Ortamını Değiştir",
   "switchRequiresRestart": "Değiştirme uygulama yeniden başlatma gerektirir",
-  "officialTeamName": "Nooto Team",
-  "conversationsEmptyStateMessage": "Nooto ile bir sohbet başlatın veya cihazınızla bir tane kaydedin",
-  "tasksCleanTodayTitle": "Bugünün görevleri temizlensin mi?",
-  "tasksCleanTodayMessage": "Bu işlem yalnızca son tarihleri kaldırır",
   "shared": "Paylaşıldı",
   "onlyYouCanSeeConversation": "Bu konuşmayı yalnızca siz görebilirsiniz",
   "anyoneWithLinkCanView": "Bağlantıya sahip olan herkes görüntüleyebilir",
+  "tasksCleanTodayTitle": "Bugünün görevleri temizlensin mi?",
+  "tasksCleanTodayMessage": "Bu işlem yalnızca son tarihleri kaldırır",
   "tasksOverdue": "Gecikmiş",
   "answerTheCallFrom": "Su numaradan gelen aramayi cevaplayin",
   "callAlreadyInProgress": "Bir arama zaten devam ediyor",
@@ -2831,5 +2829,48 @@
         "type": "String"
       }
     }
-  }
+  },
+  "fairUseBannerStatus": "Adil Kullanım: {status}",
+  "@fairUseBannerStatus": {
+    "placeholders": {
+      "status": {
+        "type": "String"
+      }
+    }
+  },
+  "improveConnectionTitle": "Bağlantıyı İyileştir",
+  "improveConnectionContent": "Omi'nin cihazınıza bağlı kalma şeklini iyileştirdik. Bunu etkinleştirmek için Cihaz Bilgileri sayfasına gidin, \"Cihazı Kes\" seçeneğine dokunun ve cihazınızı tekrar eşleştirin.",
+  "improveConnectionAction": "Anladım",
+  "clockSkewWarning": "Cihazınızın saati ~{minutes} dk. farklı. Tarih ve saat ayarlarınızı kontrol edin.",
+  "omisStorage": "Omi'nin Depolaması",
+  "phoneStorage": "Telefon Depolaması",
+  "cloudStorage": "Bulut Depolaması",
+  "howSyncingWorks": "Senkronizasyon nasıl çalışır",
+  "noSyncedRecordings": "Henüz senkronize kayıt yok",
+  "recordingsSyncAutomatically": "Kayıtlar otomatik olarak senkronize edilir — herhangi bir işlem gerekmez.",
+  "filesDownloadedUploadedNextTime": "Zaten indirilen dosyalar bir dahaki sefere yüklenecektir.",
+  "nConversationsCreated": "{count, plural, =1{1 konuşma oluşturuldu} other{{count} konuşma oluşturuldu}}",
+  "tapToView": "Görüntülemek için dokunun",
+  "syncFailed": "Senkronizasyon başarısız",
+  "keepSyncing": "Senkronizasyona devam et",
+  "cancelSyncQuestion": "Senkronizasyon iptal edilsin mi?",
+  "omisStorageDesc": "Omi'niz telefonunuza bağlı olmadığında, sesi yerleşik belleğinde yerel olarak saklar. Hiçbir kaydı kaybetmezsiniz.",
+  "phoneStorageDesc": "Omi yeniden bağlandığında, kayıtlar yüklenmeden önce otomatik olarak telefonunuza aktarılır.",
+  "cloudStorageDesc": "Yüklendikten sonra kayıtlarınız işlenir ve yazıya dökülür. Konuşmalar bir dakika içinde kullanılabilir olacaktır.",
+  "storageSection": "DEPOLAMA",
+  "tipKeepPhoneNearby": "Daha hızlı senkronizasyon için telefonunuzu yakında tutun",
+  "tipStableInternet": "Kararlı internet bulut yüklemelerini hızlandırır",
+  "tipAutoSync": "Kayıtlar otomatik olarak senkronize edilir",
+  "permissions": "İzinler",
+  "permissionEnabled": "Etkin",
+  "permissionEnable": "Etkinleştir",
+  "permissionsPageDescription": "Bu izinler Omi'nin çalışması için temeldir. Bildirimler, konum tabanlı deneyimler ve ses yakalama gibi temel özellikleri etkinleştirirler.",
+  "permissionsRequiredDescription": "Omi düzgün çalışmak için birkaç izne ihtiyaç duyar. Devam etmek için lütfen bunları verin.",
+  "permissionsSetupTitle": "En iyi deneyimi yaşayın",
+  "permissionsSetupDescription": "Omi büyüsünü gösterebilsin diye birkaç izni etkinleştirin.",
+  "permissionsChangeAnytime": "Bunları istediğiniz zaman Ayarlar > İzinler bölümünden değiştirebilirsiniz",
+  "location": "Konum",
+  "microphone": "Mikrofon",
+  "officialTeamName": "Nooto Team",
+  "conversationsEmptyStateMessage": "Nooto ile bir sohbet başlatın veya cihazınızla bir tane kaydedin"
 }

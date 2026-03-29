@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:intl_phone_field/countries.dart';
+import 'package:intl_country_data/intl_country_data.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/pages/phone_calls/phone_setup_verify_page.dart';
@@ -17,7 +17,7 @@ class PhoneSetupNumberPage extends StatefulWidget {
 class _PhoneSetupNumberPageState extends State<PhoneSetupNumberPage> {
   final TextEditingController _phoneController = TextEditingController();
   final FocusNode _phoneFocus = FocusNode();
-  Country _selectedCountry = countries.firstWhere((c) => c.code == 'US');
+  IntlCountryData _selectedCountry = IntlCountryData.fromCountryCodeAlpha2('US');
   bool _isLoading = false;
   String? _errorMessage;
 
@@ -38,12 +38,12 @@ class _PhoneSetupNumberPageState extends State<PhoneSetupNumberPage> {
 
   bool get _isValid {
     var digits = _phoneController.text.replaceAll(RegExp(r'\D'), '');
-    return digits.length >= _selectedCountry.minLength && digits.length <= _selectedCountry.maxLength;
+    return digits.length >= _selectedCountry.telephoneMinLength && digits.length <= _selectedCountry.telephoneMaxLength;
   }
 
   String get _fullNumber {
     var digits = _phoneController.text.replaceAll(RegExp(r'\D'), '');
-    return '+${_selectedCountry.fullCountryCode}$digits';
+    return '+${_selectedCountry.telephoneCode}$digits';
   }
 
   void _showCountryPicker() {
@@ -146,7 +146,7 @@ class _PhoneSetupNumberPageState extends State<PhoneSetupNumberPage> {
                             Text(_selectedCountry.flag, style: const TextStyle(fontSize: 22)),
                             const SizedBox(width: 6),
                             Text(
-                              '+${_selectedCountry.fullCountryCode}',
+                              '+${_selectedCountry.telephoneCode}',
                               style: const TextStyle(color: Colors.white, fontSize: 16),
                             ),
                             const SizedBox(width: 4),
@@ -225,8 +225,8 @@ class _PhoneSetupNumberPageState extends State<PhoneSetupNumberPage> {
 }
 
 class _CountryPickerSheet extends StatefulWidget {
-  final Country selected;
-  final ValueChanged<Country> onSelect;
+  final IntlCountryData selected;
+  final ValueChanged<IntlCountryData> onSelect;
 
   const _CountryPickerSheet({required this.selected, required this.onSelect});
 
@@ -236,13 +236,16 @@ class _CountryPickerSheet extends StatefulWidget {
 
 class _CountryPickerSheetState extends State<_CountryPickerSheet> {
   final TextEditingController _searchController = TextEditingController();
-  List<Country> _filtered = countries;
+  final List<IntlCountryData> _allCountries = IntlCountryData.all();
+  List<IntlCountryData> _filtered = IntlCountryData.all();
 
   void _filter(String query) {
     var q = query.toLowerCase();
     setState(() {
-      _filtered = countries.where((c) {
-        return c.name.toLowerCase().contains(q) || c.dialCode.contains(q) || c.code.toLowerCase().contains(q);
+      _filtered = _allCountries.where((c) {
+        return c.name.toLowerCase().contains(q) ||
+            c.telephoneCode.contains(q) ||
+            c.codeAlpha2.toLowerCase().contains(q);
       }).toList();
     });
   }
@@ -293,7 +296,7 @@ class _CountryPickerSheetState extends State<_CountryPickerSheet> {
               itemCount: _filtered.length,
               itemBuilder: (_, i) {
                 var c = _filtered[i];
-                var isSelected = c.code == widget.selected.code;
+                var isSelected = c.codeAlpha2 == widget.selected.codeAlpha2;
                 return GestureDetector(
                   onTap: () => widget.onSelect(c),
                   child: Container(
@@ -314,7 +317,7 @@ class _CountryPickerSheetState extends State<_CountryPickerSheet> {
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),
-                        Text('+${c.fullCountryCode}', style: TextStyle(fontSize: 14, color: Colors.grey[500])),
+                        Text('+${c.telephoneCode}', style: TextStyle(fontSize: 14, color: Colors.grey[500])),
                       ],
                     ),
                   ),

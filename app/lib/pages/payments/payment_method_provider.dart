@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/widgets.dart';
 
 import 'package:omi/backend/http/api/payments.dart';
-import 'package:omi/main.dart';
+import 'package:omi/app_globals.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/widgets/extensions/string.dart';
@@ -56,7 +56,7 @@ class PaymentMethodProvider extends ChangeNotifier {
       _filteredCountries = _supportedCountries;
       notifyListeners();
     } else {
-      AppSnackbar.showSnackbarError(MyApp.navigatorKey.currentContext!.l10n.paymentFailedToFetchCountries);
+      AppSnackbar.showSnackbarError(globalNavigatorKey.currentContext!.l10n.paymentFailedToFetchCountries);
     }
   }
 
@@ -80,7 +80,7 @@ class PaymentMethodProvider extends ChangeNotifier {
       _activeMethod = method;
       notifyListeners();
     } else {
-      AppSnackbar.showSnackbarError(MyApp.navigatorKey.currentContext!.l10n.paymentFailedToSetDefault);
+      AppSnackbar.showSnackbarError(globalNavigatorKey.currentContext!.l10n.paymentFailedToSetDefault);
     }
   }
 
@@ -159,7 +159,7 @@ class PaymentMethodProvider extends ChangeNotifier {
   Future<void> connectPayPal(String email, String link) async {
     var res = await savePayPalDetails(email, link);
     if (!res) {
-      AppSnackbar.showSnackbarError(MyApp.navigatorKey.currentContext!.l10n.paymentFailedToSavePaypal);
+      AppSnackbar.showSnackbarError(globalNavigatorKey.currentContext!.l10n.paymentFailedToSavePaypal);
       return;
     }
     _payPalConnectionState = PaymentConnectionState.connected;

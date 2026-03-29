@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:omi/backend/http/api/agents.dart';
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
-import 'package:omi/main.dart';
+import 'package:omi/app_globals.dart';
 import 'package:omi/providers/base_provider.dart';
 import 'package:omi/services/agent_chat_service.dart';
 import 'package:omi/services/notifications/daily_reflection_notification.dart';
@@ -166,7 +166,7 @@ class DeveloperModeProvider extends BaseProvider {
 
     if (webhookAudioBytes.text.isNotEmpty && !isValidUrl(webhookAudioBytes.text)) {
       AppSnackbar.showSnackbarError(
-        MyApp.navigatorKey.currentContext?.l10n.devModeInvalidAudioBytesWebhookUrl ?? 'Invalid audio bytes webhook URL',
+        globalNavigatorKey.currentContext?.l10n.devModeInvalidAudioBytesWebhookUrl ?? 'Invalid audio bytes webhook URL',
       );
       setIsLoading(false);
       return;
@@ -176,7 +176,7 @@ class DeveloperModeProvider extends BaseProvider {
     }
     if (webhookOnTranscriptReceived.text.isNotEmpty && !isValidUrl(webhookOnTranscriptReceived.text)) {
       AppSnackbar.showSnackbarError(
-        MyApp.navigatorKey.currentContext?.l10n.devModeInvalidRealtimeTranscriptWebhookUrl ??
+        globalNavigatorKey.currentContext?.l10n.devModeInvalidRealtimeTranscriptWebhookUrl ??
             'Invalid realtime transcript webhook URL',
       );
       setIsLoading(false);
@@ -184,7 +184,7 @@ class DeveloperModeProvider extends BaseProvider {
     }
     if (webhookOnConversationCreated.text.isNotEmpty && !isValidUrl(webhookOnConversationCreated.text)) {
       AppSnackbar.showSnackbarError(
-        MyApp.navigatorKey.currentContext?.l10n.devModeInvalidConversationCreatedWebhookUrl ??
+        globalNavigatorKey.currentContext?.l10n.devModeInvalidConversationCreatedWebhookUrl ??
             'Invalid conversation created webhook URL',
       );
       setIsLoading(false);
@@ -192,7 +192,7 @@ class DeveloperModeProvider extends BaseProvider {
     }
     if (webhookDaySummary.text.isNotEmpty && !isValidUrl(webhookDaySummary.text)) {
       AppSnackbar.showSnackbarError(
-        MyApp.navigatorKey.currentContext?.l10n.devModeInvalidDaySummaryWebhookUrl ?? 'Invalid day summary webhook URL',
+        globalNavigatorKey.currentContext?.l10n.devModeInvalidDaySummaryWebhookUrl ?? 'Invalid day summary webhook URL',
       );
       setIsLoading(false);
       return;
@@ -236,7 +236,7 @@ class DeveloperModeProvider extends BaseProvider {
     );
     setIsLoading(false);
     notifyListeners();
-    AppSnackbar.showSnackbar(MyApp.navigatorKey.currentContext?.l10n.devModeSettingsSaved ?? 'Settings saved!');
+    AppSnackbar.showSnackbar(globalNavigatorKey.currentContext?.l10n.devModeSettingsSaved ?? 'Settings saved!');
   }
 
   void setIsLoading(bool value) {

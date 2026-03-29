@@ -35,8 +35,8 @@ Prioritized feature map to guide flow-walker E2E coverage of core Omi desktop ma
 | 2 | Chat — send message, AI response, actions | intelligence (3) | 9 | 2 | ✅ flow: chat.yaml (5 steps) |
 | 3 | Sidebar navigation — all 7 sections | retrieval-action (3) | 9 | 3 | ✅ flow: navigation.yaml |
 | 4 | Conversation list & browse (dashboard embedded) | capture (5) | 15 | 2 | ✅ flow: dashboard.yaml |
-| 5 | Screen capture (Rewind) | capture (5) | 15 | 2 | ❌ needs flow |
-| 6 | Audio recording (desktop mic) | capture (5) | 15 | 1 | ❌ needs flow |
+| 5 | Screen capture (Rewind) | capture (5) | 15 | 2 | ✅ flow: screen-recording-permission.yaml (7 steps) |
+| 6 | Audio recording (desktop mic) | capture (5) | 15 | 1 | ✅ flow: audio-recording.yaml (7 steps) |
 | 7 | Memory list & browse | memory (4) | 12 | 2 | ✅ flow: memories.yaml (6 steps) |
 | 8 | Memory search | memory (4) | 12 | 2 | ✅ flow: memories.yaml |
 | 9 | Tasks — categories, filters, create, toggle | retrieval-action (3) | 9 | 2 | ✅ flow: tasks.yaml (5 steps) |
@@ -52,8 +52,8 @@ Prioritized feature map to guide flow-walker E2E coverage of core Omi desktop ma
 | 14 | Transcription language settings | understand (4) | 8 | 3 | ✅ flow: language.yaml |
 | 15 | Language mode toggle (Auto/Single) | understand (4) | 8 | 3 | ✅ flow: language.yaml |
 | 16 | Goals CRUD (create, update, delete) | intelligence (3) | 6 | 2 | ✅ flow: dashboard.yaml |
-| 17 | Apps/Integrations marketplace | retrieval-action (3) | 6 | 2 | ❌ needs flow |
-| 18 | Refer a Friend | retrieval-action (3) | 6 | 2 | ❌ needs flow |
+| 17 | Apps/Integrations marketplace | retrieval-action (3) | 6 | 2 | ✅ flow: apps.yaml (6 steps) |
+| 18 | Refer a Friend | retrieval-action (3) | 6 | 2 | ✅ flow: refer.yaml (3 steps) |
 
 ### SETTINGS & SYSTEM (priority 3-5, walker_score 1-3)
 
@@ -79,11 +79,8 @@ Prioritized feature map to guide flow-walker E2E coverage of core Omi desktop ma
 
 | Rank | Feature | Priority | Blocker | Notes |
 |------|---------|----------|---------|-------|
-| 1 | Screen capture (Rewind) | 15 | Needs screen recording permission | Rewind page exists, AX identifiers unknown — needs exploration |
-| 2 | Audio recording (desktop mic) | 15 | Needs microphone permission grant | Start Recording button visible on dashboard but mic requires OS dialog |
-| 3 | Apps/Integrations | 6 | No flow written | Apps page accessible via sidebar_apps — should be straightforward |
-| 4 | Onboarding | 5 | Needs fresh/reset state | Reset Onboarding available in tray menu but causes state corruption (known issue) |
-| 5 | Auth | 5 | External OAuth | Google/Apple Sign-In opens browser — not automatable |
+| 1 | Onboarding | 5 | Needs fresh/reset state | Reset Onboarding available in tray menu but causes state corruption (known issue) |
+| 2 | Auth | 5 | External OAuth | Google/Apple Sign-In opens browser — not automatable |
 
 ---
 
@@ -97,6 +94,11 @@ Prioritized feature map to guide flow-walker E2E coverage of core Omi desktop ma
 | memories | 5/6 | PASS (1 skipped) | flow-walker.beastoin.workers.dev/runs/Mkp6ahc12I.html |
 | tasks | 4/5 | PASS (1 skipped) | flow-walker.beastoin.workers.dev/runs/ealB_-UdqS.html |
 | settings | 9/9 | PASS | flow-walker.beastoin.workers.dev/runs/RoTW8GeljN.html |
+| rewind | 4/4 | PASS | flow-walker.beastoin.workers.dev/runs/1HE5OsPOOy.html |
+| apps | 6/6 | PASS | flow-walker.beastoin.workers.dev/runs/VDGw-wbHqa.html |
+| refer | 3/3 | PASS | flow-walker.beastoin.workers.dev/runs/Jz8ymviOy1.html |
+| screen-recording-permission | 7/7 | PASS | flow-walker.beastoin.workers.dev/runs/3WoXUG6xkT.html |
+| audio-recording | 7/7 | PASS | flow-walker.beastoin.workers.dev/runs/UdkzB-dYG_.html |
 
 ---
 
@@ -104,10 +106,10 @@ Prioritized feature map to guide flow-walker E2E coverage of core Omi desktop ma
 
 | Category | Total Features | Covered | Gaps |
 |----------|---------------|---------|------|
-| Core Daily (capture, intelligence) | 10 | 7 | 3 (screen capture, audio recording, quick note partial) |
-| Core Weekly (memory, understand, retrieval) | 8 | 6 | 2 (apps, refer) |
+| Core Daily (capture, intelligence) | 10 | 9 | 1 (quick note partial) |
+| Core Weekly (memory, understand, retrieval) | 8 | 8 | 0 |
 | Settings & System | 13 | 11 | 2 (onboarding, auth) |
-| **Total** | **31** | **24** | **7** |
+| **Total** | **31** | **28** | **3** |
 
 ---
 

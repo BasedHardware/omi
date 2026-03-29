@@ -2624,13 +2624,11 @@
   "switchApiConfirmBody": "Přepnout na {environment}? Budete muset zavřít a znovu otevřít aplikaci, aby se změny projevily.",
   "switchApiConfirmTitle": "Přepnout prostředí API",
   "switchRequiresRestart": "Přepnutí vyžaduje restart aplikace",
-  "officialTeamName": "Nooto Team",
-  "conversationsEmptyStateMessage": "Zahajte konverzaci s Nooto nebo ji nahrajte svým zařízením",
-  "tasksCleanTodayTitle": "Vyčistit dnešní úkoly?",
-  "tasksCleanTodayMessage": "Tímto se odstraní pouze termíny",
   "shared": "Sdíleno",
   "onlyYouCanSeeConversation": "Tuto konverzaci můžete vidět pouze vy",
   "anyoneWithLinkCanView": "Kdokoli s odkazem může zobrazit",
+  "tasksCleanTodayTitle": "Vyčistit dnešní úkoly?",
+  "tasksCleanTodayMessage": "Tímto se odstraní pouze termíny",
   "tasksOverdue": "Po termínu",
   "answerTheCallFrom": "Prijmete hovor od",
   "callAlreadyInProgress": "Hovor jiz probiha",
@@ -2765,5 +2763,48 @@
         "type": "String"
       }
     }
-  }
+  },
+  "fairUseBannerStatus": "Spravedlivé užívání: {status}",
+  "@fairUseBannerStatus": {
+    "placeholders": {
+      "status": {
+        "type": "String"
+      }
+    }
+  },
+  "improveConnectionTitle": "Zlepšit připojení",
+  "improveConnectionContent": "Vylepšili jsme způsob, jakým Omi zůstává připojeno k vašemu zařízení. Pro aktivaci přejděte na stránku Informace o zařízení, klepněte na \"Odpojit zařízení\" a poté zařízení znovu spárujte.",
+  "improveConnectionAction": "Rozumím",
+  "clockSkewWarning": "Hodiny vašeho zařízení se liší o ~{minutes} min. Zkontrolujte nastavení data a času.",
+  "omisStorage": "Úložiště Omi",
+  "phoneStorage": "Úložiště telefonu",
+  "cloudStorage": "Cloudové úložiště",
+  "howSyncingWorks": "Jak synchronizace funguje",
+  "noSyncedRecordings": "Zatím žádné synchronizované nahrávky",
+  "recordingsSyncAutomatically": "Nahrávky se synchronizují automaticky — není nutná žádná akce.",
+  "filesDownloadedUploadedNextTime": "Již stažené soubory budou nahrány příště.",
+  "nConversationsCreated": "{count, plural, =1{1 konverzace vytvořena} other{{count} konverzací vytvořeno}}",
+  "tapToView": "Klepněte pro zobrazení",
+  "syncFailed": "Synchronizace selhala",
+  "keepSyncing": "Pokračovat v synchronizaci",
+  "cancelSyncQuestion": "Zrušit synchronizaci?",
+  "omisStorageDesc": "Když váš Omi není připojen k telefonu, ukládá zvuk lokálně ve své vestavěné paměti. Nikdy neztratíte nahrávku.",
+  "phoneStorageDesc": "Když se Omi znovu připojí, nahrávky se automaticky přenesou do telefonu jako dočasné úložiště před nahráním.",
+  "cloudStorageDesc": "Po nahrání jsou vaše nahrávky zpracovány a přepsány. Konverzace budou dostupné během minuty.",
+  "storageSection": "ÚLOŽIŠTĚ",
+  "tipKeepPhoneNearby": "Mějte telefon poblíž pro rychlejší synchronizaci",
+  "tipStableInternet": "Stabilní internet urychluje nahrávání do cloudu",
+  "tipAutoSync": "Nahrávky se synchronizují automaticky",
+  "permissions": "Oprávnění",
+  "permissionEnabled": "Povoleno",
+  "permissionEnable": "Povolit",
+  "permissionsPageDescription": "Tato oprávnění jsou klíčová pro fungování Omi. Umožňují klíčové funkce jako oznámení, služby založené na poloze a záznam zvuku.",
+  "permissionsRequiredDescription": "Omi potřebuje několik oprávnění, aby správně fungoval. Prosím, udělte je pro pokračování.",
+  "permissionsSetupTitle": "Získejte nejlepší zážitek",
+  "permissionsSetupDescription": "Povolte několik oprávnění, aby Omi mohl fungovat naplno.",
+  "permissionsChangeAnytime": "Toto můžete kdykoli změnit v Nastavení > Oprávnění",
+  "location": "Poloha",
+  "microphone": "Mikrofon",
+  "officialTeamName": "Nooto Team",
+  "conversationsEmptyStateMessage": "Zahajte konverzaci s Nooto nebo ji nahrajte svým zařízením"
 }

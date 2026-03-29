@@ -182,12 +182,7 @@ class MemoryGraphViewModel: ObservableObject {
         defer { isLoading = false }
 
         do {
-            // Try local SQLite first (populated during file exploration)
-            var response = await KnowledgeGraphStorage.shared.loadGraph()
-            if response.nodes.isEmpty {
-                // Fall back to API (user may have graph from mobile)
-                response = try await APIClient.shared.getKnowledgeGraph()
-            }
+            let response = try await fetchGraph()
 
             log("Knowledge graph: \(response.nodes.count) nodes, \(response.edges.count) edges")
             isEmpty = response.nodes.isEmpty
@@ -217,6 +212,35 @@ class MemoryGraphViewModel: ObservableObject {
         } catch {
             log("Failed to load knowledge graph: \(error.localizedDescription)")
         }
+    }
+
+    private func fetchGraph() async throws -> KnowledgeGraphResponse {
+        var response = await KnowledgeGraphStorage.shared.loadGraph()
+        if !response.nodes.isEmpty {
+            return response
+        }
+
+        for attempt in 0..<4 {
+            if AuthState.shared.isRestoringAuth {
+                try? await Task.sleep(nanoseconds: 500_000_000)
+                continue
+            }
+
+            do {
+                return try await APIClient.shared.getKnowledgeGraph()
+            } catch {
+                if case AuthError.notSignedIn = error,
+                   AuthState.shared.isSignedIn || AuthState.shared.isRestoringAuth,
+                   attempt < 3 {
+                    try? await Task.sleep(nanoseconds: 1_000_000_000)
+                    continue
+                }
+                throw error
+            }
+        }
+
+        response = await KnowledgeGraphStorage.shared.loadGraph()
+        return response
     }
 
     // MARK: - Rebuild Graph

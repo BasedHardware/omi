@@ -24,6 +24,10 @@ class ChatToolExecutor {
     /// Called when request_permission returns "pending" — used to trigger the permission help timer
     static var onPermissionPending: ((_ permissionType: String) -> Void)?
 
+    /// Email/calendar insights from background reading (set by OnboardingChatView)
+    static var emailInsightsText: String?
+    static var calendarInsightsText: String?
+
     private static var fileScanFileCount = 0
     private static var followupContinuation: CheckedContinuation<String, Never>?
 
@@ -91,6 +95,9 @@ class ChatToolExecutor {
             return result
 
         case "complete_onboarding":
+            if !OnboardingChatPersistence.isGoalCompleted {
+                return "ERROR: Cannot complete onboarding yet. The user has NOT set their monthly goal. You MUST call ask_followup to ask about their top goal this month BEFORE calling complete_onboarding. Call get_email_insights first for context, then ask the goal question."
+            }
             let result = await executeCompleteOnboarding(toolCall.arguments)
             AnalyticsManager.shared.onboardingChatToolUsed(tool: "complete_onboarding")
             return result
@@ -100,6 +107,11 @@ class ChatToolExecutor {
             let nodeCount = (toolCall.arguments["nodes"] as? [[String: Any]])?.count ?? 0
             let edgeCount = (toolCall.arguments["edges"] as? [[String: Any]])?.count ?? 0
             AnalyticsManager.shared.onboardingChatToolUsed(tool: "save_knowledge_graph", properties: ["nodes": nodeCount, "edges": edgeCount])
+            return result
+
+        case "get_email_insights":
+            let result = executeGetEmailInsights()
+            AnalyticsManager.shared.onboardingChatToolUsed(tool: "get_email_insights", properties: ["has_email": emailInsightsText != nil, "has_calendar": calendarInsightsText != nil])
             return result
 
         default:
@@ -509,7 +521,11 @@ class ChatToolExecutor {
 
         switch type {
         case "screen_recording":
+            appState.screenRecordingGrantAttempts += 1
             appState.triggerScreenRecordingPermission()
+            if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture") {
+                NSWorkspace.shared.open(url)
+            }
             try? await Task.sleep(nanoseconds: 2_000_000_000)
             appState.checkScreenRecordingPermission()
             try? await Task.sleep(nanoseconds: 500_000_000)
@@ -819,6 +835,24 @@ class ChatToolExecutor {
         }
     }
 
+    /// Return email/calendar insights from background reading
+    private static func executeGetEmailInsights() -> String {
+        var sections: [String] = []
+
+        if let email = emailInsightsText, !email.isEmpty {
+            sections.append("## Email Insights\n\(email)")
+        }
+        if let calendar = calendarInsightsText, !calendar.isEmpty {
+            sections.append("## Calendar Insights\n\(calendar)")
+        }
+
+        if sections.isEmpty {
+            return "No email insights available yet. The background reading may still be in progress, or no browser with a Gmail session was found."
+        }
+
+        return sections.joined(separator: "\n\n")
+    }
+
     /// Set user preferences (language, name)
     private static func executeSetUserPreferences(_ args: [String: Any]) async -> String {
         var results: [String] = []
@@ -901,10 +935,8 @@ class ChatToolExecutor {
             let remappedSource = idRemap[sourceId] ?? sourceId
             let remappedTarget = idRemap[targetId] ?? targetId
 
-            // Skip self-referencing edges and edges to missing nodes
-            guard remappedSource != remappedTarget,
-                  seenLabels.values.contains(remappedSource),
-                  seenLabels.values.contains(remappedTarget) else { continue }
+            // Skip self-referencing edges
+            guard remappedSource != remappedTarget else { continue }
 
             let edgeId = "\(remappedSource)_\(remappedTarget)_\(label.lowercased().replacingOccurrences(of: " ", with: "_"))"
             edgeRecords.append(LocalKGEdgeRecord(

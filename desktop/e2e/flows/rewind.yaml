@@ -1,0 +1,35 @@
+version: 2
+name: rewind
+description: Rewind (Screen Capture) flow — navigate to Rewind page, verify permission state, explore timeline controls
+app: com.omi.computer-macos
+covers:
+  - desktop/Desktop/Sources/MainWindow/Pages/RewindPage.swift
+preconditions:
+  - auth_ready
+
+steps:
+  - id: S1
+    name: Navigate to Rewind page
+    do: "Click the Rewind sidebar icon (identifier: sidebar_rewind) to navigate to the Rewind page. Verify the page loads showing Rewind status and permission controls."
+    expect:
+      interactive_count: { min: 5 }
+
+  - id: S2
+    name: Verify permission state
+    do: "Check the Rewind page for permission status. If Screen Recording permission is not granted, a 'Grant Permission' or 'Grant' button should be visible. Note the current Rewind status (On/Off)."
+    expect:
+      interactive_count: { min: 3 }
+
+  - id: S3
+    name: Check Rewind settings gear
+    do: "Look for a settings/gear icon on the Rewind page. Click it if found to see Rewind configuration options (capture interval, storage, excluded apps)."
+    expect:
+      interactive_count: { min: 3 }
+
+  - id: S4
+    name: Return to Dashboard
+    do: "Click the Dashboard sidebar icon (identifier: sidebar_dashboard) to return to the Dashboard page."
+    expect:
+      interactive_count: { min: 5 }
+      text_visible:
+        - Dashboard

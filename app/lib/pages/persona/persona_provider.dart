@@ -6,7 +6,7 @@ import 'package:image_picker/image_picker.dart';
 
 import 'package:omi/backend/http/api/apps.dart';
 import 'package:omi/backend/preferences.dart';
-import 'package:omi/main.dart';
+import 'package:omi/app_globals.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
@@ -76,11 +76,11 @@ class PersonaProvider extends ChangeNotifier {
     Logger.debug('Twitter Profile: $res');
     if (res != null) {
       if (res['status'] == 'notfound') {
-        AppSnackbar.showSnackbarError(MyApp.navigatorKey.currentContext!.l10n.personaTwitterHandleNotFound);
+        AppSnackbar.showSnackbarError(globalNavigatorKey.currentContext!.l10n.personaTwitterHandleNotFound);
         _twitterProfile = {};
         MixpanelManager().personaTwitterProfileFetched(twitterHandle: handle, fetchSuccessful: false);
       } else if (res['status'] == 'suspended') {
-        AppSnackbar.showSnackbarError(MyApp.navigatorKey.currentContext!.l10n.personaTwitterHandleSuspended);
+        AppSnackbar.showSnackbarError(globalNavigatorKey.currentContext!.l10n.personaTwitterHandleSuspended);
         _twitterProfile = {};
         MixpanelManager().personaTwitterProfileFetched(twitterHandle: handle, fetchSuccessful: false);
       } else {
@@ -97,7 +97,7 @@ class PersonaProvider extends ChangeNotifier {
   Future verifyTweet() async {
     var (verified, verifiedPersonaId) = await verifyTwitterOwnership(_username, _twitterProfile['profile'], personaId);
     if (!verified) {
-      AppSnackbar.showSnackbarError(MyApp.navigatorKey.currentContext!.l10n.personaFailedToVerifyTwitter);
+      AppSnackbar.showSnackbarError(globalNavigatorKey.currentContext!.l10n.personaFailedToVerifyTwitter);
     }
     MixpanelManager().personaTwitterOwnershipVerified(
       personaId: verifiedPersonaId ?? personaId,
@@ -119,7 +119,7 @@ class PersonaProvider extends ChangeNotifier {
       _userPersona = res;
     } else {
       _userPersona = null;
-      AppSnackbar.showSnackbarError(MyApp.navigatorKey.currentContext!.l10n.personaFailedToFetch);
+      AppSnackbar.showSnackbarError(globalNavigatorKey.currentContext!.l10n.personaFailedToFetch);
     }
     setIsLoading(false);
   }
@@ -137,7 +137,7 @@ class PersonaProvider extends ChangeNotifier {
         SharedPreferencesUtil().verifiedPersonaId = _userPersona?.id;
       } else {
         _userPersona = null;
-        AppSnackbar.showSnackbarError(MyApp.navigatorKey.currentContext!.l10n.personaFailedToCreate);
+        AppSnackbar.showSnackbarError(globalNavigatorKey.currentContext!.l10n.personaFailedToCreate);
       }
     } else {
       // If we have a verified persona ID, fetch it
@@ -146,7 +146,7 @@ class PersonaProvider extends ChangeNotifier {
         _userPersona = App.fromJson(res);
       } else {
         _userPersona = null;
-        AppSnackbar.showSnackbarError(MyApp.navigatorKey.currentContext!.l10n.personaFailedToFetch);
+        AppSnackbar.showSnackbarError(globalNavigatorKey.currentContext!.l10n.personaFailedToFetch);
       }
     }
 
@@ -293,7 +293,7 @@ class PersonaProvider extends ChangeNotifier {
 
   Future<void> updatePersona() async {
     if (!hasOmiConnection && !hasTwitterConnection) {
-      AppSnackbar.showSnackbarError(MyApp.navigatorKey.currentContext!.l10n.personaConnectKnowledgeSource);
+      AppSnackbar.showSnackbarError(globalNavigatorKey.currentContext!.l10n.personaConnectKnowledgeSource);
       return;
     }
 
@@ -315,18 +315,16 @@ class PersonaProvider extends ChangeNotifier {
       if (hasOmiConnection && !_userPersona!.connectedAccounts.contains('omi')) {
         personaData['connected_accounts'] = [..._userPersona!.connectedAccounts, 'omi'];
       } else if (!hasOmiConnection && _userPersona!.connectedAccounts.contains('omi')) {
-        personaData['connected_accounts'] = _userPersona!.connectedAccounts
-            .where((element) => element != 'omi')
-            .toList();
+        personaData['connected_accounts'] =
+            _userPersona!.connectedAccounts.where((element) => element != 'omi').toList();
       }
 
       if (hasTwitterConnection && !_userPersona!.connectedAccounts.contains('twitter')) {
         personaData['connected_accounts'] = [..._userPersona!.connectedAccounts, 'twitter'];
         personaData['twitter'] = {'username': _twitterProfile['profile'], 'avatar': _twitterProfile['avatar']};
       } else if (!hasTwitterConnection && _userPersona!.connectedAccounts.contains('twitter')) {
-        personaData['connected_accounts'] = _userPersona!.connectedAccounts
-            .where((element) => element != 'twitter')
-            .toList();
+        personaData['connected_accounts'] =
+            _userPersona!.connectedAccounts.where((element) => element != 'twitter').toList();
       }
 
       List<String> updatedFields = [];
@@ -339,7 +337,7 @@ class PersonaProvider extends ChangeNotifier {
 
       bool success = await updatePersonaApp(selectedImage, personaData);
       if (success) {
-        AppSnackbar.showSnackbarSuccess(MyApp.navigatorKey.currentContext!.l10n.personaUpdatedSuccessfully);
+        AppSnackbar.showSnackbarSuccess(globalNavigatorKey.currentContext!.l10n.personaUpdatedSuccessfully);
         MixpanelManager().personaUpdated(
           personaId: _userPersona!.id,
           isPublic: !(personaData['private'] as bool? ?? true),
@@ -351,7 +349,7 @@ class PersonaProvider extends ChangeNotifier {
         await getVerifiedUserPersona();
         notifyListeners();
       } else {
-        AppSnackbar.showSnackbarError(MyApp.navigatorKey.currentContext!.l10n.personaFailedToUpdate);
+        AppSnackbar.showSnackbarError(globalNavigatorKey.currentContext!.l10n.personaFailedToUpdate);
         MixpanelManager().personaUpdateFailed(
           personaId: _userPersona!.id,
           errorMessage: 'Failed to update persona API call',
@@ -359,7 +357,7 @@ class PersonaProvider extends ChangeNotifier {
       }
     } catch (e) {
       Logger.debug('Error updating persona: $e');
-      AppSnackbar.showSnackbarError(MyApp.navigatorKey.currentContext!.l10n.personaFailedToUpdate);
+      AppSnackbar.showSnackbarError(globalNavigatorKey.currentContext!.l10n.personaFailedToUpdate);
       MixpanelManager().personaUpdateFailed(personaId: _userPersona!.id, errorMessage: e.toString());
     } finally {
       setIsLoading(false);
@@ -370,13 +368,13 @@ class PersonaProvider extends ChangeNotifier {
     MixpanelManager().personaCreateStarted();
     if (!formKey.currentState!.validate() || selectedImage == null) {
       if (selectedImage == null) {
-        AppSnackbar.showSnackbarError(MyApp.navigatorKey.currentContext!.l10n.personaPleaseSelectImage);
+        AppSnackbar.showSnackbarError(globalNavigatorKey.currentContext!.l10n.personaPleaseSelectImage);
       }
       return;
     }
 
     if (!hasOmiConnection && !hasTwitterConnection) {
-      AppSnackbar.showSnackbarError(MyApp.navigatorKey.currentContext!.l10n.personaConnectKnowledgeSource);
+      AppSnackbar.showSnackbarError(globalNavigatorKey.currentContext!.l10n.personaConnectKnowledgeSource);
       return;
     }
 
@@ -415,12 +413,12 @@ class PersonaProvider extends ChangeNotifier {
           onShowSuccessDialog!(personaUrl);
         }
       } else {
-        AppSnackbar.showSnackbarError(MyApp.navigatorKey.currentContext!.l10n.personaFailedToCreateTryLater);
+        AppSnackbar.showSnackbarError(globalNavigatorKey.currentContext!.l10n.personaFailedToCreateTryLater);
         MixpanelManager().personaCreateFailed(errorMessage: 'API response empty or no ID');
       }
     } catch (e) {
       AppSnackbar.showSnackbarError(
-        MyApp.navigatorKey.currentContext!.l10n.personaFailedToCreateWithError(e.toString()),
+        globalNavigatorKey.currentContext!.l10n.personaFailedToCreateWithError(e.toString()),
       );
       MixpanelManager().personaCreateFailed(errorMessage: e.toString());
       setIsLoading(false);
@@ -457,13 +455,13 @@ class PersonaProvider extends ChangeNotifier {
         MixpanelManager().personaEnabled(personaId: _userPersona!.id);
         return true;
       } else {
-        AppSnackbar.showSnackbarError(MyApp.navigatorKey.currentContext!.l10n.personaFailedToEnable);
+        AppSnackbar.showSnackbarError(globalNavigatorKey.currentContext!.l10n.personaFailedToEnable);
         MixpanelManager().personaEnableFailed(personaId: _userPersona!.id, errorMessage: 'API returned false');
         return false;
       }
     } catch (e) {
       AppSnackbar.showSnackbarError(
-        MyApp.navigatorKey.currentContext!.l10n.personaErrorEnablingWithError(e.toString()),
+        globalNavigatorKey.currentContext!.l10n.personaErrorEnablingWithError(e.toString()),
       );
       if (_userPersona != null) {
         MixpanelManager().personaEnableFailed(personaId: _userPersona!.id, errorMessage: e.toString());

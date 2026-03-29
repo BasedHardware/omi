@@ -323,10 +323,14 @@ final class UpdaterViewModel: ObservableObject {
     automaticallyChecksForUpdates = updaterController.updater.automaticallyChecksForUpdates
     automaticallyDownloadsUpdates = updaterController.updater.automaticallyDownloadsUpdates
 
+    // Auto-detect channel from app name/path on first launch only.
+    // Never overwrite a user-chosen channel on subsequent launches.
+    AppBuild.syncUpdateChannelOnFirstLaunch()
+
     // Initialize update channel from UserDefaults
-    // Normalize legacy "staging" → "beta" for users upgrading from older builds
+    // Normalize legacy "staging" → "beta" and "better" → "beta"
     var storedChannel = UserDefaults.standard.string(forKey: kUpdateChannelKey) ?? "stable"
-    if storedChannel == "staging" { storedChannel = "beta" }
+    if storedChannel == "staging" || storedChannel == "better" { storedChannel = "beta" }
     updateChannel = UpdateChannel(rawValue: storedChannel) ?? .stable
 
     // Wire up delegate back-reference
