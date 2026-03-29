@@ -1883,8 +1883,8 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
       ),
     );
   }
-} 
-
+}
+ 
 // ============================================================
 // Manual Firmware Flash Page
 // ============================================================
