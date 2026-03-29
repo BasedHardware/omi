@@ -397,6 +397,65 @@ class TestFinalAssignmentPass:
             assert seg.is_user is True, f"Segment {i} should be is_user=True after flush"
 
 
+# ─── Dirty Flag Behavior ─────────────────────────────────────────────────────
+
+
+class TestDirtyFlagBehavior:
+    """Tests for the speaker_map_dirty flag controlling full vs batch assignment.
+
+    The dirty flag is an inner variable of _stream_handler. These tests validate
+    the behavioral difference: when dirty (new match), all segments are processed;
+    when not dirty, only new/updated segments are processed.
+    """
+
+    def test_dirty_flag_true_fixes_all_prior_segments(self):
+        """When dirty (new match resolved), processing all segments fixes stale ones."""
+        from utils.speaker_assignment import process_speaker_assigned_segments
+        from models.transcript_segment import TranscriptSegment
+
+        # 4 earlier segments, all stale (is_user=False despite speaker 0 being user)
+        all_segments = [
+            TranscriptSegment(text=f'Old {i}', speaker='SPEAKER_0', speaker_id=0, is_user=False, start=i, end=i + 1)
+            for i in range(4)
+        ]
+        # New batch with 1 segment
+        new_segment = TranscriptSegment(text='New', speaker='SPEAKER_0', speaker_id=0, is_user=False, start=4, end=5)
+        all_segments.append(new_segment)
+
+        speaker_to_person_map = {0: ('user', 'User')}
+
+        # Dirty path: process ALL segments (simulates speaker_map_dirty=True)
+        process_speaker_assigned_segments(all_segments, {}, speaker_to_person_map)
+
+        # All 5 segments should be corrected
+        for i, seg in enumerate(all_segments):
+            assert seg.is_user is True, f"Segment {i} should be is_user=True in dirty path"
+
+    def test_clean_flag_only_fixes_new_segments(self):
+        """When not dirty, processing only new segments leaves prior ones stale."""
+        from utils.speaker_assignment import process_speaker_assigned_segments
+        from models.transcript_segment import TranscriptSegment
+
+        # 4 earlier segments, stale (is_user=False)
+        old_segments = [
+            TranscriptSegment(text=f'Old {i}', speaker='SPEAKER_0', speaker_id=0, is_user=False, start=i, end=i + 1)
+            for i in range(4)
+        ]
+        # New batch
+        new_segments = [TranscriptSegment(text='New', speaker='SPEAKER_0', speaker_id=0, is_user=False, start=4, end=5)]
+
+        speaker_to_person_map = {0: ('user', 'User')}
+
+        # Clean path: only process new segments (simulates speaker_map_dirty=False)
+        process_speaker_assigned_segments(new_segments, {}, speaker_to_person_map)
+
+        # New segment is fixed
+        assert new_segments[0].is_user is True
+        # Old segments remain stale — intentional, final pass at session end will fix them
+        for i, seg in enumerate(old_segments):
+            assert seg.is_user is False, f"Old segment {i} should remain stale in clean path"
+
+
 # ─── User Match Threshold Boundary ────────────────────────────────────────────
 
 
