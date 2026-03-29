@@ -84,7 +84,7 @@ class OmiBleForegroundService : Service() {
                     BluetoothAdapter.STATE_OFF -> {
                         Log.d(TAG, "Bluetooth turned OFF, cleaning up GATT")
                         updateNotification("Bluetooth is off")
-                        OmiBleManager.instance.disconnectAllPeripherals()
+                        OmiBleManager.instance.handleBluetoothOff()
                     }
                 }
             }
