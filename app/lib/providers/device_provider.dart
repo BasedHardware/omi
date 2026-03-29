@@ -91,7 +91,6 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
       }
       var connection = await ServiceManager.instance().device.ensureConnection(connectedDevice!.id);
       pairedDevice = (await connectedDevice?.getDeviceInfo(connection))?.withPersistedName();
-      connectedDevice = connectedDevice?.withPersistedName();
       SharedPreferencesUtil().btDevice = pairedDevice!;
       SharedPreferencesUtil().deviceName = pairedDevice!.name;
     } else {
