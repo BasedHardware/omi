@@ -990,6 +990,7 @@ async def sync_local_files(files: List[UploadFile] = File(...), uid: str = Depen
 from database.sync_jobs import (
     create_sync_job,
     get_sync_job,
+    update_sync_job,
     mark_job_processing,
     mark_job_completed,
     mark_job_failed,
@@ -1052,6 +1053,11 @@ def _process_segments_background(
             for i in range(0, len(threads), chunk_size):
                 [t.start() for t in threads[i : i + chunk_size]]
                 [t.join() for t in threads[i : i + chunk_size]]
+                # Heartbeat: refresh updated_at so stale detection doesn't kill active jobs
+                try:
+                    update_sync_job(job_id, {'processed_segments': min(i + chunk_size, len(threads))})
+                except Exception:
+                    pass  # Non-fatal: stale detection is a safety net, not a hard gate
 
         threads = [
             threading.Thread(

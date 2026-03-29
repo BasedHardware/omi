@@ -425,20 +425,33 @@ Future<SyncLocalFilesResponse> syncLocalFilesV2(List<File> files, {UploadProgres
         body: '',
       );
 
-      if (pollResponse == null || pollResponse.statusCode != 200) {
-        Logger.debug('syncLocalFilesV2 poll failed: ${pollResponse?.statusCode}');
+      if (pollResponse == null) {
+        Logger.debug('syncLocalFilesV2 poll failed: null response');
+        continue; // Retry on transient errors
+      }
+
+      // Terminal errors — don't retry
+      if (pollResponse.statusCode == 404) {
+        throw Exception('Sync job not found or expired');
+      }
+      if (pollResponse.statusCode == 403) {
+        throw Exception('Not authorized to view this sync job');
+      }
+      if (pollResponse.statusCode != 200) {
+        Logger.debug('syncLocalFilesV2 poll failed: ${pollResponse.statusCode}');
         continue; // Retry on transient errors
       }
 
       var jobStatus = SyncJobStatusResponse.fromJson(jsonDecode(pollResponse.body));
 
       if (jobStatus.isTerminal) {
-        if (jobStatus.result != null) {
-          return jobStatus.result!;
-        }
-        // Terminal but no result — build a response from job status
+        // All segments failed → throw to match v1's 500 behavior (WAL stays retryable)
         if (jobStatus.status == 'failed') {
           throw Exception(jobStatus.error ?? 'Sync job failed');
+        }
+        // Success or partial failure → return result
+        if (jobStatus.result != null) {
+          return jobStatus.result!;
         }
         return SyncLocalFilesResponse(
           newConversationIds: [],

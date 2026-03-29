@@ -354,6 +354,15 @@ class TestProcessSegmentsBackground:
         for field in ['new_memories', 'updated_memories', 'failed_segments', 'total_segments', 'errors']:
             assert f"'{field}'" in body, f"Worker result must include {field}"
 
+    def test_background_has_heartbeat(self):
+        """Worker must heartbeat (update_sync_job) during processing to prevent stale detection."""
+        body = self._get_bg_func_body()
+        assert 'update_sync_job(' in body, "Worker must call update_sync_job for heartbeat"
+        # Heartbeat must be inside the chunk loop, after join
+        heartbeat_pos = body.index('update_sync_job(')
+        join_pos = body.index('.join()')
+        assert heartbeat_pos > join_pos, "Heartbeat must come after thread join"
+
 
 # ---------------------------------------------------------------------------
 # 4. v1 regression tests — v1 must be completely unchanged
