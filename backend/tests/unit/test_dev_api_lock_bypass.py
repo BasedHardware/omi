@@ -333,6 +333,19 @@ class TestDevApiActionItemLockEnforcement:
         assert result == {"success": True}
         action_items_db.delete_action_item.assert_called_once_with('test-uid', 'ai-1')
 
+    def test_delete_action_item_returns_404_when_not_found(self):
+        """D6: DELETE should return 404 when action item doesn't exist."""
+        import database.action_items as action_items_db
+
+        action_items_db.get_action_item = MagicMock(return_value=None)
+
+        from routers.developer import delete_action_item
+        from fastapi import HTTPException
+
+        with pytest.raises(HTTPException) as exc_info:
+            delete_action_item(action_item_id='ai-missing', uid='test-uid')
+        assert exc_info.value.status_code == 404
+
 
 # =============================================================================
 # Knowledge Graph — Rebuild must filter locked memories
@@ -382,6 +395,44 @@ class TestKnowledgeGraphLockEnforcement:
         rebuild_knowledge_graph.assert_called_once()
         args = rebuild_knowledge_graph.call_args[0]
         assert len(args[1]) == 3
+
+    def test_rebuild_passes_empty_when_all_locked(self):
+        """K1: When all memories are locked, empty list should be passed."""
+        import database.memories as memories_db
+
+        mems = [_make_memory(locked=True, memory_id=f'mem-{i}') for i in range(3)]
+        memories_db.get_memories = MagicMock(return_value=mems)
+
+        from utils.llm.knowledge_graph import rebuild_knowledge_graph
+
+        rebuild_knowledge_graph.reset_mock()
+
+        from routers.knowledge_graph import _rebuild_graph_task
+
+        _rebuild_graph_task('test-uid', 'Test User')
+
+        rebuild_knowledge_graph.assert_called_once()
+        args = rebuild_knowledge_graph.call_args[0]
+        assert len(args[1]) == 0
+
+    def test_rebuild_handles_missing_is_locked_field(self):
+        """K1: Memories without is_locked field should default to unlocked."""
+        import database.memories as memories_db
+
+        mem = {'id': 'mem-no-field', 'content': 'Some content'}
+        memories_db.get_memories = MagicMock(return_value=[mem])
+
+        from utils.llm.knowledge_graph import rebuild_knowledge_graph
+
+        rebuild_knowledge_graph.reset_mock()
+
+        from routers.knowledge_graph import _rebuild_graph_task
+
+        _rebuild_graph_task('test-uid', 'Test User')
+
+        rebuild_knowledge_graph.assert_called_once()
+        args = rebuild_knowledge_graph.call_args[0]
+        assert len(args[1]) == 1
 
 
 # =============================================================================
