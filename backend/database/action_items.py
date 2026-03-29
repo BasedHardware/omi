@@ -246,6 +246,67 @@ def get_action_items(
     return action_items
 
 
+def get_unexported_action_items(uid: str, limit: int = 50) -> List[dict]:
+    """
+    Get action items that haven't been exported yet (for outbound sync).
+
+    Args:
+        uid: User ID
+        limit: Maximum number of items to return
+
+    Returns:
+        List of unexported action items
+    """
+    user_ref = db.collection('users').document(uid)
+    query = user_ref.collection(action_items_collection)
+    query = query.where(filter=FieldFilter('completed', '==', False))
+    query = query.order_by('created_at', direction=firestore.Query.DESCENDING)
+    query = query.limit(limit)
+
+    docs = query.stream()
+    action_items = []
+    for doc in docs:
+        data = doc.to_dict()
+        data['id'] = doc.id
+        data = _prepare_action_item_for_read(data)
+        # Filter in application code: exported != True (handles both False and missing field)
+        if data.get('exported') is True:
+            continue
+        action_items.append(data)
+
+    return action_items
+
+
+def get_action_items_with_reminder_id(uid: str, limit: int = 50) -> List[dict]:
+    """
+    Get action items that have an apple_reminder_id set (for inbound completion sync).
+
+    Args:
+        uid: User ID
+        limit: Maximum number of items to return
+
+    Returns:
+        List of action items with apple_reminder_id
+    """
+    user_ref = db.collection('users').document(uid)
+    query = user_ref.collection(action_items_collection)
+    query = query.where(filter=FieldFilter('export_platform', '==', 'apple_reminders'))
+    query = query.where(filter=FieldFilter('exported', '==', True))
+    query = query.order_by('updated_at', direction=firestore.Query.DESCENDING)
+    query = query.limit(limit)
+
+    docs = query.stream()
+    action_items = []
+    for doc in docs:
+        data = doc.to_dict()
+        data['id'] = doc.id
+        data = _prepare_action_item_for_read(data)
+        if data.get('apple_reminder_id'):
+            action_items.append(data)
+
+    return action_items
+
+
 def get_action_items_by_conversation(uid: str, conversation_id: str) -> List[dict]:
     """
     Get all action items for a specific conversation.
