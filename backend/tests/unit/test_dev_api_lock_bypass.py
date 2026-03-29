@@ -393,10 +393,12 @@ class TestProcessConversationKGLockEnforcement:
     """KG extraction in process_conversation must skip locked memories."""
 
     def test_kg_extraction_guard_uses_or_condition_in_ast(self):
-        """Verify the production guard is `if X.kg_extracted or X.is_locked: continue` via AST.
+        """Verify the production guard is exactly `if X.kg_extracted or X.is_locked: continue`.
 
-        A regression from `or` to `and` would silently break the guard. This test
-        parses the production source and asserts the exact boolean structure.
+        Checks via AST: exactly two operands, both ast.Attribute on the same base
+        variable, attributes are {kg_extracted, is_locked}, operator is Or, and body
+        is solely `continue`. A regression like `and`, extra operands, or different
+        variables will fail this test.
         """
         import ast
         import pathlib
@@ -409,7 +411,6 @@ class TestProcessConversationKGLockEnforcement:
         )
         tree = ast.parse(src.read_text(), filename=str(src))
 
-        # Walk AST looking for: if <X>.kg_extracted or <X>.is_locked: continue
         found = False
         for node in ast.walk(tree):
             if not isinstance(node, ast.If):
@@ -417,18 +418,30 @@ class TestProcessConversationKGLockEnforcement:
             test = node.test
             if not isinstance(test, ast.BoolOp) or not isinstance(test.op, ast.Or):
                 continue
-            attrs = set()
-            for val in test.values:
-                if isinstance(val, ast.Attribute):
-                    attrs.add(val.attr)
-            if 'kg_extracted' in attrs and 'is_locked' in attrs:
-                # Verify the body is `continue`
-                if any(isinstance(stmt, ast.Continue) for stmt in node.body):
-                    found = True
-                    break
+            # Exactly two operands
+            if len(test.values) != 2:
+                continue
+            # Both must be ast.Attribute
+            if not all(isinstance(v, ast.Attribute) for v in test.values):
+                continue
+            # Both must reference the same base variable
+            bases = set()
+            for v in test.values:
+                if isinstance(v.value, ast.Name):
+                    bases.add(v.value.id)
+            if len(bases) != 1:
+                continue
+            # Attributes must be exactly {kg_extracted, is_locked}
+            attrs = {v.attr for v in test.values}
+            if attrs != {'kg_extracted', 'is_locked'}:
+                continue
+            # Body must be solely `continue`
+            if len(node.body) == 1 and isinstance(node.body[0], ast.Continue):
+                found = True
+                break
 
         assert found, (
-            "Expected `if memory_db_obj.kg_extracted or memory_db_obj.is_locked: continue` "
+            "Expected exactly `if X.kg_extracted or X.is_locked: continue` "
             "in process_conversation.py — AST check failed"
         )
 
