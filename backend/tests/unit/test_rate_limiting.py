@@ -7,6 +7,8 @@ import types
 import unittest
 from unittest.mock import MagicMock, patch
 
+from fastapi import HTTPException
+
 # Stub heavy dependencies before importing our modules
 for mod_name in [
     'firebase_admin',
@@ -270,6 +272,27 @@ class TestWithRateLimitWrapper(unittest.TestCase):
         self.ep.check_rate_limit_inline("app1:uid1", "integration:memories")
         mock_enforce.assert_called_once_with("app1:uid1", "integration:memories")
 
+    @patch('utils.other.endpoints._enforce_rate_limit')
+    def test_with_rate_limit_dependency_calls_enforce_and_returns_uid(self, mock_enforce):
+        """Execute the async dependency closure and verify it enforces + returns uid."""
+        import asyncio
+
+        dep_func = self.ep.with_rate_limit(lambda: "test_uid", "chat:send_message")
+        # The inner dependency expects uid as a keyword arg (from Depends)
+        result = asyncio.run(dep_func(uid="user123"))
+        mock_enforce.assert_called_once_with("user123", "chat:send_message")
+        self.assertEqual(result, "user123")
+
+    @patch('utils.other.endpoints._enforce_rate_limit', side_effect=HTTPException(status_code=429, detail="blocked"))
+    def test_with_rate_limit_dependency_propagates_429(self, mock_enforce):
+        """Verify 429 from _enforce propagates through the dependency."""
+        import asyncio
+
+        dep_func = self.ep.with_rate_limit(lambda: "uid", "chat:send_message")
+        with self.assertRaises(HTTPException) as ctx:
+            asyncio.run(dep_func(uid="user123"))
+        self.assertEqual(ctx.exception.status_code, 429)
+
 
 class TestBoostEnvVar(unittest.TestCase):
     """Test RATE_LIMIT_BOOST env var is picked up at import time."""
@@ -343,27 +366,27 @@ class TestRouterWiring(unittest.TestCase):
     def test_conversations_router_has_rate_limits(self):
         matches = self._grep_file("routers/conversations.py", r"with_rate_limit.*conversations:")
         # create, reprocess, search, merge = 4 endpoints
-        self.assertGreaterEqual(len(matches), 4, "conversations.py missing rate limit wiring")
+        self.assertEqual(len(matches), 4, f"conversations.py expected 4 rate limits, got {len(matches)}")
 
     def test_chat_router_has_rate_limits(self):
         matches = self._grep_file("routers/chat.py", r"with_rate_limit.*(?:chat:|voice:|file:)")
         # send_message, initial(x2), voice_message, voice_transcribe, file_upload(v1+v2) = 7
-        self.assertGreaterEqual(len(matches), 6, "chat.py missing rate limit wiring")
+        self.assertEqual(len(matches), 7, f"chat.py expected 7 rate limits, got {len(matches)}")
 
     def test_legacy_file_upload_rate_limited(self):
         """Legacy v1/files must also be rate limited to prevent bypass."""
         matches = self._grep_file("routers/chat.py", r"with_rate_limit.*file:upload")
-        self.assertGreaterEqual(len(matches), 2, "v1/files legacy endpoint missing rate limit")
+        self.assertEqual(len(matches), 2, f"chat.py expected 2 file:upload limits (v1+v2), got {len(matches)}")
 
     def test_developer_router_has_rate_limits(self):
         matches = self._grep_file("routers/developer.py", r"with_rate_limit.*dev:")
         # create_memory, batch, create_conversation, from_segments = 4
-        self.assertGreaterEqual(len(matches), 4, "developer.py missing rate limit wiring")
+        self.assertEqual(len(matches), 4, f"developer.py expected 4 rate limits, got {len(matches)}")
 
     def test_goals_router_has_rate_limits(self):
         matches = self._grep_file("routers/goals.py", r"with_rate_limit.*goals:")
         # suggest, advice(x2), extract = 4
-        self.assertGreaterEqual(len(matches), 3, "goals.py missing rate limit wiring")
+        self.assertEqual(len(matches), 4, f"goals.py expected 4 rate limits, got {len(matches)}")
 
     def test_mcp_sse_router_has_rate_limit(self):
         matches = self._grep_file("routers/mcp_sse.py", r"check_rate_limit_inline.*mcp:")
