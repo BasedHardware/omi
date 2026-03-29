@@ -847,7 +847,8 @@ def _process_segments_background(segmented_paths, uid, source, is_locked, fair_u
         ]
         chunk_threads(threads)
 
-        # Record DG usage after successful processing (not before, to avoid charging on retries)
+        # Record DG usage for the batch (not per-segment; matches pre-background behavior).
+        # Recorded after threads complete but covers full batch duration regardless of partial failures.
         if fair_use_restrict_dg:
             try:
                 dg_ms = int(total_speech_seconds * 1000)
@@ -971,15 +972,25 @@ async def sync_local_files(files: List[UploadFile] = File(...), uid: str = Depen
         # Fire off heavy processing (transcription + LLM) in background thread (#5941).
         # This prevents 504 timeouts on large payloads (80-180s processing).
         # Memories are created/updated asynchronously; client sees them on next refresh.
-        # Deduplication in process_segment handles retries safely.
+        #
+        # Durability trade-off: the client's WAL is marked synced on this 200,
+        # so a background crash loses that audio.  In practice the prior behavior
+        # was worse — large payloads always 504'd, leaving WALs in an infinite
+        # retry loop that never processed.  Background failure is rare; 504 was
+        # guaranteed for affected users.
         owned_paths = set(segmented_paths)
         segmented_paths = set()  # Transfer ownership to background thread (prevent finally cleanup)
-        bg = threading.Thread(
-            target=_process_segments_background,
-            args=(owned_paths, uid, source, is_locked, fair_use_restrict_dg, total_speech_seconds),
-            daemon=True,
-        )
-        bg.start()
+        try:
+            bg = threading.Thread(
+                target=_process_segments_background,
+                args=(owned_paths, uid, source, is_locked, fair_use_restrict_dg, total_speech_seconds),
+                daemon=True,
+            )
+            bg.start()
+        except Exception:
+            # Thread failed to start (resource exhaustion) — clean up owned files
+            _cleanup_files(list(owned_paths))
+            raise
 
         logger.info(f'sync_local_files accepted uid={uid} segments={total_segments} (background)')
         return {'new_memories': [], 'updated_memories': []}
