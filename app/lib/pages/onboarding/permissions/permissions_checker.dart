@@ -120,19 +120,21 @@ class PermissionsInterstitialPage extends StatelessWidget {
                             var (serviceStatus, permissionStatus) = await provider.askForLocationPermissions();
                             if (!serviceStatus) {
                               provider.updateLocationPermission(false);
-                              showDialog(
-                                context: context,
-                                builder: (ctx) {
-                                  return getDialog(
-                                    context,
-                                    () => Navigator.of(context).pop(),
-                                    () => Navigator.of(context).pop(),
-                                    context.l10n.locationServiceDisabled,
-                                    context.l10n.locationServiceDisabledDesc,
-                                    singleButton: true,
-                                  );
-                                },
-                              );
+                              if (context.mounted) {
+                                showDialog(
+                                  context: context,
+                                  builder: (ctx) {
+                                    return getDialog(
+                                      context,
+                                      () => Navigator.of(context).pop(),
+                                      () => Navigator.of(context).pop(),
+                                      context.l10n.locationServiceDisabled,
+                                      context.l10n.locationServiceDisabledDesc,
+                                      singleButton: true,
+                                    );
+                                  },
+                                );
+                              }
                             } else {
                               bool wasGranted = permissionStatus.isGranted;
                               provider.updateLocationPermission(wasGranted);
