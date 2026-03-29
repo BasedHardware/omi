@@ -1803,6 +1803,13 @@ async def _stream_handler(
                 logger.info(
                     f"Conversation {current_conversation_id} timeout reached ({seconds_since_last_update:.1f}s). Processing... {uid} {session_id}"
                 )
+                # Drain any in-flight embedding match tasks before flushing
+                if speaker_match_tasks:
+                    pending = list(speaker_match_tasks)
+                    try:
+                        await asyncio.wait_for(asyncio.gather(*pending, return_exceptions=True), timeout=5.0)
+                    except asyncio.TimeoutError:
+                        logger.warning(f"Timeout draining speaker match tasks before rollover {uid} {session_id}")
                 _flush_speaker_assignments(current_conversation_id)
                 await _process_conversation(current_conversation_id)
                 await _create_new_in_progress_conversation()
