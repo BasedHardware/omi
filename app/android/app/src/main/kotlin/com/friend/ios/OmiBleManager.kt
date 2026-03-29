@@ -8,10 +8,12 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.content.pm.PackageManager
 import android.os.Handler
 import android.os.Looper
 import android.os.ParcelUuid
 import android.util.Log
+import androidx.core.content.ContextCompat
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ConcurrentLinkedQueue
@@ -135,6 +137,11 @@ class OmiBleManager private constructor(private val application: Application) {
             return
         }
 
+        if (ContextCompat.checkSelfPermission(application, "android.permission.BLUETOOTH_SCAN") != PackageManager.PERMISSION_GRANTED) {
+            Log.w(TAG, "BLUETOOTH_SCAN permission not granted, cannot scan")
+            return
+        }
+
         stopScan()
 
         val scanner = adapter.bluetoothLeScanner ?: return
@@ -245,6 +252,11 @@ class OmiBleManager private constructor(private val application: Application) {
         Log.i(TAG, "connectPeripheral($caller): $addr")
         connectingAddresses.add(addr)
         val gatt = device.connectGatt(application, false, gattCallback, BluetoothDevice.TRANSPORT_LE)
+        if (gatt == null) {
+            Log.e(TAG, "connectGatt returned null for $addr")
+            connectingAddresses.remove(addr)
+            return
+        }
         connectedGatts[addr] = gatt
     }
 
@@ -613,6 +625,11 @@ class OmiBleManager private constructor(private val application: Application) {
                                 val device = bluetoothAdapter?.getRemoteDevice(address) ?: return@Runnable
                                 connectingAddresses.add(address)
                                 val newGatt = device.connectGatt(application, true, this, BluetoothDevice.TRANSPORT_LE)
+                                if (newGatt == null) {
+                                    Log.e(TAG, "connectGatt returned null for $address during auth-failure retry")
+                                    connectingAddresses.remove(address)
+                                    return@Runnable
+                                }
                                 connectedGatts[address] = newGatt
                             }
                             pendingReconnectRunnable = runnable
@@ -628,6 +645,11 @@ class OmiBleManager private constructor(private val application: Application) {
                                 val device = bluetoothAdapter?.getRemoteDevice(address) ?: return@Runnable
                                 connectingAddresses.add(address)
                                 val newGatt = device.connectGatt(application, true, this, BluetoothDevice.TRANSPORT_LE)
+                                if (newGatt == null) {
+                                    Log.e(TAG, "connectGatt returned null for $address during auto-reconnect")
+                                    connectingAddresses.remove(address)
+                                    return@Runnable
+                                }
                                 connectedGatts[address] = newGatt
                             }
                             pendingReconnectRunnable = runnable
