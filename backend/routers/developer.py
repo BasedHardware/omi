@@ -306,6 +306,8 @@ def delete_memory(
     memory = memories_db.get_memory(uid, memory_id)
     if not memory:
         raise HTTPException(status_code=404, detail="Memory not found")
+    if memory.get('is_locked', False):
+        raise HTTPException(status_code=402, detail="A paid plan is required to access this memory.")
 
     memories_db.delete_memory(uid, memory_id)
     return {"success": True}
@@ -329,6 +331,8 @@ def update_memory(
     memory = memories_db.get_memory(uid, memory_id)
     if not memory:
         raise HTTPException(status_code=404, detail="Memory not found")
+    if memory.get('is_locked', False):
+        raise HTTPException(status_code=402, detail="A paid plan is required to access this memory.")
 
     if request.content is None and request.visibility is None and request.tags is None and request.category is None:
         raise HTTPException(
@@ -534,8 +538,13 @@ def delete_action_item(
 
     - **action_item_id**: The ID of the action item to delete
     """
-    if not action_items_db.delete_action_item(uid, action_item_id):
+    action_item = action_items_db.get_action_item(uid, action_item_id)
+    if not action_item:
         raise HTTPException(status_code=404, detail="Action item not found")
+    if action_item.get('is_locked', False):
+        raise HTTPException(status_code=402, detail="A paid plan is required to access this action item.")
+
+    action_items_db.delete_action_item(uid, action_item_id)
     return {"success": True}
 
 
@@ -557,6 +566,8 @@ def update_action_item(
     action_item = action_items_db.get_action_item(uid, action_item_id)
     if not action_item:
         raise HTTPException(status_code=404, detail="Action item not found")
+    if action_item.get('is_locked', False):
+        raise HTTPException(status_code=402, detail="A paid plan is required to access this action item.")
 
     # Build update data from non-None fields
     update_data = {}
@@ -1028,6 +1039,8 @@ def delete_conversation_endpoint(
     conversation = conversations_db.get_conversation(uid, conversation_id)
     if not conversation:
         raise HTTPException(status_code=404, detail="Conversation not found")
+    if conversation.get('is_locked', False):
+        raise HTTPException(status_code=402, detail="A paid plan is required to access this conversation.")
 
     conversations_db.delete_conversation(uid, conversation_id)
     return {"success": True}
@@ -1049,6 +1062,8 @@ def update_conversation_endpoint(
     conversation = conversations_db.get_conversation(uid, conversation_id)
     if not conversation:
         raise HTTPException(status_code=404, detail="Conversation not found")
+    if conversation.get('is_locked', False):
+        raise HTTPException(status_code=402, detail="A paid plan is required to access this conversation.")
 
     if request.title is None and request.discarded is None:
         raise HTTPException(status_code=422, detail="At least one field (title or discarded) must be provided")
