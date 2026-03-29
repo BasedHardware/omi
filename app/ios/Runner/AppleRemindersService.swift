@@ -28,18 +28,25 @@ class AppleRemindersService {
             completeReminder(call: call, result: result)
         case "syncFromFCM":
             syncFromFCM(call: call, result: result)
+        case "getRemindersStatus":
+            getRemindersStatus(call: call, result: result)
+        case "updateReminder":
+            updateReminder(call: call, result: result)
+        case "deleteReminder":
+            deleteReminder(call: call, result: result)
         default:
             result(FlutterMethodNotImplemented)
         }
     }
 
-    static let syncedItemsKey = "omi_synced_action_items"
     static let iso8601DateFormatter = ISO8601DateFormatter()
+
+    // MARK: - Batch Sync
 
     /// Core batch sync logic shared by both the foreground MethodChannel path
     /// and the background silent-push path (called from AppDelegate).
-    /// Returns the list of action item IDs that were successfully created as reminders.
-    func syncBatchFromJSON(_ itemsJson: String) -> [String] {
+    /// Returns an array of mappings: [{"actionItemId": "...", "calendarItemIdentifier": "..."}]
+    func syncBatchFromJSON(_ itemsJson: String) -> [[String: String]] {
         guard let data = itemsJson.data(using: .utf8),
               let items = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]],
               !items.isEmpty else {
@@ -49,16 +56,13 @@ class AppleRemindersService {
         guard hasRemindersAccess() else { return [] }
         guard let calendar = eventStore.defaultCalendarForNewReminders() else { return [] }
 
-        var syncedIds = Set(UserDefaults.standard.stringArray(forKey: AppleRemindersService.syncedItemsKey) ?? [])
-        var exportedIds: [String] = []
+        var savedPairs: [(String, EKReminder)] = []
 
         for item in items {
             guard let actionItemId = item["id"] as? String,
                   let reminderTitle = item["description"] as? String else {
                 continue
             }
-
-            if syncedIds.contains(actionItemId) { continue }
 
             let dueDate: Date? = {
                 if let dueDateStr = item["due_at"] as? String, !dueDateStr.isEmpty {
@@ -80,30 +84,28 @@ class AppleRemindersService {
 
             do {
                 try eventStore.save(reminder, commit: false)
-                syncedIds.insert(actionItemId)
-                exportedIds.append(actionItemId)
+                savedPairs.append((actionItemId, reminder))
             } catch {
                 continue
             }
         }
 
         // Single commit for all reminders
-        if !exportedIds.isEmpty {
-            do {
-                try eventStore.commit()
-            } catch {
-                return []
-            }
+        guard !savedPairs.isEmpty else { return [] }
+
+        do {
+            try eventStore.commit()
+        } catch {
+            return []
         }
 
-        // Persist dedup set
-        var syncedArray = Array(syncedIds)
-        if syncedArray.count > 100 {
-            syncedArray = Array(syncedArray.suffix(100))
+        // Read calendarItemIdentifier from each saved reminder after commit
+        return savedPairs.map { (actionItemId, reminder) in
+            [
+                "actionItemId": actionItemId,
+                "calendarItemIdentifier": reminder.calendarItemIdentifier
+            ]
         }
-        UserDefaults.standard.set(syncedArray, forKey: AppleRemindersService.syncedItemsKey)
-
-        return exportedIds
     }
 
     /// Handle sync triggered from Flutter foreground FCM handler via MethodChannel.
@@ -115,6 +117,8 @@ class AppleRemindersService {
         }
         result(syncBatchFromJSON(itemsJson))
     }
+
+    // MARK: - Permissions
 
     private func hasRemindersPermission(result: @escaping FlutterResult) {
         result(hasRemindersAccess())
@@ -146,6 +150,8 @@ class AppleRemindersService {
             }
         }
     }
+
+    // MARK: - Add Reminder (returns calendarItemIdentifier)
 
     private func addReminder(call: FlutterMethodCall, result: @escaping FlutterResult) {
         guard let args = call.arguments as? [String: Any] else {
@@ -180,16 +186,13 @@ class AppleRemindersService {
         let calendars = eventStore.calendars(for: .reminder)
         targetCalendar = calendars.first { $0.title == listName }
 
-        // If not found, create a new calendar
+        // If not found, create a new calendar using the default source (respects iCloud)
         if targetCalendar == nil {
             targetCalendar = EKCalendar(for: .reminder, eventStore: eventStore)
             targetCalendar?.title = listName
             targetCalendar?.cgColor = UIColor.systemBlue.cgColor
 
-            // Set the source (usually the local source)
-            if let localSource = eventStore.sources.first(where: { $0.sourceType == .local }) {
-                targetCalendar?.source = localSource
-            } else if let defaultSource = eventStore.defaultCalendarForNewReminders()?.source {
+            if let defaultSource = eventStore.defaultCalendarForNewReminders()?.source {
                 targetCalendar?.source = defaultSource
             }
 
@@ -217,14 +220,132 @@ class AppleRemindersService {
             reminder.dueDateComponents = dueDateComponents
         }
 
-        // Save the reminder
+        // Save the reminder and return its calendarItemIdentifier
         do {
             try eventStore.save(reminder, commit: true)
-            result(true)
+            result(reminder.calendarItemIdentifier)
         } catch {
             result(FlutterError(code: "SAVE_FAILED", message: "Failed to save reminder: \(error.localizedDescription)", details: nil))
         }
     }
+
+    // MARK: - Get Reminders Status (two-way sync)
+
+    /// Look up reminders by their calendarItemIdentifier and return current status.
+    /// Input: {"mappings": {"actionItemId": "calendarItemIdentifier", ...}}
+    /// Output: {"actionItemId": {"exists": true, "completed": true, "title": "...", "completionDate": "ISO8601"}, ...}
+    private func getRemindersStatus(call: FlutterMethodCall, result: @escaping FlutterResult) {
+        guard let args = call.arguments as? [String: Any],
+              let mappings = args["mappings"] as? [String: String] else {
+            result(FlutterError(code: "INVALID_ARGUMENTS", message: "Expected dict with 'mappings' key", details: nil))
+            return
+        }
+
+        guard hasRemindersAccess() else {
+            result(FlutterError(code: "PERMISSION_DENIED", message: "Reminders permission not granted", details: nil))
+            return
+        }
+
+        var statuses: [String: [String: Any]] = [:]
+
+        for (actionItemId, calendarItemId) in mappings {
+            let calendarItem = eventStore.calendarItem(withIdentifier: calendarItemId)
+
+            if let reminder = calendarItem as? EKReminder {
+                var status: [String: Any] = [
+                    "exists": true,
+                    "completed": reminder.isCompleted,
+                    "title": reminder.title ?? "",
+                ]
+                if let completionDate = reminder.completionDate {
+                    status["completionDate"] = AppleRemindersService.iso8601DateFormatter.string(from: completionDate)
+                }
+                statuses[actionItemId] = status
+            } else {
+                statuses[actionItemId] = [
+                    "exists": false,
+                    "completed": false,
+                    "title": "",
+                ]
+            }
+        }
+
+        result(statuses)
+    }
+
+    // MARK: - Update Reminder by Identifier
+
+    /// Update properties of an existing reminder by its calendarItemIdentifier.
+    private func updateReminder(call: FlutterMethodCall, result: @escaping FlutterResult) {
+        guard let args = call.arguments as? [String: Any],
+              let calendarItemId = args["calendarItemIdentifier"] as? String else {
+            result(FlutterError(code: "INVALID_ARGUMENTS", message: "calendarItemIdentifier is required", details: nil))
+            return
+        }
+
+        guard hasRemindersAccess() else {
+            result(FlutterError(code: "PERMISSION_DENIED", message: "Reminders permission not granted", details: nil))
+            return
+        }
+
+        guard let reminder = eventStore.calendarItem(withIdentifier: calendarItemId) as? EKReminder else {
+            result(["success": false, "exists": false])
+            return
+        }
+
+        if let title = args["title"] as? String {
+            reminder.title = title
+        }
+        if let notes = args["notes"] as? String {
+            reminder.notes = notes
+        }
+        if let dueDateMs = args["dueDate"] as? Int64 {
+            let dueDate = Date(timeIntervalSince1970: TimeInterval(dueDateMs) / 1000.0)
+            reminder.dueDateComponents = Calendar.current.dateComponents(
+                [.year, .month, .day, .hour, .minute], from: dueDate)
+        }
+        if let completed = args["completed"] as? Bool {
+            reminder.isCompleted = completed
+        }
+
+        do {
+            try eventStore.save(reminder, commit: true)
+            result(["success": true, "exists": true])
+        } catch {
+            result(["success": false, "exists": true, "error": error.localizedDescription])
+        }
+    }
+
+    // MARK: - Delete Reminder by Identifier
+
+    /// Delete an existing reminder by its calendarItemIdentifier. Idempotent.
+    private func deleteReminder(call: FlutterMethodCall, result: @escaping FlutterResult) {
+        guard let args = call.arguments as? [String: Any],
+              let calendarItemId = args["calendarItemIdentifier"] as? String else {
+            result(FlutterError(code: "INVALID_ARGUMENTS", message: "calendarItemIdentifier is required", details: nil))
+            return
+        }
+
+        guard hasRemindersAccess() else {
+            result(FlutterError(code: "PERMISSION_DENIED", message: "Reminders permission not granted", details: nil))
+            return
+        }
+
+        guard let reminder = eventStore.calendarItem(withIdentifier: calendarItemId) as? EKReminder else {
+            // Already deleted — treat as success (idempotent)
+            result(["success": true, "existed": false])
+            return
+        }
+
+        do {
+            try eventStore.remove(reminder, commit: true)
+            result(["success": true, "existed": true])
+        } catch {
+            result(["success": false, "existed": true, "error": error.localizedDescription])
+        }
+    }
+
+    // MARK: - Legacy Methods (kept for backward compatibility)
 
     private func getReminders(call: FlutterMethodCall, result: @escaping FlutterResult) {
         guard let args = call.arguments as? [String: Any] else {
@@ -234,13 +355,11 @@ class AppleRemindersService {
 
         let listName = args["listName"] as? String ?? "Reminders"
 
-        // Check permission
         guard hasRemindersAccess() else {
             result([])
             return
         }
 
-        // Find the calendar
         let calendars = eventStore.calendars(for: .reminder)
         guard let targetCalendar = calendars.first(where: { $0.title == listName }) else {
             result([])
@@ -257,6 +376,7 @@ class AppleRemindersService {
         }
     }
 
+    /// Legacy: complete by title match. Prefer updateReminder with calendarItemIdentifier.
     private func completeReminder(call: FlutterMethodCall, result: @escaping FlutterResult) {
         guard let args = call.arguments as? [String: Any] else {
             result(FlutterError(code: "INVALID_ARGUMENTS", message: "Invalid arguments", details: nil))
@@ -270,13 +390,11 @@ class AppleRemindersService {
 
         let listName = args["listName"] as? String ?? "Reminders"
 
-        // Check permission
         guard hasRemindersAccess() else {
             result(false)
             return
         }
 
-        // Find the calendar
         let calendars = eventStore.calendars(for: .reminder)
         guard let targetCalendar = calendars.first(where: { $0.title == listName }) else {
             result(false)
