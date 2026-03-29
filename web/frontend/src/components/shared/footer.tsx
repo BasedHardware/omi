@@ -79,9 +79,7 @@ export default function Footer() {
             <li>
               <a
                 className="text-zinc-400 hover:text-white hover:underline md:text-base"
-                href={
-                  'https://www.omi.me/products/omi-dev-kit-2?ref=omi_marketplace&utm_source=h.omi.me&utm_campaign=omi_marketplace_app_detail_page'
-                }
+                href={'https://www.omi.me/'}
                 target="_blank"
                 rel="noreferrer"
               >

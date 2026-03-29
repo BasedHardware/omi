@@ -182,7 +182,7 @@ export default function AppHeader({
       }`,
     },
     {
-      href: 'https://www.omi.me/products/omi-dev-kit-2?ref=omi_marketplace&utm_source=h.omi.me&utm_campaign=omi_marketplace_app_detail_page',
+      href: 'https://www.omi.me/',
       label: 'Order Now',
       className: 'text-white hover:text-gray-300',
     },
