@@ -71,6 +71,7 @@ import 'package:omi/services/notifications.dart';
 import 'package:omi/services/notifications/action_item_notification_handler.dart';
 import 'package:omi/services/notifications/important_conversation_notification_handler.dart';
 import 'package:omi/services/notifications/merge_notification_handler.dart';
+import 'package:omi/services/notifications/sync_completed_notification_handler.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/utils/analytics/growthbook.dart';
 import 'package:omi/utils/debug_log_manager.dart';
@@ -111,6 +112,12 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
     await MergeNotificationHandler.handleMergeCompleted(data, channelKey, isAppInForeground: false);
   } else if (messageType == 'important_conversation') {
     await ImportantConversationNotificationHandler.handleImportantConversation(
+      data,
+      channelKey,
+      isAppInForeground: false,
+    );
+  } else if (messageType == 'offline_sync_completed') {
+    await SyncCompletedNotificationHandler.handleSyncCompleted(
       data,
       channelKey,
       isAppInForeground: false,

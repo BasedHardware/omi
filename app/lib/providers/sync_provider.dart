@@ -12,6 +12,9 @@ import 'package:omi/models/sync_state.dart';
 import 'package:omi/utils/audio_player_utils.dart';
 import 'package:omi/utils/conversation_sync_utils.dart';
 import 'package:omi/utils/waveform_utils.dart';
+import 'package:omi/services/notifications/sync_completed_notification_handler.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:omi/backend/http/api/conversations.dart' show getSyncJobs;
 
 enum WalStatusFilter { pending, synced }
 
@@ -136,15 +139,78 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
 
   IWalService get _walService => ServiceManager.instance().wal;
 
+  StreamSubscription<SyncCompletedEvent>? _syncCompletedSubscription;
+
   SyncProvider() {
     _walService.subscribe(this, this);
     _audioPlayerUtils.addListener(_onAudioPlayerStateChanged);
+    _syncCompletedSubscription = SyncCompletedNotificationHandler.onSyncCompleted.listen(_onSyncCompleted);
     _initializeProvider();
   }
 
   void _initializeProvider() async {
     await refreshWals();
     _autoUploadPendingPhoneFiles();
+    _checkForMissedSyncCompletions();
+  }
+
+  static const _processedSyncJobsKey = 'processed_sync_job_ids';
+
+  Future<Set<String>> _getProcessedJobIds() async {
+    final prefs = await SharedPreferences.getInstance();
+    return (prefs.getStringList(_processedSyncJobsKey) ?? []).toSet();
+  }
+
+  Future<void> _markJobProcessed(String jobId) async {
+    final prefs = await SharedPreferences.getInstance();
+    final ids = (prefs.getStringList(_processedSyncJobsKey) ?? []).toSet();
+    ids.add(jobId);
+    // Keep only the last 100 to avoid unbounded growth
+    final trimmed = ids.length > 100 ? ids.toList().sublist(ids.length - 100) : ids.toList();
+    await prefs.setStringList(_processedSyncJobsKey, trimmed);
+  }
+
+  /// Handle FCM sync completed event — fetch and display the conversation results.
+  void _onSyncCompleted(SyncCompletedEvent event) async {
+    Logger.debug(
+      'SyncProvider: FCM sync completed job=${event.jobId} '
+      'new=${event.newConversationIds.length} updated=${event.updatedConversationIds.length}',
+    );
+
+    if (event.newConversationIds.isEmpty && event.updatedConversationIds.isEmpty) {
+      await _markJobProcessed(event.jobId);
+      return;
+    }
+
+    final result = SyncLocalFilesResponse(
+      newConversationIds: event.newConversationIds,
+      updatedConversationIds: event.updatedConversationIds,
+    );
+    await _processConversationResults(result);
+    await _markJobProcessed(event.jobId);
+  }
+
+  /// On app open, check for any completed sync jobs whose FCM was missed.
+  void _checkForMissedSyncCompletions() async {
+    try {
+      await Future.delayed(const Duration(seconds: 5));
+      final processedIds = await _getProcessedJobIds();
+      final completedJobs = await getSyncJobs(status: 'completed');
+      for (final job in completedJobs) {
+        if (processedIds.contains(job.id)) continue;
+        if (job.newConversationIds.isNotEmpty || job.updatedConversationIds.isNotEmpty) {
+          Logger.debug('SyncProvider: Found missed sync completion job=${job.id}');
+          final result = SyncLocalFilesResponse(
+            newConversationIds: job.newConversationIds,
+            updatedConversationIds: job.updatedConversationIds,
+          );
+          await _processConversationResults(result);
+        }
+        await _markJobProcessed(job.id);
+      }
+    } catch (e) {
+      Logger.debug('SyncProvider: Error checking missed sync completions: $e');
+    }
   }
 
   bool _isAutoUploading = false;
@@ -508,6 +574,7 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
 
   @override
   void dispose() {
+    _syncCompletedSubscription?.cancel();
     _audioPlayerUtils.removeListener(_onAudioPlayerStateChanged);
     WaveformUtils.clearCache();
     _walService.unsubscribe(this);

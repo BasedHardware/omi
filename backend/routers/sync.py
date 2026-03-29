@@ -2,9 +2,11 @@ import asyncio
 import io
 import os
 import re
+import shutil
 import struct
 import threading
 import time
+import uuid
 import wave
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
@@ -48,6 +50,11 @@ from utils.fair_use import (
     FAIR_USE_RESTRICT_DAILY_DG_MS,
 )
 from utils.subscription import has_transcription_credits
+from utils.cloud_tasks import enqueue_offline_sync_task, CLOUD_TASKS_SECRET
+from utils.notifications import send_sync_completed_message
+from utils.other.storage import storage_client, offline_sync_bucket
+from database._client import db
+from google.cloud import firestore
 
 router = APIRouter()
 
@@ -408,8 +415,6 @@ def download_audio_file_endpoint(
 # **********************************************
 
 
-import shutil
-import wave
 import logging
 from utils.log_sanitizer import sanitize
 
@@ -976,3 +981,380 @@ async def sync_local_files(files: List[UploadFile] = File(...), uid: str = Depen
         _cleanup_files(paths)  # .bin files (in case decode_files_to_wav didn't finish)
         _cleanup_files(wav_paths)  # Original wav files (if VAD didn't complete)
         _cleanup_files(segmented_paths)  # Segmented wav files after processing
+
+
+# **********************************************
+# ********** V2 Async Offline Sync *************
+# **********************************************
+
+
+@router.post("/v2/sync/upload", tags=['v2'])
+async def sync_upload_v2(
+    files: List[UploadFile] = File(...),
+    uid: str = Depends(auth.get_current_user_uid),
+):
+    """
+    Accept audio files for offline sync processing.
+
+    Stores files to GCS and enqueues async processing via Cloud Tasks.
+    Returns 202 immediately. Conversations are delivered via FCM data message
+    when processing completes.
+
+    Request: multipart/form-data with one or more .bin audio files.
+    Response: 202 Accepted with {job_id, file_count}.
+    """
+    if is_hard_restricted(uid):
+        raise HTTPException(status_code=429, detail="Account temporarily restricted")
+
+    if not files:
+        raise HTTPException(status_code=400, detail="No files provided")
+
+    # 1. Validate all files upfront (fail fast before any GCS writes)
+    file_metadata = []
+    for f in files:
+        filename = f.filename
+        if not filename or not filename.endswith('.bin'):
+            raise HTTPException(400, f"Invalid file format: {filename}")
+        if '_' not in filename:
+            raise HTTPException(400, f"Missing timestamp in filename: {filename}")
+
+        try:
+            timestamp = get_timestamp_from_path(filename)
+        except ValueError:
+            raise HTTPException(400, f"Invalid timestamp in filename: {filename}")
+
+        dt = datetime.fromtimestamp(timestamp)
+        if dt > datetime.now() or dt < datetime(2024, 1, 1):
+            raise HTTPException(400, f"Timestamp out of range: {filename}")
+
+        # Extract frame_size from filename (e.g., _fs160 → 160)
+        frame_size = 160
+        match = re.search(r'_fs(\d+)', filename)
+        if match:
+            try:
+                frame_size = int(match.group(1))
+            except ValueError:
+                pass
+
+        # Extract codec from filename
+        codec = 'opus'
+        for c in ['opus', 'pcm16', 'pcm8']:
+            if c in filename:
+                codec = c
+                break
+
+        file_metadata.append(
+            {
+                'filename': filename,
+                'timestamp': timestamp,
+                'codec': codec,
+                'frame_size': frame_size,
+            }
+        )
+
+    # 2. Generate job ID and upload raw .bin files to GCS
+    job_id = str(uuid.uuid4())
+    gcs_paths = []
+    bucket = storage_client.bucket(offline_sync_bucket)
+    for f, meta in zip(files, file_metadata):
+        gcs_path = f"uploads/{uid}/{job_id}/{meta['filename']}"
+        blob = bucket.blob(gcs_path)
+        blob.upload_from_file(f.file, content_type='application/octet-stream')
+        gcs_paths.append(gcs_path)
+
+    # 3. Detect source from filenames
+    source = 'omi'
+    for meta in file_metadata:
+        if 'limitless' in meta['filename'].lower():
+            source = 'limitless'
+            break
+
+    # 4. Create Firestore job document
+    job_doc = {
+        'uid': uid,
+        'status': 'pending',
+        'gcs_paths': gcs_paths,
+        'file_metadata': file_metadata,
+        'source': source,
+        'new_conversation_ids': [],
+        'updated_conversation_ids': [],
+        'error': None,
+        'created_at': datetime.now(timezone.utc),
+        'started_at': None,
+        'completed_at': None,
+    }
+    db.collection('offline_sync_jobs').document(job_id).set(job_doc)
+
+    # 5. Enqueue Cloud Task for async processing
+    enqueue_offline_sync_task(job_id, uid)
+
+    logger.info(f"sync_upload_v2 uid={uid} job={job_id} files={len(gcs_paths)}")
+
+    return JSONResponse(
+        status_code=202,
+        content={
+            'job_id': job_id,
+            'file_count': len(gcs_paths),
+        },
+    )
+
+
+@router.post("/v2/sync/process", tags=['v2'], include_in_schema=False)
+async def process_sync_job(request: Request):
+    """
+    Internal endpoint called by Cloud Tasks. Not exposed in public API docs.
+
+    Downloads audio files from GCS, processes them through the standard pipeline
+    (decode → VAD → transcribe → create conversations), updates the job document,
+    and sends an FCM data message on completion.
+
+    Auth: X-Cloud-Tasks-Secret header (shared secret, not user token).
+    """
+    # 1. Authenticate — shared secret, not user auth
+    secret = request.headers.get("X-Cloud-Tasks-Secret")
+    if not secret or secret != CLOUD_TASKS_SECRET:
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+    payload = await request.json()
+    job_id = payload["job_id"]
+    uid = payload["uid"]
+
+    # 2. Load job from Firestore
+    job_ref = db.collection('offline_sync_jobs').document(job_id)
+    job_snap = job_ref.get()
+    if not job_snap.exists:
+        logger.warning(f"Offline sync job {job_id} not found, skipping")
+        return {"status": "skipped", "reason": "job not found"}
+
+    job = job_snap.to_dict()
+
+    # Validate uid matches the job owner
+    if job.get('uid') != uid:
+        logger.error(f"process_sync_job uid mismatch: payload={uid} job={job.get('uid')}")
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+    # Already completed (idempotency — Cloud Tasks may redeliver)
+    if job['status'] == 'completed':
+        logger.info(f"Offline sync job {job_id} already completed, skipping")
+        return {"status": "skipped", "reason": "already completed"}
+
+    # 3. Mark as processing
+    job_ref.update(
+        {
+            'status': 'processing',
+            'started_at': datetime.now(timezone.utc),
+        }
+    )
+
+    temp_dir = f'/tmp/offline_sync_{job_id}'
+    local_paths = []
+    wav_paths = []
+    segmented_paths = set()
+
+    try:
+        # 4. Download .bin files from GCS to temp directory
+        bucket = storage_client.bucket(offline_sync_bucket)
+        os.makedirs(temp_dir, exist_ok=True)
+
+        for gcs_path, meta in zip(job['gcs_paths'], job['file_metadata']):
+            local_path = f"{temp_dir}/{meta['filename']}"
+            blob = bucket.blob(gcs_path)
+            blob.download_to_filename(local_path)
+            local_paths.append(local_path)
+
+        # 5. Check transcription credits at processing time (may have changed since upload)
+        should_lock = not has_transcription_credits(uid)
+        source = ConversationSource(job['source'])
+
+        # 6. Decode .bin → .wav (also cleans up .bin files after decoding)
+        wav_paths = decode_files_to_wav(local_paths)
+        local_paths = []  # Already cleaned up by decode_files_to_wav
+
+        if not wav_paths:
+            job_ref.update(
+                {
+                    'status': 'completed',
+                    'completed_at': datetime.now(timezone.utc),
+                    'error': 'No valid audio after decoding',
+                }
+            )
+            return {"status": "completed", "reason": "no valid audio"}
+
+        # 7. VAD segmentation (parallel, groups of 5 threads)
+        def chunk_threads(threads):
+            chunk_size = 5
+            for i in range(0, len(threads), chunk_size):
+                [t.start() for t in threads[i : i + chunk_size]]
+                [t.join() for t in threads[i : i + chunk_size]]
+
+        vad_errors = []
+        threads = [
+            threading.Thread(target=retrieve_vad_segments, args=(p, segmented_paths, vad_errors)) for p in wav_paths
+        ]
+        chunk_threads(threads)
+        _cleanup_files(wav_paths)
+        wav_paths = []
+
+        if vad_errors:
+            raise Exception(f"VAD failed for {len(vad_errors)} file(s): {'; '.join(vad_errors[:3])}")
+
+        if not segmented_paths:
+            job_ref.update(
+                {
+                    'status': 'completed',
+                    'completed_at': datetime.now(timezone.utc),
+                    'error': 'No voice segments detected',
+                }
+            )
+            return {"status": "completed", "reason": "no voice segments"}
+
+        # 8. Fair-use speech tracking (same as v1)
+        total_speech_seconds = sum(get_wav_duration(p) for p in segmented_paths)
+        total_speech_ms = int(total_speech_seconds * 1000)
+        logger.info(
+            f'process_sync_job job={job_id} segments={len(segmented_paths)} '
+            f'speech_seconds={int(total_speech_seconds)}'
+        )
+
+        if FAIR_USE_ENABLED and total_speech_ms > 0:
+            record_speech_ms(uid, total_speech_ms, source='sync')
+            speech_totals = get_rolling_speech_ms(uid)
+            triggered_caps = check_soft_caps(uid, speech_totals=speech_totals)
+            if triggered_caps:
+                logger.info(f'sync: soft caps triggered for {uid}: {triggered_caps}')
+                asyncio.create_task(trigger_classifier_if_needed(uid, triggered_caps))
+
+        # 9. DG budget gate: throttle cloud STT for restrict-stage users
+        total_segments = len(segmented_paths)
+        dg_budget_blocked = False
+        fair_use_restrict_dg = False
+        if FAIR_USE_ENABLED:
+            try:
+                fair_use_stage = get_enforcement_stage(uid)
+                if fair_use_stage == 'restrict' and FAIR_USE_RESTRICT_DAILY_DG_MS > 0:
+                    fair_use_restrict_dg = True
+                    dg_budget_blocked = is_dg_budget_exhausted(uid)
+            except Exception as e:
+                logger.error(f'sync: DG budget check error for {uid}: {e}')
+
+        if dg_budget_blocked:
+            logger.info(f'sync: DG budget exhausted, skipping {total_segments} segments uid={uid} job={job_id}')
+            _cleanup_files(list(segmented_paths))
+            segmented_paths = set()
+            job_ref.update(
+                {
+                    'status': 'failed',
+                    'error': 'DG budget exhausted',
+                    'completed_at': datetime.now(timezone.utc),
+                }
+            )
+            return {"status": "failed", "reason": "dg_budget_exhausted"}
+
+        # 10. Process segments → conversations (parallel, groups of 5 threads)
+        response = {'updated_memories': set(), 'new_memories': set()}
+        segment_errors = []
+        segment_lock = threading.Lock()
+
+        threads = [
+            threading.Thread(
+                target=process_segment,
+                args=(p, uid, response, segment_lock, segment_errors, source, should_lock),
+            )
+            for p in segmented_paths
+        ]
+        chunk_threads(threads)
+        _cleanup_files(segmented_paths)
+        segmented_paths = set()
+
+        # Record DG usage after successful processing
+        if fair_use_restrict_dg:
+            try:
+                dg_ms = int(total_speech_seconds * 1000)
+                if dg_ms > 0:
+                    record_dg_usage_ms(uid, dg_ms)
+            except Exception as e:
+                logger.error(f'sync: DG usage record error for {uid}: {e}')
+
+        new_ids = sorted(response['new_memories'])
+        updated_ids = sorted(response['updated_memories'])
+
+        # Check if all segments failed
+        if segment_errors and not new_ids and not updated_ids:
+            raise Exception(f"All {len(segment_errors)} segment(s) failed: {'; '.join(segment_errors[:3])}")
+
+        # 11. Update Firestore job document
+        update_data = {
+            'status': 'completed',
+            'completed_at': datetime.now(timezone.utc),
+            'new_conversation_ids': new_ids,
+            'updated_conversation_ids': updated_ids,
+        }
+        if segment_errors:
+            update_data['error'] = f"{len(segment_errors)} segment(s) failed (partial)"
+        job_ref.update(update_data)
+
+        # 12. Send FCM data message (silent push)
+        send_sync_completed_message(uid, job_id, new_ids, updated_ids)
+
+        # 13. Delete uploaded .bin files from GCS (processing is done)
+        for gcs_path in job['gcs_paths']:
+            try:
+                bucket.blob(gcs_path).delete()
+            except Exception:
+                pass  # GCS bucket lifecycle rule catches orphans
+
+        logger.info(f"process_sync_job completed job={job_id} new={len(new_ids)} updated={len(updated_ids)}")
+        return {"status": "completed", "new": len(new_ids), "updated": len(updated_ids)}
+
+    except Exception as e:
+        logger.error(f"Offline sync job {job_id} failed: {e}")
+        job_ref.update(
+            {
+                'status': 'failed',
+                'error': str(e)[:500],
+                'completed_at': datetime.now(timezone.utc),
+            }
+        )
+        # Return 500 so Cloud Tasks sees the failure and retries
+        raise HTTPException(status_code=500, detail=str(e))
+
+    finally:
+        _cleanup_files(local_paths)
+        _cleanup_files(wav_paths)
+        _cleanup_files(segmented_paths)
+        try:
+            if os.path.exists(temp_dir):
+                shutil.rmtree(temp_dir, ignore_errors=True)
+        except Exception:
+            pass
+
+
+@router.get("/v2/sync/jobs", tags=['v2'])
+def get_sync_jobs(
+    status: str = Query(default=None, regex="^(pending|processing|completed|failed)$"),
+    uid: str = Depends(auth.get_current_user_uid),
+):
+    """
+    List the user's recent offline sync jobs.
+
+    Optional filter by status. Returns most recent 20 jobs.
+    """
+    query = db.collection('offline_sync_jobs').where('uid', '==', uid)
+    if status:
+        query = query.where('status', '==', status)
+    query = query.order_by('created_at', direction=firestore.Query.DESCENDING).limit(20)
+
+    jobs = []
+    for doc in query.stream():
+        d = doc.to_dict()
+        d['id'] = doc.id
+        # Strip internal fields
+        d.pop('gcs_paths', None)
+        d.pop('file_metadata', None)
+        # Convert timestamps to ISO strings for JSON serialization
+        for ts_field in ('created_at', 'started_at', 'completed_at'):
+            if d.get(ts_field):
+                d[ts_field] = d[ts_field].isoformat()
+        jobs.append(d)
+
+    return {"jobs": jobs}

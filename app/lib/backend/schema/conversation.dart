@@ -87,11 +87,9 @@ class ConversationPostProcessing {
 
   factory ConversationPostProcessing.fromJson(Map<String, dynamic> json) {
     return ConversationPostProcessing(
-      status:
-          ConversationPostProcessingStatus.values.asNameMap()[json['status']] ??
+      status: ConversationPostProcessingStatus.values.asNameMap()[json['status']] ??
           ConversationPostProcessingStatus.in_progress,
-      model:
-          ConversationPostProcessingModel.values.asNameMap()[json['model']] ??
+      model: ConversationPostProcessingModel.values.asNameMap()[json['model']] ??
           ConversationPostProcessingModel.fal_whisperx,
       failReason: json['fail_reason'],
     );
@@ -142,12 +140,12 @@ class ConversationPhoto {
   }
 
   Map<String, dynamic> toJson() => {
-    'id': id,
-    'base64': base64,
-    'description': description,
-    'created_at': createdAt.toUtc().toIso8601String(),
-    'discarded': discarded,
-  };
+        'id': id,
+        'base64': base64,
+        'description': description,
+        'created_at': createdAt.toUtc().toIso8601String(),
+        'discarded': discarded,
+      };
 }
 
 class AudioFile {
@@ -182,14 +180,14 @@ class AudioFile {
   }
 
   Map<String, dynamic> toJson() => {
-    'id': id,
-    'uid': uid,
-    'conversation_id': conversationId,
-    'chunk_timestamps': chunkTimestamps,
-    'provider': provider,
-    'started_at': startedAt?.toUtc().toIso8601String(),
-    'duration': duration,
-  };
+        'id': id,
+        'uid': uid,
+        'conversation_id': conversationId,
+        'chunk_timestamps': chunkTimestamps,
+        'provider': provider,
+        'started_at': startedAt?.toUtc().toIso8601String(),
+        'duration': duration,
+      };
 }
 
 class ServerConversation {
@@ -256,12 +254,10 @@ class ServerConversation {
       transcriptSegments: ((json['transcript_segments'] ?? []) as List<dynamic>)
           .map((segment) => TranscriptSegment.fromJson(segment))
           .toList(),
-      appResults: ((json['apps_results'] ?? []) as List<dynamic>)
-          .map((result) => AppResponse.fromJson(result))
-          .toList(),
-      suggestedSummarizationApps: ((json['suggested_summarization_apps'] ?? []) as List<dynamic>)
-          .map((appId) => appId.toString())
-          .toList(),
+      appResults:
+          ((json['apps_results'] ?? []) as List<dynamic>).map((result) => AppResponse.fromJson(result)).toList(),
+      suggestedSummarizationApps:
+          ((json['suggested_summarization_apps'] ?? []) as List<dynamic>).map((appId) => appId.toString()).toList(),
       geolocation: json['geolocation'] != null ? Geolocation.fromJson(json['geolocation']) : null,
       photos: json['photos'] != null
           ? ((json['photos'] ?? []) as List<dynamic>).map((photo) => ConversationPhoto.fromJson(photo)).toList()
@@ -271,9 +267,8 @@ class ServerConversation {
       source: json['source'] != null ? ConversationSource.values.asNameMap()[json['source']] : ConversationSource.omi,
       language: json['language'],
       deleted: json['deleted'] ?? false,
-      externalIntegration: json['external_data'] != null
-          ? ConversationExternalData.fromJson(json['external_data'])
-          : null,
+      externalIntegration:
+          json['external_data'] != null ? ConversationExternalData.fromJson(json['external_data']) : null,
       status: json['status'] != null
           ? ConversationStatus.values.asNameMap()[json['status']] ?? ConversationStatus.completed
           : ConversationStatus.completed,
@@ -453,6 +448,59 @@ class SyncedConversationPointer {
       index: index ?? this.index,
       key: key ?? this.key,
       conversation: conversation ?? this.conversation,
+    );
+  }
+}
+
+/// Response from POST /v2/sync/upload (async upload accepted)
+class SyncUploadResponse {
+  final String jobId;
+  final int fileCount;
+
+  SyncUploadResponse({required this.jobId, required this.fileCount});
+
+  factory SyncUploadResponse.fromJson(Map<String, dynamic> json) {
+    return SyncUploadResponse(
+      jobId: json['job_id'] as String,
+      fileCount: json['file_count'] as int,
+    );
+  }
+}
+
+/// Job status from GET /v2/sync/jobs
+class SyncJobStatus {
+  final String id;
+  final String status;
+  final List<String> newConversationIds;
+  final List<String> updatedConversationIds;
+  final String? error;
+  final String? createdAt;
+  final String? completedAt;
+
+  SyncJobStatus({
+    required this.id,
+    required this.status,
+    required this.newConversationIds,
+    required this.updatedConversationIds,
+    this.error,
+    this.createdAt,
+    this.completedAt,
+  });
+
+  bool get isCompleted => status == 'completed';
+  bool get isFailed => status == 'failed';
+  bool get isPending => status == 'pending' || status == 'processing';
+
+  factory SyncJobStatus.fromJson(Map<String, dynamic> json) {
+    return SyncJobStatus(
+      id: json['id'] as String,
+      status: json['status'] as String,
+      newConversationIds: ((json['new_conversation_ids'] ?? []) as List<dynamic>).map((val) => val.toString()).toList(),
+      updatedConversationIds:
+          ((json['updated_conversation_ids'] ?? []) as List<dynamic>).map((val) => val.toString()).toList(),
+      error: json['error'] as String?,
+      createdAt: json['created_at'] as String?,
+      completedAt: json['completed_at'] as String?,
     );
   }
 }

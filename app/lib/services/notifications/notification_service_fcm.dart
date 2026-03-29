@@ -16,6 +16,7 @@ import 'package:omi/backend/schema/message.dart';
 import 'package:omi/services/notifications/action_item_notification_handler.dart';
 import 'package:omi/services/notifications/important_conversation_notification_handler.dart';
 import 'package:omi/services/notifications/merge_notification_handler.dart';
+import 'package:omi/services/notifications/sync_completed_notification_handler.dart';
 import 'package:omi/services/notifications/notification_interface.dart';
 import 'package:omi/services/apple_reminders_service.dart';
 import 'package:omi/utils/analytics/intercom.dart';
@@ -236,6 +237,13 @@ class _FCMNotificationService implements NotificationInterface {
           return;
         } else if (messageType == 'important_conversation') {
           ImportantConversationNotificationHandler.handleImportantConversation(
+            data,
+            channel.channelKey!,
+            isAppInForeground: true,
+          );
+          return;
+        } else if (messageType == 'offline_sync_completed') {
+          SyncCompletedNotificationHandler.handleSyncCompleted(
             data,
             channel.channelKey!,
             isAppInForeground: true,

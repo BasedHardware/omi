@@ -448,6 +448,31 @@ def send_merge_completed_message(user_id: str, merged_conversation_id: str, remo
     _send_to_user(user_id, tag, data=data, is_background=True, priority='high')
 
 
+def send_sync_completed_message(
+    user_id: str,
+    job_id: str,
+    new_conversation_ids: list,
+    updated_conversation_ids: list,
+):
+    """
+    Send a silent FCM data message when offline sync processing completes.
+
+    The app receives this and:
+    - Fetches the new/updated conversations from the API
+    - Updates the local conversation list
+    - Clears the synced WAL files
+    """
+    logger.info(f'send_sync_completed_message to user {user_id}, job {job_id}')
+    data = {
+        'type': 'offline_sync_completed',
+        'job_id': job_id,
+        'new_conversation_ids': ','.join(new_conversation_ids),
+        'updated_conversation_ids': ','.join(updated_conversation_ids),
+    }
+    tag = _generate_tag(f"{user_id}:offline_sync_completed:{job_id}")
+    _send_to_user(user_id, tag, data=data, is_background=True, priority='high')
+
+
 def send_important_conversation_message(user_id: str, conversation_id: str):
     """
     Sends a data-only FCM message when a long conversation (>30 min) completes.
