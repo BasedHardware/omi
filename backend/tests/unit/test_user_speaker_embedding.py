@@ -372,6 +372,10 @@ class TestFinalAssignmentPass:
         Simulates: conversation has 5 segments from speaker 0, all with is_user=False.
         A late embedding match maps speaker 0 -> user. The flush before rollover
         must retroactively correct all 5 segments, not just the triggering one.
+
+        Note: _flush_speaker_assignments is an inner function of _stream_handler and
+        cannot be imported directly. This test validates the core logic it delegates to
+        (process_speaker_assigned_segments on all segments with populated maps).
         """
         from utils.speaker_assignment import process_speaker_assigned_segments
         from models.transcript_segment import TranscriptSegment
