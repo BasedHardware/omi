@@ -457,7 +457,9 @@ def get_chat_sessions(
     uid: str, app_id: str = None, limit: int = 50, offset: int = 0, starred: bool = None
 ) -> List[dict]:
     col = _user_col(uid, 'chat_sessions')
-    query = col.order_by('updated_at', direction=firestore.Query.DESCENDING)
+    # Order by created_at (not updated_at) — old sessions from mobile may lack updated_at,
+    # and Firestore excludes docs missing the order-by field from results.
+    query = col.order_by('created_at', direction=firestore.Query.DESCENDING)
 
     # Always filter — when app_id is None this returns only default-chat sessions
     query = query.where(filter=FieldFilter('plugin_id', '==', app_id))
@@ -652,11 +654,11 @@ def get_notification_settings(uid: str) -> dict:
     """
     doc = _user_doc(uid).get()
     if not doc.exists:
-        return {'enabled': True, 'frequency': 1}
+        return {'enabled': True, 'frequency': 3}
     data = doc.to_dict()
     return {
         'enabled': data.get('notifications_enabled', True),
-        'frequency': data.get('notification_frequency', 1),
+        'frequency': data.get('notification_frequency', 3),
     }
 
 
@@ -675,7 +677,12 @@ def get_assistant_settings(uid: str) -> dict:
     doc = _user_doc(uid).get()
     if not doc.exists:
         return {}
-    return doc.to_dict().get('assistant_settings') or {}
+    data = doc.to_dict()
+    result = data.get('assistant_settings') or {}
+    # update_channel lives at top-level on user doc, not inside assistant_settings
+    if data.get('update_channel') is not None:
+        result['update_channel'] = data['update_channel']
+    return result
 
 
 def update_assistant_settings(uid: str, settings: dict) -> dict:
@@ -683,14 +690,28 @@ def update_assistant_settings(uid: str, settings: dict) -> dict:
 
     The Swift client sends tiny partial updates (e.g. {"focus": {"enabled": true}})
     on every toggle.  A naive overwrite would erase sibling sections.
+
+    ``update_channel`` is a special case — it lives as a top-level field on the
+    user doc (not inside assistant_settings), matching Rust backend behavior.
     """
     existing = get_assistant_settings(uid)
+
+    # Extract update_channel — it goes to a top-level user doc field
+    update_channel = settings.pop('update_channel', None)
+
     for section, values in settings.items():
         if isinstance(values, dict) and isinstance(existing.get(section), dict):
             existing[section].update(values)
         else:
             existing[section] = values
-    _user_doc(uid).update({'assistant_settings': existing})
+
+    updates = {'assistant_settings': existing}
+    if update_channel is not None:
+        updates['update_channel'] = update_channel
+    _user_doc(uid).update(updates)
+
+    if update_channel is not None:
+        existing['update_channel'] = update_channel
     return existing
 
 
@@ -867,15 +888,24 @@ def record_desktop_llm_usage(
     today = datetime.now(timezone.utc).strftime('%Y-%m-%d')
     ref = _user_col(uid, 'llm_usage').document(today)
 
-    key = 'desktop_chat' if account == 'omi' else f'desktop_chat_{account}'
+    # Rust dual-writes: always increment "desktop_chat" (backward compat for
+    # existing queries) AND "desktop_chat_{account}" (per-account breakdown).
+    acct_key = f'desktop_chat_{account}'
     update = {
-        f'{key}.input_tokens': firestore.Increment(input_tokens),
-        f'{key}.output_tokens': firestore.Increment(output_tokens),
-        f'{key}.cache_read_tokens': firestore.Increment(cache_read_tokens),
-        f'{key}.cache_write_tokens': firestore.Increment(cache_write_tokens),
-        f'{key}.total_tokens': firestore.Increment(total_tokens),
-        f'{key}.cost_usd': firestore.Increment(cost_usd),
-        f'{key}.call_count': firestore.Increment(1),
+        'desktop_chat.input_tokens': firestore.Increment(input_tokens),
+        'desktop_chat.output_tokens': firestore.Increment(output_tokens),
+        'desktop_chat.cache_read_tokens': firestore.Increment(cache_read_tokens),
+        'desktop_chat.cache_write_tokens': firestore.Increment(cache_write_tokens),
+        'desktop_chat.total_tokens': firestore.Increment(total_tokens),
+        'desktop_chat.cost_usd': firestore.Increment(cost_usd),
+        'desktop_chat.call_count': firestore.Increment(1),
+        f'{acct_key}.input_tokens': firestore.Increment(input_tokens),
+        f'{acct_key}.output_tokens': firestore.Increment(output_tokens),
+        f'{acct_key}.cache_read_tokens': firestore.Increment(cache_read_tokens),
+        f'{acct_key}.cache_write_tokens': firestore.Increment(cache_write_tokens),
+        f'{acct_key}.total_tokens': firestore.Increment(total_tokens),
+        f'{acct_key}.cost_usd': firestore.Increment(cost_usd),
+        f'{acct_key}.call_count': firestore.Increment(1),
         'date': today,
         'last_updated': datetime.now(timezone.utc),
     }
