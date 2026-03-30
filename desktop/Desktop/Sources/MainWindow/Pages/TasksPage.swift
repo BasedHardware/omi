@@ -503,8 +503,10 @@ class TasksViewModel: ObservableObject {
                     }
                 }
             } else {
-                // No status filter = "All" — load completed tasks so they show alongside todos
-                Task { await store.loadCompletedTasks() }
+                // No status filter = "All" — ensure completed tasks are present for the in-memory fallback
+                if !showCompleted {
+                    Task { await store.loadCompletedTasks() }
+                }
             }
             // When non-status filters (including date) are applied, query SQLite directly
             let hasNonStatusFilters = selectedTags.contains(where: { $0.group != .status })
@@ -1683,13 +1685,13 @@ class TasksViewModel: ObservableObject {
         let startOfTomorrow = calendar.date(byAdding: .day, value: 1, to: startOfToday)!
         let startOfDayAfterTomorrow = calendar.date(byAdding: .day, value: 2, to: startOfToday)!
         // Only apply 7-day cutoff when the last7Days filter is active
-        let applySevenDayCutoffMore = selectedTags.contains(.last7Days)
-        let sevenDaysAgoMore = Date().addingTimeInterval(-7 * 24 * 60 * 60)
+        let applySevenDayCutoff = selectedTags.contains(.last7Days)
+        let sevenDaysAgo = Date().addingTimeInterval(-7 * 24 * 60 * 60)
         for task in displayTasks {
-            if applySevenDayCutoffMore && !task.completed {
+            if applySevenDayCutoff && !task.completed {
                 if let dueAt = task.dueAt {
-                    if dueAt < sevenDaysAgoMore { continue }
-                } else if task.createdAt < sevenDaysAgoMore {
+                    if dueAt < sevenDaysAgo { continue }
+                } else if task.createdAt < sevenDaysAgo {
                     continue
                 }
             }
