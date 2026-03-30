@@ -2,16 +2,19 @@ import Foundation
 
 actor APIClient {
     static let shared = APIClient()
-    // Python backend URL for subscription/payment endpoints (these don't exist on the Rust desktop backend)
-    var pythonBackendURL: String {
+    // Primary data backend URL — Python backend (api.omi.me) is the single source of truth for all data CRUD.
+    // Override via OMI_PYTHON_API_URL for local dev.
+    var baseURL: String {
         if let cString = getenv("OMI_PYTHON_API_URL"), let url = String(validatingUTF8: cString), !url.isEmpty {
             return url.hasSuffix("/") ? url : url + "/"
         }
         return "https://api.omi.me/"
     }
 
-    // OMI Backend base URL — must be set via OMI_API_URL env var (in .env)
-    var baseURL: String {
+    // Rust desktop backend URL — used only for proxy (Gemini/Deepgram), screen_activity, config/api-keys,
+    // and desktop-specific endpoints that don't have Python parity yet.
+    // Set via OMI_API_URL env var (in .env).
+    var rustBackendURL: String {
         // First check getenv() for values set by setenv() in loadEnvironment()
         if let cString = getenv("OMI_API_URL"), let url = String(validatingUTF8: cString), !url.isEmpty {
             let normalized = url.hasSuffix("/") ? url : url + "/"
@@ -22,7 +25,7 @@ actor APIClient {
             let normalized = envURL.hasSuffix("/") ? envURL : envURL + "/"
             return normalized
         }
-        NSLog("OMI API: OMI_API_URL not set — API calls will fail")
+        NSLog("OMI API: OMI_API_URL not set — Rust backend calls will fail")
         return ""
     }
 
@@ -421,7 +424,7 @@ extension APIClient {
             let count: Int
         }
 
-        let response: CountResponse = try await get("v1/users/stats/chat-messages")
+        let response: CountResponse = try await get("v1/users/stats/chat-messages", customBaseURL: rustBackendURL)
         return response.count
     }
 
@@ -1854,18 +1857,18 @@ extension APIClient {
             relevanceScore: relevanceScore
         )
 
-        return try await post("v1/staged-tasks", body: request)
+        return try await post("v1/staged-tasks", body: request, customBaseURL: rustBackendURL)
     }
 
     /// Fetches staged tasks ordered by relevance score
     func getStagedTasks(limit: Int = 100, offset: Int = 0) async throws -> ActionItemsListResponse {
         let params = "limit=\(limit)&offset=\(offset)"
-        return try await get("v1/staged-tasks?\(params)")
+        return try await get("v1/staged-tasks?\(params)", customBaseURL: rustBackendURL)
     }
 
     /// Hard-deletes a staged task
     func deleteStagedTask(id: String) async throws {
-        try await delete("v1/staged-tasks/\(id)")
+        try await delete("v1/staged-tasks/\(id)", customBaseURL: rustBackendURL)
     }
 
     /// Batch update relevance scores for staged tasks
@@ -1881,24 +1884,24 @@ extension APIClient {
             let status: String
         }
         let request = BatchRequest(scores: scores.map { ScoreUpdate(id: $0.id, relevance_score: $0.score) })
-        let _: StatusResponse = try await patch("v1/staged-tasks/batch-scores", body: request)
+        let _: StatusResponse = try await patch("v1/staged-tasks/batch-scores", body: request, customBaseURL: rustBackendURL)
     }
 
     /// Promotes the top-ranked staged task to action_items
     func promoteTopStagedTask() async throws -> PromoteResponse {
-        return try await post("v1/staged-tasks/promote")
+        return try await post("v1/staged-tasks/promote", customBaseURL: rustBackendURL)
     }
 
     /// One-time migration of existing AI tasks to staged_tasks
     func migrateStagedTasks() async throws {
         struct StatusResponse: Decodable { let status: String }
-        let _: StatusResponse = try await post("v1/staged-tasks/migrate")
+        let _: StatusResponse = try await post("v1/staged-tasks/migrate", customBaseURL: rustBackendURL)
     }
 
     /// Migrate conversation-extracted action items (no source field) to staged_tasks
     func migrateConversationItemsToStaged() async throws {
         struct MigrateResponse: Decodable { let status: String; let migrated: Int; let deleted: Int }
-        let _: MigrateResponse = try await post("v1/staged-tasks/migrate-conversation-items")
+        let _: MigrateResponse = try await post("v1/staged-tasks/migrate-conversation-items", customBaseURL: rustBackendURL)
     }
 }
 
@@ -2079,7 +2082,7 @@ extension APIClient {
             formatter.dateFormat = "yyyy-MM-dd"
             endpoint += "?date=\(formatter.string(from: date))"
         }
-        return try await get(endpoint)
+        return try await get(endpoint, customBaseURL: rustBackendURL)
     }
 
     /// Get all scores (daily, weekly, overall) with default tab selection
@@ -2090,7 +2093,7 @@ extension APIClient {
             formatter.dateFormat = "yyyy-MM-dd"
             endpoint += "?date=\(formatter.string(from: date))"
         }
-        return try await get(endpoint)
+        return try await get(endpoint, customBaseURL: rustBackendURL)
     }
 }
 
@@ -3376,7 +3379,7 @@ extension APIClient {
 
     /// Fetches notification settings
     func getNotificationSettings() async throws -> NotificationSettingsResponse {
-        return try await get("v1/users/notification-settings")
+        return try await get("v1/users/notification-settings", customBaseURL: rustBackendURL)
     }
 
     /// Updates notification settings
@@ -3386,7 +3389,7 @@ extension APIClient {
             let frequency: Int?
         }
         let body = UpdateRequest(enabled: enabled, frequency: frequency)
-        return try await patch("v1/users/notification-settings", body: body)
+        return try await patch("v1/users/notification-settings", body: body, customBaseURL: rustBackendURL)
     }
 
     /// Fetches user profile
@@ -3416,12 +3419,12 @@ extension APIClient {
 
     /// Fetches assistant settings from the backend
     func getAssistantSettings() async throws -> AssistantSettingsResponse {
-        return try await get("v1/users/assistant-settings")
+        return try await get("v1/users/assistant-settings", customBaseURL: rustBackendURL)
     }
 
     /// Updates assistant settings on the backend (partial update — only non-nil fields are changed)
     func updateAssistantSettings(_ settings: AssistantSettingsResponse) async throws -> AssistantSettingsResponse {
-        return try await patch("v1/users/assistant-settings", body: settings)
+        return try await patch("v1/users/assistant-settings", body: settings, customBaseURL: rustBackendURL)
     }
 
     // MARK: - Knowledge Graph API
@@ -3883,17 +3886,17 @@ extension APIClient {
         if let date = date {
             endpoint += "&date=\(date)"
         }
-        return try await get(endpoint)
+        return try await get(endpoint, customBaseURL: rustBackendURL)
     }
 
     /// Create a new focus session
     func createFocusSession(_ request: CreateFocusSessionRequest) async throws -> FocusSessionResponse {
-        return try await post("v1/focus-sessions", body: request)
+        return try await post("v1/focus-sessions", body: request, customBaseURL: rustBackendURL)
     }
 
     /// Delete a focus session
     func deleteFocusSession(_ id: String) async throws {
-        try await delete("v1/focus-sessions/\(id)")
+        try await delete("v1/focus-sessions/\(id)", customBaseURL: rustBackendURL)
     }
 
     /// Get focus statistics for a date
@@ -3902,7 +3905,7 @@ extension APIClient {
         if let date = date {
             endpoint += "?date=\(date)"
         }
-        return try await get(endpoint)
+        return try await get(endpoint, customBaseURL: rustBackendURL)
     }
 }
 
@@ -3928,12 +3931,12 @@ extension APIClient {
         }
 
         let endpoint = "v1/advice?\(queryItems.joined(separator: "&"))"
-        return try await get(endpoint)
+        return try await get(endpoint, customBaseURL: rustBackendURL)
     }
 
     /// Creates a new advice entry
     func createAdvice(_ request: CreateAdviceRequest) async throws -> ServerAdvice {
-        return try await post("v1/advice", body: request)
+        return try await post("v1/advice", body: request, customBaseURL: rustBackendURL)
     }
 
     /// Updates advice (mark as read/dismissed)
@@ -3943,12 +3946,12 @@ extension APIClient {
             let is_dismissed: Bool?
         }
         let body = UpdateRequest(is_read: isRead, is_dismissed: isDismissed)
-        return try await patch("v1/advice/\(id)", body: body)
+        return try await patch("v1/advice/\(id)", body: body, customBaseURL: rustBackendURL)
     }
 
     /// Deletes advice permanently
     func deleteAdvice(id: String) async throws {
-        try await delete("v1/advice/\(id)")
+        try await delete("v1/advice/\(id)", customBaseURL: rustBackendURL)
     }
 
     /// Marks all advice as read
@@ -3956,7 +3959,7 @@ extension APIClient {
         struct StatusResponse: Decodable {
             let status: String
         }
-        let _: StatusResponse = try await post("v1/advice/mark-all-read", body: EmptyBody())
+        let _: StatusResponse = try await post("v1/advice/mark-all-read", body: EmptyBody(), customBaseURL: rustBackendURL)
     }
 }
 
@@ -4077,7 +4080,7 @@ extension APIClient {
             let metadata: String?
         }
         let body = SaveRequest(text: text, sender: sender, app_id: appId, session_id: sessionId, metadata: metadata)
-        return try await post("v2/messages", body: body)
+        return try await post("v2/messages", body: body, customBaseURL: rustBackendURL)
     }
 
     /// Fetch chat message history
@@ -4096,7 +4099,7 @@ extension APIClient {
         }
 
         let endpoint = "v2/messages?\(queryItems.joined(separator: "&"))"
-        return try await get(endpoint)
+        return try await get(endpoint, customBaseURL: rustBackendURL)
     }
 
     /// Clear chat message history
@@ -4106,7 +4109,7 @@ extension APIClient {
             endpoint += "?app_id=\(appId)"
         }
 
-        let url = URL(string: baseURL + endpoint)!
+        let url = URL(string: rustBackendURL + endpoint)!
         var request = URLRequest(url: url)
         request.httpMethod = "DELETE"
         request.allHTTPHeaderFields = try await buildHeaders(requireAuth: true)
@@ -4141,7 +4144,7 @@ extension APIClient {
         ]
 
         let endpoint = "v2/messages?\(queryItems.joined(separator: "&"))"
-        return try await get(endpoint)
+        return try await get(endpoint, customBaseURL: rustBackendURL)
     }
 
     /// Rate a message (thumbs up/down)
@@ -4153,7 +4156,7 @@ extension APIClient {
             let rating: Int?
         }
         let body = RateRequest(rating: rating)
-        let _: MessageStatusResponse = try await patch("v2/messages/\(messageId)/rating", body: body)
+        let _: MessageStatusResponse = try await patch("v2/messages/\(messageId)/rating", body: body, customBaseURL: rustBackendURL)
     }
 }
 
@@ -4176,7 +4179,7 @@ extension APIClient {
             let app_id: String?
         }
         let body = CreateRequest(title: title, app_id: appId)
-        return try await post("v2/chat-sessions", body: body)
+        return try await post("v2/chat-sessions", body: body, customBaseURL: rustBackendURL)
     }
 
     /// Fetch chat sessions
@@ -4199,12 +4202,12 @@ extension APIClient {
         }
 
         let endpoint = "v2/chat-sessions?\(queryItems.joined(separator: "&"))"
-        return try await get(endpoint)
+        return try await get(endpoint, customBaseURL: rustBackendURL)
     }
 
     /// Get a single chat session
     func getChatSession(sessionId: String) async throws -> ChatSession {
-        return try await get("v2/chat-sessions/\(sessionId)")
+        return try await get("v2/chat-sessions/\(sessionId)", customBaseURL: rustBackendURL)
     }
 
     /// Update a chat session (title, starred)
@@ -4218,12 +4221,12 @@ extension APIClient {
             let starred: Bool?
         }
         let body = UpdateRequest(title: title, starred: starred)
-        return try await patch("v2/chat-sessions/\(sessionId)", body: body)
+        return try await patch("v2/chat-sessions/\(sessionId)", body: body, customBaseURL: rustBackendURL)
     }
 
     /// Delete a chat session and its messages
     func deleteChatSession(sessionId: String) async throws {
-        try await delete("v2/chat-sessions/\(sessionId)")
+        try await delete("v2/chat-sessions/\(sessionId)", customBaseURL: rustBackendURL)
     }
 
     /// Generate an initial greeting message for a new chat session
@@ -4239,7 +4242,7 @@ extension APIClient {
         }
 
         let body = InitialMessageRequest(sessionId: sessionId, appId: appId)
-        return try await post("v2/chat/initial-message", body: body)
+        return try await post("v2/chat/initial-message", body: body, customBaseURL: rustBackendURL)
     }
 
     /// Generate a title for a chat session based on its messages
@@ -4263,7 +4266,7 @@ extension APIClient {
             sessionId: sessionId,
             messages: messages.map { TitleMessageInput(text: $0.text, sender: $0.sender) }
         )
-        return try await post("v2/chat/generate-title", body: body)
+        return try await post("v2/chat/generate-title", body: body, customBaseURL: rustBackendURL)
     }
 }
 
@@ -4362,7 +4365,7 @@ extension APIClient {
 
     /// Fetch AI-generated user profile from backend
     func getAIUserProfile() async throws -> AIUserProfileResponse? {
-        return try await get("v1/users/ai-profile")
+        return try await get("v1/users/ai-profile", customBaseURL: rustBackendURL)
     }
 
     /// Sync AI-generated user profile to backend
@@ -4382,7 +4385,7 @@ extension APIClient {
             data_sources_used: dataSourcesUsed
         )
 
-        let _: AIUserProfileResponse = try await patch("v1/users/ai-profile", body: body)
+        let _: AIUserProfileResponse = try await patch("v1/users/ai-profile", body: body, customBaseURL: rustBackendURL)
     }
 
     // MARK: - Agent VM
@@ -4397,7 +4400,7 @@ extension APIClient {
 
     /// Provision a cloud agent VM for the current user (fire-and-forget)
     func provisionAgentVM() async throws -> AgentProvisionResponse {
-        return try await post("v2/agent/provision")
+        return try await post("v2/agent/provision", customBaseURL: rustBackendURL)
     }
 
     struct AgentStatusResponse: Decodable {
@@ -4412,7 +4415,7 @@ extension APIClient {
 
     /// Get current agent VM status
     func getAgentStatus() async throws -> AgentStatusResponse? {
-        return try await get("v2/agent/status")
+        return try await get("v2/agent/status", customBaseURL: rustBackendURL)
     }
 }
 
@@ -4436,7 +4439,7 @@ struct Person: Codable, Identifiable {
 extension APIClient {
 
     func getUserSubscription() async throws -> UserSubscriptionResponse {
-        return try await get("v1/users/me/subscription", customBaseURL: pythonBackendURL)
+        return try await get("v1/users/me/subscription")
     }
 
     func createCheckoutSession(priceId: String) async throws -> CheckoutSessionResponse {
@@ -4448,11 +4451,11 @@ extension APIClient {
             }
         }
 
-        return try await post("v1/payments/checkout-session", body: Request(priceId: priceId), customBaseURL: pythonBackendURL)
+        return try await post("v1/payments/checkout-session", body: Request(priceId: priceId))
     }
 
     func createCustomerPortalSession() async throws -> CustomerPortalResponse {
-        return try await post("v1/payments/customer-portal", customBaseURL: pythonBackendURL)
+        return try await post("v1/payments/customer-portal")
     }
 
     /// Fetches all people for the current user
@@ -4556,7 +4559,7 @@ extension APIClient {
                 total_tokens: totalTokens,
                 cost_usd: costUsd,
                 account: account
-            ))
+            ), customBaseURL: rustBackendURL)
         } catch {
             log("APIClient: LLM usage record failed: \(error.localizedDescription)")
         }
@@ -4566,7 +4569,7 @@ extension APIClient {
         struct Res: Decodable { let total_cost_usd: Double }
         do {
             log("APIClient: Fetching total Omi AI cost from backend")
-            let res: Res = try await get("v1/users/me/llm-usage/total")
+            let res: Res = try await get("v1/users/me/llm-usage/total", customBaseURL: rustBackendURL)
             log("APIClient: Total Omi AI cost from backend: $\(String(format: "%.4f", res.total_cost_usd))")
             return res.total_cost_usd
         } catch {
@@ -4596,7 +4599,7 @@ extension APIClient {
     }
 
     func fetchApiKeys() async throws -> ApiKeysResponse {
-        return try await get("v1/config/api-keys")
+        return try await get("v1/config/api-keys", customBaseURL: rustBackendURL)
     }
 
     // MARK: - Platform Tools (backend RAG)
