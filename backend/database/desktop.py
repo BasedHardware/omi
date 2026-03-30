@@ -426,12 +426,27 @@ def create_chat_session(uid: str, title: str = None, app_id: str = None) -> dict
         'created_at': now,
         'updated_at': now,
         'app_id': app_id,
+        'plugin_id': app_id,  # backward compat — Python consumers query by plugin_id
         'message_count': 0,
         'starred': False,
     }
     ref = db.collection('users').document(uid).collection('chat_sessions').document(session_id)
     ref.set(doc)
     return doc
+
+
+def acquire_chat_session(uid: str, app_id: str = None) -> str:
+    """Get or create a chat session for the given app_id (None = main default chat).
+    Mirrors Rust's acquire_chat_session(): find matching session by plugin_id, or create one.
+    Returns the session ID."""
+    sessions_ref = db.collection('users').document(uid).collection('chat_sessions')
+    query = sessions_ref.where(filter=FieldFilter('plugin_id', '==', app_id)).limit(1)
+    docs = list(query.stream())
+    if docs:
+        return docs[0].id
+    # No matching session — create one
+    session = create_chat_session(uid, app_id=app_id)
+    return session['id']
 
 
 def get_chat_sessions(
@@ -508,14 +523,24 @@ def delete_chat_session(uid: str, session_id: str) -> bool:
 def save_desktop_message(uid: str, data: dict) -> dict:
     msg_id = str(uuid.uuid4())
     now = datetime.now(timezone.utc)
+    app_id = data.get('app_id')
+
+    # Acquire (get or create) a chat session when none is explicitly provided.
+    # This mirrors Rust's behavior: default-chat messages always get a session so
+    # they're visible on mobile and in session-based history.
+    session_id = data.get('session_id')
+    if not session_id:
+        session_id = acquire_chat_session(uid, app_id=app_id)
+
     doc = {
         'id': msg_id,
         'text': data['text'],
         'created_at': now,
         'sender': data['sender'],
-        'app_id': data.get('app_id'),
-        'session_id': data.get('session_id'),
-        'chat_session_id': data.get('session_id'),  # backward compat
+        'app_id': app_id,
+        'plugin_id': app_id,  # backward compat — Python consumers query by plugin_id
+        'session_id': session_id,
+        'chat_session_id': session_id,  # backward compat
         'rating': None,
         'reported': False,
         'metadata': data.get('metadata'),
@@ -523,8 +548,7 @@ def save_desktop_message(uid: str, data: dict) -> dict:
     ref = db.collection('users').document(uid).collection('messages').document(msg_id)
     ref.set(doc)
 
-    # Update chat session message count and preview if session_id provided
-    session_id = data.get('session_id')
+    # Update chat session message count and preview
     if session_id:
         session_ref = db.collection('users').document(uid).collection('chat_sessions').document(session_id)
         session_ref.update(
