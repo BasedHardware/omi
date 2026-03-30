@@ -223,20 +223,22 @@ def test_post_timeout_none_falls_back_to_default(monkeypatch):
 
 
 def test_main_methods_timeout_includes_post():
-    """backend/main.py methods_timeout dict includes POST key (#5941)."""
-    import importlib
+    """backend/main.py methods_timeout dict includes POST key (#5941).
 
-    # Verify the POST key exists in the methods_timeout construction pattern
-    # by checking that TimeoutMiddleware accepts POST in methods_timeout
-    app = Starlette(routes=[Route("/ok", lambda r: PlainTextResponse("ok"), methods=["POST"])])
-    methods = {
-        "GET": None,
-        "POST": None,
-        "PUT": None,
-        "PATCH": None,
-        "DELETE": None,
-    }
-    app.add_middleware(TimeoutMiddleware, methods_timeout=methods)
-    client = TestClient(app)
-    response = client.post("/ok")
-    assert response.status_code == 200
+    AST-parses main.py to verify the POST entry exists in the methods_timeout
+    assignment without importing the full app (avoids startup side effects).
+    """
+    import ast
+    from pathlib import Path
+
+    main_py = Path(__file__).resolve().parents[2] / "main.py"
+    tree = ast.parse(main_py.read_text())
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Assign):
+            for target in node.targets:
+                if isinstance(target, ast.Name) and target.id == "methods_timeout":
+                    assert isinstance(node.value, ast.Dict)
+                    keys = [k.value for k in node.value.keys if isinstance(k, ast.Constant)]
+                    assert "POST" in keys, f"POST missing from methods_timeout keys: {keys}"
+                    return
+    raise AssertionError("methods_timeout assignment not found in main.py")
