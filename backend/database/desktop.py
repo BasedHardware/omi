@@ -459,8 +459,8 @@ def get_chat_sessions(
     col = _user_col(uid, 'chat_sessions')
     query = col.order_by('updated_at', direction=firestore.Query.DESCENDING)
 
-    if app_id is not None:
-        query = query.where(filter=FieldFilter('plugin_id', '==', app_id))
+    # Always filter — when app_id is None this returns only default-chat sessions
+    query = query.where(filter=FieldFilter('plugin_id', '==', app_id))
     if starred is not None:
         query = query.where(filter=FieldFilter('starred', '==', starred))
 
@@ -781,9 +781,9 @@ def get_scores(uid: str, date: str = None) -> dict:
         if data.get('completed'):
             daily_completed += 1
 
-    # Weekly: tasks due in last 7 days
-    weekly_q = col.where(filter=FieldFilter('due_at', '>=', week_start)).where(
-        filter=FieldFilter('due_at', '<', day_end)
+    # Weekly: tasks created in last 7 days (matches Rust backend which uses created_at)
+    weekly_q = col.where(filter=FieldFilter('created_at', '>=', week_start)).where(
+        filter=FieldFilter('created_at', '<', day_end)
     )
     weekly_completed = weekly_total = 0
     for doc in weekly_q.stream():
