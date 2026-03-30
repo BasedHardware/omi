@@ -290,6 +290,16 @@ final class APIClientRoutingTests: XCTestCase {
                      label: "fetchApiKeys")
     }
 
+    // -- Chat message count (GET → Rust, queries PostHog) --
+
+    func testGetChatMessageCountRoutesToRust() async {
+        let client = await makeTestClient()
+        _ = try? await client.getChatMessageCount() as Int
+        assertRoutes(URLCapture.capturedRequests, host: "rust-test", port: 9002,
+                     pathContains: "v1/users/stats/chat-messages", method: "GET",
+                     label: "getChatMessageCount")
+    }
+
     // -- Assistant settings (GET → Python, migrated from Rust) --
 
     func testGetAssistantSettingsRoutesToPython() async {
