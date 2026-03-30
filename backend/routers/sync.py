@@ -815,9 +815,19 @@ def identify_speakers_for_segments(
         speaker_segments.setdefault(sid, []).append(seg)
 
     # Voice embedding matching (only when audio and cached embeddings are available)
+    # Track matched person_ids so each person is only assigned to one speaker
+    # (diarization tells us speakers are distinct — no person can be two speakers).
+    matched_person_ids: set = set()
+
     if audio_bytes and person_embeddings_cache:
-        for speaker_id, segments in speaker_segments.items():
-            # Find the longest segment for this speaker
+        # Sort speakers by total speech duration (longest first) for best embedding quality
+        sorted_speakers = sorted(
+            speaker_segments.items(),
+            key=lambda kv: sum(s.end - s.start for s in kv[1]),
+            reverse=True,
+        )
+
+        for speaker_id, segments in sorted_speakers:
             best_seg = max(segments, key=lambda s: s.end - s.start)
             seg_duration = best_seg.end - best_seg.start
 
@@ -834,10 +844,12 @@ def identify_speakers_for_segments(
                 logger.info(f'Speaker ID: embedding extraction failed for speaker {speaker_id}: {e} uid={uid}')
                 continue
 
-            # Compare against all cached embeddings
+            # Compare only against unmatched candidates (each person can be one speaker)
             best_match = None
             best_distance = float('inf')
             for person_id, data in person_embeddings_cache.items():
+                if person_id in matched_person_ids:
+                    continue
                 distance = compare_embeddings(query_embedding, data['embedding'])
                 if distance < best_distance:
                     best_distance = distance
@@ -846,8 +858,8 @@ def identify_speakers_for_segments(
             if best_match and best_distance < SPEAKER_MATCH_THRESHOLD:
                 person_id, person_name = best_match
                 speaker_to_person_map[speaker_id] = (person_id, person_name)
-                # Also assign the specific segment used for matching
                 segment_person_assignment_map[best_seg.id] = person_id
+                matched_person_ids.add(person_id)
                 logger.info(
                     f'Speaker ID (sync): speaker {speaker_id} -> {person_id} '
                     f'(distance={best_distance:.3f}) uid={uid}'
