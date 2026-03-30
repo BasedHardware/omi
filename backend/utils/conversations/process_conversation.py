@@ -71,8 +71,126 @@ from utils.webhooks import conversation_created_webhook
 from utils.notifications import send_action_item_data_message
 from utils.task_sync import auto_sync_action_items_batch
 from utils.other.storage import precache_conversation_audio
+from utils.translation import TranslationService, detect_language
+from utils.translation_cache import should_persist_translation
+from models.transcript_segment import Translation
 
 logger = logging.getLogger(__name__)
+
+# 24-hour hot window for batch translation
+TRANSLATION_HOT_WINDOW_HOURS = 24
+
+
+def resolve_translation_language(uid: str, conversation_language: Optional[str] = None) -> Optional[str]:
+    """Resolve the translation target language from user preferences and conversation metadata.
+
+    Returns the target language code, or None if translation is disabled.
+    """
+    transcription_prefs = users_db.get_user_transcription_preferences(uid)
+    single_language_mode = transcription_prefs.get('single_language_mode', False)
+    if single_language_mode:
+        return None
+
+    # Use conversation language if available, otherwise fall back to user preference
+    language = conversation_language or users_db.get_user_language_preference(uid)
+    if not language:
+        return None
+
+    return language
+
+
+def _batch_translate_segments(
+    uid: str,
+    conversation: Conversation,
+) -> bool:
+    """Batch-translate foreign-language segments in a completed conversation.
+
+    Uses free langdetect on finalized segments to identify foreign-language content,
+    then batch-translates only those segments in a single GCP API call.
+    Respects the 24h hot window — only translates recent conversations.
+
+    Returns True if any translations were added, False otherwise.
+    """
+    translation_language = resolve_translation_language(uid, conversation.language)
+    if not translation_language:
+        return False
+
+    if not conversation.transcript_segments:
+        return False
+
+    # 24h hot window: skip conversations older than 24 hours
+    if conversation.started_at:
+        age = datetime.now(timezone.utc) - conversation.started_at
+        if age > timedelta(hours=TRANSLATION_HOT_WINDOW_HOURS):
+            logger.info(
+                f"batch_translate: skipping conversation {conversation.id} — "
+                f"started {age.total_seconds() / 3600:.1f}h ago (>{TRANSLATION_HOT_WINDOW_HOURS}h window)"
+            )
+            return False
+
+    translation_language_base = translation_language.split('-')[0] if translation_language else None
+    target_lang = translation_language_base or translation_language
+
+    # Phase 1: Identify segments needing translation using free langdetect
+    segments_to_translate = []
+    for segment in conversation.transcript_segments:
+        text = segment.text.strip()
+        if not text:
+            continue
+
+        # Skip segments that already have a translation for this language
+        if segment.translations:
+            has_translation = any(t.lang == translation_language for t in segment.translations)
+            if has_translation:
+                continue
+
+        # Use free langdetect to check if segment is in target language
+        detected = detect_language(text)
+        if detected and detected == target_lang:
+            # Same language as target — no translation needed
+            continue
+
+        # Foreign language detected, or detection inconclusive — translate
+        segments_to_translate.append(segment)
+
+    if not segments_to_translate:
+        logger.info(f"batch_translate: no foreign segments found for conversation {conversation.id}")
+        return False
+
+    # Phase 2: Batch translate all foreign segments
+    translation_service = TranslationService()
+    translations_added = 0
+
+    # Collect all texts and translate in batch via sentence-level batching
+    for segment in segments_to_translate:
+        try:
+            translated_text, detected_lang = translation_service.translate_text_by_sentence(
+                translation_language, segment.text.strip()
+            )
+
+            if not should_persist_translation(segment.text.strip(), translated_text, detected_lang, target_lang):
+                continue
+
+            trans = Translation(lang=translation_language, text=translated_text)
+            if segment.translations is None:
+                segment.translations = []
+
+            existing_idx = next((i for i, t in enumerate(segment.translations) if t.lang == translation_language), None)
+            if existing_idx is not None:
+                segment.translations[existing_idx] = trans
+            else:
+                segment.translations.append(trans)
+
+            translations_added += 1
+        except Exception as e:
+            logger.warning(f"batch_translate: error translating segment {segment.id}: {e}")
+            continue
+
+    logger.info(
+        f"batch_translate: conversation={conversation.id} "
+        f"candidates={len(segments_to_translate)} translated={translations_added}"
+    )
+    return translations_added > 0
 
 
 def _get_structured(
@@ -730,6 +848,12 @@ def process_conversation(
                 precache_conversation_audio(uid, conversation.id, [af.dict() for af in audio_files])
         except Exception as e:
             logger.error(f"Error creating audio files: {e}")
+
+    # Batch translate foreign-language segments (best-effort, non-blocking)
+    try:
+        _batch_translate_segments(uid, conversation)
+    except Exception as e:
+        logger.error(f"batch_translate: failed for conversation {conversation.id}: {e}")
 
     conversation.status = ConversationStatus.completed
     conversations_db.upsert_conversation(uid, conversation.dict())
