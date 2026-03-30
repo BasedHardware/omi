@@ -620,7 +620,7 @@ static void print_audio_files_at_boot(void)
 /* File creation / continuation at boot                               */
 /* ------------------------------------------------------------------ */
 
-#define FILE_CONTINUE_THRESHOLD_SEC (2 * 60)
+#define FILE_CONTINUE_THRESHOLD_SEC (60)
 
 static int try_continue_latest_file(void)
 {
