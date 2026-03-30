@@ -1,5 +1,5 @@
 {
-  "unreleased": [],
+  "unreleased": ["Migrated data APIs to production backend for improved reliability and feature parity"],
   "releases": [
     {
       "version": "0.11.233",
