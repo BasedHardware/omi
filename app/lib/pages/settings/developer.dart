@@ -1898,8 +1898,8 @@ class _ManualFirmwareFlashPage extends StatefulWidget {
     required this.zipFilePath,
     required this.fileName,
     required this.device,
-  }); 
-
+  });
+ 
   @override
   State<_ManualFirmwareFlashPage> createState() => _ManualFirmwareFlashPageState();
 }
