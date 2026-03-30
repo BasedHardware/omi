@@ -44,13 +44,23 @@ class MapCardWidget extends StatelessWidget {
     final lng = (props['longitude'] as num?)?.toDouble();
     final title = props['title'] as String? ?? '';
     final description = props['description'] as String?;
+    final zoom = (props['zoom'] as num?)?.toInt() ?? 15;
 
     if (lat == null || lng == null) return const SizedBox.shrink();
 
-    final mapImageUrl = MapsUtil.getMapImageUrl(lat, lng);
+    final mapImageUrl = MapsUtil.getMapImageUrl(lat, lng, zoom: zoom);
 
     return GestureDetector(
-      onTap: () => MapsUtil.launchMap(lat, lng),
+      onTap: () async {
+        try {
+          await MapsUtil.launchMap(lat, lng);
+        } catch (_) {
+          if (!context.mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(context.l10n.couldNotOpenUrl)),
+          );
+        }
+      },
       child: Container(
         decoration: BoxDecoration(
           color: const Color(0xFF1A1A20),
