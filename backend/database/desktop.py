@@ -673,13 +673,25 @@ def update_notification_settings(uid: str, enabled: bool = None, frequency: int 
     return get_notification_settings(uid)
 
 
+def _get_raw_assistant_settings(uid: str) -> dict:
+    """Read only the assistant_settings sub-map (without update_channel injection)."""
+    doc = _user_doc(uid).get()
+    if not doc.exists:
+        return {}
+    return doc.to_dict().get('assistant_settings') or {}
+
+
 def get_assistant_settings(uid: str) -> dict:
+    """Read assistant settings for the API response.
+
+    Injects top-level ``update_channel`` into the response dict (it lives
+    outside ``assistant_settings`` in Firestore but the API returns it together).
+    """
     doc = _user_doc(uid).get()
     if not doc.exists:
         return {}
     data = doc.to_dict()
-    result = data.get('assistant_settings') or {}
-    # update_channel lives at top-level on user doc, not inside assistant_settings
+    result = (data.get('assistant_settings') or {}).copy()
     if data.get('update_channel') is not None:
         result['update_channel'] = data['update_channel']
     return result
@@ -694,7 +706,8 @@ def update_assistant_settings(uid: str, settings: dict) -> dict:
     ``update_channel`` is a special case — it lives as a top-level field on the
     user doc (not inside assistant_settings), matching Rust backend behavior.
     """
-    existing = get_assistant_settings(uid)
+    # Read raw sub-map (without injected update_channel) to avoid leaking it back
+    existing = _get_raw_assistant_settings(uid)
 
     # Extract update_channel — it goes to a top-level user doc field
     update_channel = settings.pop('update_channel', None)
@@ -710,6 +723,7 @@ def update_assistant_settings(uid: str, settings: dict) -> dict:
         updates['update_channel'] = update_channel
     _user_doc(uid).update(updates)
 
+    # Build response (include update_channel for the caller)
     if update_channel is not None:
         existing['update_channel'] = update_channel
     return existing
@@ -913,12 +927,17 @@ def record_desktop_llm_usage(
 
 
 def get_total_desktop_llm_cost(uid: str) -> float:
-    """Sum cost_usd across all date docs for desktop_chat* keys."""
+    """Sum cost_usd from the legacy ``desktop_chat`` bucket only.
+
+    Since record_desktop_llm_usage() dual-writes to both ``desktop_chat`` and
+    ``desktop_chat_{account}``, summing all ``desktop_chat*`` keys would
+    double-count.  The Rust backend also reads only ``desktop_chat.cost_usd``.
+    """
     col = _user_col(uid, 'llm_usage')
     total = 0.0
     for doc in col.stream():
         data = doc.to_dict()
-        for key, value in data.items():
-            if key.startswith('desktop_chat') and isinstance(value, dict):
-                total += value.get('cost_usd', 0.0)
+        dc = data.get('desktop_chat')
+        if isinstance(dc, dict):
+            total += dc.get('cost_usd', 0.0)
     return round(total, 6)
