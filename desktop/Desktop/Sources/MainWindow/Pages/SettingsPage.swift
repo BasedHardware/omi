@@ -5530,7 +5530,7 @@ struct SettingsContentView: View {
     private func completeLocalTestSubscriptionIfNeeded() async {
         guard let expectedPriceId = pendingSubscriptionPriceId else { return }
         let checkoutSessionId = pendingCheckoutSessionId
-        let baseURL = await APIClient.shared.baseURL
+        let baseURL = await APIClient.shared.rustBackendURL
         guard baseURL.hasPrefix("http://127.0.0.1:8787/") || baseURL.hasPrefix("http://localhost:8787/") else {
             return
         }
