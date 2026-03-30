@@ -806,18 +806,57 @@ class TestIdentifySpeakersForSegments:
         # Text detection should match "Bob" and assign person_id
         assert segments[0].person_id == 'p2'
 
-    def test_empty_cache_is_noop(self):
+    @patch('routers.sync.users_db')
+    def test_empty_cache_still_runs_text_detection(self, mock_users_db):
         from routers.sync import identify_speakers_for_segments
 
+        mock_users_db.get_person_by_name.return_value = {'id': 'p1', 'name': 'Alice'}
+
         segments = [
-            _make_transcript_segment(speaker_id=1, start=0.0, end=2.0, text='hello', seg_id='s1'),
+            _make_transcript_segment(speaker_id=1, start=0.0, end=2.0, text='my name is Alice', seg_id='s1'),
         ]
 
-        audio = _make_wav_bytes(duration_sec=5.0)
-        identify_speakers_for_segments(segments, audio, {}, 'uid1')
+        # Empty cache + no audio — text detection should still run
+        identify_speakers_for_segments(segments, None, {}, 'uid1')
 
-        assert segments[0].person_id is None
-        assert not segments[0].is_user
+        assert segments[0].person_id == 'p1'
+
+    @patch('routers.sync.users_db')
+    def test_no_audio_still_runs_text_detection(self, mock_users_db):
+        from routers.sync import identify_speakers_for_segments
+
+        mock_users_db.get_person_by_name.return_value = {'id': 'p2', 'name': 'Bob'}
+
+        cache = {'p1': {'embedding': np.ones((1, 512), dtype=np.float32), 'name': 'Alice'}}
+
+        segments = [
+            _make_transcript_segment(speaker_id=1, start=0.0, end=2.0, text='I am Bob', seg_id='s1'),
+        ]
+
+        # Cache exists but audio is None — voice matching skipped, text detection runs
+        identify_speakers_for_segments(segments, None, cache, 'uid1')
+
+        assert segments[0].person_id == 'p2'
+
+    @patch('routers.sync.users_db')
+    def test_undiarized_text_detection_assigns_per_segment(self, mock_users_db):
+        from routers.sync import identify_speakers_for_segments
+
+        mock_users_db.get_person_by_name.return_value = {'id': 'p1', 'name': 'Alice'}
+
+        # speaker_id=0 (undiarized) — should still get per-segment assignment
+        segments = [
+            _make_transcript_segment(speaker_id=0, start=0.0, end=2.0, text='my name is Alice', seg_id='s1'),
+            _make_transcript_segment(speaker_id=0, start=3.0, end=4.0, text='hello there', seg_id='s2'),
+        ]
+
+        identify_speakers_for_segments(segments, None, {}, 'uid1')
+
+        # First segment matched via text detection
+        assert segments[0].person_id == 'p1'
+        # Second segment has no text match — should remain unassigned
+        # (speaker_to_person_map not updated for speaker_id=0)
+        assert segments[1].person_id is None
 
     @patch('routers.sync.extract_embedding_from_bytes')
     def test_short_segments_skip_embedding(self, mock_extract):
@@ -916,9 +955,10 @@ class TestProcessSegmentSpeakerIdIntegration:
     @patch('routers.sync.deepgram_prerecorded')
     @patch('routers.sync.delete_syncing_temporal_file')
     @patch('routers.sync.get_syncing_file_temporal_signed_url', return_value='http://example.com/audio.wav')
+    @patch('routers.sync.identify_speakers_for_segments')
     @patch('routers.sync._download_audio_bytes')
-    def test_speaker_id_skipped_when_no_cache(
-        self, mock_download, mock_url, mock_delete, mock_dg, mock_ts, mock_closest, mock_process
+    def test_no_cache_skips_download_but_runs_identification(
+        self, mock_download, mock_identify, mock_url, mock_delete, mock_dg, mock_ts, mock_closest, mock_process
     ):
         from routers.sync import process_segment
 
@@ -940,6 +980,8 @@ class TestProcessSegmentSpeakerIdIntegration:
 
         # Should not attempt to download audio when no cache
         mock_download.assert_not_called()
+        # Should still run identification (for text-based detection)
+        mock_identify.assert_called_once()
 
 
 class TestSyncEndpointSpeakerIdWiring:
