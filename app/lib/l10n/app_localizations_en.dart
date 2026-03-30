@@ -8753,6 +8753,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get microphone => 'Microphone';
 
   @override
+
   String get whyAreYouCanceling => 'Why are you canceling?';
 
   @override
@@ -8940,4 +8941,49 @@ class AppLocalizationsEn extends AppLocalizations {
   String gattError(String code) {
     return 'GATT error ($code)';
   }
+
+  String get cloudAudioFiles => 'Cloud Audio Files';
+
+  @override
+  String get noCloudAudioFiles => 'No cloud audio files yet';
+
+  @override
+  String get noCloudAudioDescription =>
+      'Audio files will appear here once you record conversations with cloud sync enabled.';
+
+  @override
+  String get deleteAllAudio => 'Delete All Audio';
+
+  @override
+  String get deleteAllAudioTitle => 'Delete All Cloud Audio?';
+
+  @override
+  String get deleteAllAudioMessage =>
+      'This will permanently delete all your cloud-synced audio files. This action cannot be undone.\n\nNote: The Data Training Program requires cloud-synced audio. Deleting these files will remove your contribution to the program.';
+
+  @override
+  String get deleteAll => 'Delete All';
+
+  @override
+  String get deletingAudio => 'Deleting audio files...';
+
+  @override
+  String get audioDeletedSuccessfully => 'All cloud audio files deleted';
+
+  @override
+  String get failedToDeleteAudio => 'Failed to delete audio files';
+
+  @override
+  String nAudioFiles(int count) {
+    return '$count audio ${count == 1 ? 'file' : 'files'}';
+  }
+
+  @override
+  String totalDurationMinutes(String minutes) {
+    return '$minutes min';
+  }
+
+  @override
+  String get shareAudio => 'Share Audio';
+ 378182dcc (feat: add audio listing, playback, sharing, and delete all to Private Cloud Sync page)
 }

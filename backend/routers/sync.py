@@ -166,6 +166,60 @@ def _precache_audio_file(uid: str, conversation_id: str, audio_file: dict, fill_
         logger.error(f"Error pre-caching audio file {audio_file.get('id')}: {e}")
 
 
+@router.get("/v1/sync/audio/conversations", tags=['v1'])
+def list_conversations_with_audio(
+    uid: str = Depends(auth.get_current_user_uid),
+):
+    """
+    List all conversations that have cloud-synced audio files.
+    Returns lightweight conversation info (id, title, date, audio file count, total duration).
+    """
+    conversations = conversations_db.get_conversations(uid, limit=500, include_discarded=False)
+    result = []
+    for conv in conversations:
+        audio_files = conv.get('audio_files', [])
+        if not audio_files:
+            continue
+        total_duration = sum(af.get('duration', 0) for af in audio_files)
+        result.append({
+            'id': conv.get('id'),
+            'title': (conv.get('structured', {}) or {}).get('title', 'Untitled'),
+            'created_at': conv.get('created_at'),
+            'audio_file_count': len(audio_files),
+            'total_duration': total_duration,
+        })
+    return {'conversations': result}
+
+
+@router.delete("/v1/sync/audio", tags=['v1'])
+def delete_all_cloud_audio(
+    uid: str = Depends(auth.get_current_user_uid),
+):
+    """
+    Delete all cloud-synced audio files for the current user.
+    This removes audio chunks, merged files, and cached files from cloud storage,
+    and clears the audio_files array from each conversation document.
+    """
+    from utils.other.storage import delete_all_user_cloud_audio
+
+    # Delete files from cloud storage
+    deleted_count = delete_all_user_cloud_audio(uid)
+
+    # Clear audio_files from all conversation documents
+    conversations = conversations_db.get_conversations(uid, limit=500, include_discarded=True)
+    cleared_conversations = 0
+    for conv in conversations:
+        if conv.get('audio_files'):
+            conversations_db.update_conversation(uid, conv['id'], {'audio_files': []})
+            cleared_conversations += 1
+
+    logger.info(f"Deleted {deleted_count} cloud audio blobs and cleared {cleared_conversations} conversations for user {uid}")
+    return {
+        'deleted_blobs': deleted_count,
+        'cleared_conversations': cleared_conversations,
+    }
+
+
 @router.post("/v1/sync/audio/{conversation_id}/precache", tags=['v1'])
 def precache_conversation_audio_endpoint(
     conversation_id: str,

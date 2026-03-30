@@ -649,6 +649,22 @@ def delete_conversation_audio_files(uid: str, conversation_id: str) -> None:
         blob.delete()
 
 
+def delete_all_user_cloud_audio(uid: str) -> int:
+    """Delete all cloud-synced audio files (chunks, merged, cached) for a user.
+
+    Returns the number of blobs deleted.
+    """
+    bucket = storage_client.bucket(private_cloud_sync_bucket)
+    deleted = 0
+
+    for prefix in [f'chunks/{uid}/', f'audio/{uid}/', f'merged/{uid}/']:
+        for blob in bucket.list_blobs(prefix=prefix):
+            blob.delete()
+            deleted += 1
+
+    return deleted
+
+
 def download_audio_chunks_and_merge(
     uid: str,
     conversation_id: str,
