@@ -502,6 +502,11 @@ class TasksViewModel: ObservableObject {
                         Task { await store.loadCompletedTasks() }
                     }
                 }
+            } else {
+                // No status filter = "All" — ensure completed tasks are present for the in-memory fallback
+                if !showCompleted {
+                    Task { await store.loadCompletedTasks() }
+                }
             }
             // When non-status filters (including date) are applied, query SQLite directly
             let hasNonStatusFilters = selectedTags.contains(where: { $0.group != .status })
@@ -1608,9 +1613,13 @@ class TasksViewModel: ObservableObject {
         if !searchText.isEmpty {
             filteredTasks = applyNonStatusTagFilters(sourceTasks, context: filterContext)
         } else if hasSQLiteFilters || hasDateFilters {
-            // SQLite already filtered by category/source/priority/date
-            // Just apply status filters (todo/done/deleted)
+            // SQLite already filtered by category/source/priority/date when filteredFromDatabase is populated.
+            // When using in-memory source (filteredFromDatabase empty — e.g. async query not yet complete),
+            // date filters must be applied manually so old tasks don't bleed through.
             filteredTasks = applyStatusFilters(sourceTasks)
+            if filteredFromDatabase.isEmpty && hasDateFilters {
+                filteredTasks = applyDateFilters(filteredTasks, context: filterContext)
+            }
         } else {
             filteredTasks = applyTagFilters(sourceTasks, context: filterContext)
         }
@@ -1639,11 +1648,11 @@ class TasksViewModel: ObservableObject {
         let startOfToday = calendar.startOfDay(for: Date())
         let startOfTomorrow = calendar.date(byAdding: .day, value: 1, to: startOfToday)!
         let startOfDayAfterTomorrow = calendar.date(byAdding: .day, value: 2, to: startOfToday)!
-        // Use exact 7-day offset from current time (matches Flutter: now.subtract(Duration(days: 7)))
+        // Only apply 7-day cutoff when the last7Days filter is active (matches Flutter _categorizeItems default)
+        let applySevenDayCutoff = selectedTags.contains(.last7Days)
         let sevenDaysAgo = Date().addingTimeInterval(-7 * 24 * 60 * 60)
         for task in displayTasks {
-            // Skip incomplete tasks older than 7 days (matches Flutter _categorizeItems)
-            if !task.completed {
+            if applySevenDayCutoff && !task.completed {
                 if let dueAt = task.dueAt {
                     if dueAt < sevenDaysAgo { continue }
                 } else if task.createdAt < sevenDaysAgo {
@@ -1675,11 +1684,11 @@ class TasksViewModel: ObservableObject {
         let startOfToday = calendar.startOfDay(for: Date())
         let startOfTomorrow = calendar.date(byAdding: .day, value: 1, to: startOfToday)!
         let startOfDayAfterTomorrow = calendar.date(byAdding: .day, value: 2, to: startOfToday)!
-        // Use exact 7-day offset from current time (matches Flutter: now.subtract(Duration(days: 7)))
+        // Only apply 7-day cutoff when the last7Days filter is active
+        let applySevenDayCutoff = selectedTags.contains(.last7Days)
         let sevenDaysAgo = Date().addingTimeInterval(-7 * 24 * 60 * 60)
         for task in displayTasks {
-            // Skip incomplete tasks older than 7 days (matches Flutter _categorizeItems)
-            if !task.completed {
+            if applySevenDayCutoff && !task.completed {
                 if let dueAt = task.dueAt {
                     if dueAt < sevenDaysAgo { continue }
                 } else if task.createdAt < sevenDaysAgo {
