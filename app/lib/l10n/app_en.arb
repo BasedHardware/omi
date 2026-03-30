@@ -9972,6 +9972,18 @@
             }
         }
     },
+    "processingOnServer": "Processing on server...",
+    "processingOnServerProgress": "Processing... {current}/{total} segments",
+    "@processingOnServerProgress": {
+        "placeholders": {
+            "current": {
+                "type": "int"
+            },
+            "total": {
+                "type": "int"
+            }
+        }
+    },
     "processedStatus": "Processed",
     "corruptedStatus": "Corrupted",
     "nPending": "{count} pending",

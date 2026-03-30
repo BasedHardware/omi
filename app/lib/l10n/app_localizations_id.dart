@@ -8169,6 +8169,14 @@ class AppLocalizationsId extends AppLocalizations {
   }
 
   @override
+  String get processingOnServer => 'Memproses di server...';
+
+  @override
+  String processingOnServerProgress(int current, int total) {
+    return 'Memproses... $current/$total segmen';
+  }
+
+  @override
   String get processedStatus => 'Diproses';
 
   @override

@@ -2635,6 +2635,18 @@
     "downloadingFromDevice": "กำลังดาวน์โหลดจากอุปกรณ์",
     "reconnectingToInternet": "กำลังเชื่อมต่ออินเทอร์เน็ตอีกครั้ง...",
     "uploadingToCloud": "กำลังอัปโหลด {current} จาก {total}",
+    "processingOnServer": "กำลังประมวลผลบนเซิร์ฟเวอร์...",
+    "processingOnServerProgress": "กำลังประมวลผล... {current}/{total} เซ็กเมนต์",
+    "@processingOnServerProgress": {
+        "placeholders": {
+            "current": {
+                "type": "int"
+            },
+            "total": {
+                "type": "int"
+            }
+        }
+    },
     "processedStatus": "ประมวลผลแล้ว",
     "corruptedStatus": "เสียหาย",
     "nPending": "{count} รอดำเนินการ",

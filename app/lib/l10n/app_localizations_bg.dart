@@ -8192,6 +8192,14 @@ class AppLocalizationsBg extends AppLocalizations {
   }
 
   @override
+  String get processingOnServer => 'Обработка на сървъра...';
+
+  @override
+  String processingOnServerProgress(int current, int total) {
+    return 'Обработка... $current/$total сегмента';
+  }
+
+  @override
   String get processedStatus => 'Обработено';
 
   @override

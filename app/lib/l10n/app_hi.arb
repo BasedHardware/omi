@@ -2636,6 +2636,18 @@
     "downloadingFromDevice": "डिवाइस से डाउनलोड हो रहा है",
     "reconnectingToInternet": "इंटरनेट से पुनः कनेक्ट हो रहा है...",
     "uploadingToCloud": "{total} में से {current} अपलोड हो रहा है",
+    "processingOnServer": "सर्वर पर प्रोसेसिंग...",
+    "processingOnServerProgress": "प्रोसेसिंग... {current}/{total} सेगमेंट",
+    "@processingOnServerProgress": {
+        "placeholders": {
+            "current": {
+                "type": "int"
+            },
+            "total": {
+                "type": "int"
+            }
+        }
+    },
     "processedStatus": "संसाधित",
     "corruptedStatus": "दूषित",
     "nPending": "{count} लंबित",

@@ -8116,6 +8116,14 @@ class AppLocalizationsTh extends AppLocalizations {
   }
 
   @override
+  String get processingOnServer => 'กำลังประมวลผลบนเซิร์ฟเวอร์...';
+
+  @override
+  String processingOnServerProgress(int current, int total) {
+    return 'กำลังประมวลผล... $current/$total เซ็กเมนต์';
+  }
+
+  @override
   String get processedStatus => 'ประมวลผลแล้ว';
 
   @override

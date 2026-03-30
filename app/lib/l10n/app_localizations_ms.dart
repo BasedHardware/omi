@@ -8181,6 +8181,14 @@ class AppLocalizationsMs extends AppLocalizations {
   }
 
   @override
+  String get processingOnServer => 'Memproses di pelayan...';
+
+  @override
+  String processingOnServerProgress(int current, int total) {
+    return 'Memproses... $current/$total segmen';
+  }
+
+  @override
   String get processedStatus => 'Diproses';
 
   @override

@@ -2640,6 +2640,18 @@
     "downloadingFromDevice": "Sťahovanie zo zariadenia",
     "reconnectingToInternet": "Opätovné pripájanie k internetu...",
     "uploadingToCloud": "Nahrávanie {current} z {total}",
+    "processingOnServer": "Spracovanie na serveri...",
+    "processingOnServerProgress": "Spracovanie... {current}/{total} segmentov",
+    "@processingOnServerProgress": {
+        "placeholders": {
+            "current": {
+                "type": "int"
+            },
+            "total": {
+                "type": "int"
+            }
+        }
+    },
     "processedStatus": "Spracované",
     "corruptedStatus": "Poškodené",
     "nPending": "{count} čakajúcich",

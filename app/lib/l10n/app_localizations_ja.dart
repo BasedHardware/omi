@@ -8019,6 +8019,14 @@ class AppLocalizationsJa extends AppLocalizations {
   }
 
   @override
+  String get processingOnServer => 'サーバーで処理中...';
+
+  @override
+  String processingOnServerProgress(int current, int total) {
+    return '処理中... $current/$total セグメント';
+  }
+
+  @override
   String get processedStatus => '処理済み';
 
   @override

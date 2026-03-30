@@ -8177,6 +8177,14 @@ class AppLocalizationsPl extends AppLocalizations {
   }
 
   @override
+  String get processingOnServer => 'Przetwarzanie na serwerze...';
+
+  @override
+  String processingOnServerProgress(int current, int total) {
+    return 'Przetwarzanie... $current/$total segmentów';
+  }
+
+  @override
   String get processedStatus => 'Przetworzono';
 
   @override

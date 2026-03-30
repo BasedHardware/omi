@@ -2657,6 +2657,18 @@
     "downloadingFromDevice": "正在从设备下载",
     "reconnectingToInternet": "正在重新连接互联网...",
     "uploadingToCloud": "正在上传 {current}/{total}",
+    "processingOnServer": "正在服务器上处理...",
+    "processingOnServerProgress": "处理中... {current}/{total} 个片段",
+    "@processingOnServerProgress": {
+        "placeholders": {
+            "current": {
+                "type": "int"
+            },
+            "total": {
+                "type": "int"
+            }
+        }
+    },
     "processedStatus": "已处理",
     "corruptedStatus": "已损坏",
     "nPending": "{count} 个待处理",

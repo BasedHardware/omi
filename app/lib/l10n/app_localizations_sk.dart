@@ -8148,6 +8148,14 @@ class AppLocalizationsSk extends AppLocalizations {
   }
 
   @override
+  String get processingOnServer => 'Spracovanie na serveri...';
+
+  @override
+  String processingOnServerProgress(int current, int total) {
+    return 'Spracovanie... $current/$total segmentov';
+  }
+
+  @override
   String get processedStatus => 'Spracované';
 
   @override

@@ -2670,6 +2670,18 @@
     "downloadingFromDevice": "Cihazdan indiriliyor",
     "reconnectingToInternet": "İnternete yeniden bağlanılıyor...",
     "uploadingToCloud": "{current}/{total} yükleniyor",
+    "processingOnServer": "Sunucuda işleniyor...",
+    "processingOnServerProgress": "İşleniyor... {current}/{total} segment",
+    "@processingOnServerProgress": {
+        "placeholders": {
+            "current": {
+                "type": "int"
+            },
+            "total": {
+                "type": "int"
+            }
+        }
+    },
     "processedStatus": "İşlendi",
     "corruptedStatus": "Bozuk",
     "nPending": "{count} beklemede",
