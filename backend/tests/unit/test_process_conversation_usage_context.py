@@ -50,6 +50,9 @@ for submodule in [
     mod = _stub_module(f"database.{submodule}")
     setattr(database_mod, submodule, mod)
 
+# Provide `r` on the redis_db stub so `from database.redis_db import r` works.
+sys.modules["database.redis_db"].r = MagicMock()
+
 vector_db_mod = sys.modules["database.vector_db"]
 for attr in [
     "find_similar_memories",
@@ -158,6 +161,18 @@ utils_task_sync.auto_sync_action_items_batch = MagicMock()
 
 utils_storage = sys.modules["utils.other.storage"]
 utils_storage.precache_conversation_audio = MagicMock()
+
+# Stubs for translation modules added by batch-translation feature.
+for name in ["utils.translation", "utils.translation_cache"]:
+    if name not in sys.modules:
+        sys.modules[name] = types.ModuleType(name)
+
+utils_translation = sys.modules["utils.translation"]
+utils_translation.TranslationService = MagicMock()
+utils_translation.detect_language = MagicMock()
+
+utils_translation_cache = sys.modules["utils.translation_cache"]
+utils_translation_cache.should_persist_translation = MagicMock()
 
 import importlib
 
