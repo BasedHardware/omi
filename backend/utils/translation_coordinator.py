@@ -125,9 +125,9 @@ class TranslationCoordinator:
         self._version_counter = 0
         self._batch_buffer: List[Tuple[str, str, str, int]] = []  # (segment_id, text, conversation_id, version)
         self._batch_task: Optional[asyncio.Task] = None
-        self._inflight_tasks: List[asyncio.Task] = []
         self._flushing = False
         self._active = True
+        self._last_speaker_id: Optional[int] = None  # tracks last speaker for switch detection
 
         # Metrics
         self.metrics = {
@@ -154,7 +154,6 @@ class TranslationCoordinator:
         updated_segments: List[TranscriptSegment],
         removed_ids: List[str],
         conversation_id: str,
-        prev_speaker_id: Optional[int] = None,
     ):
         """Process updated segments and queue eligible ones for translation.
 
@@ -162,7 +161,6 @@ class TranslationCoordinator:
             updated_segments: Segments that were added or modified.
             removed_ids: Segment IDs that were removed (merged away).
             conversation_id: Current conversation ID.
-            prev_speaker_id: Speaker ID of the previous segment (for speaker-switch detection).
         """
         if not self._active and not self._flushing:
             return
@@ -177,7 +175,7 @@ class TranslationCoordinator:
             if not segment or not segment.id:
                 continue
 
-            text = segment.text.strip()
+            text = segment.text.strip() if segment.text else ''
             if not text:
                 continue
 
@@ -197,6 +195,9 @@ class TranslationCoordinator:
                 state.last_update_at = now
                 continue
 
+            # Save old last_update_at BEFORE overwriting (needed for time-based stability)
+            old_last_update_at = state.last_update_at
+
             state.latest_text = text
             state.last_update_at = now
 
@@ -212,10 +213,14 @@ class TranslationCoordinator:
                 self.metrics['negative_cache_sets'] += 1
                 continue
 
-            # Compute stability signals
-            signals = _compute_stability_signals(text, state.last_update_at, now, prev_speaker_id, segment.speaker_id)
+            # Compute stability signals using old timing and per-segment speaker tracking
+            # prev_speaker comes from the last speaker we processed in this session
+            signals = _compute_stability_signals(
+                new_text, old_last_update_at, now, self._last_speaker_id, segment.speaker_id
+            )
+            self._last_speaker_id = segment.speaker_id
 
-            is_stable = _is_text_stable(text, signals)
+            is_stable = _is_text_stable(new_text, signals)
 
             # Classify translation need
             need = classify_translation_need(new_text, self.target_language, is_stable=is_stable)
@@ -245,12 +250,16 @@ class TranslationCoordinator:
 
             async def _batch_timer():
                 await asyncio.sleep(BATCH_WINDOW_SECONDS)
-                await self._flush_batch()
+                # Shield flush from cancellation to prevent losing in-flight results
+                await asyncio.shield(self._flush_batch())
 
             self._batch_task = asyncio.ensure_future(_batch_timer())
 
     async def _flush_batch(self):
-        """Translate all queued segments in a single batched API call."""
+        """Translate all queued segments in a single batched API call.
+
+        This method is shielded from cancellation to prevent losing in-flight results.
+        """
         batch = list(self._batch_buffer)
         self._batch_buffer.clear()
         self._batch_task = None
@@ -277,7 +286,11 @@ class TranslationCoordinator:
         logger.info(f"translate_coordinator [batch] units={len(api_units)}")
 
         try:
-            results = self.translation_service.translate_units_batch(self.target_language, api_units)
+            # Run the sync GCP API call in a thread pool to avoid blocking the event loop
+            loop = asyncio.get_event_loop()
+            results = await loop.run_in_executor(
+                None, self.translation_service.translate_units_batch, self.target_language, api_units
+            )
 
             for seg_id, translated_text, detected_lang in results:
                 # Find the corresponding entry
@@ -325,16 +338,7 @@ class TranslationCoordinator:
             self._batch_task = None
         await self._flush_batch()
 
-        # Await in-flight tasks
-        if self._inflight_tasks:
-            pending = [t for t in self._inflight_tasks if not t.done()]
-            if pending:
-                try:
-                    await asyncio.wait_for(asyncio.gather(*pending, return_exceptions=True), timeout=5.0)
-                except asyncio.TimeoutError:
-                    logger.warning(f"TranslationCoordinator flush timeout: {len(pending)} tasks pending")
-            self._inflight_tasks.clear()
-
+        self._segment_states.clear()
         self._flushing = False
         self._active = False
 
