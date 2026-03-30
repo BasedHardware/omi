@@ -1580,7 +1580,7 @@ async def _stream_handler(
                     conversation = conversations_db.get_conversation(uid, conversation_id)
                     protection_level = None
                 if conversation:
-                    for i, existing_segment in enumerate(conversation['transcript_segments']):
+                    for i, existing_segment in enumerate(conversation.get('transcript_segments', [])):
                         if existing_segment['id'] == segment_id:
                             # Update or add translation
                             translations = existing_segment.get('translations', [])
@@ -1608,7 +1608,7 @@ async def _stream_handler(
                 if conversation_id == current_conversation_id:
                     conv = _get_cached_conversation()
                     if conv:
-                        for s in conv['transcript_segments']:
+                        for s in conv.get('transcript_segments', []):
                             if s['id'] == segment_id:
                                 seg_dict = s
                                 break
@@ -1637,12 +1637,7 @@ async def _stream_handler(
         """Route updated segments to the TranslationCoordinator."""
         if not translation_coordinator:
             return
-        # Determine previous speaker for speaker-switch detection
-        prev_speaker = None
-        if segments:
-            # Use the first segment's speaker_id as hint (coordinator tracks internally)
-            prev_speaker = segments[0].speaker_id if len(segments) > 1 else None
-        await translation_coordinator.observe(segments, [], conversation_id, prev_speaker_id=prev_speaker)
+        await translation_coordinator.observe(segments, [], conversation_id)
 
     async def flush_pending_translations():
         """Flush all pending translations before cleanup."""
