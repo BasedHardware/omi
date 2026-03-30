@@ -53,7 +53,11 @@ from routers import (
     tools,
     metrics,
     fair_use_admin,
-    desktop,
+    staged_tasks,
+    focus_sessions,
+    advice,
+    chat_sessions,
+    scores,
 )
 
 from utils.other.timeout import TimeoutMiddleware
@@ -117,7 +121,11 @@ app.include_router(agent_tools.router)
 app.include_router(tools.router)
 app.include_router(metrics.router)
 app.include_router(fair_use_admin.router)
-app.include_router(desktop.router)
+app.include_router(staged_tasks.router)
+app.include_router(focus_sessions.router)
+app.include_router(advice.router)
+app.include_router(chat_sessions.router)
+app.include_router(scores.router)
 
 
 methods_timeout = {
