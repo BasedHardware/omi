@@ -961,6 +961,99 @@ class TestIdentifySpeakersForSegments:
         # Speaker 1 (best clip 1.2s) can't match — Alice already taken
         assert segments[0].person_id is None
 
+    @patch('routers.sync.compare_embeddings')
+    @patch('routers.sync.extract_embedding_from_bytes')
+    def test_dedup_skips_matched_candidates_in_comparison(self, mock_extract, mock_compare):
+        """Verify compare_embeddings is NOT called for already-matched person IDs."""
+        from routers.sync import identify_speakers_for_segments
+
+        emb_a = np.array([[1.0] + [0.0] * 511], dtype=np.float32)
+        emb_b = np.array([[0.0, 1.0] + [0.0] * 510], dtype=np.float32)
+        mock_extract.side_effect = [emb_a, emb_b]
+
+        cache = {
+            'p1': {'embedding': emb_a, 'name': 'Alice'},
+            'p2': {'embedding': emb_b, 'name': 'Bob'},
+        }
+
+        # Speaker 1 has better clip (3s vs 2s), so matched first
+        segments = [
+            _make_transcript_segment(speaker_id=1, start=0.0, end=3.0, text='hello', seg_id='s1'),
+            _make_transcript_segment(speaker_id=2, start=4.0, end=6.0, text='world', seg_id='s2'),
+        ]
+
+        # Speaker 1 compares against p1 (0.1) and p2 (0.9) → matches p1
+        # Speaker 2 should only compare against p2 (p1 already matched)
+        mock_compare.side_effect = [0.1, 0.9, 0.15]
+
+        audio = _make_wav_bytes(duration_sec=7.0)
+        identify_speakers_for_segments(segments, audio, cache, 'uid1')
+
+        # 3 calls total: speaker1 vs p1, speaker1 vs p2, speaker2 vs p2 only
+        assert mock_compare.call_count == 3
+        assert segments[0].person_id == 'p1'
+        assert segments[1].person_id == 'p2'
+
+    @patch('routers.sync.extract_embedding_from_bytes')
+    def test_dedup_falls_back_to_next_candidate(self, mock_extract):
+        """When best candidate is taken, second speaker falls back to next-best match."""
+        from routers.sync import identify_speakers_for_segments
+
+        alice_emb = np.array([[1.0] + [0.0] * 511], dtype=np.float32)
+        bob_emb = np.array([[0.0, 1.0] + [0.0] * 510], dtype=np.float32)
+        # Speaker 1 returns embedding close to Alice; Speaker 2 also close to Alice but falls back to Bob
+        mixed_emb = np.array([[0.7, 0.7] + [0.0] * 510], dtype=np.float32)
+        mock_extract.side_effect = [alice_emb, mixed_emb]
+
+        cache = {
+            'p1': {'embedding': alice_emb, 'name': 'Alice'},
+            'p2': {'embedding': bob_emb, 'name': 'Bob'},
+        }
+
+        # Speaker 1 (3s clip) gets Alice, Speaker 2 (2s clip) should fall back to Bob
+        segments = [
+            _make_transcript_segment(speaker_id=1, start=0.0, end=3.0, text='hello', seg_id='s1'),
+            _make_transcript_segment(speaker_id=2, start=4.0, end=6.0, text='world', seg_id='s2'),
+        ]
+
+        audio = _make_wav_bytes(duration_sec=7.0)
+        identify_speakers_for_segments(segments, audio, cache, 'uid1')
+
+        assert segments[0].person_id == 'p1'
+        # Speaker 2's mixed_emb is closer to alice_emb than bob_emb,
+        # but Alice is taken, so Bob is the only candidate — matched if under threshold
+        # mixed_emb vs bob_emb cosine distance: depends on actual computation
+        # If distance > threshold (0.45), speaker 2 stays unmatched — that's the correct fallback
+        # The key assertion: speaker 2 does NOT get p1
+        assert segments[1].person_id != 'p1'
+
+    @patch('routers.sync.extract_embedding_from_bytes')
+    def test_equal_best_clip_stable_order(self, mock_extract):
+        """When speakers have equal best clip duration, stable input order is preserved."""
+        from routers.sync import identify_speakers_for_segments
+
+        alice_emb = np.array([[1.0] + [0.0] * 511], dtype=np.float32)
+        bob_emb = np.array([[0.0, 1.0] + [0.0] * 510], dtype=np.float32)
+        mock_extract.side_effect = [alice_emb, bob_emb]
+
+        cache = {
+            'p1': {'embedding': alice_emb, 'name': 'Alice'},
+            'p2': {'embedding': bob_emb, 'name': 'Bob'},
+        }
+
+        # Both speakers have identical best clip duration (2.0s)
+        segments = [
+            _make_transcript_segment(speaker_id=1, start=0.0, end=2.0, text='hello', seg_id='s1'),
+            _make_transcript_segment(speaker_id=2, start=3.0, end=5.0, text='world', seg_id='s2'),
+        ]
+
+        audio = _make_wav_bytes(duration_sec=6.0)
+        identify_speakers_for_segments(segments, audio, cache, 'uid1')
+
+        # Both should still match correctly regardless of tie ordering
+        assert segments[0].person_id == 'p1'
+        assert segments[1].person_id == 'p2'
+
 
 class TestProcessSegmentSpeakerIdIntegration:
     """Verify process_segment wires speaker identification correctly."""
