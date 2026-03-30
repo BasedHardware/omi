@@ -17,18 +17,59 @@ const config: Config = {
     },
     extend: {
       colors: {
-        // Backgrounds
+        // shadcn/ui semantic tokens (CSS variable driven)
+        border: 'hsl(var(--border))',
+        input: 'hsl(var(--input))',
+        ring: 'hsl(var(--ring))',
+        background: 'hsl(var(--background))',
+        foreground: 'hsl(var(--foreground))',
+        primary: {
+          DEFAULT: 'hsl(var(--primary))',
+          foreground: 'hsl(var(--primary-foreground))',
+        },
+        secondary: {
+          DEFAULT: 'hsl(var(--secondary))',
+          foreground: 'hsl(var(--secondary-foreground))',
+        },
+        destructive: {
+          DEFAULT: 'hsl(var(--destructive))',
+          foreground: 'hsl(var(--destructive-foreground))',
+        },
+        muted: {
+          DEFAULT: 'hsl(var(--muted))',
+          foreground: 'hsl(var(--muted-foreground))',
+        },
+        accent: {
+          DEFAULT: 'hsl(var(--accent))',
+          foreground: 'hsl(var(--accent-foreground))',
+        },
+        popover: {
+          DEFAULT: 'hsl(var(--popover))',
+          foreground: 'hsl(var(--popover-foreground))',
+        },
+        card: {
+          DEFAULT: 'hsl(var(--card))',
+          foreground: 'hsl(var(--card-foreground))',
+        },
+
+        // Backgrounds (legacy — kept for existing components)
         'bg-primary': '#0F0F0F',
         'bg-secondary': '#1A1A1A',
         'bg-tertiary': '#252525',
         'bg-quaternary': '#2A2A2A',
         'bg-color': '#181818',
 
-        // Purple accent system
-        'purple-primary': '#8B5CF6',
-        'purple-secondary': '#A855F7',
-        'purple-accent': '#7C3AED',
-        'purple-light': '#D946EF',
+        // Brand accent system (blue — matching landing)
+        brand: {
+          DEFAULT: '#3B82F6',
+          light: '#60A5FA',
+          dark: '#2563EB',
+        },
+        // Aliases mapped to brand blue for backward compat
+        'purple-primary': '#3B82F6',
+        'purple-secondary': '#60A5FA',
+        'purple-accent': '#2563EB',
+        'purple-light': '#60A5FA',
 
         // Text
         'text-primary': '#FFFFFF',
@@ -43,8 +84,9 @@ const config: Config = {
         info: '#3B82F6',
       },
       fontFamily: {
-        display: ['Plus Jakarta Sans', 'sans-serif'],
-        body: ['DM Sans', 'sans-serif'],
+        display: ['var(--font-inter)', 'system-ui', 'sans-serif'],
+        body: ['var(--font-inter)', 'system-ui', 'sans-serif'],
+        serif: ['var(--font-serif)', 'Georgia', 'serif'],
       },
       spacing: {
         'sidebar-width': '280px',
@@ -58,15 +100,15 @@ const config: Config = {
         'gradient-conic': 'conic-gradient(from 180deg at 50% 50%, var(--tw-gradient-stops))',
       },
       borderRadius: {
-        lg: '12px',
-        md: '8px',
-        sm: '6px',
+        lg: 'var(--radius)',
+        md: 'calc(var(--radius) - 2px)',
+        sm: 'calc(var(--radius) - 4px)',
       },
       boxShadow: {
         'soft': '0 4px 12px rgba(0, 0, 0, 0.1)',
         'medium': '0 8px 20px rgba(0, 0, 0, 0.15)',
         'strong': '0 12px 30px rgba(0, 0, 0, 0.25)',
-        'glow': '0 0 20px rgba(139, 92, 246, 0.3)',
+        'glow': '0 0 20px rgba(59, 130, 246, 0.3)',
       },
       keyframes: {
         shimmer: {
