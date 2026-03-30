@@ -13,7 +13,6 @@ in the Python backend. These endpoints serve the macOS desktop app for:
 - AI user profile
 - Daily score / scores
 - Desktop LLM usage tracking
-- Desktop LLM usage tracking
 """
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -35,46 +34,46 @@ router = APIRouter()
 
 
 class CreateStagedTaskRequest(BaseModel):
-    description: str
+    description: str = Field(..., min_length=1, max_length=5000)
     due_at: Optional[datetime] = None
     source: Optional[str] = None
     priority: Optional[str] = None
     metadata: Optional[str] = None
     category: Optional[str] = None
-    relevance_score: Optional[int] = None
+    relevance_score: Optional[int] = Field(None, ge=0, le=1000)
 
 
 class BatchScoreEntry(BaseModel):
-    id: str
-    relevance_score: int
+    id: str = Field(..., min_length=1)
+    relevance_score: int = Field(..., ge=0, le=1000)
 
 
 class BatchUpdateScoresRequest(BaseModel):
-    scores: List[BatchScoreEntry]
+    scores: List[BatchScoreEntry] = Field(..., max_length=500)
 
 
 # --- Focus Sessions ---
 
 
 class CreateFocusSessionRequest(BaseModel):
-    status: str  # "focused" or "distracted"
-    app_or_site: str
-    description: str
-    message: Optional[str] = None
-    duration_seconds: Optional[int] = None
+    status: str = Field(..., pattern=r'^(focused|distracted)$')
+    app_or_site: str = Field(..., min_length=1, max_length=500)
+    description: str = Field(..., min_length=1, max_length=5000)
+    message: Optional[str] = Field(None, max_length=5000)
+    duration_seconds: Optional[int] = Field(None, ge=0, le=86400)
 
 
 # --- Advice ---
 
 
 class CreateAdviceRequest(BaseModel):
-    content: str
-    category: Optional[str] = None
-    reasoning: Optional[str] = None
-    source_app: Optional[str] = None
-    confidence: float = 0.5
-    context_summary: Optional[str] = None
-    current_activity: Optional[str] = None
+    content: str = Field(..., min_length=1, max_length=10000)
+    category: Optional[str] = Field(None, max_length=100)
+    reasoning: Optional[str] = Field(None, max_length=5000)
+    source_app: Optional[str] = Field(None, max_length=200)
+    confidence: float = Field(0.5, ge=0.0, le=1.0)
+    context_summary: Optional[str] = Field(None, max_length=5000)
+    current_activity: Optional[str] = Field(None, max_length=500)
 
 
 class UpdateAdviceRequest(BaseModel):
@@ -86,12 +85,12 @@ class UpdateAdviceRequest(BaseModel):
 
 
 class CreateChatSessionRequest(BaseModel):
-    title: Optional[str] = None
-    app_id: Optional[str] = None
+    title: Optional[str] = Field(None, max_length=500)
+    app_id: Optional[str] = Field(None, max_length=200)
 
 
 class UpdateChatSessionRequest(BaseModel):
-    title: Optional[str] = None
+    title: Optional[str] = Field(None, max_length=500)
     starred: Optional[bool] = None
 
 
@@ -99,15 +98,15 @@ class UpdateChatSessionRequest(BaseModel):
 
 
 class SaveMessageRequest(BaseModel):
-    text: str
-    sender: str  # "human" or "ai"
-    app_id: Optional[str] = None
-    session_id: Optional[str] = None
+    text: str = Field(..., min_length=1, max_length=100000)
+    sender: str = Field(..., pattern=r'^(human|ai)$')
+    app_id: Optional[str] = Field(None, max_length=200)
+    session_id: Optional[str] = Field(None, max_length=200)
     metadata: Optional[str] = None
 
 
 class RateMessageRequest(BaseModel):
-    rating: Optional[int] = None  # 1, -1, or null
+    rating: Optional[int] = Field(None, ge=-1, le=1)
 
 
 # --- Notification Settings ---
@@ -115,50 +114,84 @@ class RateMessageRequest(BaseModel):
 
 class UpdateNotificationSettingsRequest(BaseModel):
     enabled: Optional[bool] = None
-    frequency: Optional[int] = None
+    frequency: Optional[int] = Field(None, ge=0, le=5)
+
+
+# --- Assistant Settings (matches Swift AssistantSettingsResponse schema) ---
+
+
+class SharedAssistantSettings(BaseModel):
+    cooldown_interval: Optional[int] = None
+    glow_overlay_enabled: Optional[bool] = None
+    analysis_delay: Optional[int] = None
+    screen_analysis_enabled: Optional[bool] = None
+
+
+class FocusAssistantSettings(BaseModel):
+    enabled: Optional[bool] = None
+    analysis_prompt: Optional[str] = Field(None, max_length=10000)
+    cooldown_interval: Optional[int] = None
+    notifications_enabled: Optional[bool] = None
+    excluded_apps: Optional[List[str]] = None
+
+
+class TaskAssistantSettings(BaseModel):
+    enabled: Optional[bool] = None
+    analysis_prompt: Optional[str] = Field(None, max_length=10000)
+    extraction_interval: Optional[float] = None
+    min_confidence: Optional[float] = Field(None, ge=0.0, le=1.0)
+    notifications_enabled: Optional[bool] = None
+    allowed_apps: Optional[List[str]] = None
+    browser_keywords: Optional[List[str]] = None
+
+
+class AdviceAssistantSettings(BaseModel):
+    enabled: Optional[bool] = None
+    analysis_prompt: Optional[str] = Field(None, max_length=10000)
+    extraction_interval: Optional[float] = None
+    min_confidence: Optional[float] = Field(None, ge=0.0, le=1.0)
+    notifications_enabled: Optional[bool] = None
+    excluded_apps: Optional[List[str]] = None
+
+
+class MemoryAssistantSettings(BaseModel):
+    enabled: Optional[bool] = None
+    analysis_prompt: Optional[str] = Field(None, max_length=10000)
+    extraction_interval: Optional[float] = None
+    min_confidence: Optional[float] = Field(None, ge=0.0, le=1.0)
+    notifications_enabled: Optional[bool] = None
+    excluded_apps: Optional[List[str]] = None
+
+
+class UpdateAssistantSettingsRequest(BaseModel):
+    shared: Optional[SharedAssistantSettings] = None
+    focus: Optional[FocusAssistantSettings] = None
+    task: Optional[TaskAssistantSettings] = None
+    advice: Optional[AdviceAssistantSettings] = None
+    memory: Optional[MemoryAssistantSettings] = None
+    update_channel: Optional[str] = Field(None, max_length=50)
 
 
 # --- AI Profile ---
 
 
 class UpdateAIUserProfileRequest(BaseModel):
-    profile_text: Optional[str] = None
+    profile_text: Optional[str] = Field(None, max_length=50000)
     generated_at: Optional[datetime] = None
-    data_sources_used: Optional[int] = None
+    data_sources_used: Optional[int] = Field(None, ge=0)
 
 
 # --- LLM Usage ---
 
 
 class RecordLlmUsageRequest(BaseModel):
-    input_tokens: int = 0
-    output_tokens: int = 0
-    cache_read_tokens: int = 0
-    cache_write_tokens: int = 0
-    total_tokens: int = 0
-    cost_usd: float = 0.0
-    account: str = 'desktop_chat'
-
-
-# --- Conversations from segments ---
-
-
-class TranscriptSegment(BaseModel):
-    text: str
-    speaker: str = 'SPEAKER_00'
-    speaker_id: Optional[int] = None
-    is_user: bool = False
-    person_id: Optional[str] = None
-    start: float = 0.0
-    end: float = 0.0
-
-
-class CreateConversationFromSegmentsRequest(BaseModel):
-    transcript_segments: List[TranscriptSegment] = Field(max_length=500)
-    source: Optional[str] = 'desktop'
-    started_at: Optional[datetime] = None
-    finished_at: Optional[datetime] = None
-    language: Optional[str] = 'en'
+    input_tokens: int = Field(0, ge=0)
+    output_tokens: int = Field(0, ge=0)
+    cache_read_tokens: int = Field(0, ge=0)
+    cache_write_tokens: int = Field(0, ge=0)
+    total_tokens: int = Field(0, ge=0)
+    cost_usd: float = Field(0.0, ge=0.0)
+    account: str = Field('desktop_chat', max_length=100)
 
 
 # ============================================================================
@@ -171,7 +204,16 @@ def create_staged_task(
     request: CreateStagedTaskRequest,
     uid: str = Depends(auth.get_current_user_uid),
 ):
-    return desktop_db.create_staged_task(uid, request.model_dump())
+    return desktop_db.create_staged_task(
+        uid,
+        description=request.description,
+        due_at=request.due_at,
+        source=request.source,
+        priority=request.priority,
+        metadata=request.metadata,
+        category=request.category,
+        relevance_score=request.relevance_score,
+    )
 
 
 @router.get('/v1/staged-tasks', tags=['desktop'])
@@ -231,14 +273,21 @@ def create_focus_session(
     request: CreateFocusSessionRequest,
     uid: str = Depends(auth.get_current_user_uid),
 ):
-    return desktop_db.create_focus_session(uid, request.model_dump())
+    return desktop_db.create_focus_session(
+        uid,
+        status=request.status,
+        app_or_site=request.app_or_site,
+        description=request.description,
+        message=request.message,
+        duration_seconds=request.duration_seconds,
+    )
 
 
 @router.get('/v1/focus-sessions', tags=['desktop'])
 def get_focus_sessions(
     limit: int = Query(100, ge=1, le=1000),
     offset: int = Query(0, ge=0),
-    date: Optional[str] = Query(None),
+    date: Optional[str] = Query(None, pattern=r'^\d{4}-\d{2}-\d{2}$'),
     uid: str = Depends(auth.get_current_user_uid),
 ):
     return desktop_db.get_focus_sessions(uid, limit=limit, offset=offset, date=date)
@@ -255,7 +304,7 @@ def delete_focus_session(
 
 @router.get('/v1/focus-stats', tags=['desktop'])
 def get_focus_stats(
-    date: Optional[str] = Query(None),
+    date: Optional[str] = Query(None, pattern=r'^\d{4}-\d{2}-\d{2}$'),
     uid: str = Depends(auth.get_current_user_uid),
 ):
     return desktop_db.get_focus_stats(uid, date=date)
@@ -271,7 +320,16 @@ def create_advice(
     request: CreateAdviceRequest,
     uid: str = Depends(auth.get_current_user_uid),
 ):
-    return desktop_db.create_advice(uid, request.model_dump())
+    return desktop_db.create_advice(
+        uid,
+        content=request.content,
+        category=request.category or 'other',
+        reasoning=request.reasoning,
+        source_app=request.source_app,
+        confidence=request.confidence,
+        context_summary=request.context_summary,
+        current_activity=request.current_activity,
+    )
 
 
 @router.get('/v1/advice', tags=['desktop'])
@@ -382,11 +440,14 @@ def save_message(
     request: SaveMessageRequest,
     uid: str = Depends(auth.get_current_user_uid),
 ):
-    if request.sender not in ('human', 'ai'):
-        raise HTTPException(status_code=400, detail='Invalid sender')
-    if not request.text.strip():
-        raise HTTPException(status_code=400, detail='Empty message text')
-    return desktop_db.save_desktop_message(uid, request.model_dump())
+    return desktop_db.save_desktop_message(
+        uid,
+        text=request.text,
+        sender=request.sender,
+        app_id=request.app_id,
+        session_id=request.session_id,
+        metadata=request.metadata,
+    )
 
 
 @router.get('/v2/desktop/messages', tags=['desktop'])
@@ -403,9 +464,10 @@ def get_messages(
 @router.delete('/v2/desktop/messages', tags=['desktop'])
 def delete_messages(
     app_id: Optional[str] = Query(None),
+    session_id: Optional[str] = Query(None),
     uid: str = Depends(auth.get_current_user_uid),
 ):
-    count = desktop_db.delete_desktop_messages(uid, app_id=app_id)
+    count = desktop_db.delete_desktop_messages(uid, app_id=app_id, session_id=session_id)
     return {'status': 'ok', 'deleted_count': count}
 
 
@@ -416,7 +478,7 @@ def rate_message(
     uid: str = Depends(auth.get_current_user_uid),
 ):
     if request.rating is not None and request.rating not in (1, -1):
-        raise HTTPException(status_code=400, detail='Invalid rating value')
+        raise HTTPException(status_code=400, detail='Rating must be 1, -1, or null')
     if not desktop_db.rate_desktop_message(uid, message_id, request.rating):
         raise HTTPException(status_code=404, detail='Message not found')
     return {'status': 'ok'}
@@ -437,8 +499,6 @@ def update_notification_settings(
     request: UpdateNotificationSettingsRequest,
     uid: str = Depends(auth.get_current_user_uid),
 ):
-    if request.frequency is not None and not (0 <= request.frequency <= 5):
-        raise HTTPException(status_code=400, detail='Frequency must be 0-5')
     return desktop_db.update_notification_settings(uid, enabled=request.enabled, frequency=request.frequency)
 
 
@@ -454,17 +514,12 @@ def get_assistant_settings(uid: str = Depends(auth.get_current_user_uid)):
 
 @router.patch('/v1/users/assistant-settings', tags=['desktop'])
 def update_assistant_settings(
-    request: dict,
+    request: UpdateAssistantSettingsRequest,
     uid: str = Depends(auth.get_current_user_uid),
 ):
-    # Validate prompt lengths
-    for section in ['focus', 'task', 'advice', 'memory']:
-        section_data = request.get(section, {})
-        if isinstance(section_data, dict):
-            prompt = section_data.get('analysis_prompt')
-            if prompt and len(prompt) > 10000:
-                raise HTTPException(status_code=400, detail=f'{section} prompt exceeds 10000 characters')
-    return desktop_db.update_assistant_settings(uid, request)
+    # model_dump(exclude_unset=True) ensures only fields the client sent are stored
+    settings = request.model_dump(exclude_unset=True)
+    return desktop_db.update_assistant_settings(uid, settings)
 
 
 # ============================================================================
@@ -482,7 +537,12 @@ def update_ai_profile(
     request: UpdateAIUserProfileRequest,
     uid: str = Depends(auth.get_current_user_uid),
 ):
-    return desktop_db.update_ai_user_profile(uid, request.model_dump(exclude_unset=True))
+    return desktop_db.update_ai_user_profile(
+        uid,
+        profile_text=request.profile_text,
+        generated_at=request.generated_at,
+        data_sources_used=request.data_sources_used,
+    )
 
 
 # ============================================================================
@@ -492,7 +552,7 @@ def update_ai_profile(
 
 @router.get('/v1/daily-score', tags=['desktop'])
 def get_daily_score(
-    date: Optional[str] = Query(None),
+    date: Optional[str] = Query(None, pattern=r'^\d{4}-\d{2}-\d{2}$'),
     uid: str = Depends(auth.get_current_user_uid),
 ):
     return desktop_db.get_daily_score(uid, date=date)
@@ -500,7 +560,7 @@ def get_daily_score(
 
 @router.get('/v1/scores', tags=['desktop'])
 def get_scores(
-    date: Optional[str] = Query(None),
+    date: Optional[str] = Query(None, pattern=r'^\d{4}-\d{2}-\d{2}$'),
     uid: str = Depends(auth.get_current_user_uid),
 ):
     return desktop_db.get_scores(uid, date=date)
