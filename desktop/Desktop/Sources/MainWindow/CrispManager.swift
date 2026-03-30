@@ -147,7 +147,7 @@ class CrispManager: ObservableObject {
 
     private func fetchUnreadMessages() async throws -> [CrispOperatorMessage] {
         let api = APIClient.shared
-        let baseURL = await api.baseURL
+        let baseURL = await api.rustBackendURL
         let headers = try await api.buildHeaders(requireAuth: true)
 
         var urlString = "\(baseURL)v1/crisp/unread"
