@@ -13,9 +13,7 @@ in the Python backend. These endpoints serve the macOS desktop app for:
 - AI user profile
 - Daily score / scores
 - Desktop LLM usage tracking
-- Chat message count
-- Screen activity sync
-- Conversations from segments
+- Desktop LLM usage tracking
 """
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -24,7 +22,6 @@ from datetime import datetime
 from pydantic import BaseModel, Field
 
 import database.desktop as desktop_db
-import database.screen_activity as screen_activity_db
 from utils.other import endpoints as auth
 
 router = APIRouter()
@@ -141,21 +138,6 @@ class RecordLlmUsageRequest(BaseModel):
     total_tokens: int = 0
     cost_usd: float = 0.0
     account: str = 'desktop_chat'
-
-
-# --- Screen Activity ---
-
-
-class ScreenActivityRow(BaseModel):
-    id: int
-    timestamp: str
-    appName: Optional[str] = ''
-    windowTitle: Optional[str] = ''
-    ocrText: Optional[str] = ''
-
-
-class ScreenActivitySyncRequest(BaseModel):
-    rows: List[ScreenActivityRow]
 
 
 # --- Conversations from segments ---
@@ -553,34 +535,12 @@ def get_total_llm_cost(uid: str = Depends(auth.get_current_user_uid)):
     return {'total_cost_usd': total}
 
 
-# ============================================================================
-# CHAT MESSAGE COUNT
-# ============================================================================
-
-
-@router.get('/v1/users/stats/chat-messages', tags=['desktop'])
-def get_chat_message_count(uid: str = Depends(auth.get_current_user_uid)):
-    count = desktop_db.get_chat_message_count(uid)
-    return {'count': count}
-
-
-# ============================================================================
-# SCREEN ACTIVITY SYNC
-# ============================================================================
-
-
-@router.post('/v1/screen-activity/sync', tags=['desktop'])
-def sync_screen_activity(
-    request: ScreenActivitySyncRequest,
-    uid: str = Depends(auth.get_current_user_uid),
-):
-    rows = [r.model_dump() for r in request.rows]
-    written = screen_activity_db.upsert_screen_activity(uid, rows)
-    return {'status': 'ok', 'written': written}
-
-
-# NOTE: v2/messages (non-desktop-prefixed) and v1/conversations/from-segments
-# remain on the Rust backend. v2/messages conflicts with chat.py's AI streaming
-# endpoint, and from-segments requires the Rust LLM processing pipeline.
-# These will be migrated in Phase 2 when the Python chat pipeline supports
-# desktop persistence semantics.
+# NOTE: The following endpoints remain on the Rust backend:
+# - v1/users/stats/chat-messages — queries PostHog (no Python PostHog client)
+# - v1/screen-activity/sync — writes Pinecone embeddings (Rust has Pinecone client)
+# - v2/messages (non-desktop-prefixed) — conflicts with chat.py's AI streaming
+# - v1/conversations/from-segments — requires Rust LLM processing pipeline
+# - v2/chat/initial-message, v2/chat/generate-title — AI generation
+# - v2/agent/* — GCE VM management
+# - v1/config/api-keys — API key distribution
+# - Crisp messaging — external service integration
