@@ -820,10 +820,13 @@ def identify_speakers_for_segments(
     matched_person_ids: set = set()
 
     if audio_bytes and person_embeddings_cache:
-        # Sort speakers by total speech duration (longest first) for best embedding quality
+        # Sort speakers by best single segment duration (longest first) — this is the clip
+        # actually used for embedding, so it determines match quality.
+        # Note: matched_person_ids assumes diarization is correct (one person = one speaker).
+        # If diarization fragments one person across speaker IDs, only the best match wins.
         sorted_speakers = sorted(
             speaker_segments.items(),
-            key=lambda kv: sum(s.end - s.start for s in kv[1]),
+            key=lambda kv: max(s.end - s.start for s in kv[1]),
             reverse=True,
         )
 
