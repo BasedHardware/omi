@@ -189,6 +189,33 @@ class TestDeepgramPrerecordedKeywords:
         assert 'keywords' not in options
 
     @patch('utils.stt.pre_recorded._deepgram_client')
+    def test_empty_list_keywords_omits_option(self, mock_client):
+        """When keywords is an empty list, no keyword option should be set."""
+        from utils.stt.pre_recorded import deepgram_prerecorded
+
+        mock_response = MagicMock()
+        mock_response.to_dict.return_value = {
+            'results': {
+                'channels': [
+                    {
+                        'detected_language': 'en',
+                        'alternatives': [
+                            {'words': [{'word': 'ok', 'start': 0, 'end': 0.2, 'speaker': 0, 'punctuated_word': 'Ok'}]}
+                        ],
+                    }
+                ]
+            }
+        }
+        mock_client.listen.rest.v.return_value.transcribe_url.return_value = mock_response
+
+        deepgram_prerecorded('http://example.com/audio.wav', keywords=[])
+
+        call_args = mock_client.listen.rest.v.return_value.transcribe_url.call_args
+        options = call_args[0][1]
+        assert 'keyterm' not in options
+        assert 'keywords' not in options
+
+    @patch('utils.stt.pre_recorded._deepgram_client')
     def test_keywords_preserved_on_retry(self, mock_client):
         """Keywords should be passed through on retry attempts."""
         from utils.stt.pre_recorded import deepgram_prerecorded
@@ -391,6 +418,35 @@ class TestProcessSegmentPreferences:
 
         _, kwargs = mock_dg.call_args
         assert len(kwargs['keywords']) <= 100
+        # "Omi" must be preserved even after truncation
+        assert 'Omi' in kwargs['keywords']
+
+    @patch('routers.sync.process_conversation')
+    @patch('routers.sync.get_closest_conversation_to_timestamps', return_value=None)
+    @patch('routers.sync.get_timestamp_from_path', return_value=1700000000)
+    @patch('routers.sync.deepgram_prerecorded')
+    @patch('routers.sync.delete_syncing_temporal_file')
+    @patch('routers.sync.get_syncing_file_temporal_signed_url', return_value='http://example.com/audio.wav')
+    def test_single_language_empty_language_falls_back(
+        self, mock_url, mock_delete, mock_dg, mock_ts, mock_closest, mock_process
+    ):
+        """single_language_mode=True with empty language should fall back to multi/nova-3."""
+        from routers.sync import process_segment
+
+        mock_dg.return_value = (self._make_mock_words(), 'en')
+        mock_process.return_value = MagicMock(id='test-id')
+
+        prefs = {'vocabulary': [], 'language': '', 'single_language_mode': True}
+
+        response = {'new_memories': set(), 'updated_memories': set()}
+        lock = threading.Lock()
+        errors = []
+
+        process_segment('test/path.bin', 'uid123', response, lock, errors, transcription_prefs=prefs)
+
+        _, kwargs = mock_dg.call_args
+        assert kwargs['language'] == 'multi'
+        assert kwargs['model'] == 'nova-3'
 
     @patch('routers.sync.process_conversation')
     @patch('routers.sync.get_closest_conversation_to_timestamps', return_value=None)
@@ -445,6 +501,35 @@ class TestProcessSegmentPreferences:
         call_args = mock_process.call_args
         # The language arg is the second positional argument
         assert call_args[0][1] == 'en', "Should use user's language 'en', not Deepgram's detected 'fr'"
+
+
+# ---------------------------------------------------------------------------
+# Structural: endpoint wires transcription_prefs into threads
+# ---------------------------------------------------------------------------
+
+
+class TestSyncEndpointPrefsWiring:
+    """Verify sync_local_files fetches prefs and passes to process_segment threads."""
+
+    @staticmethod
+    def _read_sync_source():
+        sync_path = os.path.join(os.path.dirname(__file__), '..', '..', 'routers', 'sync.py')
+        with open(sync_path) as f:
+            return f.read()
+
+    def test_endpoint_fetches_transcription_prefs(self):
+        """sync_local_files must call get_user_transcription_preferences before threads."""
+        source = self._read_sync_source()
+        fn_start = source.index('async def sync_local_files(')
+        fn_body = source[fn_start:]
+        assert 'get_user_transcription_preferences' in fn_body
+
+    def test_endpoint_passes_prefs_to_thread(self):
+        """Each thread must receive transcription_prefs as an argument."""
+        source = self._read_sync_source()
+        fn_start = source.index('async def sync_local_files(')
+        fn_body = source[fn_start:]
+        assert 'transcription_prefs' in fn_body
 
 
 # ---------------------------------------------------------------------------
