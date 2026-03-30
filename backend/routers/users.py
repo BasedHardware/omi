@@ -1330,7 +1330,7 @@ class RecordDesktopLlmUsageRequest(BaseModel):
     cache_write_tokens: int = Field(0, ge=0)
     total_tokens: int = Field(0, ge=0)
     cost_usd: float = Field(0.0, ge=0.0)
-    account: str = Field('desktop_chat', max_length=100)
+    account: str = Field('omi', max_length=100)
 
 
 @router.post('/v1/users/me/llm-usage', tags=['users'])
