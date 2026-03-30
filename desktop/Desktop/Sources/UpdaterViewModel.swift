@@ -312,6 +312,13 @@ final class UpdaterViewModel: ObservableObject {
   }
 
   private init() {
+    // Restore beta for users whose preference was overwritten by the March 27 bug
+    AppBuild.migrateBetaChannelOverwrite()
+
+    if UserDefaults.standard.string(forKey: kUpdateChannelKey) == nil {
+      AppBuild.syncUpdateChannelOnFirstLaunch()
+    }
+
     // Initialize the updater controller with our delegate
     updaterController = SPUStandardUpdaterController(
       startingUpdater: true,
@@ -322,10 +329,6 @@ final class UpdaterViewModel: ObservableObject {
     // Initialize published properties from updater state (must be before using `self`)
     automaticallyChecksForUpdates = updaterController.updater.automaticallyChecksForUpdates
     automaticallyDownloadsUpdates = updaterController.updater.automaticallyDownloadsUpdates
-
-    // Auto-detect channel from app name/path on first launch only.
-    // Never overwrite a user-chosen channel on subsequent launches.
-    AppBuild.syncUpdateChannelOnFirstLaunch()
 
     // Initialize update channel from UserDefaults
     // Normalize legacy "staging" → "beta" and "better" → "beta"
