@@ -1633,11 +1633,11 @@ async def _stream_handler(
     pending_translations = {}
     translation_flushing = False
 
-    async def translate(segments: List[TranscriptSegment], conversation_id: str):
+    async def translate(segments: List[TranscriptSegment], conversation_id: str, removed_ids: List[str] = None):
         """Route updated segments to the TranslationCoordinator."""
         if not translation_coordinator:
             return
-        await translation_coordinator.observe(segments, [], conversation_id)
+        await translation_coordinator.observe(segments, removed_ids or [], conversation_id)
 
     async def flush_pending_translations():
         """Flush all pending translations before cleanup."""
@@ -2110,7 +2110,7 @@ async def _stream_handler(
                     onboarding_handler.on_segments_received([s.dict() for s in transcript_segments])
 
                 if translation_enabled:
-                    await translate(updated_segments, conversation.id)
+                    await translate(updated_segments, conversation.id, removed_ids=removed_ids)
 
                 # Speaker detection
                 for segment in updated_segments:
