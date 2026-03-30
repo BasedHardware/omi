@@ -903,6 +903,61 @@ class TestIdentifySpeakersForSegments:
         assert segments[0].person_id == 'p1'
         assert segments[1].person_id == 'p2'
 
+    @patch('routers.sync.extract_embedding_from_bytes')
+    def test_matched_person_not_reused_across_speakers(self, mock_extract):
+        """Once a person matches a speaker, they are excluded from candidates for other speakers.
+        Leverages diarization speaker count to reduce embedding distance calculations."""
+        from routers.sync import identify_speakers_for_segments
+
+        alice_emb = np.array([[1.0] + [0.0] * 511], dtype=np.float32)
+        # Both speakers return embeddings close to Alice
+        mock_extract.side_effect = [alice_emb, alice_emb]
+
+        cache = {
+            'p1': {'embedding': alice_emb, 'name': 'Alice'},
+        }
+
+        # Speaker 1 has longer total duration, so it gets matched first
+        segments = [
+            _make_transcript_segment(speaker_id=1, start=0.0, end=3.0, text='hello', seg_id='s1'),
+            _make_transcript_segment(speaker_id=2, start=4.0, end=6.0, text='world', seg_id='s2'),
+        ]
+
+        audio = _make_wav_bytes(duration_sec=7.0)
+        identify_speakers_for_segments(segments, audio, cache, 'uid1')
+
+        # Speaker 1 (longer) matches Alice
+        assert segments[0].person_id == 'p1'
+        # Speaker 2 should NOT match Alice again — person already used
+        assert segments[1].person_id is None
+
+    @patch('routers.sync.extract_embedding_from_bytes')
+    def test_longest_speaker_matched_first(self, mock_extract):
+        """Speakers are sorted by total speech duration so the best embedding quality wins."""
+        from routers.sync import identify_speakers_for_segments
+
+        alice_emb = np.array([[1.0] + [0.0] * 511], dtype=np.float32)
+        # Speaker 2 (longer) gets matched first; speaker 1 also close to Alice but excluded
+        mock_extract.side_effect = [alice_emb, alice_emb]
+
+        cache = {
+            'p1': {'embedding': alice_emb, 'name': 'Alice'},
+        }
+
+        # Speaker 2 has MORE total duration than speaker 1
+        segments = [
+            _make_transcript_segment(speaker_id=1, start=0.0, end=1.5, text='hi', seg_id='s1'),
+            _make_transcript_segment(speaker_id=2, start=2.0, end=5.0, text='hello there', seg_id='s2'),
+        ]
+
+        audio = _make_wav_bytes(duration_sec=6.0)
+        identify_speakers_for_segments(segments, audio, cache, 'uid1')
+
+        # Speaker 2 (3s total) matched first, gets Alice
+        assert segments[1].person_id == 'p1'
+        # Speaker 1 (1.5s total) can't match — Alice already taken
+        assert segments[0].person_id is None
+
 
 class TestProcessSegmentSpeakerIdIntegration:
     """Verify process_segment wires speaker identification correctly."""
