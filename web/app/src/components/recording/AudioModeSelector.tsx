@@ -28,7 +28,7 @@ export function AudioModeSelector({
       initial={{ opacity: 0, scale: 0.95 }}
       animate={{ opacity: 1, scale: 1 }}
       exit={{ opacity: 0, scale: 0.95 }}
-      className="bg-bg-secondary rounded-2xl border border-bg-tertiary shadow-strong p-6 max-w-md w-full"
+      className="bg-bg-secondary rounded-2xl border border-border shadow-strong p-6 max-w-md w-full"
     >
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
@@ -49,8 +49,8 @@ export function AudioModeSelector({
           className={cn(
             'w-full p-4 rounded-xl border-2 text-left transition-all',
             selectedMode === 'mic-only'
-              ? 'border-purple-primary bg-purple-primary/10'
-              : 'border-bg-tertiary hover:border-bg-quaternary hover:bg-bg-tertiary/50'
+              ? 'border-primary bg-primary/10'
+              : 'border-border hover:border-border hover:bg-bg-tertiary/50'
           )}
         >
           <div className="flex items-start gap-4">
@@ -58,7 +58,7 @@ export function AudioModeSelector({
               className={cn(
                 'p-2.5 rounded-xl',
                 selectedMode === 'mic-only'
-                  ? 'bg-purple-primary text-white'
+                  ? 'bg-primary text-white'
                   : 'bg-bg-tertiary text-text-secondary'
               )}
             >
@@ -68,7 +68,7 @@ export function AudioModeSelector({
               <div className="flex items-center gap-2">
                 <span className="font-medium text-text-primary">Microphone Only</span>
                 {selectedMode === 'mic-only' && (
-                  <span className="text-xs px-2 py-0.5 rounded-full bg-purple-primary/20 text-purple-primary">
+                  <span className="text-xs px-2 py-0.5 rounded-full bg-primary/20 text-primary">
                     Selected
                   </span>
                 )}
@@ -88,8 +88,8 @@ export function AudioModeSelector({
             'w-full p-4 rounded-xl border-2 text-left transition-all',
             !systemAudioSupported && 'opacity-50 cursor-not-allowed',
             selectedMode === 'mic-and-system'
-              ? 'border-purple-primary bg-purple-primary/10'
-              : 'border-bg-tertiary hover:border-bg-quaternary hover:bg-bg-tertiary/50'
+              ? 'border-primary bg-primary/10'
+              : 'border-border hover:border-border hover:bg-bg-tertiary/50'
           )}
         >
           <div className="flex items-start gap-4">
@@ -97,7 +97,7 @@ export function AudioModeSelector({
               className={cn(
                 'p-2.5 rounded-xl',
                 selectedMode === 'mic-and-system'
-                  ? 'bg-purple-primary text-white'
+                  ? 'bg-primary text-white'
                   : 'bg-bg-tertiary text-text-secondary'
               )}
             >
@@ -107,7 +107,7 @@ export function AudioModeSelector({
               <div className="flex items-center gap-2">
                 <span className="font-medium text-text-primary">Mic + System Audio</span>
                 {selectedMode === 'mic-and-system' && (
-                  <span className="text-xs px-2 py-0.5 rounded-full bg-purple-primary/20 text-purple-primary">
+                  <span className="text-xs px-2 py-0.5 rounded-full bg-primary/20 text-primary">
                     Selected
                   </span>
                 )}
@@ -166,8 +166,8 @@ export function AudioModeSelector({
                   </p>
                 </div>
 
-                <div className="pt-2 border-t border-bg-quaternary">
-                  <p className="text-text-quaternary text-xs">
+                <div className="pt-2 border-t border-border">
+                  <p className="text-muted-foreground text-xs">
                     System audio requires sharing a browser tab or window. You&apos;ll be prompted to select
                     what to share when recording starts.
                   </p>
@@ -183,7 +183,7 @@ export function AudioModeSelector({
         onClick={onStartRecording}
         className={cn(
           'w-full py-3 px-4 rounded-xl font-medium transition-all',
-          'bg-purple-primary hover:bg-purple-secondary text-white',
+          'bg-primary hover:bg-primary/90 text-white',
           'flex items-center justify-center gap-2'
         )}
       >

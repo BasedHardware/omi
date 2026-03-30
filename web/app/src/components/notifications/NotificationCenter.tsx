@@ -90,7 +90,7 @@ export function NotificationCenter() {
             transition={{ type: 'spring', damping: 30, stiffness: 300 }}
             className={cn(
               'h-full flex-shrink-0 overflow-hidden',
-              'bg-bg-secondary border-l border-bg-tertiary',
+              'bg-bg-secondary border-l border-border',
               'max-sm:fixed max-sm:inset-0 max-sm:z-50 max-sm:w-full'
             )}
           >
@@ -98,10 +98,10 @@ export function NotificationCenter() {
               className={cn('w-[400px] h-full flex flex-col', 'max-sm:w-full')}
             >
               {/* Header */}
-              <div className="flex items-center justify-between p-4 border-b border-bg-tertiary">
+              <div className="flex items-center justify-between p-4 border-b border-border">
                 <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-full bg-purple-primary/20 flex items-center justify-center">
-                    <Bell className="w-4 h-4 text-purple-primary" />
+                  <div className="w-8 h-8 rounded-full bg-brand/20 flex items-center justify-center">
+                    <Bell className="w-4 h-4 text-brand" />
                   </div>
                   <div>
                     <h2 className="font-semibold text-text-primary">
@@ -122,7 +122,7 @@ export function NotificationCenter() {
                       aria-label="Mark all as read"
                       title="Mark all as read"
                     >
-                      <CheckCheck className="w-4 h-4 text-text-quaternary hover:text-text-secondary" />
+                      <CheckCheck className="w-4 h-4 text-muted-foreground hover:text-text-secondary" />
                     </button>
                   )}
                   {notifications.length > 0 && (
@@ -132,7 +132,7 @@ export function NotificationCenter() {
                       aria-label="Clear all notifications"
                       title="Clear all notifications"
                     >
-                      <Trash2 className="w-4 h-4 text-text-quaternary hover:text-text-secondary" />
+                      <Trash2 className="w-4 h-4 text-muted-foreground hover:text-text-secondary" />
                     </button>
                   )}
                   <button
@@ -153,12 +153,12 @@ export function NotificationCenter() {
                 {notifications.length === 0 ? (
                   <div className="flex flex-col items-center justify-center h-full px-4 py-12 text-center">
                     <div className="w-16 h-16 rounded-full bg-bg-tertiary flex items-center justify-center mb-4">
-                      <Bell className="w-8 h-8 text-text-quaternary" />
+                      <Bell className="w-8 h-8 text-muted-foreground" />
                     </div>
                     <p className="text-text-secondary font-medium mb-1">
                       No notifications yet
                     </p>
-                    <p className="text-sm text-text-quaternary">
+                    <p className="text-sm text-muted-foreground">
                       When you receive notifications, they&apos;ll appear here
                     </p>
                   </div>
@@ -167,7 +167,7 @@ export function NotificationCenter() {
                     {groupedNotifications.map((group) => (
                       <div key={group.label}>
                         <div className="px-4 py-2 bg-bg-primary/50 sticky top-0">
-                          <p className="text-xs font-medium text-text-quaternary uppercase tracking-wide">
+                          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
                             {group.label}
                           </p>
                         </div>

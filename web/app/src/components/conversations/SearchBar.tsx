@@ -100,15 +100,15 @@ export function SearchBar({
           'flex items-center gap-2 px-3 py-2 rounded-lg overflow-hidden',
           'bg-bg-secondary border transition-all duration-150',
           isFocused
-            ? 'border-purple-primary/40 ring-2 ring-purple-primary/20'
-            : 'border-transparent hover:border-bg-quaternary'
+            ? 'border-brand/40 ring-2 ring-ring/20'
+            : 'border-transparent hover:border-border'
         )}
       >
         {/* Search icon */}
         <Search
           className={cn(
             'w-4 h-4 flex-shrink-0 transition-colors',
-            isFocused ? 'text-purple-primary' : 'text-text-quaternary'
+            isFocused ? 'text-brand' : 'text-muted-foreground'
           )}
         />
 
@@ -123,7 +123,7 @@ export function SearchBar({
           placeholder={placeholder}
           className={cn(
             'flex-1 bg-transparent text-sm text-text-primary',
-            'placeholder:text-text-quaternary',
+            'placeholder:text-muted-foreground',
             'outline-none'
           )}
         />
@@ -140,7 +140,7 @@ export function SearchBar({
               onClick={handleClear}
               className={cn(
                 'p-1 rounded-md',
-                'text-text-quaternary hover:text-text-secondary',
+                'text-muted-foreground hover:text-text-secondary',
                 'hover:bg-bg-tertiary transition-colors'
               )}
               aria-label="Clear search"
@@ -157,7 +157,7 @@ export function SearchBar({
               className={cn(
                 'hidden sm:flex items-center gap-0.5',
                 'px-1.5 py-0.5 rounded',
-                'bg-bg-tertiary text-text-quaternary text-xs'
+                'bg-bg-tertiary text-muted-foreground text-xs'
               )}
             >
               <kbd className="font-sans">{isMac ? '⌘' : 'Ctrl'}</kbd>

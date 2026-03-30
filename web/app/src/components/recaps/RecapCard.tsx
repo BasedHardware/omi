@@ -50,11 +50,11 @@ export function RecapCard({
       className={cn(
         'noise-overlay group relative rounded-xl cursor-pointer',
         'border transition-all duration-150',
-        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-purple-primary/50',
+        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
         'p-4',
         isSelected
-          ? 'bg-purple-primary/10 border-purple-primary/50'
-          : 'bg-white/[0.02] border-white/[0.06] hover:bg-white/[0.05] hover:border-purple-primary/30'
+          ? 'bg-brand/10 border-brand/50'
+          : 'bg-white/[0.02] border-white/[0.06] hover:bg-white/[0.05] hover:border-brand/30'
       )}
       tabIndex={0}
       role="button"
@@ -63,7 +63,7 @@ export function RecapCard({
     >
       {/* Top row: Date */}
       <div className="flex items-center justify-between mb-1.5">
-        <span className="text-[11px] text-text-quaternary">
+        <span className="text-[11px] text-muted-foreground">
           {formatRecapDate(recap.date)}
         </span>
       </div>
@@ -88,7 +88,7 @@ export function RecapCard({
           <h3
             className={cn(
               'font-medium leading-snug transition-colors text-sm line-clamp-2',
-              isSelected ? 'text-purple-primary' : 'text-text-primary group-hover:text-white'
+              isSelected ? 'text-brand' : 'text-text-primary group-hover:text-white'
             )}
           >
             {recap.headline || 'Daily Recap'}
@@ -98,8 +98,8 @@ export function RecapCard({
           <div className="flex items-center gap-3 mt-1.5">
             {/* Conversations count */}
             <div className="flex items-center gap-1">
-              <MessageSquare className="w-3 h-3 text-text-quaternary" />
-              <span className="text-[10px] text-text-quaternary">
+              <MessageSquare className="w-3 h-3 text-muted-foreground" />
+              <span className="text-[10px] text-muted-foreground">
                 {recap.stats.total_conversations}
               </span>
             </div>
@@ -107,8 +107,8 @@ export function RecapCard({
             {/* Duration */}
             {recap.stats.total_duration_minutes > 0 && (
               <div className="flex items-center gap-1">
-                <Clock className="w-3 h-3 text-text-quaternary" />
-                <span className="text-[10px] text-text-quaternary">
+                <Clock className="w-3 h-3 text-muted-foreground" />
+                <span className="text-[10px] text-muted-foreground">
                   {formatDuration(recap.stats.total_duration_minutes)}
                 </span>
               </div>
@@ -117,8 +117,8 @@ export function RecapCard({
             {/* Action items count */}
             {recap.stats.action_items_count > 0 && (
               <div className="flex items-center gap-1">
-                <CheckSquare className="w-3 h-3 text-text-quaternary" />
-                <span className="text-[10px] text-text-quaternary">
+                <CheckSquare className="w-3 h-3 text-muted-foreground" />
+                <span className="text-[10px] text-muted-foreground">
                   {recap.stats.action_items_count}
                 </span>
               </div>
@@ -127,8 +127,8 @@ export function RecapCard({
             {/* Locations count */}
             {recap.locations && recap.locations.length > 0 && (
               <div className="flex items-center gap-1">
-                <MapPin className="w-3 h-3 text-text-quaternary" />
-                <span className="text-[10px] text-text-quaternary">
+                <MapPin className="w-3 h-3 text-muted-foreground" />
+                <span className="text-[10px] text-muted-foreground">
                   {recap.locations.length}
                 </span>
               </div>

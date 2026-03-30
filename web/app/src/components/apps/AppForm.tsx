@@ -91,8 +91,8 @@ interface AppFormProps {
 
 // Design system constants
 const sectionCardClass = 'rounded-2xl p-5 bg-gradient-to-b from-white/[0.03] to-white/[0.01] shadow-[0_0_0_1px_rgba(255,255,255,0.04),0_2px_4px_rgba(0,0,0,0.1),0_8px_16px_rgba(0,0,0,0.1)]';
-const inputClass = 'w-full px-4 py-3 rounded-xl bg-bg-tertiary border border-bg-quaternary text-text-primary placeholder:text-text-tertiary focus:outline-none focus:ring-2 focus:ring-purple-primary/50';
-const textareaClass = 'w-full px-4 py-3 rounded-xl resize-none bg-bg-tertiary border border-bg-quaternary text-text-primary placeholder:text-text-tertiary focus:outline-none focus:ring-2 focus:ring-purple-primary/50';
+const inputClass = 'w-full px-4 py-3 rounded-xl bg-bg-tertiary border border-border text-text-primary placeholder:text-text-tertiary focus:outline-none focus:ring-2 focus:ring-ring';
+const textareaClass = 'w-full px-4 py-3 rounded-xl resize-none bg-bg-tertiary border border-border text-text-primary placeholder:text-text-tertiary focus:outline-none focus:ring-2 focus:ring-ring';
 
 export function AppForm({ mode, app }: AppFormProps) {
   const router = useRouter();
@@ -462,7 +462,7 @@ export function AppForm({ mode, app }: AppFormProps) {
       <PageHeader title={mode === 'create' ? 'Create App' : 'Edit App'} icon={LayoutGrid} showBackButton />
 
       {/* Toolbar with Actions */}
-      <div className="flex-shrink-0 px-6 py-3 border-b border-bg-tertiary bg-bg-secondary">
+      <div className="flex-shrink-0 px-6 py-3 border-b border-border bg-bg-secondary">
         <div className="max-w-2xl mx-auto flex items-center justify-end gap-3">
           {mode === 'edit' && (
             <button
@@ -486,8 +486,8 @@ export function AppForm({ mode, app }: AppFormProps) {
             disabled={isSubmitting}
             className={cn(
               'flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-medium',
-              'bg-purple-primary text-white',
-              'hover:bg-purple-secondary transition-colors',
+              'bg-brand text-white',
+              'hover:bg-brand-light transition-colors',
               'disabled:opacity-50 disabled:cursor-not-allowed'
             )}
           >
@@ -523,8 +523,8 @@ export function AppForm({ mode, app }: AppFormProps) {
               onClick={() => fileInputRef.current?.click()}
               className={cn(
                 'w-20 h-20 rounded-2xl border border-dashed flex items-center justify-center',
-                'transition-colors hover:border-purple-primary/50',
-                logoPreview ? 'border-transparent' : 'border-bg-quaternary'
+                'transition-colors hover:border-brand/50',
+                logoPreview ? 'border-transparent' : 'border-border'
               )}
             >
               {logoPreview ? (
@@ -574,8 +574,8 @@ export function AppForm({ mode, app }: AppFormProps) {
               disabled={isGeneratingDescription || !name}
               className={cn(
                 'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm',
-                'bg-purple-primary/10 text-purple-primary',
-                'hover:bg-purple-primary/20 transition-colors',
+                'bg-brand/10 text-brand',
+                'hover:bg-brand/20 transition-colors',
                 'disabled:opacity-50 disabled:cursor-not-allowed'
               )}
             >
@@ -603,9 +603,9 @@ export function AppForm({ mode, app }: AppFormProps) {
                 'w-full px-4 py-3 pr-10 rounded-xl text-left',
                 'border transition-all',
                 category
-                  ? 'bg-purple-primary/10 border-purple-primary/50 text-white'
-                  : 'bg-bg-tertiary border-bg-quaternary text-text-primary',
-                'focus:outline-none focus:ring-2 focus:ring-purple-primary/50'
+                  ? 'bg-brand/10 border-brand/50 text-white'
+                  : 'bg-bg-tertiary border-border text-text-primary',
+                'focus:outline-none focus:ring-2 focus:ring-ring'
               )}
             >
               {category
@@ -614,13 +614,13 @@ export function AppForm({ mode, app }: AppFormProps) {
             </button>
             <ChevronDownIcon className={cn(
               'w-5 h-5 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none transition-all',
-              category ? 'text-purple-primary' : 'text-text-tertiary',
+              category ? 'text-brand' : 'text-text-tertiary',
               isCategoryOpen && 'rotate-180'
             )} />
 
             {/* Dropdown menu */}
             {isCategoryOpen && (
-              <div className="absolute z-50 w-full mt-2 py-2 rounded-xl bg-bg-secondary border border-bg-quaternary shadow-xl max-h-64 overflow-y-auto">
+              <div className="absolute z-50 w-full mt-2 py-2 rounded-xl bg-bg-secondary border border-border shadow-xl max-h-64 overflow-y-auto">
                 {categories.map((cat) => {
                   const isSelected = category === cat.id;
                   return (
@@ -634,13 +634,13 @@ export function AppForm({ mode, app }: AppFormProps) {
                       className={cn(
                         'w-full px-4 py-2.5 text-left transition-colors flex items-center justify-between',
                         isSelected
-                          ? 'bg-purple-primary/20 text-white'
+                          ? 'bg-brand/20 text-white'
                           : 'text-text-primary hover:bg-bg-tertiary'
                       )}
                     >
                       <span>{cat.title}</span>
                       {isSelected && (
-                        <svg className="w-4 h-4 text-purple-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                        <svg className="w-4 h-4 text-brand" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
                           <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                         </svg>
                       )}
@@ -681,14 +681,14 @@ export function AppForm({ mode, app }: AppFormProps) {
             disabled={uploadingThumbnail}
             className={cn(
               'flex-shrink-0 w-[120px] h-[180px] rounded-xl',
-              'border border-dashed border-bg-quaternary',
+              'border border-dashed border-border',
               'flex items-center justify-center',
-              'hover:border-purple-primary/50 transition-colors',
+              'hover:border-brand/50 transition-colors',
               'disabled:opacity-50'
             )}
           >
             {uploadingThumbnail ? (
-              <div className="animate-spin rounded-full h-6 w-6 border-2 border-purple-primary border-t-transparent" />
+              <div className="animate-spin rounded-full h-6 w-6 border-2 border-brand border-t-transparent" />
             ) : (
               <PlusIcon className="w-6 h-6 text-text-tertiary" />
             )}
@@ -721,7 +721,7 @@ export function AppForm({ mode, app }: AppFormProps) {
                   'relative px-4 py-4 rounded-xl text-left transition-all',
                   'border flex items-center justify-between',
                   isSelected
-                    ? 'bg-purple-primary/10 text-white border-purple-primary/50 ring-1 ring-purple-primary/30'
+                    ? 'bg-brand/10 text-white border-brand/50 ring-1 ring-brand/30'
                     : 'bg-bg-tertiary border-transparent text-text-primary hover:bg-bg-quaternary'
                 )}
               >
@@ -734,7 +734,7 @@ export function AppForm({ mode, app }: AppFormProps) {
                 <div className={cn(
                   'w-5 h-5 rounded-full flex items-center justify-center border-2 transition-all',
                   isSelected
-                    ? 'bg-purple-primary border-purple-primary'
+                    ? 'bg-brand border-brand'
                     : 'border-text-quaternary bg-transparent'
                 )}>
                   {isSelected && (
@@ -805,9 +805,9 @@ export function AppForm({ mode, app }: AppFormProps) {
                 onChange={(e) => setTriggerEvent(e.target.value)}
                 className={cn(
                   'w-full px-4 py-3 rounded-xl appearance-none',
-                  'bg-bg-tertiary border border-bg-quaternary',
+                  'bg-bg-tertiary border border-border',
                   'text-text-primary',
-                  'focus:outline-none focus:ring-2 focus:ring-purple-primary/50'
+                  'focus:outline-none focus:ring-2 focus:ring-ring'
                 )}
               >
                 <option value="">Select a trigger</option>
@@ -879,7 +879,7 @@ export function AppForm({ mode, app }: AppFormProps) {
                     'px-4 py-4 rounded-xl text-left transition-all',
                     'border flex items-center justify-between',
                     isSelected
-                      ? 'bg-purple-primary/10 text-white border-purple-primary/50 ring-1 ring-purple-primary/30'
+                      ? 'bg-brand/10 text-white border-brand/50 ring-1 ring-brand/30'
                       : 'bg-bg-tertiary border-transparent text-text-primary hover:bg-bg-quaternary'
                   )}
                 >
@@ -892,7 +892,7 @@ export function AppForm({ mode, app }: AppFormProps) {
                   <div className={cn(
                     'w-5 h-5 rounded-full flex items-center justify-center border-2 transition-all',
                     isSelected
-                      ? 'bg-purple-primary border-purple-primary'
+                      ? 'bg-brand border-brand'
                       : 'border-text-quaternary bg-transparent'
                   )}>
                     {isSelected && (
@@ -933,7 +933,7 @@ export function AppForm({ mode, app }: AppFormProps) {
         <div className={cn(
           'flex items-center justify-between p-4 rounded-xl transition-all',
           !isPrivate
-            ? 'bg-purple-primary/10'
+            ? 'bg-brand/10'
             : 'bg-bg-tertiary'
         )}>
           <div>
@@ -947,7 +947,7 @@ export function AppForm({ mode, app }: AppFormProps) {
             onClick={() => setIsPrivate(!isPrivate)}
             className={cn(
               'relative w-14 h-8 rounded-full transition-all',
-              !isPrivate ? 'bg-purple-primary' : 'bg-bg-quaternary'
+              !isPrivate ? 'bg-brand' : 'bg-bg-quaternary'
             )}
           >
             <div
@@ -965,7 +965,7 @@ export function AppForm({ mode, app }: AppFormProps) {
             <div className={cn(
               'flex items-center justify-between p-4 rounded-xl transition-all',
               isPaid
-                ? 'bg-purple-primary/10'
+                ? 'bg-brand/10'
                 : 'bg-bg-tertiary'
             )}>
               <div>
@@ -979,7 +979,7 @@ export function AppForm({ mode, app }: AppFormProps) {
                 onClick={() => setIsPaid(!isPaid)}
                 className={cn(
                   'relative w-14 h-8 rounded-full transition-all',
-                  isPaid ? 'bg-purple-primary' : 'bg-bg-quaternary'
+                  isPaid ? 'bg-brand' : 'bg-bg-quaternary'
                 )}
               >
                 <div
@@ -1007,9 +1007,9 @@ export function AppForm({ mode, app }: AppFormProps) {
                       placeholder="0.00"
                       className={cn(
                         'w-full pl-8 pr-4 py-3 rounded-xl',
-                        'bg-bg-secondary border border-bg-quaternary',
+                        'bg-bg-secondary border border-border',
                         'text-text-primary placeholder:text-text-tertiary',
-                        'focus:outline-none focus:ring-2 focus:ring-purple-primary/50'
+                        'focus:outline-none focus:ring-2 focus:ring-ring'
                       )}
                     />
                   </div>
@@ -1030,8 +1030,8 @@ export function AppForm({ mode, app }: AppFormProps) {
                             'flex-1 px-4 py-3 rounded-xl text-sm font-medium transition-all',
                             'border',
                             isSelected
-                              ? 'bg-purple-primary/10 text-white border-purple-primary/50'
-                              : 'bg-bg-secondary border-bg-quaternary text-text-secondary hover:bg-bg-quaternary'
+                              ? 'bg-brand/10 text-white border-brand/50'
+                              : 'bg-bg-secondary border-border text-text-secondary hover:bg-bg-quaternary'
                           )}
                         >
                           {plan.title}

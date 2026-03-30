@@ -1,14 +1,21 @@
 'use client';
 
 import { useState } from 'react';
-import { ChevronDown, ChevronRight } from 'lucide-react';
+import { ChevronDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import {
+  Table,
+  TableBody,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
 import { TaskCard, TaskCardSkeleton } from './TaskCard';
 import type { ActionItem } from '@/types/conversation';
 
 interface TaskGroupProps {
   title: string;
-  icon: string;
+  icon: React.ReactNode;
   tasks: ActionItem[];
   collapsible?: boolean;
   defaultCollapsed?: boolean;
@@ -20,10 +27,8 @@ interface TaskGroupProps {
   onSetDueDate?: (id: string, date: Date | null) => void;
   selectedIds?: Set<string>;
   onSelect?: (id: string, selected: boolean) => void;
-  // Double-click to enter selection mode
   onEnterSelectionMode?: (id: string) => void;
 }
-
 
 export function TaskGroup({
   title,
@@ -50,85 +55,81 @@ export function TaskGroup({
   const hasMore = maxVisible && tasks.length > maxVisible && !showAll;
 
   return (
-    <section className="space-y-2">
-      {/* Header */}
+    <section>
+      {/* Group header */}
       <button
         onClick={() => collapsible && setIsCollapsed(!isCollapsed)}
         disabled={!collapsible}
         className={cn(
-          'flex items-center gap-2 w-full',
-          'text-left',
-          collapsible && 'cursor-pointer hover:opacity-80'
+          'flex items-center gap-1.5 px-2 py-1.5 w-full text-left',
+          collapsible && 'cursor-pointer hover:bg-accent/50 rounded-md'
         )}
       >
         {collapsible && (
-          <span className="text-text-quaternary">
-            {isCollapsed ? (
-              <ChevronRight className="w-4 h-4" />
-            ) : (
-              <ChevronDown className="w-4 h-4" />
+          <ChevronDown
+            className={cn(
+              'w-3 h-3 text-muted-foreground transition-transform duration-150',
+              isCollapsed && '-rotate-90'
             )}
-          </span>
+          />
         )}
-        <span className="text-base">{icon}</span>
-        <h3 className="text-sm font-medium text-text-secondary">{title}</h3>
-        <span className="text-xs text-text-quaternary">({tasks.length})</span>
+        <span className="text-muted-foreground">{icon}</span>
+        <span className="text-xs font-medium text-foreground">{title}</span>
+        <span className="text-[10px] text-muted-foreground">{tasks.length}</span>
       </button>
 
-      {/* Tasks */}
+      {/* Data table */}
       {!isCollapsed && (
-        <div className="space-y-1.5">
-          {visibleTasks.map((task) => (
-            <TaskCard
-              key={task.id}
-              task={task}
-              onToggleComplete={onToggleComplete}
-              onSnooze={onSnooze}
-              onDelete={onDelete}
-              onUpdateDescription={onUpdateDescription}
-              onSetDueDate={onSetDueDate}
-              isSelected={selectedIds?.has(task.id)}
-              onSelect={onSelect}
-              onEnterSelectionMode={onEnterSelectionMode}
-            />
-          ))}
+        <>
+          <Table>
+            <TableHeader>
+              <TableRow className="border-border/30 hover:bg-transparent">
+                <TableHead className="w-8 px-2" />
+                <TableHead className="text-[10px] uppercase tracking-wider font-medium">Task</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-wider font-medium w-28 text-right">Due</TableHead>
+                <TableHead className="w-10" />
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {visibleTasks.map((task) => (
+                <TaskCard
+                  key={task.id}
+                  task={task}
+                  onToggleComplete={onToggleComplete}
+                  onSnooze={onSnooze}
+                  onDelete={onDelete}
+                  onUpdateDescription={onUpdateDescription}
+                  onSetDueDate={onSetDueDate}
+                  isSelected={selectedIds?.has(task.id)}
+                  onSelect={onSelect}
+                  onEnterSelectionMode={onEnterSelectionMode}
+                />
+              ))}
+            </TableBody>
+          </Table>
 
-          {/* Show more button */}
           {hasMore && (
             <button
               onClick={() => setShowAll(true)}
-              className={cn(
-                'w-full py-2 text-sm text-text-tertiary',
-                'hover:text-purple-primary transition-colors',
-                'text-center'
-              )}
+              className="w-full py-1.5 text-xs text-muted-foreground hover:text-primary transition-colors text-center"
             >
-              Show {tasks.length - maxVisible} more
+              Show {tasks.length - (maxVisible || 0)} more
             </button>
           )}
-        </div>
+        </>
       )}
     </section>
   );
 }
 
-// Skeleton loader
-interface TaskGroupSkeletonProps {
-  count?: number;
-}
-
-export function TaskGroupSkeleton({ count = 3 }: TaskGroupSkeletonProps) {
+export function TaskGroupSkeleton({ count = 3 }: { count?: number }) {
   return (
-    <div className="space-y-2">
-      {/* Header skeleton */}
-      <div className="flex items-center gap-2">
-        <div className="w-4 h-4 bg-bg-quaternary rounded animate-pulse" />
-        <div className="h-4 w-24 bg-bg-quaternary rounded animate-pulse" />
-        <div className="h-3 w-6 bg-bg-quaternary rounded animate-pulse" />
+    <div>
+      <div className="flex items-center gap-1.5 px-2 py-1.5">
+        <div className="w-3 h-3 bg-muted rounded animate-pulse" />
+        <div className="h-3 w-20 bg-muted rounded animate-pulse" />
       </div>
-
-      {/* Card skeletons */}
-      <div className="space-y-1.5">
+      <div>
         {Array.from({ length: count }).map((_, i) => (
           <TaskCardSkeleton key={i} />
         ))}

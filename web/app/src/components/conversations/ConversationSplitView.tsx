@@ -524,7 +524,7 @@ export function ConversationSplitView() {
       <PageHeader title="Conversations" icon={MessageSquare} />
 
       {/* Toolbar: Folder Tabs */}
-      <div className="flex-shrink-0 bg-bg-secondary border-b border-bg-tertiary">
+      <div className="flex-shrink-0 bg-bg-secondary border-b border-border">
         <div className="flex items-center gap-4 px-6 py-3">
           {/* Folder Tabs - takes up available space */}
           <div className="flex-1 min-w-0">
@@ -553,7 +553,7 @@ export function ConversationSplitView() {
           className={cn(
             'w-full lg:w-auto flex-shrink-0',
             'flex flex-col h-full overflow-hidden',
-            'bg-bg-primary border-r border-bg-tertiary',
+            'bg-bg-primary border-r border-border',
             // On mobile, hide list when conversation is selected
             selectedId ? 'hidden lg:flex' : 'flex'
           )}
@@ -580,7 +580,7 @@ export function ConversationSplitView() {
                   'flex items-center gap-1.5 px-3 py-1.5 rounded-lg flex-shrink-0 whitespace-nowrap',
                   'text-sm font-medium transition-colors',
                   isSelectionMode
-                    ? 'bg-purple-primary/20 text-purple-primary hover:bg-purple-primary/30'
+                    ? 'bg-brand/20 text-brand hover:bg-brand/30'
                     : 'text-text-secondary hover:text-text-primary hover:bg-bg-tertiary'
                 )}
               >
@@ -608,7 +608,7 @@ export function ConversationSplitView() {
                   </span>
                 )}
                 {filterDate && (
-                  <span className="px-2 py-0.5 rounded bg-purple-primary/10 text-purple-primary">
+                  <span className="px-2 py-0.5 rounded bg-brand/10 text-brand">
                     Filtered by date
                   </span>
                 )}
@@ -658,9 +658,9 @@ export function ConversationSplitView() {
               <div className="flex flex-col items-center justify-center py-12 text-center">
                 <div className="w-12 h-12 rounded-xl bg-bg-tertiary flex items-center justify-center mb-3">
                   {isSearching ? (
-                    <SearchIcon className="w-6 h-6 text-text-quaternary" />
+                    <SearchIcon className="w-6 h-6 text-muted-foreground" />
                   ) : (
-                    <MessageSquare className="w-6 h-6 text-text-quaternary" />
+                    <MessageSquare className="w-6 h-6 text-muted-foreground" />
                   )}
                 </div>
                 <p className="text-text-tertiary text-sm">
@@ -736,7 +736,7 @@ export function ConversationSplitView() {
             <div className="flex-1 flex items-center justify-center">
               <div className="text-center">
                 <div className="w-16 h-16 rounded-2xl bg-bg-tertiary flex items-center justify-center mx-auto mb-4">
-                  <MessageSquare className="w-8 h-8 text-text-quaternary" />
+                  <MessageSquare className="w-8 h-8 text-muted-foreground" />
                 </div>
                 <h3 className="text-lg font-medium text-text-primary mb-2">
                   Select a conversation

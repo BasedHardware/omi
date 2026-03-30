@@ -82,7 +82,7 @@ function payloadToNotification(payload: MessagePayload): OmiNotification {
   return {
     id: data.notification_id || `notif-${Date.now()}`,
     type: (data.notification_type as NotificationType) || 'announcement',
-    title: notification.title || data.title || 'Omi',
+    title: notification.title || data.title || 'Nooto',
     body: notification.body || data.body || '',
     timestamp: new Date().toISOString(),
     read: false,

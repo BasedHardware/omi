@@ -74,7 +74,7 @@ function FilterDropdown({
         className={cn(
           'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm transition-colors',
           value
-            ? 'bg-purple-primary/10 text-purple-primary border border-purple-primary/30'
+            ? 'bg-brand/10 text-brand border border-brand/30'
             : 'bg-bg-tertiary text-text-secondary hover:bg-bg-quaternary border border-transparent'
         )}
       >
@@ -85,7 +85,7 @@ function FilterDropdown({
       {isOpen && (
         <>
           <div className="fixed inset-0 z-10" onClick={() => setIsOpen(false)} />
-          <div className="absolute top-full left-0 mt-1 z-20 min-w-[180px] max-h-[300px] overflow-y-auto bg-bg-secondary border border-bg-tertiary rounded-lg shadow-lg py-1">
+          <div className="absolute top-full left-0 mt-1 z-20 min-w-[180px] max-h-[300px] overflow-y-auto bg-bg-secondary border border-border rounded-lg shadow-lg py-1">
             <button
               onClick={() => {
                 onChange(undefined);
@@ -93,7 +93,7 @@ function FilterDropdown({
               }}
               className={cn(
                 'w-full px-3 py-2 text-left text-sm hover:bg-bg-tertiary transition-colors',
-                !value ? 'text-purple-primary' : 'text-text-secondary'
+                !value ? 'text-brand' : 'text-text-secondary'
               )}
             >
               {placeholder || `All ${label}s`}
@@ -107,7 +107,7 @@ function FilterDropdown({
                 }}
                 className={cn(
                   'w-full px-3 py-2 text-left text-sm hover:bg-bg-tertiary transition-colors',
-                  value === option.id ? 'text-purple-primary' : 'text-text-primary'
+                  value === option.id ? 'text-brand' : 'text-text-primary'
                 )}
               >
                 {option.title}
@@ -138,7 +138,7 @@ function RatingFilter({
         className={cn(
           'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm transition-colors',
           value
-            ? 'bg-purple-primary/10 text-purple-primary border border-purple-primary/30'
+            ? 'bg-brand/10 text-brand border border-brand/30'
             : 'bg-bg-tertiary text-text-secondary hover:bg-bg-quaternary border border-transparent'
         )}
       >
@@ -150,7 +150,7 @@ function RatingFilter({
       {isOpen && (
         <>
           <div className="fixed inset-0 z-10" onClick={() => setIsOpen(false)} />
-          <div className="absolute top-full left-0 mt-1 z-20 min-w-[120px] bg-bg-secondary border border-bg-tertiary rounded-lg shadow-lg py-1">
+          <div className="absolute top-full left-0 mt-1 z-20 min-w-[120px] bg-bg-secondary border border-border rounded-lg shadow-lg py-1">
             <button
               onClick={() => {
                 onChange(undefined);
@@ -158,7 +158,7 @@ function RatingFilter({
               }}
               className={cn(
                 'w-full px-3 py-2 text-left text-sm hover:bg-bg-tertiary transition-colors',
-                !value ? 'text-purple-primary' : 'text-text-secondary'
+                !value ? 'text-brand' : 'text-text-secondary'
               )}
             >
               Any rating
@@ -172,7 +172,7 @@ function RatingFilter({
                 }}
                 className={cn(
                   'w-full px-3 py-2 text-left text-sm hover:bg-bg-tertiary transition-colors flex items-center gap-1',
-                  value === rating ? 'text-purple-primary' : 'text-text-primary'
+                  value === rating ? 'text-brand' : 'text-text-primary'
                 )}
               >
                 {rating}+ <Star className="w-3 h-3 fill-current" />
@@ -209,7 +209,7 @@ function SortDropdown({
         className={cn(
           'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm transition-colors',
           value && value !== 'installs_desc'
-            ? 'bg-purple-primary/10 text-purple-primary border border-purple-primary/30'
+            ? 'bg-brand/10 text-brand border border-brand/30'
             : 'bg-bg-tertiary text-text-secondary hover:bg-bg-quaternary border border-transparent'
         )}
       >
@@ -220,7 +220,7 @@ function SortDropdown({
       {isOpen && (
         <>
           <div className="fixed inset-0 z-10" onClick={() => setIsOpen(false)} />
-          <div className="absolute top-full right-0 mt-1 z-20 min-w-[150px] bg-bg-secondary border border-bg-tertiary rounded-lg shadow-lg py-1">
+          <div className="absolute top-full right-0 mt-1 z-20 min-w-[150px] bg-bg-secondary border border-border rounded-lg shadow-lg py-1">
             {sortOptions.map(option => (
               <button
                 key={option.id}
@@ -231,7 +231,7 @@ function SortDropdown({
                 className={cn(
                   'w-full px-3 py-2 text-left text-sm hover:bg-bg-tertiary transition-colors',
                   value === option.id || (!value && option.id === 'installs_desc')
-                    ? 'text-purple-primary'
+                    ? 'text-brand'
                     : 'text-text-primary'
                 )}
               >
@@ -503,13 +503,13 @@ export function AppsExplorer() {
     if (activeTab === 'installed') {
       return {
         title: 'No installed apps yet',
-        subtitle: 'Explore and install apps to enhance your Omi experience',
+        subtitle: 'Explore and install apps to enhance your Nooto experience',
       };
     }
     if (activeTab === 'my-apps') {
       return {
         title: 'No apps created yet',
-        subtitle: 'Create your own apps to customize your Omi experience',
+        subtitle: 'Create your own apps to customize your Nooto experience',
       };
     }
     return { title: '', subtitle: '' };
@@ -521,7 +521,7 @@ export function AppsExplorer() {
       <PageHeader title="Apps" icon={LayoutGrid} />
 
       {/* Sticky Toolbar */}
-      <div className="sticky top-0 z-10 border-b border-bg-tertiary bg-bg-secondary">
+      <div className="sticky top-0 z-10 border-b border-border bg-bg-secondary">
         <div className="py-4 px-4">
           {/* Tabs + Create button */}
           <div className="flex items-center gap-1 mb-4">
@@ -531,7 +531,7 @@ export function AppsExplorer() {
               className={cn(
                 'px-4 py-2 rounded-xl text-sm font-medium transition-colors',
                 activeTab === 'explore'
-                  ? 'bg-purple-primary text-white'
+                  ? 'bg-brand text-white'
                   : 'text-text-secondary hover:bg-bg-tertiary'
               )}
             >
@@ -542,7 +542,7 @@ export function AppsExplorer() {
               className={cn(
                 'px-4 py-2 rounded-xl text-sm font-medium transition-colors',
                 activeTab === 'installed'
-                  ? 'bg-purple-primary text-white'
+                  ? 'bg-brand text-white'
                   : 'text-text-secondary hover:bg-bg-tertiary'
               )}
             >
@@ -553,7 +553,7 @@ export function AppsExplorer() {
               className={cn(
                 'px-4 py-2 rounded-xl text-sm font-medium transition-colors',
                 activeTab === 'my-apps'
-                  ? 'bg-purple-primary text-white'
+                  ? 'bg-brand text-white'
                   : 'text-text-secondary hover:bg-bg-tertiary'
               )}
             >
@@ -566,8 +566,8 @@ export function AppsExplorer() {
               onClick={() => router.push('/my-apps/new')}
               className={cn(
                 'flex items-center gap-2 px-4 py-2 rounded-xl',
-                'bg-purple-primary text-white font-medium',
-                'hover:bg-purple-primary/90 transition-colors'
+                'bg-brand text-white font-medium',
+                'hover:bg-brand/90 transition-colors'
               )}
             >
               <Plus className="w-5 h-5" />
@@ -577,7 +577,7 @@ export function AppsExplorer() {
 
           {/* Search */}
           <div className="relative mb-3">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-text-quaternary" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
             <input
               type="text"
               value={searchQuery}
@@ -585,9 +585,9 @@ export function AppsExplorer() {
               placeholder="Search apps..."
               className={cn(
                 'w-full pl-10 pr-10 py-2.5 rounded-xl',
-                'bg-bg-tertiary border border-bg-quaternary',
-                'text-text-primary placeholder:text-text-quaternary',
-                'focus:outline-none focus:ring-2 focus:ring-purple-primary/50',
+                'bg-bg-tertiary border border-border',
+                'text-text-primary placeholder:text-muted-foreground',
+                'focus:outline-none focus:ring-2 focus:ring-ring',
                 'transition-all'
               )}
             />
@@ -628,7 +628,7 @@ export function AppsExplorer() {
             {activeFilterCount > 0 && (
               <button
                 onClick={clearFilters}
-                className="text-sm text-purple-primary hover:underline ml-2"
+                className="text-sm text-brand hover:underline ml-2"
               >
                 Clear all
               </button>
@@ -641,7 +641,7 @@ export function AppsExplorer() {
       <div className="w-full px-6 py-6">
         {isLoading ? (
           <div className="flex justify-center py-12">
-            <Loader2 className="w-8 h-8 text-purple-primary animate-spin" />
+            <Loader2 className="w-8 h-8 text-brand animate-spin" />
           </div>
         ) : isSearching ? (
           <div className="flex justify-center py-12">
@@ -671,7 +671,7 @@ export function AppsExplorer() {
             ) : getAppsForCurrentTab().length === 0 ? (
               <div className="text-center py-12">
                 <p className="text-text-tertiary">{getEmptyMessage().title}</p>
-                <p className="text-sm text-text-quaternary mt-1">
+                <p className="text-sm text-muted-foreground mt-1">
                   {getEmptyMessage().subtitle}
                 </p>
               </div>
@@ -692,7 +692,7 @@ export function AppsExplorer() {
             {searchResults.length === 0 ? (
               <div className="text-center py-12">
                 <p className="text-text-tertiary">No apps match your search</p>
-                <p className="text-sm text-text-quaternary mt-1">
+                <p className="text-sm text-muted-foreground mt-1">
                   Try different keywords or adjust your filters
                 </p>
               </div>

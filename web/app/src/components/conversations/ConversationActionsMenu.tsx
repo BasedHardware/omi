@@ -167,7 +167,7 @@ export function ConversationActionsMenu({
             className={cn(
               'absolute right-0 top-full mt-2 z-50',
               'min-w-[200px] py-2 rounded-xl',
-              'bg-bg-secondary border border-bg-tertiary shadow-xl'
+              'bg-bg-secondary border border-border shadow-xl'
             )}
           >
             {/* Copy Transcript */}
@@ -210,7 +210,7 @@ export function ConversationActionsMenu({
 
             {/* Divider */}
             {(hasTranscript || hasSummary) && (
-              <div className="my-2 border-t border-bg-tertiary" />
+              <div className="my-2 border-t border-border" />
             )}
 
             {/* Reprocess */}
@@ -231,7 +231,7 @@ export function ConversationActionsMenu({
             )}
 
             {/* Divider before delete */}
-            <div className="my-2 border-t border-bg-tertiary" />
+            <div className="my-2 border-t border-border" />
 
             {/* Delete */}
             {showDeleteConfirm ? (

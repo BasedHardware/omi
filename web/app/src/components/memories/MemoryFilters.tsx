@@ -70,10 +70,10 @@ export function MemoryFilters({ activeCategories, onCategoriesChange }: MemoryFi
         onClick={() => setIsOpen(!isOpen)}
         className={cn(
           'flex items-center gap-2 px-3 py-2 rounded-lg',
-          'bg-bg-tertiary border border-bg-quaternary',
+          'bg-bg-tertiary border border-border',
           'text-sm text-text-secondary hover:text-text-primary',
           'transition-colors',
-          activeCategories.length > 0 && 'border-purple-primary/30 text-purple-primary'
+          activeCategories.length > 0 && 'border-brand/30 text-brand'
         )}
       >
         <Filter className="w-4 h-4" />
@@ -87,7 +87,7 @@ export function MemoryFilters({ activeCategories, onCategoriesChange }: MemoryFi
             className="fixed inset-0 z-40"
             onClick={() => setIsOpen(false)}
           />
-          <div className="absolute right-0 top-full mt-1 z-50 bg-bg-secondary border border-bg-tertiary rounded-lg shadow-lg py-1 min-w-[160px]">
+          <div className="absolute right-0 top-full mt-1 z-50 bg-bg-secondary border border-border rounded-lg shadow-lg py-1 min-w-[160px]">
             {filterOptions.map((option) => {
               const isActive =
                 option.category === 'all'
@@ -101,7 +101,7 @@ export function MemoryFilters({ activeCategories, onCategoriesChange }: MemoryFi
                   className={cn(
                     'w-full flex items-center gap-2 px-3 py-2 text-sm',
                     'hover:bg-bg-tertiary transition-colors text-left',
-                    isActive ? 'text-purple-primary' : 'text-text-secondary'
+                    isActive ? 'text-brand' : 'text-text-secondary'
                   )}
                 >
                   {option.icon}

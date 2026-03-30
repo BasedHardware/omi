@@ -21,7 +21,7 @@ const LocationMap = dynamic(() => import('./sections/LocationMap'), {
   ssr: false,
   loading: () => (
     <div className="h-full bg-bg-tertiary animate-pulse flex items-center justify-center">
-      <MapPin className="w-8 h-8 text-text-quaternary" />
+      <MapPin className="w-8 h-8 text-muted-foreground" />
     </div>
   ),
 });
@@ -183,7 +183,7 @@ function JourneyTimeline({ locations, onConversationClick, currentIndex = -1, on
       {/* Header */}
       <div className="p-4 border-b border-white/[0.04]">
         <h4 className="text-sm font-medium text-text-primary flex items-center gap-2">
-          <Clock className="w-4 h-4 text-purple-primary" />
+          <Clock className="w-4 h-4 text-brand" />
           Your Journey
         </h4>
       </div>
@@ -205,7 +205,7 @@ function JourneyTimeline({ locations, onConversationClick, currentIndex = -1, on
         ) : (
           <div className="relative">
             {/* Vertical line connecting all items */}
-            <div className="absolute left-4 top-4 bottom-4 w-px bg-purple-primary/20" />
+            <div className="absolute left-4 top-4 bottom-4 w-px bg-brand/20" />
 
             <div className="space-y-4">
               {sortedLocations.map((loc, idx) => {
@@ -234,7 +234,7 @@ function JourneyTimeline({ locations, onConversationClick, currentIndex = -1, on
                     {/* Numbered marker */}
                     <div className={cn(
                       "relative z-10 w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-semibold transition-all",
-                      isCurrent ? "bg-purple-primary shadow-lg ring-2 ring-purple-primary/50 scale-110" : "bg-purple-primary shadow-md",
+                      isCurrent ? "bg-brand shadow-lg ring-2 ring-ring/50 scale-110" : "bg-brand shadow-md",
                       isPast && !isCurrent && "opacity-60"
                     )}>
                       {idx + 1}
@@ -257,7 +257,7 @@ function JourneyTimeline({ locations, onConversationClick, currentIndex = -1, on
                       {/* Time */}
                       <p className={cn(
                         "text-xs font-medium",
-                        isCurrent ? "text-purple-primary" : "text-purple-primary/70"
+                        isCurrent ? "text-brand" : "text-brand/70"
                       )}>
                         {formatJourneyTime(loc.time)}
                       </p>
@@ -267,7 +267,7 @@ function JourneyTimeline({ locations, onConversationClick, currentIndex = -1, on
                         <p className={cn(
                           "text-sm",
                           isCurrent ? "text-text-primary font-medium" : "text-text-secondary",
-                          loc.conversation_id && onConversationClick && "group-hover:text-purple-primary transition-colors"
+                          loc.conversation_id && onConversationClick && "group-hover:text-brand transition-colors"
                         )}>
                           {display.title}
                         </p>
@@ -392,7 +392,7 @@ export function RecapDetailPanel({
     return (
       <div className="h-full flex flex-col bg-bg-secondary">
         <div className="flex-1 flex items-center justify-center">
-          <Loader2 className="w-8 h-8 text-purple-primary animate-spin" />
+          <Loader2 className="w-8 h-8 text-brand animate-spin" />
         </div>
       </div>
     );
@@ -422,7 +422,7 @@ export function RecapDetailPanel({
       {/* Main content area */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         {/* Header - always visible */}
-        <div className="flex-shrink-0 bg-bg-secondary border-b border-bg-tertiary z-10">
+        <div className="flex-shrink-0 bg-bg-secondary border-b border-border z-10">
           <div className="p-6">
             <div className="flex items-start justify-between">
               <div className="flex items-start gap-4">
@@ -661,7 +661,7 @@ function Section({ title, icon: Icon, children }: SectionProps) {
     >
       {/* Section header */}
       <div className="flex items-center gap-2 mb-3">
-        <Icon className="w-5 h-5 text-purple-primary" />
+        <Icon className="w-5 h-5 text-brand" />
         <h3 className="text-base font-semibold text-text-primary">{title}</h3>
       </div>
       {/* Section content */}
@@ -674,7 +674,7 @@ function Section({ title, icon: Icon, children }: SectionProps) {
 export function RecapDetailPanelSkeleton() {
   return (
     <div className="h-full flex flex-col bg-bg-secondary">
-      <div className="p-6 border-b border-bg-tertiary">
+      <div className="p-6 border-b border-border">
         <div className="flex items-start gap-4">
           <div className="w-14 h-14 rounded-2xl bg-bg-tertiary animate-pulse" />
           <div className="flex-1 space-y-2">

@@ -169,7 +169,7 @@ export const AudioPlayer = forwardRef<AudioPlayerRef, AudioPlayerProps>(
     if (error) {
       return (
         <div className={cn(
-          'flex items-center gap-3 p-3 rounded-xl bg-bg-tertiary border border-bg-quaternary/50',
+          'flex items-center gap-3 p-3 rounded-xl bg-bg-tertiary border border-border/50',
           'text-text-tertiary text-sm',
           className
         )}>
@@ -181,7 +181,7 @@ export const AudioPlayer = forwardRef<AudioPlayerRef, AudioPlayerProps>(
 
     return (
       <div className={cn(
-        'flex items-center gap-3 p-3 rounded-xl bg-bg-tertiary border border-bg-quaternary/50',
+        'flex items-center gap-3 p-3 rounded-xl bg-bg-tertiary border border-border/50',
         className
       )}>
         {/* Hidden audio element */}
@@ -205,8 +205,8 @@ export const AudioPlayer = forwardRef<AudioPlayerRef, AudioPlayerProps>(
           disabled={isLoading}
           className={cn(
             'w-10 h-10 rounded-full flex items-center justify-center',
-            'bg-purple-primary text-white',
-            'hover:bg-purple-secondary transition-colors',
+            'bg-brand text-white',
+            'hover:bg-brand-light transition-colors',
             'disabled:opacity-50 disabled:cursor-not-allowed',
             'flex-shrink-0'
           )}
@@ -240,12 +240,12 @@ export const AudioPlayer = forwardRef<AudioPlayerRef, AudioPlayerProps>(
               '[&::-webkit-slider-thumb]:w-3',
               '[&::-webkit-slider-thumb]:h-3',
               '[&::-webkit-slider-thumb]:rounded-full',
-              '[&::-webkit-slider-thumb]:bg-purple-primary',
+              '[&::-webkit-slider-thumb]:bg-brand',
               '[&::-webkit-slider-thumb]:cursor-pointer',
               '[&::-moz-range-thumb]:w-3',
               '[&::-moz-range-thumb]:h-3',
               '[&::-moz-range-thumb]:rounded-full',
-              '[&::-moz-range-thumb]:bg-purple-primary',
+              '[&::-moz-range-thumb]:bg-brand',
               '[&::-moz-range-thumb]:border-0',
               '[&::-moz-range-thumb]:cursor-pointer',
               'disabled:opacity-50'
@@ -276,7 +276,7 @@ export const AudioPlayer = forwardRef<AudioPlayerRef, AudioPlayerProps>(
           </button>
 
           {showSpeedMenu && (
-            <div className="absolute bottom-full right-0 mb-2 py-1 bg-bg-secondary border border-bg-tertiary rounded-lg shadow-lg z-10">
+            <div className="absolute bottom-full right-0 mb-2 py-1 bg-bg-secondary border border-border rounded-lg shadow-lg z-10">
               {PLAYBACK_SPEEDS.map((speed) => (
                 <button
                   key={speed}
@@ -285,7 +285,7 @@ export const AudioPlayer = forwardRef<AudioPlayerRef, AudioPlayerProps>(
                     'w-full px-4 py-1.5 text-xs text-left',
                     'hover:bg-bg-tertiary transition-colors',
                     speed === playbackSpeed
-                      ? 'text-purple-primary font-medium'
+                      ? 'text-brand font-medium'
                       : 'text-text-secondary'
                   )}
                 >

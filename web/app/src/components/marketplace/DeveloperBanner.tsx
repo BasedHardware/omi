@@ -57,7 +57,7 @@ export function DeveloperBanner() {
                 Start Building Your Own Apps
               </h3>
               <p className="mt-2 text-sm text-purple-100 sm:text-base">
-                Create powerful AI-powered apps for Omi and start earning. Join our
+                Create powerful AI-powered apps for Nooto and start earning. Join our
                 developer community today!
               </p>
             </div>

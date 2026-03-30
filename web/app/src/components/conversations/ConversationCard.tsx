@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, memo } from 'react';
-import { motion } from 'framer-motion';
 import { Star, Check } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { formatTime, formatDuration } from '@/lib/utils';
@@ -85,26 +84,19 @@ export const ConversationCard = memo(function ConversationCard({
   };
 
   return (
-    <motion.div
-      whileHover={{ y: compact ? 0 : -1 }}
-      transition={{ duration: 0.15, ease: 'easeOut' }}
-      onHoverStart={() => setIsHovered(true)}
-      onHoverEnd={() => setIsHovered(false)}
+    <div
       onClick={handleClick}
       onDoubleClick={handleDoubleClick}
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
       className={cn(
-        'noise-overlay group relative rounded-xl cursor-pointer overflow-hidden',
-        'border transition-all duration-150',
-        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-purple-primary/50',
-        'p-4',
-        // Checked state in selection mode (purple highlight)
+        'group relative flex items-center gap-3 px-3 py-2.5 rounded-lg cursor-pointer',
+        'transition-all duration-100',
         isChecked
-          ? 'bg-purple-primary/20 border-purple-primary shadow-[0_0_0_1px_rgba(139,92,246,0.5)]'
-          // Normal selected state (viewing detail)
+          ? 'bg-brand/15'
           : isSelected
-            ? 'bg-purple-primary/10 border-purple-primary/50 shadow-[0_0_0_1px_rgba(139,92,246,0.3)]'
-            : 'bg-white/[0.02] border-white/[0.06] hover:bg-white/[0.05] hover:border-purple-primary/30',
-        // Merging state - dim the card
+            ? 'bg-white/[0.06]'
+            : 'hover:bg-white/[0.04]',
         isMerging && 'opacity-50 pointer-events-none'
       )}
       tabIndex={0}
@@ -112,152 +104,80 @@ export const ConversationCard = memo(function ConversationCard({
       aria-label={`Conversation: ${conversation.structured.title}`}
       aria-selected={isSelected || isChecked}
     >
-      {/* Top row: Time + Star */}
-      <div className="flex items-center justify-between mb-1.5">
-        <span className="text-[11px] text-text-quaternary">
-          {formatTime(startedAt)}
-        </span>
+      {/* Checkbox — selection mode */}
+      {isSelectionMode && (
+        <div
+          className={cn(
+            'flex-shrink-0 w-4 h-4 rounded border flex items-center justify-center',
+            isChecked ? 'bg-brand border-brand' : 'border-muted-foreground/40'
+          )}
+        >
+          {isChecked && <Check className="w-3 h-3 text-white" strokeWidth={3} />}
+        </div>
+      )}
 
-        {/* Star button - visible on hover or if starred */}
+      {/* Time */}
+      <span className="text-[11px] text-muted-foreground tabular-nums w-14 flex-shrink-0">
+        {formatTime(startedAt)}
+      </span>
+
+      {/* Title */}
+      <h3
+        className={cn(
+          'flex-1 min-w-0 text-sm truncate transition-colors',
+          isSelected ? 'text-brand font-medium' : 'text-foreground/90'
+        )}
+      >
+        {conversation.structured.title || 'Untitled conversation'}
+      </h3>
+
+      {/* Right side: category + duration + star */}
+      <div className="flex items-center gap-2 flex-shrink-0">
+        {category && category !== 'other' && (
+          <span className="text-[10px] text-muted-foreground capitalize hidden sm:inline">
+            {category}
+          </span>
+        )}
+        {durationSeconds > 0 && (
+          <span className="text-[10px] text-muted-foreground tabular-nums">
+            {formatDuration(durationSeconds)}
+          </span>
+        )}
+        {conversation.status === 'processing' && (
+          <div className="w-1.5 h-1.5 rounded-full bg-brand animate-pulse" />
+        )}
+        {isNew && !conversation.status?.includes('processing') && (
+          <span className="px-1 py-0.5 rounded text-[9px] font-medium bg-brand/20 text-brand">
+            New
+          </span>
+        )}
         <button
           onClick={handleStarClick}
           className={cn(
-            'p-0.5 rounded',
-            'transition-all duration-150',
-            isStarred || isHovered ? 'opacity-100' : 'opacity-0',
-            'hover:bg-bg-secondary'
+            'p-0.5 rounded transition-opacity',
+            isStarred || isHovered ? 'opacity-100' : 'opacity-0'
           )}
-          aria-label={isStarred ? 'Unstar conversation' : 'Star conversation'}
+          aria-label={isStarred ? 'Unstar' : 'Star'}
         >
-          <motion.div
-            animate={isStarred ? { scale: [1, 1.2, 1] } : { scale: 1 }}
-            transition={{ duration: 0.2 }}
-          >
-            <Star
-              className={cn(
-                'w-3 h-3 transition-colors',
-                isStarred
-                  ? 'fill-warning text-warning'
-                  : 'text-text-quaternary hover:text-text-secondary'
-              )}
-            />
-          </motion.div>
+          <Star
+            className={cn(
+              'w-3 h-3',
+              isStarred ? 'fill-warning text-warning' : 'text-muted-foreground'
+            )}
+          />
         </button>
       </div>
-
-      {/* Main content row: Checkbox + Emoji + Title */}
-      <div className="flex items-start gap-2.5">
-        {/* Checkbox for selection mode */}
-        {isSelectionMode && (
-          <motion.div
-            initial={{ opacity: 0, scale: 0.8 }}
-            animate={{ opacity: 1, scale: 1 }}
-            className={cn(
-              'flex-shrink-0 w-5 h-5 rounded-md border-2 flex items-center justify-center',
-              'transition-all duration-150',
-              isChecked
-                ? 'bg-purple-primary border-purple-primary'
-                : 'border-text-quaternary bg-transparent'
-            )}
-          >
-            {isChecked && (
-              <Check className="w-3.5 h-3.5 text-white" strokeWidth={3} />
-            )}
-          </motion.div>
-        )}
-
-        {/* Emoji Icon */}
-        <div
-          className={cn(
-            'flex-shrink-0 rounded-lg',
-            'bg-bg-secondary flex items-center justify-center',
-            'select-none',
-            'group-hover:scale-105 transition-transform duration-150',
-            'w-9 h-9 text-xl'
-          )}
-        >
-          {conversation.structured.emoji || '💬'}
-        </div>
-
-        {/* Title + metadata */}
-        <div className="flex-1 min-w-0">
-          <h3
-            className={cn(
-              'font-medium leading-snug transition-colors text-sm truncate',
-              isSelected ? 'text-purple-primary' : 'text-text-primary group-hover:text-white'
-            )
-            }
-          >
-            {conversation.structured.title || 'Untitled conversation'}
-          </h3>
-
-          {/* Bottom row: Category tag + Duration */}
-          <div className="flex items-center justify-between mt-1.5">
-            {/* Category tag - subtle */}
-            {category && category !== 'other' ? (
-              <span className="text-[10px] text-text-quaternary capitalize">
-                {category}
-              </span>
-            ) : (
-              <span />
-            )}
-
-            {/* Duration - right aligned */}
-            {durationSeconds > 0 && (
-              <span className="text-[10px] text-text-quaternary">
-                {formatDuration(durationSeconds)}
-              </span>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* Processing indicator - inline with category/duration */}
-      {conversation.status === 'processing' && (
-        <div className="flex items-center gap-1.5 mt-2 ml-[46px]">
-          <div className="w-1.5 h-1.5 rounded-full bg-purple-primary animate-pulse" />
-          <span className="text-xs text-text-quaternary">Processing...</span>
-        </div>
-      )}
-
-      {/* New badge - positioned inside card bounds */}
-      {isNew && !conversation.status?.includes('processing') && (
-        <motion.div
-          initial={{ opacity: 0, scale: 0.8 }}
-          animate={{ opacity: 1, scale: 1 }}
-          className={cn(
-            'absolute top-2 right-2',
-            'px-1.5 py-0.5 rounded',
-            'bg-purple-primary/20 text-purple-primary text-[10px] font-medium'
-          )}
-        >
-          New
-        </motion.div>
-      )}
-    </motion.div>
+    </div>
   );
 });
 
 // Skeleton loader for conversation cards - matches compact layout
 export function ConversationCardSkeleton() {
   return (
-    <div
-      className={cn(
-        'flex items-start gap-2.5 p-4 rounded-xl',
-        'bg-bg-tertiary animate-pulse'
-      )}
-    >
-      {/* Emoji placeholder */}
-      <div className="flex-shrink-0 w-9 h-9 rounded-lg bg-bg-quaternary" />
-
-      {/* Content placeholder */}
-      <div className="flex-1 space-y-2">
-        <div className="h-4 bg-bg-quaternary rounded w-3/4" />
-        <div className="flex items-center gap-2">
-          <div className="h-4 w-14 bg-bg-quaternary rounded" />
-          <div className="h-3 w-20 bg-bg-quaternary rounded" />
-        </div>
-      </div>
+    <div className="flex items-center gap-3 px-3 py-2.5 animate-pulse">
+      <div className="h-3 w-14 bg-muted rounded" />
+      <div className="h-3 flex-1 bg-muted rounded" />
+      <div className="h-3 w-10 bg-muted rounded" />
     </div>
   );
 }

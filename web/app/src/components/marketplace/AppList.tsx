@@ -43,7 +43,7 @@ const MarketplaceHeader = memo(function MarketplaceHeader({
                   minimized ? 'text-xl sm:text-2xl' : 'sm:text-3xl md:text-4xl'
                 }`}
               >
-                Omi App Store
+                Nooto App Store
               </h1>
               <div
                 className={`transform-gpu overflow-hidden transition-all duration-300 ${

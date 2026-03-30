@@ -104,7 +104,7 @@ export function MainLayout({ children, title, hideHeader = false }: MainLayoutPr
                     'flex-shrink-0',
                     'flex items-center gap-4 px-4 py-4 lg:px-8',
                     'bg-bg-primary/80 backdrop-blur-md',
-                    'border-b border-bg-tertiary'
+                    'border-b border-white/10'
                   )}
                 >
                   <MobileMenuButton onClick={() => setSidebarOpen(true)} />

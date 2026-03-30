@@ -26,7 +26,7 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
         <div className="w-16 h-16 relative">
           <Image
             src="/logo.png"
-            alt="Omi"
+            alt="Nooto"
             fill
             sizes="64px"
             priority

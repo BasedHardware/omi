@@ -32,8 +32,8 @@ export async function generateStaticParams() {
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { category } = await params;
   const metadata = getCategoryMetadata(category);
-  const title = `${metadata.displayName} Apps - Omi App Store`;
-  const description = `${metadata.description} Browse ${metadata.displayName} apps for your Omi.`;
+  const title = `${metadata.displayName} Apps - Nooto App Store`;
+  const description = `${metadata.description} Browse ${metadata.displayName} apps for your Nooto.`;
 
   return {
     title,
@@ -111,7 +111,7 @@ export default async function CategoryPage({ params }: Props) {
       />
       <CollectionPageJsonLd
         name={`${categoryMeta.displayName} Apps`}
-        description={`${categoryMeta.description} Browse ${categoryMeta.displayName} apps for your Omi.`}
+        description={`${categoryMeta.description} Browse ${categoryMeta.displayName} apps for your Nooto.`}
         url={`/apps/category/${category}`}
       />
       {/* Fixed Header and Navigation */}

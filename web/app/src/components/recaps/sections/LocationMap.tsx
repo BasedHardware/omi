@@ -452,7 +452,7 @@ export default function LocationMap({
                   {loc.conversation_id && onConversationClick && (
                     <button
                       onClick={() => onConversationClick(loc.conversation_id!)}
-                      className="mt-2 flex items-center gap-1 text-xs text-purple-600 hover:text-purple-700 transition-colors"
+                      className="mt-2 flex items-center gap-1 text-xs text-brand hover:text-brand-dark transition-colors"
                     >
                       <MessageSquare className="w-3 h-3" />
                       <span>View conversation</span>
@@ -504,7 +504,7 @@ export default function LocationMap({
               {/* Play/Pause button */}
               <button
                 onClick={isPlaying ? handlePause : handlePlay}
-                className="w-8 h-8 flex items-center justify-center rounded-full bg-purple-primary hover:bg-purple-primary/90 text-white transition-colors"
+                className="w-8 h-8 flex items-center justify-center rounded-full bg-brand hover:bg-brand/90 text-white transition-colors"
               >
                 {isPlaying ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4 ml-0.5" />}
               </button>
@@ -517,7 +517,7 @@ export default function LocationMap({
                   max={sortedLocations.length - 1}
                   value={currentIndex}
                   onChange={handleSliderChange}
-                  className="flex-1 h-1 bg-bg-tertiary rounded-full appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:bg-purple-primary [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:cursor-pointer"
+                  className="flex-1 h-1 bg-bg-tertiary rounded-full appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:bg-brand [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:cursor-pointer"
                 />
                 <span className="text-xs text-text-tertiary w-12 text-right">
                   {currentIndex >= 0 ? `${currentIndex + 1}/${sortedLocations.length}` : 'All'}
@@ -545,7 +545,7 @@ export default function LocationMap({
             {/* Current time display */}
             {currentLocation && (
               <div className="mt-2 text-center">
-                <span className="text-xs text-purple-primary font-medium">
+                <span className="text-xs text-brand font-medium">
                   {formatTime(currentLocation.time)}
                 </span>
               </div>

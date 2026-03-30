@@ -228,7 +228,7 @@ export function Sidebar({
           willChange: !isDesktop ? 'transform' : undefined,
         }}
         className={cn(
-          'bg-bg-secondary border-r border-white/[0.04]',
+          'bg-bg-secondary border-r border-white/10',
           'flex flex-col flex-shrink-0',
           // Mobile: fixed overlay with slide transition
           'fixed top-0 left-0 bottom-0 z-50',
@@ -238,116 +238,91 @@ export function Sidebar({
         )}
       >
         {/* Header */}
-        <div className="border-b border-white/[0.04]">
+        <div className="border-b border-white/10">
           {/* Logo row - fixed layout */}
           <div
             className={cn(
-              'flex items-center pt-7 px-4 pb-4',
+              'flex items-center px-4 h-16',
               showText ? 'justify-between' : 'justify-center'
             )}
           >
-            <Link
-              href="/conversations"
-              className="flex items-center gap-2"
-            >
-              <Image
-                src="/omi-white.webp"
-                alt="Omi"
-                width={showText ? 60 : 32}
-                height={showText ? 24 : 13}
-                className="object-contain"
-              />
-              {showText && (
-                <span className="text-[10px] bg-purple-primary/20 text-purple-primary px-1.5 py-0.5 rounded-full font-medium">
+            {showText ? (
+              <Link
+                href="/conversations"
+                className="flex items-center gap-2"
+              >
+                <span className="font-bold tracking-tight text-white text-xl">
+                  nooto
+                </span>
+                <span className="text-[10px] bg-brand/20 text-brand px-1.5 py-0.5 rounded-full font-medium">
                   Beta
                 </span>
-              )}
-            </Link>
+              </Link>
+            ) : (
+              <button
+                onClick={handleToggleExpand}
+                className="p-1.5 rounded-lg text-text-tertiary hover:bg-bg-tertiary hover:text-text-secondary transition-colors"
+                title="Expand sidebar"
+              >
+                <PanelLeft className="w-4 h-4" />
+              </button>
+            )}
 
-            {/* Mobile close button */}
+            {/* Mobile close */}
             {!isDesktop && (
               <button
                 onClick={onClose}
-                className="p-2 rounded-lg hover:bg-bg-tertiary transition-colors"
+                className="p-1.5 rounded-lg hover:bg-bg-tertiary transition-colors"
               >
-                <X className="w-5 h-5 text-text-secondary" />
+                <X className="w-4 h-4 text-text-secondary" />
               </button>
             )}
-          </div>
 
-          {/* Toggle button row (desktop only) - appears on sidebar hover */}
-          {isDesktop && (
-            <div
-              className={cn(
-                'px-4 pb-3',
-                showText ? 'flex justify-end' : 'flex justify-center'
-              )}
-            >
+            {/* Desktop toggle — only when expanded */}
+            {isDesktop && showText && (
               <button
                 onClick={handleToggleExpand}
                 className={cn(
-                  'p-2 rounded-lg transition-all duration-200',
+                  'p-1.5 rounded-lg transition-all duration-200',
                   'text-text-tertiary hover:bg-bg-tertiary hover:text-text-secondary',
                   isHeaderHovered ? 'opacity-100' : 'opacity-0'
                 )}
-                title={isExpanded ? 'Collapse sidebar' : 'Expand sidebar'}
+                title="Collapse sidebar"
               >
-                {isExpanded ? (
-                  <PanelLeftClose className="w-4 h-4" />
-                ) : (
-                  <PanelLeft className="w-4 h-4" />
-                )}
+                <PanelLeftClose className="w-3.5 h-3.5" />
               </button>
-            </div>
-          )}
-
-          {/* Notification bell */}
-          <div
-            className={cn(
-              'px-4 pb-3',
-              showText ? 'flex justify-start' : 'flex justify-center'
             )}
-          >
-            <button
-              onClick={toggleNotificationCenter}
-              className={cn(
-                'flex items-center rounded-lg transition-colors',
-                'text-text-tertiary hover:bg-bg-tertiary hover:text-text-secondary',
-                showText ? 'px-2 py-2' : 'p-2'
-              )}
-              title="Notifications"
-            >
-              <div className="relative">
-                <Bell className="w-5 h-5" />
-                {unreadCount > 0 && (
-                  <span
-                    className={cn(
-                      'absolute -top-2.5 -right-2.5',
-                      'min-w-[18px] h-[18px] px-1',
-                      'flex items-center justify-center',
-                      'bg-red-500 text-white text-[10px] font-bold',
-                      'rounded-full'
-                    )}
-                  >
-                    {unreadCount > 99 ? '99+' : unreadCount}
-                  </span>
-                )}
-              </div>
-              {showText && (
-                <span className="ml-3 text-sm text-text-secondary">
-                  Notifications
-                </span>
-              )}
-            </button>
           </div>
         </div>
 
         {/* Scrollable middle section */}
         <div className="flex-1 min-h-0 overflow-y-auto">
           <nav className={cn(
-            'py-2 space-y-1',
-            showText ? 'px-3' : 'px-2'
+            'py-2 space-y-0.5',
+            showText ? 'px-3' : 'px-1.5'
           )}>
+            {/* Notification bell */}
+            <button
+              onClick={toggleNotificationCenter}
+              className={cn(
+                'flex items-center rounded-xl w-full',
+                'transition-colors duration-200',
+                showText ? 'gap-3 px-4 py-3' : 'justify-center p-3',
+                'text-text-secondary hover:bg-white/[0.04] hover:text-text-primary'
+              )}
+              title="Notifications"
+            >
+              <span className="flex-shrink-0 relative">
+                <Bell className="w-5 h-5" />
+                {unreadCount > 0 && (
+                  <span className="absolute -top-1.5 -right-1.5 min-w-[16px] h-[16px] px-1 flex items-center justify-center bg-red-500 text-white text-[9px] font-bold rounded-full">
+                    {unreadCount > 99 ? '99+' : unreadCount}
+                  </span>
+                )}
+              </span>
+              {showText && <span className="font-medium">Notifications</span>}
+            </button>
+
             {navItems.map((item) => {
               const isActive =
                 pathname === item.href ||
@@ -365,12 +340,12 @@ export function Sidebar({
                   }}
                   title={!showText ? (showComingSoon ? `${item.label} (Coming Soon)` : item.label) : undefined}
                   className={cn(
-                    'flex items-center rounded-xl border-l-[3px]',
-                    'transition-colors duration-150',
+                    'flex items-center rounded-xl',
+                    'transition-all duration-200',
                     showText ? 'gap-3 px-4 py-3' : 'justify-center p-3',
                     isActive
-                      ? 'bg-purple-primary/10 text-purple-primary border-l-[3px] border-purple-primary'
-                      : 'text-text-secondary hover:bg-bg-tertiary hover:text-text-primary border-transparent',
+                      ? 'bg-brand/10 text-brand'
+                      : 'text-text-secondary hover:bg-white/[0.04] hover:text-text-primary',
                     showComingSoon && 'opacity-60'
                   )}
                 >
@@ -388,7 +363,7 @@ export function Sidebar({
                     <span className="font-medium flex items-center gap-2">
                       {item.label}
                       {showComingSoon && (
-                        <span className="text-[10px] text-text-quaternary bg-bg-quaternary px-1.5 py-0.5 rounded">
+                        <span className="text-[10px] text-muted-foreground bg-bg-quaternary px-1.5 py-0.5 rounded">
                           Soon
                         </span>
                       )}
@@ -405,8 +380,8 @@ export function Sidebar({
 
           const isMac = typeof navigator !== 'undefined' && /Mac/.test(navigator.userAgent);
           const bannerHref = isMac ? 'https://macos.omi.me/' : 'https://onelink.to/rbsrxc';
-          const bannerTitle = isMac ? 'Omi is 10X better on macOS' : 'Take Omi with you';
-          const bannerSubtitle = isMac ? 'Try Omi on macOS' : 'Try Omi on your phone';
+          const bannerTitle = isMac ? 'Nooto is 10X better on macOS' : 'Take Nooto with you';
+          const bannerSubtitle = isMac ? 'Try Nooto on macOS' : 'Try Nooto on your phone';
           return (
             <div className={cn('px-3 pt-2 pb-2', !showText && 'px-2')}>
               <a
@@ -424,7 +399,7 @@ export function Sidebar({
                 {showText && (
                   <div className="min-w-0">
                     <p className="text-sm font-medium text-text-primary">{bannerTitle}</p>
-                    <p className="text-xs text-text-quaternary">{bannerSubtitle}</p>
+                    <p className="text-xs text-muted-foreground">{bannerSubtitle}</p>
                   </div>
                 )}
                 {showText && (
@@ -435,7 +410,7 @@ export function Sidebar({
                       setMobileAppDismissed(true);
                       localStorage.setItem('mobile-app-banner-dismissed', 'true');
                     }}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full p-1 text-text-quaternary transition-colors hover:bg-white/[0.08] hover:text-text-tertiary"
+                    className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full p-1 text-muted-foreground transition-colors hover:bg-white/[0.08] hover:text-text-tertiary"
                     aria-label="Dismiss"
                   >
                     <X className="h-3.5 w-3.5" />
@@ -455,7 +430,7 @@ export function Sidebar({
             title={!showText ? 'Feedback' : undefined}
             className={cn(
               'flex items-center rounded-lg transition-colors',
-              'text-text-tertiary hover:text-purple-primary hover:bg-bg-tertiary/50',
+              'text-text-tertiary hover:text-brand hover:bg-white/[0.04]',
               showText ? 'gap-3 px-3 py-2' : 'justify-center p-2'
             )}
           >
@@ -469,7 +444,7 @@ export function Sidebar({
             title={!showText ? 'Discord' : undefined}
             className={cn(
               'flex items-center rounded-lg transition-colors',
-              'text-text-tertiary hover:text-purple-primary hover:bg-bg-tertiary/50',
+              'text-text-tertiary hover:text-brand hover:bg-white/[0.04]',
               showText ? 'gap-3 px-3 py-2' : 'justify-center p-2'
             )}
           >
@@ -479,7 +454,7 @@ export function Sidebar({
         </div>
 
         {/* Footer - User Section with Settings Menu */}
-        <div className="border-t border-white/[0.04]">
+        <div className="border-t border-white/10">
           <div className="bg-bg-primary/30">
             <div className="relative" ref={userMenuRef}>
               <button
@@ -524,7 +499,7 @@ export function Sidebar({
                       <p className="text-sm font-medium text-text-primary truncate">
                         {user?.displayName || 'User'}
                       </p>
-                      <p className="text-xs text-text-quaternary truncate">
+                      <p className="text-xs text-muted-foreground truncate">
                         {user?.email}
                       </p>
                     </div>
@@ -532,7 +507,7 @@ export function Sidebar({
                     {/* Dropdown indicator */}
                     <svg
                       className={cn(
-                        'w-4 h-4 text-text-quaternary transition-transform',
+                        'w-4 h-4 text-muted-foreground transition-transform',
                         showUserMenu && 'rotate-180'
                       )}
                       fill="none"
@@ -562,13 +537,14 @@ export function Sidebar({
                       'absolute bottom-full left-2 right-2 mb-3',
                       'bg-[#1a1a1f]/95 backdrop-blur-xl',
                       'rounded-2xl overflow-hidden',
-                      'shadow-[0_0_0_1px_rgba(255,255,255,0.06),0_-20px_40px_-10px_rgba(139,92,246,0.15),0_10px_30px_-5px_rgba(0,0,0,0.5)]'
+                      'border border-white/10',
+                      'shadow-[0_-20px_40px_-10px_rgba(59,130,246,0.1),0_10px_30px_-5px_rgba(0,0,0,0.5)]'
                     )}
                   >
                     {/* User info header */}
-                    <div className="p-4 border-b border-white/[0.04]">
+                    <div className="p-4 border-b border-white/10">
                       <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-purple-500/20 to-purple-600/10 flex items-center justify-center ring-1 ring-white/[0.08] overflow-hidden">
+                        <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-brand/20 to-brand-dark/10 flex items-center justify-center ring-1 ring-white/[0.08] overflow-hidden">
                           {user?.photoURL ? (
                             <Image
                               src={user.photoURL}
@@ -614,7 +590,7 @@ export function Sidebar({
                             'hover:bg-white/[0.04]'
                           )}
                         >
-                          <item.icon className="w-4 h-4 text-white/40 group-hover:text-purple-400 transition-colors flex-shrink-0" />
+                          <item.icon className="w-4 h-4 text-white/40 group-hover:text-brand-light transition-colors flex-shrink-0" />
                           <span className="text-sm text-white/70 group-hover:text-white/90">
                             {item.label}
                           </span>
@@ -623,7 +599,7 @@ export function Sidebar({
                     </div>
 
                     {/* Sign out - separated */}
-                    <div className="p-2 pt-0 border-t border-white/[0.04] mt-1">
+                    <div className="p-2 pt-0 border-t border-white/10 mt-1">
                       <button
                         onClick={handleSignOut}
                         className={cn(
@@ -655,7 +631,7 @@ export function MobileMenuButton({ onClick }: { onClick: () => void }) {
       className={cn(
         'lg:hidden p-2 rounded-lg',
         'hover:bg-bg-tertiary transition-colors',
-        'focus:outline-none focus-visible:ring-2 focus-visible:ring-purple-primary/50'
+        'focus:outline-none focus-visible:ring-2 focus-visible:ring-ring'
       )}
     >
       <Menu className="w-6 h-6 text-text-secondary" />

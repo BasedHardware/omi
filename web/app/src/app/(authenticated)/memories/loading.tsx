@@ -4,7 +4,7 @@ import { Brain } from 'lucide-react';
 
 function MemoryCardSkeleton() {
   return (
-    <div className="p-4 rounded-xl bg-bg-secondary border border-bg-tertiary">
+    <div className="p-4 rounded-xl bg-bg-secondary border border-border">
       <div className="flex items-start gap-3">
         <div className="w-8 h-8 rounded-lg bg-bg-tertiary animate-pulse flex-shrink-0" />
         <div className="flex-1 min-w-0">
@@ -25,7 +25,7 @@ export default function MemoriesLoading() {
   return (
     <div className="flex flex-col h-full overflow-hidden">
       {/* Page Header */}
-      <div className="flex-shrink-0 px-6 py-4 border-b border-bg-tertiary bg-bg-primary">
+      <div className="flex-shrink-0 px-6 py-4 border-b border-border bg-bg-primary">
         <div className="flex items-center gap-3">
           <div className="p-2 rounded-lg bg-bg-tertiary">
             <Brain className="w-5 h-5 text-text-secondary" />
@@ -35,7 +35,7 @@ export default function MemoriesLoading() {
       </div>
 
       {/* Toolbar */}
-      <div className="flex-shrink-0 px-6 py-3 border-b border-bg-tertiary bg-bg-secondary">
+      <div className="flex-shrink-0 px-6 py-3 border-b border-border bg-bg-secondary">
         <div className="flex items-center justify-between">
           {/* View mode tabs */}
           <div className="flex items-center gap-1 p-1 rounded-lg bg-bg-tertiary">
@@ -53,7 +53,7 @@ export default function MemoriesLoading() {
       </div>
 
       {/* Filters */}
-      <div className="flex-shrink-0 px-6 py-3 border-b border-bg-tertiary">
+      <div className="flex-shrink-0 px-6 py-3 border-b border-border">
         <div className="flex items-center gap-3">
           <div className="flex-1 h-10 rounded-lg bg-bg-tertiary animate-pulse" />
           <div className="flex items-center gap-2">
@@ -76,7 +76,7 @@ export default function MemoriesLoading() {
         </div>
 
         {/* Insights Sidebar */}
-        <div className="hidden lg:block w-80 border-l border-bg-tertiary p-4">
+        <div className="hidden lg:block w-80 border-l border-border p-4">
           <div className="space-y-6">
             <div>
               <div className="h-5 w-24 bg-bg-tertiary rounded animate-pulse mb-3" />

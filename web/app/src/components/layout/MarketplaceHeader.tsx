@@ -16,7 +16,7 @@ export function MarketplaceHeader() {
           <Link href="/apps" className="flex items-center gap-2">
             <Image
               src="/omi-white.webp"
-              alt="Omi"
+              alt="Nooto"
               width={80}
               height={32}
               className="h-6 w-auto"
@@ -33,8 +33,8 @@ export function MarketplaceHeader() {
                   href="/conversations"
                   className={cn(
                     'px-4 py-1.5 rounded-full text-sm font-medium',
-                    'bg-purple-primary text-white',
-                    'hover:bg-purple-secondary transition-colors'
+                    'bg-brand text-white',
+                    'hover:bg-brand-light transition-colors'
                   )}
                 >
                   Dashboard

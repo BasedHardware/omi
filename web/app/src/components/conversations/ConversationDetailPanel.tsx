@@ -3,6 +3,7 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
+import { CollapsibleSummary } from '@/components/generative-ui/CollapsibleSummary';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   ArrowLeft,
@@ -37,7 +38,7 @@ const SingleLocationMap = dynamic(() => import('@/components/ui/SingleLocationMa
   ssr: false,
   loading: () => (
     <div className="h-full bg-bg-tertiary animate-pulse flex items-center justify-center rounded-r-xl">
-      <MapPin className="w-8 h-8 text-text-quaternary" />
+      <MapPin className="w-8 h-8 text-muted-foreground" />
     </div>
   ),
 });
@@ -94,7 +95,7 @@ function ActionItemRow({ item }: { item: ActionItem }) {
     <div
       className={cn(
         'flex items-start gap-3 p-4 rounded-xl',
-        'bg-bg-tertiary border border-bg-quaternary/50',
+        'bg-bg-tertiary border border-border/50',
         item.completed && 'opacity-60'
       )}
     >
@@ -127,7 +128,7 @@ function ActionItemRow({ item }: { item: ActionItem }) {
           {item.description}
         </span>
         {item.due_at && (
-          <p className="text-xs text-text-quaternary mt-1">
+          <p className="text-xs text-muted-foreground mt-1">
             Due: {new Date(item.due_at).toLocaleDateString()}
           </p>
         )}
@@ -206,14 +207,12 @@ function SummaryTab({
               >
                 {category && (
                   <div className="mb-3">
-                    <span className="inline-flex px-3 py-1 rounded-full text-xs font-medium bg-purple-primary/10 text-purple-primary capitalize">
+                    <span className="inline-flex px-2 py-0.5 rounded-full text-[10px] font-medium bg-primary/10 text-primary capitalize">
                       {category}
                     </span>
                   </div>
                 )}
-                <p className="text-text-secondary leading-relaxed text-lg">
-                  {overview}
-                </p>
+                <CollapsibleSummary content={overview} className="text-text-secondary leading-relaxed" />
                 {geolocation.address && (
                   <div className="mt-4 flex items-start gap-2 text-sm text-text-tertiary">
                     <MapPin className="w-4 h-4 flex-shrink-0 mt-0.5" />
@@ -230,7 +229,7 @@ function SummaryTab({
                 )}>
                   <button
                     onClick={() => setIsExpanded(!isExpanded)}
-                    className="flex items-center gap-1 text-sm text-purple-primary hover:text-purple-400 transition-colors"
+                    className="flex items-center gap-1 text-sm text-primary hover:text-primary/80 transition-colors"
                   >
                     {isExpanded ? (
                       <>
@@ -263,23 +262,21 @@ function SummaryTab({
         <div>
           {category && (
             <div className="mb-3">
-              <span className="inline-flex px-3 py-1 rounded-full text-xs font-medium bg-purple-primary/10 text-purple-primary capitalize">
+              <span className="inline-flex px-2 py-0.5 rounded-full text-[10px] font-medium bg-primary/10 text-primary capitalize">
                 {category}
               </span>
             </div>
           )}
-          <p className="text-text-secondary leading-relaxed text-lg">
-            {overview}
-          </p>
+          <CollapsibleSummary content={overview} className="text-text-secondary leading-relaxed" />
         </div>
       )}
 
       {/* App Summaries Section */}
-      <div className="pt-4 border-t border-bg-tertiary">
+      <div className="pt-4 border-t border-border">
         {/* Section Header with Generate Button */}
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
-            <Sparkles className="w-4 h-4 text-purple-primary" />
+            <Sparkles className="w-4 h-4 text-primary" />
             <h3 className="text-sm font-medium text-text-primary">Summary Templates</h3>
           </div>
           <GenerateSummaryButton
@@ -582,64 +579,43 @@ export function ConversationDetailPanel({
 
   return (
     <div className="h-full flex flex-col overflow-hidden relative">
-      {/* Header */}
-      <div className="flex-shrink-0 p-4 lg:p-6 border-b border-bg-tertiary">
-        <div className="flex items-start gap-4">
+      {/* Header — compact */}
+      <div className="flex-shrink-0 px-4 lg:px-6 py-3 border-b border-border/50">
+        <div className="flex items-center gap-3">
           {/* Back button (mobile only) */}
           {onBack && (
             <button
               onClick={onBack}
-              className="lg:hidden p-2 -ml-2 rounded-lg hover:bg-bg-tertiary transition-colors"
+              className="lg:hidden p-1.5 -ml-1 rounded-lg hover:bg-secondary transition-colors"
               aria-label="Back to list"
             >
-              <ArrowLeft className="w-5 h-5 text-text-secondary" />
+              <ArrowLeft className="w-4 h-4 text-muted-foreground" />
             </button>
           )}
 
-          {/* Emoji */}
-          <div className="w-14 h-14 rounded-2xl bg-bg-tertiary flex items-center justify-center text-3xl flex-shrink-0">
-            {structured.emoji || '💬'}
-          </div>
-
           <div className="flex-1 min-w-0">
-            {/* Editable Title */}
             <EditableTitle
               conversationId={conversationId}
               title={structured.title || 'Untitled Conversation'}
               onTitleChange={handleTitleChange}
-              className="text-xl font-display font-semibold text-text-primary mb-2 line-clamp-2"
+              className="text-sm font-medium text-foreground line-clamp-1"
             />
-
-            {/* Meta info */}
-            <div className="flex flex-wrap items-center gap-3 text-sm text-text-tertiary">
+            <div className="flex flex-wrap items-center gap-2 mt-0.5 text-xs text-muted-foreground">
               {conversation.started_at && (
-                <div className="flex items-center gap-1.5">
-                  <Calendar className="w-4 h-4" />
-                  <span>{formatDate(conversation.started_at)}</span>
-                </div>
+                <span>{formatDate(conversation.started_at)}</span>
               )}
               {conversation.started_at && (
-                <div className="flex items-center gap-1.5">
-                  <Clock className="w-4 h-4" />
-                  <span>{formatTime(new Date(conversation.started_at))}</span>
-                </div>
+                <span>{formatTime(new Date(conversation.started_at))}</span>
               )}
               {duration > 0 && (
-                <div className="flex items-center gap-1.5">
-                  <MessageSquare className="w-4 h-4" />
-                  <span>{formatDuration(duration)}</span>
-                </div>
+                <span>{formatDuration(duration)}</span>
               )}
               {conversation.starred && (
-                <div className="flex items-center gap-1.5 text-warning">
-                  <Star className="w-4 h-4 fill-current" />
-                  <span>Starred</span>
-                </div>
+                <Star className="w-3 h-3 text-warning fill-current" />
               )}
             </div>
           </div>
 
-          {/* Actions Menu */}
           <ConversationActionsMenu
             conversation={conversation}
             people={people}
@@ -649,35 +625,30 @@ export function ConversationDetailPanel({
         </div>
       </div>
 
-      {/* Tabs */}
+      {/* Tabs — minimal underline style */}
       {enabledTabs.length > 0 && (
-        <div className="flex-shrink-0 px-4 lg:px-6 py-3 border-b border-bg-tertiary">
-          <div className="flex gap-1">
+        <div className="flex-shrink-0 px-4 lg:px-6 border-b border-border/50">
+          <div className="flex gap-4">
             {enabledTabs.map((tab) => (
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
                 className={cn(
-                  'flex items-center gap-2 px-3 py-2 rounded-lg',
-                  'text-sm font-medium transition-all duration-150',
+                  'flex items-center gap-1.5 py-2.5 text-sm font-medium transition-colors relative',
                   activeTab === tab.id
-                    ? 'bg-purple-primary text-white'
-                    : 'text-text-secondary hover:text-text-primary hover:bg-bg-tertiary'
+                    ? 'text-primary'
+                    : 'text-muted-foreground hover:text-foreground'
                 )}
               >
                 {tab.icon}
                 <span>{tab.label}</span>
                 {tab.count !== undefined && tab.count > 0 && (
-                  <span
-                    className={cn(
-                      'px-1.5 py-0.5 rounded-full text-xs',
-                      activeTab === tab.id
-                        ? 'bg-white/20'
-                        : 'bg-bg-tertiary'
-                    )}
-                  >
+                  <span className="text-xs text-muted-foreground">
                     {tab.count}
                   </span>
+                )}
+                {activeTab === tab.id && (
+                  <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary rounded-full" />
                 )}
               </button>
             ))}
@@ -725,8 +696,8 @@ export function ConversationDetailPanel({
                 )}
                 {/* Loading state while fetching signed URLs */}
                 {audioAvailable && fetchedAudioFiles.length === 0 && (
-                  <div className="flex items-center gap-3 p-3 rounded-xl bg-bg-tertiary border border-bg-quaternary/50 text-text-tertiary text-sm">
-                    <div className="w-10 h-10 rounded-full flex items-center justify-center bg-purple-primary/50">
+                  <div className="flex items-center gap-3 p-3 rounded-xl bg-bg-tertiary border border-border/50 text-text-tertiary text-sm">
+                    <div className="w-10 h-10 rounded-full flex items-center justify-center bg-primary/50">
                       <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
                     </div>
                     <span>Loading audio...</span>

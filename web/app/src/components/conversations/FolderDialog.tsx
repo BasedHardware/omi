@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import * as Dialog from '@radix-ui/react-dialog';
-import { X, Loader2, FolderPlus, Pencil } from 'lucide-react';
+import { X, Loader2, FolderPlus, Pencil, Folder as FolderIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { FOLDER_EMOJIS, FOLDER_COLORS } from '@/types/folder';
 import type { Folder, CreateFolderRequest, UpdateFolderRequest } from '@/types/folder';
@@ -73,7 +73,7 @@ export function FolderDialog({
           <Dialog.Content
             className={cn(
               'w-full max-w-md p-6 rounded-2xl text-left align-middle',
-              'bg-bg-secondary border border-bg-tertiary shadow-[0_16px_64px_rgba(0,0,0,0.5)]',
+              'bg-bg-secondary border border-border shadow-[0_16px_64px_rgba(0,0,0,0.5)]',
               'max-h-[85vh] overflow-y-auto',
               'duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-[48%] data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%]',
               'outline-none focus:outline-none' // Remove default browser focus ring
@@ -89,7 +89,7 @@ export function FolderDialog({
               disabled={isLoading}
               className={cn(
                 'absolute top-4 right-4 p-2 rounded-lg',
-                'text-text-quaternary hover:text-text-primary',
+                'text-muted-foreground hover:text-text-primary',
                 'hover:bg-bg-tertiary transition-colors',
                 'disabled:opacity-50 disabled:cursor-not-allowed'
               )}
@@ -131,9 +131,9 @@ export function FolderDialog({
                     maxLength={100}
                     className={cn(
                       'flex-1 px-3 py-2 rounded-lg',
-                      'bg-bg-tertiary border border-bg-quaternary',
-                      'text-text-primary placeholder:text-text-quaternary',
-                      'focus:outline-none focus:ring-2 focus:ring-purple-primary/50',
+                      'bg-bg-tertiary border border-border',
+                      'text-text-primary placeholder:text-muted-foreground',
+                      'focus:outline-none focus:ring-2 focus:ring-ring',
                       'disabled:opacity-50'
                     )}
                     autoFocus
@@ -144,7 +144,7 @@ export function FolderDialog({
               {/* Description input */}
               <div className="mb-4">
                 <label className="block text-sm font-medium text-text-secondary mb-2">
-                  Description <span className="text-text-quaternary font-normal">(optional)</span>
+                  Description <span className="text-muted-foreground font-normal">(optional)</span>
                 </label>
                 <textarea
                   value={description}
@@ -155,14 +155,14 @@ export function FolderDialog({
                   rows={2}
                   className={cn(
                     'w-full px-3 py-2 rounded-lg resize-none',
-                    'bg-bg-tertiary border border-bg-quaternary',
-                    'text-text-primary placeholder:text-text-quaternary',
+                    'bg-bg-tertiary border border-border',
+                    'text-text-primary placeholder:text-muted-foreground',
                     'text-sm',
-                    'focus:outline-none focus:ring-2 focus:ring-purple-primary/50',
+                    'focus:outline-none focus:ring-2 focus:ring-ring',
                     'disabled:opacity-50'
                   )}
                 />
-                <p className="mt-1 text-xs text-text-quaternary">
+                <p className="mt-1 text-xs text-muted-foreground">
                   Helps AI auto-categorize conversations into this folder
                 </p>
               </div>
@@ -184,7 +184,7 @@ export function FolderDialog({
                         'flex items-center justify-center',
                         'transition-all duration-150',
                         emoji === e
-                          ? 'bg-purple-primary/20 ring-2 ring-purple-primary'
+                          ? 'bg-brand/20 ring-2 ring-ring'
                           : 'bg-bg-tertiary hover:bg-bg-quaternary',
                         'disabled:opacity-50 disabled:cursor-not-allowed'
                       )}
@@ -298,7 +298,7 @@ export function DeleteFolderDialog({
           <Dialog.Content
             className={cn(
               'w-full max-w-sm p-6 rounded-2xl text-left align-middle',
-              'bg-bg-secondary border border-bg-tertiary shadow-[0_16px_64px_rgba(0,0,0,0.5)]',
+              'bg-bg-secondary border border-border shadow-[0_16px_64px_rgba(0,0,0,0.5)]',
               'max-h-[85vh] overflow-y-auto',
               'duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-[48%] data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%]',
               'outline-none focus:outline-none'
@@ -313,7 +313,11 @@ export function DeleteFolderDialog({
               'w-12 h-12 rounded-xl mb-4',
               'bg-error/20 flex items-center justify-center'
             )}>
-              <span className="text-2xl">{folder.emoji || '📁'}</span>
+              {folder.emoji ? (
+                <span className="text-2xl">{folder.emoji}</span>
+              ) : (
+                <FolderIcon className="w-6 h-6 text-muted-foreground" />
+              )}
             </div>
 
             {/* Title */}

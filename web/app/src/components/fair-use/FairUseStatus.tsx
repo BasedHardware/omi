@@ -24,7 +24,7 @@ function UsageBar({
   limit: number;
   pct: number;
 }) {
-  const barColor = pct >= 100 ? 'bg-red-500' : pct >= 80 ? 'bg-amber-500' : 'bg-purple-500';
+  const barColor = pct >= 100 ? 'bg-red-500' : pct >= 80 ? 'bg-amber-500' : 'bg-brand';
 
   return (
     <div className="space-y-1.5">
@@ -103,7 +103,7 @@ export function FairUseStatus() {
           <p className="text-text-tertiary mb-4">Unable to load fair use status.</p>
           <button
             onClick={loadStatus}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-purple-500/10 text-purple-400 hover:bg-purple-500/20 transition-colors"
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-brand/10 text-brand-light hover:bg-brand/20 transition-colors"
           >
             <RefreshCw className="w-4 h-4" />
             Retry
@@ -195,7 +195,7 @@ export function FairUseStatus() {
         const usedMin = Math.round(used_ms / 60000);
         const limitMin = Math.round(daily_limit_ms / 60000);
         const pct = Math.min((used_ms / daily_limit_ms) * 100, 100);
-        const barColor = exhausted ? 'bg-red-500' : 'bg-purple-500';
+        const barColor = exhausted ? 'bg-red-500' : 'bg-brand';
 
         let resetLabel = '';
         if (resets_at) {
@@ -231,7 +231,7 @@ export function FairUseStatus() {
               <p className="text-xs font-medium text-red-400 mt-2">Budget exhausted — transcription paused</p>
             )}
             {resetLabel && (
-              <p className="text-xs text-text-quaternary mt-1">{resetLabel}</p>
+              <p className="text-xs text-muted-foreground mt-1">{resetLabel}</p>
             )}
           </div>
         );
@@ -240,16 +240,16 @@ export function FairUseStatus() {
       {/* Message — only when present */}
       {status?.message && (
         <div className="flex gap-2.5 px-1">
-          <Info className="w-4 h-4 text-text-quaternary flex-shrink-0 mt-0.5" />
+          <Info className="w-4 h-4 text-muted-foreground flex-shrink-0 mt-0.5" />
           <p className="text-sm text-text-tertiary leading-relaxed">{status.message}</p>
         </div>
       )}
 
       {/* About footnote */}
       <div className="px-1 pt-2">
-        <h4 className="text-xs font-medium text-text-quaternary mb-1">About Fair Use</h4>
-        <p className="text-xs text-text-quaternary/70 leading-relaxed">
-          Omi is designed for personal conversations, meetings, and live interactions. Usage is measured by real speech
+        <h4 className="text-xs font-medium text-muted-foreground mb-1">About Fair Use</h4>
+        <p className="text-xs text-muted-foreground/70 leading-relaxed">
+          Nooto is designed for personal conversations, meetings, and live interactions. Usage is measured by real speech
           time detected, not connection time. If usage significantly exceeds normal patterns for non-personal content,
           adjustments may apply.
         </p>

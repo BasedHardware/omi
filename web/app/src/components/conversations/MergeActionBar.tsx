@@ -39,7 +39,7 @@ export function MergeActionBar({
         inline ? 'flex-wrap gap-2' : 'gap-3',
         'px-4 py-2.5 rounded-xl',
         'bg-bg-tertiary/80',
-        'border border-bg-tertiary',
+        'border border-border',
         !inline && [
           'fixed bottom-6 left-1/2 -translate-x-1/2 z-50',
           'rounded-2xl backdrop-blur-lg',
@@ -67,7 +67,7 @@ export function MergeActionBar({
       {/* Selection count badge */}
       <div className={cn(
         'px-3 py-1.5 rounded-full',
-        'bg-purple-primary/20 text-purple-primary',
+        'bg-brand/20 text-brand',
         'text-sm font-medium'
       )}>
         {selectedCount} selected
@@ -84,7 +84,7 @@ export function MergeActionBar({
             'transition-all duration-150',
             canMove && !isLoading
               ? 'bg-bg-tertiary text-text-primary hover:bg-bg-quaternary'
-              : 'bg-bg-tertiary text-text-quaternary cursor-not-allowed',
+              : 'bg-bg-tertiary text-muted-foreground cursor-not-allowed',
             inline && 'flex-1'
           )}
         >
@@ -104,7 +104,7 @@ export function MergeActionBar({
             'transition-all duration-150',
             canDelete && !isLoading
               ? 'bg-error/10 text-error hover:bg-error/20'
-              : 'bg-bg-tertiary text-text-quaternary cursor-not-allowed',
+              : 'bg-bg-tertiary text-muted-foreground cursor-not-allowed',
             inline && 'flex-1'
           )}
         >
@@ -122,8 +122,8 @@ export function MergeActionBar({
           'text-sm font-medium',
           'transition-all duration-150',
           canMerge && !isLoading
-            ? 'bg-purple-primary text-white hover:bg-purple-primary/90'
-            : 'bg-bg-tertiary text-text-quaternary cursor-not-allowed',
+            ? 'bg-brand text-white hover:bg-brand/90'
+            : 'bg-bg-tertiary text-muted-foreground cursor-not-allowed',
           inline && 'flex-1'
         )}
       >

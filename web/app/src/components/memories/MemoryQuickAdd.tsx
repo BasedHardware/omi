@@ -63,9 +63,9 @@ export function MemoryQuickAdd({ onAdd, disabled = false }: MemoryQuickAddProps)
         disabled={disabled}
         className={cn(
           'flex items-center gap-2 w-full px-3 py-2.5',
-          'rounded-lg border border-dashed border-bg-quaternary',
+          'rounded-lg border border-dashed border-border',
           'text-text-tertiary hover:text-text-secondary',
-          'hover:border-purple-primary/50 hover:bg-bg-tertiary',
+          'hover:border-brand/50 hover:bg-bg-tertiary',
           'transition-all duration-150',
           disabled && 'opacity-50 cursor-not-allowed'
         )}
@@ -84,7 +84,7 @@ export function MemoryQuickAdd({ onAdd, disabled = false }: MemoryQuickAddProps)
       transition={{ duration: 0.15 }}
       onSubmit={handleSubmit}
       className={cn(
-        'rounded-lg border border-purple-primary/50',
+        'rounded-lg border border-brand/50',
         'bg-bg-secondary p-3 space-y-3'
       )}
     >
@@ -99,7 +99,7 @@ export function MemoryQuickAdd({ onAdd, disabled = false }: MemoryQuickAddProps)
         disabled={isSubmitting}
         className={cn(
           'w-full bg-transparent',
-          'text-sm text-text-primary placeholder:text-text-quaternary',
+          'text-sm text-text-primary placeholder:text-muted-foreground',
           'outline-none'
         )}
       />
@@ -151,7 +151,7 @@ export function MemoryQuickAdd({ onAdd, disabled = false }: MemoryQuickAddProps)
             disabled={!content.trim() || isSubmitting}
             className={cn(
               'px-3 py-1 text-xs rounded',
-              'bg-purple-primary hover:bg-purple-secondary',
+              'bg-brand hover:bg-brand-light',
               'text-white font-medium',
               'transition-colors',
               'disabled:opacity-50 disabled:cursor-not-allowed'
@@ -163,7 +163,7 @@ export function MemoryQuickAdd({ onAdd, disabled = false }: MemoryQuickAddProps)
       </div>
 
       {/* Hint */}
-      <p className="text-[10px] text-text-quaternary">
+      <p className="text-[10px] text-muted-foreground">
         Press Enter to add, Escape to cancel
       </p>
     </motion.form>

@@ -102,7 +102,7 @@ export function CollectionPageJsonLd({ name, description, url }: CollectionPageJ
     url: `https://omi.me${url}`,
     isPartOf: {
       '@type': 'WebSite',
-      name: 'Omi',
+      name: 'Nooto',
       url: 'https://omi.me',
     },
   };

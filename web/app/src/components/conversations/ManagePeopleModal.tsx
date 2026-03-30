@@ -114,14 +114,14 @@ export function ManagePeopleModal({ isOpen, onClose }: ManagePeopleModalProps) {
             className={cn(
               'fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50',
               'w-full max-w-md bg-bg-secondary rounded-2xl',
-              'shadow-xl border border-bg-tertiary',
+              'shadow-xl border border-border',
               'max-h-[85vh] overflow-hidden flex flex-col'
             )}
           >
             {/* Header */}
-            <div className="flex items-center justify-between p-4 border-b border-bg-tertiary">
+            <div className="flex items-center justify-between p-4 border-b border-border">
               <div className="flex items-center gap-2">
-                <User className="w-5 h-5 text-purple-primary" />
+                <User className="w-5 h-5 text-brand" />
                 <h2 className="text-lg font-semibold text-text-primary">Manage People</h2>
               </div>
               <button
@@ -143,7 +143,7 @@ export function ManagePeopleModal({ isOpen, onClose }: ManagePeopleModalProps) {
 
               {/* Add Person Form */}
               {showAddForm ? (
-                <div className="mb-4 p-3 rounded-lg bg-bg-tertiary border border-bg-quaternary">
+                <div className="mb-4 p-3 rounded-lg bg-bg-tertiary border border-border">
                   <p className="text-sm font-medium text-text-primary mb-2">Add New Person</p>
                   <div className="flex gap-2">
                     <input
@@ -154,9 +154,9 @@ export function ManagePeopleModal({ isOpen, onClose }: ManagePeopleModalProps) {
                       autoFocus
                       className={cn(
                         'flex-1 px-3 py-2 rounded-lg',
-                        'bg-bg-secondary border border-bg-quaternary',
-                        'text-sm text-text-primary placeholder:text-text-quaternary',
-                        'focus:outline-none focus:ring-2 focus:ring-purple-primary/50'
+                        'bg-bg-secondary border border-border',
+                        'text-sm text-text-primary placeholder:text-muted-foreground',
+                        'focus:outline-none focus:ring-2 focus:ring-ring'
                       )}
                       onKeyDown={(e) => {
                         if (e.key === 'Enter') handleCreatePerson();
@@ -171,7 +171,7 @@ export function ManagePeopleModal({ isOpen, onClose }: ManagePeopleModalProps) {
                       disabled={!newPersonName.trim() || actionLoading === 'new'}
                       className={cn(
                         'px-4 py-2 rounded-lg text-sm font-medium',
-                        'bg-purple-primary hover:bg-purple-secondary text-white',
+                        'bg-brand hover:bg-brand-light text-white',
                         'disabled:opacity-50 disabled:cursor-not-allowed',
                         'transition-colors'
                       )}
@@ -198,7 +198,7 @@ export function ManagePeopleModal({ isOpen, onClose }: ManagePeopleModalProps) {
                   onClick={() => setShowAddForm(true)}
                   className={cn(
                     'mb-4 w-full flex items-center justify-center gap-2 p-3 rounded-lg',
-                    'border border-dashed border-bg-quaternary',
+                    'border border-dashed border-border',
                     'text-sm font-medium text-text-tertiary',
                     'hover:bg-bg-tertiary hover:text-text-secondary hover:border-text-quaternary',
                     'transition-colors'
@@ -233,11 +233,11 @@ export function ManagePeopleModal({ isOpen, onClose }: ManagePeopleModalProps) {
                       key={person.id}
                       className={cn(
                         'flex items-center gap-3 p-3 rounded-lg',
-                        'bg-bg-tertiary border border-bg-quaternary'
+                        'bg-bg-tertiary border border-border'
                       )}
                     >
                       {/* Avatar */}
-                      <div className="w-10 h-10 rounded-full bg-purple-primary/20 flex items-center justify-center text-purple-primary font-medium">
+                      <div className="w-10 h-10 rounded-full bg-brand/20 flex items-center justify-center text-brand font-medium">
                         {person.name.charAt(0).toUpperCase()}
                       </div>
 
@@ -250,7 +250,7 @@ export function ManagePeopleModal({ isOpen, onClose }: ManagePeopleModalProps) {
                           autoFocus
                           className={cn(
                             'flex-1 px-3 py-1.5 rounded-lg',
-                            'bg-bg-secondary border border-purple-primary',
+                            'bg-bg-secondary border border-brand',
                             'text-sm text-text-primary',
                             'focus:outline-none'
                           )}
@@ -345,7 +345,7 @@ export function ManagePeopleModal({ isOpen, onClose }: ManagePeopleModalProps) {
             </div>
 
             {/* Footer */}
-            <div className="p-4 border-t border-bg-tertiary">
+            <div className="p-4 border-t border-border">
               <button
                 onClick={onClose}
                 className={cn(

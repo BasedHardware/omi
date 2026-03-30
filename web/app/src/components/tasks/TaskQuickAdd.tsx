@@ -72,9 +72,9 @@ export function TaskQuickAdd({ onAdd, disabled = false, defaultDueDate }: TaskQu
         disabled={disabled}
         className={cn(
           'flex items-center gap-2 w-full px-3 py-2.5',
-          'rounded-lg border border-dashed border-bg-quaternary',
+          'rounded-lg border border-dashed border-border',
           'text-text-tertiary hover:text-text-secondary',
-          'hover:border-purple-primary/50 hover:bg-bg-tertiary',
+          'hover:border-brand/50 hover:bg-bg-tertiary',
           'transition-all duration-150',
           disabled && 'opacity-50 cursor-not-allowed'
         )}
@@ -93,7 +93,7 @@ export function TaskQuickAdd({ onAdd, disabled = false, defaultDueDate }: TaskQu
       transition={{ duration: 0.15 }}
       onSubmit={handleSubmit}
       className={cn(
-        'rounded-lg border border-purple-primary/50',
+        'rounded-lg border border-brand/50',
         'bg-bg-secondary p-3 space-y-3'
       )}
     >
@@ -108,7 +108,7 @@ export function TaskQuickAdd({ onAdd, disabled = false, defaultDueDate }: TaskQu
         disabled={isSubmitting}
         className={cn(
           'w-full bg-transparent',
-          'text-sm text-text-primary placeholder:text-text-quaternary',
+          'text-sm text-text-primary placeholder:text-muted-foreground',
           'outline-none'
         )}
       />
@@ -118,7 +118,7 @@ export function TaskQuickAdd({ onAdd, disabled = false, defaultDueDate }: TaskQu
         {/* Date picker */}
         <div className="flex items-center gap-2">
           <div className="relative">
-            <Calendar className="w-4 h-4 text-text-quaternary absolute left-2 top-1/2 -translate-y-1/2 pointer-events-none" />
+            <Calendar className="w-4 h-4 text-muted-foreground absolute left-2 top-1/2 -translate-y-1/2 pointer-events-none" />
             <input
               type="date"
               value={dueDate}
@@ -128,7 +128,7 @@ export function TaskQuickAdd({ onAdd, disabled = false, defaultDueDate }: TaskQu
                 'pl-8 pr-2 py-1 text-xs rounded',
                 'bg-bg-secondary border border-transparent',
                 'text-text-secondary',
-                'focus:border-purple-primary/50 focus:outline-none',
+                'focus:border-brand/50 focus:outline-none',
                 'transition-colors'
               )}
             />
@@ -137,7 +137,7 @@ export function TaskQuickAdd({ onAdd, disabled = false, defaultDueDate }: TaskQu
             <button
               type="button"
               onClick={() => setDueDate('')}
-              className="p-1 text-text-quaternary hover:text-text-secondary"
+              className="p-1 text-muted-foreground hover:text-text-secondary"
             >
               <X className="w-3 h-3" />
             </button>
@@ -163,7 +163,7 @@ export function TaskQuickAdd({ onAdd, disabled = false, defaultDueDate }: TaskQu
             disabled={!value.trim() || isSubmitting}
             className={cn(
               'px-3 py-1 text-xs rounded',
-              'bg-purple-primary hover:bg-purple-secondary',
+              'bg-brand hover:bg-brand-light',
               'text-white font-medium',
               'transition-colors',
               'disabled:opacity-50 disabled:cursor-not-allowed'
@@ -175,7 +175,7 @@ export function TaskQuickAdd({ onAdd, disabled = false, defaultDueDate }: TaskQu
       </div>
 
       {/* Hint */}
-      <p className="text-[10px] text-text-quaternary">
+      <p className="text-[10px] text-muted-foreground">
         Press Enter to add, Escape to cancel
       </p>
     </motion.form>

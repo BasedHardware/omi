@@ -219,32 +219,32 @@ export function PlansSheet({
                     'fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-[101]',
                     'w-[90vw] max-w-[500px] max-h-[85vh] overflow-y-auto',
                     'bg-bg-secondary rounded-2xl',
-                    'border border-bg-tertiary',
+                    'border border-border',
                     'shadow-2xl',
                     'focus:outline-none'
                   )}
                 >
                   {/* Header */}
-                  <div className="sticky top-0 bg-bg-secondary z-10 px-6 pt-6 pb-4 border-b border-bg-tertiary">
+                  <div className="sticky top-0 bg-bg-secondary z-10 px-6 pt-6 pb-4 border-b border-border">
                     <Dialog.Close asChild>
                       <button
                         className="absolute top-4 right-4 p-1.5 rounded-lg hover:bg-bg-tertiary transition-colors"
                         aria-label="Close"
                       >
-                        <X className="w-4 h-4 text-text-quaternary" />
+                        <X className="w-4 h-4 text-muted-foreground" />
                       </button>
                     </Dialog.Close>
 
                     <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-full bg-purple-primary/10 flex items-center justify-center">
-                        <Crown className="w-5 h-5 text-purple-primary" />
+                      <div className="w-10 h-10 rounded-full bg-brand/10 flex items-center justify-center">
+                        <Crown className="w-5 h-5 text-brand" />
                       </div>
                       <div>
                         <Dialog.Title className="text-lg font-semibold text-text-primary">
                           {isUnlimited && !isCanceling_ ? 'Manage Your Plan' : 'Choose Your Plan'}
                         </Dialog.Title>
                         {isUnlimited && subscription?.current_period_end && (
-                          <p className="text-xs text-text-quaternary">
+                          <p className="text-xs text-muted-foreground">
                             {isCanceling_
                               ? `Cancels on ${formatDate(subscription.current_period_end)}`
                               : `Renews ${formatDate(subscription.current_period_end)}`
@@ -259,7 +259,7 @@ export function PlansSheet({
                   <div className="p-6 space-y-6">
                     {isLoadingPlans ? (
                       <div className="flex items-center justify-center py-12">
-                        <Loader2 className="w-6 h-6 text-purple-primary animate-spin" />
+                        <Loader2 className="w-6 h-6 text-brand animate-spin" />
                       </div>
                     ) : (
                       <>
@@ -277,12 +277,12 @@ export function PlansSheet({
                                 className={cn(
                                   'relative p-4 rounded-xl border-2 text-left transition-all',
                                   isSelected
-                                    ? 'border-purple-primary bg-purple-primary/5'
-                                    : 'border-bg-tertiary hover:border-bg-quaternary bg-bg-tertiary/50'
+                                    ? 'border-brand bg-brand/5'
+                                    : 'border-border hover:border-border bg-bg-tertiary/50'
                                 )}
                               >
                                 {isAnnual && (
-                                  <span className="absolute -top-2 right-2 px-2 py-0.5 bg-purple-primary text-white text-[10px] font-medium rounded-full">
+                                  <span className="absolute -top-2 right-2 px-2 py-0.5 bg-brand text-white text-[10px] font-medium rounded-full">
                                     POPULAR
                                   </span>
                                 )}
@@ -294,7 +294,7 @@ export function PlansSheet({
                                   {option.price_string}
                                 </p>
                                 {option.description && (
-                                  <p className="text-xs text-purple-primary mt-1">
+                                  <p className="text-xs text-brand mt-1">
                                     {option.description}
                                   </p>
                                 )}
@@ -316,7 +316,7 @@ export function PlansSheet({
                           <ul className="space-y-2">
                             {defaultFeatures.map((feature, idx) => (
                               <li key={idx} className="flex items-start gap-2">
-                                <Check className="w-4 h-4 text-purple-primary flex-shrink-0 mt-0.5" />
+                                <Check className="w-4 h-4 text-brand flex-shrink-0 mt-0.5" />
                                 <span className="text-sm text-text-tertiary">{feature}</span>
                               </li>
                             ))}
@@ -337,8 +337,8 @@ export function PlansSheet({
                           disabled={isLoading || !selectedPriceId || (isUnlimited && !isCanceling_ && selectedOption?.is_active)}
                           className={cn(
                             'w-full py-3 rounded-xl font-medium transition-colors',
-                            'bg-purple-primary text-white',
-                            'hover:bg-purple-secondary',
+                            'bg-brand text-white',
+                            'hover:bg-brand-light',
                             'disabled:opacity-50 disabled:cursor-not-allowed'
                           )}
                         >
@@ -360,7 +360,7 @@ export function PlansSheet({
 
                         {/* Secondary Actions */}
                         {isUnlimited && (
-                          <div className="pt-4 border-t border-bg-tertiary space-y-3">
+                          <div className="pt-4 border-t border-border space-y-3">
                             <button
                               onClick={handleManagePayment}
                               disabled={isLoading}

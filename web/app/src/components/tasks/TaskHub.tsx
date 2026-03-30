@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useCallback, useMemo, useEffect } from 'react';
-import { LayoutGrid, List, RefreshCw, CheckSquare, Square, Search } from 'lucide-react';
+import { LayoutGrid, List, RefreshCw, CheckSquare, Square, Search, AlertCircle, CalendarDays, CalendarPlus, CalendarRange, ClipboardList, Inbox, CircleCheck } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useActionItems } from '@/hooks/useActionItems';
 import { useTaskKeyboardShortcuts } from '@/hooks/useTaskKeyboardShortcuts';
@@ -338,107 +338,76 @@ export function TaskHub() {
       {/* Page Header */}
       <PageHeader title="Tasks" icon={CheckSquare} />
 
-      {/* Toolbar */}
-      <div className="flex-shrink-0 bg-bg-secondary border-b border-bg-tertiary">
-        <div className="py-3 px-4">
-          <div className="flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            {/* View mode toggle */}
-            <div className="flex items-center gap-1 p-1 bg-bg-tertiary rounded-lg">
+      {/* Toolbar — compact, underline tabs */}
+      <div className="flex-shrink-0 border-b border-border/50 px-4 flex items-center justify-between gap-4">
+        <div className="flex items-center gap-4">
+          {/* View tabs — underline style */}
+          <div className="flex items-center gap-3">
             <button
               onClick={() => setViewMode('hub')}
               className={cn(
-                'flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm',
-                'transition-colors',
-                viewMode === 'hub'
-                  ? 'bg-purple-primary text-white'
-                  : 'text-text-tertiary hover:text-text-secondary'
+                'flex items-center gap-1.5 py-2.5 text-sm font-medium relative transition-colors',
+                viewMode === 'hub' ? 'text-primary' : 'text-muted-foreground hover:text-foreground'
               )}
             >
-              <LayoutGrid className="w-4 h-4" />
+              <LayoutGrid className="w-3.5 h-3.5" />
               Hub
+              {viewMode === 'hub' && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary rounded-full" />}
             </button>
             <button
-              onClick={() => {
-                setViewMode('list');
-                setSelectedDate(null); // Clear date filter when switching to list
-              }}
+              onClick={() => { setViewMode('list'); setSelectedDate(null); }}
               className={cn(
-                'flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm',
-                'transition-colors',
-                viewMode === 'list'
-                  ? 'bg-purple-primary text-white'
-                  : 'text-text-tertiary hover:text-text-secondary'
+                'flex items-center gap-1.5 py-2.5 text-sm font-medium relative transition-colors',
+                viewMode === 'list' ? 'text-primary' : 'text-muted-foreground hover:text-foreground'
               )}
             >
-              <List className="w-4 h-4" />
+              <List className="w-3.5 h-3.5" />
               List
+              {viewMode === 'list' && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary rounded-full" />}
             </button>
-            </div>
-
-            {/* Select mode toggle - moved to left */}
-            {filteredItems.filter((i) => !i.completed).length > 0 && (
-              <button
-                onClick={toggleSelectMode}
-                className={cn(
-                  'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm',
-                  'transition-colors',
-                  isSelectMode
-                    ? 'bg-purple-primary/10 text-purple-primary'
-                    : 'text-text-tertiary hover:text-text-primary hover:bg-bg-tertiary'
-                )}
-              >
-                {isSelectMode ? (
-                  <>
-                    <CheckSquare className="w-4 h-4" />
-                    <span>Selecting</span>
-                  </>
-                ) : (
-                  <>
-                    <Square className="w-4 h-4" />
-                    <span>Select</span>
-                  </>
-                )}
-              </button>
-            )}
-
-            {/* Search */}
-            <div className="relative flex-1 max-w-sm">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-quaternary" />
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search tasks..."
-                className={cn(
-                  'w-full pl-9 pr-4 py-1.5 rounded-lg',
-                  'bg-bg-tertiary border border-bg-quaternary',
-                  'text-sm text-text-primary',
-                  'focus:outline-none focus:ring-2 focus:ring-purple-primary/50',
-                  'placeholder:text-text-quaternary'
-                )}
-              />
-            </div>
           </div>
 
-          {/* Actions */}
-          <div className="flex items-center gap-2">
+          {/* Select toggle */}
+          {filteredItems.filter((i) => !i.completed).length > 0 && (
             <button
-              onClick={refresh}
-              disabled={loading}
+              onClick={toggleSelectMode}
               className={cn(
-                'p-2 rounded-lg',
-                'text-text-tertiary hover:text-text-primary',
-                'hover:bg-bg-tertiary transition-colors',
-                'disabled:opacity-50 disabled:cursor-not-allowed'
+                'flex items-center gap-1 text-xs transition-colors',
+                isSelectMode ? 'text-primary' : 'text-muted-foreground hover:text-foreground'
               )}
-              title="Refresh tasks"
             >
-              <RefreshCw className={cn('w-5 h-5', loading && 'animate-spin')} />
+              {isSelectMode ? <CheckSquare className="w-3.5 h-3.5" /> : <Square className="w-3.5 h-3.5" />}
+              {isSelectMode ? 'Selecting' : 'Select'}
             </button>
+          )}
+
+          {/* Search */}
+          <div className="relative max-w-xs">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search tasks..."
+              className={cn(
+                'w-full pl-8 pr-3 py-1.5 rounded-md',
+                'bg-transparent border border-border',
+                'text-xs text-foreground',
+                'focus:outline-none focus:ring-1 focus:ring-ring',
+                'placeholder:text-muted-foreground'
+              )}
+            />
           </div>
         </div>
-        </div>
+
+        <button
+          onClick={refresh}
+          disabled={loading}
+          className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent transition-colors disabled:opacity-50"
+          title="Refresh"
+        >
+          <RefreshCw className={cn('w-3.5 h-3.5', loading && 'animate-spin')} />
+        </button>
       </div>
 
       {/* Content - Two column layout for Hub view */}
@@ -488,7 +457,7 @@ export function TaskHub() {
           {isEmpty && (
             <div className="flex flex-col items-center justify-center py-16 text-center">
               <div className="w-16 h-16 rounded-2xl bg-bg-tertiary flex items-center justify-center mb-4">
-                <CheckSquare className="w-8 h-8 text-text-quaternary" />
+                <CheckSquare className="w-8 h-8 text-muted-foreground" />
               </div>
               <h3 className="text-lg font-medium text-text-primary mb-2">
                 No tasks yet
@@ -510,7 +479,7 @@ export function TaskHub() {
                   </span>
                   <button
                     onClick={() => setSearchQuery('')}
-                    className="text-xs text-purple-primary hover:underline"
+                    className="text-xs text-brand hover:underline"
                   >
                     Clear search
                   </button>
@@ -525,7 +494,7 @@ export function TaskHub() {
                   </span>
                   <button
                     onClick={() => setSelectedDate(null)}
-                    className="text-xs text-purple-primary hover:underline"
+                    className="text-xs text-brand hover:underline"
                   >
                     Show all
                   </button>
@@ -557,7 +526,7 @@ export function TaskHub() {
                   {filteredView.pending.length > 0 && (
                     <TaskGroup
                       title="Pending"
-                      icon="📋"
+                      icon={<ClipboardList className="w-4 h-4" />}
                       tasks={filteredView.pending}
                       {...taskGroupProps}
                     />
@@ -565,7 +534,7 @@ export function TaskHub() {
                   {filteredView.completed.length > 0 && (
                     <TaskGroup
                       title="Completed"
-                      icon="✓"
+                      icon={<CircleCheck className="w-4 h-4" />}
                       tasks={filteredView.completed}
                       collapsible
                       defaultCollapsed
@@ -583,25 +552,25 @@ export function TaskHub() {
                 <div className="space-y-4">
                   <TaskGroup
                     title="Priority Tasks"
-                    icon="🔥"
+                    icon={<AlertCircle className="w-4 h-4" />}
                     tasks={filteredGroupedItems.overdue}
                     {...taskGroupProps}
                   />
                   <TaskGroup
                     title="Today"
-                    icon="📅"
+                    icon={<CalendarDays className="w-4 h-4" />}
                     tasks={filteredGroupedItems.today}
                     {...taskGroupProps}
                   />
                   <TaskGroup
                     title="Tomorrow"
-                    icon="📆"
+                    icon={<CalendarPlus className="w-4 h-4" />}
                     tasks={filteredGroupedItems.tomorrow}
                     {...taskGroupProps}
                   />
                   <TaskGroup
                     title="This Week"
-                    icon="🗓"
+                    icon={<CalendarRange className="w-4 h-4" />}
                     tasks={filteredGroupedItems.thisWeek}
                     collapsible
                     defaultCollapsed={filteredGroupedItems.thisWeek.length > 5}
@@ -609,7 +578,7 @@ export function TaskHub() {
                   />
                   <TaskGroup
                     title="Later"
-                    icon="📋"
+                    icon={<ClipboardList className="w-4 h-4" />}
                     tasks={filteredGroupedItems.later}
                     collapsible
                     defaultCollapsed={filteredGroupedItems.later.length > 5}
@@ -617,7 +586,7 @@ export function TaskHub() {
                   />
                   <TaskGroup
                     title="No Due Date"
-                    icon="📭"
+                    icon={<Inbox className="w-4 h-4" />}
                     tasks={filteredGroupedItems.noDueDate}
                     collapsible
                     defaultCollapsed
@@ -625,7 +594,7 @@ export function TaskHub() {
                   />
                   <TaskGroup
                     title="Completed"
-                    icon="✓"
+                    icon={<CircleCheck className="w-4 h-4" />}
                     tasks={filteredGroupedItems.completed}
                     collapsible
                     defaultCollapsed
@@ -640,13 +609,13 @@ export function TaskHub() {
 
         {/* Right Column - Dashboard (sticky sidebar) - only in Hub view */}
         {viewMode === 'hub' && (
-          <div className="w-full lg:w-[380px] lg:flex-shrink-0 p-4 lg:pl-6 lg:border-l border-bg-tertiary order-first lg:order-last lg:h-full lg:overflow-y-auto">
+          <div className="w-full lg:w-[380px] lg:flex-shrink-0 p-4 lg:pl-6 lg:border-l border-border order-first lg:order-last lg:h-full lg:overflow-y-auto">
             {/* Loading state for dashboard */}
             {loading && items.length === 0 && (
               <div className="space-y-4">
-                <div className="h-32 bg-bg-secondary border border-bg-tertiary rounded-xl animate-pulse" />
-                <div className="h-24 bg-bg-secondary border border-bg-tertiary rounded-xl animate-pulse" />
-                <div className="h-64 bg-bg-secondary border border-bg-tertiary rounded-xl animate-pulse" />
+                <div className="h-32 bg-bg-secondary border border-border rounded-xl animate-pulse" />
+                <div className="h-24 bg-bg-secondary border border-border rounded-xl animate-pulse" />
+                <div className="h-64 bg-bg-secondary border border-border rounded-xl animate-pulse" />
               </div>
             )}
 

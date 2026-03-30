@@ -2,7 +2,7 @@
 
 import { useRef, useState } from 'react';
 import { motion } from 'framer-motion';
-import { Plus, Star, Pencil, Trash2, Inbox, Briefcase, Heart, Users } from 'lucide-react';
+import { Plus, Star, Pencil, Trash2, Inbox, Briefcase, Heart, Users, Folder as FolderIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { Folder } from '@/types/folder';
 
@@ -107,7 +107,7 @@ export function FolderTabs({
             animate={{ opacity: 1, scale: 1 }}
             className={cn(
               'fixed z-50 py-1 rounded-lg',
-              'bg-bg-secondary border border-bg-tertiary',
+              'bg-bg-secondary border border-border',
               'shadow-lg min-w-[140px]'
             )}
             style={{ left: contextMenu.x, top: contextMenu.y }}
@@ -177,7 +177,7 @@ function TabButton({
         'text-sm font-medium whitespace-nowrap',
         'transition-all duration-150',
         isSelected
-          ? 'bg-purple-primary text-white'
+          ? 'bg-brand text-white'
           : 'bg-bg-tertiary text-text-secondary hover:bg-bg-quaternary hover:text-text-primary'
       )}
       style={
@@ -186,9 +186,9 @@ function TabButton({
           : undefined
       }
     >
-      {/* Icon or emoji */}
+      {/* Icon */}
       {icon && <span className={cn(isSelected ? 'text-white' : 'text-text-tertiary')}>{icon}</span>}
-      {emoji && <span>{emoji}</span>}
+      {!icon && <span className={cn(isSelected ? 'text-white' : 'text-text-tertiary')}><FolderIcon className="w-3.5 h-3.5" /></span>}
 
       {/* Label */}
       <span>{label}</span>

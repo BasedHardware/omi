@@ -336,7 +336,7 @@ export function MemoriesPage() {
       <PageHeader title="Memories" icon={Brain} />
 
       {/* Toolbar */}
-      <header className="flex-shrink-0 bg-bg-secondary border-b border-bg-tertiary w-full max-w-full">
+      <header className="flex-shrink-0 bg-bg-secondary border-b border-border w-full max-w-full">
         <div className="py-3 px-4 max-w-full">
           {/* Row 1: View toggle + Select + Sort + Filter + Search + Refresh */}
           <div className="flex items-center gap-3 max-w-full">
@@ -349,7 +349,7 @@ export function MemoriesPage() {
                     'flex items-center gap-1.5 px-2.5 py-1 rounded-md text-sm font-medium',
                     'transition-all duration-150',
                     viewMode === 'list'
-                      ? 'bg-purple-primary text-white'
+                      ? 'bg-brand text-white'
                       : 'text-text-tertiary hover:text-text-primary'
                   )}
                 >
@@ -362,7 +362,7 @@ export function MemoriesPage() {
                     'flex items-center gap-1.5 px-2.5 py-1 rounded-md text-sm font-medium',
                     'transition-all duration-150',
                     viewMode === 'graph'
-                      ? 'bg-purple-primary text-white'
+                      ? 'bg-brand text-white'
                       : 'text-text-tertiary hover:text-text-primary'
                   )}
                 >
@@ -375,7 +375,7 @@ export function MemoriesPage() {
                     'flex items-center gap-1.5 px-2.5 py-1 rounded-md text-sm font-medium',
                     'transition-all duration-150',
                     viewMode === 'tags'
-                      ? 'bg-purple-primary text-white'
+                      ? 'bg-brand text-white'
                       : 'text-text-tertiary hover:text-text-primary'
                   )}
                 >
@@ -392,7 +392,7 @@ export function MemoriesPage() {
                     'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm',
                     'transition-colors',
                     isSelectMode
-                      ? 'bg-purple-primary/10 text-purple-primary'
+                      ? 'bg-brand/10 text-brand'
                       : 'text-text-tertiary hover:text-text-primary hover:bg-bg-tertiary'
                   )}
                 >
@@ -417,7 +417,7 @@ export function MemoriesPage() {
                     onClick={() => setShowSortMenu(!showSortMenu)}
                     className={cn(
                       'flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg',
-                      'bg-bg-tertiary border border-bg-quaternary',
+                      'bg-bg-tertiary border border-border',
                       'text-sm text-text-secondary hover:text-text-primary',
                       'transition-colors'
                     )}
@@ -432,7 +432,7 @@ export function MemoriesPage() {
                         className="fixed inset-0 z-40"
                         onClick={() => setShowSortMenu(false)}
                       />
-                      <div className="absolute left-0 top-full mt-1 z-50 bg-bg-secondary border border-bg-tertiary rounded-lg shadow-lg py-1 min-w-[160px]">
+                      <div className="absolute left-0 top-full mt-1 z-50 bg-bg-secondary border border-border rounded-lg shadow-lg py-1 min-w-[160px]">
                         {SORT_OPTIONS.map((option) => (
                           <button
                             key={option.value}
@@ -444,7 +444,7 @@ export function MemoriesPage() {
                               'w-full text-left px-3 py-2 text-sm',
                               'hover:bg-bg-tertiary transition-colors',
                               sortBy === option.value
-                                ? 'text-purple-primary'
+                                ? 'text-brand'
                                 : 'text-text-secondary'
                             )}
                           >
@@ -469,7 +469,7 @@ export function MemoriesPage() {
             {/* Center: Search (only in list view) */}
             {viewMode === 'list' && (
               <div className="relative flex-1 max-w-sm">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-quaternary" />
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                 <input
                   type="text"
                   value={searchQuery}
@@ -477,10 +477,10 @@ export function MemoriesPage() {
                   placeholder="Search memories..."
                   className={cn(
                     'w-full pl-9 pr-4 py-1.5 rounded-lg',
-                    'bg-bg-tertiary border border-bg-quaternary',
+                    'bg-bg-tertiary border border-border',
                     'text-sm text-text-primary',
-                    'focus:outline-none focus:ring-2 focus:ring-purple-primary/50',
-                    'placeholder:text-text-quaternary'
+                    'focus:outline-none focus:ring-2 focus:ring-ring',
+                    'placeholder:text-muted-foreground'
                   )}
                 />
               </div>
@@ -553,7 +553,7 @@ export function MemoriesPage() {
                     </span>
                     <button
                       onClick={() => setSelectedTag(null)}
-                      className="text-xs text-purple-primary hover:underline"
+                      className="text-xs text-brand hover:underline"
                     >
                       Clear filter
                     </button>
@@ -587,7 +587,7 @@ export function MemoriesPage() {
               <Suspense
                 fallback={
                   <div className="flex items-center justify-center h-full">
-                    <Loader2 className="w-8 h-8 animate-spin text-purple-primary" />
+                    <Loader2 className="w-8 h-8 animate-spin text-brand" />
                     <span className="ml-2 text-text-tertiary">Loading graph...</span>
                   </div>
                 }
@@ -598,7 +598,7 @@ export function MemoriesPage() {
               <Suspense
                 fallback={
                   <div className="flex items-center justify-center h-full">
-                    <Loader2 className="w-8 h-8 animate-spin text-purple-primary" />
+                    <Loader2 className="w-8 h-8 animate-spin text-brand" />
                     <span className="ml-2 text-text-tertiary">Loading insights...</span>
                   </div>
                 }
@@ -617,25 +617,25 @@ export function MemoriesPage() {
 
           {/* Right Column - Insights sidebar */}
           {viewMode === 'list' && (
-            <div className="w-full lg:w-[380px] lg:flex-shrink-0 p-4 lg:pl-6 lg:border-l border-bg-tertiary space-y-4 lg:h-full lg:overflow-y-auto min-w-0 max-w-full order-2">
+            <div className="w-full lg:w-[380px] lg:flex-shrink-0 p-4 lg:pl-6 lg:border-l border-border space-y-4 lg:h-full lg:overflow-y-auto min-w-0 max-w-full order-2">
               {/* Loading state */}
               {loading && memories.length === 0 ? (
                 <div className="space-y-4">
-                  <div className="h-32 bg-bg-secondary border border-bg-tertiary rounded-xl animate-pulse" />
-                  <div className="h-44 bg-bg-secondary border border-bg-tertiary rounded-xl animate-pulse" />
+                  <div className="h-32 bg-bg-secondary border border-border rounded-xl animate-pulse" />
+                  <div className="h-44 bg-bg-secondary border border-border rounded-xl animate-pulse" />
                 </div>
               ) : (
                 <>
                   {/* Stats Card */}
-                  <div className="rounded-xl bg-bg-secondary border border-bg-tertiary p-4">
+                  <div className="rounded-xl bg-bg-secondary border border-border p-4">
                     <h3 className="text-sm font-medium text-text-tertiary uppercase tracking-wider mb-3 flex items-center gap-2">
-                      <TrendingUp className="w-4 h-4 text-purple-primary" />
+                      <TrendingUp className="w-4 h-4 text-brand" />
                       Insights
                     </h3>
 
                     {/* Total memories */}
                     <div className="mb-3">
-                      <div className="text-2xl font-bold text-purple-primary">{memories.length}</div>
+                      <div className="text-2xl font-bold text-brand">{memories.length}</div>
                       <div className="text-sm text-text-secondary">Total Memories</div>
                       {recentMemoriesCount > 0 && (
                         <div className="text-xs text-green-400 mt-1">
@@ -659,8 +659,8 @@ export function MemoriesPage() {
                     {/* Activity Chart (30 days) */}
                     <div>
                       <div className="flex items-center justify-between mb-2">
-                        <span className="text-xs text-text-quaternary">Activity (30 days)</span>
-                        <span className="text-xs text-text-quaternary">
+                        <span className="text-xs text-muted-foreground">Activity (30 days)</span>
+                        <span className="text-xs text-muted-foreground">
                           {recentMemoriesCount} memories
                         </span>
                       </div>
@@ -668,7 +668,7 @@ export function MemoriesPage() {
                         {activityData.map((day) => (
                           <div
                             key={day.date}
-                            className="flex-1 bg-purple-primary/20 rounded-t transition-all hover:bg-purple-primary/40"
+                            className="flex-1 bg-brand/20 rounded-t transition-all hover:bg-brand/40"
                             style={{
                               height: `${Math.max((day.count / maxActivity) * 100, 4)}%`,
                             }}
@@ -681,9 +681,9 @@ export function MemoriesPage() {
 
                   {/* Life Balance Radar */}
                   {lifeBalance.length > 0 && lifeBalance.some(d => d.rawCount > 0) && (
-                    <div className="rounded-xl bg-bg-secondary border border-bg-tertiary p-4">
+                    <div className="rounded-xl bg-bg-secondary border border-border p-4">
                       <h3 className="text-sm font-medium text-text-tertiary uppercase tracking-wider mb-2 flex items-center gap-2">
-                        <Sparkles className="w-4 h-4 text-purple-primary" />
+                        <Sparkles className="w-4 h-4 text-brand" />
                         Life Balance
                       </h3>
                       <LifeBalanceChart data={lifeBalance} compact />
@@ -692,9 +692,9 @@ export function MemoriesPage() {
 
                   {/* Trending Topics */}
                   {(risingTags.length > 0 || fadingTags.length > 0) && (
-                    <div className="rounded-xl bg-bg-secondary border border-bg-tertiary p-4">
+                    <div className="rounded-xl bg-bg-secondary border border-border p-4">
                       <h3 className="text-sm font-medium text-text-tertiary uppercase tracking-wider mb-3 flex items-center gap-2">
-                        <TrendingUp className="w-4 h-4 text-purple-primary" />
+                        <TrendingUp className="w-4 h-4 text-brand" />
                         Trending
                       </h3>
                       <TrendingSidebar
@@ -707,17 +707,17 @@ export function MemoriesPage() {
 
                   {/* Top Tags Card */}
                   {allTags.length > 0 && (
-                    <div className="rounded-xl bg-bg-secondary border border-bg-tertiary p-4">
+                    <div className="rounded-xl bg-bg-secondary border border-border p-4">
                       <div className="flex items-center justify-between mb-3">
                         <h3 className="text-sm font-medium text-text-tertiary uppercase tracking-wider flex items-center gap-2">
-                          <Tag className="w-4 h-4 text-purple-primary" />
+                          <Tag className="w-4 h-4 text-brand" />
                           Top Tags
                         </h3>
                         <button
                           onClick={() => setViewMode('tags')}
                           className={cn(
                             'p-1.5 rounded-md transition-colors',
-                            'text-text-quaternary hover:text-purple-primary hover:bg-purple-primary/10'
+                            'text-muted-foreground hover:text-brand hover:bg-brand/10'
                           )}
                           title="View all tags"
                         >
@@ -734,18 +734,18 @@ export function MemoriesPage() {
                               onClick={() => handleTagClick(tag)}
                               className={cn(
                                 'w-full text-left group p-1 -m-1 rounded-md',
-                                selectedTag === tag && 'ring-1 ring-purple-primary bg-purple-primary/5'
+                                selectedTag === tag && 'ring-1 ring-brand bg-brand/5'
                               )}
                             >
                               <div className="flex items-center justify-between mb-1">
-                                <span className="text-sm text-text-primary group-hover:text-purple-primary transition-colors">
+                                <span className="text-sm text-text-primary group-hover:text-brand transition-colors">
                                   {tag}
                                 </span>
-                                <span className="text-xs text-text-quaternary">{count}</span>
+                                <span className="text-xs text-muted-foreground">{count}</span>
                               </div>
                               <div className="h-1 bg-bg-quaternary rounded-full overflow-hidden">
                                 <div
-                                  className="h-full bg-gradient-to-r from-purple-primary to-purple-secondary rounded-full transition-all"
+                                  className="h-full bg-gradient-to-r from-purple-primary to-brand-light rounded-full transition-all"
                                   style={{ width: `${percent}%` }}
                                 />
                               </div>
@@ -758,9 +758,9 @@ export function MemoriesPage() {
 
                   {/* Added Today Card */}
                   {todayMemories.length > 0 && (
-                    <div className="rounded-xl bg-bg-secondary border border-bg-tertiary p-4">
+                    <div className="rounded-xl bg-bg-secondary border border-border p-4">
                       <h3 className="text-sm font-medium text-text-tertiary uppercase tracking-wider mb-3 flex items-center gap-2">
-                        <Plus className="w-4 h-4 text-purple-primary" />
+                        <Plus className="w-4 h-4 text-brand" />
                         Added Today
                       </h3>
                       <div className="space-y-2">
@@ -774,7 +774,7 @@ export function MemoriesPage() {
                           </button>
                         ))}
                         {todayMemories.length > 3 && (
-                          <p className="text-xs text-text-quaternary text-center pt-1">
+                          <p className="text-xs text-muted-foreground text-center pt-1">
                             +{todayMemories.length - 3} more today
                           </p>
                         )}

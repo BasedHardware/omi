@@ -59,7 +59,7 @@ export function CaseStatusView({
           </p>
           <p className="text-xs text-zinc-500 mt-4">
             If you believe this is an error, contact{' '}
-            <a href={`mailto:${SUPPORT_EMAIL}`} className="text-purple-400 hover:text-purple-300">
+            <a href={`mailto:${SUPPORT_EMAIL}`} className="text-brand-light hover:text-purple-300">
               {SUPPORT_EMAIL}
             </a>
           </p>
@@ -122,7 +122,7 @@ export function CaseStatusView({
           <div className="rounded-xl bg-zinc-900/50 px-4 py-3">
             <p className="text-xs text-zinc-400 leading-relaxed">
               This case hasn&apos;t been updated in {updatedDays} days. If you need assistance, please contact{' '}
-              <a href={`mailto:${email}`} className="text-purple-400 hover:text-purple-300">
+              <a href={`mailto:${email}`} className="text-brand-light hover:text-purple-300">
                 {email}
               </a>
             </p>
@@ -132,7 +132,7 @@ export function CaseStatusView({
         {/* Footer */}
         <p className="text-center text-xs text-zinc-600">
           Need help?{' '}
-          <a href={`mailto:${email}`} className="text-purple-400/70 hover:text-purple-300">
+          <a href={`mailto:${email}`} className="text-brand-light/70 hover:text-purple-300">
             {email}
           </a>
         </p>

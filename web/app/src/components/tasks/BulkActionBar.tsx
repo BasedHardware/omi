@@ -61,7 +61,7 @@ export function BulkActionBar({
               'flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm',
               'transition-colors',
               allSelected
-                ? 'bg-purple-primary/10 text-purple-primary'
+                ? 'bg-brand/10 text-brand'
                 : 'text-text-tertiary hover:text-text-primary hover:bg-bg-quaternary'
             )}
           >
@@ -77,43 +77,35 @@ export function BulkActionBar({
       )}
 
       {/* Selection count */}
-      <div className="flex items-center gap-2">
-        <span className="text-sm font-medium text-text-primary">
+      <div className="flex items-center gap-1.5">
+        <span className="text-xs font-medium text-foreground">
           {selectedCount} selected
         </span>
         {!inline && (
           <button
             onClick={onClear}
-            className="p-1 rounded hover:bg-bg-tertiary text-text-quaternary hover:text-text-secondary transition-colors"
-            title="Clear selection"
+            className="p-0.5 rounded hover:bg-accent text-muted-foreground transition-colors"
+            title="Clear"
           >
-            <X className="w-4 h-4" />
+            <X className="w-3 h-3" />
           </button>
         )}
       </div>
 
-      {/* Divider */}
-      <div className="w-px h-6 bg-bg-tertiary" />
+      <div className="w-px h-4 bg-border" />
 
       {/* Actions */}
-      <div className="flex items-center gap-2">
-        {/* Snooze dropdown - hidden when hideSnooze is true */}
+      <div className="flex items-center gap-1">
         {!hideSnooze && onSnooze && (
           <div className="relative">
             <button
               onClick={() => setShowSnoozeMenu(!showSnoozeMenu)}
               disabled={selectedCount === 0}
-              className={cn(
-                'flex items-center gap-1.5 px-3 py-1.5 rounded-lg',
-                'bg-bg-tertiary hover:bg-bg-quaternary',
-                'text-text-secondary text-sm',
-                'transition-colors',
-                'disabled:opacity-50 disabled:cursor-not-allowed'
-              )}
+              className="flex items-center gap-1 px-2 py-1 rounded-md text-xs text-muted-foreground hover:text-foreground hover:bg-accent transition-colors disabled:opacity-40"
             >
-              <Clock className="w-4 h-4" />
-              <span>Snooze</span>
-              <ChevronDown className="w-3 h-3" />
+              <Clock className="w-3 h-3" />
+              Snooze
+              <ChevronDown className="w-2.5 h-2.5" />
             </button>
 
             {/* Dropdown menu */}
@@ -126,7 +118,7 @@ export function BulkActionBar({
                   transition={{ duration: 0.15 }}
                   className={cn(
                     inline ? 'absolute top-full mt-2 left-0' : 'absolute bottom-full mb-2 left-0',
-                    'bg-bg-secondary border border-bg-tertiary rounded-lg',
+                    'bg-bg-secondary border border-border rounded-lg',
                     'shadow-lg shadow-black/20',
                     'py-1 min-w-[120px] z-50'
                   )}
@@ -164,59 +156,36 @@ export function BulkActionBar({
           </div>
         )}
 
-        {/* Complete button - hidden when hideComplete is true */}
         {!hideComplete && onComplete && (
           <button
             onClick={onComplete}
             disabled={selectedCount === 0}
-            className={cn(
-              'flex items-center gap-1.5 px-3 py-1.5 rounded-lg',
-              'bg-success/20 hover:bg-success/30',
-              'text-success text-sm',
-              'transition-colors',
-              'disabled:opacity-50 disabled:cursor-not-allowed'
-            )}
+            className="flex items-center gap-1 px-2 py-1 rounded-md text-xs text-success hover:bg-success/10 transition-colors disabled:opacity-40"
           >
-            <Check className="w-4 h-4" />
-            <span>Complete</span>
+            <Check className="w-3 h-3" />
+            Complete
           </button>
         )}
 
-        {/* Delete button */}
         <button
           onClick={onDelete}
           disabled={selectedCount === 0}
-          className={cn(
-            'flex items-center gap-1.5 px-3 py-1.5 rounded-lg',
-            'bg-error/20 hover:bg-error/30',
-            'text-error text-sm',
-            'transition-colors',
-            'disabled:opacity-50 disabled:cursor-not-allowed'
-          )}
+          className="flex items-center gap-1 px-2 py-1 rounded-md text-xs text-destructive hover:bg-destructive/10 transition-colors disabled:opacity-40"
         >
-          <Trash2 className="w-4 h-4" />
-          <span>Delete</span>
+          <Trash2 className="w-3 h-3" />
+          Delete
         </button>
 
-        {/* Divider */}
-        {(onCopy || onExport) && <div className="w-px h-6 bg-bg-tertiary" />}
+        {(onCopy || onExport) && <div className="w-px h-4 bg-border" />}
 
-        {/* Copy button */}
         {onCopy && (
           <button
             onClick={onCopy}
             disabled={selectedCount === 0}
-            className={cn(
-              'flex items-center gap-1.5 px-3 py-1.5 rounded-lg',
-              'bg-bg-tertiary hover:bg-bg-quaternary',
-              'text-text-secondary text-sm',
-              'transition-colors',
-              'disabled:opacity-50 disabled:cursor-not-allowed'
-            )}
-            title="Copy to clipboard"
+            className="flex items-center gap-1 px-2 py-1 rounded-md text-xs text-muted-foreground hover:text-foreground hover:bg-accent transition-colors disabled:opacity-40"
           >
-            <Copy className="w-4 h-4" />
-            <span>Copy</span>
+            <Copy className="w-3 h-3" />
+            Copy
           </button>
         )}
 
@@ -226,17 +195,11 @@ export function BulkActionBar({
             <button
               onClick={() => setShowExportMenu(!showExportMenu)}
               disabled={selectedCount === 0}
-              className={cn(
-                'flex items-center gap-1.5 px-3 py-1.5 rounded-lg',
-                'bg-bg-tertiary hover:bg-bg-quaternary',
-                'text-text-secondary text-sm',
-                'transition-colors',
-                'disabled:opacity-50 disabled:cursor-not-allowed'
-              )}
+              className="flex items-center gap-1 px-2 py-1 rounded-md text-xs text-muted-foreground hover:text-foreground hover:bg-accent transition-colors disabled:opacity-40"
             >
-              <Download className="w-4 h-4" />
-              <span>Export</span>
-              <ChevronDown className="w-3 h-3" />
+              <Download className="w-3 h-3" />
+              Export
+              <ChevronDown className="w-2.5 h-2.5" />
             </button>
 
             {/* Export dropdown menu */}
@@ -249,7 +212,7 @@ export function BulkActionBar({
                   transition={{ duration: 0.15 }}
                   className={cn(
                     inline ? 'absolute top-full mt-2 right-0' : 'absolute bottom-full mb-2 right-0',
-                    'bg-bg-secondary border border-bg-tertiary rounded-lg',
+                    'bg-bg-secondary border border-border rounded-lg',
                     'shadow-lg shadow-black/20',
                     'py-1 min-w-[140px] z-50'
                   )}
@@ -291,18 +254,12 @@ export function BulkActionBar({
         )}
       </div>
 
-      {/* Done button - only in inline mode */}
       {inline && onDone && (
         <>
-          <div className="w-px h-6 bg-bg-tertiary ml-auto" />
+          <div className="w-px h-4 bg-border ml-auto" />
           <button
             onClick={onDone}
-            className={cn(
-              'flex items-center gap-1.5 px-3 py-1.5 rounded-lg',
-              'bg-purple-primary/10 hover:bg-purple-primary/20',
-              'text-purple-primary text-sm font-medium',
-              'transition-colors'
-            )}
+            className="px-2 py-1 rounded-md text-xs font-medium text-primary hover:bg-primary/10 transition-colors"
           >
             Done
           </button>
@@ -320,8 +277,8 @@ export function BulkActionBar({
         exit={{ opacity: 0, height: 0 }}
         transition={{ duration: 0.2 }}
         className={cn(
-          'flex items-center gap-3 py-2 px-3 rounded-lg',
-          'bg-bg-tertiary/50 border border-bg-quaternary'
+          'flex items-center gap-2 py-1.5 px-3 rounded-md',
+          'bg-accent/50 border border-border/50'
         )}
       >
         {content}
@@ -339,7 +296,7 @@ export function BulkActionBar({
         transition={{ duration: 0.2, ease: 'easeOut' }}
         className={cn(
           'fixed bottom-4 left-1/2 -translate-x-1/2',
-          'bg-bg-secondary border border-bg-tertiary',
+          'bg-bg-secondary border border-border',
           'rounded-xl shadow-lg shadow-black/30',
           'px-4 py-3',
           'flex items-center gap-4',

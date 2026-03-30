@@ -44,15 +44,15 @@ export function PersonChip({
         'text-sm font-medium transition-all duration-150',
         'border',
         selected
-          ? 'bg-purple-primary/20 border-purple-primary text-purple-primary'
-          : 'bg-bg-tertiary border-bg-quaternary text-text-secondary hover:bg-bg-quaternary hover:text-text-primary',
+          ? 'bg-brand/20 border-brand text-brand'
+          : 'bg-bg-tertiary border-border text-text-secondary hover:bg-bg-quaternary hover:text-text-primary',
         className
       )}
     >
       <div
         className={cn(
           'w-5 h-5 rounded-full flex items-center justify-center text-xs',
-          selected ? 'bg-purple-primary/30 text-purple-primary' : colorClass
+          selected ? 'bg-brand/30 text-brand' : colorClass
         )}
       >
         {person.name.charAt(0).toUpperCase()}
@@ -81,18 +81,18 @@ export function YouChip({ selected = false, onClick, className }: YouChipProps) 
         'text-sm font-medium transition-all duration-150',
         'border',
         selected
-          ? 'bg-purple-primary/20 border-purple-primary text-purple-primary'
-          : 'bg-bg-tertiary border-bg-quaternary text-text-secondary hover:bg-bg-quaternary hover:text-text-primary',
+          ? 'bg-brand/20 border-brand text-brand'
+          : 'bg-bg-tertiary border-border text-text-secondary hover:bg-bg-quaternary hover:text-text-primary',
         className
       )}
     >
       <div
         className={cn(
           'w-5 h-5 rounded-full flex items-center justify-center',
-          selected ? 'bg-purple-primary/30' : 'bg-purple-primary/20'
+          selected ? 'bg-brand/30' : 'bg-brand/20'
         )}
       >
-        <User className="w-3 h-3 text-purple-primary" />
+        <User className="w-3 h-3 text-brand" />
       </div>
       <span>You</span>
       {selected && <Check className="w-3.5 h-3.5" />}
@@ -116,7 +116,7 @@ export function AddPersonChip({ onClick, className }: AddPersonChipProps) {
         'inline-flex items-center gap-2 px-3 py-1.5 rounded-full',
         'text-sm font-medium transition-all duration-150',
         'border border-dashed',
-        'bg-bg-tertiary border-bg-quaternary text-text-tertiary',
+        'bg-bg-tertiary border-border text-text-tertiary',
         'hover:bg-bg-quaternary hover:text-text-secondary hover:border-text-quaternary',
         className
       )}

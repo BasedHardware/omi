@@ -1,7 +1,7 @@
 'use client';
 
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Loader2, FolderInput, Plus } from 'lucide-react';
+import { X, Loader2, FolderInput, Plus, Folder as FolderIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { Folder } from '@/types/folder';
 
@@ -48,7 +48,7 @@ export function MoveFolderDialog({
             className={cn(
               'fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50',
               'w-full max-w-sm p-6 rounded-2xl',
-              'bg-bg-secondary border border-bg-tertiary',
+              'bg-bg-secondary border border-border',
               'shadow-[0_16px_64px_rgba(0,0,0,0.5)]'
             )}
           >
@@ -58,7 +58,7 @@ export function MoveFolderDialog({
               disabled={isLoading}
               className={cn(
                 'absolute top-4 right-4 p-2 rounded-lg',
-                'text-text-quaternary hover:text-text-primary',
+                'text-muted-foreground hover:text-text-primary',
                 'hover:bg-bg-tertiary transition-colors',
                 'disabled:opacity-50 disabled:cursor-not-allowed'
               )}
@@ -69,9 +69,9 @@ export function MoveFolderDialog({
             {/* Icon */}
             <div className={cn(
               'w-12 h-12 rounded-xl mb-4',
-              'bg-purple-primary/20 flex items-center justify-center'
+              'bg-brand/20 flex items-center justify-center'
             )}>
-              <FolderInput className="w-6 h-6 text-purple-primary" />
+              <FolderInput className="w-6 h-6 text-brand" />
             </div>
 
             {/* Title */}
@@ -98,17 +98,21 @@ export function MoveFolderDialog({
                       'disabled:opacity-50 disabled:cursor-not-allowed'
                     )}
                   >
-                    <span className="text-xl">{folder.emoji || '📁'}</span>
+                    {folder.emoji ? (
+                      <span className="text-xl">{folder.emoji}</span>
+                    ) : (
+                      <FolderIcon className="w-5 h-5 text-muted-foreground" />
+                    )}
                     <span className="flex-1 text-left text-sm font-medium text-text-primary">
                       {folder.name}
                     </span>
                     {folder.conversation_count !== undefined && (
-                      <span className="text-xs text-text-quaternary">
+                      <span className="text-xs text-muted-foreground">
                         {folder.conversation_count}
                       </span>
                     )}
                     {loadingFolderId === folder.id && (
-                      <Loader2 className="w-4 h-4 animate-spin text-purple-primary" />
+                      <Loader2 className="w-4 h-4 animate-spin text-brand" />
                     )}
                   </button>
                 ))
@@ -116,7 +120,7 @@ export function MoveFolderDialog({
             </div>
 
             {/* Divider */}
-            <div className="border-t border-bg-tertiary my-4" />
+            <div className="border-t border-border my-4" />
 
             {/* Create new folder button */}
             <button
@@ -124,8 +128,8 @@ export function MoveFolderDialog({
               disabled={isLoading}
               className={cn(
                 'w-full flex items-center gap-3 px-4 py-3 rounded-xl',
-                'bg-purple-primary/10 hover:bg-purple-primary/20',
-                'text-purple-primary',
+                'bg-brand/10 hover:bg-brand/20',
+                'text-brand',
                 'transition-colors duration-150',
                 'disabled:opacity-50 disabled:cursor-not-allowed'
               )}

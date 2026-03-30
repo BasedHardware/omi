@@ -8,7 +8,7 @@ export default function ConversationsLoading() {
   return (
     <div className="flex flex-col h-full overflow-hidden">
       {/* Page Header */}
-      <div className="flex-shrink-0 px-6 py-4 border-b border-bg-tertiary bg-bg-primary">
+      <div className="flex-shrink-0 px-6 py-4 border-b border-border bg-bg-primary">
         <div className="flex items-center gap-3">
           <div className="p-2 rounded-lg bg-bg-tertiary">
             <MessageSquare className="w-5 h-5 text-text-secondary" />
@@ -20,7 +20,7 @@ export default function ConversationsLoading() {
       </div>
 
       {/* Toolbar: Folder Tabs */}
-      <div className="flex-shrink-0 bg-bg-secondary border-b border-bg-tertiary">
+      <div className="flex-shrink-0 bg-bg-secondary border-b border-border">
         <div className="flex items-center gap-4 px-6 py-3">
           <div className="flex-1 min-w-0">
             <FolderTabsSkeleton />
@@ -35,7 +35,7 @@ export default function ConversationsLoading() {
         {/* Left Panel: Conversation List Skeleton */}
         <div
           style={{ width: '420px' }}
-          className="w-full lg:w-auto flex-shrink-0 flex flex-col h-full overflow-hidden bg-bg-primary border-r border-bg-tertiary"
+          className="w-full lg:w-auto flex-shrink-0 flex flex-col h-full overflow-hidden bg-bg-primary border-r border-border"
         >
           {/* Search and Date Filter skeleton */}
           <div className="flex-shrink-0 px-3 pt-4 pb-3">
@@ -60,7 +60,7 @@ export default function ConversationsLoading() {
         {/* Right Panel: Detail Skeleton */}
         <div className="flex-1 flex flex-col min-w-0 h-full overflow-hidden bg-bg-primary">
           {/* Detail header skeleton */}
-          <div className="flex-shrink-0 p-6 border-b border-bg-tertiary">
+          <div className="flex-shrink-0 p-6 border-b border-border">
             <div className="flex items-start gap-4">
               <div className="flex-1">
                 <div className="h-7 w-64 bg-bg-tertiary rounded animate-pulse mb-2" />
