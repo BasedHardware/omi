@@ -1865,7 +1865,7 @@ class AppLocalizationsBg extends AppLocalizations {
   String get continueWithoutDevice => 'Продължи без устройство';
 
   @override
-  String get permissionsRequired => 'Изискват се разрешения';
+  String get permissionsRequired => 'Необходими разрешения';
 
   @override
   String get permissionsRequiredDesc =>
@@ -8192,6 +8192,14 @@ class AppLocalizationsBg extends AppLocalizations {
   }
 
   @override
+  String get processingOnServer => 'Обработка на сървъра...';
+
+  @override
+  String processingOnServerProgress(int current, int total) {
+    return 'Обработка... $current/$total сегмента';
+  }
+
+  @override
   String get processedStatus => 'Обработено';
 
   @override
@@ -8750,4 +8758,36 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get storageSection => 'СЪХРАНЕНИЕ';
+
+  @override
+  String get permissions => 'Разрешения';
+
+  @override
+  String get permissionEnabled => 'Активирано';
+
+  @override
+  String get permissionEnable => 'Активиране';
+
+  @override
+  String get permissionsPageDescription =>
+      'Тези разрешения са основни за работата на Omi. Те позволяват ключови функции като известия, базирани на местоположение изживявания и аудио запис.';
+
+  @override
+  String get permissionsRequiredDescription =>
+      'Omi се нуждае от няколко разрешения, за да работи правилно. Моля, предоставете ги, за да продължите.';
+
+  @override
+  String get permissionsSetupTitle => 'Получете най-доброто изживяване';
+
+  @override
+  String get permissionsSetupDescription => 'Активирайте няколко разрешения, за да може Omi да работи магически.';
+
+  @override
+  String get permissionsChangeAnytime => 'Можете да ги промените по всяко време в Настройки > Разрешения';
+
+  @override
+  String get location => 'Местоположение';
+
+  @override
+  String get microphone => 'Микрофон';
 }

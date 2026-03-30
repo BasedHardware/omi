@@ -1,10 +1,13 @@
 import asyncio
 import io
+import logging
 import os
 import re
+import shutil
 import struct
 import threading
 import time
+import uuid as _uuid
 import wave
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
@@ -18,6 +21,14 @@ from pydub import AudioSegment
 from database import conversations as conversations_db
 from database import users as users_db
 from database.conversations import get_closest_conversation_to_timestamps, update_conversation_segments
+from database.sync_jobs import (
+    create_sync_job,
+    get_sync_job,
+    update_sync_job,
+    mark_job_processing,
+    mark_job_completed,
+    mark_job_failed,
+)
 from models.conversation import CreateConversation, ConversationSource, Conversation
 from models.transcript_segment import TranscriptSegment
 from utils.conversations.process_conversation import process_conversation
@@ -30,9 +41,8 @@ from utils.other.storage import (
     get_merged_audio_signed_url,
 )
 
-# Audio constants
-AUDIO_SAMPLE_RATE = 16000
 from utils import encryption
+from utils.log_sanitizer import sanitize
 from utils.stt.pre_recorded import deepgram_prerecorded, postprocess_words
 from utils.stt.vad import vad_is_empty
 from utils.fair_use import (
@@ -49,6 +59,11 @@ from utils.fair_use import (
 )
 from utils.subscription import has_transcription_credits
 
+logger = logging.getLogger(__name__)
+
+# Audio constants
+AUDIO_SAMPLE_RATE = 16000
+
 router = APIRouter()
 
 
@@ -57,12 +72,12 @@ router = APIRouter()
 # **********************************************
 
 
-def pcm_to_wav(pcm_data: bytes, sample_rate: int = 16000, channels: int = 1) -> bytes:
-    """Convert PCM16 data to WAV format."""
+def pcm_to_wav(pcm_data: bytes, sample_rate: int = 16000, channels: int = 1, sample_width: int = 2) -> bytes:
+    """Convert raw PCM data to WAV format."""
     wav_buffer = io.BytesIO()
     with wave.open(wav_buffer, 'wb') as wav_file:
         wav_file.setnchannels(channels)
-        wav_file.setsampwidth(2)  # 16-bit audio
+        wav_file.setsampwidth(sample_width)
         wav_file.setframerate(sample_rate)
         wav_file.writeframes(pcm_data)
     return wav_buffer.getvalue()
@@ -408,14 +423,6 @@ def download_audio_file_endpoint(
 # **********************************************
 
 
-import shutil
-import wave
-import logging
-from utils.log_sanitizer import sanitize
-
-logger = logging.getLogger(__name__)
-
-
 def decode_opus_file_to_wav(opus_file_path, wav_file_path, sample_rate=16000, channels=1, frame_size: int = 160):
     """Decode an Opus file with length-prefixed frames to WAV format.
 
@@ -524,6 +531,47 @@ def get_wav_duration(wav_path: str) -> float:
         return 0.0
 
 
+def decode_pcm_file_to_wav(pcm_file_path, wav_file_path, sample_rate=16000, channels=1, sample_width=2):
+    """Decode a length-prefixed PCM .bin file to WAV.
+
+    The file format is: [4-byte uint32 frame_length][frame_bytes] repeated.
+    Each frame contains raw PCM samples (no encoding).
+    sample_width: 2 for pcm16, 1 for pcm8.
+    """
+    try:
+        pcm_data = bytearray()
+        with open(pcm_file_path, 'rb') as f:
+            while True:
+                length_bytes = f.read(4)
+                if not length_bytes or len(length_bytes) < 4:
+                    break
+                frame_length = struct.unpack('<I', length_bytes)[0]
+                if frame_length == 0 or frame_length > 65536:
+                    logger.warning(f"PCM decode: suspicious frame length {frame_length}, skipping rest")
+                    break
+                frame_data = f.read(frame_length)
+                if len(frame_data) < frame_length:
+                    break
+                pcm_data.extend(frame_data)
+
+        if not pcm_data:
+            logger.info(f"PCM decode: no data in {pcm_file_path}")
+            return False
+
+        wav_data = pcm_to_wav(bytes(pcm_data), sample_rate=sample_rate, channels=channels, sample_width=sample_width)
+        with open(wav_file_path, 'wb') as f:
+            f.write(wav_data)
+        return True
+    except Exception as e:
+        logger.error(f"PCM decode failed for {pcm_file_path}: {e}")
+        return False
+
+
+def _is_pcm_codec(filename: str) -> bool:
+    """Check if the filename indicates a PCM codec (pcm8 or pcm16)."""
+    return '_pcm16_' in filename or '_pcm8_' in filename
+
+
 def decode_files_to_wav(files_path: List[str]):
     wav_files = []
     for path in files_path:
@@ -538,7 +586,18 @@ def decode_files_to_wav(files_path: List[str]):
             except ValueError:
                 logger.error(f"Invalid frame size format in filename: {filename}, using default {frame_size}")
 
-        success = decode_opus_file_to_wav(path, wav_path, frame_size=frame_size)
+        # Detect codec from filename: PCM files need different decoding than Opus
+        if _is_pcm_codec(filename):
+            # Parse sample rate from filename: audio_{device}_{codec}_{sampleRate}_{channel}_...
+            sample_rate_match = re.search(r'_pcm(?:8|16)_(\d+)_', filename)
+            sample_rate = (
+                int(sample_rate_match.group(1)) if sample_rate_match else (16000 if '_pcm16_' in filename else 8000)
+            )
+            sample_width = 1 if '_pcm8_' in filename else 2
+            success = decode_pcm_file_to_wav(path, wav_path, sample_rate=sample_rate, sample_width=sample_width)
+        else:
+            success = decode_opus_file_to_wav(path, wav_path, frame_size=frame_size)
+
         if not success:
             # Clean up .bin file even on decode failure
             if os.path.exists(path):
@@ -658,12 +717,9 @@ def process_segment(
 
         words, language = deepgram_prerecorded(url, speakers_count=3, attempts=0, return_language=True)
         if not words:
-            # deepgram_prerecorded returns [] on both "no speech" AND "failure after retries".
-            # Treat as error so the segment is retried — dedup prevents duplicates.
-            error_msg = f'Deepgram returned no words for segment {path}'
-            logger.error(error_msg)
-            with lock:
-                errors.append(error_msg)
+            # DG processed audio successfully but found no speech (silence/noise).
+            # Real DG failures now raise RuntimeError and are caught by the except block.
+            logger.info(f'No transcript words for segment {path} (silence or noise-only audio)')
             return
         transcript_segments: List[TranscriptSegment] = postprocess_words(words, 0)
         if not transcript_segments:
@@ -927,3 +983,305 @@ async def sync_local_files(files: List[UploadFile] = File(...), uid: str = Depen
         _cleanup_files(paths)  # .bin files (in case decode_files_to_wav didn't finish)
         _cleanup_files(wav_paths)  # Original wav files (if VAD didn't complete)
         _cleanup_files(segmented_paths)  # Segmented wav files after processing
+
+
+# ---------------------------------------------------------------------------
+# v2 async sync-local-files
+# ---------------------------------------------------------------------------
+# v1 processes segments synchronously (80-180s for large payloads → 504).
+# v2 does the fast path (decode, VAD) inline, then hands off STT+LLM to a
+# background thread. The app polls GET /v2/sync-local-files/{job_id} until
+# the job reaches a terminal status.
+# ---------------------------------------------------------------------------
+
+
+def _retrieve_file_paths_v2(files: List[UploadFile], uid: str, job_id: str):
+    """Like retrieve_file_paths but uses a job-specific directory to avoid concurrency conflicts."""
+    directory = f'syncing/{uid}/{job_id}/'
+    os.makedirs(directory, exist_ok=True)
+    paths = []
+    for file in files:
+        filename = file.filename
+        if not filename.endswith('.bin'):
+            raise HTTPException(status_code=400, detail=f"Invalid file format {filename}")
+        if '_' not in filename:
+            raise HTTPException(status_code=400, detail=f"Invalid file format {filename}, missing timestamp")
+        try:
+            timestamp = get_timestamp_from_path(filename)
+        except ValueError:
+            raise HTTPException(status_code=400, detail=f"Invalid file format {filename}, invalid timestamp")
+
+        time_val = datetime.fromtimestamp(timestamp)
+        if time_val > datetime.now() or time_val < datetime(2024, 1, 1):
+            raise HTTPException(status_code=400, detail=f"Invalid file format {filename}, invalid timestamp")
+
+        path = f"{directory}{filename}"
+        try:
+            with open(path, "wb") as buffer:
+                shutil.copyfileobj(file.file, buffer)
+            paths.append(path)
+        except Exception as e:
+            if os.path.exists(path):
+                os.remove(path)
+            raise HTTPException(status_code=500, detail=f"Failed to write file {filename}: {str(e)}")
+    return paths
+
+
+def _process_segments_background(
+    job_id: str,
+    uid: str,
+    segmented_paths: list,
+    source,
+    is_locked: bool,
+    fair_use_restrict_dg: bool,
+    total_speech_seconds: float,
+    job_dir: str,
+):
+    """Background worker: runs segment processing and updates Redis job status."""
+    try:
+        mark_job_processing(job_id)
+
+        response = {'updated_memories': set(), 'new_memories': set()}
+        segment_errors = []
+        segment_lock = threading.Lock()
+        total_segments = len(segmented_paths)
+
+        def chunk_threads_bg(threads):
+            chunk_size = 5
+            for i in range(0, len(threads), chunk_size):
+                [t.start() for t in threads[i : i + chunk_size]]
+                [t.join() for t in threads[i : i + chunk_size]]
+                # Heartbeat: refresh updated_at so stale detection doesn't kill active jobs
+                try:
+                    update_sync_job(job_id, {'processed_segments': min(i + chunk_size, len(threads))})
+                except Exception:
+                    pass  # Non-fatal: stale detection is a safety net, not a hard gate
+
+        threads = [
+            threading.Thread(
+                target=process_segment,
+                args=(path, uid, response, segment_lock, segment_errors, source, is_locked),
+            )
+            for path in segmented_paths
+        ]
+        chunk_threads_bg(threads)
+
+        # Record DG usage after processing (not before, to avoid charging on retries)
+        if fair_use_restrict_dg:
+            try:
+                dg_ms = int(total_speech_seconds * 1000)
+                if dg_ms > 0:
+                    record_dg_usage_ms(uid, dg_ms)
+            except Exception as e:
+                logger.error(f'sync_v2: DG usage record error for {uid}: {e}')
+
+        # Build result matching v1 response shape
+        failed_segments = len(segment_errors)
+        result = {
+            'new_memories': sorted(response['new_memories']),
+            'updated_memories': sorted(response['updated_memories']),
+        }
+        if failed_segments > 0:
+            result['failed_segments'] = failed_segments
+            result['total_segments'] = total_segments
+            result['errors'] = segment_errors[:10]
+
+        mark_job_completed(
+            job_id,
+            {
+                'new_memories': result['new_memories'],
+                'updated_memories': result['updated_memories'],
+                'failed_segments': failed_segments,
+                'total_segments': total_segments,
+                'errors': segment_errors[:10] if segment_errors else [],
+            },
+        )
+
+        logger.info(
+            f'sync_v2 background complete job={job_id} uid={uid} '
+            f'success={total_segments - failed_segments}/{total_segments}'
+        )
+    except Exception as e:
+        logger.error(f'sync_v2 background failed job={job_id} uid={uid}: {e}')
+        try:
+            mark_job_failed(job_id, str(e))
+        except Exception:
+            pass
+    finally:
+        # Clean up segmented wav files
+        _cleanup_files(list(segmented_paths))
+        # Clean up job directory
+        try:
+            if job_dir and os.path.isdir(job_dir):
+                shutil.rmtree(job_dir, ignore_errors=True)
+        except Exception as e:
+            logger.error(f'sync_v2: failed to cleanup job dir {job_dir}: {e}')
+
+
+@router.post("/v2/sync-local-files")
+async def sync_local_files_v2(files: List[UploadFile] = File(...), uid: str = Depends(auth.get_current_user_uid)):
+    """
+    Async version of sync-local-files. Does fast-path work (decode, VAD) inline,
+    then starts background processing and returns 202 with a job_id for polling.
+    """
+    # Pre-check gates (same as v1)
+    if is_hard_restricted(uid):
+        raise HTTPException(status_code=429, detail="Account temporarily restricted due to fair-use policy")
+
+    should_lock = not has_transcription_credits(uid)
+
+    # Detect source
+    source = ConversationSource.omi
+    for f in files:
+        if f.filename and 'limitless' in f.filename.lower():
+            source = ConversationSource.limitless
+            break
+
+    # Create job_id early so we have it for the directory
+    job_id = str(_uuid.uuid4())
+    job_dir = f'syncing/{uid}/{job_id}'
+
+    paths = []
+    wav_paths = []
+    segmented_paths = set()
+
+    try:
+        # --- Fast path (inline, <5s typically) ---
+        paths = _retrieve_file_paths_v2(files, uid, job_id)
+        wav_paths = decode_files_to_wav(paths)
+
+        def chunk_threads_local(threads):
+            chunk_size = 5
+            for i in range(0, len(threads), chunk_size):
+                [t.start() for t in threads[i : i + chunk_size]]
+                [t.join() for t in threads[i : i + chunk_size]]
+
+        vad_errors = []
+        threads = [
+            threading.Thread(target=retrieve_vad_segments, args=(path, segmented_paths, vad_errors))
+            for path in wav_paths
+        ]
+        chunk_threads_local(threads)
+
+        _cleanup_files(wav_paths)
+        wav_paths = []
+
+        if vad_errors:
+            error_detail = f"VAD processing failed for {len(vad_errors)} file(s): {'; '.join(vad_errors[:3])}"
+            if len(vad_errors) > 3:
+                error_detail += f" (and {len(vad_errors) - 3} more)"
+            raise HTTPException(status_code=500, detail=error_detail)
+
+        # Fair-use speech tracking
+        total_speech_seconds = sum(get_wav_duration(p) for p in segmented_paths)
+        total_speech_ms = int(total_speech_seconds * 1000)
+
+        if FAIR_USE_ENABLED and total_speech_ms > 0:
+            record_speech_ms(uid, total_speech_ms, source='sync')
+            speech_totals = get_rolling_speech_ms(uid)
+            triggered_caps = check_soft_caps(uid, speech_totals=speech_totals)
+            if triggered_caps:
+                logger.info(f'sync_v2: soft caps triggered for {uid}: {triggered_caps}')
+                asyncio.create_task(trigger_classifier_if_needed(uid, triggered_caps))
+
+        # DG budget gate
+        fair_use_restrict_dg = False
+        if FAIR_USE_ENABLED:
+            try:
+                fair_use_stage = get_enforcement_stage(uid)
+                if fair_use_stage == 'restrict' and FAIR_USE_RESTRICT_DAILY_DG_MS > 0:
+                    fair_use_restrict_dg = True
+                    if is_dg_budget_exhausted(uid):
+                        _cleanup_files(list(segmented_paths))
+                        return JSONResponse(
+                            status_code=429,
+                            content={
+                                'dg_budget_exhausted': True,
+                                'skipped_segments': len(segmented_paths),
+                            },
+                        )
+            except Exception as e:
+                logger.error(f'sync_v2: DG budget check error for {uid}: {e}')
+
+        total_segments = len(segmented_paths)
+
+        if total_segments == 0:
+            # Nothing to process — return completed immediately
+            return JSONResponse(
+                status_code=200,
+                content={
+                    'new_memories': [],
+                    'updated_memories': [],
+                },
+            )
+
+        # --- Create Redis job and start background thread ---
+        job = create_sync_job(uid, total_files=len(files), total_segments=total_segments, job_id=job_id)
+
+        # Transfer ownership of segmented_paths to the background thread
+        owned_paths = list(segmented_paths)
+        segmented_paths = set()  # Prevent finally cleanup of files now owned by bg thread
+
+        bg_thread = threading.Thread(
+            target=_process_segments_background,
+            args=(
+                job_id,
+                uid,
+                owned_paths,
+                source,
+                should_lock,
+                fair_use_restrict_dg,
+                total_speech_seconds,
+                job_dir,
+            ),
+            daemon=True,
+        )
+        bg_thread.start()
+
+        return JSONResponse(
+            status_code=202,
+            content={
+                'job_id': job_id,
+                'status': 'queued',
+                'total_files': len(files),
+                'total_segments': total_segments,
+                'poll_after_ms': 3000,
+            },
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f'sync_v2 fast-path failed uid={uid}: {e}')
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        _cleanup_files(paths)
+        _cleanup_files(wav_paths)
+        _cleanup_files(list(segmented_paths))
+
+
+@router.get("/v2/sync-local-files/{job_id}")
+async def get_sync_job_status(job_id: str, uid: str = Depends(auth.get_current_user_uid)):
+    """Poll for the status of an async sync job."""
+    job = get_sync_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Sync job not found or expired")
+    if job['uid'] != uid:
+        raise HTTPException(status_code=403, detail="Not authorized to view this sync job")
+
+    # Build response — include result only when terminal
+    resp = {
+        'job_id': job['job_id'],
+        'status': job['status'],
+        'total_segments': job.get('total_segments', 0),
+        'processed_segments': job.get('processed_segments', 0),
+        'successful_segments': job.get('successful_segments', 0),
+        'failed_segments': job.get('failed_segments', 0),
+    }
+
+    if job['status'] in ('completed', 'partial_failure', 'failed'):
+        if job.get('result'):
+            resp['result'] = job['result']
+        if job.get('error'):
+            resp['error'] = job['error']
+
+    return resp

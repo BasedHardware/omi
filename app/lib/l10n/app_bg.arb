@@ -573,7 +573,7 @@
     "tryAgain": "Опитай отново",
     "connectOmiOmiGlass": "Свържи Omi / OmiGlass",
     "continueWithoutDevice": "Продължи без устройство",
-    "permissionsRequired": "Изискват се разрешения",
+    "permissionsRequired": "Необходими разрешения",
     "permissionsRequiredDesc": "Това приложение се нуждае от разрешения за Bluetooth и местоположение, за да функционира правилно. Моля, активирайте ги в настройките.",
     "openSettings": "Отвори настройки",
     "wantDifferentName": "Искате ли различно име?",
@@ -2604,6 +2604,18 @@
     "downloadingFromDevice": "Изтегляне от устройството",
     "reconnectingToInternet": "Повторно свързване с интернет...",
     "uploadingToCloud": "Качване на {current} от {total}",
+    "processingOnServer": "Обработка на сървъра...",
+    "processingOnServerProgress": "Обработка... {current}/{total} сегмента",
+    "@processingOnServerProgress": {
+        "placeholders": {
+            "current": {
+                "type": "int"
+            },
+            "total": {
+                "type": "int"
+            }
+        }
+    },
     "processedStatus": "Обработено",
     "corruptedStatus": "Повредено",
     "nPending": "{count} в изчакване",
@@ -2794,5 +2806,15 @@
     "storageSection": "СЪХРАНЕНИЕ",
     "tipKeepPhoneNearby": "Дръжте телефона наблизо за по-бърза синхронизация",
     "tipStableInternet": "Стабилен интернет ускорява качването в облака",
-    "tipAutoSync": "Записите се синхронизират автоматично"
+    "tipAutoSync": "Записите се синхронизират автоматично",
+    "permissions": "Разрешения",
+    "permissionEnabled": "Активирано",
+    "permissionEnable": "Активиране",
+    "permissionsPageDescription": "Тези разрешения са основни за работата на Omi. Те позволяват ключови функции като известия, базирани на местоположение изживявания и аудио запис.",
+    "permissionsRequiredDescription": "Omi се нуждае от няколко разрешения, за да работи правилно. Моля, предоставете ги, за да продължите.",
+    "permissionsSetupTitle": "Получете най-доброто изживяване",
+    "permissionsSetupDescription": "Активирайте няколко разрешения, за да може Omi да работи магически.",
+    "permissionsChangeAnytime": "Можете да ги промените по всяко време в Настройки > Разрешения",
+    "location": "Местоположение",
+    "microphone": "Микрофон"
 }

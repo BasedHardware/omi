@@ -1818,7 +1818,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get skipThisQuestion => 'Hoppa över denna fråga';
 
   @override
-  String get skipForNow => 'Hoppa över för tillfället';
+  String get skipForNow => 'Hoppa över för nu';
 
   @override
   String get connectionError => 'Anslutningsfel';
@@ -8162,6 +8162,14 @@ class AppLocalizationsSv extends AppLocalizations {
   }
 
   @override
+  String get processingOnServer => 'Bearbetar på servern...';
+
+  @override
+  String processingOnServerProgress(int current, int total) {
+    return 'Bearbetar... $current/$total segment';
+  }
+
+  @override
   String get processedStatus => 'Bearbetad';
 
   @override
@@ -8718,4 +8726,36 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get storageSection => 'LAGRING';
+
+  @override
+  String get permissions => 'Behörigheter';
+
+  @override
+  String get permissionEnabled => 'Aktiverad';
+
+  @override
+  String get permissionEnable => 'Aktivera';
+
+  @override
+  String get permissionsPageDescription =>
+      'Dessa behörigheter är centrala för hur Omi fungerar. De aktiverar nyckelfunktioner som aviseringar, platsbaserade upplevelser och ljudinspelning.';
+
+  @override
+  String get permissionsRequiredDescription =>
+      'Omi behöver några behörigheter för att fungera korrekt. Vänligen bevilja dem för att fortsätta.';
+
+  @override
+  String get permissionsSetupTitle => 'Få den bästa upplevelsen';
+
+  @override
+  String get permissionsSetupDescription => 'Aktivera några behörigheter så att Omi kan göra sin magi.';
+
+  @override
+  String get permissionsChangeAnytime => 'Du kan ändra dessa när som helst i Inställningar > Behörigheter';
+
+  @override
+  String get location => 'Plats';
+
+  @override
+  String get microphone => 'Mikrofon';
 }

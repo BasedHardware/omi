@@ -8021,6 +8021,14 @@ class AppLocalizationsKo extends AppLocalizations {
   }
 
   @override
+  String get processingOnServer => '서버에서 처리 중...';
+
+  @override
+  String processingOnServerProgress(int current, int total) {
+    return '처리 중... $current/$total 세그먼트';
+  }
+
+  @override
   String get processedStatus => '처리됨';
 
   @override
@@ -8569,4 +8577,34 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get storageSection => '저장소';
+
+  @override
+  String get permissions => '권한';
+
+  @override
+  String get permissionEnabled => '활성화됨';
+
+  @override
+  String get permissionEnable => '활성화';
+
+  @override
+  String get permissionsPageDescription => '이 권한들은 Omi 작동의 핵심입니다. 알림, 위치 기반 경험, 오디오 캡처와 같은 주요 기능을 활성화합니다.';
+
+  @override
+  String get permissionsRequiredDescription => 'Omi가 제대로 작동하려면 몇 가지 권한이 필요합니다. 계속하려면 권한을 허용해 주세요.';
+
+  @override
+  String get permissionsSetupTitle => '최고의 경험을 누리세요';
+
+  @override
+  String get permissionsSetupDescription => 'Omi가 마법을 부릴 수 있도록 몇 가지 권한을 활성화하세요.';
+
+  @override
+  String get permissionsChangeAnytime => '설정 > 권한에서 언제든지 변경할 수 있습니다';
+
+  @override
+  String get location => '위치';
+
+  @override
+  String get microphone => '마이크';
 }

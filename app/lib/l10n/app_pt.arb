@@ -554,7 +554,7 @@
     "allDone": "Tudo pronto!",
     "keepGoing": "Continue",
     "skipThisQuestion": "Saltar esta pergunta",
-    "skipForNow": "Pular por enquanto",
+    "skipForNow": "Pular por agora",
     "connectionError": "Erro de conexão",
     "connectionErrorDesc": "Falha ao conectar com servidor.",
     "invalidRecordingMultipleSpeakers": "Gravação inválida",
@@ -2671,6 +2671,18 @@
     "downloadingFromDevice": "Transferindo do dispositivo",
     "reconnectingToInternet": "Reconectando à internet...",
     "uploadingToCloud": "Enviando {current} de {total}",
+    "processingOnServer": "Processando no servidor...",
+    "processingOnServerProgress": "Processando... {current}/{total} segmentos",
+    "@processingOnServerProgress": {
+        "placeholders": {
+            "current": {
+                "type": "int"
+            },
+            "total": {
+                "type": "int"
+            }
+        }
+    },
     "processedStatus": "Processado",
     "corruptedStatus": "Corrompido",
     "nPending": "{count} pendentes",
@@ -2861,5 +2873,15 @@
     "storageSection": "ARMAZENAMENTO",
     "tipKeepPhoneNearby": "Mantenha o telefone por perto para sincronização mais rápida",
     "tipStableInternet": "Internet estável acelera uploads para a nuvem",
-    "tipAutoSync": "As gravações são sincronizadas automaticamente"
+    "tipAutoSync": "As gravações são sincronizadas automaticamente",
+    "permissions": "Permissões",
+    "permissionEnabled": "Ativada",
+    "permissionEnable": "Ativar",
+    "permissionsPageDescription": "Estas permissões são essenciais para o funcionamento do Omi. Elas habilitam recursos-chave como notificações, experiências baseadas em localização e captura de áudio.",
+    "permissionsRequiredDescription": "O Omi precisa de algumas permissões para funcionar corretamente. Por favor, conceda-as para continuar.",
+    "permissionsSetupTitle": "Tenha a melhor experiência",
+    "permissionsSetupDescription": "Ative algumas permissões para que o Omi possa fazer a sua magia.",
+    "permissionsChangeAnytime": "Você pode alterar isso a qualquer momento em Configurações > Permissões",
+    "location": "Localização",
+    "microphone": "Microfone"
 }

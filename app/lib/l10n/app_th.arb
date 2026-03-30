@@ -559,7 +559,7 @@
     "allDone": "เสร็จแล้ว!",
     "keepGoing": "ทำต่อไป คุณทำได้ดีมาก",
     "skipThisQuestion": "ข้ามคำถามนี้",
-    "skipForNow": "ข้ามไว้ก่อน",
+    "skipForNow": "ข้ามไปก่อน",
     "connectionError": "ข้อผิดพลาดในการเชื่อมต่อ",
     "connectionErrorDesc": "เชื่อมต่อกับเซิร์ฟเวอร์ไม่สำเร็จ กรุณาตรวจสอบการเชื่อมต่ออินเทอร์เน็ตของคุณและลองอีกครั้ง",
     "invalidRecordingMultipleSpeakers": "ตรวจพบการบันทึกที่ไม่ถูกต้อง",
@@ -2635,6 +2635,18 @@
     "downloadingFromDevice": "กำลังดาวน์โหลดจากอุปกรณ์",
     "reconnectingToInternet": "กำลังเชื่อมต่ออินเทอร์เน็ตอีกครั้ง...",
     "uploadingToCloud": "กำลังอัปโหลด {current} จาก {total}",
+    "processingOnServer": "กำลังประมวลผลบนเซิร์ฟเวอร์...",
+    "processingOnServerProgress": "กำลังประมวลผล... {current}/{total} เซ็กเมนต์",
+    "@processingOnServerProgress": {
+        "placeholders": {
+            "current": {
+                "type": "int"
+            },
+            "total": {
+                "type": "int"
+            }
+        }
+    },
     "processedStatus": "ประมวลผลแล้ว",
     "corruptedStatus": "เสียหาย",
     "nPending": "{count} รอดำเนินการ",
@@ -2825,5 +2837,15 @@
     "storageSection": "พื้นที่จัดเก็บ",
     "tipKeepPhoneNearby": "ให้โทรศัพท์อยู่ใกล้เพื่อการซิงค์ที่เร็วขึ้น",
     "tipStableInternet": "อินเทอร์เน็ตที่เสถียรช่วยให้อัปโหลดคลาวด์เร็วขึ้น",
-    "tipAutoSync": "การบันทึกจะซิงค์โดยอัตโนมัติ"
+    "tipAutoSync": "การบันทึกจะซิงค์โดยอัตโนมัติ",
+    "permissions": "สิทธิ์",
+    "permissionEnabled": "เปิดใช้งานแล้ว",
+    "permissionEnable": "เปิดใช้งาน",
+    "permissionsPageDescription": "สิทธิ์เหล่านี้มีความสำคัญต่อการทำงานของ Omi ช่วยเปิดใช้งานฟีเจอร์หลัก เช่น การแจ้งเตือน ประสบการณ์ตามตำแหน่ง และการบันทึกเสียง",
+    "permissionsRequiredDescription": "Omi ต้องการสิทธิ์บางอย่างเพื่อทำงานได้อย่างถูกต้อง กรุณาอนุญาตเพื่อดำเนินการต่อ",
+    "permissionsSetupTitle": "รับประสบการณ์ที่ดีที่สุด",
+    "permissionsSetupDescription": "เปิดใช้งานสิทธิ์บางอย่างเพื่อให้ Omi ทำงานได้อย่างเต็มที่",
+    "permissionsChangeAnytime": "คุณสามารถเปลี่ยนได้ทุกเมื่อในการตั้งค่า > สิทธิ์",
+    "location": "ตำแหน่ง",
+    "microphone": "ไมโครโฟน"
 }

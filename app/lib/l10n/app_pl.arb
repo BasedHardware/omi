@@ -2670,6 +2670,18 @@
     "downloadingFromDevice": "Pobieranie z urządzenia",
     "reconnectingToInternet": "Ponowne łączenie z internetem...",
     "uploadingToCloud": "Przesyłanie {current} z {total}",
+    "processingOnServer": "Przetwarzanie na serwerze...",
+    "processingOnServerProgress": "Przetwarzanie... {current}/{total} segmentów",
+    "@processingOnServerProgress": {
+        "placeholders": {
+            "current": {
+                "type": "int"
+            },
+            "total": {
+                "type": "int"
+            }
+        }
+    },
     "processedStatus": "Przetworzono",
     "corruptedStatus": "Uszkodzony",
     "nPending": "{count} oczekujących",
@@ -2860,5 +2872,15 @@
     "storageSection": "PAMIĘĆ",
     "tipKeepPhoneNearby": "Trzymaj telefon blisko dla szybszej synchronizacji",
     "tipStableInternet": "Stabilny internet przyspiesza przesyłanie do chmury",
-    "tipAutoSync": "Nagrania synchronizują się automatycznie"
+    "tipAutoSync": "Nagrania synchronizują się automatycznie",
+    "permissions": "Uprawnienia",
+    "permissionEnabled": "Włączone",
+    "permissionEnable": "Włącz",
+    "permissionsPageDescription": "Te uprawnienia są kluczowe dla działania Omi. Umożliwiają kluczowe funkcje, takie jak powiadomienia, doświadczenia oparte na lokalizacji i nagrywanie dźwięku.",
+    "permissionsRequiredDescription": "Omi potrzebuje kilku uprawnień, aby działać prawidłowo. Proszę, przyznaj je, aby kontynuować.",
+    "permissionsSetupTitle": "Uzyskaj najlepsze wrażenia",
+    "permissionsSetupDescription": "Włącz kilka uprawnień, aby Omi mógł działać jak magia.",
+    "permissionsChangeAnytime": "Możesz je zmienić w dowolnym momencie w Ustawienia > Uprawnienia",
+    "location": "Lokalizacja",
+    "microphone": "Mikrofon"
 }

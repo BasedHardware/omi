@@ -250,6 +250,27 @@ def remove_person_speech_sample(uid: str, person_id: str, sample_path: str) -> b
     return True
 
 
+def set_user_speaker_embedding(uid: str, embedding: list) -> bool:
+    """Store speaker embedding for the user's own voice on their user document."""
+    user_ref = db.collection('users').document(uid)
+    user_ref.update(
+        {
+            'speaker_embedding': embedding,
+            'speaker_embedding_updated_at': datetime.now(timezone.utc),
+        }
+    )
+    return True
+
+
+def get_user_speaker_embedding(uid: str) -> Optional[list]:
+    """Get the user's own speaker embedding from their user document."""
+    user_ref = db.collection('users').document(uid)
+    user_doc = user_ref.get()
+    if not user_doc.exists:
+        return None
+    return user_doc.to_dict().get('speaker_embedding')
+
+
 def set_person_speaker_embedding(uid: str, person_id: str, embedding: list) -> bool:
     """
     Store speaker embedding for a person.

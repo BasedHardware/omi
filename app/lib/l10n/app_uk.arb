@@ -559,7 +559,7 @@
     "allDone": "Все готово!",
     "keepGoing": "Продовжуйте, у вас чудово виходить",
     "skipThisQuestion": "Пропустити це питання",
-    "skipForNow": "Пропустити зараз",
+    "skipForNow": "Пропустити поки що",
     "connectionError": "Помилка підключення",
     "connectionErrorDesc": "Не вдалося підключитися до сервера. Будь ласка, перевірте підключення до інтернету та спробуйте ще раз.",
     "invalidRecordingMultipleSpeakers": "Виявлено недійсний запис",
@@ -2635,6 +2635,18 @@
     "downloadingFromDevice": "Завантаження з пристрою",
     "reconnectingToInternet": "Повторне підключення до інтернету...",
     "uploadingToCloud": "Завантаження {current} з {total}",
+    "processingOnServer": "Обробка на сервері...",
+    "processingOnServerProgress": "Обробка... {current}/{total} сегментів",
+    "@processingOnServerProgress": {
+        "placeholders": {
+            "current": {
+                "type": "int"
+            },
+            "total": {
+                "type": "int"
+            }
+        }
+    },
     "processedStatus": "Оброблено",
     "corruptedStatus": "Пошкоджено",
     "nPending": "{count} очікують",
@@ -2825,5 +2837,15 @@
     "storageSection": "СХОВИЩЕ",
     "tipKeepPhoneNearby": "Тримайте телефон поруч для швидшої синхронізації",
     "tipStableInternet": "Стабільний інтернет прискорює завантаження в хмару",
-    "tipAutoSync": "Записи синхронізуються автоматично"
+    "tipAutoSync": "Записи синхронізуються автоматично",
+    "permissions": "Дозволи",
+    "permissionEnabled": "Увімкнено",
+    "permissionEnable": "Увімкнути",
+    "permissionsPageDescription": "Ці дозволи є ключовими для роботи Omi. Вони забезпечують основні функції, такі як сповіщення, функції на основі місцезнаходження та запис звуку.",
+    "permissionsRequiredDescription": "Omi потребує кількох дозволів для коректної роботи. Будь ласка, надайте їх, щоб продовжити.",
+    "permissionsSetupTitle": "Отримайте найкращий досвід",
+    "permissionsSetupDescription": "Увімкніть кілька дозволів, щоб Omi міг творити свою магію.",
+    "permissionsChangeAnytime": "Ви можете змінити це будь-коли в Налаштування > Дозволи",
+    "location": "Місцезнаходження",
+    "microphone": "Мікрофон"
 }

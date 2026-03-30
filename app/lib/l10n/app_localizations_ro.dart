@@ -1825,7 +1825,7 @@ class AppLocalizationsRo extends AppLocalizations {
   String get skipThisQuestion => 'Sari peste această întrebare';
 
   @override
-  String get skipForNow => 'Sari peste pentru moment';
+  String get skipForNow => 'Omite deocamdată';
 
   @override
   String get connectionError => 'Eroare de conexiune';
@@ -8198,6 +8198,14 @@ class AppLocalizationsRo extends AppLocalizations {
   }
 
   @override
+  String get processingOnServer => 'Procesare pe server...';
+
+  @override
+  String processingOnServerProgress(int current, int total) {
+    return 'Procesare... $current/$total segmente';
+  }
+
+  @override
   String get processedStatus => 'Procesat';
 
   @override
@@ -8757,4 +8765,36 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get storageSection => 'STOCARE';
+
+  @override
+  String get permissions => 'Permisiuni';
+
+  @override
+  String get permissionEnabled => 'Activată';
+
+  @override
+  String get permissionEnable => 'Activare';
+
+  @override
+  String get permissionsPageDescription =>
+      'Aceste permisiuni sunt esențiale pentru funcționarea Omi. Ele activează funcții cheie precum notificări, experiențe bazate pe locație și captură audio.';
+
+  @override
+  String get permissionsRequiredDescription =>
+      'Omi are nevoie de câteva permisiuni pentru a funcționa corect. Te rugăm să le acorzi pentru a continua.';
+
+  @override
+  String get permissionsSetupTitle => 'Obține cea mai bună experiență';
+
+  @override
+  String get permissionsSetupDescription => 'Activează câteva permisiuni pentru ca Omi să își poată face magia.';
+
+  @override
+  String get permissionsChangeAnytime => 'Poți schimba oricând din Setări > Permisiuni';
+
+  @override
+  String get location => 'Locație';
+
+  @override
+  String get microphone => 'Microfon';
 }

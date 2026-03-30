@@ -801,13 +801,9 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
   ) -> [String] {
     var suggestions: [String] = []
 
-    if let snapshot {
-      for project in snapshot.projectNames.prefix(2) {
-        suggestions.append("Ship \(project)")
-      }
-      if let technology = snapshot.technologies.first {
-        suggestions.append("Make faster progress in \(technology)")
-      }
+    // Context-aware but user-centered goals (not raw project names)
+    if snapshot != nil || !email.isEmpty || !calendar.isEmpty {
+      suggestions.append("Be more productive and focused every day")
     }
 
     if !email.isEmpty {
@@ -816,6 +812,10 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
 
     if !calendar.isEmpty {
       suggestions.append("Create more focus time between meetings")
+    }
+
+    if snapshot != nil {
+      suggestions.append("Make meaningful progress on my projects")
     }
 
     suggestions.append("I’ll type my own")

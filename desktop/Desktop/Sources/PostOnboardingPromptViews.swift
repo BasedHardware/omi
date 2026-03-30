@@ -137,29 +137,23 @@ struct PromptSuggestionBanner: View {
   private let calloutCream = Color(hex: 0xF4E3AA)
 
   private func compactLabel(for suggestion: String) -> String {
-    if suggestion.hasPrefix("What should I focus on today to ship ") {
+    if suggestion == "What should I focus on today to achieve my goals?" {
       return "What should I focus on today?"
     }
-    if suggestion.hasPrefix("Based on my recent work, what am I probably blocked on in ") {
-      return "What am I probably blocked on?"
+    if suggestion == "What email follow-ups matter most today?" {
+      return "Which email follow-ups matter?"
     }
-    if suggestion == "Which follow-ups from my recent emails matter most today?" {
-      return "Which email follow-ups matter most?"
+    if suggestion == "Where can I find focus time this week?" {
+      return "Where can I find focus time?"
     }
-    if suggestion == "Where can I create more focus time in my calendar this week?" {
-      return "Where can I create more focus time?"
-    }
-    if suggestion.hasPrefix("Help me break \"") {
-      return "What are the next 3 steps?"
-    }
-    if suggestion == "What should I prioritize this week based on what you know about me?" {
-      return "What should I prioritize this week?"
+    if suggestion == "Break my goal into the next 3 steps." {
+      return "Next 3 steps for my goal"
     }
     if suggestion == "What on my screen matters most right now?" {
-      return "What matters most on my screen?"
+      return "What matters on my screen?"
     }
-    if suggestion == "What is the highest-leverage thing I can do in the next 30 minutes?" {
-      return "What should I do in the next 30 minutes?"
+    if suggestion == "What's the highest-leverage thing I can do next?" {
+      return "What should I do next?"
     }
     return suggestion
   }

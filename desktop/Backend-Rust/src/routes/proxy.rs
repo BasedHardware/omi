@@ -2,6 +2,7 @@
 // Keys stay server-side; desktop client authenticates via Firebase token only.
 //
 // Issue #5861: Remove client-side API key exposure risk.
+// Issue #6098 L2: Tiered rate limiting with Pro→Flash degradation.
 
 use axum::{
     body::Bytes,
@@ -15,6 +16,8 @@ use axum::{
 use crate::auth::AuthUser;
 use crate::AppState;
 
+use super::rate_limit::{self, RateDecision};
+
 // Allowed Gemini API actions (suffix after model name)
 const GEMINI_ALLOWED_ACTIONS: &[&str] = &[
     "generateContent",
@@ -23,29 +26,75 @@ const GEMINI_ALLOWED_ACTIONS: &[&str] = &[
     "batchEmbedContents",
 ];
 
+/// Proxy-specific error type — allows JSON 429 responses alongside bare status codes.
+enum ProxyError {
+    Status(StatusCode),
+    RateLimited,
+}
+
+impl IntoResponse for ProxyError {
+    fn into_response(self) -> Response {
+        match self {
+            ProxyError::Status(status) => status.into_response(),
+            ProxyError::RateLimited => {
+                // Message must contain "resource exhausted" or "429" for Swift GeminiClient
+                // to treat it as a transient error and apply retry backoff.
+                let body = rate_limit::rate_limit_error_json(
+                    "Resource exhausted: rate limit exceeded. Please try again later.",
+                );
+                Response::builder()
+                    .status(StatusCode::TOO_MANY_REQUESTS)
+                    .header("content-type", "application/json")
+                    .header("retry-after", "60")
+                    .body(axum::body::Body::from(body))
+                    .unwrap()
+            }
+        }
+    }
+}
+
 /// POST /v1/proxy/gemini/*path
 /// Proxies requests to https://generativelanguage.googleapis.com/v1beta/...
 /// Appends the server-side Gemini API key. Client sends Bearer Firebase token.
+/// Rate-limited per user: Tier 1 (allow), Tier 2 (degrade Pro→Flash), Tier 3 (reject 429).
 async fn gemini_proxy(
     State(state): State<AppState>,
-    _user: AuthUser,
+    user: AuthUser,
     Path(path): Path<String>,
     body: Bytes,
-) -> Result<Response, StatusCode> {
+) -> Result<Response, ProxyError> {
     let gemini_key = state
         .config
         .gemini_api_key
         .as_ref()
-        .ok_or(StatusCode::SERVICE_UNAVAILABLE)?;
+        .ok_or(ProxyError::Status(StatusCode::SERVICE_UNAVAILABLE))?;
 
     // Validate the action is in our allowlist
     let action = extract_gemini_action(&path);
     if !is_gemini_action_allowed(action) {
         tracing::warn!("gemini_proxy: blocked action '{}' in path '{}'", action, path);
-        return Err(StatusCode::FORBIDDEN);
+        return Err(ProxyError::Status(StatusCode::FORBIDDEN));
     }
 
-    let url = build_gemini_url(&path, gemini_key);
+    // Rate limit check
+    let decision = state.gemini_rate_limiter.check_and_record(&user.uid, state.redis.as_ref()).await;
+    if decision == RateDecision::Reject {
+        tracing::warn!("gemini_proxy: rate limit rejected uid={}", user.uid);
+        return Err(ProxyError::RateLimited);
+    }
+
+    // Apply model degradation if needed
+    let effective_path = rate_limit::maybe_rewrite_model_path(&path, &decision, action);
+    if effective_path != path {
+        tracing::info!(
+            "gemini_proxy: degraded uid={} {} -> {}",
+            user.uid,
+            path,
+            effective_path
+        );
+    }
+
+    let url = build_gemini_url(&effective_path, gemini_key);
 
     let upstream = reqwest::Client::new()
         .post(&url)
@@ -55,14 +104,14 @@ async fn gemini_proxy(
         .await
         .map_err(|e| {
             tracing::error!("gemini_proxy: upstream request failed: {}", e);
-            StatusCode::BAD_GATEWAY
+            ProxyError::Status(StatusCode::BAD_GATEWAY)
         })?;
 
     let status =
         StatusCode::from_u16(upstream.status().as_u16()).unwrap_or(StatusCode::BAD_GATEWAY);
     let bytes = upstream.bytes().await.map_err(|e| {
         tracing::error!("gemini_proxy: failed to read upstream body: {}", e);
-        StatusCode::BAD_GATEWAY
+        ProxyError::Status(StatusCode::BAD_GATEWAY)
     })?;
 
     Ok((status, bytes).into_response())
@@ -70,28 +119,47 @@ async fn gemini_proxy(
 
 /// POST /v1/proxy/gemini-stream/*path
 /// Same as gemini_proxy but streams the response using SSE (for streamGenerateContent).
+/// Rate-limited per user with same tiers as gemini_proxy.
 async fn gemini_stream_proxy(
     State(state): State<AppState>,
-    _user: AuthUser,
+    user: AuthUser,
     Path(path): Path<String>,
     axum::extract::Query(query): axum::extract::Query<std::collections::HashMap<String, String>>,
     body: Bytes,
-) -> Result<Response, StatusCode> {
+) -> Result<Response, ProxyError> {
     let gemini_key = state
         .config
         .gemini_api_key
         .as_ref()
-        .ok_or(StatusCode::SERVICE_UNAVAILABLE)?;
+        .ok_or(ProxyError::Status(StatusCode::SERVICE_UNAVAILABLE))?;
 
     // Validate the action
     let action = extract_gemini_action(&path);
     if !is_gemini_action_allowed(action) {
         tracing::warn!("gemini_stream_proxy: blocked action '{}'", action);
-        return Err(StatusCode::FORBIDDEN);
+        return Err(ProxyError::Status(StatusCode::FORBIDDEN));
+    }
+
+    // Rate limit check
+    let decision = state.gemini_rate_limiter.check_and_record(&user.uid, state.redis.as_ref()).await;
+    if decision == RateDecision::Reject {
+        tracing::warn!("gemini_stream_proxy: rate limit rejected uid={}", user.uid);
+        return Err(ProxyError::RateLimited);
+    }
+
+    // Apply model degradation if needed
+    let effective_path = rate_limit::maybe_rewrite_model_path(&path, &decision, action);
+    if effective_path != path {
+        tracing::info!(
+            "gemini_stream_proxy: degraded uid={} {} -> {}",
+            user.uid,
+            path,
+            effective_path
+        );
     }
 
     // Build upstream URL with query params (e.g., alt=sse)
-    let upstream_url = build_gemini_stream_url(&path, gemini_key, &query);
+    let upstream_url = build_gemini_stream_url(&effective_path, gemini_key, &query);
 
     let upstream = reqwest::Client::new()
         .post(&upstream_url)
@@ -101,7 +169,7 @@ async fn gemini_stream_proxy(
         .await
         .map_err(|e| {
             tracing::error!("gemini_stream_proxy: upstream request failed: {}", e);
-            StatusCode::BAD_GATEWAY
+            ProxyError::Status(StatusCode::BAD_GATEWAY)
         })?;
 
     let status =
@@ -460,5 +528,31 @@ mod tests {
             build_deepgram_auth_header("dg-test-key"),
             "Token dg-test-key"
         );
+    }
+
+    // --- ProxyError::RateLimited response ---
+
+    #[tokio::test]
+    async fn rate_limited_response_status_and_headers() {
+        let response = ProxyError::RateLimited.into_response();
+        assert_eq!(response.status(), StatusCode::TOO_MANY_REQUESTS);
+        assert_eq!(
+            response.headers().get("content-type").unwrap(),
+            "application/json"
+        );
+        assert_eq!(response.headers().get("retry-after").unwrap(), "60");
+    }
+
+    #[tokio::test]
+    async fn rate_limited_response_body() {
+        let response = ProxyError::RateLimited.into_response();
+        let body_bytes = axum::body::to_bytes(response.into_body(), 4096)
+            .await
+            .unwrap();
+        let parsed: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
+        assert_eq!(parsed["error"]["code"], 429);
+        assert_eq!(parsed["error"]["status"], "RESOURCE_EXHAUSTED");
+        let msg = parsed["error"]["message"].as_str().unwrap().to_lowercase();
+        assert!(msg.contains("resource exhausted"));
     }
 }

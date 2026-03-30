@@ -346,7 +346,10 @@ Future<List<ServerConversation>> sendStorageToBackend(File file, String sdCardDa
 Future<SyncLocalFilesResponse> syncLocalFiles(List<File> files, {UploadProgressCallback? onUploadProgress}) async {
   try {
     var response = await makeMultipartApiCall(
-        url: '${Env.apiBaseUrl}v1/sync-local-files', files: files, onUploadProgress: onUploadProgress);
+      url: '${Env.apiBaseUrl}v1/sync-local-files',
+      files: files,
+      onUploadProgress: onUploadProgress,
+    );
 
     if (response.statusCode == 200 || response.statusCode == 207) {
       var result = SyncLocalFilesResponse.fromJson(jsonDecode(response.body));
@@ -370,6 +373,106 @@ Future<SyncLocalFilesResponse> syncLocalFiles(List<File> files, {UploadProgressC
     }
   } catch (e) {
     Logger.debug('syncLocalFiles error: $e');
+    rethrow;
+  }
+}
+
+/// v2 async sync: POST files → 202 with job_id, then poll until terminal.
+/// Returns the same SyncLocalFilesResponse as v1 once processing is confirmed complete.
+typedef SyncJobPollCallback = void Function(SyncJobStatusResponse status);
+
+Future<SyncLocalFilesResponse> syncLocalFilesV2(
+  List<File> files, {
+  UploadProgressCallback? onUploadProgress,
+  SyncJobPollCallback? onPollProgress,
+}) async {
+  try {
+    // Step 1: Submit files
+    var response = await makeMultipartApiCall(
+      url: '${Env.apiBaseUrl}v2/sync-local-files',
+      files: files,
+      onUploadProgress: onUploadProgress,
+    );
+
+    // Fast-path responses (no async job created)
+    if (response.statusCode == 200) {
+      return SyncLocalFilesResponse.fromJson(jsonDecode(response.body));
+    }
+
+    if (response.statusCode != 202) {
+      if (response.statusCode == 400) {
+        throw Exception('Audio file could not be processed by server');
+      } else if (response.statusCode == 413) {
+        throw Exception('Audio file is too large to upload');
+      } else if (response.statusCode == 429) {
+        throw Exception('Rate limited or budget exhausted');
+      } else if (response.statusCode >= 500) {
+        throw Exception('Server is temporarily unavailable');
+      } else {
+        throw Exception('Upload failed unexpectedly');
+      }
+    }
+
+    // Step 2: Poll for completion
+    var startResponse = SyncJobStartResponse.fromJson(jsonDecode(response.body));
+    var jobId = startResponse.jobId;
+    var pollInterval = Duration(milliseconds: startResponse.pollAfterMs);
+
+    const maxPolls = 120; // 120 x 3s = 6 minutes max
+    for (var i = 0; i < maxPolls; i++) {
+      await Future.delayed(pollInterval);
+
+      var pollResponse = await makeApiCall(
+        url: '${Env.apiBaseUrl}v2/sync-local-files/$jobId',
+        headers: {},
+        method: 'GET',
+        body: '',
+      );
+
+      if (pollResponse == null) {
+        Logger.debug('syncLocalFilesV2 poll failed: null response');
+        continue; // Retry on transient errors
+      }
+
+      // Terminal errors — don't retry
+      if (pollResponse.statusCode == 404) {
+        throw Exception('Sync job not found or expired');
+      }
+      if (pollResponse.statusCode == 403) {
+        throw Exception('Not authorized to view this sync job');
+      }
+      if (pollResponse.statusCode != 200) {
+        Logger.debug('syncLocalFilesV2 poll failed: ${pollResponse.statusCode}');
+        continue; // Retry on transient errors
+      }
+
+      var jobStatus = SyncJobStatusResponse.fromJson(jsonDecode(pollResponse.body));
+
+      // Report poll progress to caller for UI updates
+      onPollProgress?.call(jobStatus);
+
+      if (jobStatus.isTerminal) {
+        // All segments failed → throw to match v1's 500 behavior (WAL stays retryable)
+        if (jobStatus.status == 'failed') {
+          throw Exception(jobStatus.error ?? 'Sync job failed');
+        }
+        // Success or partial failure → return result
+        if (jobStatus.result != null) {
+          return jobStatus.result!;
+        }
+        return SyncLocalFilesResponse(
+          newConversationIds: [],
+          updatedConversationIds: [],
+          failedSegments: jobStatus.failedSegments,
+          totalSegments: jobStatus.totalSegments,
+        );
+      }
+    }
+
+    // Polling timed out — don't mark as synced
+    throw Exception('Sync job timed out waiting for results');
+  } catch (e) {
+    Logger.debug('syncLocalFilesV2 error: $e');
     rethrow;
   }
 }

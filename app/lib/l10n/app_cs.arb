@@ -559,7 +559,7 @@
     "allDone": "Vše hotovo!",
     "keepGoing": "Pokračujte dál, jde vám to skvěle",
     "skipThisQuestion": "Přeskočit tuto otázku",
-    "skipForNow": "Zatím přeskočit",
+    "skipForNow": "Přeskočit",
     "connectionError": "Chyba připojení",
     "connectionErrorDesc": "Nepodařilo se připojit k serveru. Zkontrolujte prosím připojení k internetu a zkuste to znovu.",
     "invalidRecordingMultipleSpeakers": "Detekována neplatná nahrávka",
@@ -2604,6 +2604,18 @@
     "downloadingFromDevice": "Stahování ze zařízení",
     "reconnectingToInternet": "Opětovné připojování k internetu...",
     "uploadingToCloud": "Nahrávání {current} z {total}",
+    "processingOnServer": "Zpracování na serveru...",
+    "processingOnServerProgress": "Zpracování... {current}/{total} segmentů",
+    "@processingOnServerProgress": {
+        "placeholders": {
+            "current": {
+                "type": "int"
+            },
+            "total": {
+                "type": "int"
+            }
+        }
+    },
     "processedStatus": "Zpracováno",
     "corruptedStatus": "Poškozeno",
     "nPending": "{count} čekajících",
@@ -2794,5 +2806,15 @@
     "storageSection": "ÚLOŽIŠTĚ",
     "tipKeepPhoneNearby": "Mějte telefon poblíž pro rychlejší synchronizaci",
     "tipStableInternet": "Stabilní internet urychluje nahrávání do cloudu",
-    "tipAutoSync": "Nahrávky se synchronizují automaticky"
+    "tipAutoSync": "Nahrávky se synchronizují automaticky",
+    "permissions": "Oprávnění",
+    "permissionEnabled": "Povoleno",
+    "permissionEnable": "Povolit",
+    "permissionsPageDescription": "Tato oprávnění jsou klíčová pro fungování Omi. Umožňují klíčové funkce jako oznámení, služby založené na poloze a záznam zvuku.",
+    "permissionsRequiredDescription": "Omi potřebuje několik oprávnění, aby správně fungoval. Prosím, udělte je pro pokračování.",
+    "permissionsSetupTitle": "Získejte nejlepší zážitek",
+    "permissionsSetupDescription": "Povolte několik oprávnění, aby Omi mohl fungovat naplno.",
+    "permissionsChangeAnytime": "Toto můžete kdykoli změnit v Nastavení > Oprávnění",
+    "location": "Poloha",
+    "microphone": "Mikrofon"
 }

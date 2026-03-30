@@ -1817,7 +1817,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get skipThisQuestion => 'Přeskočit tuto otázku';
 
   @override
-  String get skipForNow => 'Zatím přeskočit';
+  String get skipForNow => 'Přeskočit';
 
   @override
   String get connectionError => 'Chyba připojení';
@@ -8155,6 +8155,14 @@ class AppLocalizationsCs extends AppLocalizations {
   }
 
   @override
+  String get processingOnServer => 'Zpracování na serveru...';
+
+  @override
+  String processingOnServerProgress(int current, int total) {
+    return 'Zpracování... $current/$total segmentů';
+  }
+
+  @override
   String get processedStatus => 'Zpracováno';
 
   @override
@@ -8711,4 +8719,36 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get storageSection => 'ÚLOŽIŠTĚ';
+
+  @override
+  String get permissions => 'Oprávnění';
+
+  @override
+  String get permissionEnabled => 'Povoleno';
+
+  @override
+  String get permissionEnable => 'Povolit';
+
+  @override
+  String get permissionsPageDescription =>
+      'Tato oprávnění jsou klíčová pro fungování Omi. Umožňují klíčové funkce jako oznámení, služby založené na poloze a záznam zvuku.';
+
+  @override
+  String get permissionsRequiredDescription =>
+      'Omi potřebuje několik oprávnění, aby správně fungoval. Prosím, udělte je pro pokračování.';
+
+  @override
+  String get permissionsSetupTitle => 'Získejte nejlepší zážitek';
+
+  @override
+  String get permissionsSetupDescription => 'Povolte několik oprávnění, aby Omi mohl fungovat naplno.';
+
+  @override
+  String get permissionsChangeAnytime => 'Toto můžete kdykoli změnit v Nastavení > Oprávnění';
+
+  @override
+  String get location => 'Poloha';
+
+  @override
+  String get microphone => 'Mikrofon';
 }

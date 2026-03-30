@@ -80,10 +80,6 @@ struct OMIApp: App {
   /// Launch mode determined at startup from command-line arguments
   static let launchMode = LaunchMode.fromCommandLine()
 
-  init() {
-    AppBuild.syncUpdateChannelWithInstalledApp()
-  }
-
   /// Window title with version number (different for rewind mode)
   private var windowTitle: String {
     // Keep a distinct title in non-production builds so custom test apps are easy to identify.

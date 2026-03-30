@@ -3,11 +3,13 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
+import 'package:meta/meta.dart';
 
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/models/sync_state.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/services/audio_sources/audio_source.dart';
 import 'package:omi/services/wals/wal.dart';
 import 'package:omi/services/wals/wal_interfaces.dart';
 import 'package:omi/utils/debug_log_manager.dart';
@@ -17,7 +19,7 @@ import 'package:omi/utils/wal_file_manager.dart';
 class LocalWalSyncImpl implements LocalWalSync {
   List<Wal> _wals = const [];
 
-  List<List<int>> _frames = [];
+  List<WalFrame> _frames = [];
   List<bool> _frameSynced = [];
 
   Timer? _chunkingTimer;
@@ -38,6 +40,15 @@ class LocalWalSyncImpl implements LocalWalSync {
   SyncLocalFilesResponse? get accumulatedResponse => _accumulatedResponse;
 
   LocalWalSyncImpl(this.listener);
+
+  @visibleForTesting
+  List<WalFrame> get testFrames => _frames;
+
+  @visibleForTesting
+  List<bool> get testFrameSynced => _frameSynced;
+
+  @visibleForTesting
+  List<Wal> get testWals => _wals;
 
   @override
   void cancelSync() {
@@ -112,10 +123,8 @@ class LocalWalSyncImpl implements LocalWalSync {
 
   @override
   Future onAudioCodecChanged(BleAudioCodec codec) async {
-    if (codec.getFramesPerSecond() == _framesPerSecond && codec == _codec) {
-      return;
-    }
-
+    // Always chunk+flush+clear to ensure clean session boundaries.
+    // This is safe when frames are empty (_chunk returns immediately).
     await _chunk();
     await _flush();
     _frames = [];
@@ -146,7 +155,7 @@ class LocalWalSyncImpl implements LocalWalSync {
 
     var high = pivot;
     var low = 0;
-    var chunk = _frames.sublist(low, high);
+    var chunk = _frames.sublist(low, high).map((f) => f.payload).toList();
     var timerStart = timerEnd - (high - low) ~/ _framesPerSecond;
     var chunkFrameCount = high - low;
 
@@ -236,11 +245,11 @@ class LocalWalSyncImpl implements LocalWalSync {
 
         List<int> data = [];
         for (int i = 0; i < wal.data.length; i++) {
-          var frame = wal.data[i].sublist(3);
+          var frame = wal.data[i];
 
           final byteFrame = ByteData(frame.length);
-          for (int i = 0; i < frame.length; i++) {
-            byteFrame.setUint8(i, frame[i]);
+          for (int j = 0; j < frame.length; j++) {
+            byteFrame.setUint8(j, frame[j]);
           }
           data.addAll(Uint32List.fromList([frame.length]).buffer.asUint8List());
           data.addAll(byteFrame.buffer.asUint8List());
@@ -326,18 +335,15 @@ class LocalWalSyncImpl implements LocalWalSync {
   }
 
   @override
-  void onByteStream(List<int> value) async {
-    _frames.add(value);
+  void onFrameCaptured(WalFrame frame) {
+    _frames.add(frame);
     _frameSynced.add(false);
   }
 
   @override
-  void onBytesSync(List<int> value) {
+  void markFrameSynced(FrameSyncKey key) {
     for (int i = _frames.length - 1; i >= 0; i--) {
-      if (_frames[i].length >= 3 &&
-          _frames[i][0] == value[0] &&
-          _frames[i][1] == value[1] &&
-          _frames[i][2] == value[2]) {
+      if (_frames[i].syncKey == key) {
         _frameSynced[i] = true;
         break;
       }
@@ -447,12 +453,26 @@ class LocalWalSyncImpl implements LocalWalSync {
       }
 
       // Report file-count progress
-      progress?.onWalSyncedProgress(filesUploaded / totalFilesToUpload,
-          phase: SyncPhase.uploadingToCloud, currentFile: filesUploaded, totalFiles: totalFilesToUpload);
+      progress?.onWalSyncedProgress(
+        filesUploaded / totalFilesToUpload,
+        phase: SyncPhase.uploadingToCloud,
+        currentFile: filesUploaded,
+        totalFiles: totalFilesToUpload,
+      );
 
       listener.onWalUpdated();
       try {
-        var partialRes = await syncLocalFiles(files);
+        var partialRes = await syncLocalFilesV2(
+          files,
+          onPollProgress: (jobStatus) {
+            progress?.onWalSyncedProgress(
+              jobStatus.totalSegments > 0 ? jobStatus.processedSegments / jobStatus.totalSegments : 0.0,
+              phase: SyncPhase.processingOnServer,
+              currentFile: jobStatus.processedSegments,
+              totalFiles: jobStatus.totalSegments,
+            );
+          },
+        );
 
         resp.newConversationIds.addAll(
           partialRes.newConversationIds.where((id) => !resp.newConversationIds.contains(id)),
@@ -577,7 +597,17 @@ class LocalWalSyncImpl implements LocalWalSync {
 
     listener.onWalUpdated();
     try {
-      var partialRes = await syncLocalFiles([walFile]);
+      var partialRes = await syncLocalFilesV2(
+        [walFile],
+        onPollProgress: (jobStatus) {
+          progress?.onWalSyncedProgress(
+            jobStatus.totalSegments > 0 ? jobStatus.processedSegments / jobStatus.totalSegments : 0.0,
+            phase: SyncPhase.processingOnServer,
+            currentFile: jobStatus.processedSegments,
+            totalFiles: jobStatus.totalSegments,
+          );
+        },
+      );
 
       resp.newConversationIds.addAll(
         partialRes.newConversationIds.where((id) => !resp.newConversationIds.contains(id)),
