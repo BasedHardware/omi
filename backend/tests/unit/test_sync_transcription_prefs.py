@@ -1006,3 +1006,150 @@ class TestSyncEndpointSpeakerIdWiring:
         fn_start = source.index('async def sync_local_files(')
         fn_body = source[fn_start:]
         assert 'person_embeddings_cache' in fn_body
+
+
+# ---------------------------------------------------------------------------
+# Additional coverage: download, exception handling, boundaries, propagation
+# ---------------------------------------------------------------------------
+
+
+class TestDownloadAudioBytes:
+    """Verify _download_audio_bytes handles success and failure."""
+
+    @patch('routers.sync.requests')
+    def test_download_success(self, mock_requests):
+        from routers.sync import _download_audio_bytes
+
+        mock_resp = MagicMock()
+        mock_resp.content = b'wav-bytes'
+        mock_resp.raise_for_status.return_value = None
+        mock_requests.get.return_value = mock_resp
+
+        result = _download_audio_bytes('http://example.com/audio.wav')
+        assert result == b'wav-bytes'
+        mock_requests.get.assert_called_once_with('http://example.com/audio.wav', timeout=60)
+
+    @patch('routers.sync.requests')
+    def test_download_failure_returns_none(self, mock_requests):
+        from routers.sync import _download_audio_bytes
+
+        mock_requests.get.side_effect = Exception("Connection refused")
+
+        result = _download_audio_bytes('http://example.com/audio.wav')
+        assert result is None
+
+
+class TestSpeakerIdExceptionHandling:
+    """Verify process_segment swallows speaker ID exceptions gracefully."""
+
+    @staticmethod
+    def _mock_words():
+        return [
+            {'timestamp': [0.0, 0.5], 'speaker': 'SPEAKER_00', 'text': 'Hello'},
+            {'timestamp': [0.5, 1.0], 'speaker': 'SPEAKER_00', 'text': 'world'},
+        ]
+
+    @patch('routers.sync.process_conversation')
+    @patch('routers.sync.get_closest_conversation_to_timestamps', return_value=None)
+    @patch('routers.sync.get_timestamp_from_path', return_value=1700000000)
+    @patch('routers.sync.deepgram_prerecorded')
+    @patch('routers.sync.delete_syncing_temporal_file')
+    @patch('routers.sync.get_syncing_file_temporal_signed_url', return_value='http://example.com/audio.wav')
+    @patch('routers.sync.identify_speakers_for_segments', side_effect=RuntimeError("embedding API down"))
+    @patch('routers.sync._download_audio_bytes', return_value=b'audio')
+    def test_speaker_id_exception_does_not_break_processing(
+        self, mock_download, mock_identify, mock_url, mock_delete, mock_dg, mock_ts, mock_closest, mock_process
+    ):
+        from routers.sync import process_segment
+
+        mock_dg.return_value = (self._mock_words(), 'en')
+        mock_process.return_value = MagicMock(id='test-id')
+
+        cache = {'p1': {'embedding': np.ones((1, 512)), 'name': 'Alice'}}
+        response = {'new_memories': set(), 'updated_memories': set()}
+        lock = threading.Lock()
+        errors = []
+
+        # Should not raise — exception is caught and logged
+        process_segment(
+            'test/path.bin',
+            'uid123',
+            response,
+            lock,
+            errors,
+            person_embeddings_cache=cache,
+        )
+
+        # Conversation should still be created despite speaker ID failure
+        mock_process.assert_called_once()
+        assert 'test-id' in response['new_memories']
+
+
+class TestSpeakerIdBoundaries:
+    """Verify boundary conditions for speaker identification."""
+
+    def test_exact_threshold_clip_duration(self):
+        """Clip exactly at SPEAKER_ID_MIN_AUDIO (1.0s) should be extracted."""
+        from routers.sync import _extract_speaker_clip_wav
+
+        audio = _make_wav_bytes(duration_sec=5.0)
+        clip = _extract_speaker_clip_wav(audio, 1.0, 2.0)  # exactly 1.0s
+        assert clip is not None
+        with wave.open(io.BytesIO(clip), 'rb') as wf:
+            duration = wf.getnframes() / wf.getframerate()
+            assert 0.9 < duration < 1.1
+
+    def test_just_below_threshold_clip_duration(self):
+        """Clip just below 1.0s threshold should return None."""
+        from routers.sync import _extract_speaker_clip_wav
+
+        audio = _make_wav_bytes(duration_sec=5.0)
+        clip = _extract_speaker_clip_wav(audio, 1.0, 1.99)  # 0.99s < 1.0s
+        assert clip is None
+
+    @patch('routers.sync.extract_embedding_from_bytes')
+    def test_speaker_id_none_normalized_to_zero(self, mock_extract):
+        """Segments with speaker_id=None should be treated as speaker_id=0."""
+        from routers.sync import identify_speakers_for_segments
+
+        mock_extract.return_value = np.ones((1, 512), dtype=np.float32)
+
+        cache = {'p1': {'embedding': np.ones((1, 512), dtype=np.float32), 'name': 'Alice'}}
+
+        seg = _make_transcript_segment(speaker_id=1, start=0.0, end=2.0, text='hello', seg_id='s1')
+        seg.speaker_id = None  # Override to None
+
+        segments = [seg]
+        audio = _make_wav_bytes(duration_sec=5.0)
+        identify_speakers_for_segments(segments, audio, cache, 'uid1')
+
+        # Should be grouped under speaker_id=0, and still get voice matched
+        assert segments[0].person_id == 'p1'
+
+    @patch('routers.sync.users_db')
+    @patch('routers.sync.extract_embedding_from_bytes')
+    def test_diarized_text_match_propagates_to_all_speaker_segments(self, mock_extract, mock_users_db):
+        """When text detection matches a diarized speaker, all segments with that speaker_id get assigned."""
+        from routers.sync import identify_speakers_for_segments
+
+        # Embedding doesn't match anyone
+        mock_extract.return_value = np.zeros((1, 512), dtype=np.float32)
+        far_emb = np.ones((1, 512), dtype=np.float32)
+        cache = {'p1': {'embedding': far_emb, 'name': 'Alice'}}
+
+        mock_users_db.get_person_by_name.return_value = {'id': 'p2', 'name': 'Bob'}
+
+        segments = [
+            _make_transcript_segment(speaker_id=2, start=0.0, end=2.0, text='my name is Bob', seg_id='s1'),
+            _make_transcript_segment(speaker_id=2, start=3.0, end=4.0, text='how are you', seg_id='s2'),
+            _make_transcript_segment(speaker_id=2, start=5.0, end=6.0, text='goodbye', seg_id='s3'),
+        ]
+
+        audio = _make_wav_bytes(duration_sec=7.0)
+        identify_speakers_for_segments(segments, audio, cache, 'uid1')
+
+        # Text detection matched "Bob" on s1 → speaker_to_person_map[2] = p2
+        # All speaker_id=2 segments should be assigned via speaker_to_person_map
+        assert segments[0].person_id == 'p2'
+        assert segments[1].person_id == 'p2'
+        assert segments[2].person_id == 'p2'
