@@ -443,7 +443,7 @@ extension APIClient {
             let count: Int
         }
 
-        let response: CountResponse = try await get("v1/users/stats/chat-messages")
+        let response: CountResponse = try await get("v1/users/stats/chat-messages", customBaseURL: rustBackendURL)
         return response.count
     }
 
