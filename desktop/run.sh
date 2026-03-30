@@ -209,30 +209,6 @@ find "$HOME" -maxdepth 4 -name "$APP_NAME.app" -type d -not -path "$APP_BUNDLE" 
     rm -rf "$stale"
 done
 
-if [ "${OMI_SKIP_TUNNEL:-0}" != "1" ]; then
-    step "Starting Cloudflare quick tunnel..."
-    if command -v cloudflared >/dev/null 2>&1; then
-        TUNNEL_LOG=$(mktemp /tmp/cloudflared-XXXXXX.log)
-        cloudflared tunnel --url http://localhost:${BACKEND_PORT:-8080} > "$TUNNEL_LOG" 2>&1 &
-        TUNNEL_PID=$!
-        for i in {1..20}; do
-            TUNNEL_URL=$(grep -o 'https://[a-z0-9-]*\.trycloudflare\.com' "$TUNNEL_LOG" 2>/dev/null | head -1)
-            if [ -n "$TUNNEL_URL" ]; then break; fi
-            sleep 0.5
-        done
-        if [ -n "$TUNNEL_URL" ]; then
-            rm -f "$TUNNEL_LOG"
-            substep "Tunnel URL: $TUNNEL_URL"
-        else
-            substep "Warning: Could not capture tunnel URL (see $TUNNEL_LOG for details)"
-        fi
-    else
-        substep "cloudflared not found — skipping tunnel (set OMI_API_URL in .env instead)"
-    fi
-else
-    substep "Skipping tunnel (OMI_SKIP_TUNNEL=1)"
-fi
-
 # ─── Load .env and credentials ─────────────────────────────────────────
 cd "$BACKEND_DIR"
 
@@ -315,6 +291,30 @@ if [ -n "$FIREBASE_AUTH_PROJECT_ID" ]; then
 fi
 substep "Firebase project: $FIREBASE_PROJECT_ID | Backend port: $BACKEND_PORT | Auth port: $AUTH_PORT"
 cd - > /dev/null
+
+if [ "${OMI_SKIP_TUNNEL:-0}" != "1" ]; then
+    step "Starting Cloudflare quick tunnel..."
+    if command -v cloudflared >/dev/null 2>&1; then
+        TUNNEL_LOG=$(mktemp /tmp/cloudflared-XXXXXX.log)
+        cloudflared tunnel --url http://localhost:${BACKEND_PORT} > "$TUNNEL_LOG" 2>&1 &
+        TUNNEL_PID=$!
+        for i in {1..20}; do
+            TUNNEL_URL=$(grep -o 'https://[a-z0-9-]*\.trycloudflare\.com' "$TUNNEL_LOG" 2>/dev/null | head -1)
+            if [ -n "$TUNNEL_URL" ]; then break; fi
+            sleep 0.5
+        done
+        if [ -n "$TUNNEL_URL" ]; then
+            rm -f "$TUNNEL_LOG"
+            substep "Tunnel URL: $TUNNEL_URL"
+        else
+            substep "Warning: Could not capture tunnel URL (see $TUNNEL_LOG for details)"
+        fi
+    else
+        substep "cloudflared not found — skipping tunnel (set OMI_API_URL in .env instead)"
+    fi
+else
+    substep "Skipping tunnel (OMI_SKIP_TUNNEL=1)"
+fi
 
 # ─── Start Rust backend ───────────────────────────────────────────────
 if [ "${OMI_SKIP_BACKEND:-0}" != "1" ]; then
