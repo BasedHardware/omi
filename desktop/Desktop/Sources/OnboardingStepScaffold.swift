@@ -23,6 +23,7 @@ struct OnboardingStepScaffold<Content: View>: View {
   let rightPaneMode: OnboardingRightPaneMode
   let showsSkip: Bool
   let onSkip: (() -> Void)?
+  let onForceComplete: (() -> Void)?
   let content: Content
 
   init(
@@ -36,6 +37,7 @@ struct OnboardingStepScaffold<Content: View>: View {
     rightPaneMode: OnboardingRightPaneMode = .graph,
     showsSkip: Bool = false,
     onSkip: (() -> Void)? = nil,
+    onForceComplete: (() -> Void)? = nil,
     @ViewBuilder content: () -> Content
   ) {
     _graphViewModel = ObservedObject(wrappedValue: graphViewModel)
@@ -48,6 +50,7 @@ struct OnboardingStepScaffold<Content: View>: View {
     self.rightPaneMode = rightPaneMode
     self.showsSkip = showsSkip
     self.onSkip = onSkip
+    self.onForceComplete = onForceComplete
     self.content = content()
   }
 
@@ -119,19 +122,7 @@ struct OnboardingStepScaffold<Content: View>: View {
 
   private var header: some View {
     HStack {
-      if let logoImage = onboardingLogoImage() {
-        Image(nsImage: logoImage)
-          .resizable()
-          .renderingMode(.template)
-          .foregroundColor(.white)
-          .scaledToFit()
-          .frame(width: 52, height: 18)
-          .accessibilityLabel("omi")
-      } else {
-        Text("omi")
-          .font(.system(size: 18, weight: .semibold))
-          .foregroundColor(.white)
-      }
+      OnboardingLogoMark(onForceComplete: onForceComplete)
 
       Spacer()
 
@@ -180,6 +171,32 @@ struct OnboardingStepScaffold<Content: View>: View {
         .frame(maxWidth: 460, alignment: centered ? .center : .leading)
     }
     .frame(maxWidth: .infinity, alignment: centered ? .center : .leading)
+  }
+}
+
+struct OnboardingLogoMark: View {
+  let onForceComplete: (() -> Void)?
+
+  var body: some View {
+    Group {
+      if let logoImage = onboardingLogoImage() {
+        Image(nsImage: logoImage)
+          .resizable()
+          .renderingMode(.template)
+          .foregroundColor(.white)
+          .scaledToFit()
+          .frame(width: 52, height: 18)
+      } else {
+        Text("omi")
+          .font(.system(size: 18, weight: .semibold))
+          .foregroundColor(.white)
+      }
+    }
+    .contentShape(Rectangle())
+    .onLongPressGesture(minimumDuration: 1) {
+      onForceComplete?()
+    }
+    .accessibilityLabel("omi")
   }
 
   private func onboardingLogoImage() -> NSImage? {

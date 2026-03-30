@@ -8,6 +8,7 @@ struct OnboardingFileScanStepView: View {
   let totalSteps: Int
   let onContinue: () -> Void
   let onSkip: () -> Void
+  let onForceComplete: (() -> Void)?
 
   var body: some View {
     OnboardingStepScaffold(
@@ -18,7 +19,8 @@ struct OnboardingFileScanStepView: View {
       title: "Start building your profile.",
       description: "Omi scans projects and recent files.",
       showsSkip: true,
-      onSkip: onSkip
+      onSkip: onSkip,
+      onForceComplete: onForceComplete
     ) {
       VStack(alignment: .leading, spacing: 24) {
         ZStack {

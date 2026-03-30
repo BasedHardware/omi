@@ -7,6 +7,7 @@ struct OnboardingGoalStepView: View {
   let stepIndex: Int
   let totalSteps: Int
   let onContinue: () -> Void
+  let onForceComplete: (() -> Void)?
 
   @State private var customGoalSelected = false
 
@@ -19,7 +20,8 @@ struct OnboardingGoalStepView: View {
       totalSteps: totalSteps,
       eyebrow: "Goal",
       title: "Pick one goal.",
-      description: "Omi will optimize for this first."
+      description: "Omi will optimize for this first.",
+      onForceComplete: onForceComplete
     ) {
       VStack(alignment: .leading, spacing: 18) {
         GoalChipGrid(

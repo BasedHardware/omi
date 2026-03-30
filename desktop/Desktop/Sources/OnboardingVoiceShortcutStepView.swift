@@ -6,6 +6,7 @@ struct OnboardingVoiceShortcutStepView: View {
     @ObservedObject var chatProvider: ChatProvider
     var onComplete: () -> Void
     var onSkip: () -> Void
+    var onForceComplete: (() -> Void)?
 
     @ObservedObject private var shortcutSettings = ShortcutSettings.shared
 
@@ -19,9 +20,7 @@ struct OnboardingVoiceShortcutStepView: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack {
-                Text("Set your voice shortcut")
-                    .font(.system(size: 18, weight: .semibold))
-                    .foregroundColor(OmiColors.textPrimary)
+                OnboardingLogoMark(onForceComplete: onForceComplete)
 
                 Spacer()
 
