@@ -243,29 +243,24 @@ skip_no_pusher = pytest.mark.skipif(
 
 @skip_no_backend
 class TestTranslationE2E:
-    """Verify that connecting with language=multi produces TranslationEvent messages.
+    """Verify that real-time translation events are NO LONGER emitted during streaming.
 
-    The pipeline:
-      Client → /v4/listen?language=multi → Deepgram (multi-lang) → transcripts
-        → translation service → TranslationEvent sent back to client
-
-    Translation requires:
-    1. language='multi' (triggers multi-lang STT + translation pipeline)
-    2. Real speech audio that Deepgram can transcribe
-    3. Backend must have Google Cloud Translation API credentials
+    Translation was moved to batch post-conversation processing (#6155).
+    These tests verify that no TranslationEvent messages are sent during live streaming,
+    regardless of language mode.
     """
 
     @pytest.mark.asyncio
-    async def test_translation_events_received(self):
-        """Stream real speech with language=multi and verify TranslationEvent arrives."""
+    async def test_no_translation_events_in_multi_language_mode(self):
+        """Stream real speech with language=multi — no TranslationEvent should arrive.
+
+        Translation now happens in post-conversation batch processing, not during streaming.
+        """
         audio = load_test_audio_pcm16(seconds=10)
         if audio is None:
             pytest.skip("Test WAV file not found")
         pcm_data, sample_rate = audio
 
-        uid = f"test-translation-{uuid.uuid4().hex[:8]}"
-
-        # Connect with language=multi to trigger translation pipeline
         ws = await connect_listen(
             sample_rate=sample_rate,
             language='multi',
@@ -274,65 +269,21 @@ class TestTranslationE2E:
         try:
             assert await wait_for_ready(ws), "Backend did not send 'ready' status"
 
-            # Send speech audio
             await send_audio_chunks(ws, pcm_data)
 
-            # Collect events — look for both transcript segments and translation events
-            # Translation has a 1-second debounce, so we wait up to 20 seconds
-            transcripts = []
-            translations = []
+            # Collect events for 15 seconds — should NOT see any translating events
+            events = await collect_events(ws, duration=15)
+            translation_events = [e for e in events if e.get('type') == 'translating']
 
-            def got_both(events):
-                for e in events:
-                    etype = e.get('type', '')
-                    if etype == 'translating':
-                        translations.append(e)
-                    # Transcripts come as raw segment arrays (no 'type' field)
-                    # or as objects with segments list
-                    if 'segments' in e and etype != 'translating':
-                        transcripts.append(e)
-                return len(translations) > 0
-
-            events = await collect_events_until(ws, got_both, timeout=25)
-
-            # Parse all collected events
-            for e in events:
-                etype = e.get('type', '')
-                if etype == 'translating' and e not in translations:
-                    translations.append(e)
-
-            # We should have received at least one translation event
-            assert len(translations) > 0, (
-                f"Expected TranslationEvent but got none. "
-                f"Total events collected: {len(events)}. "
-                f"Event types: {[e.get('type', 'no-type') for e in events]}"
-            )
-
-            # Verify translation event structure
-            for t in translations:
-                assert t['type'] == 'translating'
-                assert 'segments' in t
-                assert isinstance(t['segments'], list)
-
-            # At least one translation segment should have translated text
-            all_segments = []
-            for t in translations:
-                all_segments.extend(t['segments'])
-
-            if all_segments:
-                # Segments from TranslationEvent should have text content
-                has_text = any(seg.get('text', '').strip() for seg in all_segments if isinstance(seg, dict))
-                assert has_text, f"Translation segments have no text content: {all_segments[:3]}"
-
+            assert (
+                len(translation_events) == 0
+            ), f"Got unexpected TranslationEvents during streaming (should be batch-only): {translation_events}"
         finally:
             await ws.close()
 
     @pytest.mark.asyncio
     async def test_no_translation_in_single_language_mode(self):
-        """When language is a specific code (not 'multi'), no TranslationEvent should arrive.
-
-        In single-language mode, the translation pipeline is skipped entirely.
-        """
+        """When language is a specific code (not 'multi'), no TranslationEvent should arrive."""
         audio = load_test_audio_pcm16(seconds=5)
         if audio is None:
             pytest.skip("Test WAV file not found")
@@ -340,7 +291,7 @@ class TestTranslationE2E:
 
         ws = await connect_listen(
             sample_rate=sample_rate,
-            language='en',  # Single language — no translation
+            language='en',
             conversation_timeout=120,
         )
         try:
@@ -348,7 +299,6 @@ class TestTranslationE2E:
 
             await send_audio_chunks(ws, pcm_data)
 
-            # Collect for 10 seconds — should NOT see any translating events
             events = await collect_events(ws, duration=10)
             translation_events = [e for e in events if e.get('type') == 'translating']
 
@@ -359,8 +309,8 @@ class TestTranslationE2E:
             await ws.close()
 
     @pytest.mark.asyncio
-    async def test_translation_segments_have_lang_field(self):
-        """Translation segments should include the target language."""
+    async def test_transcripts_still_arrive_without_translation(self):
+        """Transcript segments should still arrive when translation is disabled during streaming."""
         audio = load_test_audio_pcm16(seconds=10)
         if audio is None:
             pytest.skip("Test WAV file not found")
@@ -375,28 +325,15 @@ class TestTranslationE2E:
             assert await wait_for_ready(ws), "Backend did not send 'ready' status"
             await send_audio_chunks(ws, pcm_data)
 
-            # Wait for translation events
-            translations = []
+            # Collect events — should get transcript segments but no translation events
+            events = await collect_events(ws, duration=15)
+            transcript_events = [e for e in events if 'segments' in e and e.get('type') != 'translating']
+            translation_events = [e for e in events if e.get('type') == 'translating']
 
-            def got_translation(events):
-                for e in events:
-                    if e.get('type') == 'translating':
-                        translations.append(e)
-                return len(translations) > 0
-
-            await collect_events_until(ws, got_translation, timeout=25)
-
-            if not translations:
-                pytest.skip("No translation events received (translation API may be unconfigured)")
-
-            # Check segment structure — each translated segment dict should have
-            # translation-related fields
-            for t in translations:
-                for seg in t.get('segments', []):
-                    if isinstance(seg, dict):
-                        # Segment should have text at minimum
-                        assert 'text' in seg, f"Translation segment missing 'text': {seg}"
-
+            # Transcripts should still work
+            assert len(transcript_events) > 0 or len(events) > 0, "No events received during streaming"
+            # No translation events
+            assert len(translation_events) == 0, f"Got unexpected TranslationEvents: {translation_events}"
         finally:
             await ws.close()
 
