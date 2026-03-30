@@ -1,32 +1,73 @@
 """
 Desktop-specific Firestore CRUD operations.
 
-Collections:
-- users/{uid}/staged_tasks       — AI-generated tasks awaiting promotion
-- users/{uid}/focus_sessions     — Focus/distraction tracking
-- users/{uid}/advice             — Proactive coaching advice
-- users/{uid}/chat_sessions      — Multi-session chat grouping (v2)
+Architecture
+~~~~~~~~~~~~
+This module handles Firestore collections and fields that are **unique to the
+desktop app** and do not already exist in other database modules.
 
-Also handles:
-- Notification settings (user doc fields)
-- Assistant settings (user doc nested map)
-- AI user profile (user doc nested map)
-- Daily score calculation from action_items
-- Desktop LLM usage recording (per-query token tracking)
-- Desktop chat message persistence (v2)
+Desktop-only collections:
+  users/{uid}/staged_tasks    — AI-generated tasks awaiting promotion
+  users/{uid}/focus_sessions  — Focus / distraction tracking
+  users/{uid}/advice          — Proactive coaching items
+
+Shared collections with desktop-specific schema:
+  users/{uid}/chat_sessions   — Desktop v2 sessions (title, preview, message_count,
+                                 starred) differ from mobile schema (message_ids,
+                                 openai_thread_id).  Both schemas coexist in the
+                                 same Firestore collection; fields are additive.
+  users/{uid}/messages        — Desktop messages are persistence-only (no LLM
+                                 streaming).  They write the same fields as
+                                 chat.py's Message model for cross-platform compat.
+  users/{uid}/llm_usage       — Desktop uses a flat key ("desktop_chat") while
+                                 llm_usage.py uses feature.model nesting.  Both
+                                 schemas coexist in the same date-keyed docs.
+
+User document fields:
+  notification_settings, assistant_settings, ai_user_profile — nested maps on
+  the user doc, read/written only by the desktop app.
+
+Computed:
+  Daily score — derived from action_items counts, not stored separately.
+
+Reuse:
+  promote_staged_task() calls database.action_items.create_action_item() to
+  avoid duplicating action-item creation logic.
 """
 
+import logging
 import uuid
 from datetime import datetime, timezone, timedelta
-from typing import Dict, Any, List, Optional, Tuple
+from typing import List, Optional
 
 from google.cloud import firestore
-from google.cloud.firestore_v1 import FieldFilter
+from google.cloud.firestore_v1.base_query import FieldFilter
 
 from ._client import db
-import logging
+import database.action_items as action_items_db
 
 logger = logging.getLogger(__name__)
+
+USERS = 'users'
+BATCH_LIMIT = 500  # Firestore hard limit
+
+
+def _user_col(uid: str, collection: str):
+    """Shorthand for users/{uid}/{collection}."""
+    return db.collection(USERS).document(uid).collection(collection)
+
+
+def _user_doc(uid: str):
+    """Shorthand for users/{uid}."""
+    return db.collection(USERS).document(uid)
+
+
+def _commit_batch(batch, count):
+    """Commit batch if count reaches BATCH_LIMIT; return fresh batch and 0."""
+    if count >= BATCH_LIMIT:
+        batch.commit()
+        return db.batch(), 0
+    return batch, count
 
 
 # ============================================================================
@@ -34,50 +75,63 @@ logger = logging.getLogger(__name__)
 # ============================================================================
 
 
-def create_staged_task(uid: str, data: dict) -> dict:
+def create_staged_task(uid: str, description: str, **kwargs) -> dict:
+    """Create a staged task.  Deduplicates by case-insensitive description."""
+    col = _user_col(uid, 'staged_tasks')
+
+    # Deduplicate
+    desc_lower = description.strip().lower()
+    for doc in col.stream():
+        if doc.to_dict().get('description', '').strip().lower() == desc_lower:
+            existing = doc.to_dict()
+            existing['id'] = doc.id
+            return existing
+
     task_id = str(uuid.uuid4())
     now = datetime.now(timezone.utc)
     doc = {
         'id': task_id,
-        'description': data['description'],
+        'description': description,
         'completed': False,
         'created_at': now,
         'updated_at': now,
-        'due_at': data.get('due_at'),
-        'source': data.get('source'),
-        'priority': data.get('priority'),
-        'metadata': data.get('metadata'),
-        'category': data.get('category'),
-        'relevance_score': data.get('relevance_score'),
-        'from_staged': True,
     }
-    ref = db.collection('users').document(uid).collection('staged_tasks').document(task_id)
-    ref.set(doc)
+    for field in ('due_at', 'source', 'priority', 'metadata', 'category', 'relevance_score'):
+        if field in kwargs and kwargs[field] is not None:
+            doc[field] = kwargs[field]
+
+    col.document(task_id).set(doc)
     return doc
 
 
 def get_staged_tasks(uid: str, limit: int = 100, offset: int = 0) -> List[dict]:
-    col = db.collection('users').document(uid).collection('staged_tasks')
+    """Fetch uncompleted staged tasks ordered by relevance (ascending)."""
+    col = _user_col(uid, 'staged_tasks')
     query = col.where(filter=FieldFilter('completed', '==', False))
     query = query.order_by('relevance_score', direction=firestore.Query.ASCENDING)
-    query = query.order_by('created_at', direction=firestore.Query.DESCENDING)
     if offset > 0:
         query = query.offset(offset)
     query = query.limit(limit)
-    return [{**doc.to_dict(), 'id': doc.id} for doc in query.stream()]
+
+    items = []
+    for doc in query.stream():
+        data = doc.to_dict()
+        data['id'] = doc.id
+        items.append(data)
+    return items
 
 
 def delete_staged_task(uid: str, task_id: str) -> bool:
-    ref = db.collection('users').document(uid).collection('staged_tasks').document(task_id)
-    doc = ref.get()
-    if not doc.exists:
+    ref = _user_col(uid, 'staged_tasks').document(task_id)
+    if not ref.get().exists:
         return False
     ref.delete()
     return True
 
 
 def batch_update_staged_scores(uid: str, scores: List[dict]) -> None:
-    col = db.collection('users').document(uid).collection('staged_tasks')
+    """Update relevance_score for staged tasks in batches of 500."""
+    col = _user_col(uid, 'staged_tasks')
     now = datetime.now(timezone.utc)
     batch = db.batch()
     count = 0
@@ -85,163 +139,114 @@ def batch_update_staged_scores(uid: str, scores: List[dict]) -> None:
         ref = col.document(item['id'])
         batch.update(ref, {'relevance_score': item['relevance_score'], 'updated_at': now})
         count += 1
-        if count >= 499:
-            batch.commit()
-            batch = db.batch()
-            count = 0
+        batch, count = _commit_batch(batch, count)
     if count > 0:
         batch.commit()
 
 
-def get_active_ai_action_items(uid: str) -> List[dict]:
-    """Get active AI action items (from_staged=true, not completed, not deleted)."""
-    col = db.collection('users').document(uid).collection('action_items')
-    query = col.where(filter=FieldFilter('from_staged', '==', True))
-    query = query.where(filter=FieldFilter('completed', '==', False))
-    items = []
-    for doc in query.stream():
-        data = doc.to_dict()
-        if data.get('deleted'):
-            continue
-        data['id'] = doc.id
-        items.append(data)
-    return items
+def promote_staged_task(uid: str) -> Optional[dict]:
+    """Promote the top-scored staged task to an action_item.
 
+    Returns the new action_item dict or None if no staged tasks exist.
+    Uses database.action_items.create_action_item() for consistent field handling.
+    """
+    col = _user_col(uid, 'staged_tasks')
+    query = (
+        col.where(filter=FieldFilter('completed', '==', False))
+        .order_by('relevance_score', direction=firestore.Query.ASCENDING)
+        .limit(1)
+    )
+    docs = list(query.stream())
+    if not docs:
+        return None
 
-def promote_staged_task(uid: str) -> dict:
-    """Promote top-ranked staged task to action_items. Returns status dict."""
-    active = get_active_ai_action_items(uid)
-    if len(active) >= 5:
-        return {'promoted': False, 'reason': f'Already have {len(active)} active AI tasks (max 5)'}
+    staged = docs[0].to_dict()
+    staged['id'] = docs[0].id
 
-    existing_descs = {
-        item['description'].strip().lower().removeprefix('[screen] ').removesuffix(' [screen]') for item in active
-    }
-
-    staged = get_staged_tasks(uid, limit=20, offset=0)
-    if not staged:
-        return {'promoted': False, 'reason': 'No staged tasks available'}
-
-    selected = None
-    duplicate_ids = []
-    seen = set()
-    for task in staged:
-        norm = task['description'].strip().lower().removeprefix('[screen] ').removesuffix(' [screen]')
-        if norm in existing_descs or norm in seen:
-            duplicate_ids.append(task['id'])
-            continue
-        seen.add(norm)
-        if selected is None:
-            selected = task
-
-    # Clean up duplicates
-    for dup_id in duplicate_ids:
-        delete_staged_task(uid, dup_id)
-
-    if selected is None:
-        return {'promoted': False, 'reason': 'All candidate staged tasks are duplicates'}
-
-    # Create in action_items
-    action_id = str(uuid.uuid4())
-    now = datetime.now(timezone.utc)
-    action_doc = {
-        'id': action_id,
-        'description': selected['description'],
+    # Build action_item data from staged task fields
+    action_data = {
+        'description': staged['description'],
         'completed': False,
-        'created_at': now,
-        'updated_at': now,
-        'due_at': selected.get('due_at'),
-        'source': selected.get('source'),
-        'priority': selected.get('priority'),
-        'metadata': selected.get('metadata'),
-        'category': selected.get('category'),
-        'relevance_score': selected.get('relevance_score'),
         'from_staged': True,
     }
-    db.collection('users').document(uid).collection('action_items').document(action_id).set(action_doc)
-    delete_staged_task(uid, selected['id'])
+    for field in ('due_at', 'source', 'priority', 'metadata', 'category', 'relevance_score'):
+        if staged.get(field) is not None:
+            action_data[field] = staged[field]
 
-    return {'promoted': True, 'reason': None, 'promoted_task': action_doc}
+    action_id = action_items_db.create_action_item(uid, action_data)
+
+    # Mark staged task as completed
+    col.document(staged['id']).update({'completed': True, 'promoted_at': datetime.now(timezone.utc)})
+
+    action_item = action_items_db.get_action_item(uid, action_id)
+    return action_item
 
 
 def migrate_ai_tasks(uid: str) -> dict:
-    """One-time migration: move excess AI tasks from action_items to staged_tasks."""
-    col = db.collection('users').document(uid).collection('action_items')
+    """One-time migration: move excess AI tasks from action_items to staged_tasks.
+
+    Keeps top 3 AI tasks in action_items, moves the rest to staged_tasks.
+    Uses a 'source' field marker to identify AI-created tasks.
+    """
+    col = _user_col(uid, 'action_items')
     query = col.where(filter=FieldFilter('completed', '==', False))
+
     all_items = []
     for doc in query.stream():
         data = doc.to_dict()
+        data['id'] = doc.id
         if data.get('deleted'):
             continue
-        data['id'] = doc.id
         all_items.append(data)
 
-    ai_tasks = [item for item in all_items if item.get('source', '').find('screenshot') >= 0]
-    if not ai_tasks:
-        return {'status': 'ok'}
+    # Separate AI-generated tasks from manual ones
+    ai_tasks = [item for item in all_items if 'screenshot' in (item.get('source') or '')]
+    if len(ai_tasks) <= 3:
+        return {'moved': 0, 'kept': len(ai_tasks)}
 
-    ai_tasks.sort(key=lambda x: x.get('relevance_score') or 2147483647)
+    # Sort by relevance_score ascending (best first)
+    ai_tasks.sort(key=lambda x: x.get('relevance_score') or 999)
+    keep = ai_tasks[:3]
+    to_move = ai_tasks[3:]
 
-    # Tag top 5 with [screen] suffix
-    for task in ai_tasks[:5]:
-        desc = task['description']
-        if not desc.endswith(' [screen]') and not desc.startswith('[screen] '):
-            col.document(task['id']).update({'description': f'{desc} [screen]'})
-
-    # Move the rest to staged_tasks
-    to_move = ai_tasks[5:]
-    if not to_move:
-        return {'status': 'ok'}
-
-    staged_col = db.collection('users').document(uid).collection('staged_tasks')
+    staged_col = _user_col(uid, 'staged_tasks')
     batch = db.batch()
-    count = 0
+    batch_count = 0
     for task in to_move:
         batch.set(staged_col.document(task['id']), task)
         batch.delete(col.document(task['id']))
-        count += 1
-        if count >= 249:
-            batch.commit()
-            batch = db.batch()
-            count = 0
-    if count > 0:
+        batch_count += 2  # set + delete = 2 operations
+        batch, batch_count = _commit_batch(batch, batch_count)
+    if batch_count > 0:
         batch.commit()
 
-    return {'status': 'ok'}
+    return {'moved': len(to_move), 'kept': len(keep)}
 
 
 def migrate_conversation_items_to_staged(uid: str) -> dict:
-    """Migrate action items from old conversation extraction to staged_tasks."""
-    col = db.collection('users').document(uid).collection('action_items')
-    query = col.where(filter=FieldFilter('completed', '==', False))
+    """Move conversation-sourced action items (without 'source') to staged_tasks."""
+    col = _user_col(uid, 'action_items')
+    staged_col = _user_col(uid, 'staged_tasks')
 
-    migrated = 0
-    deleted = 0
-    staged_col = db.collection('users').document(uid).collection('staged_tasks')
     batch = db.batch()
-    count = 0
-
-    for doc in query.stream():
+    moved = 0
+    batch_count = 0
+    for doc in col.stream():
         data = doc.to_dict()
-        if data.get('deleted'):
+        if data.get('deleted') or data.get('completed'):
             continue
-        # Items with conversation_id but no source are from old conversation extraction
         if data.get('conversation_id') and not data.get('source'):
             data['id'] = doc.id
-            data['source'] = 'conversation'
+            data['source'] = 'conversation_migration'
             batch.set(staged_col.document(doc.id), data)
             batch.delete(col.document(doc.id))
-            migrated += 1
-            count += 1
-            if count >= 249:
-                batch.commit()
-                batch = db.batch()
-                count = 0
-
-    if count > 0:
+            moved += 1
+            batch_count += 2  # set + delete = 2 operations
+            batch, batch_count = _commit_batch(batch, batch_count)
+    if batch_count > 0:
         batch.commit()
 
-    return {'status': 'ok', 'migrated': migrated, 'deleted': deleted}
+    return {'moved': moved}
 
 
 # ============================================================================
@@ -249,80 +254,72 @@ def migrate_conversation_items_to_staged(uid: str) -> dict:
 # ============================================================================
 
 
-def create_focus_session(uid: str, data: dict) -> dict:
+def create_focus_session(uid: str, status: str, app_or_site: str, description: str, **kwargs) -> dict:
     session_id = str(uuid.uuid4())
     now = datetime.now(timezone.utc)
     doc = {
         'id': session_id,
-        'status': data['status'],
-        'app_or_site': data['app_or_site'],
-        'description': data['description'],
-        'message': data.get('message'),
+        'status': status,
+        'app_or_site': app_or_site,
+        'description': description,
+        'message': kwargs.get('message'),
         'created_at': now,
-        'duration_seconds': data.get('duration_seconds'),
+        'duration_seconds': kwargs.get('duration_seconds'),
     }
-    ref = db.collection('users').document(uid).collection('focus_sessions').document(session_id)
-    ref.set(doc)
+    _user_col(uid, 'focus_sessions').document(session_id).set(doc)
     return doc
 
 
-def get_focus_sessions(uid: str, limit: int = 100, offset: int = 0, date: str = None) -> List[dict]:
-    col = db.collection('users').document(uid).collection('focus_sessions')
+def get_focus_sessions(uid: str, date: str = None, limit: int = 100, offset: int = 0) -> List[dict]:
+    col = _user_col(uid, 'focus_sessions')
     query = col.order_by('created_at', direction=firestore.Query.DESCENDING)
 
     if date:
-        start = datetime.strptime(date, '%Y-%m-%d').replace(tzinfo=timezone.utc)
-        end = start + timedelta(days=1) - timedelta(milliseconds=1)
-        query = query.where(filter=FieldFilter('created_at', '>=', start))
-        query = query.where(filter=FieldFilter('created_at', '<=', end))
+        day_start = datetime.strptime(date, '%Y-%m-%d').replace(tzinfo=timezone.utc)
+        day_end = day_start + timedelta(days=1)
+        query = query.where(filter=FieldFilter('created_at', '>=', day_start))
+        query = query.where(filter=FieldFilter('created_at', '<', day_end))
 
-    if offset > 0:
-        query = query.offset(offset)
-    query = query.limit(limit)
-    return [{**doc.to_dict(), 'id': doc.id} for doc in query.stream()]
+    query = query.offset(offset).limit(limit)
+    items = []
+    for doc in query.stream():
+        data = doc.to_dict()
+        data['id'] = doc.id
+        items.append(data)
+    return items
 
 
 def delete_focus_session(uid: str, session_id: str) -> bool:
-    ref = db.collection('users').document(uid).collection('focus_sessions').document(session_id)
-    doc = ref.get()
-    if not doc.exists:
+    ref = _user_col(uid, 'focus_sessions').document(session_id)
+    if not ref.get().exists:
         return False
     ref.delete()
     return True
 
 
 def get_focus_stats(uid: str, date: str = None) -> dict:
-    if not date:
-        date = datetime.now(timezone.utc).strftime('%Y-%m-%d')
-
-    sessions = get_focus_sessions(uid, limit=5000, offset=0, date=date)
-
-    focused_seconds = 0
-    distracted_seconds = 0
+    sessions = get_focus_sessions(uid, date=date, limit=5000, offset=0)
     focused_count = 0
     distracted_count = 0
-    distraction_times: Dict[str, int] = {}
+    total_focus_seconds = 0
+    distractions = {}
 
     for s in sessions:
-        dur = s.get('duration_seconds') or 0
         if s.get('status') == 'focused':
-            focused_seconds += dur
             focused_count += 1
-        else:
-            distracted_seconds += dur
+            total_focus_seconds += s.get('duration_seconds') or 0
+        elif s.get('status') == 'distracted':
             distracted_count += 1
             app = s.get('app_or_site', 'Unknown')
-            distraction_times[app] = distraction_times.get(app, 0) + dur
-
-    top_distractions = sorted(distraction_times.items(), key=lambda x: x[1], reverse=True)[:5]
+            entry = distractions.setdefault(app, {'duration_seconds': 0, 'count': 0})
+            entry['duration_seconds'] += s.get('duration_seconds') or 60
+            entry['count'] += 1
 
     return {
-        'focused_minutes': round(focused_seconds / 60, 1),
-        'distracted_minutes': round(distracted_seconds / 60, 1),
-        'session_count': len(sessions),
         'focused_count': focused_count,
         'distracted_count': distracted_count,
-        'top_distractions': [{'app': app, 'minutes': round(secs / 60, 1)} for app, secs in top_distractions],
+        'total_focus_seconds': total_focus_seconds,
+        'top_distractions': sorted(distractions.items(), key=lambda x: x[1]['duration_seconds'], reverse=True)[:5],
     }
 
 
@@ -331,88 +328,95 @@ def get_focus_stats(uid: str, date: str = None) -> dict:
 # ============================================================================
 
 
-def create_advice(uid: str, data: dict) -> dict:
+def create_advice(uid: str, content: str, category: str = 'other', **kwargs) -> dict:
     advice_id = str(uuid.uuid4())
     now = datetime.now(timezone.utc)
     doc = {
         'id': advice_id,
-        'content': data['content'],
-        'category': data.get('category', 'other'),
-        'reasoning': data.get('reasoning'),
-        'source_app': data.get('source_app'),
-        'confidence': data.get('confidence', 0.5),
-        'context_summary': data.get('context_summary'),
-        'current_activity': data.get('current_activity'),
+        'content': content,
+        'category': category,
+        'reasoning': kwargs.get('reasoning'),
+        'source_app': kwargs.get('source_app'),
+        'confidence': kwargs.get('confidence', 0.5),
+        'context_summary': kwargs.get('context_summary'),
+        'current_activity': kwargs.get('current_activity'),
         'created_at': now,
         'updated_at': now,
         'is_read': False,
         'is_dismissed': False,
     }
-    ref = db.collection('users').document(uid).collection('advice').document(advice_id)
-    ref.set(doc)
+    _user_col(uid, 'advice').document(advice_id).set(doc)
     return doc
 
 
 def get_advice(
-    uid: str, limit: int = 100, offset: int = 0, category: str = None, include_dismissed: bool = False
+    uid: str, category: str = None, limit: int = 50, offset: int = 0, include_dismissed: bool = False
 ) -> List[dict]:
-    col = db.collection('users').document(uid).collection('advice')
+    col = _user_col(uid, 'advice')
     query = col.order_by('created_at', direction=firestore.Query.DESCENDING)
-
-    if not include_dismissed:
-        query = query.where(filter=FieldFilter('is_dismissed', '==', False))
     if category:
         query = query.where(filter=FieldFilter('category', '==', category))
-
+    if not include_dismissed:
+        query = query.where(filter=FieldFilter('is_dismissed', '==', False))
     if offset > 0:
         query = query.offset(offset)
     query = query.limit(limit)
-    return [{**doc.to_dict(), 'id': doc.id} for doc in query.stream()]
+
+    items = []
+    for doc in query.stream():
+        data = doc.to_dict()
+        data['id'] = doc.id
+        items.append(data)
+    return items
 
 
 def update_advice(uid: str, advice_id: str, is_read: bool = None, is_dismissed: bool = None) -> Optional[dict]:
-    ref = db.collection('users').document(uid).collection('advice').document(advice_id)
-    doc = ref.get()
-    if not doc.exists:
+    ref = _user_col(uid, 'advice').document(advice_id)
+    snap = ref.get()
+    if not snap.exists:
         return None
-    update = {'updated_at': datetime.now(timezone.utc)}
+    updates = {'updated_at': datetime.now(timezone.utc)}
     if is_read is not None:
-        update['is_read'] = is_read
+        updates['is_read'] = is_read
     if is_dismissed is not None:
-        update['is_dismissed'] = is_dismissed
-    ref.update(update)
-    data = ref.get().to_dict()
-    data['id'] = advice_id
-    return data
+        updates['is_dismissed'] = is_dismissed
+    ref.update(updates)
+    result = ref.get().to_dict()
+    result['id'] = advice_id
+    return result
 
 
 def delete_advice(uid: str, advice_id: str) -> bool:
-    ref = db.collection('users').document(uid).collection('advice').document(advice_id)
-    doc = ref.get()
-    if not doc.exists:
+    ref = _user_col(uid, 'advice').document(advice_id)
+    if not ref.get().exists:
         return False
     ref.delete()
     return True
 
 
 def mark_all_advice_read(uid: str) -> int:
-    col = db.collection('users').document(uid).collection('advice')
+    col = _user_col(uid, 'advice')
     query = col.where(filter=FieldFilter('is_read', '==', False))
-    count = 0
     batch = db.batch()
+    total = 0
+    batch_count = 0
     for doc in query.stream():
         batch.update(col.document(doc.id), {'is_read': True, 'updated_at': datetime.now(timezone.utc)})
-        count += 1
-        if count % 499 == 0:
-            batch.commit()
-            batch = db.batch()
-    if count % 499 != 0:
+        total += 1
+        batch_count += 1
+        batch, batch_count = _commit_batch(batch, batch_count)
+    if batch_count > 0:
         batch.commit()
-    return count
+    return total
 
 
 # ============================================================================
-# CHAT SESSIONS v2 — users/{uid}/chat_sessions
+# CHAT SESSIONS v2 — users/{uid}/chat_sessions (desktop schema)
+#
+# Desktop sessions store: title, preview, message_count, starred, updated_at.
+# Mobile sessions (chat.py) store: message_ids, file_ids, openai_thread_id.
+# Both schemas coexist in the same Firestore collection.
+# Both MUST write plugin_id alongside app_id for cross-platform query compat.
 # ============================================================================
 
 
@@ -426,25 +430,25 @@ def create_chat_session(uid: str, title: str = None, app_id: str = None) -> dict
         'created_at': now,
         'updated_at': now,
         'app_id': app_id,
-        'plugin_id': app_id,  # backward compat — Python consumers query by plugin_id
+        'plugin_id': app_id,  # Python chat.py queries chat_sessions by plugin_id
         'message_count': 0,
         'starred': False,
     }
-    ref = db.collection('users').document(uid).collection('chat_sessions').document(session_id)
-    ref.set(doc)
+    _user_col(uid, 'chat_sessions').document(session_id).set(doc)
     return doc
 
 
 def acquire_chat_session(uid: str, app_id: str = None) -> str:
-    """Get or create a chat session for the given app_id (None = main default chat).
-    Mirrors Rust's acquire_chat_session(): find matching session by plugin_id, or create one.
-    Returns the session ID."""
-    sessions_ref = db.collection('users').document(uid).collection('chat_sessions')
-    query = sessions_ref.where(filter=FieldFilter('plugin_id', '==', app_id)).limit(1)
+    """Get or create a chat session for the given app_id (None = main chat).
+
+    Queries by plugin_id to match both Python chat.py and Rust backend behavior.
+    For main chat (app_id=None), matches sessions where plugin_id is None.
+    """
+    col = _user_col(uid, 'chat_sessions')
+    query = col.where(filter=FieldFilter('plugin_id', '==', app_id)).limit(1)
     docs = list(query.stream())
     if docs:
         return docs[0].id
-    # No matching session — create one
     session = create_chat_session(uid, app_id=app_id)
     return session['id']
 
@@ -452,22 +456,25 @@ def acquire_chat_session(uid: str, app_id: str = None) -> str:
 def get_chat_sessions(
     uid: str, app_id: str = None, limit: int = 50, offset: int = 0, starred: bool = None
 ) -> List[dict]:
-    col = db.collection('users').document(uid).collection('chat_sessions')
-    query = col.order_by('created_at', direction=firestore.Query.DESCENDING)
+    col = _user_col(uid, 'chat_sessions')
+    query = col.order_by('updated_at', direction=firestore.Query.DESCENDING)
 
     if app_id is not None:
-        query = query.where(filter=FieldFilter('app_id', '==', app_id))
+        query = query.where(filter=FieldFilter('plugin_id', '==', app_id))
     if starred is not None:
         query = query.where(filter=FieldFilter('starred', '==', starred))
 
-    if offset > 0:
-        query = query.offset(offset)
-    query = query.limit(limit)
-    return [{**doc.to_dict(), 'id': doc.id} for doc in query.stream()]
+    query = query.offset(offset).limit(limit)
+    items = []
+    for doc in query.stream():
+        data = doc.to_dict()
+        data['id'] = doc.id
+        items.append(data)
+    return items
 
 
 def get_chat_session(uid: str, session_id: str) -> Optional[dict]:
-    ref = db.collection('users').document(uid).collection('chat_sessions').document(session_id)
+    ref = _user_col(uid, 'chat_sessions').document(session_id)
     doc = ref.get()
     if not doc.exists:
         return None
@@ -477,85 +484,102 @@ def get_chat_session(uid: str, session_id: str) -> Optional[dict]:
 
 
 def update_chat_session(uid: str, session_id: str, title: str = None, starred: bool = None) -> Optional[dict]:
-    ref = db.collection('users').document(uid).collection('chat_sessions').document(session_id)
-    doc = ref.get()
-    if not doc.exists:
+    ref = _user_col(uid, 'chat_sessions').document(session_id)
+    if not ref.get().exists:
         return None
-    update = {'updated_at': datetime.now(timezone.utc)}
+    updates = {'updated_at': datetime.now(timezone.utc)}
     if title is not None:
-        update['title'] = title
+        updates['title'] = title
     if starred is not None:
-        update['starred'] = starred
-    ref.update(update)
-    data = ref.get().to_dict()
-    data['id'] = session_id
-    return data
+        updates['starred'] = starred
+    ref.update(updates)
+    result = ref.get().to_dict()
+    result['id'] = session_id
+    return result
 
 
 def delete_chat_session(uid: str, session_id: str) -> bool:
-    ref = db.collection('users').document(uid).collection('chat_sessions').document(session_id)
-    doc = ref.get()
-    if not doc.exists:
+    """Delete a chat session and cascade-delete its messages.
+
+    Uses a Firestore transaction to ensure atomicity: if the session doc is
+    modified between the read and the delete, the transaction retries.
+    """
+    session_ref = _user_col(uid, 'chat_sessions').document(session_id)
+    msg_col = _user_col(uid, 'messages')
+
+    if not session_ref.get().exists:
         return False
-    # Cascade delete messages for this session
-    msg_col = db.collection('users').document(uid).collection('messages')
-    msgs = msg_col.where(filter=FieldFilter('chat_session_id', '==', session_id)).stream()
-    batch = db.batch()
-    count = 0
-    for msg_doc in msgs:
-        batch.delete(msg_col.document(msg_doc.id))
-        count += 1
-        if count >= 499:
-            batch.commit()
-            batch = db.batch()
-            count = 0
-    ref_delete = ref
-    batch.delete(ref_delete)
-    batch.commit()
+
+    # Delete messages in batches (outside transaction — Firestore transactions
+    # are limited to 500 ops and messages could exceed that).
+    query = msg_col.where(filter=FieldFilter('chat_session_id', '==', session_id))
+    while True:
+        docs = list(query.limit(BATCH_LIMIT).stream())
+        if not docs:
+            break
+        batch = db.batch()
+        for doc in docs:
+            batch.delete(msg_col.document(doc.id))
+        batch.commit()
+
+    # Delete the session itself
+    session_ref.delete()
     return True
 
 
 # ============================================================================
-# DESKTOP MESSAGES v2 — users/{uid}/messages (persistence layer)
+# DESKTOP MESSAGES — users/{uid}/messages
+#
+# Desktop messages are persistence-only (no LLM streaming).  They write the
+# same field set as chat.py's Message model for cross-platform compatibility:
+#   plugin_id, app_id, type='text', chat_session_id, from_external_integration
+#
+# When session_id is not provided, acquire_chat_session() auto-creates one
+# (matching Rust's save_message behavior for default-chat visibility).
 # ============================================================================
 
 
-def save_desktop_message(uid: str, data: dict) -> dict:
+def save_desktop_message(
+    uid: str, text: str, sender: str, app_id: str = None, session_id: str = None, metadata: str = None
+) -> dict:
+    """Save a chat message for the desktop app.
+
+    Writes all fields expected by chat.py's Message model so messages are
+    visible across platforms.  Auto-acquires a session if none provided.
+    """
     msg_id = str(uuid.uuid4())
     now = datetime.now(timezone.utc)
-    app_id = data.get('app_id')
 
-    # Acquire (get or create) a chat session when none is explicitly provided.
-    # This mirrors Rust's behavior: default-chat messages always get a session so
-    # they're visible on mobile and in session-based history.
-    session_id = data.get('session_id')
+    # Auto-acquire session (matches Rust backend behavior)
     if not session_id:
         session_id = acquire_chat_session(uid, app_id=app_id)
 
     doc = {
         'id': msg_id,
-        'text': data['text'],
+        'text': text,
         'created_at': now,
-        'sender': data['sender'],
+        'sender': sender,
+        'type': 'text',  # Desktop messages are always type 'text'
         'app_id': app_id,
-        'plugin_id': app_id,  # backward compat — Python consumers query by plugin_id
+        'plugin_id': app_id,  # chat.py queries messages by plugin_id
         'session_id': session_id,
-        'chat_session_id': session_id,  # backward compat
+        'chat_session_id': session_id,  # chat.py uses this field name
+        'from_external_integration': False,
         'rating': None,
         'reported': False,
-        'metadata': data.get('metadata'),
+        'memories_id': [],
+        'metadata': metadata,
     }
-    ref = db.collection('users').document(uid).collection('messages').document(msg_id)
-    ref.set(doc)
+    _user_col(uid, 'messages').document(msg_id).set(doc)
 
-    # Update chat session message count and preview
+    # Update session message_count and preview
     if session_id:
-        session_ref = db.collection('users').document(uid).collection('chat_sessions').document(session_id)
+        session_ref = _user_col(uid, 'chat_sessions').document(session_id)
         session_ref.update(
             {
                 'updated_at': now,
                 'message_count': firestore.Increment(1),
-                'preview': data['text'][:100] if data['text'] else None,
+                'preview': text[:100] if text else None,
             }
         )
 
@@ -565,160 +589,135 @@ def save_desktop_message(uid: str, data: dict) -> dict:
 def get_desktop_messages(
     uid: str, app_id: str = None, session_id: str = None, limit: int = 100, offset: int = 0
 ) -> List[dict]:
-    col = db.collection('users').document(uid).collection('messages')
+    """Fetch messages.  Filters by plugin_id (matching chat.py's query pattern)."""
+    col = _user_col(uid, 'messages')
     query = col.order_by('created_at', direction=firestore.Query.DESCENDING)
 
     if app_id is not None:
-        query = query.where(filter=FieldFilter('app_id', '==', app_id))
+        query = query.where(filter=FieldFilter('plugin_id', '==', app_id))
     if session_id is not None:
         query = query.where(filter=FieldFilter('chat_session_id', '==', session_id))
 
-    if offset > 0:
-        query = query.offset(offset)
-    query = query.limit(limit)
-    return [{**doc.to_dict(), 'id': doc.id} for doc in query.stream()]
-
-
-def delete_desktop_messages(uid: str, app_id: str = None) -> int:
-    col = db.collection('users').document(uid).collection('messages')
-    if app_id:
-        query = col.where(filter=FieldFilter('app_id', '==', app_id))
-    else:
-        query = col
-
-    count = 0
-    batch = db.batch()
+    query = query.offset(offset).limit(limit)
+    items = []
     for doc in query.stream():
-        batch.delete(col.document(doc.id))
-        count += 1
-        if count % 499 == 0:
-            batch.commit()
-            batch = db.batch()
-    if count % 499 != 0:
+        data = doc.to_dict()
+        data['id'] = doc.id
+        items.append(data)
+    return items
+
+
+def delete_desktop_messages(uid: str, app_id: str = None, session_id: str = None) -> int:
+    """Delete messages matching app_id/session_id.  Returns count deleted."""
+    col = _user_col(uid, 'messages')
+    query = col.where(filter=FieldFilter('plugin_id', '==', app_id))
+    if session_id:
+        query = query.where(filter=FieldFilter('chat_session_id', '==', session_id))
+
+    deleted = 0
+    while True:
+        docs = list(query.limit(BATCH_LIMIT).stream())
+        if not docs:
+            break
+        batch = db.batch()
+        for doc in docs:
+            batch.delete(col.document(doc.id))
         batch.commit()
-    return count
+        deleted += len(docs)
+    return deleted
 
 
 def rate_desktop_message(uid: str, message_id: str, rating: Optional[int]) -> bool:
-    ref = db.collection('users').document(uid).collection('messages').document(message_id)
-    doc = ref.get()
-    if not doc.exists:
+    """Rate a message (1=thumbs up, -1=thumbs down, None=clear)."""
+    ref = _user_col(uid, 'messages').document(message_id)
+    if not ref.get().exists:
         return False
-    ref.update({'rating': rating})
+    ref.update({'rating': rating, 'updated_at': datetime.now(timezone.utc)})
     return True
 
 
 # ============================================================================
-# NOTIFICATION SETTINGS — user document fields
+# USER SETTINGS — fields on users/{uid} document
 # ============================================================================
 
 
 def get_notification_settings(uid: str) -> dict:
-    user_ref = db.collection('users').document(uid)
-    doc = user_ref.get()
+    doc = _user_doc(uid).get()
     if not doc.exists:
-        return {'enabled': True, 'frequency': 3}
+        return {}
     data = doc.to_dict()
     return {
-        'enabled': data.get('notifications_enabled', True),
-        'frequency': data.get('notification_frequency', 3),
+        'notifications_enabled': data.get('notifications_enabled', True),
+        'notification_frequency': data.get('notification_frequency', 1),
     }
 
 
 def update_notification_settings(uid: str, enabled: bool = None, frequency: int = None) -> dict:
-    user_ref = db.collection('users').document(uid)
-    update = {}
+    updates = {}
     if enabled is not None:
-        update['notifications_enabled'] = enabled
+        updates['notifications_enabled'] = enabled
     if frequency is not None:
-        update['notification_frequency'] = frequency
-    if update:
-        user_ref.update(update)
+        updates['notification_frequency'] = frequency
+    if updates:
+        _user_doc(uid).update(updates)
     return get_notification_settings(uid)
 
 
-# ============================================================================
-# ASSISTANT SETTINGS — user document nested map
-# ============================================================================
-
-
 def get_assistant_settings(uid: str) -> dict:
-    user_ref = db.collection('users').document(uid)
-    doc = user_ref.get()
+    doc = _user_doc(uid).get()
     if not doc.exists:
         return {}
-    data = doc.to_dict()
-    settings = data.get('assistant_settings', {})
-    result = dict(settings)
-    if 'update_channel' in data:
-        result['update_channel'] = data['update_channel']
-    return result
+    return doc.to_dict().get('assistant_settings') or {}
 
 
 def update_assistant_settings(uid: str, settings: dict) -> dict:
-    user_ref = db.collection('users').document(uid)
-    update = {}
-
-    # Extract update_channel if present (top-level field)
-    update_channel = settings.pop('update_channel', None)
-    if update_channel is not None:
-        update['update_channel'] = update_channel
-
-    # Merge assistant_settings
-    if settings:
-        # Use dot-notation to merge nested fields without overwriting entire map
-        for key, value in settings.items():
-            if isinstance(value, dict):
-                for subkey, subvalue in value.items():
-                    update[f'assistant_settings.{key}.{subkey}'] = subvalue
-            else:
-                update[f'assistant_settings.{key}'] = value
-
-    if update:
-        user_ref.set(update, merge=True)
-
-    return get_assistant_settings(uid)
-
-
-# ============================================================================
-# AI USER PROFILE — user document nested map
-# ============================================================================
+    _user_doc(uid).update({'assistant_settings': settings})
+    return settings
 
 
 def get_ai_user_profile(uid: str) -> Optional[dict]:
-    user_ref = db.collection('users').document(uid)
-    doc = user_ref.get()
+    doc = _user_doc(uid).get()
     if not doc.exists:
         return None
-    data = doc.to_dict()
-    return data.get('ai_user_profile')
+    return doc.to_dict().get('ai_user_profile')
 
 
-def update_ai_user_profile(uid: str, profile: dict) -> dict:
-    user_ref = db.collection('users').document(uid)
-    user_ref.set({'ai_user_profile': profile}, merge=True)
-    return profile
+def update_ai_user_profile(
+    uid: str, profile_text: str = None, generated_at=None, data_sources_used: int = None
+) -> dict:
+    """Update AI user profile.  Only writes non-None fields (partial update)."""
+    # Read existing profile and merge updates
+    existing = get_ai_user_profile(uid) or {}
+    if profile_text is not None:
+        existing['profile_text'] = profile_text
+    if generated_at is not None:
+        existing['generated_at'] = generated_at
+    if data_sources_used is not None:
+        existing['data_sources_used'] = data_sources_used
+    _user_doc(uid).update({'ai_user_profile': existing})
+    return existing
 
 
 # ============================================================================
-# DAILY SCORE — calculated from action_items
+# DAILY SCORE — computed from users/{uid}/action_items
 # ============================================================================
 
 
 def get_daily_score(uid: str, date: str = None) -> dict:
-    if not date:
-        date = datetime.now(timezone.utc).strftime('%Y-%m-%d')
+    """Compute productivity score for a single day from action_items."""
+    if date:
+        day = datetime.strptime(date, '%Y-%m-%d').replace(tzinfo=timezone.utc)
+    else:
+        day = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
 
-    start = datetime.strptime(date, '%Y-%m-%d').replace(tzinfo=timezone.utc)
-    end = start + timedelta(days=1) - timedelta(milliseconds=1)
+    day_end = day + timedelta(days=1)
+    col = _user_col(uid, 'action_items')
 
-    col = db.collection('users').document(uid).collection('action_items')
-    query = col.where(filter=FieldFilter('due_at', '>=', start))
-    query = query.where(filter=FieldFilter('due_at', '<=', end))
-
-    completed = 0
+    # Count tasks due today
+    due_query = col.where(filter=FieldFilter('due_at', '>=', day)).where(filter=FieldFilter('due_at', '<', day_end))
     total = 0
-    for doc in query.stream():
+    completed = 0
+    for doc in due_query.stream():
         data = doc.to_dict()
         if data.get('deleted'):
             continue
@@ -726,25 +725,35 @@ def get_daily_score(uid: str, date: str = None) -> dict:
         if data.get('completed'):
             completed += 1
 
-    score = (completed / total * 100.0) if total > 0 else 0.0
-    return {'score': score, 'completed_tasks': completed, 'total_tasks': total, 'date': date}
+    score = round((completed / total * 100) if total > 0 else 0)
+    return {'date': day.strftime('%Y-%m-%d'), 'score': score, 'completed': completed, 'total': total}
 
 
 def get_scores(uid: str, date: str = None) -> dict:
-    if not date:
-        date = datetime.now(timezone.utc).strftime('%Y-%m-%d')
+    """Compute daily, weekly, and overall scores (matching Rust backend behavior).
 
-    today = datetime.strptime(date, '%Y-%m-%d').replace(tzinfo=timezone.utc)
-    today_end = today + timedelta(days=1) - timedelta(milliseconds=1)
-    week_ago = today - timedelta(days=7)
+    Takes a single date (or defaults to today) and returns:
+      daily  — tasks due on that date
+      weekly — tasks due in the 7 days ending on that date
+      overall — all non-deleted tasks
+    """
+    if date:
+        day = datetime.strptime(date, '%Y-%m-%d').replace(tzinfo=timezone.utc)
+    else:
+        day = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
 
-    col = db.collection('users').document(uid).collection('action_items')
+    day_start = day
+    day_end = day + timedelta(days=1)
+    week_start = day - timedelta(days=7)
+
+    col = _user_col(uid, 'action_items')
+
+    def _score(completed, total):
+        return round((completed / total * 100) if total > 0 else 0, 1)
 
     # Daily: tasks due today
-    daily_q = col.where(filter=FieldFilter('due_at', '>=', today))
-    daily_q = daily_q.where(filter=FieldFilter('due_at', '<=', today_end))
-    daily_completed = 0
-    daily_total = 0
+    daily_q = col.where(filter=FieldFilter('due_at', '>=', day_start)).where(filter=FieldFilter('due_at', '<', day_end))
+    daily_completed = daily_total = 0
     for doc in daily_q.stream():
         data = doc.to_dict()
         if data.get('deleted'):
@@ -753,11 +762,11 @@ def get_scores(uid: str, date: str = None) -> dict:
         if data.get('completed'):
             daily_completed += 1
 
-    # Weekly: tasks created in last 7 days
-    weekly_q = col.where(filter=FieldFilter('created_at', '>=', week_ago))
-    weekly_q = weekly_q.where(filter=FieldFilter('created_at', '<=', today_end))
-    weekly_completed = 0
-    weekly_total = 0
+    # Weekly: tasks due in last 7 days
+    weekly_q = col.where(filter=FieldFilter('due_at', '>=', week_start)).where(
+        filter=FieldFilter('due_at', '<', day_end)
+    )
+    weekly_completed = weekly_total = 0
     for doc in weekly_q.stream():
         data = doc.to_dict()
         if data.get('deleted'):
@@ -766,9 +775,8 @@ def get_scores(uid: str, date: str = None) -> dict:
         if data.get('completed'):
             weekly_completed += 1
 
-    # Overall: all action items
-    overall_completed = 0
-    overall_total = 0
+    # Overall: all non-deleted tasks
+    overall_completed = overall_total = 0
     for doc in col.stream():
         data = doc.to_dict()
         if data.get('deleted'):
@@ -777,25 +785,23 @@ def get_scores(uid: str, date: str = None) -> dict:
         if data.get('completed'):
             overall_completed += 1
 
-    def calc_score(c, t):
-        return (c / t * 100.0) if t > 0 else 0.0
-
     daily = {
-        'score': calc_score(daily_completed, daily_total),
+        'score': _score(daily_completed, daily_total),
         'completed_tasks': daily_completed,
         'total_tasks': daily_total,
     }
     weekly = {
-        'score': calc_score(weekly_completed, weekly_total),
+        'score': _score(weekly_completed, weekly_total),
         'completed_tasks': weekly_completed,
         'total_tasks': weekly_total,
     }
     overall = {
-        'score': calc_score(overall_completed, overall_total),
+        'score': _score(overall_completed, overall_total),
         'completed_tasks': overall_completed,
         'total_tasks': overall_total,
     }
 
+    # Determine default tab (highest score, prefer daily > weekly > overall)
     if daily['total_tasks'] > 0 and daily['score'] >= weekly['score'] and daily['score'] >= overall['score']:
         default_tab = 'daily'
     elif weekly['score'] >= overall['score']:
@@ -803,11 +809,24 @@ def get_scores(uid: str, date: str = None) -> dict:
     else:
         default_tab = 'overall'
 
-    return {'daily': daily, 'weekly': weekly, 'overall': overall, 'default_tab': default_tab, 'date': date}
+    return {
+        'daily': daily,
+        'weekly': weekly,
+        'overall': overall,
+        'default_tab': default_tab,
+        'date': day.strftime('%Y-%m-%d'),
+    }
 
 
 # ============================================================================
-# DESKTOP LLM USAGE — users/{uid}/llm_usage (per-query recording)
+# DESKTOP LLM USAGE — users/{uid}/llm_usage/{YYYY-MM-DD}
+#
+# Desktop uses a flat key scheme ("desktop_chat" / "desktop_chat_{account}")
+# with fields: input_tokens, output_tokens, cache_read_tokens,
+# cache_write_tokens, total_tokens, cost_usd, call_count.
+#
+# This differs from llm_usage.py's {feature}.{model} nesting.  Both schemas
+# coexist in the same date-keyed documents using Firestore's schemaless design.
 # ============================================================================
 
 
@@ -815,17 +834,21 @@ def record_desktop_llm_usage(
     uid: str,
     input_tokens: int,
     output_tokens: int,
-    cache_read_tokens: int,
-    cache_write_tokens: int,
-    total_tokens: int,
-    cost_usd: float,
-    account: str = 'desktop_chat',
+    cache_read_tokens: int = 0,
+    cache_write_tokens: int = 0,
+    total_tokens: int = 0,
+    cost_usd: float = 0.0,
+    account: str = 'omi',
 ) -> None:
-    now = datetime.now(timezone.utc)
-    doc_id = now.strftime('%Y-%m-%d')
-    ref = db.collection('users').document(uid).collection('llm_usage').document(doc_id)
+    """Record desktop LLM token usage with atomic increments.
 
-    key = f'desktop_chat' if account == 'desktop_chat' else f'desktop_chat_{account}'
+    Matches the Rust backend's field schema exactly so existing analytics
+    and the Swift client see consistent data.
+    """
+    today = datetime.now(timezone.utc).strftime('%Y-%m-%d')
+    ref = _user_col(uid, 'llm_usage').document(today)
+
+    key = 'desktop_chat' if account == 'omi' else f'desktop_chat_{account}'
     update = {
         f'{key}.input_tokens': firestore.Increment(input_tokens),
         f'{key}.output_tokens': firestore.Increment(output_tokens),
@@ -834,32 +857,19 @@ def record_desktop_llm_usage(
         f'{key}.total_tokens': firestore.Increment(total_tokens),
         f'{key}.cost_usd': firestore.Increment(cost_usd),
         f'{key}.call_count': firestore.Increment(1),
-        'date': doc_id,
-        'last_updated': now,
+        'date': today,
+        'last_updated': datetime.now(timezone.utc),
     }
     ref.set(update, merge=True)
 
 
 def get_total_desktop_llm_cost(uid: str) -> float:
-    col = db.collection('users').document(uid).collection('llm_usage')
+    """Sum cost_usd across all date docs for desktop_chat* keys."""
+    col = _user_col(uid, 'llm_usage')
     total = 0.0
     for doc in col.stream():
         data = doc.to_dict()
         for key, value in data.items():
             if key.startswith('desktop_chat') and isinstance(value, dict):
                 total += value.get('cost_usd', 0.0)
-    return total
-
-
-# ============================================================================
-# CHAT MESSAGE COUNT — from PostHog or Firestore messages
-# ============================================================================
-
-
-def get_chat_message_count(uid: str) -> int:
-    """Count messages in Firestore for the user."""
-    col = db.collection('users').document(uid).collection('messages')
-    count = 0
-    for _ in col.select([]).stream():
-        count += 1
-    return count
+    return round(total, 6)
