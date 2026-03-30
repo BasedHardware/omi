@@ -158,7 +158,7 @@ actor ScreenActivitySyncService {
 
         do {
             let headers = try await APIClient.shared.buildHeaders()
-            let baseURL = await APIClient.shared.rustBackendURL
+            let baseURL = await APIClient.shared.baseURL
             guard let url = URL(string: baseURL + "v1/screen-activity/sync") else {
                 log("ScreenActivitySync: invalid URL")
                 return false
