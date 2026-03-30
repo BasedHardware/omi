@@ -581,3 +581,386 @@ class TestGetDeepgramModelForLanguage:
         lang, model = get_deepgram_model_for_language('th')
         assert lang == 'th'
         assert model == 'nova-2-general'
+
+
+# ---------------------------------------------------------------------------
+# Speaker identification for sync path
+# ---------------------------------------------------------------------------
+
+import io
+import struct
+import wave
+
+import numpy as np
+
+
+def _make_wav_bytes(duration_sec: float = 2.0, sample_rate: int = 16000) -> bytes:
+    """Generate silent WAV bytes of the given duration for testing."""
+    n_samples = int(duration_sec * sample_rate)
+    samples = b'\x00\x00' * n_samples  # 16-bit silence
+    buf = io.BytesIO()
+    with wave.open(buf, 'wb') as wf:
+        wf.setnchannels(1)
+        wf.setsampwidth(2)
+        wf.setframerate(sample_rate)
+        wf.writeframes(samples)
+    return buf.getvalue()
+
+
+def _make_transcript_segment(speaker_id, start, end, text='hello', seg_id=None):
+    """Create a TranscriptSegment-like object for testing."""
+    from models.transcript_segment import TranscriptSegment
+
+    seg = TranscriptSegment(
+        text=text,
+        speaker='SPEAKER_{:02d}'.format(speaker_id),
+        speaker_id=speaker_id,
+        is_user=False,
+        start=start,
+        end=end,
+    )
+    if seg_id:
+        seg.id = seg_id
+    return seg
+
+
+class TestBuildPersonEmbeddingsCache:
+    """Verify build_person_embeddings_cache loads user + people embeddings."""
+
+    @patch('routers.sync.users_db')
+    def test_loads_user_embedding(self, mock_users_db):
+        from routers.sync import build_person_embeddings_cache
+
+        mock_users_db.get_user_speaker_embedding.return_value = [0.1] * 512
+        mock_users_db.get_people.return_value = []
+
+        cache = build_person_embeddings_cache('uid1')
+
+        assert 'user' in cache
+        assert cache['user']['name'] == 'User'
+        assert cache['user']['embedding'].shape == (1, 512)
+
+    @patch('routers.sync.users_db')
+    def test_loads_people_embeddings(self, mock_users_db):
+        from routers.sync import build_person_embeddings_cache
+
+        mock_users_db.get_user_speaker_embedding.return_value = None
+        mock_users_db.get_people.return_value = [
+            {'id': 'p1', 'name': 'Alice', 'speaker_embedding': [0.2] * 512},
+            {'id': 'p2', 'name': 'Bob'},  # no embedding
+            {'id': 'p3', 'name': 'Carol', 'speaker_embedding': [0.3] * 512},
+        ]
+
+        cache = build_person_embeddings_cache('uid1')
+
+        assert 'user' not in cache
+        assert 'p1' in cache
+        assert 'p2' not in cache
+        assert 'p3' in cache
+        assert cache['p1']['name'] == 'Alice'
+
+    @patch('routers.sync.users_db')
+    def test_empty_when_no_embeddings(self, mock_users_db):
+        from routers.sync import build_person_embeddings_cache
+
+        mock_users_db.get_user_speaker_embedding.return_value = None
+        mock_users_db.get_people.return_value = []
+
+        cache = build_person_embeddings_cache('uid1')
+        assert cache == {}
+
+
+class TestExtractSpeakerClipWav:
+    """Verify _extract_speaker_clip_wav clips audio correctly."""
+
+    def test_extracts_clip(self):
+        from routers.sync import _extract_speaker_clip_wav
+
+        audio = _make_wav_bytes(duration_sec=5.0)
+        clip = _extract_speaker_clip_wav(audio, 1.0, 3.0)
+        assert clip is not None
+        # Verify it's valid WAV
+        with wave.open(io.BytesIO(clip), 'rb') as wf:
+            clip_duration = wf.getnframes() / wf.getframerate()
+            assert 1.8 < clip_duration < 2.2  # ~2 seconds
+
+    def test_returns_none_for_short_clip(self):
+        from routers.sync import _extract_speaker_clip_wav
+
+        audio = _make_wav_bytes(duration_sec=5.0)
+        clip = _extract_speaker_clip_wav(audio, 1.0, 1.5)  # only 0.5s < 1.0s threshold
+        assert clip is None
+
+    def test_caps_at_10_seconds(self):
+        from routers.sync import _extract_speaker_clip_wav
+
+        audio = _make_wav_bytes(duration_sec=20.0)
+        clip = _extract_speaker_clip_wav(audio, 0.0, 15.0)
+        assert clip is not None
+        with wave.open(io.BytesIO(clip), 'rb') as wf:
+            clip_duration = wf.getnframes() / wf.getframerate()
+            assert clip_duration <= 10.1  # should be capped at ~10s
+
+    def test_clamps_to_audio_bounds(self):
+        from routers.sync import _extract_speaker_clip_wav
+
+        audio = _make_wav_bytes(duration_sec=3.0)
+        clip = _extract_speaker_clip_wav(audio, -1.0, 5.0)
+        assert clip is not None
+        with wave.open(io.BytesIO(clip), 'rb') as wf:
+            clip_duration = wf.getnframes() / wf.getframerate()
+            assert 2.8 < clip_duration < 3.2
+
+
+class TestIdentifySpeakersForSegments:
+    """Verify identify_speakers_for_segments matches speakers and applies assignments."""
+
+    @patch('routers.sync.extract_embedding_from_bytes')
+    def test_voice_match_assigns_person(self, mock_extract):
+        from routers.sync import identify_speakers_for_segments
+
+        # Create a "matching" embedding — same as Alice's
+        alice_emb = np.ones((1, 512), dtype=np.float32)
+        mock_extract.return_value = alice_emb
+
+        cache = {
+            'p1': {'embedding': alice_emb, 'name': 'Alice'},
+        }
+
+        segments = [
+            _make_transcript_segment(speaker_id=1, start=0.0, end=2.0, text='hello', seg_id='s1'),
+            _make_transcript_segment(speaker_id=1, start=3.0, end=4.0, text='world', seg_id='s2'),
+        ]
+
+        audio = _make_wav_bytes(duration_sec=5.0)
+        identify_speakers_for_segments(segments, audio, cache, 'uid1')
+
+        # Both segments should be assigned to Alice (speaker_id 1 -> person p1)
+        assert segments[0].person_id == 'p1'
+        assert segments[1].person_id == 'p1'
+        assert not segments[0].is_user
+        assert not segments[1].is_user
+
+    @patch('routers.sync.extract_embedding_from_bytes')
+    def test_user_match_sets_is_user(self, mock_extract):
+        from routers.sync import identify_speakers_for_segments
+
+        user_emb = np.ones((1, 512), dtype=np.float32)
+        mock_extract.return_value = user_emb
+
+        cache = {
+            'user': {'embedding': user_emb, 'name': 'User'},
+        }
+
+        segments = [
+            _make_transcript_segment(speaker_id=1, start=0.0, end=2.0, text='hello', seg_id='s1'),
+        ]
+
+        audio = _make_wav_bytes(duration_sec=5.0)
+        identify_speakers_for_segments(segments, audio, cache, 'uid1')
+
+        assert segments[0].is_user is True
+        assert segments[0].person_id is None
+
+    @patch('routers.sync.extract_embedding_from_bytes')
+    def test_no_match_above_threshold(self, mock_extract):
+        from routers.sync import identify_speakers_for_segments
+
+        # Return an embedding far from the cached one
+        mock_extract.return_value = np.ones((1, 512), dtype=np.float32)
+        far_emb = -np.ones((1, 512), dtype=np.float32)
+
+        cache = {
+            'p1': {'embedding': far_emb, 'name': 'Alice'},
+        }
+
+        segments = [
+            _make_transcript_segment(speaker_id=1, start=0.0, end=2.0, text='hello', seg_id='s1'),
+        ]
+
+        audio = _make_wav_bytes(duration_sec=5.0)
+        identify_speakers_for_segments(segments, audio, cache, 'uid1')
+
+        # No match — segments should remain unassigned
+        assert segments[0].person_id is None
+        assert not segments[0].is_user
+
+    @patch('routers.sync.users_db')
+    @patch('routers.sync.extract_embedding_from_bytes')
+    def test_text_detection_fallback(self, mock_extract, mock_users_db):
+        from routers.sync import identify_speakers_for_segments
+
+        # Embedding extraction fails (too short clip), so voice matching skips
+        mock_extract.side_effect = ValueError("Audio too short")
+        mock_users_db.get_person_by_name.return_value = {'id': 'p2', 'name': 'Bob'}
+
+        cache = {'p1': {'embedding': np.ones((1, 512), dtype=np.float32), 'name': 'Alice'}}
+
+        segments = [
+            _make_transcript_segment(speaker_id=1, start=0.0, end=2.0, text='my name is Bob', seg_id='s1'),
+        ]
+
+        audio = _make_wav_bytes(duration_sec=5.0)
+        identify_speakers_for_segments(segments, audio, cache, 'uid1')
+
+        # Text detection should match "Bob" and assign person_id
+        assert segments[0].person_id == 'p2'
+
+    def test_empty_cache_is_noop(self):
+        from routers.sync import identify_speakers_for_segments
+
+        segments = [
+            _make_transcript_segment(speaker_id=1, start=0.0, end=2.0, text='hello', seg_id='s1'),
+        ]
+
+        audio = _make_wav_bytes(duration_sec=5.0)
+        identify_speakers_for_segments(segments, audio, {}, 'uid1')
+
+        assert segments[0].person_id is None
+        assert not segments[0].is_user
+
+    @patch('routers.sync.extract_embedding_from_bytes')
+    def test_short_segments_skip_embedding(self, mock_extract):
+        from routers.sync import identify_speakers_for_segments
+
+        cache = {'p1': {'embedding': np.ones((1, 512), dtype=np.float32), 'name': 'Alice'}}
+
+        # All segments under 1.0s — too short for embedding extraction
+        segments = [
+            _make_transcript_segment(speaker_id=1, start=0.0, end=0.5, text='hi', seg_id='s1'),
+            _make_transcript_segment(speaker_id=1, start=1.0, end=1.3, text='ok', seg_id='s2'),
+        ]
+
+        audio = _make_wav_bytes(duration_sec=5.0)
+        identify_speakers_for_segments(segments, audio, cache, 'uid1')
+
+        # extract_embedding_from_bytes should not have been called
+        mock_extract.assert_not_called()
+        assert segments[0].person_id is None
+
+    @patch('routers.sync.extract_embedding_from_bytes')
+    def test_multiple_speakers_matched(self, mock_extract):
+        from routers.sync import identify_speakers_for_segments
+
+        alice_emb = np.array([[1.0] + [0.0] * 511], dtype=np.float32)
+        bob_emb = np.array([[0.0, 1.0] + [0.0] * 510], dtype=np.float32)
+
+        # Return different embeddings based on call order
+        mock_extract.side_effect = [alice_emb, bob_emb]
+
+        cache = {
+            'p1': {'embedding': alice_emb, 'name': 'Alice'},
+            'p2': {'embedding': bob_emb, 'name': 'Bob'},
+        }
+
+        segments = [
+            _make_transcript_segment(speaker_id=1, start=0.0, end=2.0, text='hello', seg_id='s1'),
+            _make_transcript_segment(speaker_id=2, start=3.0, end=5.0, text='world', seg_id='s2'),
+        ]
+
+        audio = _make_wav_bytes(duration_sec=6.0)
+        identify_speakers_for_segments(segments, audio, cache, 'uid1')
+
+        assert segments[0].person_id == 'p1'
+        assert segments[1].person_id == 'p2'
+
+
+class TestProcessSegmentSpeakerIdIntegration:
+    """Verify process_segment wires speaker identification correctly."""
+
+    @staticmethod
+    def _mock_words():
+        return [
+            {'timestamp': [0.0, 0.5], 'speaker': 'SPEAKER_00', 'text': 'Hello'},
+            {'timestamp': [0.5, 1.0], 'speaker': 'SPEAKER_00', 'text': 'world'},
+        ]
+
+    @patch('routers.sync.process_conversation')
+    @patch('routers.sync.get_closest_conversation_to_timestamps', return_value=None)
+    @patch('routers.sync.get_timestamp_from_path', return_value=1700000000)
+    @patch('routers.sync.deepgram_prerecorded')
+    @patch('routers.sync.delete_syncing_temporal_file')
+    @patch('routers.sync.get_syncing_file_temporal_signed_url', return_value='http://example.com/audio.wav')
+    @patch('routers.sync.identify_speakers_for_segments')
+    @patch('routers.sync._download_audio_bytes')
+    def test_speaker_id_called_when_cache_provided(
+        self, mock_download, mock_identify, mock_url, mock_delete, mock_dg, mock_ts, mock_closest, mock_process
+    ):
+        from routers.sync import process_segment
+
+        mock_dg.return_value = (self._mock_words(), 'en')
+        mock_process.return_value = MagicMock(id='test-id')
+        mock_download.return_value = b'fake-audio-bytes'
+
+        cache = {'p1': {'embedding': np.ones((1, 512)), 'name': 'Alice'}}
+
+        response = {'new_memories': set(), 'updated_memories': set()}
+        lock = threading.Lock()
+        errors = []
+
+        process_segment(
+            'test/path.bin',
+            'uid123',
+            response,
+            lock,
+            errors,
+            person_embeddings_cache=cache,
+        )
+
+        mock_download.assert_called_once()
+        mock_identify.assert_called_once()
+
+    @patch('routers.sync.process_conversation')
+    @patch('routers.sync.get_closest_conversation_to_timestamps', return_value=None)
+    @patch('routers.sync.get_timestamp_from_path', return_value=1700000000)
+    @patch('routers.sync.deepgram_prerecorded')
+    @patch('routers.sync.delete_syncing_temporal_file')
+    @patch('routers.sync.get_syncing_file_temporal_signed_url', return_value='http://example.com/audio.wav')
+    @patch('routers.sync._download_audio_bytes')
+    def test_speaker_id_skipped_when_no_cache(
+        self, mock_download, mock_url, mock_delete, mock_dg, mock_ts, mock_closest, mock_process
+    ):
+        from routers.sync import process_segment
+
+        mock_dg.return_value = (self._mock_words(), 'en')
+        mock_process.return_value = MagicMock(id='test-id')
+
+        response = {'new_memories': set(), 'updated_memories': set()}
+        lock = threading.Lock()
+        errors = []
+
+        process_segment(
+            'test/path.bin',
+            'uid123',
+            response,
+            lock,
+            errors,
+            person_embeddings_cache=None,
+        )
+
+        # Should not attempt to download audio when no cache
+        mock_download.assert_not_called()
+
+
+class TestSyncEndpointSpeakerIdWiring:
+    """Verify sync_local_files builds speaker embeddings cache."""
+
+    @staticmethod
+    def _read_sync_source():
+        sync_path = os.path.join(os.path.dirname(__file__), '..', '..', 'routers', 'sync.py')
+        with open(sync_path) as f:
+            return f.read()
+
+    def test_endpoint_builds_embeddings_cache(self):
+        """sync_local_files must call build_person_embeddings_cache."""
+        source = self._read_sync_source()
+        fn_start = source.index('async def sync_local_files(')
+        fn_body = source[fn_start:]
+        assert 'build_person_embeddings_cache' in fn_body
+
+    def test_endpoint_passes_cache_to_thread(self):
+        """Each thread must receive person_embeddings_cache as an argument."""
+        source = self._read_sync_source()
+        fn_start = source.index('async def sync_local_files(')
+        fn_body = source[fn_start:]
+        assert 'person_embeddings_cache' in fn_body
