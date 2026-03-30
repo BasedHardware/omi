@@ -932,30 +932,33 @@ class TestIdentifySpeakersForSegments:
         assert segments[1].person_id is None
 
     @patch('routers.sync.extract_embedding_from_bytes')
-    def test_longest_speaker_matched_first(self, mock_extract):
-        """Speakers are sorted by total speech duration so the best embedding quality wins."""
+    def test_best_clip_speaker_matched_first(self, mock_extract):
+        """Speakers are sorted by best single segment (clip quality) not total duration."""
         from routers.sync import identify_speakers_for_segments
 
         alice_emb = np.array([[1.0] + [0.0] * 511], dtype=np.float32)
-        # Speaker 2 (longer) gets matched first; speaker 1 also close to Alice but excluded
+        # Both speakers return embeddings close to Alice
         mock_extract.side_effect = [alice_emb, alice_emb]
 
         cache = {
             'p1': {'embedding': alice_emb, 'name': 'Alice'},
         }
 
-        # Speaker 2 has MORE total duration than speaker 1
+        # Speaker 1 has MORE total duration (3 x 1.2s = 3.6s) but shorter best clip (1.2s)
+        # Speaker 2 has LESS total duration (3.0s) but longer best clip (3.0s)
         segments = [
-            _make_transcript_segment(speaker_id=1, start=0.0, end=1.5, text='hi', seg_id='s1'),
-            _make_transcript_segment(speaker_id=2, start=2.0, end=5.0, text='hello there', seg_id='s2'),
+            _make_transcript_segment(speaker_id=1, start=0.0, end=1.2, text='hi', seg_id='s1a'),
+            _make_transcript_segment(speaker_id=1, start=2.0, end=3.2, text='there', seg_id='s1b'),
+            _make_transcript_segment(speaker_id=1, start=4.0, end=5.2, text='friend', seg_id='s1c'),
+            _make_transcript_segment(speaker_id=2, start=6.0, end=9.0, text='hello world', seg_id='s2'),
         ]
 
-        audio = _make_wav_bytes(duration_sec=6.0)
+        audio = _make_wav_bytes(duration_sec=10.0)
         identify_speakers_for_segments(segments, audio, cache, 'uid1')
 
-        # Speaker 2 (3s total) matched first, gets Alice
-        assert segments[1].person_id == 'p1'
-        # Speaker 1 (1.5s total) can't match — Alice already taken
+        # Speaker 2 (best clip 3.0s) matched first despite lower total, gets Alice
+        assert segments[3].person_id == 'p1'
+        # Speaker 1 (best clip 1.2s) can't match — Alice already taken
         assert segments[0].person_id is None
 
 
