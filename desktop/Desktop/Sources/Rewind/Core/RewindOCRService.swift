@@ -169,16 +169,22 @@ actor RewindOCRService {
                     return
                 }
 
-                guard let observations = request.results as? [VNRecognizedTextObservation] else {
+                guard let rawObservations = request.results as? [VNRecognizedTextObservation] else {
                     continuation.resume(returning: OCRResult(fullText: "", blocks: [], processedAt: Date()))
                     return
                 }
 
+                // Snapshot into a Swift Array immediately to avoid race conditions with
+                // Vision mutating its internal NSArray after the callback fires.
+                let observations = Array(rawObservations)
                 var blocks: [OCRTextBlock] = []
                 var fullTextLines: [String] = []
 
                 for observation in observations {
-                    guard let candidate = observation.topCandidates(1).first else { continue }
+                    // Materialize candidates before any access — calling topCandidates(1).first
+                    // inline can crash if Vision's backing NSArray has inconsistent storage.
+                    let candidates = observation.topCandidates(1)
+                    guard !candidates.isEmpty, let candidate = candidates.first else { continue }
 
                     let boundingBox = observation.boundingBox
                     let block = OCRTextBlock(
