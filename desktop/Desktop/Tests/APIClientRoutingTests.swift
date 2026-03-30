@@ -290,92 +290,108 @@ final class APIClientRoutingTests: XCTestCase {
                      label: "fetchApiKeys")
     }
 
-    // -- Assistant settings (GET → Rust) --
+    // -- Assistant settings (GET → Python, migrated from Rust) --
 
-    func testGetAssistantSettingsRoutesToRust() async {
+    func testGetAssistantSettingsRoutesToPython() async {
         let client = await makeTestClient()
         _ = try? await client.getAssistantSettings() as AssistantSettingsResponse
-        assertRoutes(URLCapture.capturedRequests, host: "rust-test", port: 9002,
+        assertRoutes(URLCapture.capturedRequests, host: "python-test", port: 9001,
                      pathContains: "v1/users/assistant-settings", method: "GET",
                      label: "getAssistantSettings")
     }
 
-    // -- Notification settings (GET → Rust) --
+    // -- Notification settings (GET → Python, migrated from Rust) --
 
-    func testGetNotificationSettingsRoutesToRust() async {
+    func testGetNotificationSettingsRoutesToPython() async {
         let client = await makeTestClient()
         _ = try? await client.getNotificationSettings() as NotificationSettingsResponse
-        assertRoutes(URLCapture.capturedRequests, host: "rust-test", port: 9002,
+        assertRoutes(URLCapture.capturedRequests, host: "python-test", port: 9001,
                      pathContains: "v1/users/notification-settings", method: "GET",
                      label: "getNotificationSettings")
     }
 
-    // -- Staged tasks (GET → Rust) --
+    // -- Staged tasks (GET, DELETE → Python, migrated from Rust) --
 
-    func testGetStagedTasksRoutesToRust() async {
+    func testGetStagedTasksRoutesToPython() async {
         let client = await makeTestClient()
         _ = try? await client.getStagedTasks() as ActionItemsListResponse
-        assertRoutes(URLCapture.capturedRequests, host: "rust-test", port: 9002,
+        assertRoutes(URLCapture.capturedRequests, host: "python-test", port: 9001,
                      pathContains: "v1/staged-tasks", method: "GET",
                      label: "getStagedTasks")
     }
 
-    // -- Daily score (GET → Rust) --
-
-    func testGetDailyScoreRoutesToRust() async {
-        let client = await makeTestClient()
-        _ = try? await client.getDailyScore() as DailyScore
-        assertRoutes(URLCapture.capturedRequests, host: "rust-test", port: 9002,
-                     pathContains: "v1/daily-score", method: "GET",
-                     label: "getDailyScore")
-    }
-
-    // -- Chat sessions (GET, POST → Rust) --
-
-    func testGetChatSessionsRoutesToRust() async {
-        let client = await makeTestClient()
-        _ = try? await client.getChatSessions() as [ChatSession]
-        assertRoutes(URLCapture.capturedRequests, host: "rust-test", port: 9002,
-                     pathContains: "v2/chat-sessions", method: "GET",
-                     label: "getChatSessions")
-    }
-
-    func testCreateChatSessionRoutesToRust() async {
-        let client = await makeTestClient()
-        _ = try? await client.createChatSession(title: "test") as ChatSession
-        assertRoutes(URLCapture.capturedRequests, host: "rust-test", port: 9002,
-                     pathContains: "v2/chat-sessions", method: "POST",
-                     label: "createChatSession")
-    }
-
-    // -- Delete chat session (DELETE → Rust) --
-
-    func testDeleteChatSessionRoutesToRust() async {
-        let client = await makeTestClient()
-        try? await client.deleteChatSession(sessionId: "sess-1")
-        assertRoutes(URLCapture.capturedRequests, host: "rust-test", port: 9002,
-                     pathContains: "v2/chat-sessions/sess-1", method: "DELETE",
-                     label: "deleteChatSession")
-    }
-
-    // -- Delete staged task (DELETE → Rust) --
-
-    func testDeleteStagedTaskRoutesToRust() async {
+    func testDeleteStagedTaskRoutesToPython() async {
         let client = await makeTestClient()
         try? await client.deleteStagedTask(id: "st-1")
-        assertRoutes(URLCapture.capturedRequests, host: "rust-test", port: 9002,
+        assertRoutes(URLCapture.capturedRequests, host: "python-test", port: 9001,
                      pathContains: "v1/staged-tasks/st-1", method: "DELETE",
                      label: "deleteStagedTask")
     }
 
-    // -- Delete messages: manual URL with rustBackendURL (DELETE → Rust) --
+    // -- Daily score (GET → Python, migrated from Rust) --
 
-    func testDeleteMessagesRoutesToRust() async {
+    func testGetDailyScoreRoutesToPython() async {
+        let client = await makeTestClient()
+        _ = try? await client.getDailyScore() as DailyScore
+        assertRoutes(URLCapture.capturedRequests, host: "python-test", port: 9001,
+                     pathContains: "v1/daily-score", method: "GET",
+                     label: "getDailyScore")
+    }
+
+    // -- Chat sessions (GET, POST, DELETE → Python, migrated from Rust) --
+
+    func testGetChatSessionsRoutesToPython() async {
+        let client = await makeTestClient()
+        _ = try? await client.getChatSessions() as [ChatSession]
+        assertRoutes(URLCapture.capturedRequests, host: "python-test", port: 9001,
+                     pathContains: "v2/chat-sessions", method: "GET",
+                     label: "getChatSessions")
+    }
+
+    func testCreateChatSessionRoutesToPython() async {
+        let client = await makeTestClient()
+        _ = try? await client.createChatSession(title: "test") as ChatSession
+        assertRoutes(URLCapture.capturedRequests, host: "python-test", port: 9001,
+                     pathContains: "v2/chat-sessions", method: "POST",
+                     label: "createChatSession")
+    }
+
+    func testDeleteChatSessionRoutesToPython() async {
+        let client = await makeTestClient()
+        try? await client.deleteChatSession(sessionId: "sess-1")
+        assertRoutes(URLCapture.capturedRequests, host: "python-test", port: 9001,
+                     pathContains: "v2/chat-sessions/sess-1", method: "DELETE",
+                     label: "deleteChatSession")
+    }
+
+    // -- Desktop messages (DELETE → Python, path changed to v2/desktop/messages) --
+
+    func testDeleteMessagesRoutesToPython() async {
         let client = await makeTestClient()
         _ = try? await client.deleteMessages() as MessageDeleteResponse
-        assertRoutes(URLCapture.capturedRequests, host: "rust-test", port: 9002,
-                     pathContains: "v2/messages", method: "DELETE",
+        assertRoutes(URLCapture.capturedRequests, host: "python-test", port: 9001,
+                     pathContains: "v2/desktop/messages", method: "DELETE",
                      label: "deleteMessages")
+    }
+
+    // -- AI profile (GET, PATCH → Python, migrated from Rust) --
+
+    func testGetAIUserProfileRoutesToPython() async {
+        let client = await makeTestClient()
+        _ = try? await client.getAIUserProfile() as AIUserProfileResponse?
+        assertRoutes(URLCapture.capturedRequests, host: "python-test", port: 9001,
+                     pathContains: "v1/users/ai-profile", method: "GET",
+                     label: "getAIUserProfile")
+    }
+
+    // -- LLM usage (GET → Python, migrated from Rust) --
+
+    func testFetchTotalOmiAICostRoutesToPython() async {
+        let client = await makeTestClient()
+        _ = await client.fetchTotalOmiAICost()
+        assertRoutes(URLCapture.capturedRequests, host: "python-test", port: 9001,
+                     pathContains: "v1/users/me/llm-usage/total", method: "GET",
+                     label: "fetchTotalOmiAICost")
     }
 
     // MARK: - Python-routed: remaining manual URL builders
