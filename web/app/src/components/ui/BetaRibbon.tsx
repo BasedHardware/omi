@@ -33,7 +33,7 @@ export function BetaRibbon() {
           href="https://feedback.omi.me"
           target="_blank"
           rel="noopener noreferrer"
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-bg-tertiary/80 backdrop-blur-sm text-text-tertiary hover:text-purple-primary hover:bg-bg-tertiary transition-colors text-xs"
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-bg-tertiary/80 backdrop-blur-sm text-text-tertiary hover:text-primary hover:bg-bg-tertiary transition-colors text-xs"
         >
           <MessageSquare className="w-3.5 h-3.5" />
           <span>Feedback</span>
@@ -42,7 +42,7 @@ export function BetaRibbon() {
           href="http://discord.omi.me"
           target="_blank"
           rel="noopener noreferrer"
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-bg-tertiary/80 backdrop-blur-sm text-text-tertiary hover:text-purple-primary hover:bg-bg-tertiary transition-colors text-xs"
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-bg-tertiary/80 backdrop-blur-sm text-text-tertiary hover:text-primary hover:bg-bg-tertiary transition-colors text-xs"
         >
           <DiscordIcon className="w-3.5 h-3.5" />
           <span>Discord</span>
@@ -55,7 +55,7 @@ export function BetaRibbon() {
           href="https://feedback.omi.me"
           target="_blank"
           rel="noopener noreferrer"
-          className="pointer-events-auto absolute top-6 -right-8 w-36 text-center py-1.5 bg-purple-primary text-white text-xs font-semibold uppercase tracking-wider rotate-45 shadow-lg hover:bg-purple-600 transition-colors"
+          className="pointer-events-auto absolute top-6 -right-8 w-36 text-center py-1.5 bg-primary text-primary-foreground text-xs font-semibold uppercase tracking-wider rotate-45 shadow-lg hover:bg-primary/90 transition-colors"
         >
           Beta
         </a>
