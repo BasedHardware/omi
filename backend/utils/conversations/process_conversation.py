@@ -91,8 +91,10 @@ def resolve_translation_language(uid: str, conversation_language: Optional[str] 
     if single_language_mode:
         return None
 
-    # Use conversation language if available, otherwise fall back to user preference
-    language = conversation_language or users_db.get_user_language_preference(uid)
+    # Use conversation language if available, otherwise fall back to user preference.
+    # "multi" is a special value for multi-language streaming — not a real language code.
+    language = conversation_language if conversation_language and conversation_language != "multi" else None
+    language = language or users_db.get_user_language_preference(uid)
     if not language:
         return None
 
@@ -105,8 +107,9 @@ def _batch_translate_segments(
 ) -> bool:
     """Batch-translate foreign-language segments in a completed conversation.
 
-    Uses free langdetect on finalized segments to identify foreign-language content,
-    then batch-translates only those segments in a single GCP API call.
+    Uses free langdetect on finalized segments to skip same-language content,
+    then translates remaining segments via TranslationService (which provides
+    memory LRU + Redis caching to minimize GCP API calls).
     Respects the 24h hot window — only translates recent conversations.
 
     Returns True if any translations were added, False otherwise.
