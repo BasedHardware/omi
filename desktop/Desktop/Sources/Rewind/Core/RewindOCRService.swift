@@ -169,7 +169,8 @@ actor RewindOCRService {
                     return
                 }
 
-                guard let observations = request.results as? [VNRecognizedTextObservation] else {
+                guard let observations = request.results as? [VNRecognizedTextObservation],
+                      !observations.isEmpty else {
                     continuation.resume(returning: OCRResult(fullText: "", blocks: [], processedAt: Date()))
                     return
                 }
@@ -178,7 +179,8 @@ actor RewindOCRService {
                 var fullTextLines: [String] = []
 
                 for observation in observations {
-                    guard let candidate = observation.topCandidates(1).first else { continue }
+                    let candidates = observation.topCandidates(1)
+                    guard !candidates.isEmpty, let candidate = candidates.first else { continue }
 
                     let boundingBox = observation.boundingBox
                     let block = OCRTextBlock(
