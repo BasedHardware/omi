@@ -572,16 +572,17 @@ def save_desktop_message(
     }
     _user_col(uid, 'messages').document(msg_id).set(doc)
 
-    # Update session message_count and preview
+    # Update session message_count and preview (skip if session was deleted)
     if session_id:
         session_ref = _user_col(uid, 'chat_sessions').document(session_id)
-        session_ref.update(
-            {
-                'updated_at': now,
-                'message_count': firestore.Increment(1),
-                'preview': text[:100] if text else None,
-            }
-        )
+        if session_ref.get().exists:
+            session_ref.update(
+                {
+                    'updated_at': now,
+                    'message_count': firestore.Increment(1),
+                    'preview': text[:100] if text else None,
+                }
+            )
 
     return {'id': msg_id, 'created_at': now.isoformat()}
 
@@ -589,12 +590,13 @@ def save_desktop_message(
 def get_desktop_messages(
     uid: str, app_id: str = None, session_id: str = None, limit: int = 100, offset: int = 0
 ) -> List[dict]:
-    """Fetch messages.  Filters by plugin_id (matching chat.py's query pattern)."""
+    """Fetch messages.  Always filters by plugin_id so default chat (None) only
+    returns its own messages, not messages from every app."""
     col = _user_col(uid, 'messages')
     query = col.order_by('created_at', direction=firestore.Query.DESCENDING)
 
-    if app_id is not None:
-        query = query.where(filter=FieldFilter('plugin_id', '==', app_id))
+    # Always filter — when app_id is None this returns only default-chat messages
+    query = query.where(filter=FieldFilter('plugin_id', '==', app_id))
     if session_id is not None:
         query = query.where(filter=FieldFilter('chat_session_id', '==', session_id))
 
@@ -642,13 +644,19 @@ def rate_desktop_message(uid: str, message_id: str, rating: Optional[int]) -> bo
 
 
 def get_notification_settings(uid: str) -> dict:
+    """Return notification settings with Swift-compatible field names.
+
+    Firestore stores ``notifications_enabled`` / ``notification_frequency`` on
+    the user doc.  The Swift ``NotificationSettingsResponse`` decodes
+    ``enabled`` / ``frequency``, so we map to the wire names here.
+    """
     doc = _user_doc(uid).get()
     if not doc.exists:
-        return {}
+        return {'enabled': True, 'frequency': 1}
     data = doc.to_dict()
     return {
-        'notifications_enabled': data.get('notifications_enabled', True),
-        'notification_frequency': data.get('notification_frequency', 1),
+        'enabled': data.get('notifications_enabled', True),
+        'frequency': data.get('notification_frequency', 1),
     }
 
 
@@ -671,8 +679,19 @@ def get_assistant_settings(uid: str) -> dict:
 
 
 def update_assistant_settings(uid: str, settings: dict) -> dict:
-    _user_doc(uid).update({'assistant_settings': settings})
-    return settings
+    """Deep-merge partial settings into existing assistant_settings.
+
+    The Swift client sends tiny partial updates (e.g. {"focus": {"enabled": true}})
+    on every toggle.  A naive overwrite would erase sibling sections.
+    """
+    existing = get_assistant_settings(uid)
+    for section, values in settings.items():
+        if isinstance(values, dict) and isinstance(existing.get(section), dict):
+            existing[section].update(values)
+        else:
+            existing[section] = values
+    _user_doc(uid).update({'assistant_settings': existing})
+    return existing
 
 
 def get_ai_user_profile(uid: str) -> Optional[dict]:
