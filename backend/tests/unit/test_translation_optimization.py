@@ -3,8 +3,9 @@ Tests for translation optimization changes:
 - split_into_sentences (no comma splitting)
 - detect_language (free langdetect only, no paid Google API)
 - TranslationService (batch API, Redis cache, memory cache)
-- TranscriptSegmentLanguageCache (update_from_translate_response)
+- should_persist_translation
 - Redis cache helpers (fail-open)
+- batch_translate_segments (post-conversation batch translation)
 
 Uses module stubbing to avoid Firestore/Redis init at import time.
 """
@@ -70,7 +71,7 @@ from utils.translation import (
     TRANSLATION_CACHE_TTL,
     MAX_BATCH_SIZE,
 )
-from utils.translation_cache import TranscriptSegmentLanguageCache, should_persist_translation
+from utils.translation_cache import should_persist_translation
 
 
 class TestSplitIntoSentences:
@@ -341,60 +342,6 @@ class TestTranslationServiceReturnType:
         assert result == ("", "")
 
 
-class TestTranscriptSegmentLanguageCache:
-    def test_update_from_translate_response_target_lang(self):
-        """update_from_translate_response should mark segment as target when detected matches."""
-        cache = TranscriptSegmentLanguageCache()
-        cache.update_from_translate_response("seg1", "en", "en")
-        assert cache.cache["seg1"] is True
-
-    def test_update_from_translate_response_foreign_lang(self):
-        """update_from_translate_response should mark segment as foreign when detected differs."""
-        cache = TranscriptSegmentLanguageCache()
-        cache.update_from_translate_response("seg1", "fr", "en")
-        assert cache.cache["seg1"] is False
-
-    def test_update_from_translate_response_locale_tagged(self):
-        """update_from_translate_response should normalize locale tags (en-US -> en)."""
-        cache = TranscriptSegmentLanguageCache()
-        cache.update_from_translate_response("seg1", "en-US", "en")
-        assert cache.cache["seg1"] is True
-
-    def test_foreign_stays_foreign(self):
-        """Once marked as foreign, segment stays foreign even without new text."""
-        cache = TranscriptSegmentLanguageCache()
-        cache.cache["seg1"] = False
-        assert cache.is_in_target_language("seg1", "", "en") is False
-
-    def test_unknown_detection_returns_false(self):
-        """When detection is inconclusive (None), should return False (needs translation)."""
-        cache = TranscriptSegmentLanguageCache()
-        with patch('utils.translation_cache.detect_language', return_value=None):
-            result = cache.is_in_target_language("seg1", "short", "en")
-            # Should NOT assume target language when detection is unknown
-            assert result is False
-
-    def test_detected_foreign_returns_false(self):
-        """When detected language differs from target, should return False."""
-        cache = TranscriptSegmentLanguageCache()
-        with patch('utils.translation_cache.detect_language', return_value='fr'):
-            result = cache.is_in_target_language("seg1", "Bonjour", "en")
-            assert result is False
-
-    def test_detected_target_returns_true(self):
-        """When detected language matches target, should return True."""
-        cache = TranscriptSegmentLanguageCache()
-        with patch('utils.translation_cache.detect_language', return_value='en'):
-            result = cache.is_in_target_language("seg1", "Hello world today", "en")
-            assert result is True
-
-    def test_delete_cache(self):
-        cache = TranscriptSegmentLanguageCache()
-        cache.cache["seg1"] = True
-        cache.delete_cache("seg1")
-        assert "seg1" not in cache.cache
-
-
 class TestShouldPersistTranslation:
     def test_noop_target_language_translation_not_persisted(self):
         """If text is unchanged and detected language matches target, don't persist translation."""
@@ -475,126 +422,90 @@ class TestShouldPersistTranslation:
 class TestShortForeignTextLangdetectPreFilter:
     """Verify that langdetect does NOT misdetect short foreign words as English (target).
 
-    If langdetect detected foreign text as English, is_in_target_language() would return True
-    and the segment would be skipped entirely (never sent to API). These tests verify that
-    short foreign words are NOT skipped by the pre-filter.
+    In batch translation, detect_language is used to identify foreign segments.
+    These tests verify that short foreign words are correctly detected as non-English.
     """
 
     def test_short_foreign_words_not_detected_as_english(self):
         """Short foreign words should not be detected as 'en' by langdetect."""
-        cache = TranscriptSegmentLanguageCache()
-        foreign_words = [
-            ("Bonjour.", "seg-fr"),
-            ("Hola.", "seg-es"),
-            ("Danke.", "seg-de"),
-            ("Gracias.", "seg-es2"),
-        ]
-        for text, seg_id in foreign_words:
-            result = cache.is_in_target_language(seg_id, text, "en")
-            assert result is False, f"'{text}' was incorrectly detected as English — would skip translation"
+        foreign_words = ["Bonjour.", "Hola.", "Danke.", "Gracias."]
+        for text in foreign_words:
+            detected = detect_language(text)
+            assert detected != "en", f"'{text}' was incorrectly detected as English — would skip translation"
 
     def test_multiple_short_foreign_sentences_not_detected_as_english(self):
         """Multiple short foreign sentences should not be detected as 'en'."""
-        cache = TranscriptSegmentLanguageCache()
-        result = cache.is_in_target_language("seg-multi-fr", "Bonjour. Merci. Au revoir.", "en")
-        assert result is False, "Multiple French sentences incorrectly detected as English"
-        result = cache.is_in_target_language("seg-multi-es", "Hola. Gracias. Adiós.", "en")
-        assert result is False, "Multiple Spanish sentences incorrectly detected as English"
+        detected = detect_language("Bonjour. Merci. Au revoir.")
+        assert detected != "en", "Multiple French sentences incorrectly detected as English"
+        detected = detect_language("Hola. Gracias. Adiós.")
+        assert detected != "en", "Multiple Spanish sentences incorrectly detected as English"
 
 
-class TestTranslateSegmentGuardWired:
-    """Regression test: verify should_persist_translation is wired into transcribe.py.
+class TestBatchTranslationWired:
+    """Regression test: verify batch translation is wired into process_conversation.py."""
 
-    _translate_segment is a closure inside _stream_handler and cannot be imported directly.
-    This test reads the source to verify the guard call is present — catches accidental removal.
-    """
-
-    def test_transcribe_imports_should_persist_translation(self):
-        """transcribe.py must import should_persist_translation from translation_cache."""
-        import inspect
-        import importlib
-
-        # Read transcribe module source to verify import
-        transcribe_path = os.path.join(os.path.dirname(__file__), '..', '..', 'routers', 'transcribe.py')
-        with open(transcribe_path) as f:
+    def test_process_conversation_calls_batch_translate(self):
+        """process_conversation.py must call _batch_translate_segments."""
+        process_conv_path = os.path.join(
+            os.path.dirname(__file__), '..', '..', 'utils', 'conversations', 'process_conversation.py'
+        )
+        with open(process_conv_path) as f:
             source = f.read()
-        assert 'from utils.translation_cache import' in source
+        assert '_batch_translate_segments' in source
         assert 'should_persist_translation' in source
 
-    def test_transcribe_calls_should_persist_translation_before_translation_creation(self):
-        """Guard must appear before Translation object creation in _translate_segment."""
+    def test_transcribe_no_longer_imports_realtime_translation(self):
+        """transcribe.py must NOT import TranslationService or TranscriptSegmentLanguageCache."""
         transcribe_path = os.path.join(os.path.dirname(__file__), '..', '..', 'routers', 'transcribe.py')
         with open(transcribe_path) as f:
             source = f.read()
-        guard_pos = source.find('should_persist_translation(')
-        translation_create_pos = source.find('trans = Translation(lang=translation_language')
-        assert guard_pos > 0, "should_persist_translation call not found in transcribe.py"
-        assert translation_create_pos > 0, "Translation creation not found in transcribe.py"
-        assert guard_pos < translation_create_pos, "Guard must appear before Translation creation"
+        assert 'from utils.translation import TranslationService' not in source
+        assert 'TranscriptSegmentLanguageCache' not in source
 
 
-class TestTranslateSegmentGuardIntegration:
-    """Integration test simulating _translate_segment's guard path.
+class TestBatchTranslationGuardIntegration:
+    """Integration test simulating batch translation's guard path.
 
     Verifies the full logic flow: translate API returns same text with target lang detected,
-    guard triggers early return, pending entry is pruned, no translation is persisted.
+    guard triggers skip, no translation is persisted.
     """
 
-    def test_noop_translation_skips_persist_and_prunes_pending(self):
-        """When API returns identical text with same detected lang, no Translation is created
-        and pending_translations entry is pruned."""
+    def test_noop_translation_skips_persist(self):
+        """When API returns identical text with same detected lang, no Translation is created."""
         segment_text = "Transcription service."
         translation_language = "en"
         translation_language_base = "en"
-        pending_translations = {'seg-1': {'text_hash': 'abc123', 'version': 1}}
-        persisted_translations = []  # tracks what would be written to DB
+        persisted_translations = []
 
-        # Simulate translate API returning identical text with "en" detected
         translated_text = "Transcription service."
         detected_lang = "en"
 
-        # Simulate language cache update (should still happen before guard)
-        cache = TranscriptSegmentLanguageCache()
-        cache.update_from_translate_response('seg-1', detected_lang, translation_language_base)
-        assert cache.cache.get('seg-1') is True  # cache learns target language
-
-        # Guard check — same as transcribe.py line 1514
         if not should_persist_translation(
             segment_text, translated_text, detected_lang, translation_language_base or translation_language
         ):
-            pending_translations.pop('seg-1', None)
-            # Early return — no Translation created
+            pass  # skip — no-op translation
         else:
             persisted_translations.append({'lang': translation_language, 'text': translated_text})
 
-        # Verify: no translation persisted, pending entry pruned
         assert len(persisted_translations) == 0
-        assert 'seg-1' not in pending_translations
 
-    def test_real_translation_persists_and_keeps_pending(self):
+    def test_real_translation_persists(self):
         """When API returns different text (real translation), Translation IS created."""
         segment_text = "Bonjour le monde"
         translation_language = "en"
         translation_language_base = "en"
-        pending_translations = {'seg-2': {'text_hash': 'def456', 'version': 1}}
         persisted_translations = []
 
         translated_text = "Hello world"
         detected_lang = "fr"
 
-        cache = TranscriptSegmentLanguageCache()
-        cache.update_from_translate_response('seg-2', detected_lang, translation_language_base)
-        assert cache.cache.get('seg-2') is False  # cache learns non-target language
-
         if not should_persist_translation(
             segment_text, translated_text, detected_lang, translation_language_base or translation_language
         ):
-            pending_translations.pop('seg-2', None)
+            pass
         else:
             persisted_translations.append({'lang': translation_language, 'text': translated_text})
-            pending_translations.pop('seg-2', None)  # normal cleanup after persist
 
-        # Verify: translation WAS persisted
         assert len(persisted_translations) == 1
         assert persisted_translations[0]['text'] == "Hello world"
 
