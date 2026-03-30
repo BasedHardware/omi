@@ -417,6 +417,35 @@ class TestProcessSegmentPreferences:
         assert kwargs['language'] == 'multi'
         assert kwargs['model'] == 'nova-3'
 
+    @patch('routers.sync.process_conversation')
+    @patch('routers.sync.get_closest_conversation_to_timestamps', return_value=None)
+    @patch('routers.sync.get_timestamp_from_path', return_value=1700000000)
+    @patch('routers.sync.deepgram_prerecorded')
+    @patch('routers.sync.delete_syncing_temporal_file')
+    @patch('routers.sync.get_syncing_file_temporal_signed_url', return_value='http://example.com/audio.wav')
+    def test_single_language_trusts_user_language(
+        self, mock_url, mock_delete, mock_dg, mock_ts, mock_closest, mock_process
+    ):
+        """Single-language mode should trust user's language, not Deepgram's detection."""
+        from routers.sync import process_segment
+
+        # Deepgram detects 'fr' but user chose 'en' in single-language mode
+        mock_dg.return_value = (self._make_mock_words(), 'fr')
+        mock_process.return_value = MagicMock(id='test-id')
+
+        prefs = {'vocabulary': [], 'language': 'en', 'single_language_mode': True}
+
+        response = {'new_memories': set(), 'updated_memories': set()}
+        lock = threading.Lock()
+        errors = []
+
+        process_segment('test/path.bin', 'uid123', response, lock, errors, transcription_prefs=prefs)
+
+        # process_conversation should be called with user's language, not detected
+        call_args = mock_process.call_args
+        # The language arg is the second positional argument
+        assert call_args[0][1] == 'en', "Should use user's language 'en', not Deepgram's detected 'fr'"
+
 
 # ---------------------------------------------------------------------------
 # get_deepgram_model_for_language edge cases
