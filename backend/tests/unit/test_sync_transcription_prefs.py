@@ -1020,12 +1020,9 @@ class TestIdentifySpeakersForSegments:
         identify_speakers_for_segments(segments, audio, cache, 'uid1')
 
         assert segments[0].person_id == 'p1'
-        # Speaker 2's mixed_emb is closer to alice_emb than bob_emb,
-        # but Alice is taken, so Bob is the only candidate — matched if under threshold
-        # mixed_emb vs bob_emb cosine distance: depends on actual computation
-        # If distance > threshold (0.45), speaker 2 stays unmatched — that's the correct fallback
-        # The key assertion: speaker 2 does NOT get p1
-        assert segments[1].person_id != 'p1'
+        # Speaker 2's mixed_emb vs bob_emb cosine distance ≈ 0.293, under threshold 0.45.
+        # Alice (p1) is taken, so Bob (p2) is the only remaining candidate and matches.
+        assert segments[1].person_id == 'p2'
 
     @patch('routers.sync.extract_embedding_from_bytes')
     def test_equal_best_clip_stable_order(self, mock_extract):
