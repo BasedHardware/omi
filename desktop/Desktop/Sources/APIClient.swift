@@ -32,6 +32,9 @@ actor APIClient {
     let session: URLSession
     private let decoder: JSONDecoder
 
+    /// When set, `buildHeaders` uses this instead of calling AuthService (test-only).
+    var testAuthHeader: String?
+
     // Short-lived caches to deduplicate simultaneous calls from multiple services
     private var goalsCacheTime: Date?
     private var goalsCache: [Goal]?
@@ -43,7 +46,17 @@ actor APIClient {
         config.timeoutIntervalForRequest = 30
         self.session = URLSession(configuration: config)
 
-        self.decoder = JSONDecoder()
+        self.decoder = Self.makeDecoder()
+    }
+
+    /// Test-only initializer that accepts a custom URLSession for request interception.
+    init(session: URLSession) {
+        self.session = session
+        self.decoder = Self.makeDecoder()
+    }
+
+    private static func makeDecoder() -> JSONDecoder {
+        let decoder = JSONDecoder()
         // Note: Don't use .convertFromSnakeCase - it conflicts with explicit CodingKeys
         // Use custom date strategy to handle ISO8601 with fractional seconds
         decoder.dateDecodingStrategy = .custom { decoder in
@@ -65,6 +78,7 @@ actor APIClient {
 
             throw DecodingError.dataCorruptedError(in: container, debugDescription: "Invalid date format: \(dateString)")
         }
+        return decoder
     }
 
     // MARK: - Request Building
@@ -77,9 +91,13 @@ actor APIClient {
         ]
 
         if requireAuth {
-            let authService = await MainActor.run { AuthService.shared }
-            let authHeader = try await authService.getAuthHeader()
-            headers["Authorization"] = authHeader
+            if let testHeader = testAuthHeader {
+                headers["Authorization"] = testHeader
+            } else {
+                let authService = await MainActor.run { AuthService.shared }
+                let authHeader = try await authService.getAuthHeader()
+                headers["Authorization"] = authHeader
+            }
         }
 
         return headers

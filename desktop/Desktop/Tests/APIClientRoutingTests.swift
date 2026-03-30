@@ -1,29 +1,35 @@
 import XCTest
 @testable import Omi_Computer
 
-// MARK: - URL-capturing protocol for routing verification
+// MARK: - Request-capturing protocol for routing verification
 
-/// Records every request URL so tests can assert which backend was called.
+/// Captured request info: URL + HTTP method.
+private struct CapturedRequest {
+    let url: URL
+    let method: String
+}
+
+/// Intercepts HTTP requests, records their URL and method, then returns 403
+/// so APIClient throws .httpError (not 401, which triggers AuthService refresh).
 private final class URLCapture: URLProtocol, @unchecked Sendable {
-    /// Thread-safe storage for captured URLs
     private static let lock = NSLock()
-    private static var _urls: [URL] = []
+    private static var _requests: [CapturedRequest] = []
 
-    static var capturedURLs: [URL] {
+    static var capturedRequests: [CapturedRequest] {
         lock.lock()
         defer { lock.unlock() }
-        return _urls
+        return _requests
     }
 
     static func reset() {
         lock.lock()
-        _urls.removeAll()
+        _requests.removeAll()
         lock.unlock()
     }
 
-    private static func record(_ url: URL) {
+    private static func record(_ req: CapturedRequest) {
         lock.lock()
-        _urls.append(url)
+        _requests.append(req)
         lock.unlock()
     }
 
@@ -32,211 +38,423 @@ private final class URLCapture: URLProtocol, @unchecked Sendable {
 
     override func startLoading() {
         if let url = request.url {
-            URLCapture.record(url)
+            URLCapture.record(CapturedRequest(
+                url: url,
+                method: request.httpMethod ?? "GET"
+            ))
         }
-        // Return an auth error so the request terminates quickly
-        let response = HTTPURLResponse(url: request.url!, statusCode: 401, httpVersion: nil, headerFields: nil)!
+        let response = HTTPURLResponse(url: request.url!, statusCode: 403, httpVersion: nil, headerFields: nil)!
         client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
-        client?.urlProtocol(self, didLoad: Data("{}".utf8))
+        client?.urlProtocol(self, didLoad: Data("{\"detail\":\"test\"}".utf8))
         client?.urlProtocolDidFinishLoading(self)
     }
 
     override func stopLoading() {}
 }
 
-// MARK: - URL property tests
+// MARK: - Assertion helpers
+
+private func assertRoutes(
+    _ reqs: [CapturedRequest],
+    host: String,
+    port: Int,
+    pathContains: String,
+    method: String,
+    label: String,
+    file: StaticString = #filePath,
+    line: UInt = #line
+) {
+    XCTAssertEqual(reqs.count, 1, "\(label): expected 1 request, got \(reqs.count)", file: file, line: line)
+    guard let req = reqs.first else { return }
+    XCTAssertEqual(req.url.host, host, "\(label): wrong host", file: file, line: line)
+    XCTAssertEqual(req.url.port, port, "\(label): wrong port", file: file, line: line)
+    XCTAssertTrue(req.url.absoluteString.contains(pathContains), "\(label): path should contain '\(pathContains)', got \(req.url.absoluteString)", file: file, line: line)
+    XCTAssertEqual(req.method, method, "\(label): wrong HTTP method", file: file, line: line)
+}
+
+// MARK: - Tests
 
 final class APIClientRoutingTests: XCTestCase {
 
-    // MARK: - baseURL defaults to Python backend (api.omi.me)
+    // MARK: - URL property tests
 
     func testBaseURLDefaultsToPythonBackend() async {
         unsetenv("OMI_PYTHON_API_URL")
         let client = APIClient()
         let url = await client.baseURL
-        XCTAssertEqual(url, "https://api.omi.me/", "baseURL should default to Python backend when OMI_PYTHON_API_URL is not set")
+        XCTAssertEqual(url, "https://api.omi.me/")
     }
 
     func testBaseURLReadsFromPythonEnvVar() async {
         setenv("OMI_PYTHON_API_URL", "http://localhost:8080", 1)
+        defer { unsetenv("OMI_PYTHON_API_URL") }
         let client = APIClient()
         let url = await client.baseURL
-        XCTAssertEqual(url, "http://localhost:8080/", "baseURL should read from OMI_PYTHON_API_URL and add trailing slash")
-        unsetenv("OMI_PYTHON_API_URL")
+        XCTAssertEqual(url, "http://localhost:8080/")
     }
 
     func testBaseURLAddsTrailingSlash() async {
         setenv("OMI_PYTHON_API_URL", "http://localhost:8080", 1)
+        defer { unsetenv("OMI_PYTHON_API_URL") }
         let client = APIClient()
         let url = await client.baseURL
-        XCTAssertTrue(url.hasSuffix("/"), "baseURL should always have a trailing slash")
-        unsetenv("OMI_PYTHON_API_URL")
+        XCTAssertTrue(url.hasSuffix("/"))
     }
 
     func testBaseURLPreservesExistingTrailingSlash() async {
         setenv("OMI_PYTHON_API_URL", "http://localhost:8080/", 1)
+        defer { unsetenv("OMI_PYTHON_API_URL") }
         let client = APIClient()
         let url = await client.baseURL
-        XCTAssertEqual(url, "http://localhost:8080/", "baseURL should not double trailing slash")
-        unsetenv("OMI_PYTHON_API_URL")
+        XCTAssertEqual(url, "http://localhost:8080/")
     }
-
-    // MARK: - rustBackendURL reads from OMI_API_URL
 
     func testRustBackendURLReadsFromApiUrlEnvVar() async {
         setenv("OMI_API_URL", "http://localhost:8787", 1)
+        defer { unsetenv("OMI_API_URL") }
         let client = APIClient()
         let url = await client.rustBackendURL
-        XCTAssertEqual(url, "http://localhost:8787/", "rustBackendURL should read from OMI_API_URL and add trailing slash")
-        unsetenv("OMI_API_URL")
+        XCTAssertEqual(url, "http://localhost:8787/")
     }
 
     func testRustBackendURLReturnsEmptyWhenNotSet() async {
         unsetenv("OMI_API_URL")
         let client = APIClient()
         let url = await client.rustBackendURL
-        XCTAssertEqual(url, "", "rustBackendURL should return empty string when OMI_API_URL is not set")
+        XCTAssertEqual(url, "")
     }
-
-    // MARK: - baseURL and rustBackendURL are independent
 
     func testBaseURLAndRustBackendURLAreIndependent() async {
         setenv("OMI_PYTHON_API_URL", "http://python:8080", 1)
         setenv("OMI_API_URL", "http://rust:8787", 1)
+        defer { unsetenv("OMI_PYTHON_API_URL"); unsetenv("OMI_API_URL") }
+
         let client = APIClient()
         let base = await client.baseURL
         let rust = await client.rustBackendURL
         XCTAssertEqual(base, "http://python:8080/")
         XCTAssertEqual(rust, "http://rust:8787/")
-        XCTAssertNotEqual(base, rust, "baseURL (Python) and rustBackendURL should be different URLs")
-        unsetenv("OMI_PYTHON_API_URL")
-        unsetenv("OMI_API_URL")
+        XCTAssertNotEqual(base, rust)
     }
 
-    // MARK: - Routing behavior: migrated CRUD uses Python, Rust-only uses Rust
+    // MARK: - Routing behavior: Python-routed endpoints (default baseURL)
 
-    /// Helper: creates an APIClient whose session uses URLCapture so we can
-    /// inspect which host each request targets without hitting the network.
-    private func makeCapturingClient() -> APIClient {
+    private func makeTestClient() async -> APIClient {
         let config = URLSessionConfiguration.ephemeral
         config.protocolClasses = [URLCapture.self]
-
-        // Create a fresh client with our capturing session
-        let client = APIClient()
-        // We cannot replace `session` (it's `let`), so we test through the
-        // generic HTTP helpers that accept `customBaseURL`. The endpoint
-        // methods in APIClient simply call these helpers, passing
-        // `customBaseURL: rustBackendURL` for Rust-only endpoints.
+        let session = URLSession(configuration: config)
+        let client = APIClient(session: session)
+        await client.setTestAuthHeader("Bearer test-token")
         return client
     }
 
-    /// Verify that when no customBaseURL is provided (Python path), the
-    /// constructed URL points to the Python backend.
-    func testGetWithoutCustomBaseURLUsesPythonBackend() async {
-        setenv("OMI_PYTHON_API_URL", "http://python-host:8080", 1)
-        setenv("OMI_API_URL", "http://rust-host:8787", 1)
-        defer {
-            unsetenv("OMI_PYTHON_API_URL")
-            unsetenv("OMI_API_URL")
-        }
-
-        let client = APIClient()
-        let base = await client.baseURL
-
-        // Simulate what a migrated endpoint (e.g., getConversation) does:
-        //   get("v1/conversations/abc123")  →  baseURL + endpoint
-        let expectedURL = base + "v1/conversations/abc123"
-        XCTAssertTrue(
-            expectedURL.hasPrefix("http://python-host:8080/"),
-            "Migrated CRUD endpoint should route to Python backend, got: \(expectedURL)"
-        )
+    override func setUp() {
+        super.setUp()
+        URLCapture.reset()
+        setenv("OMI_PYTHON_API_URL", "http://python-test:9001", 1)
+        setenv("OMI_API_URL", "http://rust-test:9002", 1)
     }
 
-    /// Verify that when customBaseURL = rustBackendURL is provided (Rust path),
-    /// the constructed URL points to the Rust backend.
-    func testGetWithCustomBaseURLUsesRustBackend() async {
-        setenv("OMI_PYTHON_API_URL", "http://python-host:8080", 1)
-        setenv("OMI_API_URL", "http://rust-host:8787", 1)
-        defer {
-            unsetenv("OMI_PYTHON_API_URL")
-            unsetenv("OMI_API_URL")
-        }
-
-        let client = APIClient()
-        let rustURL = await client.rustBackendURL
-
-        // Simulate what a Rust-only endpoint (e.g., fetchApiKeys) does:
-        //   get("v1/config/api-keys", customBaseURL: rustBackendURL)
-        let expectedURL = rustURL + "v1/config/api-keys"
-        XCTAssertTrue(
-            expectedURL.hasPrefix("http://rust-host:8787/"),
-            "Rust-only endpoint should route to Rust backend, got: \(expectedURL)"
-        )
+    override func tearDown() {
+        unsetenv("OMI_PYTHON_API_URL")
+        unsetenv("OMI_API_URL")
+        URLCapture.reset()
+        super.tearDown()
     }
 
-    /// Verify the customBaseURL-or-baseURL fallback logic matches what
-    /// the generic HTTP helpers do: `let base = customBaseURL ?? baseURL`.
-    func testCustomBaseURLFallbackLogic() async {
-        setenv("OMI_PYTHON_API_URL", "http://python:9001", 1)
-        setenv("OMI_API_URL", "http://rust:9002", 1)
-        defer {
-            unsetenv("OMI_PYTHON_API_URL")
-            unsetenv("OMI_API_URL")
-        }
+    // -- Conversations (GET, DELETE → Python) --
 
-        let client = APIClient()
-        let pythonBase = await client.baseURL
-        let rustBase = await client.rustBackendURL
-
-        // No customBaseURL → Python (this is what getConversation, getMemories, etc. do)
-        let nilFallback: String? = nil
-        let pythonPath = (nilFallback ?? pythonBase) + "v1/conversations"
-        XCTAssertEqual(pythonPath, "http://python:9001/v1/conversations")
-
-        // customBaseURL = rustBackendURL → Rust (this is what fetchApiKeys, getAssistantSettings, etc. do)
-        let rustPath = (rustBase) + "v1/config/api-keys"
-        XCTAssertEqual(rustPath, "http://rust:9002/v1/config/api-keys")
+    func testGetConversationRoutesToPython() async {
+        let client = await makeTestClient()
+        _ = try? await client.getConversation(id: "test-123") as ServerConversation
+        assertRoutes(URLCapture.capturedRequests, host: "python-test", port: 9001,
+                     pathContains: "v1/conversations/test-123", method: "GET",
+                     label: "getConversation")
     }
 
-    /// Verify specific endpoint routing by checking customBaseURL parameter presence.
-    /// This ensures the code paths for representative endpoints are correct:
-    /// - getConversation: no customBaseURL → Python
-    /// - fetchApiKeys: customBaseURL = rustBackendURL → Rust
-    /// - getAssistantSettings: customBaseURL = rustBackendURL → Rust
-    func testEndpointRoutingClassification() async {
-        setenv("OMI_PYTHON_API_URL", "http://python:9001", 1)
-        setenv("OMI_API_URL", "http://rust:9002", 1)
-        defer {
-            unsetenv("OMI_PYTHON_API_URL")
-            unsetenv("OMI_API_URL")
-        }
+    func testDeleteConversationRoutesToPython() async {
+        let client = await makeTestClient()
+        try? await client.deleteConversation(id: "conv-456")
+        assertRoutes(URLCapture.capturedRequests, host: "python-test", port: 9001,
+                     pathContains: "v1/conversations/conv-456", method: "DELETE",
+                     label: "deleteConversation")
+    }
 
-        let client = APIClient()
-        let pythonBase = await client.baseURL
-        let rustBase = await client.rustBackendURL
+    // -- Conversations: manual URL(string: baseURL + ...) paths (PATCH → Python) --
 
-        // Python-routed endpoints (no customBaseURL):
-        // getConversation → get("v1/conversations/\(id)")
-        XCTAssertEqual(pythonBase + "v1/conversations/test-id", "http://python:9001/v1/conversations/test-id")
-        // getMemories → get("v3/memories?...")
-        XCTAssertEqual(pythonBase + "v3/memories?limit=50&offset=0", "http://python:9001/v3/memories?limit=50&offset=0")
-        // getActionItems → get("v1/action-items?...")
-        XCTAssertEqual(pythonBase + "v1/action-items?limit=50", "http://python:9001/v1/action-items?limit=50")
-        // getGoals → get("v1/goals")
-        XCTAssertEqual(pythonBase + "v1/goals", "http://python:9001/v1/goals")
-        // getFolders → get("v1/folders")
-        XCTAssertEqual(pythonBase + "v1/folders", "http://python:9001/v1/folders")
+    func testSetConversationStarredRoutesToPython() async {
+        let client = await makeTestClient()
+        try? await client.setConversationStarred(id: "c1", starred: true)
+        assertRoutes(URLCapture.capturedRequests, host: "python-test", port: 9001,
+                     pathContains: "v1/conversations/c1/starred", method: "PATCH",
+                     label: "setConversationStarred")
+    }
 
-        // Rust-routed endpoints (customBaseURL = rustBackendURL):
-        // fetchApiKeys → get("v1/config/api-keys", customBaseURL: rustBackendURL)
-        XCTAssertEqual(rustBase + "v1/config/api-keys", "http://rust:9002/v1/config/api-keys")
-        // getAssistantSettings → get("v1/users/assistant-settings", customBaseURL: rustBackendURL)
-        XCTAssertEqual(rustBase + "v1/users/assistant-settings", "http://rust:9002/v1/users/assistant-settings")
-        // getStagedTasks → get("v1/staged-tasks?...", customBaseURL: rustBackendURL)
-        XCTAssertEqual(rustBase + "v1/staged-tasks?limit=100&offset=0", "http://rust:9002/v1/staged-tasks?limit=100&offset=0")
-        // getChatSessions → get("v2/chat-sessions", customBaseURL: rustBackendURL)
-        XCTAssertEqual(rustBase + "v2/chat-sessions", "http://rust:9002/v2/chat-sessions")
-        // getDailyScore → get("v1/daily-score?...", customBaseURL: rustBackendURL)
-        XCTAssertEqual(rustBase + "v1/daily-score", "http://rust:9002/v1/daily-score")
+    func testUpdateConversationTitleRoutesToPython() async {
+        let client = await makeTestClient()
+        try? await client.updateConversationTitle(id: "c2", title: "New")
+        assertRoutes(URLCapture.capturedRequests, host: "python-test", port: 9001,
+                     pathContains: "v1/conversations/c2", method: "PATCH",
+                     label: "updateConversationTitle")
+    }
+
+    // -- Folders (GET → Python) --
+
+    func testGetFoldersRoutesToPython() async {
+        let client = await makeTestClient()
+        _ = try? await client.getFolders() as [Folder]
+        assertRoutes(URLCapture.capturedRequests, host: "python-test", port: 9001,
+                     pathContains: "v1/folders", method: "GET",
+                     label: "getFolders")
+    }
+
+    // -- Memories (POST → Python) --
+
+    func testCreateMemoryRoutesToPython() async {
+        let client = await makeTestClient()
+        _ = try? await client.createMemory(content: "test memory") as CreateMemoryResponse
+        assertRoutes(URLCapture.capturedRequests, host: "python-test", port: 9001,
+                     pathContains: "v3/memories", method: "POST",
+                     label: "createMemory")
+    }
+
+    // -- Action items (GET → Python) --
+
+    func testGetActionItemRoutesToPython() async {
+        let client = await makeTestClient()
+        _ = try? await client.getActionItem(id: "ai-1") as TaskActionItem
+        assertRoutes(URLCapture.capturedRequests, host: "python-test", port: 9001,
+                     pathContains: "v1/action-items/ai-1", method: "GET",
+                     label: "getActionItem")
+    }
+
+    // -- Goals: manual URL path (PATCH → Python) --
+
+    func testUpdateGoalProgressRoutesToPython() async {
+        let client = await makeTestClient()
+        _ = try? await client.updateGoalProgress(goalId: "g1", currentValue: 42.0) as Goal
+        assertRoutes(URLCapture.capturedRequests, host: "python-test", port: 9001,
+                     pathContains: "v1/goals/g1/progress", method: "PATCH",
+                     label: "updateGoalProgress")
+    }
+
+    // -- Apps (GET → Python) --
+
+    func testGetAppsRoutesToPython() async {
+        let client = await makeTestClient()
+        _ = try? await client.getApps() as [OmiApp]
+        assertRoutes(URLCapture.capturedRequests, host: "python-test", port: 9001,
+                     pathContains: "v1/apps", method: "GET",
+                     label: "getApps")
+    }
+
+    // -- Personas (GET → Python) --
+
+    func testGetPersonaRoutesToPython() async {
+        let client = await makeTestClient()
+        _ = try? await client.getPersona() as Persona?
+        assertRoutes(URLCapture.capturedRequests, host: "python-test", port: 9001,
+                     pathContains: "v1/personas", method: "GET",
+                     label: "getPersona")
+    }
+
+    // -- User settings (GET → Python) --
+
+    func testGetDailySummarySettingsRoutesToPython() async {
+        let client = await makeTestClient()
+        _ = try? await client.getDailySummarySettings() as DailySummarySettings
+        assertRoutes(URLCapture.capturedRequests, host: "python-test", port: 9001,
+                     pathContains: "v1/users/daily-summary-settings", method: "GET",
+                     label: "getDailySummarySettings")
+    }
+
+    // -- Subscription/payments (GET → Python, was explicit pythonBackendURL, now default) --
+
+    func testGetUserSubscriptionRoutesToPython() async {
+        let client = await makeTestClient()
+        _ = try? await client.getUserSubscription() as UserSubscriptionResponse
+        assertRoutes(URLCapture.capturedRequests, host: "python-test", port: 9001,
+                     pathContains: "v1/users/me/subscription", method: "GET",
+                     label: "getUserSubscription")
+    }
+
+    // MARK: - Routing behavior: Rust-routed endpoints (customBaseURL: rustBackendURL)
+
+    // -- Config/API keys (GET → Rust) --
+
+    func testFetchApiKeysRoutesToRust() async {
+        let client = await makeTestClient()
+        _ = try? await client.fetchApiKeys() as APIClient.ApiKeysResponse
+        assertRoutes(URLCapture.capturedRequests, host: "rust-test", port: 9002,
+                     pathContains: "v1/config/api-keys", method: "GET",
+                     label: "fetchApiKeys")
+    }
+
+    // -- Assistant settings (GET → Rust) --
+
+    func testGetAssistantSettingsRoutesToRust() async {
+        let client = await makeTestClient()
+        _ = try? await client.getAssistantSettings() as AssistantSettingsResponse
+        assertRoutes(URLCapture.capturedRequests, host: "rust-test", port: 9002,
+                     pathContains: "v1/users/assistant-settings", method: "GET",
+                     label: "getAssistantSettings")
+    }
+
+    // -- Notification settings (GET → Rust) --
+
+    func testGetNotificationSettingsRoutesToRust() async {
+        let client = await makeTestClient()
+        _ = try? await client.getNotificationSettings() as NotificationSettingsResponse
+        assertRoutes(URLCapture.capturedRequests, host: "rust-test", port: 9002,
+                     pathContains: "v1/users/notification-settings", method: "GET",
+                     label: "getNotificationSettings")
+    }
+
+    // -- Staged tasks (GET → Rust) --
+
+    func testGetStagedTasksRoutesToRust() async {
+        let client = await makeTestClient()
+        _ = try? await client.getStagedTasks() as ActionItemsListResponse
+        assertRoutes(URLCapture.capturedRequests, host: "rust-test", port: 9002,
+                     pathContains: "v1/staged-tasks", method: "GET",
+                     label: "getStagedTasks")
+    }
+
+    // -- Daily score (GET → Rust) --
+
+    func testGetDailyScoreRoutesToRust() async {
+        let client = await makeTestClient()
+        _ = try? await client.getDailyScore() as DailyScore
+        assertRoutes(URLCapture.capturedRequests, host: "rust-test", port: 9002,
+                     pathContains: "v1/daily-score", method: "GET",
+                     label: "getDailyScore")
+    }
+
+    // -- Chat sessions (GET, POST → Rust) --
+
+    func testGetChatSessionsRoutesToRust() async {
+        let client = await makeTestClient()
+        _ = try? await client.getChatSessions() as [ChatSession]
+        assertRoutes(URLCapture.capturedRequests, host: "rust-test", port: 9002,
+                     pathContains: "v2/chat-sessions", method: "GET",
+                     label: "getChatSessions")
+    }
+
+    func testCreateChatSessionRoutesToRust() async {
+        let client = await makeTestClient()
+        _ = try? await client.createChatSession(title: "test") as ChatSession
+        assertRoutes(URLCapture.capturedRequests, host: "rust-test", port: 9002,
+                     pathContains: "v2/chat-sessions", method: "POST",
+                     label: "createChatSession")
+    }
+
+    // -- Delete chat session (DELETE → Rust) --
+
+    func testDeleteChatSessionRoutesToRust() async {
+        let client = await makeTestClient()
+        try? await client.deleteChatSession(sessionId: "sess-1")
+        assertRoutes(URLCapture.capturedRequests, host: "rust-test", port: 9002,
+                     pathContains: "v2/chat-sessions/sess-1", method: "DELETE",
+                     label: "deleteChatSession")
+    }
+
+    // -- Delete staged task (DELETE → Rust) --
+
+    func testDeleteStagedTaskRoutesToRust() async {
+        let client = await makeTestClient()
+        try? await client.deleteStagedTask(id: "st-1")
+        assertRoutes(URLCapture.capturedRequests, host: "rust-test", port: 9002,
+                     pathContains: "v1/staged-tasks/st-1", method: "DELETE",
+                     label: "deleteStagedTask")
+    }
+
+    // -- Delete messages: manual URL with rustBackendURL (DELETE → Rust) --
+
+    func testDeleteMessagesRoutesToRust() async {
+        let client = await makeTestClient()
+        _ = try? await client.deleteMessages() as MessageDeleteResponse
+        assertRoutes(URLCapture.capturedRequests, host: "rust-test", port: 9002,
+                     pathContains: "v2/messages", method: "DELETE",
+                     label: "deleteMessages")
+    }
+
+    // MARK: - Python-routed: remaining manual URL builders
+
+    // -- setConversationVisibility: manual URL(string: baseURL + ...) PATCH → Python --
+
+    func testSetConversationVisibilityRoutesToPython() async {
+        let client = await makeTestClient()
+        try? await client.setConversationVisibility(id: "c3")
+        assertRoutes(URLCapture.capturedRequests, host: "python-test", port: 9001,
+                     pathContains: "v1/conversations/c3/visibility", method: "PATCH",
+                     label: "setConversationVisibility")
+    }
+
+    // -- moveConversationToFolder: manual URL PATCH → Python --
+
+    func testMoveConversationToFolderRoutesToPython() async {
+        let client = await makeTestClient()
+        try? await client.moveConversationToFolder(conversationId: "c4", folderId: "f1")
+        assertRoutes(URLCapture.capturedRequests, host: "python-test", port: 9001,
+                     pathContains: "v1/conversations/c4/folder", method: "PATCH",
+                     label: "moveConversationToFolder")
+    }
+
+    // -- setRecordingPermission: manual URL POST → Python --
+
+    func testSetRecordingPermissionRoutesToPython() async {
+        let client = await makeTestClient()
+        try? await client.setRecordingPermission(enabled: true)
+        assertRoutes(URLCapture.capturedRequests, host: "python-test", port: 9001,
+                     pathContains: "v1/users/store-recording-permission", method: "POST",
+                     label: "setRecordingPermission")
+    }
+
+    // -- setPrivateCloudSync: manual URL POST → Python --
+
+    func testSetPrivateCloudSyncRoutesToPython() async {
+        let client = await makeTestClient()
+        try? await client.setPrivateCloudSync(enabled: false)
+        assertRoutes(URLCapture.capturedRequests, host: "python-test", port: 9001,
+                     pathContains: "v1/users/private-cloud-sync", method: "POST",
+                     label: "setPrivateCloudSync")
+    }
+
+    // -- updatePersonName: manual URL PATCH → Python --
+
+    func testUpdatePersonNameRoutesToPython() async {
+        let client = await makeTestClient()
+        try? await client.updatePersonName(personId: "p1", newName: "Alice")
+        assertRoutes(URLCapture.capturedRequests, host: "python-test", port: 9001,
+                     pathContains: "v1/users/people/p1/name", method: "PATCH",
+                     label: "updatePersonName")
+    }
+
+    // -- completeGoal: manual URL PATCH → Python --
+
+    func testCompleteGoalRoutesToPython() async {
+        let client = await makeTestClient()
+        _ = try? await client.completeGoal(id: "g2") as Goal
+        assertRoutes(URLCapture.capturedRequests, host: "python-test", port: 9001,
+                     pathContains: "v1/goals/g2", method: "PATCH",
+                     label: "completeGoal")
+    }
+
+    // -- assignSegmentsBulk: manual URL PATCH → Python --
+
+    func testAssignSegmentsBulkRoutesToPython() async {
+        let client = await makeTestClient()
+        try? await client.assignSegmentsBulk(conversationId: "c5", segmentIds: ["s1"], isUser: true, personId: nil)
+        assertRoutes(URLCapture.capturedRequests, host: "python-test", port: 9001,
+                     pathContains: "v1/conversations/c5/segments/assign-bulk", method: "PATCH",
+                     label: "assignSegmentsBulk")
+    }
+}
+
+// MARK: - Helper extension to set testAuthHeader from async context
+
+extension APIClient {
+    func setTestAuthHeader(_ header: String) async {
+        self.testAuthHeader = header
     }
 }
