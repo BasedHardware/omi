@@ -33,7 +33,7 @@ from utils.other.storage import (
 # Audio constants
 AUDIO_SAMPLE_RATE = 16000
 from utils import encryption
-from utils.stt.pre_recorded import deepgram_prerecorded, postprocess_words
+from utils.stt.pre_recorded import deepgram_prerecorded, get_deepgram_model_for_language, postprocess_words
 from utils.stt.vad import vad_is_empty
 from utils.fair_use import (
     record_speech_ms,
@@ -698,6 +698,7 @@ def process_segment(
     errors: list,
     source: ConversationSource = ConversationSource.omi,
     is_locked: bool = False,
+    transcription_prefs: dict = None,
 ):
     try:
         url = get_syncing_file_temporal_signed_url(path)
@@ -708,7 +709,26 @@ def process_segment(
 
         threading.Thread(target=delete_file).start()
 
-        words, language = deepgram_prerecorded(url, speakers_count=3, attempts=0, return_language=True)
+        # Apply user transcription preferences (vocabulary, language, model)
+        prefs = transcription_prefs or {}
+        vocabulary = list({"Omi"} | set(prefs.get('vocabulary', [])))[:100]
+        user_language = prefs.get('language', '') or ''
+        single_language_mode = prefs.get('single_language_mode', False)
+
+        if single_language_mode and user_language:
+            dg_language, dg_model = get_deepgram_model_for_language(user_language)
+        else:
+            dg_language, dg_model = get_deepgram_model_for_language('multi')
+
+        words, language = deepgram_prerecorded(
+            url,
+            speakers_count=3,
+            attempts=0,
+            return_language=True,
+            language=dg_language,
+            model=dg_model,
+            keywords=vocabulary if vocabulary else None,
+        )
         if not words:
             # DG processed audio successfully but found no speech (silence/noise).
             # Real DG failures now raise RuntimeError and are caught by the except block.
@@ -915,6 +935,9 @@ async def sync_local_files(files: List[UploadFile] = File(...), uid: str = Depen
                 },
             )
 
+        # Fetch user transcription preferences once before spawning threads
+        transcription_prefs = users_db.get_user_transcription_preferences(uid)
+
         threads = [
             threading.Thread(
                 target=process_segment,
@@ -926,6 +949,7 @@ async def sync_local_files(files: List[UploadFile] = File(...), uid: str = Depen
                     segment_errors,
                     source,
                     is_locked,
+                    transcription_prefs,
                 ),
             )
             for path in segmented_paths
