@@ -1087,17 +1087,6 @@ def set_user_transcription_preferences(uid: str, single_language_mode: bool = No
         user_ref.update(update_data)
 
 
-def set_user_speaker_embedding(uid: str, embedding: list):
-    """Store speaker embedding on the user document itself (not a person)."""
-    user_ref = db.collection('users').document(uid)
-    user_ref.update(
-        {
-            'speaker_embedding': embedding,
-            'speaker_embedding_updated_at': datetime.now(timezone.utc),
-        }
-    )
-
-
 def share_speech_profile(owner_uid: str, target_uid: str):
     """Share the owner's speech profile with another user (target_uid)."""
     shared_ref = db.collection('users').document(owner_uid).collection('shared_speech_profiles').document(target_uid)
