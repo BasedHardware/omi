@@ -8141,6 +8141,14 @@ class AppLocalizationsDa extends AppLocalizations {
   }
 
   @override
+  String get processingOnServer => 'Behandler på serveren...';
+
+  @override
+  String processingOnServerProgress(int current, int total) {
+    return 'Behandler... $current/$total segmenter';
+  }
+
+  @override
   String get processedStatus => 'Behandlet';
 
   @override

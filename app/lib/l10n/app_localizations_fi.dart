@@ -8157,6 +8157,14 @@ class AppLocalizationsFi extends AppLocalizations {
   }
 
   @override
+  String get processingOnServer => 'Käsitellään palvelimella...';
+
+  @override
+  String processingOnServerProgress(int current, int total) {
+    return 'Käsitellään... $current/$total segmenttiä';
+  }
+
+  @override
   String get processedStatus => 'Käsitelty';
 
   @override

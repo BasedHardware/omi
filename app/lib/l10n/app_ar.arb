@@ -2602,6 +2602,18 @@
     "downloadingFromDevice": "جارٍ التنزيل من الجهاز",
     "reconnectingToInternet": "جارٍ إعادة الاتصال بالإنترنت...",
     "uploadingToCloud": "جارٍ رفع {current} من {total}",
+    "processingOnServer": "جاري المعالجة على الخادم...",
+    "processingOnServerProgress": "جاري المعالجة... {current}/{total} أجزاء",
+    "@processingOnServerProgress": {
+        "placeholders": {
+            "current": {
+                "type": "int"
+            },
+            "total": {
+                "type": "int"
+            }
+        }
+    },
     "processedStatus": "تمت المعالجة",
     "corruptedStatus": "تالف",
     "nPending": "{count} قيد الانتظار",

@@ -2671,6 +2671,18 @@
     "downloadingFromDevice": "Transferindo do dispositivo",
     "reconnectingToInternet": "Reconectando à internet...",
     "uploadingToCloud": "Enviando {current} de {total}",
+    "processingOnServer": "Processando no servidor...",
+    "processingOnServerProgress": "Processando... {current}/{total} segmentos",
+    "@processingOnServerProgress": {
+        "placeholders": {
+            "current": {
+                "type": "int"
+            },
+            "total": {
+                "type": "int"
+            }
+        }
+    },
     "processedStatus": "Processado",
     "corruptedStatus": "Corrompido",
     "nPending": "{count} pendentes",

@@ -8162,6 +8162,14 @@ class AppLocalizationsSv extends AppLocalizations {
   }
 
   @override
+  String get processingOnServer => 'Bearbetar på servern...';
+
+  @override
+  String processingOnServerProgress(int current, int total) {
+    return 'Bearbetar... $current/$total segment';
+  }
+
+  @override
   String get processedStatus => 'Bearbetad';
 
   @override

@@ -2635,6 +2635,18 @@
     "downloadingFromDevice": "기기에서 다운로드 중",
     "reconnectingToInternet": "인터넷에 다시 연결 중...",
     "uploadingToCloud": "{current}/{total} 업로드 중",
+    "processingOnServer": "서버에서 처리 중...",
+    "processingOnServerProgress": "처리 중... {current}/{total} 세그먼트",
+    "@processingOnServerProgress": {
+        "placeholders": {
+            "current": {
+                "type": "int"
+            },
+            "total": {
+                "type": "int"
+            }
+        }
+    },
     "processedStatus": "처리됨",
     "corruptedStatus": "손상됨",
     "nPending": "{count}개 대기 중",

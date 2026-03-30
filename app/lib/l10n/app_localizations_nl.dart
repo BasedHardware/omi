@@ -8184,6 +8184,14 @@ class AppLocalizationsNl extends AppLocalizations {
   }
 
   @override
+  String get processingOnServer => 'Verwerken op de server...';
+
+  @override
+  String processingOnServerProgress(int current, int total) {
+    return 'Verwerken... $current/$total segmenten';
+  }
+
+  @override
   String get processedStatus => 'Verwerkt';
 
   @override

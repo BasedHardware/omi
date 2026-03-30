@@ -8219,6 +8219,14 @@ class AppLocalizationsEl extends AppLocalizations {
   }
 
   @override
+  String get processingOnServer => 'Επεξεργασία στον διακομιστή...';
+
+  @override
+  String processingOnServerProgress(int current, int total) {
+    return 'Επεξεργασία... $current/$total τμήματα';
+  }
+
+  @override
   String get processedStatus => 'Επεξεργασμένο';
 
   @override

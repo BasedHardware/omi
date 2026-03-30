@@ -8101,6 +8101,14 @@ class AppLocalizationsAr extends AppLocalizations {
   }
 
   @override
+  String get processingOnServer => 'جاري المعالجة على الخادم...';
+
+  @override
+  String processingOnServerProgress(int current, int total) {
+    return 'جاري المعالجة... $current/$total أجزاء';
+  }
+
+  @override
   String get processedStatus => 'تمت المعالجة';
 
   @override
