@@ -720,7 +720,10 @@ def process_segment(
         else:
             dg_language, dg_model = get_deepgram_model_for_language('multi')
 
-        words, language = deepgram_prerecorded(
+        # When single-language mode is active, trust the user's language choice
+        # rather than Deepgram's detection (avoids overriding explicit selection).
+        use_return_language = not (single_language_mode and user_language)
+        words, detected_language = deepgram_prerecorded(
             url,
             speakers_count=3,
             attempts=0,
@@ -729,6 +732,7 @@ def process_segment(
             model=dg_model,
             keywords=vocabulary if vocabulary else None,
         )
+        language = user_language if (single_language_mode and user_language) else detected_language
         if not words:
             # DG processed audio successfully but found no speech (silence/noise).
             # Real DG failures now raise RuntimeError and are caught by the except block.
