@@ -216,6 +216,20 @@ class TestResolveTranslationLanguage:
             result = resolve_translation_language("uid-1")
             assert result == "en"
 
+    def test_multi_conversation_language_falls_back_to_user_pref(self):
+        with patch('utils.conversations.process_conversation.users_db') as mock_users:
+            mock_users.get_user_transcription_preferences.return_value = {'single_language_mode': False}
+            mock_users.get_user_language_preference.return_value = "en"
+            result = resolve_translation_language("uid-1", "multi")
+            assert result == "en"
+
+    def test_multi_conversation_language_without_user_pref_returns_none(self):
+        with patch('utils.conversations.process_conversation.users_db') as mock_users:
+            mock_users.get_user_transcription_preferences.return_value = {'single_language_mode': False}
+            mock_users.get_user_language_preference.return_value = ""
+            result = resolve_translation_language("uid-1", "multi")
+            assert result is None
+
 
 class TestBatchTranslateSegments:
     def test_skips_when_translation_disabled(self):
