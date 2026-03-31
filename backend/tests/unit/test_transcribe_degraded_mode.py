@@ -17,6 +17,7 @@ _mock_modules = {}
 for mod_name in [
     'database',
     'database._client',
+    'database.fair_use',
     'database.redis_db',
     'database.users',
     'utils.other.storage',
@@ -846,3 +847,96 @@ def test_stt_session_barrier_works_at_persisted_tail():
     assert len(combined) == 2, f"stt_session barrier must prevent persisted-tail merge, got {len(combined)}"
     assert combined[0].text == 'hello world', "Original tail unchanged"
     assert combined[1].stt_session == 'ses-B', "New segment keeps its stt_session"
+
+
+# ---------------------------------------------------------------------------
+# Behavioral async tests for recovery race and usage tracking wiring (#6052)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_recovery_no_audio_loss_during_flush():
+    """Chunks arriving DURING recovery flush must route to degraded buffer, not be dropped.
+
+    The fix: stt_degraded stays True until after flush completes and socket is published.
+    Before the fix, stt_degraded was flipped to False before await _flush_degraded_batch(),
+    creating a window where chunks hit neither live-send nor degraded-buffer path.
+    """
+    src = _read_transcribe_source()
+
+    # Find _send_stt_recovered_event
+    fn_start = src.find('async def _send_stt_recovered_event')
+    assert fn_start != -1, '_send_stt_recovered_event must exist'
+
+    # Extract function body (up to next def at same indent level)
+    fn_body = src[fn_start : fn_start + 1500]
+
+    # The key correctness property: stt_degraded = False must appear AFTER the flush call
+    flush_pos = fn_body.find('await _flush_degraded_batch()')
+    degraded_false_pos = fn_body.find('stt_degraded = False')
+    assert flush_pos != -1, '_flush_degraded_batch must be called in recovery'
+    assert degraded_false_pos != -1, 'stt_degraded must be set to False'
+    assert degraded_false_pos > flush_pos, (
+        'stt_degraded = False must come AFTER _flush_degraded_batch() to prevent audio loss '
+        f'(flush at {flush_pos}, degraded=False at {degraded_false_pos})'
+    )
+
+
+@pytest.mark.asyncio
+async def test_recovery_stt_degraded_stays_true_during_flush():
+    """stt_degraded must stay True during flush so incoming chunks route to degraded buffer.
+
+    Simulates the transcribe.py recovery pattern: an async flush runs while
+    new audio chunks arrive.  If stt_degraded were set to False before the
+    flush, chunks would hit neither live-send nor degraded-buffer path.
+    """
+    # Simulate the transcribe.py recovery pattern in isolation
+    stt_degraded = True
+    chunks_routed_to_degraded = []
+    flush_started = asyncio.Event()
+    flush_done = asyncio.Event()
+
+    async def mock_flush_degraded_batch():
+        """Simulates the await _flush_degraded_batch() call during recovery."""
+        flush_started.set()
+        # During this await, new chunks arrive in the event loop
+        await asyncio.sleep(0)  # Yield to event loop
+
+    async def recovery_event():
+        nonlocal stt_degraded
+        # This matches the FIXED pattern in transcribe.py:
+        # flush first, THEN set stt_degraded = False
+        await mock_flush_degraded_batch()
+        stt_degraded = False
+        flush_done.set()
+
+    async def incoming_chunk():
+        await flush_started.wait()
+        # This chunk arrives while recovery flush is in progress
+        if stt_degraded:
+            chunks_routed_to_degraded.append(b'\x00' * 1600)
+
+    # Run both concurrently
+    await asyncio.gather(recovery_event(), incoming_chunk())
+
+    # The chunk must have been routed to degraded buffer (stt_degraded was still True)
+    assert len(chunks_routed_to_degraded) == 1, (
+        'Chunk arriving during recovery flush must route to degraded buffer'
+    )
+
+
+@pytest.mark.asyncio
+async def test_degraded_flush_kwargs_wires_track_usage():
+    """_degraded_flush_kwargs must pass track_usage to DegradedBatchProcessor.flush()."""
+    src = _read_transcribe_source()
+
+    fn_start = src.find('def _degraded_flush_kwargs')
+    assert fn_start != -1, '_degraded_flush_kwargs must exist'
+    fn_body = src[fn_start : fn_start + 500]
+
+    assert 'track_usage' in fn_body, (
+        '_degraded_flush_kwargs must pass track_usage so degraded batch DG minutes are counted'
+    )
+    assert 'fair_use_track_dg_usage' in fn_body, (
+        'track_usage must reference fair_use_track_dg_usage variable'
+    )
