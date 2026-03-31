@@ -18,7 +18,7 @@ from database import (
     notifications as notification_db,
     daily_summaries as daily_summaries_db,
     llm_usage as llm_usage_db,
-    desktop as desktop_db,
+    users as users_db,
 )
 from database.conversations import get_in_progress_conversation, get_conversation
 from database.redis_db import (
@@ -1207,7 +1207,7 @@ class UpdateNotificationSettingsRequest(BaseModel):
 
 @router.get('/v1/users/notification-settings', tags=['users'])
 def get_notification_settings(uid: str = Depends(auth.get_current_user_uid)):
-    return desktop_db.get_notification_settings(uid)
+    return users_db.get_notification_settings(uid)
 
 
 @router.patch('/v1/users/notification-settings', tags=['users'])
@@ -1215,7 +1215,7 @@ def update_notification_settings(
     request: UpdateNotificationSettingsRequest,
     uid: str = Depends(auth.get_current_user_uid),
 ):
-    return desktop_db.update_notification_settings(uid, enabled=request.enabled, frequency=request.frequency)
+    return users_db.update_notification_settings(uid, enabled=request.enabled, frequency=request.frequency)
 
 
 # ============================================================================
@@ -1277,7 +1277,7 @@ class UpdateAssistantSettingsRequest(BaseModel):
 
 @router.get('/v1/users/assistant-settings', tags=['users'])
 def get_assistant_settings(uid: str = Depends(auth.get_current_user_uid)):
-    return desktop_db.get_assistant_settings(uid)
+    return users_db.get_assistant_settings(uid)
 
 
 @router.patch('/v1/users/assistant-settings', tags=['users'])
@@ -1286,7 +1286,7 @@ def update_assistant_settings(
     uid: str = Depends(auth.get_current_user_uid),
 ):
     settings = request.model_dump(exclude_unset=True)
-    return desktop_db.update_assistant_settings(uid, settings)
+    return users_db.update_assistant_settings(uid, settings)
 
 
 # ============================================================================
@@ -1302,7 +1302,7 @@ class UpdateAIUserProfileRequest(BaseModel):
 
 @router.get('/v1/users/ai-profile', tags=['users'])
 def get_ai_profile(uid: str = Depends(auth.get_current_user_uid)):
-    return desktop_db.get_ai_user_profile(uid)
+    return users_db.get_ai_user_profile(uid)
 
 
 @router.patch('/v1/users/ai-profile', tags=['users'])
@@ -1310,7 +1310,7 @@ def update_ai_profile(
     request: UpdateAIUserProfileRequest,
     uid: str = Depends(auth.get_current_user_uid),
 ):
-    return desktop_db.update_ai_user_profile(
+    return users_db.update_ai_user_profile(
         uid,
         profile_text=request.profile_text,
         generated_at=request.generated_at,
@@ -1338,7 +1338,7 @@ def record_desktop_llm_usage(
     request: RecordDesktopLlmUsageRequest,
     uid: str = Depends(auth.get_current_user_uid),
 ):
-    desktop_db.record_desktop_llm_usage(
+    llm_usage_db.record_desktop_llm_usage(
         uid,
         input_tokens=request.input_tokens,
         output_tokens=request.output_tokens,
@@ -1353,5 +1353,5 @@ def record_desktop_llm_usage(
 
 @router.get('/v1/users/me/llm-usage/total', tags=['users'])
 def get_total_desktop_llm_cost(uid: str = Depends(auth.get_current_user_uid)):
-    total = desktop_db.get_total_desktop_llm_cost(uid)
+    total = llm_usage_db.get_total_desktop_llm_cost(uid)
     return {'total_cost_usd': total}
