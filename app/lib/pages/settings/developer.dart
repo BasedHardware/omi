@@ -1895,8 +1895,8 @@ class _ManualFirmwareFlashPage extends StatefulWidget {
   final BtDevice device;
 
   const _ManualFirmwareFlashPage({
-    required this.zipFilePath, 
-    required this.fileName,
+    required this.zipFilePath,
+    required this.fileName, 
     required this.device,
   });
 
