@@ -718,9 +718,12 @@ def save_message(
 def delete_messages(uid: str, app_id: str = None, session_id: str = None) -> int:
     """Delete messages matching app_id/session_id.  Returns count deleted."""
     col = db.collection('users').document(uid).collection('messages')
-    query = col.where(filter=FieldFilter('plugin_id', '==', app_id))
     if session_id:
-        query = query.where(filter=FieldFilter('chat_session_id', '==', session_id))
+        # Session-scoped delete: filter by session only (same logic as get_messages)
+        query = col.where(filter=FieldFilter('chat_session_id', '==', session_id))
+    else:
+        # App-scoped delete: filter by plugin_id (None = main chat)
+        query = col.where(filter=FieldFilter('plugin_id', '==', app_id))
 
     deleted = 0
     while True:
