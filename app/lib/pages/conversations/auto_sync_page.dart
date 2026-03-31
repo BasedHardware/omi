@@ -58,6 +58,11 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
                 icon: const Icon(Icons.info_outline, color: Color(0xFF8E8E93), size: 22),
                 onPressed: () => _showInfoSheet(context),
               ),
+              if (pendingWals.isNotEmpty || syncedWals.isNotEmpty)
+                IconButton(
+                  icon: const Icon(Icons.more_horiz, color: Color(0xFF8E8E93), size: 22),
+                  onPressed: () => _showManageStorageSheet(context, syncProvider),
+                ),
             ],
           ),
           body: ListView(
@@ -539,25 +544,6 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
           syncProvider.statusFilter == WalStatusFilter.synced,
           () => syncProvider.setStatusFilter(WalStatusFilter.synced),
           count: syncedCount,
-        ),
-        const Spacer(),
-        GestureDetector(
-          onTap: () => _showManageStorageSheet(context, syncProvider),
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            decoration: BoxDecoration(
-              color: const Color(0xFF1C1C1E),
-              borderRadius: BorderRadius.circular(100),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Icons.delete_outline, color: Colors.grey.shade400, size: 16),
-                const SizedBox(width: 4),
-                Text(context.l10n.manageStorage, style: TextStyle(color: Colors.grey.shade400, fontSize: 13)),
-              ],
-            ),
-          ),
         ),
       ],
     );
