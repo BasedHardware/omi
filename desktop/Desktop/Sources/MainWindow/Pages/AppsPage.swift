@@ -15,9 +15,9 @@ struct SafeDismissButton: View {
     var body: some View {
         Image(systemName: icon)
             .scaledFont(size: 14, weight: .medium)
-            .foregroundColor(isPressed ? OmiColors.textTertiary : OmiColors.textSecondary)
+            .foregroundColor(isPressed ? NootoColors.textTertiary : NootoColors.textSecondary)
             .frame(width: 28, height: 28)
-            .background(showBackground ? OmiColors.backgroundSecondary : Color.clear)
+            .background(showBackground ? NootoColors.backgroundSecondary : Color.clear)
             .clipShape(Circle())
             .contentShape(Circle())
             .opacity(isPressed ? 0.7 : 1.0)
@@ -77,9 +77,9 @@ struct DismissButton: View {
     var body: some View {
         Image(systemName: icon)
             .scaledFont(size: 14, weight: .medium)
-            .foregroundColor(isPressed ? OmiColors.textTertiary : OmiColors.textSecondary)
+            .foregroundColor(isPressed ? NootoColors.textTertiary : NootoColors.textSecondary)
             .frame(width: 28, height: 28)
-            .background(showBackground ? OmiColors.backgroundSecondary : Color.clear)
+            .background(showBackground ? NootoColors.backgroundSecondary : Color.clear)
             .clipShape(Circle())
             .contentShape(Circle())
             .opacity(isPressed ? 0.7 : 1.0)
@@ -118,7 +118,7 @@ struct AppsPage: View {
                 .padding()
 
             Divider()
-                .background(OmiColors.backgroundTertiary)
+                .background(NootoColors.backgroundTertiary)
 
             // Content
             if appProvider.isLoading {
@@ -137,17 +137,17 @@ struct AppsPage: View {
                                         .scaleEffect(1.2)
                                     Text("Loading...")
                                         .scaledFont(size: 14)
-                                        .foregroundColor(OmiColors.textTertiary)
+                                        .foregroundColor(NootoColors.textTertiary)
                                 }
                                 .frame(maxWidth: .infinity, minHeight: 200)
                             } else if filteredApps.isEmpty {
                                 VStack(spacing: 12) {
                                     Image(systemName: "magnifyingglass")
                                         .scaledFont(size: 32)
-                                        .foregroundColor(OmiColors.textTertiary)
+                                        .foregroundColor(NootoColors.textTertiary)
                                     Text("No apps found")
                                         .scaledFont(size: 16, weight: .medium)
-                                        .foregroundColor(OmiColors.textSecondary)
+                                        .foregroundColor(NootoColors.textSecondary)
                                 }
                                 .frame(maxWidth: .infinity, minHeight: 200)
                             } else {
@@ -160,7 +160,7 @@ struct AppsPage: View {
                                             Text("Back")
                                                 .scaledFont(size: 13, weight: .medium)
                                         }
-                                        .foregroundColor(OmiColors.textSecondary)
+                                        .foregroundColor(NootoColors.textSecondary)
                                     }
                                     .buttonStyle(.plain)
                                 }
@@ -181,7 +181,7 @@ struct AppsPage: View {
                                                 .scaleEffect(0.8)
                                             Text("Loading more...")
                                                 .scaledFont(size: 13)
-                                                .foregroundColor(OmiColors.textTertiary)
+                                                .foregroundColor(NootoColors.textTertiary)
                                         } else {
                                             Color.clear
                                                 .frame(height: 1)
@@ -238,7 +238,7 @@ struct AppsPage: View {
                 }
             }
         }
-        .background(OmiColors.backgroundPrimary)
+        .background(NootoColors.backgroundPrimary)
         .onChange(of: searchText) { _, newValue in
             appProvider.searchQuery = newValue
             // Clear filters when searching
@@ -281,22 +281,22 @@ struct AppsPage: View {
         HStack(spacing: 10) {
             HStack {
                 Image(systemName: "magnifyingglass")
-                    .foregroundColor(OmiColors.textTertiary)
+                    .foregroundColor(NootoColors.textTertiary)
 
                 TextField("Search apps...", text: $searchText)
                     .textFieldStyle(.plain)
-                    .foregroundColor(OmiColors.textPrimary)
+                    .foregroundColor(NootoColors.textPrimary)
 
                 if !searchText.isEmpty {
                     Button(action: { searchText = "" }) {
                         Image(systemName: "xmark.circle.fill")
-                            .foregroundColor(OmiColors.textTertiary)
+                            .foregroundColor(NootoColors.textTertiary)
                     }
                     .buttonStyle(.plain)
                 }
             }
             .padding(10)
-            .background(OmiColors.backgroundSecondary)
+            .background(NootoColors.backgroundSecondary)
             .cornerRadius(10)
 
             // Filter toggles
@@ -351,12 +351,12 @@ struct AppsPage: View {
                 }
                 .padding(.horizontal, 12)
                 .padding(.vertical, 8)
-                .background(OmiColors.backgroundSecondary)
-                .foregroundColor(appProvider.selectedCategory != nil ? OmiColors.textPrimary : OmiColors.textSecondary)
+                .background(NootoColors.backgroundSecondary)
+                .foregroundColor(appProvider.selectedCategory != nil ? NootoColors.textPrimary : NootoColors.textSecondary)
                 .cornerRadius(8)
                 .overlay(
                     RoundedRectangle(cornerRadius: 8)
-                        .stroke(appProvider.selectedCategory != nil ? OmiColors.border : Color.clear, lineWidth: 1)
+                        .stroke(appProvider.selectedCategory != nil ? NootoColors.border : Color.clear, lineWidth: 1)
                 )
             }
             .menuStyle(.borderlessButton)
@@ -369,9 +369,9 @@ struct AppsPage: View {
                 SmallHeaderButton(
                     icon: "app.badge.fill",
                     label: "Create App",
-                    color: OmiColors.purplePrimary
+                    color: NootoColors.brandPrimary
                 ) {
-                    if let url = URL(string: "https://docs.omi.me/docs/developer/apps/Introduction") {
+                    if let url = URL(string: "https://docs.nooto.togodynamics.com/docs/developer/apps/Introduction") {
                         NSWorkspace.shared.open(url)
                     }
                 }
@@ -467,15 +467,15 @@ struct AppsPage: View {
         VStack(spacing: 16) {
             Image(systemName: "square.grid.2x2")
                 .scaledFont(size: 48)
-                .foregroundColor(OmiColors.textTertiary)
+                .foregroundColor(NootoColors.textTertiary)
 
             Text("No apps found")
                 .scaledFont(size: 20, weight: .semibold)
-                .foregroundColor(OmiColors.textPrimary)
+                .foregroundColor(NootoColors.textPrimary)
 
             if !searchText.isEmpty {
                 Text("Try a different search term")
-                    .foregroundColor(OmiColors.textTertiary)
+                    .foregroundColor(NootoColors.textTertiary)
 
                 Button("Clear Search") {
                     searchText = ""
@@ -483,7 +483,7 @@ struct AppsPage: View {
                 .buttonStyle(.bordered)
             } else {
                 Text("Apps will appear here once available")
-                    .foregroundColor(OmiColors.textTertiary)
+                    .foregroundColor(NootoColors.textTertiary)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -500,9 +500,9 @@ struct ShimmerView: View {
             .fill(
                 LinearGradient(
                     colors: [
-                        OmiColors.backgroundSecondary,
-                        OmiColors.backgroundTertiary,
-                        OmiColors.backgroundSecondary
+                        NootoColors.backgroundSecondary,
+                        NootoColors.backgroundTertiary,
+                        NootoColors.backgroundSecondary
                     ],
                     startPoint: .leading,
                     endPoint: .trailing
@@ -552,12 +552,12 @@ struct FilterToggle: View {
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
-            .background(isActive ? Color.white : OmiColors.backgroundSecondary)
-            .foregroundColor(isActive ? Color.black : OmiColors.textSecondary)
+            .background(isActive ? Color.white : NootoColors.backgroundSecondary)
+            .foregroundColor(isActive ? Color.black : NootoColors.textSecondary)
             .cornerRadius(8)
             .overlay(
                 RoundedRectangle(cornerRadius: 8)
-                    .stroke(isActive ? OmiColors.border : Color.clear, lineWidth: 1)
+                    .stroke(isActive ? NootoColors.border : Color.clear, lineWidth: 1)
             )
         }
         .buttonStyle(.plain)
@@ -582,11 +582,11 @@ struct SmallHeaderButton: View {
                     .foregroundColor(color)
                 Text(label)
                     .scaledFont(size: 12, weight: .medium)
-                    .foregroundColor(OmiColors.textSecondary)
+                    .foregroundColor(NootoColors.textSecondary)
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 6)
-            .background(isHovering ? OmiColors.backgroundTertiary : OmiColors.backgroundSecondary)
+            .background(isHovering ? NootoColors.backgroundTertiary : NootoColors.backgroundSecondary)
             .cornerRadius(6)
         }
         .buttonStyle(.plain)
@@ -609,7 +609,7 @@ struct HorizontalAppSection: View {
         VStack(alignment: .leading, spacing: 12) {
             Text(title)
                 .scaledFont(size: 18, weight: .semibold)
-                .foregroundColor(OmiColors.textPrimary)
+                .foregroundColor(NootoColors.textPrimary)
 
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 16) {
@@ -623,15 +623,15 @@ struct HorizontalAppSection: View {
                             VStack(spacing: 6) {
                                 ZStack {
                                     RoundedRectangle(cornerRadius: 14)
-                                        .fill(OmiColors.backgroundSecondary)
+                                        .fill(NootoColors.backgroundSecondary)
                                         .frame(width: 56, height: 56)
                                     Image(systemName: "chevron.right")
                                         .scaledFont(size: 18, weight: .medium)
-                                        .foregroundColor(OmiColors.textSecondary)
+                                        .foregroundColor(NootoColors.textSecondary)
                                 }
                                 Text("See more")
                                     .scaledFont(size: 11)
-                                    .foregroundColor(OmiColors.textTertiary)
+                                    .foregroundColor(NootoColors.textTertiary)
                             }
                             .frame(width: 70)
                         }
@@ -641,15 +641,15 @@ struct HorizontalAppSection: View {
                             VStack(spacing: 6) {
                                 ZStack {
                                     RoundedRectangle(cornerRadius: 14)
-                                        .fill(OmiColors.backgroundSecondary)
+                                        .fill(NootoColors.backgroundSecondary)
                                         .frame(width: 56, height: 56)
                                     Image(systemName: "chevron.right")
                                         .scaledFont(size: 18, weight: .medium)
-                                        .foregroundColor(OmiColors.textSecondary)
+                                        .foregroundColor(NootoColors.textSecondary)
                                 }
                                 Text("View all")
                                     .scaledFont(size: 11)
-                                    .foregroundColor(OmiColors.textTertiary)
+                                    .foregroundColor(NootoColors.textTertiary)
                             }
                             .frame(width: 70)
                         }
@@ -676,7 +676,7 @@ struct AppGridSection: View {
             HStack {
                 Text(title)
                     .scaledFont(size: 18, weight: .semibold)
-                    .foregroundColor(OmiColors.textPrimary)
+                    .foregroundColor(NootoColors.textPrimary)
 
                 Spacer()
 
@@ -688,7 +688,7 @@ struct AppGridSection: View {
                             Image(systemName: "chevron.right")
                                 .scaledFont(size: 10, weight: .medium)
                         }
-                        .foregroundColor(OmiColors.textSecondary)
+                        .foregroundColor(NootoColors.textSecondary)
                     }
                     .buttonStyle(.plain)
                 }
@@ -735,7 +735,7 @@ struct CompactAppCard: View {
                 VStack(spacing: 2) {
                     Text(app.name)
                         .scaledFont(size: 12, weight: .medium)
-                        .foregroundColor(OmiColors.textPrimary)
+                        .foregroundColor(NootoColors.textPrimary)
                         .lineLimit(1)
 
                     // Rating and installs
@@ -746,17 +746,17 @@ struct CompactAppCard: View {
                                 .foregroundColor(.yellow)
                             Text(rating)
                                 .scaledFont(size: 10)
-                                .foregroundColor(OmiColors.textTertiary)
+                                .foregroundColor(NootoColors.textTertiary)
                         }
                         if let installs = app.formattedInstalls {
                             if app.formattedRating != nil {
                                 Text("·")
                                     .scaledFont(size: 10)
-                                    .foregroundColor(OmiColors.textTertiary)
+                                    .foregroundColor(NootoColors.textTertiary)
                             }
                             Text(installs)
                                 .scaledFont(size: 10)
-                                .foregroundColor(OmiColors.textTertiary)
+                                .foregroundColor(NootoColors.textTertiary)
                         }
                     }
                 }
@@ -766,7 +766,7 @@ struct CompactAppCard: View {
             }
             .frame(width: 90)
             .padding(.vertical, 8)
-            .background(isHovering ? OmiColors.backgroundSecondary.opacity(0.5) : Color.clear)
+            .background(isHovering ? NootoColors.backgroundSecondary.opacity(0.5) : Color.clear)
             .cornerRadius(12)
         }
         .buttonStyle(.plain)
@@ -775,10 +775,10 @@ struct CompactAppCard: View {
 
     private var appIconPlaceholder: some View {
         RoundedRectangle(cornerRadius: 14)
-            .fill(OmiColors.backgroundTertiary)
+            .fill(NootoColors.backgroundTertiary)
             .overlay(
                 Image(systemName: "app.fill")
-                    .foregroundColor(OmiColors.textTertiary)
+                    .foregroundColor(NootoColors.textTertiary)
             )
     }
 }
@@ -813,7 +813,7 @@ struct SmallAppButton: View {
                     .cornerRadius(11)
                     .overlay(
                         RoundedRectangle(cornerRadius: 11)
-                            .stroke(OmiColors.border, lineWidth: 1)
+                            .stroke(NootoColors.border, lineWidth: 1)
                     )
             }
         }
@@ -852,12 +852,12 @@ struct AppCard: View {
                     VStack(alignment: .leading, spacing: 4) {
                         Text(app.name)
                             .scaledFont(size: 14, weight: .medium)
-                            .foregroundColor(OmiColors.textPrimary)
+                            .foregroundColor(NootoColors.textPrimary)
                             .lineLimit(1)
 
                         Text(app.author)
                             .scaledFont(size: 12)
-                            .foregroundColor(OmiColors.textTertiary)
+                            .foregroundColor(NootoColors.textTertiary)
                             .lineLimit(1)
                     }
 
@@ -866,7 +866,7 @@ struct AppCard: View {
 
                 Text(app.description)
                     .scaledFont(size: 12)
-                    .foregroundColor(OmiColors.textSecondary)
+                    .foregroundColor(NootoColors.textSecondary)
                     .lineLimit(2)
                     .multilineTextAlignment(.leading)
 
@@ -880,17 +880,17 @@ struct AppCard: View {
                                     .foregroundColor(.yellow)
                                 Text(rating)
                                     .scaledFont(size: 11)
-                                    .foregroundColor(OmiColors.textTertiary)
+                                    .foregroundColor(NootoColors.textTertiary)
                             }
                         }
                         if let installs = app.formattedInstalls {
                             HStack(spacing: 3) {
                                 Image(systemName: "arrow.down.circle")
                                     .scaledFont(size: 10)
-                                    .foregroundColor(OmiColors.textTertiary)
+                                    .foregroundColor(NootoColors.textTertiary)
                                 Text(installs)
                                     .scaledFont(size: 11)
-                                    .foregroundColor(OmiColors.textTertiary)
+                                    .foregroundColor(NootoColors.textTertiary)
                             }
                         }
                     }
@@ -902,11 +902,11 @@ struct AppCard: View {
                 }
             }
             .padding(14)
-            .background(isHovering ? OmiColors.backgroundSecondary : OmiColors.backgroundPrimary)
+            .background(isHovering ? NootoColors.backgroundSecondary : NootoColors.backgroundPrimary)
             .cornerRadius(12)
             .overlay(
                 RoundedRectangle(cornerRadius: 12)
-                    .stroke(OmiColors.backgroundTertiary, lineWidth: 1)
+                    .stroke(NootoColors.backgroundTertiary, lineWidth: 1)
             )
         }
         .buttonStyle(.plain)
@@ -917,10 +917,10 @@ struct AppCard: View {
 
     private var appIconPlaceholder: some View {
         RoundedRectangle(cornerRadius: 12)
-            .fill(OmiColors.backgroundTertiary)
+            .fill(NootoColors.backgroundTertiary)
             .overlay(
                 Image(systemName: "app.fill")
-                    .foregroundColor(OmiColors.textTertiary)
+                    .foregroundColor(NootoColors.textTertiary)
             )
     }
 }
@@ -955,7 +955,7 @@ struct AppActionButton: View {
                     .cornerRadius(14)
                     .overlay(
                         RoundedRectangle(cornerRadius: 14)
-                            .stroke(OmiColors.border, lineWidth: 1)
+                            .stroke(NootoColors.border, lineWidth: 1)
                     )
             }
         }
@@ -986,7 +986,7 @@ struct AppFilterSheet: View {
             HStack {
                 Text("Filters")
                     .scaledFont(size: 18, weight: .semibold)
-                    .foregroundColor(OmiColors.textPrimary)
+                    .foregroundColor(NootoColors.textPrimary)
 
                 Spacer()
 
@@ -996,7 +996,7 @@ struct AppFilterSheet: View {
                         Task { await appProvider.searchApps() }
                     }
                     .scaledFont(size: 13)
-                    .foregroundColor(OmiColors.textSecondary)
+                    .foregroundColor(NootoColors.textSecondary)
                 }
 
                 DismissButton(action: dismissSheet)
@@ -1004,7 +1004,7 @@ struct AppFilterSheet: View {
             .padding()
 
             Divider()
-                .background(OmiColors.backgroundTertiary)
+                .background(NootoColors.backgroundTertiary)
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 24) {
@@ -1012,7 +1012,7 @@ struct AppFilterSheet: View {
                     VStack(alignment: .leading, spacing: 12) {
                         Text("Category")
                             .scaledFont(size: 14, weight: .semibold)
-                            .foregroundColor(OmiColors.textPrimary)
+                            .foregroundColor(NootoColors.textPrimary)
 
                         FlowLayout(spacing: 8) {
                             ForEach(appProvider.categories) { category in
@@ -1035,7 +1035,7 @@ struct AppFilterSheet: View {
                     VStack(alignment: .leading, spacing: 12) {
                         Text("Capability")
                             .scaledFont(size: 14, weight: .semibold)
-                            .foregroundColor(OmiColors.textPrimary)
+                            .foregroundColor(NootoColors.textPrimary)
 
                         FlowLayout(spacing: 8) {
                             ForEach(appProvider.capabilities) { capability in
@@ -1058,11 +1058,11 @@ struct AppFilterSheet: View {
                     VStack(alignment: .leading, spacing: 12) {
                         Text("Other")
                             .scaledFont(size: 14, weight: .semibold)
-                            .foregroundColor(OmiColors.textPrimary)
+                            .foregroundColor(NootoColors.textPrimary)
 
                         Toggle("Show installed only", isOn: $appProvider.showInstalledOnly)
-                            .toggleStyle(SwitchToggleStyle(tint: OmiColors.purplePrimary))
-                            .foregroundColor(OmiColors.textSecondary)
+                            .toggleStyle(SwitchToggleStyle(tint: NootoColors.brandPrimary))
+                            .foregroundColor(NootoColors.textSecondary)
                             .onChange(of: appProvider.showInstalledOnly) { _, _ in
                                 Task { await appProvider.searchApps() }
                             }
@@ -1072,7 +1072,7 @@ struct AppFilterSheet: View {
             }
         }
         .frame(width: 400, height: 450)
-        .background(OmiColors.backgroundPrimary)
+        .background(NootoColors.backgroundPrimary)
     }
 
     private var hasActiveFilters: Bool {
@@ -1095,12 +1095,12 @@ struct FilterChip: View {
                 .scaledFont(size: 13)
                 .padding(.horizontal, 14)
                 .padding(.vertical, 8)
-                .background(isSelected ? Color.white : OmiColors.backgroundSecondary)
-                .foregroundColor(isSelected ? OmiColors.textPrimary : OmiColors.textSecondary)
+                .background(isSelected ? Color.white : NootoColors.backgroundSecondary)
+                .foregroundColor(isSelected ? NootoColors.textPrimary : NootoColors.textSecondary)
                 .cornerRadius(20)
                 .overlay(
                     RoundedRectangle(cornerRadius: 20)
-                        .stroke(isSelected ? OmiColors.border : Color.clear, lineWidth: 1)
+                        .stroke(isSelected ? NootoColors.border : Color.clear, lineWidth: 1)
                 )
         }
         .buttonStyle(.plain)
@@ -1137,18 +1137,18 @@ struct CategoryAppsSheet: View {
 
                 Text(category.title)
                     .scaledFont(size: 18, weight: .semibold)
-                    .foregroundColor(OmiColors.textPrimary)
+                    .foregroundColor(NootoColors.textPrimary)
 
                 Spacer()
 
                 Text("\(categoryApps.count) apps")
                     .scaledFont(size: 13)
-                    .foregroundColor(OmiColors.textTertiary)
+                    .foregroundColor(NootoColors.textTertiary)
             }
             .padding()
 
             Divider()
-                .background(OmiColors.backgroundTertiary)
+                .background(NootoColors.backgroundTertiary)
 
             ScrollView {
                 LazyVGrid(columns: [
@@ -1162,7 +1162,7 @@ struct CategoryAppsSheet: View {
                 .padding()
             }
         }
-        .background(OmiColors.backgroundPrimary)
+        .background(NootoColors.backgroundPrimary)
     }
 }
 
@@ -1209,7 +1209,7 @@ struct AppDetailSheet: View {
                                     .aspectRatio(contentMode: .fill)
                             default:
                                 RoundedRectangle(cornerRadius: 16)
-                                    .fill(OmiColors.backgroundTertiary)
+                                    .fill(NootoColors.backgroundTertiary)
                             }
                         }
                         .frame(width: 80, height: 80)
@@ -1218,11 +1218,11 @@ struct AppDetailSheet: View {
                         VStack(alignment: .leading, spacing: 6) {
                             Text(app.name)
                                 .scaledFont(size: 24, weight: .bold)
-                                .foregroundColor(OmiColors.textPrimary)
+                                .foregroundColor(NootoColors.textPrimary)
 
                             Text(app.author)
                                 .scaledFont(size: 14)
-                                .foregroundColor(OmiColors.textTertiary)
+                                .foregroundColor(NootoColors.textTertiary)
 
                             HStack(spacing: 12) {
                                 if let rating = app.formattedRating {
@@ -1232,12 +1232,12 @@ struct AppDetailSheet: View {
                                         Text("\(rating) (\(app.ratingCount))")
                                     }
                                     .scaledFont(size: 13)
-                                    .foregroundColor(OmiColors.textSecondary)
+                                    .foregroundColor(NootoColors.textSecondary)
                                 }
 
                                 Text("\(app.installs) installs")
                                     .scaledFont(size: 13)
-                                    .foregroundColor(OmiColors.textSecondary)
+                                    .foregroundColor(NootoColors.textSecondary)
                             }
                         }
 
@@ -1257,11 +1257,11 @@ struct AppDetailSheet: View {
                                     .scaledFont(size: 14, weight: .semibold)
                                     .foregroundColor(app.enabled ? .white : .black)
                                     .frame(width: 100, height: 36)
-                                    .background(app.enabled ? OmiColors.error : Color.white)
+                                    .background(app.enabled ? NootoColors.error : Color.white)
                                     .cornerRadius(18)
                                     .overlay(
                                         RoundedRectangle(cornerRadius: 18)
-                                            .stroke(app.enabled ? Color.clear : OmiColors.border, lineWidth: 1)
+                                            .stroke(app.enabled ? Color.clear : NootoColors.border, lineWidth: 1)
                                     )
                             }
                         }
@@ -1269,17 +1269,17 @@ struct AppDetailSheet: View {
                     }
 
                     Divider()
-                        .background(OmiColors.backgroundTertiary)
+                        .background(NootoColors.backgroundTertiary)
 
                     // Description
                     VStack(alignment: .leading, spacing: 8) {
                         Text("About")
                             .scaledFont(size: 16, weight: .semibold)
-                            .foregroundColor(OmiColors.textPrimary)
+                            .foregroundColor(NootoColors.textPrimary)
 
                         Text(app.description)
                             .scaledFont(size: 14)
-                            .foregroundColor(OmiColors.textSecondary)
+                            .foregroundColor(NootoColors.textSecondary)
                             .fixedSize(horizontal: false, vertical: true)
                     }
 
@@ -1288,7 +1288,7 @@ struct AppDetailSheet: View {
                         VStack(alignment: .leading, spacing: 8) {
                             Text("Capabilities")
                                 .scaledFont(size: 16, weight: .semibold)
-                                .foregroundColor(OmiColors.textPrimary)
+                                .foregroundColor(NootoColors.textPrimary)
 
                             FlowLayout(spacing: 8) {
                                 ForEach(app.capabilities, id: \.self) { capability in
@@ -1302,22 +1302,22 @@ struct AppDetailSheet: View {
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Category")
                             .scaledFont(size: 16, weight: .semibold)
-                            .foregroundColor(OmiColors.textPrimary)
+                            .foregroundColor(NootoColors.textPrimary)
 
                         Text(app.category.replacingOccurrences(of: "-", with: " ").capitalized)
                             .scaledFont(size: 14)
-                            .foregroundColor(OmiColors.textSecondary)
+                            .foregroundColor(NootoColors.textSecondary)
                     }
 
                     Divider()
-                        .background(OmiColors.backgroundTertiary)
+                        .background(NootoColors.backgroundTertiary)
 
                     // Add Review Section
                     VStack(alignment: .leading, spacing: 12) {
                         HStack {
                             Text("Reviews")
                                 .scaledFont(size: 16, weight: .semibold)
-                                .foregroundColor(OmiColors.textPrimary)
+                                .foregroundColor(NootoColors.textPrimary)
 
                             Spacer()
 
@@ -1329,7 +1329,7 @@ struct AppDetailSheet: View {
                                         Text("Add Review")
                                             .scaledFont(size: 13, weight: .medium)
                                     }
-                                    .foregroundColor(OmiColors.textSecondary)
+                                    .foregroundColor(NootoColors.textSecondary)
                                 }
                                 .buttonStyle(.plain)
                             }
@@ -1341,14 +1341,14 @@ struct AppDetailSheet: View {
                                 HStack {
                                     Text("Your Review")
                                         .scaledFont(size: 13, weight: .medium)
-                                        .foregroundColor(OmiColors.textPrimary)
+                                        .foregroundColor(NootoColors.textPrimary)
 
                                     Spacer()
 
                                     Button(action: { showAddReview = true }) {
                                         Text("Edit")
                                             .scaledFont(size: 12, weight: .medium)
-                                            .foregroundColor(OmiColors.textTertiary)
+                                            .foregroundColor(NootoColors.textTertiary)
                                     }
                                     .buttonStyle(.plain)
                                 }
@@ -1366,7 +1366,7 @@ struct AppDetailSheet: View {
                         } else if userReview == nil && reviews.isEmpty {
                             Text("No reviews yet. Be the first to review this app!")
                                 .scaledFont(size: 13)
-                                .foregroundColor(OmiColors.textTertiary)
+                                .foregroundColor(NootoColors.textTertiary)
                                 .padding(.vertical, 8)
                         }
                     }
@@ -1375,7 +1375,7 @@ struct AppDetailSheet: View {
             }
         }
         .frame(width: 500, height: 600)
-        .background(OmiColors.backgroundPrimary)
+        .background(NootoColors.backgroundPrimary)
         .task {
             await loadReviews()
         }
@@ -1459,7 +1459,7 @@ struct AddReviewSheet: View {
 
                 Text(existingReview != nil ? "Edit Review" : "Add Review")
                     .scaledFont(size: 16, weight: .semibold)
-                    .foregroundColor(OmiColors.textPrimary)
+                    .foregroundColor(NootoColors.textPrimary)
 
                 Spacer()
 
@@ -1468,7 +1468,7 @@ struct AddReviewSheet: View {
             .padding()
 
             Divider()
-                .background(OmiColors.backgroundTertiary)
+                .background(NootoColors.backgroundTertiary)
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 24) {
@@ -1482,7 +1482,7 @@ struct AddReviewSheet: View {
                                     .aspectRatio(contentMode: .fill)
                             default:
                                 RoundedRectangle(cornerRadius: 12)
-                                    .fill(OmiColors.backgroundTertiary)
+                                    .fill(NootoColors.backgroundTertiary)
                             }
                         }
                         .frame(width: 50, height: 50)
@@ -1491,11 +1491,11 @@ struct AddReviewSheet: View {
                         VStack(alignment: .leading, spacing: 4) {
                             Text(app.name)
                                 .scaledFont(size: 16, weight: .semibold)
-                                .foregroundColor(OmiColors.textPrimary)
+                                .foregroundColor(NootoColors.textPrimary)
 
                             Text(app.author)
                                 .scaledFont(size: 13)
-                                .foregroundColor(OmiColors.textTertiary)
+                                .foregroundColor(NootoColors.textTertiary)
                         }
 
                         Spacer()
@@ -1505,7 +1505,7 @@ struct AddReviewSheet: View {
                     VStack(alignment: .leading, spacing: 12) {
                         Text("Your Rating")
                             .scaledFont(size: 14, weight: .medium)
-                            .foregroundColor(OmiColors.textPrimary)
+                            .foregroundColor(NootoColors.textPrimary)
 
                         StarRatingPicker(rating: $selectedRating)
                     }
@@ -1515,27 +1515,27 @@ struct AddReviewSheet: View {
                         HStack {
                             Text("Your Review")
                                 .scaledFont(size: 14, weight: .medium)
-                                .foregroundColor(OmiColors.textPrimary)
+                                .foregroundColor(NootoColors.textPrimary)
 
                             Spacer()
 
                             Text("\(reviewText.count)/\(maxReviewLength)")
                                 .scaledFont(size: 12)
-                                .foregroundColor(reviewText.count > maxReviewLength ? OmiColors.error : OmiColors.textTertiary)
+                                .foregroundColor(reviewText.count > maxReviewLength ? NootoColors.error : NootoColors.textTertiary)
                         }
 
                         ZStack(alignment: .topLeading) {
                             TextEditor(text: $reviewText)
                                 .scaledFont(size: 14)
-                                .foregroundColor(OmiColors.textPrimary)
+                                .foregroundColor(NootoColors.textPrimary)
                                 .scrollContentBackground(.hidden)
                                 .frame(minHeight: 120, maxHeight: 200)
                                 .padding(12)
-                                .background(OmiColors.backgroundSecondary)
+                                .background(NootoColors.backgroundSecondary)
                                 .cornerRadius(10)
                                 .overlay(
                                     RoundedRectangle(cornerRadius: 10)
-                                        .stroke(OmiColors.backgroundTertiary, lineWidth: 1)
+                                        .stroke(NootoColors.backgroundTertiary, lineWidth: 1)
                                 )
                                 .onChange(of: reviewText) { _, newValue in
                                     if newValue.count > maxReviewLength {
@@ -1546,7 +1546,7 @@ struct AddReviewSheet: View {
                             if reviewText.isEmpty {
                                 Text("Share your experience with this app...")
                                     .scaledFont(size: 14)
-                                    .foregroundColor(OmiColors.textTertiary)
+                                    .foregroundColor(NootoColors.textTertiary)
                                     .padding(.leading, 17)
                                     .padding(.top, 20)
                                     .allowsHitTesting(false)
@@ -1558,10 +1558,10 @@ struct AddReviewSheet: View {
                     if let errorMessage = errorMessage {
                         HStack(spacing: 8) {
                             Image(systemName: "exclamationmark.circle.fill")
-                                .foregroundColor(OmiColors.error)
+                                .foregroundColor(NootoColors.error)
                             Text(errorMessage)
                                 .scaledFont(size: 13)
-                                .foregroundColor(OmiColors.error)
+                                .foregroundColor(NootoColors.error)
                         }
                     }
 
@@ -1571,20 +1571,20 @@ struct AddReviewSheet: View {
                             if isSubmitting {
                                 ProgressView()
                                     .scaleEffect(0.8)
-                                    .tint(OmiColors.textPrimary)
+                                    .tint(NootoColors.textPrimary)
                             } else {
                                 Text(existingReview != nil ? "Update Review" : "Submit Review")
                                     .scaledFont(size: 14, weight: .semibold)
                             }
                         }
-                        .foregroundColor(OmiColors.textPrimary)
+                        .foregroundColor(NootoColors.textPrimary)
                         .frame(maxWidth: .infinity)
                         .frame(height: 44)
                         .background(isFormValid ? Color.white : Color.white.opacity(0.5))
                         .cornerRadius(10)
                         .overlay(
                             RoundedRectangle(cornerRadius: 10)
-                                .stroke(OmiColors.border, lineWidth: 1)
+                                .stroke(NootoColors.border, lineWidth: 1)
                         )
                     }
                     .buttonStyle(.plain)
@@ -1594,7 +1594,7 @@ struct AddReviewSheet: View {
             }
         }
         .frame(width: 400, height: 480)
-        .background(OmiColors.backgroundPrimary)
+        .background(NootoColors.backgroundPrimary)
     }
 
     private func submitReview() {
@@ -1654,7 +1654,7 @@ struct StarRatingPicker: View {
             if rating > 0 {
                 Text(ratingLabel)
                     .scaledFont(size: 14, weight: .medium)
-                    .foregroundColor(OmiColors.textSecondary)
+                    .foregroundColor(NootoColors.textSecondary)
                     .padding(.leading, 8)
             }
         }
@@ -1667,7 +1667,7 @@ struct StarRatingPicker: View {
 
     private func starColor(for star: Int) -> Color {
         let effectiveRating = hoverRating > 0 ? hoverRating : rating
-        return star <= effectiveRating ? .yellow : OmiColors.textTertiary.opacity(0.5)
+        return star <= effectiveRating ? .yellow : NootoColors.textTertiary.opacity(0.5)
     }
 
     private func scaleEffect(for star: Int) -> CGFloat {
@@ -1714,8 +1714,8 @@ struct CapabilityBadge: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 6)
-        .background(OmiColors.backgroundSecondary)
-        .foregroundColor(OmiColors.textSecondary)
+        .background(NootoColors.backgroundSecondary)
+        .foregroundColor(NootoColors.textSecondary)
         .cornerRadius(16)
     }
 }
@@ -1733,7 +1733,7 @@ struct ReviewCard: View {
                     ForEach(1...5, id: \.self) { star in
                         Image(systemName: star <= review.score ? "star.fill" : "star")
                             .scaledFont(size: 10)
-                            .foregroundColor(star <= review.score ? .yellow : OmiColors.textTertiary)
+                            .foregroundColor(star <= review.score ? .yellow : NootoColors.textTertiary)
                     }
                 }
 
@@ -1741,32 +1741,32 @@ struct ReviewCard: View {
 
                 Text(review.ratedAt, style: .date)
                     .scaledFont(size: 11)
-                    .foregroundColor(OmiColors.textTertiary)
+                    .foregroundColor(NootoColors.textTertiary)
             }
 
             Text(review.review)
                 .scaledFont(size: 13)
-                .foregroundColor(OmiColors.textSecondary)
+                .foregroundColor(NootoColors.textSecondary)
                 .lineLimit(3)
 
             if let response = review.response {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Developer Response")
                         .scaledFont(size: 11, weight: .medium)
-                        .foregroundColor(OmiColors.textTertiary)
+                        .foregroundColor(NootoColors.textTertiary)
 
                     Text(response)
                         .scaledFont(size: 12)
-                        .foregroundColor(OmiColors.textSecondary)
+                        .foregroundColor(NootoColors.textSecondary)
                         .lineLimit(2)
                 }
                 .padding(10)
-                .background(OmiColors.backgroundSecondary)
+                .background(NootoColors.backgroundSecondary)
                 .cornerRadius(8)
             }
         }
         .padding(12)
-        .background(OmiColors.backgroundSecondary.opacity(0.5))
+        .background(NootoColors.backgroundSecondary.opacity(0.5))
         .cornerRadius(10)
     }
 }
@@ -1870,7 +1870,7 @@ struct DismissableSheetModifier<SheetContent: View>: ViewModifier {
 
                     // Sheet content centered
                     sheetContent()
-                        .background(OmiColors.backgroundPrimary)
+                        .background(NootoColors.backgroundPrimary)
                         .clipShape(RoundedRectangle(cornerRadius: 12))
                         .shadow(color: .black.opacity(0.3), radius: 20, x: 0, y: 10)
                         .transition(.scale(scale: 0.95).combined(with: .opacity))
@@ -1920,7 +1920,7 @@ struct DismissableSheetItemModifier<Item: Identifiable, SheetContent: View>: Vie
 
                     // Sheet content centered
                     sheetContent(presentedItem)
-                        .background(OmiColors.backgroundPrimary)
+                        .background(NootoColors.backgroundPrimary)
                         .clipShape(RoundedRectangle(cornerRadius: 12))
                         .shadow(color: .black.opacity(0.3), radius: 20, x: 0, y: 10)
                         .transition(.scale(scale: 0.95).combined(with: .opacity))
@@ -1956,19 +1956,19 @@ struct CreateAppCard: View {
 
             Text(title)
                 .scaledFont(size: 14, weight: .semibold)
-                .foregroundColor(OmiColors.textPrimary)
+                .foregroundColor(NootoColors.textPrimary)
 
             Spacer()
 
             Image(systemName: "chevron.right")
                 .scaledFont(size: 12, weight: .medium)
-                .foregroundColor(OmiColors.textTertiary)
+                .foregroundColor(NootoColors.textTertiary)
         }
         .padding(12)
         .frame(maxWidth: .infinity)
         .background(
             RoundedRectangle(cornerRadius: 12)
-                .fill(isHovering ? OmiColors.backgroundSecondary : OmiColors.backgroundPrimary)
+                .fill(isHovering ? NootoColors.backgroundSecondary : NootoColors.backgroundPrimary)
                 .overlay(
                     RoundedRectangle(cornerRadius: 12)
                         .stroke(iconColor.opacity(0.3), lineWidth: 1)
