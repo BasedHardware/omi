@@ -321,7 +321,18 @@ class TranscriptionService: NSObject, URLSessionWebSocketDelegate {
     /// Send chunks one at a time; on first failure, re-buffer the rest and reconnect.
     private func replayChunksSequentially(task: URLSessionWebSocketTask, chunks: [Data], index: Int) {
         guard index < chunks.count else {
-            withState { _isReplaying = false }
+            // Drain any chunks that arrived during replay (live sendAudio appends to reconnectBuffer while _isReplaying)
+            let moreChunks: [Data] = withState {
+                let pending = reconnectBuffer.drain()
+                if pending.isEmpty {
+                    _isReplaying = false
+                }
+                return pending
+            }
+            if !moreChunks.isEmpty {
+                log("TranscriptionService: Draining \(moreChunks.count) chunks accumulated during replay")
+                replayChunksSequentially(task: task, chunks: moreChunks, index: 0)
+            }
             return
         }
 
