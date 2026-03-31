@@ -179,15 +179,17 @@ def get_messages(
     include_conversations: bool = False,
     app_id: Optional[str] = None,
     chat_session_id: Optional[str] = None,
-    # include_plugin_id_filter: bool = True,
 ):
     logger.info(f'get_messages {uid} {limit} {offset} {app_id} {include_conversations}')
     user_ref = db.collection('users').document(uid)
     messages_ref = user_ref.collection('messages')
-    # if include_plugin_id_filter:
-    messages_ref = messages_ref.where(filter=FieldFilter('plugin_id', '==', app_id))
     if chat_session_id:
+        # Session-scoped query: filter by session only, skip plugin_id filter
+        # because the session already determines which app the messages belong to.
         messages_ref = messages_ref.where(filter=FieldFilter('chat_session_id', '==', chat_session_id))
+    else:
+        # App-scoped query: filter by plugin_id (None = main chat)
+        messages_ref = messages_ref.where(filter=FieldFilter('plugin_id', '==', app_id))
 
     messages_ref = messages_ref.order_by('created_at', direction=firestore.Query.DESCENDING).limit(limit).offset(offset)
 
@@ -620,6 +622,9 @@ def get_chat_sessions(
     uid: str, app_id: str = None, limit: int = 50, offset: int = 0, starred: bool = None
 ) -> List[dict]:
     col = db.collection('users').document(uid).collection('chat_sessions')
+    # Order by updated_at — v2 sessions always have this field.
+    # Legacy v1 sessions (missing updated_at) are excluded by Firestore,
+    # which is correct since this endpoint serves v2 clients only.
     query = col.order_by('updated_at', direction=firestore.Query.DESCENDING)
 
     # Always filter — when app_id is None this returns only default-chat sessions
