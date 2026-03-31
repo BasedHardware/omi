@@ -205,9 +205,6 @@ final class VADGateService {
     private let preRollMs: Double = 500
     private let hangoverMs: Double = 4000       // Streaming mode: controls finalize timing
     private let batchHangoverMs: Double = 2000  // Batch mode: controls chunk boundary (user-visible latency)
-    /// Maximum batch buffer size before auto-emit (~23.4s of stereo 16kHz Int16 PCM).
-    /// Prevents HTTP 413 from backend/proxy body size limits.
-    static let maxBatchBytes = 1_500_000
     private let keepaliveSec: Double = 20
     private let vadWindowSamples = 512
     private let sampleRate = 16000
@@ -647,11 +644,6 @@ final class VADGateService {
         case .speech:
             batchAudioBuffer.append(stereoData)
 
-            // Auto-emit if buffer exceeds max size (prevents HTTP 413)
-            if batchAudioBuffer.count >= VADGateService.maxBatchBytes {
-                return autoEmitBatchBuffer(nextChunkMs: chunkMs, nextChunkData: stereoData)
-            }
-
             if !isSpeech {
                 // SPEECH -> HANGOVER
                 batchState = .hangover
@@ -661,12 +653,6 @@ final class VADGateService {
 
         case .hangover:
             batchAudioBuffer.append(stereoData)
-
-            // Auto-emit if buffer exceeds max size (prevents HTTP 413)
-            if batchAudioBuffer.count >= VADGateService.maxBatchBytes {
-                return autoEmitBatchBuffer(nextChunkMs: chunkMs, nextChunkData: stereoData)
-            }
-
             let timeSinceSpeechMs = batchAudioCursorMs - batchLastSpeechMs
 
             if isSpeech {
@@ -696,58 +682,6 @@ final class VADGateService {
             return BatchGateOutput(audioBuffer: nil, speechStartWallTime: batchSpeechStartWallTime, isComplete: false)
         }
     }
-
-    /// Auto-emit the current batch buffer when it exceeds maxBatchBytes.
-    /// Transitions to .speech state so the next audio continues accumulating into a fresh buffer.
-    /// Called under lock.
-    private func autoEmitBatchBuffer(nextChunkMs: Double, nextChunkData: Data) -> BatchGateOutput {
-        let bytesPerFrame = 4
-        let completedBuffer = batchAudioBuffer
-        let startTime = batchSpeechStartWallTime
-
-        // Advance start time for the next buffer: emitted duration in seconds
-        let emittedDurationSec = Double(completedBuffer.count / bytesPerFrame) / Double(sampleRate)
-        batchSpeechStartWallTime = startTime + emittedDurationSec
-
-        // Always transition to .speech for continued accumulation.
-        // If we were in .hangover, staying there would emit a silence-only follow-up chunk.
-        batchState = .speech
-        // Reset lastSpeechMs to current cursor so the hangover timer starts fresh.
-        // Without this, the next silent chunk would immediately trigger hangover→silence
-        // and emit an empty/silence-only buffer.
-        batchLastSpeechMs = batchAudioCursorMs
-        batchAudioBuffer = Data()
-
-        log("VADGate [batch]: Auto-emit (max size) — \(completedBuffer.count) bytes (\(String(format: "%.1f", emittedDurationSec))s)")
-
-        return BatchGateOutput(audioBuffer: completedBuffer, speechStartWallTime: startTime, isComplete: true)
-    }
-
-    // MARK: - Test Accessors (internal, accessible via @testable import)
-
-    /// Directly invoke auto-emit for testing. Sets up state, calls autoEmitBatchBuffer, returns result.
-    func testAutoEmit(
-        batchBuffer: Data,
-        startState: GateState,
-        speechStartWallTime: Double,
-        audioCursorMs: Double,
-        lastSpeechMs: Double
-    ) -> (output: BatchGateOutput, resultState: GateState, resultLastSpeechMs: Double, resultStartWallTime: Double) {
-        lock.lock()
-        defer { lock.unlock() }
-        batchAudioBuffer = batchBuffer
-        batchState = startState
-        batchSpeechStartWallTime = speechStartWallTime
-        batchAudioCursorMs = audioCursorMs
-        batchLastSpeechMs = lastSpeechMs
-
-        let output = autoEmitBatchBuffer(nextChunkMs: 100, nextChunkData: Data())
-        return (output, batchState, batchLastSpeechMs, batchSpeechStartWallTime)
-    }
-
-    /// Read batch state for assertions.
-    var testBatchState: GateState { batchState }
-    var testBatchBufferCount: Int { batchAudioBuffer.count }
 
     /// Flush remaining batch audio buffer (call when recording stops).
     func flushBatchBuffer() -> BatchGateOutput? {
