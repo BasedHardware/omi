@@ -4,18 +4,12 @@ Google Calendar Auto-Sync Module for Omi.
 Provides automatic synchronization of Google Calendar events into Omi's
 memory system. Events are transformed into natural language memories and
 pushed via the Omi Facts API.
-
-Key features:
-- Periodic background sync (configurable interval)
-- Deduplication via event ID tracking
-- Natural language event formatting
-- Handles token refresh automatically
 """
+import asyncio
 import os
 import sys
-import time
 from datetime import datetime, timedelta
-from typing import Dict, List, Optional
+from typing import Callable, Dict, List, Optional, Set
 
 import requests
 
@@ -28,7 +22,7 @@ OMI_API_KEY = os.getenv("OMI_API_KEY", "")
 
 # Sync defaults
 DEFAULT_SYNC_INTERVAL_MINUTES = 30
-MAX_EVENTS_PER_SYNC = 20
+MAX_EVENTS_PER_SYNC = 50
 SYNC_LOOKFORWARD_DAYS = 7
 
 
@@ -104,7 +98,7 @@ def push_memory_to_omi(uid: str, memory_text: str) -> bool:
         response = requests.post(
             url, headers=headers, json=payload, params={"uid": uid}, timeout=10
         )
-        if response.status_code == 200:
+        if response.status_code in (200, 201):
             log(f"Sync: Pushed memory for {uid}: {memory_text[:80]}...")
             return True
         else:
@@ -117,21 +111,15 @@ def push_memory_to_omi(uid: str, memory_text: str) -> bool:
 
 def sync_user_calendar(
     uid: str,
-    get_valid_access_token_fn,
-    calendar_api_request_fn,
-    get_default_calendar_fn,
+    get_valid_access_token_fn: Callable,
+    calendar_api_request_fn: Callable,
+    get_default_calendar_fn: Callable,
 ) -> Dict:
     """
     Sync a user's upcoming Google Calendar events to Omi memories.
 
-    Args:
-        uid: User ID
-        get_valid_access_token_fn: Function to get valid OAuth token
-        calendar_api_request_fn: Function to make Calendar API requests
-        get_default_calendar_fn: Function to get user's default calendar
-
-    Returns:
-        Dict with sync results (success, synced count, skipped count, etc.)
+    Merges new event IDs into the cumulative set of already-synced IDs
+    to prevent duplicate memories across runs.
     """
     log(f"Sync: Starting for user {uid}")
 
@@ -139,9 +127,9 @@ def sync_user_calendar(
     if not access_token:
         return {"success": False, "error": "Not authenticated with Google Calendar"}
 
-    # Load previously synced event IDs for deduplication
+    # Load cumulative set of previously synced event IDs
     stored_ids_raw = get_user_setting(uid, "synced_event_ids")
-    synced_ids = set(stored_ids_raw) if stored_ids_raw else set()
+    synced_ids: Set[str] = set(stored_ids_raw) if stored_ids_raw else set()
 
     calendar_id = get_default_calendar_fn(uid)
     now = datetime.utcnow()
@@ -171,11 +159,9 @@ def sync_user_calendar(
 
     synced = 0
     skipped = 0
-    new_ids: set = set()
 
     for event in events:
         event_id = event.get("id", "")
-        new_ids.add(event_id)
 
         if event_id in synced_ids:
             skipped += 1
@@ -184,13 +170,13 @@ def sync_user_calendar(
         memory_text = format_event_as_memory(event)
         if push_memory_to_omi(uid, memory_text):
             synced += 1
+            synced_ids.add(event_id)
         else:
             log(f"Sync: Failed to push event {event_id}")
 
-        time.sleep(0.3)
-
+    # Persist the merged cumulative set
     store_user_setting(uid, "last_sync_at", datetime.utcnow().isoformat())
-    store_user_setting(uid, "synced_event_ids", list(new_ids))
+    store_user_setting(uid, "synced_event_ids", list(synced_ids))
 
     summary = f"Synced {synced} new events, skipped {skipped} already synced"
     log(f"Sync: Completed for {uid} — {summary}")
@@ -202,3 +188,67 @@ def sync_user_calendar(
         "total_events": len(events),
         "message": summary,
     }
+
+
+# ============================================
+# Background scheduler for auto-sync
+# ============================================
+
+_scheduler_tasks: Dict[str, asyncio.Task] = {}
+
+
+async def _run_periodic_sync(
+    uid: str,
+    interval_minutes: int,
+    get_valid_access_token_fn: Callable,
+    calendar_api_request_fn: Callable,
+    get_default_calendar_fn: Callable,
+):
+    """Background coroutine that syncs a user's calendar on a fixed interval."""
+    log(f"Scheduler: Started periodic sync for {uid} every {interval_minutes}m")
+    while True:
+        await asyncio.sleep(interval_minutes * 60)
+        enabled = get_user_setting(uid, "auto_sync_enabled")
+        if not enabled:
+            log(f"Scheduler: Auto-sync disabled for {uid}, stopping")
+            break
+        try:
+            sync_user_calendar(
+                uid,
+                get_valid_access_token_fn,
+                calendar_api_request_fn,
+                get_default_calendar_fn,
+            )
+        except Exception as e:
+            log(f"Scheduler: Error during periodic sync for {uid}: {e}")
+
+
+def start_auto_sync(
+    uid: str,
+    get_valid_access_token_fn: Callable,
+    calendar_api_request_fn: Callable,
+    get_default_calendar_fn: Callable,
+    interval_minutes: int = DEFAULT_SYNC_INTERVAL_MINUTES,
+):
+    """Start a background auto-sync task for a user."""
+    stop_auto_sync(uid)
+    loop = asyncio.get_event_loop()
+    task = loop.create_task(
+        _run_periodic_sync(
+            uid,
+            interval_minutes,
+            get_valid_access_token_fn,
+            calendar_api_request_fn,
+            get_default_calendar_fn,
+        )
+    )
+    _scheduler_tasks[uid] = task
+    log(f"Scheduler: Auto-sync task created for {uid}")
+
+
+def stop_auto_sync(uid: str):
+    """Cancel a user's background auto-sync task if running."""
+    task = _scheduler_tasks.pop(uid, None)
+    if task and not task.done():
+        task.cancel()
+        log(f"Scheduler: Cancelled auto-sync for {uid}")
