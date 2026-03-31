@@ -85,10 +85,10 @@ Widget _buildAppIcon(BuildContext context, String appId, {double size = 15, doub
           placeholder: (context, url) => SizedBox(
             width: size,
             height: size,
-            child: Icon(Icons.apps, size: size * 0.7, color: Colors.white.withOpacity(opacity)),
+            child: Icon(Icons.apps, size: size * 0.7, color: Colors.white.withValues(alpha: opacity)),
           ),
           errorWidget: (context, url, error) =>
-              Icon(Icons.apps, size: size * 0.7, color: Colors.white.withOpacity(opacity)),
+              Icon(Icons.apps, size: size * 0.7, color: Colors.white.withValues(alpha: opacity)),
         ),
       ),
     );
@@ -97,7 +97,7 @@ Widget _buildAppIcon(BuildContext context, String appId, {double size = 15, doub
   // Fallback to generic icon if app not found
   return Opacity(
     opacity: opacity,
-    child: Icon(Icons.apps, size: size, color: Colors.white.withOpacity(opacity)),
+    child: Icon(Icons.apps, size: size, color: Colors.white.withValues(alpha: opacity)),
   );
 }
 
@@ -842,7 +842,7 @@ class _MemoriesMessageWidgetState extends State<MemoriesMessageWidget> {
                     if (conversationDetailLoading[data.$1]) return;
                     setState(() => conversationDetailLoading[data.$1] = true);
                     ServerConversation? m = await getConversationById(data.$2.id);
-                    if (m == null) return;
+                    if (!context.mounted || m == null) return;
                     (idx, date) = memProvider.addConversationWithDateGrouped(m);
                     MixpanelManager().chatMessageConversationClicked(m);
                     setState(() => conversationDetailLoading[data.$1] = false);
@@ -850,6 +850,7 @@ class _MemoriesMessageWidgetState extends State<MemoriesMessageWidget> {
                     await Navigator.of(
                       context,
                     ).push(MaterialPageRoute(builder: (c) => ConversationDetailPage(conversation: m)));
+                    if (!context.mounted) return;
                     if (SharedPreferencesUtil().modifiedConversationDetails?.id == m.id) {
                       ServerConversation modifiedDetails = SharedPreferencesUtil().modifiedConversationDetails!;
                       widget.updateConversation(SharedPreferencesUtil().modifiedConversationDetails!);
@@ -1045,7 +1046,7 @@ class _FeedbackBottomSheetState extends State<FeedbackBottomSheet> {
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                     decoration: BoxDecoration(
-                      color: isSelected ? Colors.blue.withOpacity(0.2) : const Color(0xFF2C2C2E),
+                      color: isSelected ? Colors.blue.withValues(alpha: 0.2) : const Color(0xFF2C2C2E),
                       borderRadius: BorderRadius.circular(20),
                       border: isSelected ? Border.all(color: Colors.blue, width: 1.5) : null,
                     ),
@@ -1240,7 +1241,7 @@ class _MessageActionBarState extends State<MessageActionBar> {
             icon: FontAwesomeIcons.share,
             onTap: () async {
               HapticFeedback.lightImpact();
-              await Share.share(widget.messageText);
+              await SharePlus.instance.share(ShareParams(text: widget.messageText));
               MixpanelManager().track('Chat Message Shared', properties: {'message': widget.messageText});
 
               // Implicit positive feedback - user shared the message (silent, no UI change)
@@ -1283,6 +1284,7 @@ class CopyButton extends StatelessWidget {
         highlightColor: Colors.transparent,
         onTap: () async {
           await Clipboard.setData(ClipboardData(text: messageText));
+          if (!context.mounted) return;
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
               content: Text(
