@@ -295,7 +295,8 @@ class TranscriptionService: NSObject, URLSessionWebSocketDelegate {
         }
     }
 
-    /// Replay audio buffered during reconnection
+    /// Replay audio buffered during reconnection.
+    /// On send failure, re-buffer remaining chunks and trigger reconnection.
     private func replayBufferedAudio() {
         let (task, chunks): (URLSessionWebSocketTask?, [Data]) = withState {
             guard _connectionState == .connected else { return (nil, []) }
@@ -304,10 +305,21 @@ class TranscriptionService: NSObject, URLSessionWebSocketDelegate {
         guard let task = task, !chunks.isEmpty else { return }
 
         log("TranscriptionService: Replaying \(chunks.count) buffered audio chunks")
-        for chunk in chunks {
-            task.send(.data(chunk)) { error in
+        for (index, chunk) in chunks.enumerated() {
+            task.send(.data(chunk)) { [weak self] error in
                 if let error = error {
-                    logError("TranscriptionService: Replay send error", error: error)
+                    logError("TranscriptionService: Replay send error at chunk \(index)", error: error)
+                    // Re-buffer unsent chunks (this one + remaining) and trigger reconnect
+                    if let self = self {
+                        self.withState {
+                            // Re-buffer from failed chunk onward
+                            for remaining in chunks[index...] {
+                                self.reconnectBuffer.append(remaining)
+                            }
+                        }
+                        self.handleDisconnection()
+                    }
+                    return
                 }
             }
         }
