@@ -23,7 +23,8 @@ final class OnboardingFlowTests: XCTestCase {
       hasMergedVoiceInputStep: false,
       hasRemovedNotificationStep: true,
       hasInsertedFloatingBarShortcutStep: true,
-      hasMigratedPagedIntro: true
+      hasMigratedPagedIntro: true,
+      hasReorderedTrustStep: true
     )
 
     XCTAssertEqual(migrated, 3)
@@ -37,7 +38,8 @@ final class OnboardingFlowTests: XCTestCase {
       hasMergedVoiceInputStep: true,
       hasRemovedNotificationStep: true,
       hasInsertedFloatingBarShortcutStep: true,
-      hasMigratedPagedIntro: true
+      hasMigratedPagedIntro: true,
+      hasReorderedTrustStep: true
     )
 
     XCTAssertEqual(migrated, OnboardingFlow.lastStepIndex)
