@@ -132,6 +132,14 @@ describe("getRetryDeleteKey", () => {
   });
 });
 
+describe("needsModelUpdate edge cases", () => {
+  it("returns true when existing.model is undefined but requestedModel is set", () => {
+    // Legacy/partially cached session with no model field
+    const existing: SessionEntry = { sessionId: "s1", cwd: "/" };
+    expect(needsModelUpdate(existing, "claude-sonnet-4-6")).toBe(true);
+  });
+});
+
 describe("session isolation: main vs floating", () => {
   let sessions: ReturnType<typeof createSessionMap>;
 
