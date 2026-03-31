@@ -81,6 +81,7 @@ class MessageServiceStatusEvent(MessageEvent):
     event_type: str = "service_status"
     status: str
     status_text: Optional[str] = None
+    metadata: Optional[dict] = None
 
     def to_json(self):
         j = self.model_dump(mode="json")
