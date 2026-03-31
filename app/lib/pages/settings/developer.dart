@@ -1881,8 +1881,8 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
           );
         },
       ),
-    ); 
-  }
+    );
+  } 
 }
 
 // ============================================================
