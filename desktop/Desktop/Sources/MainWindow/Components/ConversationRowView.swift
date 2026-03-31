@@ -215,9 +215,9 @@ struct ConversationRowView: View {
             }) {
                 Image(systemName: "pencil")
                     .scaledFont(size: 11)
-                    .foregroundColor(OmiColors.textTertiary)
+                    .foregroundColor(NootoColors.textTertiary)
                     .frame(width: 22, height: 22)
-                    .background(Circle().fill(OmiColors.backgroundSecondary))
+                    .background(Circle().fill(NootoColors.backgroundSecondary))
             }
             .buttonStyle(.plain)
             .help("Edit title")
@@ -226,9 +226,9 @@ struct ConversationRowView: View {
             Button(action: { Task { await copyLink() } }) {
                 Image(systemName: isCopyingLink ? "arrow.triangle.2.circlepath" : "link")
                     .scaledFont(size: 11)
-                    .foregroundColor(OmiColors.textTertiary)
+                    .foregroundColor(NootoColors.textTertiary)
                     .frame(width: 22, height: 22)
-                    .background(Circle().fill(OmiColors.backgroundSecondary))
+                    .background(Circle().fill(NootoColors.backgroundSecondary))
             }
             .buttonStyle(.plain)
             .disabled(isCopyingLink)
@@ -257,9 +257,9 @@ struct ConversationRowView: View {
                 } label: {
                     Image(systemName: conversation.folderId != nil ? "folder.fill" : "folder")
                         .scaledFont(size: 11)
-                        .foregroundColor(conversation.folderId != nil ? .white : OmiColors.textTertiary)
+                        .foregroundColor(conversation.folderId != nil ? .white : NootoColors.textTertiary)
                         .frame(width: 22, height: 22)
-                        .background(Circle().fill(OmiColors.backgroundSecondary))
+                        .background(Circle().fill(NootoColors.backgroundSecondary))
                 }
                 .menuStyle(.borderlessButton)
                 .frame(width: 22)
@@ -270,9 +270,9 @@ struct ConversationRowView: View {
             Button(action: { showDeleteConfirmation = true }) {
                 Image(systemName: "trash")
                     .scaledFont(size: 11)
-                    .foregroundColor(OmiColors.error.opacity(0.8))
+                    .foregroundColor(NootoColors.error.opacity(0.8))
                     .frame(width: 22, height: 22)
-                    .background(Circle().fill(OmiColors.backgroundSecondary))
+                    .background(Circle().fill(NootoColors.backgroundSecondary))
             }
             .buttonStyle(.plain)
             .help("Delete")
@@ -287,7 +287,7 @@ struct ConversationRowView: View {
             if isMultiSelectMode {
                 Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
                     .scaledFont(size: 18)
-                    .foregroundColor(isSelected ? OmiColors.purplePrimary : OmiColors.textTertiary)
+                    .foregroundColor(isSelected ? NootoColors.brandPrimary : NootoColors.textTertiary)
             }
 
             // Emoji
@@ -296,7 +296,7 @@ struct ConversationRowView: View {
                 .frame(width: 32, height: 32)
                 .background(
                     RoundedRectangle(cornerRadius: 8)
-                        .fill(OmiColors.backgroundTertiary)
+                        .fill(NootoColors.backgroundTertiary)
                 )
 
             // Title + metadata below
@@ -304,7 +304,7 @@ struct ConversationRowView: View {
                 HStack(spacing: 8) {
                     Text(conversation.title)
                         .scaledFont(size: 14, weight: .medium)
-                        .foregroundColor(OmiColors.textPrimary)
+                        .foregroundColor(NootoColors.textPrimary)
                         .lineLimit(1)
 
                     if isNewlyCreated {
@@ -321,15 +321,15 @@ struct ConversationRowView: View {
                 HStack(spacing: 6) {
                     Text(formattedTimestamp)
                         .scaledFont(size: 12)
-                        .foregroundColor(OmiColors.textTertiary)
+                        .foregroundColor(NootoColors.textTertiary)
 
                     Text("·")
                         .scaledFont(size: 12)
-                        .foregroundColor(OmiColors.textQuaternary)
+                        .foregroundColor(NootoColors.textQuaternary)
 
                     Text(conversation.formattedDuration)
                         .scaledFont(size: 12)
-                        .foregroundColor(OmiColors.textTertiary)
+                        .foregroundColor(NootoColors.textTertiary)
                 }
             }
 
@@ -341,7 +341,7 @@ struct ConversationRowView: View {
             }) {
                 Image(systemName: conversation.starred ? "star.fill" : "star")
                     .scaledFont(size: 12)
-                    .foregroundColor(conversation.starred ? OmiColors.amber : OmiColors.textTertiary)
+                    .foregroundColor(conversation.starred ? NootoColors.amber : NootoColors.textTertiary)
                     .opacity(isStarring ? 0.5 : 1.0)
             }
             .buttonStyle(.plain)
@@ -350,11 +350,11 @@ struct ConversationRowView: View {
         .padding(.vertical, 10)
         .background(
             RoundedRectangle(cornerRadius: 8)
-                .fill(isSelected ? OmiColors.purplePrimary.opacity(0.2) : (isHovering ? OmiColors.backgroundTertiary : (isNewlyCreated ? OmiColors.purplePrimary.opacity(0.15) : OmiColors.backgroundSecondary)))
+                .fill(isSelected ? NootoColors.brandPrimary.opacity(0.2) : (isHovering ? NootoColors.backgroundTertiary : (isNewlyCreated ? NootoColors.brandPrimary.opacity(0.15) : NootoColors.backgroundSecondary)))
         )
         .overlay(
             RoundedRectangle(cornerRadius: 8)
-                .stroke(isSelected ? OmiColors.purplePrimary.opacity(0.5) : Color.clear, lineWidth: 2)
+                .stroke(isSelected ? NootoColors.brandPrimary.opacity(0.5) : Color.clear, lineWidth: 2)
         )
         .contentShape(Rectangle())
     }
@@ -367,7 +367,7 @@ struct ConversationRowView: View {
             if isMultiSelectMode {
                 Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
                     .scaledFont(size: 20)
-                    .foregroundColor(isSelected ? OmiColors.purplePrimary : OmiColors.textTertiary)
+                    .foregroundColor(isSelected ? NootoColors.brandPrimary : NootoColors.textTertiary)
             }
 
             // Emoji
@@ -376,7 +376,7 @@ struct ConversationRowView: View {
                 .frame(width: 36, height: 36)
                 .background(
                     RoundedRectangle(cornerRadius: 10)
-                        .fill(OmiColors.backgroundTertiary)
+                        .fill(NootoColors.backgroundTertiary)
                 )
 
             // Title + time/duration below
@@ -384,7 +384,7 @@ struct ConversationRowView: View {
                 HStack(spacing: 8) {
                     Text(conversation.title)
                         .scaledFont(size: 15, weight: .medium)
-                        .foregroundColor(OmiColors.textPrimary)
+                        .foregroundColor(NootoColors.textPrimary)
                         .lineLimit(1)
 
                     if isNewlyCreated {
@@ -401,15 +401,15 @@ struct ConversationRowView: View {
                 HStack(spacing: 6) {
                     Text(formattedTimestamp)
                         .scaledFont(size: 12)
-                        .foregroundColor(OmiColors.textTertiary)
+                        .foregroundColor(NootoColors.textTertiary)
 
                     Text("·")
                         .scaledFont(size: 12)
-                        .foregroundColor(OmiColors.textQuaternary)
+                        .foregroundColor(NootoColors.textQuaternary)
 
                     Text(conversation.formattedDuration)
                         .scaledFont(size: 12)
-                        .foregroundColor(OmiColors.textTertiary)
+                        .foregroundColor(NootoColors.textTertiary)
                 }
             }
 
@@ -421,7 +421,7 @@ struct ConversationRowView: View {
             }) {
                 Image(systemName: conversation.starred ? "star.fill" : "star")
                     .scaledFont(size: 14)
-                    .foregroundColor(conversation.starred ? OmiColors.amber : OmiColors.textTertiary)
+                    .foregroundColor(conversation.starred ? NootoColors.amber : NootoColors.textTertiary)
                     .opacity(isStarring ? 0.5 : 1.0)
             }
             .buttonStyle(.plain)
@@ -429,11 +429,11 @@ struct ConversationRowView: View {
         .padding(12)
         .background(
             RoundedRectangle(cornerRadius: 10)
-                .fill(isSelected ? OmiColors.purplePrimary.opacity(0.2) : (isHovering ? OmiColors.backgroundSecondary : (isNewlyCreated ? OmiColors.purplePrimary.opacity(0.15) : OmiColors.backgroundTertiary)))
+                .fill(isSelected ? NootoColors.brandPrimary.opacity(0.2) : (isHovering ? NootoColors.backgroundSecondary : (isNewlyCreated ? NootoColors.brandPrimary.opacity(0.15) : NootoColors.backgroundTertiary)))
         )
         .overlay(
             RoundedRectangle(cornerRadius: 10)
-                .stroke(isSelected ? OmiColors.purplePrimary.opacity(0.5) : Color.clear, lineWidth: 2)
+                .stroke(isSelected ? NootoColors.brandPrimary.opacity(0.5) : Color.clear, lineWidth: 2)
         )
         .contentShape(Rectangle())
     }
@@ -558,5 +558,5 @@ struct ConversationRowView: View {
             .foregroundColor(.white)
     }
     .padding()
-    .background(OmiColors.backgroundPrimary)
+    .background(NootoColors.backgroundPrimary)
 }
