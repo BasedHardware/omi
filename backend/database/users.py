@@ -1,3 +1,4 @@
+import time
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -50,6 +51,20 @@ def set_user_private_cloud_sync_enabled(uid: str, value: bool):
     """Enable or disable private cloud sync for a user."""
     user_ref = db.collection('users').document(uid)
     user_ref.update({'private_cloud_sync_enabled': value})
+
+
+def set_user_cancellation_feedback(uid: str, reason: str, reason_details: str = None):
+    user_ref = db.collection('users').document(uid)
+    user_ref.set(
+        {
+            'cancellation_feedback': {
+                'reason': reason,
+                'reason_details': reason_details,
+                'timestamp': time.time(),
+            }
+        },
+        merge=True,
+    )
 
 
 def create_person(uid: str, data: dict):
