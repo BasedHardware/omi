@@ -252,14 +252,14 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
   Widget build(BuildContext context) {
     List<Widget> pages = [
       AuthComponent(
-        onSignIn: () {
+        onSignIn: () async {
           SharedPreferencesUtil().hasOmiDevice = true;
           SharedPreferencesUtil().verifiedPersonaId = null;
           MixpanelManager().onboardingStepCompleted('Auth');
           context.read<HomeProvider>().setupHasSpeakerProfile();
           IntercomManager.instance.loginIdentifiedUser(SharedPreferencesUtil().uid);
           if (SharedPreferencesUtil().onboardingCompleted) {
-            _routeWithPermissionsCheck(context);
+            await _routeWithPermissionsCheck(context);
           } else {
             _goNext(); // Go to Name page
           }

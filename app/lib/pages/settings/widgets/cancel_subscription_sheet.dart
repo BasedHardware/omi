@@ -109,9 +109,9 @@ class _CancelSubscriptionFlowState extends State<CancelSubscriptionFlow> {
   @override
   Widget build(BuildContext context) {
     return PopScope(
-      canPop: !_isCancelling,
+      canPop: _page == 0 && !_isCancelling,
       onPopInvokedWithResult: (didPop, _) {
-        if (!didPop && !_isCancelling && _page > 0) _back();
+        if (!didPop && _page > 0 && !_isCancelling) _back();
       },
       child: GestureDetector(
         onTap: () => FocusScope.of(context).unfocus(),

@@ -52,13 +52,13 @@ def set_user_private_cloud_sync_enabled(uid: str, value: bool):
     user_ref.update({'private_cloud_sync_enabled': value})
 
 
-def set_user_cancellation_feedback(uid: str, reason: str, reason_details: str = None):
+def set_user_cancellation_feedback(uid: str, reason: str, reason_details: Optional[str] = None):
     user_ref = db.collection('users').document(uid)
     user_ref.set(
         {
             'cancellation_feedback': {
                 'reason': reason,
-                'reason_details': reason_details,
+                'reason_details': reason_details or '',
                 'timestamp': datetime.now(timezone.utc),
             }
         },
