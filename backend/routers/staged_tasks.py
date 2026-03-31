@@ -99,9 +99,11 @@ def promote_staged_task(uid: str = Depends(auth.get_current_user_uid)):
 
 @router.post('/v1/staged-tasks/migrate', tags=['staged-tasks'])
 def migrate_ai_tasks(uid: str = Depends(auth.get_current_user_uid)):
-    return staged_tasks_db.migrate_ai_tasks(uid)
+    result = staged_tasks_db.migrate_ai_tasks(uid)
+    return {'status': f"moved {result['moved']}, kept {result['kept']}"}
 
 
 @router.post('/v1/staged-tasks/migrate-conversation-items', tags=['staged-tasks'])
 def migrate_conversation_items(uid: str = Depends(auth.get_current_user_uid)):
-    return staged_tasks_db.migrate_conversation_items_to_staged(uid)
+    result = staged_tasks_db.migrate_conversation_items_to_staged(uid)
+    return {'status': 'ok', 'migrated': result['moved'], 'deleted': 0}
