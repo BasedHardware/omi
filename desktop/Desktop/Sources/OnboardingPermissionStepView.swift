@@ -43,22 +43,22 @@ struct OnboardingPermissionStepView: View {
           HStack(spacing: 14) {
             ZStack {
               RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .fill(OmiColors.backgroundSecondary)
+                .fill(NootoColors.backgroundSecondary)
                 .frame(width: 58, height: 58)
 
               Image(systemName: icon)
                 .font(.system(size: 24, weight: .semibold))
-                .foregroundColor(OmiColors.textSecondary)
+                .foregroundColor(NootoColors.textSecondary)
             }
 
             VStack(alignment: .leading, spacing: 4) {
               Text(reasonTitle)
                 .font(.system(size: 18, weight: .semibold))
-                .foregroundColor(OmiColors.textPrimary)
+                .foregroundColor(NootoColors.textPrimary)
 
               Text(statusText)
                 .font(.system(size: 13, weight: .medium))
-                .foregroundColor(isGranted ? OmiColors.success : OmiColors.textTertiary)
+                .foregroundColor(isGranted ? NootoColors.success : NootoColors.textTertiary)
             }
 
             Spacer()
@@ -66,27 +66,27 @@ struct OnboardingPermissionStepView: View {
 
           Text(reasonDetail)
             .font(.system(size: 14))
-            .foregroundColor(OmiColors.textSecondary)
+            .foregroundColor(NootoColors.textSecondary)
             .lineSpacing(4)
 
           if permissionType == "screen_recording", appState.isScreenRecordingStale {
-            Text("macOS still isn’t granting screen capture to this build. In Screen & System Audio Recording, toggle Omi Dev off, then on again, then quit and reopen the app.")
+            Text("macOS still isn’t granting screen capture to this build. In Screen & System Audio Recording, toggle Nooto Dev off, then on again, then quit and reopen the app.")
               .font(.system(size: 13, weight: .medium))
-              .foregroundColor(OmiColors.warning)
+              .foregroundColor(NootoColors.warning)
               .fixedSize(horizontal: false, vertical: true)
           }
 
           if permissionType == "full_disk_access", let email = coordinator.userEmail() {
             Text(email)
               .font(.system(size: 13, weight: .medium))
-              .foregroundColor(OmiColors.textTertiary)
+              .foregroundColor(NootoColors.textTertiary)
           }
 
 
           if let error = coordinator.lastActionError, !isGranted {
             Text(error)
               .font(.system(size: 12, weight: .medium))
-              .foregroundColor(OmiColors.warning)
+              .foregroundColor(NootoColors.warning)
           }
         }
         .frame(maxWidth: 540, alignment: .leading)
@@ -94,7 +94,7 @@ struct OnboardingPermissionStepView: View {
         if isGranted {
           Text("Permission granted. Continuing…")
             .font(.system(size: 13, weight: .medium))
-            .foregroundColor(OmiColors.textTertiary)
+            .foregroundColor(NootoColors.textTertiary)
         } else {
           Button(isRequesting ? "Waiting for macOS…" : primaryActionLabel) {
             Task {
