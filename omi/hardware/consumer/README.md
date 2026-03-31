@@ -40,7 +40,7 @@ Licensed under MIT (see [LICENSE](LICENSE)).
 | Processor | nRF5340 dual-core Bluetooth LE SoC |
 | Wi-Fi | nRF7002 Wi-Fi 6 chip |
 | Audio | 2x TDK T5838 top-port PDM microphones |
-| Storage | CSNP4GCR01 8GB NAND Flash |
+| Storage | CSNP4GCR01 4Gbit NAND Flash |
 | IMU | LSM6DS3TR-C 6-axis accelerometer/gyroscope |
 | Battery | 3.7V 150mAh LiPo (custom, D16xH6.1mm) |
 | Charging | BQ25101 Li-Ion charger IC, magnetic pogo pins |
