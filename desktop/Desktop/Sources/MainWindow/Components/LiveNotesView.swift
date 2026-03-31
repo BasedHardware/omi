@@ -22,7 +22,7 @@ struct LiveNotesView: View {
             headerView
 
             Divider()
-                .background(OmiColors.border)
+                .background(NootoColors.border)
 
             // Notes list
             if monitor.notes.isEmpty {
@@ -34,7 +34,7 @@ struct LiveNotesView: View {
             // Manual note input
             manualInputView
         }
-        .background(OmiColors.backgroundSecondary)
+        .background(NootoColors.backgroundSecondary)
     }
 
     // MARK: - Header
@@ -43,7 +43,7 @@ struct LiveNotesView: View {
         HStack {
             Text("Notes")
                 .scaledFont(size: 14, weight: .semibold)
-                .foregroundColor(OmiColors.textPrimary)
+                .foregroundColor(NootoColors.textPrimary)
 
             Spacer()
 
@@ -51,7 +51,7 @@ struct LiveNotesView: View {
             HStack(spacing: 6) {
                 Image(systemName: "sparkles")
                     .scaledFont(size: 12)
-                    .foregroundColor(monitor.isAiEnabled ? OmiColors.purplePrimary : OmiColors.textQuaternary)
+                    .foregroundColor(monitor.isAiEnabled ? NootoColors.brandPrimary : NootoColors.textQuaternary)
 
                 Toggle("", isOn: $monitor.isAiEnabled)
                     .toggleStyle(.switch)
@@ -78,16 +78,16 @@ struct LiveNotesView: View {
 
             Image(systemName: "note.text")
                 .scaledFont(size: 32)
-                .foregroundColor(OmiColors.textQuaternary)
+                .foregroundColor(NootoColors.textQuaternary)
 
             Text("Notes will appear here")
                 .scaledFont(size: 13)
-                .foregroundColor(OmiColors.textTertiary)
+                .foregroundColor(NootoColors.textTertiary)
 
             if monitor.isAiEnabled {
                 Text("AI generates notes as you speak")
                     .scaledFont(size: 12)
-                    .foregroundColor(OmiColors.textQuaternary)
+                    .foregroundColor(NootoColors.textQuaternary)
             }
 
             Spacer()
@@ -132,13 +132,13 @@ struct LiveNotesView: View {
     private var manualInputView: some View {
         VStack(spacing: 0) {
             Divider()
-                .background(OmiColors.border)
+                .background(NootoColors.border)
 
             HStack(spacing: 8) {
                 TextField("Add a note...", text: $manualNoteText)
                     .textFieldStyle(.plain)
                     .scaledFont(size: 13)
-                    .foregroundColor(OmiColors.textPrimary)
+                    .foregroundColor(NootoColors.textPrimary)
                     .focused($isInputFocused)
                     .onSubmit {
                         addManualNote()
@@ -147,14 +147,14 @@ struct LiveNotesView: View {
                 Button(action: addManualNote) {
                     Image(systemName: "plus.circle.fill")
                         .scaledFont(size: 18)
-                        .foregroundColor(manualNoteText.isEmpty ? OmiColors.textQuaternary : OmiColors.purplePrimary)
+                        .foregroundColor(manualNoteText.isEmpty ? NootoColors.textQuaternary : NootoColors.brandPrimary)
                 }
                 .buttonStyle(.plain)
                 .disabled(manualNoteText.isEmpty)
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 10)
-            .background(OmiColors.backgroundTertiary)
+            .background(NootoColors.backgroundTertiary)
         }
     }
 
@@ -224,12 +224,12 @@ private struct NoteRowView: View {
             if note.isAiGenerated {
                 Image(systemName: "sparkles")
                     .scaledFont(size: 10)
-                    .foregroundColor(OmiColors.purplePrimary)
+                    .foregroundColor(NootoColors.brandPrimary)
                     .frame(width: 14)
             } else {
                 Image(systemName: "pencil")
                     .scaledFont(size: 10)
-                    .foregroundColor(OmiColors.textTertiary)
+                    .foregroundColor(NootoColors.textTertiary)
                     .frame(width: 14)
             }
 
@@ -239,7 +239,7 @@ private struct NoteRowView: View {
                     TextField("", text: $editText)
                         .textFieldStyle(.plain)
                         .scaledFont(size: 13)
-                        .foregroundColor(OmiColors.textPrimary)
+                        .foregroundColor(NootoColors.textPrimary)
                         .focused($isEditFocused)
                         .onSubmit { onSaveEdit() }
                         .onAppear { isEditFocused = true }
@@ -248,7 +248,7 @@ private struct NoteRowView: View {
                     // Display mode
                     Text(note.text)
                         .scaledFont(size: 13)
-                        .foregroundColor(OmiColors.textPrimary)
+                        .foregroundColor(NootoColors.textPrimary)
                         .lineLimit(nil)
                         .onTapGesture(count: 2) {
                             onStartEdit()
@@ -258,7 +258,7 @@ private struct NoteRowView: View {
                 // Timestamp
                 Text(formattedTime)
                     .scaledFont(size: 10)
-                    .foregroundColor(OmiColors.textQuaternary)
+                    .foregroundColor(NootoColors.textQuaternary)
             }
 
             Spacer()
@@ -270,28 +270,28 @@ private struct NoteRowView: View {
                         Button(action: onSaveEdit) {
                             Image(systemName: "checkmark")
                                 .scaledFont(size: 11)
-                                .foregroundColor(OmiColors.success)
+                                .foregroundColor(NootoColors.success)
                         }
                         .buttonStyle(.plain)
 
                         Button(action: onCancelEdit) {
                             Image(systemName: "xmark")
                                 .scaledFont(size: 11)
-                                .foregroundColor(OmiColors.textTertiary)
+                                .foregroundColor(NootoColors.textTertiary)
                         }
                         .buttonStyle(.plain)
                     } else {
                         Button(action: onStartEdit) {
                             Image(systemName: "pencil")
                                 .scaledFont(size: 11)
-                                .foregroundColor(OmiColors.textTertiary)
+                                .foregroundColor(NootoColors.textTertiary)
                         }
                         .buttonStyle(.plain)
 
                         Button(action: onDelete) {
                             Image(systemName: "trash")
                                 .scaledFont(size: 11)
-                                .foregroundColor(OmiColors.error)
+                                .foregroundColor(NootoColors.error)
                         }
                         .buttonStyle(.plain)
                     }
@@ -302,7 +302,7 @@ private struct NoteRowView: View {
         .padding(.vertical, 8)
         .background(
             RoundedRectangle(cornerRadius: 8)
-                .fill(isHovering || isEditing ? OmiColors.backgroundTertiary : Color.clear)
+                .fill(isHovering || isEditing ? NootoColors.backgroundTertiary : Color.clear)
         )
         .onHover { hovering in
             isHovering = hovering
@@ -315,5 +315,5 @@ private struct NoteRowView: View {
 #Preview {
     LiveNotesView()
         .frame(width: 300, height: 500)
-        .background(OmiColors.backgroundPrimary)
+        .background(NootoColors.backgroundPrimary)
 }
