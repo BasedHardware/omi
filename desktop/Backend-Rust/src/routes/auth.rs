@@ -394,7 +394,13 @@ async fn auth_token(
     if form.use_custom_token {
         match generate_custom_token(&state, &credentials).await {
             Ok(token) => response.custom_token = Some(token),
-            Err(e) => tracing::warn!("Failed to generate custom token: {}", e),
+            Err(e) => {
+                tracing::error!("Failed to generate custom token: {}", e);
+                return Err(ErrorResponse {
+                    error: "custom_token_failed".to_string(),
+                    message: format!("Failed to generate custom token: {}", e),
+                });
+            }
         }
     }
 
