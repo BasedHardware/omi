@@ -17,14 +17,14 @@ struct LiveTranscriptPanel: View {
             VStack(spacing: 16) {
                 Image(systemName: "waveform")
                     .scaledFont(size: 48)
-                    .foregroundColor(OmiColors.textTertiary)
+                    .foregroundColor(NootoColors.textTertiary)
                     .opacity(0.5)
                 Text("Live Transcript")
                     .scaledFont(size: 16, weight: .medium)
-                    .foregroundColor(OmiColors.textSecondary)
+                    .foregroundColor(NootoColors.textSecondary)
                 Text("Start speaking and your transcript will appear here")
                     .scaledFont(size: 14)
-                    .foregroundColor(OmiColors.textTertiary)
+                    .foregroundColor(NootoColors.textTertiary)
                     .multilineTextAlignment(.center)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -49,7 +49,7 @@ struct RecordingBarAudioLevels: View {
             HStack(spacing: 6) {
                 Image(systemName: "mic.fill")
                     .scaledFont(size: 12)
-                    .foregroundColor(OmiColors.textTertiary)
+                    .foregroundColor(NootoColors.textTertiary)
                 AudioLevelWaveformView(
                     level: monitor.microphoneLevel,
                     barCount: 8,
@@ -60,7 +60,7 @@ struct RecordingBarAudioLevels: View {
             HStack(spacing: 6) {
                 Image(systemName: "speaker.wave.2.fill")
                     .scaledFont(size: 12)
-                    .foregroundColor(OmiColors.textTertiary)
+                    .foregroundColor(NootoColors.textTertiary)
                 AudioLevelWaveformView(
                     level: monitor.systemLevel,
                     barCount: 8,
@@ -79,7 +79,7 @@ struct RecordingBarDuration: View {
     var body: some View {
         Text(timer.formattedDuration)
             .scaledFont(size: 14, weight: .medium, design: .monospaced)
-            .foregroundColor(OmiColors.textSecondary)
+            .foregroundColor(NootoColors.textSecondary)
     }
 }
 
@@ -92,14 +92,14 @@ struct RecordingBarTranscriptText: View {
         if let latestText = monitor.latestText, !monitor.isEmpty {
             Text(latestText)
                 .scaledFont(size: 14)
-                .foregroundColor(OmiColors.textSecondary)
+                .foregroundColor(NootoColors.textSecondary)
                 .lineLimit(1)
                 .truncationMode(.head)
                 .frame(maxWidth: 260, alignment: .leading)
         } else {
             Text("Listening")
                 .scaledFont(size: 14, weight: .medium)
-                .foregroundColor(OmiColors.textPrimary)
+                .foregroundColor(NootoColors.textPrimary)
         }
     }
 }
@@ -172,7 +172,7 @@ private struct LiveSegmentView: View {
     }
 
     private var bubbleColor: Color {
-        isUser ? OmiColors.purplePrimary.opacity(0.3) : OmiColors.backgroundTertiary
+        isUser ? NootoColors.brandPrimary.opacity(0.3) : NootoColors.backgroundTertiary
     }
 
     var body: some View {
@@ -202,12 +202,12 @@ private struct LiveSegmentView: View {
                         HStack(spacing: 4) {
                             Text(speakerLabel)
                                 .scaledFont(size: 12, weight: personName != nil ? .semibold : .medium)
-                                .foregroundColor(personName != nil ? OmiColors.purplePrimary : OmiColors.textTertiary)
+                                .foregroundColor(personName != nil ? NootoColors.brandPrimary : NootoColors.textTertiary)
 
                             if personName == nil {
                                 Image(systemName: "pencil")
                                     .scaledFont(size: 9)
-                                    .foregroundColor(OmiColors.textQuaternary)
+                                    .foregroundColor(NootoColors.textQuaternary)
                                     .opacity(isHovered ? 1 : 0)
                             }
                         }
@@ -224,12 +224,12 @@ private struct LiveSegmentView: View {
                 } else {
                     Text(speakerLabel)
                         .scaledFont(size: 12, weight: .medium)
-                        .foregroundColor(OmiColors.textTertiary)
+                        .foregroundColor(NootoColors.textTertiary)
                 }
 
                 Text(formatTime(segment.start))
                     .scaledFont(size: 11)
-                    .foregroundColor(OmiColors.textQuaternary)
+                    .foregroundColor(NootoColors.textQuaternary)
 
                 if isUser {
                     speakerAvatar
@@ -239,7 +239,7 @@ private struct LiveSegmentView: View {
             // Message bubble
             Text(segment.text)
                 .scaledFont(size: 14)
-                .foregroundColor(OmiColors.textPrimary)
+                .foregroundColor(NootoColors.textPrimary)
                 .textSelection(.enabled)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 8)
@@ -252,12 +252,12 @@ private struct LiveSegmentView: View {
 
     private var speakerAvatar: some View {
         Circle()
-            .fill(isUser ? OmiColors.purplePrimary : (personName != nil ? OmiColors.purplePrimary.opacity(0.6) : OmiColors.backgroundQuaternary))
+            .fill(isUser ? NootoColors.brandPrimary : (personName != nil ? NootoColors.brandPrimary.opacity(0.6) : NootoColors.backgroundQuaternary))
             .frame(width: 24, height: 24)
             .overlay(
                 Text(isUser ? "Y" : (personName?.prefix(1).uppercased() ?? String(segment.speaker)))
                     .scaledFont(size: 11, weight: .medium)
-                    .foregroundColor(OmiColors.textPrimary)
+                    .foregroundColor(NootoColors.textPrimary)
             )
     }
 }
@@ -270,5 +270,5 @@ private struct LiveSegmentView: View {
         SpeakerSegment(speaker: 1, text: "Sure, I'd love to hear more about it.", start: 10.5, end: 12.0)
     ])
     .frame(width: 400, height: 300)
-    .background(OmiColors.backgroundSecondary)
+    .background(NootoColors.backgroundSecondary)
 }
