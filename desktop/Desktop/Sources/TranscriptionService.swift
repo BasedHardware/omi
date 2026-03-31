@@ -296,7 +296,8 @@ class TranscriptionService: NSObject, URLSessionWebSocketDelegate {
     }
 
     /// Replay audio buffered during reconnection.
-    /// On send failure, re-buffer remaining chunks and trigger reconnection.
+    /// Sends chunks sequentially so only the first failure controls the retry path,
+    /// preventing duplicate rebuffering from concurrent failure callbacks.
     private func replayBufferedAudio() {
         let (task, chunks): (URLSessionWebSocketTask?, [Data]) = withState {
             guard _connectionState == .connected else { return (nil, []) }
@@ -305,23 +306,28 @@ class TranscriptionService: NSObject, URLSessionWebSocketDelegate {
         guard let task = task, !chunks.isEmpty else { return }
 
         log("TranscriptionService: Replaying \(chunks.count) buffered audio chunks")
-        for (index, chunk) in chunks.enumerated() {
-            task.send(.data(chunk)) { [weak self] error in
-                if let error = error {
-                    logError("TranscriptionService: Replay send error at chunk \(index)", error: error)
-                    // Re-buffer unsent chunks (this one + remaining) and trigger reconnect
-                    if let self = self {
-                        self.withState {
-                            // Re-buffer from failed chunk onward
-                            for remaining in chunks[index...] {
-                                self.reconnectBuffer.append(remaining)
-                            }
+        replayChunksSequentially(task: task, chunks: chunks, index: 0)
+    }
+
+    /// Send chunks one at a time; on first failure, re-buffer the rest and reconnect.
+    private func replayChunksSequentially(task: URLSessionWebSocketTask, chunks: [Data], index: Int) {
+        guard index < chunks.count else { return }
+
+        task.send(.data(chunks[index])) { [weak self] error in
+            if let error = error {
+                logError("TranscriptionService: Replay send error at chunk \(index)", error: error)
+                if let self = self {
+                    self.withState {
+                        for remaining in chunks[index...] {
+                            self.reconnectBuffer.append(remaining)
                         }
-                        self.handleDisconnection()
                     }
-                    return
+                    self.handleDisconnection()
                 }
+                return
             }
+            // Success — send next chunk
+            self?.replayChunksSequentially(task: task, chunks: chunks, index: index + 1)
         }
     }
 
@@ -419,6 +425,7 @@ class TranscriptionService: NSObject, URLSessionWebSocketDelegate {
         guard var components = URLComponents(string: "\(wsBase)\(listenPath)") else {
             log("TranscriptionService: Invalid URL base: \(wsBase)")
             onError?(TranscriptionError.connectionFailed(NSError(domain: "Invalid URL", code: -1)))
+            handleDisconnection()
             return
         }
         var queryItems = [
@@ -447,6 +454,7 @@ class TranscriptionService: NSObject, URLSessionWebSocketDelegate {
 
         guard let url = components.url else {
             onError?(TranscriptionError.connectionFailed(NSError(domain: "Invalid URL", code: -1)))
+            handleDisconnection()
             return
         }
 
