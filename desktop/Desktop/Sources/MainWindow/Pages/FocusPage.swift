@@ -105,7 +105,7 @@ struct FocusPage: View {
                     .scaleEffect(1.2)
                 Text("Loading focus data...")
                     .scaledFont(size: 14)
-                    .foregroundColor(OmiColors.textTertiary)
+                    .foregroundColor(NootoColors.textTertiary)
                     .padding(.top, 12)
                 Spacer()
             }
@@ -122,19 +122,19 @@ struct FocusPage: View {
                 // Monitoring status indicator
                 HStack(spacing: 8) {
                     Circle()
-                        .fill(viewModel.isMonitoring ? Color.green : OmiColors.textTertiary)
+                        .fill(viewModel.isMonitoring ? Color.green : NootoColors.textTertiary)
                         .frame(width: 8, height: 8)
 
                     Text(viewModel.isMonitoring ? "Monitoring" : "Not monitoring")
                         .scaledFont(size: 13)
-                        .foregroundColor(OmiColors.textTertiary)
+                        .foregroundColor(NootoColors.textTertiary)
 
                     Text("•")
-                        .foregroundColor(OmiColors.textTertiary)
+                        .foregroundColor(NootoColors.textTertiary)
 
                     Text("\(viewModel.todayCount) sessions today")
                         .scaledFont(size: 13)
-                        .foregroundColor(OmiColors.textTertiary)
+                        .foregroundColor(NootoColors.textTertiary)
                 }
 
                 Spacer()
@@ -144,7 +144,7 @@ struct FocusPage: View {
                     Toggle(isOn: $viewModel.showHistorical) {
                         Text("Show all")
                             .scaledFont(size: 13)
-                            .foregroundColor(OmiColors.textSecondary)
+                            .foregroundColor(NootoColors.textSecondary)
                     }
                     .toggleStyle(.switch)
                     .controlSize(.small)
@@ -167,7 +167,7 @@ struct FocusPage: View {
                     } label: {
                         Image(systemName: "ellipsis.circle")
                             .scaledFont(size: 18)
-                            .foregroundColor(OmiColors.textSecondary)
+                            .foregroundColor(NootoColors.textSecondary)
                     }
                     .menuStyle(.borderlessButton)
                 }
@@ -263,21 +263,21 @@ struct FocusPage: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text("Waiting to Analyze")
                     .scaledFont(size: 20, weight: .semibold)
-                    .foregroundColor(OmiColors.textPrimary)
+                    .foregroundColor(NootoColors.textPrimary)
 
                 HStack(spacing: 8) {
                     if let app = storage.detectedAppName {
                         Text(app)
                             .scaledFont(size: 14)
-                            .foregroundColor(OmiColors.textSecondary)
+                            .foregroundColor(NootoColors.textSecondary)
 
                         Text("•")
-                            .foregroundColor(OmiColors.textTertiary)
+                            .foregroundColor(NootoColors.textTertiary)
                     }
 
                     Text("Analyzing in \(seconds)s")
                         .scaledFont(size: 14)
-                        .foregroundColor(OmiColors.textTertiary)
+                        .foregroundColor(NootoColors.textTertiary)
                 }
             }
 
@@ -321,21 +321,21 @@ struct FocusPage: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text("Cooldown Active")
                     .scaledFont(size: 20, weight: .semibold)
-                    .foregroundColor(OmiColors.textPrimary)
+                    .foregroundColor(NootoColors.textPrimary)
 
                 HStack(spacing: 8) {
                     if let app = storage.detectedAppName ?? viewModel.currentApp {
                         Text(app)
                             .scaledFont(size: 14)
-                            .foregroundColor(OmiColors.textSecondary)
+                            .foregroundColor(NootoColors.textSecondary)
 
                         Text("•")
-                            .foregroundColor(OmiColors.textTertiary)
+                            .foregroundColor(NootoColors.textTertiary)
                     }
 
                     Text("Next check in \(minutes):\(String(format: "%02d", seconds))")
                         .scaledFont(size: 14)
-                        .foregroundColor(OmiColors.textTertiary)
+                        .foregroundColor(NootoColors.textTertiary)
                 }
             }
 
@@ -348,7 +348,7 @@ struct FocusPage: View {
                     .foregroundColor(Color.orange)
                 Text("remaining")
                     .scaledFont(size: 10)
-                    .foregroundColor(OmiColors.textTertiary)
+                    .foregroundColor(NootoColors.textTertiary)
             }
         }
         .padding(20)
@@ -380,11 +380,11 @@ struct FocusPage: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text("Analyzing...")
                     .scaledFont(size: 20, weight: .semibold)
-                    .foregroundColor(OmiColors.textPrimary)
+                    .foregroundColor(NootoColors.textPrimary)
 
                 Text(appName)
                     .scaledFont(size: 14)
-                    .foregroundColor(OmiColors.textSecondary)
+                    .foregroundColor(NootoColors.textSecondary)
             }
 
             Spacer()
@@ -425,12 +425,12 @@ struct FocusPage: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text(status == .focused ? "Focused" : "Distracted")
                     .scaledFont(size: 20, weight: .semibold)
-                    .foregroundColor(OmiColors.textPrimary)
+                    .foregroundColor(NootoColors.textPrimary)
 
                 if let app = appName {
                     Text(app)
                         .scaledFont(size: 14)
-                        .foregroundColor(OmiColors.textSecondary)
+                        .foregroundColor(NootoColors.textSecondary)
                 }
             }
 
@@ -466,7 +466,7 @@ struct FocusPage: View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Today's Summary")
                 .scaledFont(size: 14, weight: .semibold)
-                .foregroundColor(OmiColors.textSecondary)
+                .foregroundColor(NootoColors.textSecondary)
                 .textCase(.uppercase)
 
             LazyVGrid(columns: [
@@ -496,7 +496,7 @@ struct FocusPage: View {
                     value: String(format: "%.0f", viewModel.stats.focusRate),
                     unit: "%",
                     icon: "chart.pie.fill",
-                    color: OmiColors.purplePrimary
+                    color: NootoColors.brandPrimary
                 )
 
                 FocusStatCard(
@@ -504,7 +504,7 @@ struct FocusPage: View {
                     value: "\(viewModel.stats.sessionCount)",
                     unit: "",
                     icon: "clock.fill",
-                    color: OmiColors.info
+                    color: NootoColors.info
                 )
             }
         }
@@ -516,7 +516,7 @@ struct FocusPage: View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Top Distractions")
                 .scaledFont(size: 14, weight: .semibold)
-                .foregroundColor(OmiColors.textSecondary)
+                .foregroundColor(NootoColors.textSecondary)
                 .textCase(.uppercase)
 
             VStack(spacing: 8) {
@@ -529,24 +529,24 @@ struct FocusPage: View {
 
                         Text(entry.appOrSite)
                             .scaledFont(size: 14)
-                            .foregroundColor(OmiColors.textPrimary)
+                            .foregroundColor(NootoColors.textPrimary)
 
                         Spacer()
 
                         Text("\(entry.count)x")
                             .scaledFont(size: 12)
-                            .foregroundColor(OmiColors.textTertiary)
+                            .foregroundColor(NootoColors.textTertiary)
 
                         Text(formatDuration(entry.totalSeconds))
                             .scaledFont(size: 13, weight: .medium)
-                            .foregroundColor(OmiColors.textSecondary)
+                            .foregroundColor(NootoColors.textSecondary)
                             .frame(width: 50, alignment: .trailing)
                     }
                     .padding(.horizontal, 12)
                     .padding(.vertical, 10)
                     .background(
                         RoundedRectangle(cornerRadius: 8)
-                            .fill(OmiColors.backgroundTertiary.opacity(0.4))
+                            .fill(NootoColors.backgroundTertiary.opacity(0.4))
                     )
                 }
             }
@@ -560,7 +560,7 @@ struct FocusPage: View {
             HStack {
                 Text(viewModel.showHistorical ? "All Sessions" : "Today's Sessions")
                     .scaledFont(size: 14, weight: .semibold)
-                    .foregroundColor(OmiColors.textSecondary)
+                    .foregroundColor(NootoColors.textSecondary)
                     .textCase(.uppercase)
 
                 Spacer()
@@ -568,12 +568,12 @@ struct FocusPage: View {
                 // Search field
                 HStack(spacing: 8) {
                     Image(systemName: "magnifyingglass")
-                        .foregroundColor(OmiColors.textTertiary)
+                        .foregroundColor(NootoColors.textTertiary)
                         .scaledFont(size: 12)
 
                     TextField("Search...", text: $viewModel.searchText)
                         .textFieldStyle(.plain)
-                        .foregroundColor(OmiColors.textPrimary)
+                        .foregroundColor(NootoColors.textPrimary)
                         .scaledFont(size: 13)
 
                     if !viewModel.searchText.isEmpty {
@@ -581,7 +581,7 @@ struct FocusPage: View {
                             viewModel.searchText = ""
                         } label: {
                             Image(systemName: "xmark.circle.fill")
-                                .foregroundColor(OmiColors.textTertiary)
+                                .foregroundColor(NootoColors.textTertiary)
                                 .scaledFont(size: 12)
                         }
                         .buttonStyle(.plain)
@@ -589,7 +589,7 @@ struct FocusPage: View {
                 }
                 .padding(.horizontal, 10)
                 .padding(.vertical, 6)
-                .background(OmiColors.backgroundTertiary)
+                .background(NootoColors.backgroundTertiary)
                 .cornerRadius(6)
                 .frame(width: 180)
             }
@@ -613,15 +613,15 @@ struct FocusPage: View {
         VStack(spacing: 12) {
             Image(systemName: "eye.fill")
                 .scaledFont(size: 36)
-                .foregroundColor(OmiColors.textTertiary)
+                .foregroundColor(NootoColors.textTertiary)
 
             Text("No Sessions Yet")
                 .scaledFont(size: 16, weight: .semibold)
-                .foregroundColor(OmiColors.textPrimary)
+                .foregroundColor(NootoColors.textPrimary)
 
             Text("Focus sessions will appear here as you work.\nMake sure Focus monitoring is enabled in Settings.")
                 .scaledFont(size: 13)
-                .foregroundColor(OmiColors.textTertiary)
+                .foregroundColor(NootoColors.textTertiary)
                 .multilineTextAlignment(.center)
         }
         .frame(maxWidth: .infinity)
@@ -660,14 +660,14 @@ struct FocusSessionRow: View {
             // App/site
             Text(session.appOrSite)
                 .scaledFont(size: 14, weight: .medium)
-                .foregroundColor(OmiColors.textPrimary)
+                .foregroundColor(NootoColors.textPrimary)
                 .lineLimit(1)
                 .frame(width: 120, alignment: .leading)
 
             // Description
             Text(session.description)
                 .scaledFont(size: 13)
-                .foregroundColor(OmiColors.textSecondary)
+                .foregroundColor(NootoColors.textSecondary)
                 .lineLimit(1)
 
             Spacer()
@@ -676,7 +676,7 @@ struct FocusSessionRow: View {
             if let message = session.message, !message.isEmpty {
                 Text(message)
                     .scaledFont(size: 12)
-                    .foregroundColor(OmiColors.textTertiary)
+                    .foregroundColor(NootoColors.textTertiary)
                     .lineLimit(1)
                     .frame(maxWidth: 150, alignment: .trailing)
             }
@@ -685,14 +685,14 @@ struct FocusSessionRow: View {
             if !session.isSynced {
                 Image(systemName: "arrow.triangle.2.circlepath")
                     .scaledFont(size: 11)
-                    .foregroundColor(OmiColors.textTertiary)
+                    .foregroundColor(NootoColors.textTertiary)
                     .help("Pending sync")
             }
 
             // Time
             Text(formatTime(session.createdAt))
                 .scaledFont(size: 12)
-                .foregroundColor(OmiColors.textTertiary)
+                .foregroundColor(NootoColors.textTertiary)
                 .frame(width: 60, alignment: .trailing)
 
             // Delete button (on hover)
@@ -702,7 +702,7 @@ struct FocusSessionRow: View {
                 } label: {
                     Image(systemName: "trash")
                         .scaledFont(size: 12)
-                        .foregroundColor(OmiColors.textTertiary)
+                        .foregroundColor(NootoColors.textTertiary)
                 }
                 .buttonStyle(.plain)
                 .help("Delete")
@@ -713,7 +713,7 @@ struct FocusSessionRow: View {
         .padding(.vertical, 10)
         .background(
             RoundedRectangle(cornerRadius: 8)
-                .fill(isHovering ? OmiColors.backgroundTertiary : OmiColors.backgroundTertiary.opacity(0.4))
+                .fill(isHovering ? NootoColors.backgroundTertiary : NootoColors.backgroundTertiary.opacity(0.4))
         )
         .onHover { hovering in
             isHovering = hovering
@@ -760,5 +760,5 @@ struct FocusSessionRow: View {
 #Preview {
     FocusPage()
         .frame(width: 800, height: 600)
-        .background(OmiColors.backgroundPrimary)
+        .background(NootoColors.backgroundPrimary)
 }
