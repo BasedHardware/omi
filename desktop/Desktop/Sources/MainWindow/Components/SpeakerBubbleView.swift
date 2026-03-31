@@ -10,10 +10,10 @@ struct SpeakerBubbleView: View {
     /// Get speaker color based on speaker ID
     private var bubbleColor: Color {
         if isUser {
-            return OmiColors.userBubble
+            return NootoColors.userBubble
         }
-        let colorIndex = segment.speakerId % OmiColors.speakerColors.count
-        return OmiColors.speakerColors[colorIndex]
+        let colorIndex = segment.speakerId % NootoColors.speakerColors.count
+        return NootoColors.speakerColors[colorIndex]
     }
 
     /// Format timestamp as MM:SS
@@ -57,7 +57,7 @@ struct SpeakerBubbleView: View {
                                     .scaledFont(size: 10)
                             }
                         }
-                        .foregroundColor(personName != nil ? OmiColors.purplePrimary : OmiColors.textTertiary)
+                        .foregroundColor(personName != nil ? NootoColors.brandPrimary : NootoColors.textTertiary)
                     }
                     .buttonStyle(.plain)
                     .onHover { hovering in
@@ -70,7 +70,7 @@ struct SpeakerBubbleView: View {
                 } else {
                     Text(speakerLabel)
                         .scaledFont(size: 12, weight: .medium)
-                        .foregroundColor(OmiColors.textTertiary)
+                        .foregroundColor(NootoColors.textTertiary)
                 }
 
                 // Message bubble
@@ -80,7 +80,7 @@ struct SpeakerBubbleView: View {
                 // Users can still copy the full transcript via the "Copy" button in the header.
                 Text(segment.text)
                     .scaledFont(size: 14)
-                    .foregroundColor(OmiColors.textPrimary)
+                    .foregroundColor(NootoColors.textPrimary)
                     .padding(.horizontal, 14)
                     .padding(.vertical, 10)
                     .background(
@@ -91,7 +91,7 @@ struct SpeakerBubbleView: View {
                 // Timestamp
                 Text(formatTime(segment.start))
                     .scaledFont(size: 11)
-                    .foregroundColor(OmiColors.textQuaternary)
+                    .foregroundColor(NootoColors.textQuaternary)
             }
 
             if isUser {
@@ -104,12 +104,12 @@ struct SpeakerBubbleView: View {
 
     private var avatar: some View {
         Circle()
-            .fill(isUser ? OmiColors.purplePrimary : (personName != nil ? OmiColors.purplePrimary.opacity(0.3) : OmiColors.backgroundQuaternary))
+            .fill(isUser ? NootoColors.brandPrimary : (personName != nil ? NootoColors.brandPrimary.opacity(0.3) : NootoColors.backgroundQuaternary))
             .frame(width: 32, height: 32)
             .overlay(
                 Text(avatarInitial)
                     .scaledFont(size: 13, weight: .semibold)
-                    .foregroundColor(OmiColors.textPrimary)
+                    .foregroundColor(NootoColors.textPrimary)
             )
     }
 }
@@ -120,5 +120,5 @@ struct SpeakerBubbleView: View {
             .foregroundColor(.white)
     }
     .padding()
-    .background(OmiColors.backgroundPrimary)
+    .background(NootoColors.backgroundPrimary)
 }
