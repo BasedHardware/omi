@@ -240,7 +240,7 @@ export function ChatPanel() {
             transition={{ type: 'spring', damping: 30, stiffness: 300 }}
             className={cn(
               'h-full flex-shrink-0 overflow-hidden',
-              'bg-bg-secondary border-l border-white/10',
+              'bg-bg-secondary border-l border-border/50',
               'max-sm:fixed max-sm:inset-0 max-sm:z-50 max-sm:w-full'
             )}
           >
@@ -248,51 +248,45 @@ export function ChatPanel() {
               'w-[400px] h-full flex flex-col',
               'max-sm:w-full'
             )}>
-            {/* Header */}
-            <div className="flex items-center justify-between p-4 border-b border-white/10">
-              <div className="flex items-center gap-3">
-                {/* Back button when in app-specific chat */}
+            {/* Header — matches page header h-16 */}
+            <div className="flex items-center justify-between px-3 h-16 border-b border-border/50">
+              <div className="flex items-center gap-2">
                 {selectedAppId && (
                   <button
                     onClick={clearAppContext}
-                    className="p-1.5 -ml-1 rounded-lg hover:bg-bg-tertiary transition-colors"
+                    className="p-1 rounded-md hover:bg-accent transition-colors"
                     aria-label="Back to Nooto chat"
-                    title="Back to Nooto"
                   >
-                    <ArrowLeft className="w-4 h-4 text-text-tertiary" />
+                    <ArrowLeft className="w-3.5 h-3.5 text-muted-foreground" />
                   </button>
                 )}
-                <div className="w-8 h-8 rounded-full bg-brand/20 flex items-center justify-center">
-                  <Sparkles className="w-4 h-4 text-brand" />
-                </div>
-                <div>
-                  <h2 className="font-semibold text-text-primary">
-                    {selectedApp ? `Chat with ${selectedApp.name}` : 'Chat with Nooto'}
-                  </h2>
-                  {currentContext?.title && !selectedAppId && (
-                    <p className="text-xs text-text-tertiary truncate max-w-[250px]">
-                      Context: {currentContext.title}
-                    </p>
-                  )}
-                </div>
+                <Sparkles className="w-3.5 h-3.5 text-muted-foreground" />
+                <span className="text-sm font-medium text-foreground">
+                  {selectedApp ? selectedApp.name : 'Chat'}
+                </span>
+                {currentContext?.title && !selectedAppId && (
+                  <span className="text-xs text-muted-foreground truncate max-w-[180px]">
+                    · {currentContext.title}
+                  </span>
+                )}
               </div>
-              <div className="flex items-center gap-1">
+              <div className="flex items-center gap-0.5">
                 {messages.length > 0 && (
                   <button
                     onClick={() => setShowClearDialog(true)}
-                    className="p-2 rounded-lg hover:bg-bg-tertiary transition-colors"
+                    className="p-1.5 rounded-md hover:bg-accent transition-colors"
                     aria-label="Clear chat"
-                    title="Clear chat history"
+                    title="Clear history"
                   >
-                    <Trash2 className="w-4 h-4 text-muted-foreground hover:text-text-secondary" />
+                    <Trash2 className="w-3.5 h-3.5 text-muted-foreground" />
                   </button>
                 )}
                 <button
                   onClick={closeChat}
-                  className="p-2 rounded-lg hover:bg-bg-tertiary transition-colors"
-                  aria-label="Close chat"
+                  className="p-1.5 rounded-md hover:bg-accent transition-colors"
+                  aria-label="Close"
                 >
-                  <X className="w-5 h-5 text-text-secondary" />
+                  <X className="w-3.5 h-3.5 text-muted-foreground" />
                 </button>
               </div>
             </div>
@@ -422,9 +416,8 @@ export function ChatPanel() {
               <div ref={messagesEndRef} />
             </div>
 
-            {/* Input area */}
-            <div className="border-t border-white/10">
-              {/* File preview bar */}
+            {/* Input area — compact */}
+            <div className="border-t border-border/50">
               {selectedFiles.length > 0 && (
                 <FilePreview
                   files={selectedFiles}
@@ -433,21 +426,15 @@ export function ChatPanel() {
                 />
               )}
 
-              <div className="p-4">
-                <div className="flex items-center gap-2">
-                  {/* File attach button */}
+              <div className="p-3">
+                <div className="flex items-center gap-1.5">
                   <button
                     onClick={() => fileInputRef.current?.click()}
                     disabled={isStreaming || selectedFiles.length >= MAX_FILES}
-                    className={cn(
-                      'p-2 rounded-lg flex-shrink-0',
-                      'text-text-tertiary hover:text-brand hover:bg-bg-tertiary',
-                      'disabled:opacity-50 disabled:cursor-not-allowed',
-                      'transition-colors'
-                    )}
-                    title={selectedFiles.length >= MAX_FILES ? `Max ${MAX_FILES} files` : 'Attach file'}
+                    className="p-1.5 rounded-md flex-shrink-0 text-muted-foreground hover:text-foreground hover:bg-accent transition-colors disabled:opacity-40"
+                    title="Attach file"
                   >
-                    <Paperclip className="w-5 h-5" />
+                    <Paperclip className="w-3.5 h-3.5" />
                   </button>
                   <input
                     ref={fileInputRef}
@@ -458,7 +445,6 @@ export function ChatPanel() {
                     className="hidden"
                   />
 
-                  {/* Text input */}
                   <input
                     ref={inputRef}
                     type="text"
@@ -468,34 +454,31 @@ export function ChatPanel() {
                     placeholder="Ask anything..."
                     disabled={isStreaming}
                     className={cn(
-                      'flex-1 px-4 py-3 rounded-xl',
-                      'bg-bg-tertiary border border-border',
-                      'text-text-primary placeholder:text-muted-foreground',
-                      'focus:outline-none focus:ring-2 focus:ring-ring',
-                      'transition-shadow',
-                      'disabled:opacity-50 disabled:cursor-not-allowed'
+                      'flex-1 px-3 py-2 rounded-lg text-sm',
+                      'bg-transparent border border-border',
+                      'text-foreground placeholder:text-muted-foreground',
+                      'focus:outline-none focus:ring-1 focus:ring-ring',
+                      'disabled:opacity-40'
                     )}
                   />
 
-                  {/* Inline voice recorder */}
                   <InlineVoiceRecorder
                     onTranscript={handleVoiceTranscript}
                     disabled={isStreaming}
                   />
 
-                  {/* Send button */}
                   <button
                     onClick={() => handleSend()}
                     disabled={!canSend}
                     className={cn(
-                      'p-3 rounded-xl flex-shrink-0',
-                      'bg-brand hover:bg-brand-dark',
-                      'disabled:opacity-50 disabled:cursor-not-allowed',
+                      'p-2 rounded-lg flex-shrink-0',
+                      'bg-primary hover:bg-primary/90 text-primary-foreground',
+                      'disabled:opacity-40',
                       'transition-colors'
                     )}
-                    aria-label="Send message"
+                    aria-label="Send"
                   >
-                    <Send className="w-5 h-5 text-white" />
+                    <Send className="w-3.5 h-3.5" />
                   </button>
                 </div>
               </div>
