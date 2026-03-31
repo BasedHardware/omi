@@ -39,6 +39,7 @@ pytest tests/unit/test_pusher_conversation_retry.py -v
 pytest tests/unit/test_listen_fallback_removal.py -v
 pytest tests/unit/test_desktop_updates.py -v
 pytest tests/unit/test_translation_optimization.py -v
+pytest tests/unit/test_translation_cost_optimization.py -v
 pytest tests/unit/test_conversation_source_unknown.py -v
 pytest tests/unit/test_transcribe_conversation_cache.py -v
 pytest tests/unit/test_pusher_private_cloud_data_protection.py -v
