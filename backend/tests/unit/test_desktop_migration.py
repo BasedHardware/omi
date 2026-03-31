@@ -155,7 +155,7 @@ class UpdateNotificationSettingsRequest(BaseModel):
     frequency: int | None = Field(None, ge=0, le=5)
 
 
-class RecordDesktopLlmUsageRequest(BaseModel):
+class RecordLlmUsageBucketRequest(BaseModel):
     input_tokens: int = Field(0, ge=0)
     output_tokens: int = Field(0, ge=0)
     cache_read_tokens: int = Field(0, ge=0)
@@ -238,24 +238,24 @@ class TestUpdateNotificationSettingsValidation:
 
 class TestRecordDesktopLlmUsageValidation:
     def test_negative_tokens_fails(self):
-        """RecordDesktopLlmUsageRequest with negative tokens should fail."""
+        """RecordLlmUsageBucketRequest with negative tokens should fail."""
         with pytest.raises(ValidationError) as exc_info:
-            RecordDesktopLlmUsageRequest(input_tokens=-1)
+            RecordLlmUsageBucketRequest(input_tokens=-1)
         assert 'input_tokens' in str(exc_info.value)
 
     def test_negative_output_tokens_fails(self):
         with pytest.raises(ValidationError) as exc_info:
-            RecordDesktopLlmUsageRequest(output_tokens=-5)
+            RecordLlmUsageBucketRequest(output_tokens=-5)
         assert 'output_tokens' in str(exc_info.value)
 
     def test_default_account_is_omi(self):
-        """RecordDesktopLlmUsageRequest default account is 'omi'."""
-        r = RecordDesktopLlmUsageRequest()
+        """RecordLlmUsageBucketRequest default account is 'omi'."""
+        r = RecordLlmUsageBucketRequest()
         assert r.account == 'omi'
 
     def test_all_defaults_zero(self):
         """All token fields default to 0."""
-        r = RecordDesktopLlmUsageRequest()
+        r = RecordLlmUsageBucketRequest()
         assert r.input_tokens == 0
         assert r.output_tokens == 0
         assert r.cache_read_tokens == 0
@@ -424,8 +424,8 @@ class TestAssistantSettingsWireCompat:
 class TestDesktopMessagesWireCompat:
     """Verify message field names match cross-platform expectations."""
 
-    def test_save_desktop_message_writes_expected_fields(self):
-        """save_desktop_message writes plugin_id, chat_session_id, type='text', from_external_integration=False."""
+    def test_save_message_writes_expected_fields(self):
+        """save_message writes plugin_id, chat_session_id, type='text', from_external_integration=False."""
         mock_doc_ref = MagicMock()
         mock_session_ref = MagicMock()
         mock_session_ref.get.return_value.exists = True
@@ -439,12 +439,12 @@ class TestDesktopMessagesWireCompat:
             col_mock.document.return_value = doc_mock
             return col_mock
 
-        with patch.object(chat_db, 'acquire_desktop_chat_session', return_value='session-123'):
+        with patch.object(chat_db, 'acquire_chat_session', return_value='session-123'):
             with patch.object(chat_db, 'db') as patched_db:
                 patched_db.collection.return_value.document.return_value.collection.return_value.document.return_value = (
                     mock_doc_ref
                 )
-                result = chat_db.save_desktop_message('test-uid', text='hello', sender='human', app_id='my-app')
+                result = chat_db.save_message('test-uid', text='hello', sender='human', app_id='my-app')
 
         # Verify the doc written to Firestore
         set_call = mock_doc_ref.set.call_args[0][0]
@@ -676,13 +676,13 @@ class TestLlmUsage:
     """Verify LLM usage dual-write and cost summation."""
 
     def test_record_dual_writes_desktop_chat_and_account(self):
-        """record_desktop_llm_usage dual-writes both 'desktop_chat' and 'desktop_chat_{account}'."""
+        """record_llm_usage_bucket dual-writes both 'desktop_chat' and 'desktop_chat_{account}'."""
         mock_ref = MagicMock()
         with patch.object(llm_usage_db, 'db') as patched_db:
             patched_db.collection.return_value.document.return_value.collection.return_value.document.return_value = (
                 mock_ref
             )
-            llm_usage_db.record_desktop_llm_usage(
+            llm_usage_db.record_llm_usage_bucket(
                 'test-uid',
                 input_tokens=100,
                 output_tokens=50,
@@ -711,13 +711,13 @@ class TestLlmUsage:
             patched_db.collection.return_value.document.return_value.collection.return_value.document.return_value = (
                 mock_ref
             )
-            llm_usage_db.record_desktop_llm_usage('test-uid', input_tokens=10, output_tokens=5)
+            llm_usage_db.record_llm_usage_bucket('test-uid', input_tokens=10, output_tokens=5)
 
         update_data = mock_ref.set.call_args[0][0]
         assert 'desktop_chat_omi.input_tokens' in update_data
 
     def test_get_total_cost_only_sums_desktop_chat_bucket(self):
-        """get_total_desktop_llm_cost only sums the desktop_chat bucket, not desktop_chat_{account}."""
+        """get_total_llm_cost only sums the desktop_chat bucket, not desktop_chat_{account}."""
         doc1 = MagicMock()
         doc1.to_dict.return_value = {
             'desktop_chat': {'cost_usd': 0.05, 'call_count': 10},
@@ -734,13 +734,13 @@ class TestLlmUsage:
 
         with patch.object(llm_usage_db, 'db') as patched_db:
             patched_db.collection.return_value.document.return_value.collection.return_value = mock_col
-            total = llm_usage_db.get_total_desktop_llm_cost('test-uid')
+            total = llm_usage_db.get_total_llm_cost('test-uid')
 
         # Should only sum desktop_chat: 0.05 + 0.03 = 0.08
         assert total == round(0.08, 6)
 
     def test_get_total_cost_ignores_non_dict_desktop_chat(self):
-        """get_total_desktop_llm_cost handles docs where desktop_chat is not a dict."""
+        """get_total_llm_cost handles docs where desktop_chat is not a dict."""
         doc1 = MagicMock()
         doc1.to_dict.return_value = {'desktop_chat': 'corrupted', 'other_key': 123}
         doc2 = MagicMock()
@@ -751,7 +751,7 @@ class TestLlmUsage:
 
         with patch.object(llm_usage_db, 'db') as patched_db:
             patched_db.collection.return_value.document.return_value.collection.return_value = mock_col
-            total = llm_usage_db.get_total_desktop_llm_cost('test-uid')
+            total = llm_usage_db.get_total_llm_cost('test-uid')
 
         assert total == 0.01
 
@@ -939,13 +939,13 @@ class TestModelParity:
         assert set(field_names) == set(expected), f"Field mismatch: source={field_names} test={expected}"
 
     def test_llm_usage_fields_match_source(self):
-        """Inline RecordDesktopLlmUsageRequest matches routers/users.py definition."""
+        """Inline RecordLlmUsageBucketRequest matches routers/users.py definition."""
         import ast
 
         source = (BACKEND_DIR / 'routers' / 'users.py').read_text()
         tree = ast.parse(source)
         for node in ast.walk(tree):
-            if isinstance(node, ast.ClassDef) and node.name == 'RecordDesktopLlmUsageRequest':
+            if isinstance(node, ast.ClassDef) and node.name == 'RecordLlmUsageBucketRequest':
                 field_names = [
                     stmt.target.id
                     for stmt in node.body
@@ -953,8 +953,8 @@ class TestModelParity:
                 ]
                 break
         else:
-            pytest.fail("RecordDesktopLlmUsageRequest not found in routers/users.py")
-        expected = [f.alias or name for name, f in RecordDesktopLlmUsageRequest.model_fields.items()]
+            pytest.fail("RecordLlmUsageBucketRequest not found in routers/users.py")
+        expected = [f.alias or name for name, f in RecordLlmUsageBucketRequest.model_fields.items()]
         assert set(field_names) == set(expected), f"Field mismatch: source={field_names} test={expected}"
 
 
