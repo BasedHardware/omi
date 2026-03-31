@@ -1235,7 +1235,12 @@ class FloatingControlBarManager {
                 }
             }
 
-        await provider.sendMessage(message, model: ShortcutSettings.shared.selectedModel, systemPromptPrefix: ChatProvider.floatingBarSystemPromptPrefix, sessionKey: "main", imageData: screenshotData)
+        await provider.sendMessage(message, model: ShortcutSettings.shared.selectedModel, systemPromptPrefix: ChatProvider.floatingBarSystemPromptPrefix, sessionKey: "floating", imageData: screenshotData)
+
+        // Cancel the messages subscription now that streaming is done.
+        // Leaving it alive lets later sidebar mutations overwrite the floating bar display.
+        chatCancellable?.cancel()
+        chatCancellable = nil
 
         // Handle errors after sendMessage completes
         barWindow.state.isAILoading = false
