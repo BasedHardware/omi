@@ -1235,7 +1235,10 @@ class FloatingControlBarManager {
                 }
             }
 
-        await provider.sendMessage(message, model: ShortcutSettings.shared.selectedModel, systemPromptPrefix: ChatProvider.floatingBarSystemPromptPrefix, sessionKey: "floating", imageData: screenshotData)
+        let floatingModel = ShortcutSettings.shared.selectedModel.isEmpty
+            ? "claude-sonnet-4-6"
+            : ShortcutSettings.shared.selectedModel
+        await provider.sendMessage(message, model: floatingModel, systemPromptPrefix: ChatProvider.floatingBarSystemPromptPrefix, sessionKey: "floating", imageData: screenshotData)
 
         // Cancel the messages subscription now that streaming is done.
         // Leaving it alive lets later sidebar mutations overwrite the floating bar display.
