@@ -372,18 +372,9 @@ def cancel_subscription_endpoint(
     if not subscription.stripe_subscription_id:
         raise HTTPException(status_code=400, detail="No active Stripe subscription found.")
 
-    # Store cancellation reason on the user document
+    # Store cancellation reason
     if request.reason:
-        users_db.db.collection('users').document(uid).set(
-            {
-                'cancellation_feedback': {
-                    'reason': request.reason,
-                    'reason_details': request.reason_details,
-                    'timestamp': time.time(),
-                }
-            },
-            merge=True,
-        )
+        users_db.set_user_cancellation_feedback(uid, request.reason, request.reason_details)
 
     try:
         # First, check if the subscription is managed by a subscription schedule
