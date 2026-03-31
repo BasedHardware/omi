@@ -2329,7 +2329,7 @@ class AppState: ObservableObject {
     let vocabulary = AssistantSettings.shared.effectiveVocabulary
 
     do {
-      let segments = try await TranscriptionService.batchTranscribeWithSplitting(
+      let segments = try await TranscriptionService.batchTranscribeFull(
         audioData: audioBuffer,
         language: effectiveLanguage,
         vocabulary: vocabulary

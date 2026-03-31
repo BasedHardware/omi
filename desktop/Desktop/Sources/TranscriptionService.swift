@@ -2,17 +2,9 @@ import Foundation
 
 /// Service for real-time speech-to-text transcription using DeepGram
 /// Streams audio over WebSocket and receives transcript segments
-class TranscriptionService: NSObject, URLSessionWebSocketDelegate {
+class TranscriptionService {
 
     // MARK: - Types
-
-    /// Connection lifecycle state (thread-safe via stateQueue)
-    enum ConnectionState {
-        case disconnected
-        case connecting
-        case connected
-        case reconnecting
-    }
 
     /// Transcript segment from DeepGram
     struct TranscriptSegment {
@@ -42,7 +34,6 @@ class TranscriptionService: NSObject, URLSessionWebSocketDelegate {
         case missingAPIKey
         case connectionFailed(Error)
         case invalidResponse
-        case payloadTooLarge(statusCode: Int, body: String)
         case webSocketError(String)
 
         var errorDescription: String? {
@@ -53,35 +44,19 @@ class TranscriptionService: NSObject, URLSessionWebSocketDelegate {
                 return "Connection failed: \(error.localizedDescription)"
             case .invalidResponse:
                 return "Invalid response from DeepGram"
-            case .payloadTooLarge(let statusCode, _):
-                return "Payload too large (HTTP \(statusCode))"
             case .webSocketError(let message):
                 return "WebSocket error: \(message)"
             }
         }
     }
 
-    // MARK: - Thread-safe state
-
-    /// Serial queue protecting all mutable connection state
-    private let stateQueue = DispatchQueue(label: "com.omi.transcription.state")
-    private var _connectionState: ConnectionState = .disconnected
-    private var _webSocketTask: URLSessionWebSocketTask?
-    private var _urlSession: URLSession?
-    private var _shouldReconnect = false
-    private var _reconnectAttempts = 0
-    private var _connectionGeneration: UInt64 = 0  // Monotonic ID to discard stale delegate callbacks
-    private var _lastDataReceivedAt: Date?
-    private var _lastKeepaliveSuccessAt: Date?
-
-    /// Execute a block on the state queue and return its result
-    private func withState<T>(_ body: () -> T) -> T {
-        stateQueue.sync { body() }
-    }
-
     // MARK: - Properties
 
     private let apiKey: String
+    private var webSocketTask: URLSessionWebSocketTask?
+    private var urlSession: URLSession?
+    private var isConnected = false
+    private var shouldReconnect = false
 
     // Callbacks
     private var onTranscript: TranscriptHandler?
@@ -115,10 +90,10 @@ class TranscriptionService: NSObject, URLSessionWebSocketDelegate {
     }()
     private let channels: Int  // 2 = stereo (mic + system), 1 = mono (mic only for PTT)
 
-    // Reconnection — no hard cap; backoff with jitter, retry while shouldReconnect is true
+    // Reconnection
+    private var reconnectAttempts = 0
+    private let maxReconnectAttempts = 10
     private var reconnectTask: Task<Void, Never>?
-    private let maxBackoff: TimeInterval = 60.0
-    private let backoffJitterRange: ClosedRange<Double> = 0.5...1.5
 
     // Keepalive
     private var keepaliveTask: Task<Void, Never>?
@@ -126,17 +101,15 @@ class TranscriptionService: NSObject, URLSessionWebSocketDelegate {
 
     // Watchdog: detect stale connections where WebSocket dies silently
     private var watchdogTask: Task<Void, Never>?
+    private var lastDataReceivedAt: Date?
+    private var lastKeepaliveSuccessAt: Date?
     private let watchdogInterval: TimeInterval = 30.0   // Check every 30 seconds
     private let staleThreshold: TimeInterval = 60.0     // Reconnect if no data for 60 seconds
 
-    // Audio buffering (outbound send coalescing)
+    // Audio buffering
     private var audioBuffer = Data()
     private let audioBufferSize = 3200  // ~100ms of 16kHz 16-bit audio (16000 * 2 * 0.1)
     private let audioBufferLock = NSLock()
-
-    // Reconnect audio ring buffer: holds audio produced while disconnected/reconnecting
-    // 30s of stereo 16kHz 16-bit = ~1.92MB; cap at 960KB (~15s) to stay conservative
-    private var reconnectBuffer = ReconnectAudioRingBuffer(ttl: 30, maxBytes: 960_000)
 
     // MARK: - Initialization
 
@@ -163,7 +136,6 @@ class TranscriptionService: NSObject, URLSessionWebSocketDelegate {
         self.language = language
         self.vocabulary = vocabulary
         self.channels = channels
-        super.init()
         log("TranscriptionService: Initialized with language=\(language), vocabulary=\(self.vocabulary.count) terms, channels=\(channels), proxy=\(self.useProxy)")
     }
 
@@ -180,17 +152,15 @@ class TranscriptionService: NSObject, URLSessionWebSocketDelegate {
         self.onError = onError
         self.onConnected = onConnected
         self.onDisconnected = onDisconnected
-        withState {
-            _shouldReconnect = true
-            _reconnectAttempts = 0
-        }
+        self.shouldReconnect = true
+        self.reconnectAttempts = 0
 
         connect()
     }
 
     /// Stop the transcription service
     func stop() {
-        withState { _shouldReconnect = false }
+        shouldReconnect = false
         reconnectTask?.cancel()
         reconnectTask = nil
         keepaliveTask?.cancel()
@@ -207,7 +177,7 @@ class TranscriptionService: NSObject, URLSessionWebSocketDelegate {
     /// Signal Deepgram that no more audio will be sent, but keep connection open
     /// to receive final transcription results. Call stop() later to fully disconnect.
     func finishStream() {
-        withState { _shouldReconnect = false }
+        shouldReconnect = false
         reconnectTask?.cancel()
         reconnectTask = nil
         keepaliveTask?.cancel()
@@ -217,14 +187,10 @@ class TranscriptionService: NSObject, URLSessionWebSocketDelegate {
 
         flushAudioBuffer()
 
-        let task: URLSessionWebSocketTask? = withState {
-            guard _connectionState == .connected else { return nil }
-            return _webSocketTask
-        }
-        guard let task = task else { return }
+        guard isConnected, let webSocketTask = webSocketTask else { return }
 
         let closeMsg = "{\"type\": \"CloseStream\"}"
-        task.send(.string(closeMsg)) { error in
+        webSocketTask.send(.string(closeMsg)) { error in
             if let error = error {
                 logError("TranscriptionService: CloseStream send error", error: error)
             }
@@ -232,28 +198,9 @@ class TranscriptionService: NSObject, URLSessionWebSocketDelegate {
         log("TranscriptionService: CloseStream sent, waiting for final results")
     }
 
-    /// Send audio data to DeepGram (buffered for efficiency).
-    /// When disconnected/reconnecting, audio is queued in a ring buffer and replayed on reconnect.
+    /// Send audio data to DeepGram (buffered for efficiency)
     func sendAudio(_ data: Data) {
-        guard !data.isEmpty else { return }
-
-        let shouldSendNow: Bool = withState {
-            reconnectBuffer.prune()
-            switch _connectionState {
-            case .connected:
-                return true
-            case .connecting, .reconnecting:
-                reconnectBuffer.append(data)
-                return false
-            case .disconnected:
-                if _shouldReconnect {
-                    reconnectBuffer.append(data)
-                }
-                return false
-            }
-        }
-
-        guard shouldSendNow else { return }
+        guard isConnected else { return }
 
         audioBufferLock.lock()
         audioBuffer.append(data)
@@ -283,14 +230,10 @@ class TranscriptionService: NSObject, URLSessionWebSocketDelegate {
 
     /// Actually send an audio chunk to DeepGram
     private func sendAudioChunk(_ data: Data) {
-        let task: URLSessionWebSocketTask? = withState {
-            guard _connectionState == .connected else { return nil }
-            return _webSocketTask
-        }
-        guard let task = task else { return }
+        guard isConnected, let webSocketTask = webSocketTask else { return }
 
         let message = URLSessionWebSocketTask.Message.data(data)
-        task.send(message) { [weak self] error in
+        webSocketTask.send(message) { [weak self] error in
             if let error = error {
                 logError("TranscriptionService: Send error", error: error)
                 self?.handleDisconnection()
@@ -298,51 +241,11 @@ class TranscriptionService: NSObject, URLSessionWebSocketDelegate {
         }
     }
 
-    /// Replay audio buffered during reconnection.
-    /// Sends chunks sequentially so only the first failure controls the retry path,
-    /// preventing duplicate rebuffering from concurrent failure callbacks.
-    private func replayBufferedAudio() {
-        let (task, chunks): (URLSessionWebSocketTask?, [Data]) = withState {
-            guard _connectionState == .connected else { return (nil, []) }
-            return (_webSocketTask, reconnectBuffer.drain())
-        }
-        guard let task = task, !chunks.isEmpty else { return }
-
-        log("TranscriptionService: Replaying \(chunks.count) buffered audio chunks")
-        replayChunksSequentially(task: task, chunks: chunks, index: 0)
-    }
-
-    /// Send chunks one at a time; on first failure, re-buffer the rest and reconnect.
-    private func replayChunksSequentially(task: URLSessionWebSocketTask, chunks: [Data], index: Int) {
-        guard index < chunks.count else { return }
-
-        task.send(.data(chunks[index])) { [weak self] error in
-            if let error = error {
-                logError("TranscriptionService: Replay send error at chunk \(index)", error: error)
-                if let self = self {
-                    self.withState {
-                        for remaining in chunks[index...] {
-                            self.reconnectBuffer.append(remaining)
-                        }
-                    }
-                    self.handleDisconnection()
-                }
-                return
-            }
-            // Success — send next chunk
-            self?.replayChunksSequentially(task: task, chunks: chunks, index: index + 1)
-        }
-    }
-
     /// Send Deepgram Finalize message to flush pending transcripts
     func sendFinalize() {
-        let task: URLSessionWebSocketTask? = withState {
-            guard _connectionState == .connected else { return nil }
-            return _webSocketTask
-        }
-        guard let task = task else { return }
+        guard isConnected, let webSocketTask = webSocketTask else { return }
         let msg = "{\"type\": \"Finalize\"}"
-        task.send(.string(msg)) { error in
+        webSocketTask.send(.string(msg)) { error in
             if let error = error {
                 logError("TranscriptionService: Finalize error", error: error)
             }
@@ -356,62 +259,12 @@ class TranscriptionService: NSObject, URLSessionWebSocketDelegate {
 
     /// Check if connected
     var connected: Bool {
-        return withState { _connectionState == .connected }
-    }
-
-    // MARK: - Test accessors (internal for @testable import)
-
-    /// Current connection state (read-only, for testing)
-    var testConnectionState: ConnectionState {
-        withState { _connectionState }
-    }
-
-    /// Current generation token (read-only, for testing)
-    var testConnectionGeneration: UInt64 {
-        withState { _connectionGeneration }
-    }
-
-    /// Directly set state for testing state machine behavior.
-    /// Only callable from tests via @testable import.
-    func testSetState(_ state: ConnectionState) {
-        withState { _connectionState = state }
-    }
-
-    /// Expose handleDisconnection for idempotency testing
-    func testHandleDisconnection() {
-        handleDisconnection()
-    }
-
-    /// Expose shouldReconnect setter for testing
-    func testSetShouldReconnect(_ value: Bool) {
-        withState { _shouldReconnect = value }
-    }
-
-    /// Compute reconnect delay: exponential backoff capped at maxBackoff, then jittered.
-    /// Exposed as static for testability.
-    static func reconnectDelay(
-        attempt: Int,
-        maxBackoff: TimeInterval = 60.0,
-        jitterRange: ClosedRange<Double> = 0.5...1.5
-    ) -> TimeInterval {
-        let baseDelay = min(pow(2.0, Double(attempt)), maxBackoff)
-        let jitter = Double.random(in: jitterRange)
-        return baseDelay * jitter
+        return isConnected
     }
 
     // MARK: - Private Methods
 
     private func connect() {
-        let generation: UInt64 = withState {
-            guard _connectionState == .disconnected || _connectionState == .reconnecting else {
-                return 0  // 0 = signal not to proceed
-            }
-            _connectionState = .connecting
-            _connectionGeneration += 1
-            return _connectionGeneration
-        }
-        guard generation > 0 else { return }
-
         if useProxy {
             // Proxy mode: get Firebase auth token async, then connect
             Task { [weak self] in
@@ -419,28 +272,19 @@ class TranscriptionService: NSObject, URLSessionWebSocketDelegate {
                 do {
                     let authService = await MainActor.run { AuthService.shared }
                     let authHeader = try await authService.getAuthHeader()
-                    // Re-check: stop() may have been called while fetching auth token
-                    let stillValid = self.withState {
-                        self._connectionGeneration == generation && self._shouldReconnect && self._connectionState == .connecting
-                    }
-                    guard stillValid else {
-                        log("TranscriptionService: Auth fetched but connection no longer wanted (gen \(generation))")
-                        return
-                    }
-                    self.connectWithAuth(authHeader: authHeader, generation: generation)
+                    self.connectWithAuth(authHeader: authHeader)
                 } catch {
                     logError("TranscriptionService: Failed to get auth token for proxy", error: error)
                     self.onError?(TranscriptionError.connectionFailed(error))
-                    self.handleDisconnection()
                 }
             }
         } else {
             // Direct Deepgram mode (legacy/developer override)
-            connectWithAuth(authHeader: "Token \(apiKey)", generation: generation)
+            connectWithAuth(authHeader: "Token \(apiKey)")
         }
     }
 
-    private func connectWithAuth(authHeader: String, generation: UInt64) {
+    private func connectWithAuth(authHeader: String) {
         // Build WebSocket URL with parameters
         let wsBase: String
         if useProxy {
@@ -456,7 +300,6 @@ class TranscriptionService: NSObject, URLSessionWebSocketDelegate {
         guard var components = URLComponents(string: "\(wsBase)\(listenPath)") else {
             log("TranscriptionService: Invalid URL base: \(wsBase)")
             onError?(TranscriptionError.connectionFailed(NSError(domain: "Invalid URL", code: -1)))
-            handleDisconnection()
             return
         }
         var queryItems = [
@@ -485,100 +328,40 @@ class TranscriptionService: NSObject, URLSessionWebSocketDelegate {
 
         guard let url = components.url else {
             onError?(TranscriptionError.connectionFailed(NSError(domain: "Invalid URL", code: -1)))
-            handleDisconnection()
             return
         }
 
-        // Verify this generation is still current before creating network resources
-        let stillValid = withState { _connectionGeneration == generation && _connectionState == .connecting }
-        guard stillValid else {
-            log("TranscriptionService: Connection no longer wanted (gen \(generation))")
-            return
-        }
-        log("TranscriptionService: Connecting to \(url.host ?? "?") (gen \(generation))")
+        log("TranscriptionService: Connecting to \(url.absoluteString)")
 
         // Create URL request with authorization header
         var request = URLRequest(url: url)
         request.setValue(authHeader, forHTTPHeaderField: "Authorization")
 
-        // Create URLSession with self as delegate to receive WebSocket lifecycle callbacks
+        // Create URLSession and WebSocket task
         let configuration = URLSessionConfiguration.default
         configuration.timeoutIntervalForRequest = 30
         configuration.timeoutIntervalForResource = 0  // No resource timeout for long-lived WebSocket
-        let session = URLSession(configuration: configuration, delegate: self, delegateQueue: nil)
-        let task = session.webSocketTask(with: request)
+        urlSession = URLSession(configuration: configuration)
+        webSocketTask = urlSession?.webSocketTask(with: request)
 
-        withState {
-            _urlSession = session
-            _webSocketTask = task
+        // Start the connection
+        webSocketTask?.resume()
+
+        // Start receiving messages
+        receiveMessage()
+
+        // Mark as connected (DeepGram doesn't send a connect confirmation)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+            guard let self = self, self.webSocketTask?.state == .running else { return }
+            self.isConnected = true
+            self.reconnectAttempts = 0
+            self.lastDataReceivedAt = Date()
+            self.lastKeepaliveSuccessAt = Date()
+            log("TranscriptionService: Connected")
+            self.startKeepalive()
+            self.startWatchdog()
+            self.onConnected?()
         }
-
-        // Start the connection — didOpenWithProtocol delegate will confirm handshake
-        task.resume()
-
-        // Start receiving messages immediately (queued until handshake completes)
-        receiveMessage(generation: generation)
-
-        // Connect timeout: if handshake hasn't completed in 10s, treat as failure
-        Task { [weak self] in
-            try? await Task.sleep(nanoseconds: 10_000_000_000)
-            guard let self = self else { return }
-            let shouldTimeout: Bool = self.withState {
-                self._connectionGeneration == generation && self._connectionState == .connecting
-            }
-            if shouldTimeout {
-                log("TranscriptionService: Connect timeout (gen \(generation))")
-                self.handleDisconnection()
-            }
-        }
-    }
-
-    // MARK: - URLSessionWebSocketDelegate
-
-    /// Called when WebSocket handshake completes successfully
-    func urlSession(
-        _ session: URLSession,
-        webSocketTask: URLSessionWebSocketTask,
-        didOpenWithProtocol protocol: String?
-    ) {
-        let (isValid, generation): (Bool, UInt64) = withState {
-            // Only accept if this is the current session AND we still want to be connected
-            guard _urlSession === session && _shouldReconnect && _connectionState == .connecting else {
-                return (false, _connectionGeneration)
-            }
-            _connectionState = .connected
-            _reconnectAttempts = 0
-            _lastDataReceivedAt = Date()
-            _lastKeepaliveSuccessAt = Date()
-            return (true, _connectionGeneration)
-        }
-        guard isValid else {
-            log("TranscriptionService: Ignoring stale didOpen (gen \(generation))")
-            // Clean up the unwanted session
-            session.invalidateAndCancel()
-            return
-        }
-
-        log("TranscriptionService: Connected (gen \(generation), protocol=\(`protocol` ?? "none"))")
-        startKeepalive()
-        startWatchdog()
-        replayBufferedAudio()
-        onConnected?()
-    }
-
-    /// Called when WebSocket receives a close frame from server
-    func urlSession(
-        _ session: URLSession,
-        webSocketTask: URLSessionWebSocketTask,
-        didCloseWith closeCode: URLSessionWebSocketTask.CloseCode,
-        reason: Data?
-    ) {
-        let isCurrentSession: Bool = withState { _urlSession === session }
-        guard isCurrentSession else { return }
-
-        let reasonText = reason.flatMap { String(data: $0, encoding: .utf8) } ?? "none"
-        log("TranscriptionService: Server closed connection (code=\(closeCode.rawValue), reason=\(reasonText))")
-        handleDisconnection()
     }
 
     /// Start keepalive ping task to prevent connection timeout
@@ -587,9 +370,7 @@ class TranscriptionService: NSObject, URLSessionWebSocketDelegate {
         keepaliveTask = Task { [weak self] in
             while !Task.isCancelled {
                 try? await Task.sleep(nanoseconds: UInt64(self?.keepaliveInterval ?? 8.0) * 1_000_000_000)
-                guard !Task.isCancelled, let self = self else { break }
-                let isConn = self.withState { self._connectionState == .connected }
-                guard isConn else { break }
+                guard !Task.isCancelled, let self = self, self.isConnected else { break }
                 self.sendKeepalive()
             }
         }
@@ -597,20 +378,17 @@ class TranscriptionService: NSObject, URLSessionWebSocketDelegate {
 
     /// Send a keepalive ping to DeepGram
     private func sendKeepalive() {
-        let task: URLSessionWebSocketTask? = withState {
-            guard _connectionState == .connected else { return nil }
-            return _webSocketTask
-        }
-        guard let task = task else { return }
+        guard isConnected, let webSocketTask = webSocketTask else { return }
 
+        // Send a small JSON keepalive message
         let keepalive = "{\"type\": \"KeepAlive\"}"
         let message = URLSessionWebSocketTask.Message.string(keepalive)
-        task.send(message) { [weak self] error in
+        webSocketTask.send(message) { [weak self] error in
             if let error = error {
                 logError("TranscriptionService: Keepalive error", error: error)
                 self?.handleDisconnection()
             } else {
-                self?.withState { self?._lastKeepaliveSuccessAt = Date() }
+                self?.lastKeepaliveSuccessAt = Date()
             }
         }
     }
@@ -621,19 +399,16 @@ class TranscriptionService: NSObject, URLSessionWebSocketDelegate {
         watchdogTask = Task { [weak self] in
             while !Task.isCancelled {
                 try? await Task.sleep(nanoseconds: UInt64(self?.watchdogInterval ?? 30.0) * 1_000_000_000)
-                guard !Task.isCancelled, let self = self else { break }
+                guard !Task.isCancelled, let self = self, self.isConnected else { break }
 
-                let (isConn, lastData, lastKeepalive) = self.withState {
-                    (self._connectionState == .connected, self._lastDataReceivedAt, self._lastKeepaliveSuccessAt)
-                }
-                guard isConn else { break }
-
-                if let lastData = lastData,
+                if let lastData = self.lastDataReceivedAt,
                    Date().timeIntervalSince(lastData) > self.staleThreshold {
                     // Check if keepalives are still succeeding — if so, the connection
                     // is alive and Deepgram just has nothing to return (silent room).
-                    if let lastKeepalive = lastKeepalive,
+                    // Only force reconnect when keepalives have also gone stale.
+                    if let lastKeepalive = self.lastKeepaliveSuccessAt,
                        Date().timeIntervalSince(lastKeepalive) < self.staleThreshold {
+                        // Keepalives working — connection is alive, just no speech to transcribe
                         continue
                     }
                     log("TranscriptionService: Watchdog detected stale connection (no data for \(String(format: "%.0f", Date().timeIntervalSince(lastData)))s, keepalives also failing) - forcing reconnect")
@@ -644,93 +419,61 @@ class TranscriptionService: NSObject, URLSessionWebSocketDelegate {
     }
 
     private func disconnect() {
-        let oldSession: URLSession? = withState {
-            _connectionState = .disconnected
-            _connectionGeneration += 1  // Invalidate any in-flight receive callbacks
-            let s = _urlSession
-            _webSocketTask?.cancel(with: .normalClosure, reason: nil)
-            _webSocketTask = nil
-            _urlSession = nil
-            return s
-        }
+        isConnected = false
         keepaliveTask?.cancel()
         keepaliveTask = nil
         watchdogTask?.cancel()
         watchdogTask = nil
-        oldSession?.invalidateAndCancel()
+        webSocketTask?.cancel(with: .normalClosure, reason: nil)
+        webSocketTask = nil
+        urlSession?.invalidateAndCancel()
+        urlSession = nil
         log("TranscriptionService: Disconnected")
         onDisconnected?()
     }
 
     private func handleDisconnection() {
-        let (shouldAttemptReconnect, attempt): (Bool, Int) = withState {
-            // Idempotent: if already reconnecting or disconnected, this is a duplicate callback
-            guard _connectionState == .connected || _connectionState == .connecting else { return (false, 0) }
+        guard isConnected else { return }
 
-            _connectionGeneration += 1  // Invalidate any in-flight receive/keepalive callbacks
-            let oldSession = _urlSession
-            _connectionState = .reconnecting
-            _webSocketTask = nil
-            _urlSession = nil
-            oldSession?.invalidateAndCancel()
-
-            guard _shouldReconnect else {
-                _connectionState = .disconnected
-                return (false, 0)
-            }
-            _reconnectAttempts += 1
-            return (true, _reconnectAttempts)
-        }
-
+        isConnected = false
         keepaliveTask?.cancel()
         keepaliveTask = nil
         watchdogTask?.cancel()
         watchdogTask = nil
-
-        // Salvage any partial audio in the coalescing buffer into the reconnect buffer
-        audioBufferLock.lock()
-        let partialAudio = audioBuffer
-        audioBuffer = Data()
-        audioBufferLock.unlock()
-        if !partialAudio.isEmpty {
-            withState { reconnectBuffer.append(partialAudio) }
-        }
-
+        webSocketTask = nil
+        urlSession?.invalidateAndCancel()
+        urlSession = nil
         onDisconnected?()
 
-        guard shouldAttemptReconnect else { return }
+        // Attempt reconnection if enabled
+        if shouldReconnect && reconnectAttempts < maxReconnectAttempts {
+            reconnectAttempts += 1
+            let delay = min(pow(2.0, Double(reconnectAttempts)), 32.0) // Exponential backoff, max 32s
+            log("TranscriptionService: Reconnecting in \(delay)s (attempt \(reconnectAttempts))")
 
-        // Exponential backoff with jitter, no hard cap on attempts
-        let delay = Self.reconnectDelay(attempt: attempt, maxBackoff: maxBackoff, jitterRange: backoffJitterRange)
-        log("TranscriptionService: Reconnecting in \(String(format: "%.1f", delay))s (attempt \(attempt))")
-
-        reconnectTask = Task { [weak self] in
-            try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
-            guard !Task.isCancelled else { return }
-            guard let self = self else { return }
-            let shouldReconnect = self.withState { self._shouldReconnect }
-            guard shouldReconnect else { return }
-            self.connect()
+            reconnectTask = Task {
+                try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+                guard !Task.isCancelled, self.shouldReconnect else { return }
+                self.connect()
+            }
+        } else if reconnectAttempts >= maxReconnectAttempts {
+            log("TranscriptionService: Max reconnect attempts reached")
+            onError?(TranscriptionError.webSocketError("Max reconnect attempts reached"))
         }
     }
 
-    private func receiveMessage(generation: UInt64) {
-        let task: URLSessionWebSocketTask? = withState { _webSocketTask }
-        task?.receive { [weak self] result in
+    private func receiveMessage() {
+        webSocketTask?.receive { [weak self] result in
             guard let self = self else { return }
-
-            // Discard callbacks from stale connections
-            let currentGen = self.withState { self._connectionGeneration }
-            guard currentGen == generation else { return }
 
             switch result {
             case .success(let message):
                 self.handleMessage(message)
-                self.receiveMessage(generation: generation)
+                // Continue receiving
+                self.receiveMessage()
 
             case .failure(let error):
-                let isActive = self.withState { self._connectionState == .connected || self._connectionState == .connecting }
-                guard isActive else { return }
+                guard self.isConnected else { return }
                 logError("TranscriptionService: Receive error", error: error)
                 self.handleDisconnection()
             }
@@ -739,7 +482,7 @@ class TranscriptionService: NSObject, URLSessionWebSocketDelegate {
 
     private func handleMessage(_ message: URLSessionWebSocketTask.Message) {
         // Track that we received data (for watchdog stale detection)
-        withState { _lastDataReceivedAt = Date() }
+        lastDataReceivedAt = Date()
 
         switch message {
         case .string(let text):
@@ -955,9 +698,6 @@ extension TranscriptionService {
             let statusCode = (response as? HTTPURLResponse)?.statusCode ?? -1
             let body = String(data: data, encoding: .utf8) ?? "no body"
             logError("TranscriptionService: Batch full transcription failed with status \(statusCode): \(body)", error: nil)
-            if statusCode == 413 {
-                throw TranscriptionError.payloadTooLarge(statusCode: statusCode, body: body)
-            }
             throw TranscriptionError.invalidResponse
         }
 
@@ -994,215 +734,6 @@ extension TranscriptionService {
         }
 
         return segments
-    }
-
-    // MARK: - Batch Transcription with Splitting
-
-    /// Maximum audio payload size for a single batch transcription request.
-    /// Matches VADGateService.maxBatchBytes. Audio larger than this is proactively split.
-    static let maxBatchPayloadBytes = VADGateService.maxBatchBytes
-
-    /// Bytes per second for stereo 16kHz Int16 PCM audio.
-    static let stereoBytesPerSecond = 64_000
-
-    /// Transcribe audio with automatic splitting for large payloads.
-    /// Proactively splits audio exceeding maxBatchPayloadBytes, and retries with splitting on 413.
-    static func batchTranscribeWithSplitting(
-        audioData: Data,
-        language: String = "en",
-        vocabulary: [String] = []
-    ) async throws -> [TranscriptSegment] {
-        // Proactive split if audio exceeds max payload
-        if audioData.count > maxBatchPayloadBytes {
-            log("TranscriptionService: Audio \(audioData.count) bytes exceeds \(maxBatchPayloadBytes) — splitting")
-            return try await splitAndTranscribe(audioData: audioData, language: language, vocabulary: vocabulary)
-        }
-
-        // Try direct transcription, retry with split on 413
-        do {
-            return try await batchTranscribeFull(audioData: audioData, language: language, vocabulary: vocabulary)
-        } catch TranscriptionError.payloadTooLarge {
-            log("TranscriptionService: Got 413, retrying with split")
-            return try await splitAndTranscribe(audioData: audioData, language: language, vocabulary: vocabulary)
-        }
-    }
-
-    /// Split audio at midpoint with 1s overlap, transcribe each half, merge results.
-    /// Only one level of splitting — halves are sent directly via batchTranscribeFull.
-    static func splitAndTranscribe(
-        audioData: Data,
-        language: String,
-        vocabulary: [String]
-    ) async throws -> [TranscriptSegment] {
-        let overlapBytes = stereoBytesPerSecond  // 1 second overlap
-        let bytesPerFrame = 4  // Stereo Int16: 2 channels * 2 bytes
-
-        // Align midpoint to frame boundary
-        let rawMid = audioData.count / 2
-        let mid = (rawMid / bytesPerFrame) * bytesPerFrame
-
-        // First half: [0, mid + overlap/2)
-        let firstEnd = min(mid + overlapBytes / 2, audioData.count)
-        let alignedFirstEnd = (firstEnd / bytesPerFrame) * bytesPerFrame
-        let firstHalf = audioData.prefix(alignedFirstEnd)
-
-        // Second half: [mid - overlap/2, end)
-        let secondStart = max(mid - overlapBytes / 2, 0)
-        let alignedSecondStart = (secondStart / bytesPerFrame) * bytesPerFrame
-        let secondHalf = audioData.suffix(from: alignedSecondStart)
-
-        let splitStartSec = Double(alignedSecondStart) / Double(stereoBytesPerSecond)
-
-        log("TranscriptionService: Split — first=\(firstHalf.count) bytes, second=\(secondHalf.count) bytes, offset=\(String(format: "%.1f", splitStartSec))s")
-
-        // Transcribe both halves (recursively split if still too large)
-        let firstSegments = try await batchTranscribeWithSplitting(
-            audioData: Data(firstHalf), language: language, vocabulary: vocabulary
-        )
-        let secondSegments = try await batchTranscribeWithSplitting(
-            audioData: Data(secondHalf), language: language, vocabulary: vocabulary
-        )
-
-        // Merge per channel: offset second-half timestamps, dedupe overlap
-        return mergeSegments(first: firstSegments, second: secondSegments, secondOffsetSec: splitStartSec)
-    }
-
-    /// Merge segments from two halves per channel.
-    /// Second-half word timestamps are offset by secondOffsetSec.
-    /// Words in the overlap window are deduped by matching text and timestamp proximity.
-    static func mergeSegments(
-        first: [TranscriptSegment],
-        second: [TranscriptSegment],
-        secondOffsetSec: Double
-    ) -> [TranscriptSegment] {
-        // Group by channel
-        var firstByChannel: [Int: TranscriptSegment] = [:]
-        for seg in first { firstByChannel[seg.channelIndex] = seg }
-
-        var secondByChannel: [Int: TranscriptSegment] = [:]
-        for seg in second { secondByChannel[seg.channelIndex] = seg }
-
-        let allChannels = Set(firstByChannel.keys).union(secondByChannel.keys)
-        var merged: [TranscriptSegment] = []
-
-        for ch in allChannels.sorted() {
-            let firstWords = firstByChannel[ch]?.words ?? []
-            let secondWords = (secondByChannel[ch]?.words ?? []).map { word in
-                TranscriptSegment.Word(
-                    word: word.word,
-                    start: word.start + secondOffsetSec,
-                    end: word.end + secondOffsetSec,
-                    confidence: word.confidence,
-                    speaker: word.speaker,
-                    punctuatedWord: word.punctuatedWord
-                )
-            }
-
-            // Dedupe: find where first-half ends and second-half begins
-            let deduped = dedupeOverlapWords(first: firstWords, second: secondWords)
-
-            let combinedText = deduped.map { $0.punctuatedWord }.joined(separator: " ")
-            let avgConfidence = deduped.isEmpty ? 0.0 : deduped.reduce(0.0) { $0 + $1.confidence } / Double(deduped.count)
-
-            merged.append(TranscriptSegment(
-                text: combinedText,
-                isFinal: true,
-                speechFinal: true,
-                confidence: avgConfidence,
-                words: deduped,
-                channelIndex: ch
-            ))
-        }
-
-        return merged
-    }
-
-    /// Deduplicate words in the overlap window between first and second halves.
-    /// Words from the second half that match a first-half word (same text, within 0.5s) are dropped.
-    static func dedupeOverlapWords(
-        first: [TranscriptSegment.Word],
-        second: [TranscriptSegment.Word]
-    ) -> [TranscriptSegment.Word] {
-        guard let lastFirstWord = first.last else { return second }
-        let overlapEnd = lastFirstWord.end
-
-        var result = first
-        for word in second {
-            // Skip words that fall within the overlap window and match a first-half word
-            if word.start <= overlapEnd + 0.5 {
-                let isDuplicate = first.contains { firstWord in
-                    firstWord.word.lowercased() == word.word.lowercased() &&
-                    abs(firstWord.start - word.start) < 0.5
-                }
-                if isDuplicate { continue }
-            }
-            result.append(word)
-        }
-
-        return result
-    }
-}
-
-// MARK: - Reconnect Audio Ring Buffer
-
-/// Bounded ring buffer that holds audio chunks produced while WebSocket is reconnecting.
-/// Chunks older than `ttl` or exceeding `maxBytes` are evicted automatically.
-/// Internal access level for testability via @testable import.
-struct ReconnectAudioRingBuffer {
-    struct Chunk {
-        let data: Data
-        let createdAt: Date
-    }
-
-    let ttl: TimeInterval
-    let maxBytes: Int
-    private(set) var chunks: [Chunk] = []
-    private(set) var totalBytes = 0
-
-    init(ttl: TimeInterval = 30, maxBytes: Int = 960_000) {
-        self.ttl = ttl
-        self.maxBytes = maxBytes
-    }
-
-    mutating func append(_ data: Data, now: Date = Date()) {
-        guard !data.isEmpty else { return }
-        evictExpired(now: now)
-
-        if data.count >= maxBytes {
-            let truncated = Data(data.suffix(maxBytes))
-            chunks = [Chunk(data: truncated, createdAt: now)]
-            totalBytes = truncated.count
-            return
-        }
-
-        chunks.append(Chunk(data: data, createdAt: now))
-        totalBytes += data.count
-        evictOverflow()
-    }
-
-    mutating func drain(now: Date = Date()) -> [Data] {
-        evictExpired(now: now)
-        let drained = chunks.map(\.data)
-        chunks.removeAll(keepingCapacity: true)
-        totalBytes = 0
-        return drained
-    }
-
-    mutating func prune(now: Date = Date()) {
-        evictExpired(now: now)
-    }
-
-    private mutating func evictExpired(now: Date) {
-        while let first = chunks.first, now.timeIntervalSince(first.createdAt) > ttl {
-            totalBytes -= first.data.count
-            chunks.removeFirst()
-        }
-    }
-
-    private mutating func evictOverflow() {
-        while totalBytes > maxBytes, !chunks.isEmpty {
-            totalBytes -= chunks.removeFirst().data.count
-        }
     }
 }
 
