@@ -25,7 +25,7 @@ enum AppBuild {
       return bundleName
     }
 
-    return "omi"
+    return "nooto"
   }
 
   static var currentUpdateChannel: String {
