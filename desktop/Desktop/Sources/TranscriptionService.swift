@@ -350,6 +350,18 @@ class TranscriptionService: NSObject, URLSessionWebSocketDelegate {
         return withState { _connectionState == .connected }
     }
 
+    /// Compute reconnect delay: exponential backoff capped at maxBackoff, then jittered.
+    /// Exposed as static for testability.
+    static func reconnectDelay(
+        attempt: Int,
+        maxBackoff: TimeInterval = 60.0,
+        jitterRange: ClosedRange<Double> = 0.5...1.5
+    ) -> TimeInterval {
+        let baseDelay = min(pow(2.0, Double(attempt)), maxBackoff)
+        let jitter = Double.random(in: jitterRange)
+        return baseDelay * jitter
+    }
+
     // MARK: - Private Methods
 
     private func connect() {
@@ -650,9 +662,7 @@ class TranscriptionService: NSObject, URLSessionWebSocketDelegate {
         guard shouldAttemptReconnect else { return }
 
         // Exponential backoff with jitter, no hard cap on attempts
-        let baseDelay = min(pow(2.0, Double(attempt)), maxBackoff)
-        let jitter = Double.random(in: backoffJitterRange)
-        let delay = baseDelay * jitter
+        let delay = Self.reconnectDelay(attempt: attempt, maxBackoff: maxBackoff, jitterRange: backoffJitterRange)
         log("TranscriptionService: Reconnecting in \(String(format: "%.1f", delay))s (attempt \(attempt))")
 
         reconnectTask = Task { [weak self] in
@@ -949,16 +959,17 @@ extension TranscriptionService {
 
 /// Bounded ring buffer that holds audio chunks produced while WebSocket is reconnecting.
 /// Chunks older than `ttl` or exceeding `maxBytes` are evicted automatically.
-private struct ReconnectAudioRingBuffer {
-    private struct Chunk {
+/// Internal access level for testability via @testable import.
+struct ReconnectAudioRingBuffer {
+    struct Chunk {
         let data: Data
         let createdAt: Date
     }
 
-    private let ttl: TimeInterval
-    private let maxBytes: Int
-    private var chunks: [Chunk] = []
-    private var totalBytes = 0
+    let ttl: TimeInterval
+    let maxBytes: Int
+    private(set) var chunks: [Chunk] = []
+    private(set) var totalBytes = 0
 
     init(ttl: TimeInterval = 30, maxBytes: Int = 960_000) {
         self.ttl = ttl
