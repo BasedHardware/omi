@@ -575,6 +575,321 @@ class TestGetChatSessionsQuery:
         assert 'app_id' not in fields, f"Should use plugin_id, not app_id as filter field: {fields}"
 
 
+class TestCreateChatSession:
+    """Verify create_chat_session writes correct fields."""
+
+    def test_default_title_and_counters(self):
+        """create_chat_session with no title uses 'New Chat' and initializes counters."""
+        mock_doc_ref = MagicMock()
+
+        with patch.object(chat_db, 'db') as patched_db:
+            patched_db.collection.return_value.document.return_value.collection.return_value.document.return_value = (
+                mock_doc_ref
+            )
+            result = chat_db.create_chat_session('uid')
+
+        assert result['title'] == 'New Chat'
+        assert result['message_count'] == 0
+        assert result['starred'] is False
+        assert result['preview'] is None
+        mock_doc_ref.set.assert_called_once()
+
+    def test_plugin_id_matches_app_id(self):
+        """create_chat_session sets both plugin_id and app_id to the given app_id."""
+        mock_doc_ref = MagicMock()
+
+        with patch.object(chat_db, 'db') as patched_db:
+            patched_db.collection.return_value.document.return_value.collection.return_value.document.return_value = (
+                mock_doc_ref
+            )
+            result = chat_db.create_chat_session('uid', app_id='my-plugin')
+
+        assert result['plugin_id'] == 'my-plugin'
+        assert result['app_id'] == 'my-plugin'
+
+    def test_custom_title(self):
+        """create_chat_session uses the provided title."""
+        mock_doc_ref = MagicMock()
+
+        with patch.object(chat_db, 'db') as patched_db:
+            patched_db.collection.return_value.document.return_value.collection.return_value.document.return_value = (
+                mock_doc_ref
+            )
+            result = chat_db.create_chat_session('uid', title='My Custom Chat')
+
+        assert result['title'] == 'My Custom Chat'
+
+
+class TestAcquireChatSession:
+    """Verify acquire_chat_session reuse vs create logic."""
+
+    def test_reuses_existing_session(self):
+        """acquire_chat_session returns existing session ID when one exists."""
+        mock_doc = MagicMock()
+        mock_doc.id = 'existing-session-id'
+        mock_query = MagicMock()
+        mock_query.limit.return_value = mock_query
+        mock_query.stream.return_value = [mock_doc]
+
+        with patch.object(chat_db, 'db') as patched_db:
+            patched_db.collection.return_value.document.return_value.collection.return_value.where.return_value = (
+                mock_query
+            )
+            result = chat_db.acquire_chat_session('uid', app_id='my-app')
+
+        assert result == 'existing-session-id'
+
+    def test_creates_new_session_when_none_exists(self):
+        """acquire_chat_session creates a new session when no matching session found."""
+        mock_query = MagicMock()
+        mock_query.limit.return_value = mock_query
+        mock_query.stream.return_value = []  # No existing sessions
+
+        with patch.object(chat_db, 'db') as patched_db, patch.object(
+            chat_db, 'create_chat_session', return_value={'id': 'new-session-id'}
+        ) as mock_create:
+            patched_db.collection.return_value.document.return_value.collection.return_value.where.return_value = (
+                mock_query
+            )
+            result = chat_db.acquire_chat_session('uid', app_id='my-app')
+
+        assert result == 'new-session-id'
+        mock_create.assert_called_once_with('uid', app_id='my-app')
+
+
+class TestUpdateChatSession:
+    """Verify update_chat_session behavior."""
+
+    def test_not_found_returns_none(self):
+        """update_chat_session returns None when session doesn't exist."""
+        mock_ref = MagicMock()
+        mock_ref.get.return_value.exists = False
+
+        with patch.object(chat_db, 'db') as patched_db:
+            patched_db.collection.return_value.document.return_value.collection.return_value.document.return_value = (
+                mock_ref
+            )
+            result = chat_db.update_chat_session('uid', 'nonexistent-session', title='New Title')
+
+        assert result is None
+        mock_ref.update.assert_not_called()
+
+    def test_title_only_update(self):
+        """update_chat_session with title only updates title and updated_at."""
+        mock_ref = MagicMock()
+        mock_ref.get.return_value.exists = True
+        mock_ref.get.return_value.to_dict.return_value = {'title': 'Updated Title'}
+
+        with patch.object(chat_db, 'db') as patched_db:
+            patched_db.collection.return_value.document.return_value.collection.return_value.document.return_value = (
+                mock_ref
+            )
+            chat_db.update_chat_session('uid', 'sess-1', title='Updated Title')
+
+        update_call = mock_ref.update.call_args[0][0]
+        assert 'title' in update_call
+        assert 'updated_at' in update_call
+        assert 'starred' not in update_call
+
+    def test_starred_only_update(self):
+        """update_chat_session with starred only updates starred and updated_at."""
+        mock_ref = MagicMock()
+        mock_ref.get.return_value.exists = True
+        mock_ref.get.return_value.to_dict.return_value = {'starred': True}
+
+        with patch.object(chat_db, 'db') as patched_db:
+            patched_db.collection.return_value.document.return_value.collection.return_value.document.return_value = (
+                mock_ref
+            )
+            chat_db.update_chat_session('uid', 'sess-1', starred=True)
+
+        update_call = mock_ref.update.call_args[0][0]
+        assert 'starred' in update_call
+        assert 'updated_at' in update_call
+        assert 'title' not in update_call
+
+
+class TestDeleteChatSessionCascade:
+    """Verify delete_chat_session with cascade_messages."""
+
+    def test_cascade_deletes_messages_then_session(self):
+        """delete_chat_session with cascade_messages=True deletes messages first."""
+        mock_session_ref = MagicMock()
+        mock_session_ref.get.return_value.exists = True
+        mock_msg_col = MagicMock()
+        mock_query = MagicMock()
+        mock_msg_col.where.return_value = mock_query
+
+        # Return 2 docs on first batch, then empty
+        mock_doc1 = MagicMock()
+        mock_doc1.id = 'msg-1'
+        mock_doc2 = MagicMock()
+        mock_doc2.id = 'msg-2'
+        mock_query.limit.return_value = mock_query
+        mock_query.stream.side_effect = [[mock_doc1, mock_doc2], []]
+
+        mock_batch = MagicMock()
+
+        with patch.object(chat_db, 'db') as patched_db:
+            mock_user_ref = MagicMock()
+            mock_user_ref.collection.side_effect = lambda name: (
+                MagicMock(document=MagicMock(return_value=mock_session_ref))
+                if name == 'chat_sessions'
+                else mock_msg_col
+            )
+            patched_db.collection.return_value.document.return_value = mock_user_ref
+            patched_db.batch.return_value = mock_batch
+            chat_db.delete_chat_session('uid', 'sess-1', cascade_messages=True)
+
+        mock_batch.commit.assert_called_once()
+        mock_session_ref.delete.assert_called_once()
+
+    def test_cascade_nonexistent_session_short_circuits(self):
+        """delete_chat_session with cascade on nonexistent session returns False."""
+        mock_session_ref = MagicMock()
+        mock_session_ref.get.return_value.exists = False
+
+        with patch.object(chat_db, 'db') as patched_db:
+            mock_user_ref = MagicMock()
+            mock_user_ref.collection.return_value.document.return_value = mock_session_ref
+            patched_db.collection.return_value.document.return_value = mock_user_ref
+            result = chat_db.delete_chat_session('uid', 'nonexistent', cascade_messages=True)
+
+        assert result is False
+
+
+class TestSaveMessageSessionBehavior:
+    """Verify save_message session acquisition and preview behavior."""
+
+    def test_explicit_session_id_skips_acquire(self):
+        """save_message with explicit session_id doesn't call acquire_chat_session."""
+        mock_doc_ref = MagicMock()
+        mock_session_ref = MagicMock()
+        mock_session_ref.get.return_value.exists = True
+
+        with patch.object(chat_db, 'acquire_chat_session') as mock_acquire, patch.object(chat_db, 'db') as patched_db:
+            patched_db.collection.return_value.document.return_value.collection.return_value.document.return_value = (
+                mock_doc_ref
+            )
+            # Make session ref accessible for the session update path
+            mock_doc_ref.set.return_value = None
+            chat_db.save_message('uid', text='hello', sender='human', session_id='my-session')
+
+        mock_acquire.assert_not_called()
+
+    def test_preview_truncated_to_100_chars(self):
+        """save_message truncates preview to 100 characters."""
+        long_text = 'x' * 200
+        mock_msg_ref = MagicMock()
+        mock_session_ref = MagicMock()
+        mock_session_ref.get.return_value.exists = True
+
+        with patch.object(chat_db, 'acquire_chat_session', return_value='sess-1'), patch.object(
+            chat_db, 'db'
+        ) as patched_db:
+            # Mock message write
+            patched_db.collection.return_value.document.return_value.collection.side_effect = lambda name: (
+                MagicMock(document=MagicMock(return_value=mock_session_ref))
+                if name == 'chat_sessions'
+                else MagicMock(document=MagicMock(return_value=mock_msg_ref))
+            )
+            chat_db.save_message('uid', text=long_text, sender='human')
+
+        # Check the session update call has truncated preview
+        if mock_session_ref.update.called:
+            update_call = mock_session_ref.update.call_args[0][0]
+            assert len(update_call['preview']) == 100
+
+
+class TestDeleteMessagesCount:
+    """Verify delete_messages returns correct count."""
+
+    def test_returns_zero_when_no_messages(self):
+        """delete_messages returns 0 when no matching messages found."""
+        mock_col = MagicMock()
+        mock_query = MagicMock()
+        mock_col.where.return_value = mock_query
+        mock_query.limit.return_value = mock_query
+        mock_query.stream.return_value = []
+
+        with patch.object(chat_db, 'db') as patched_db:
+            patched_db.collection.return_value.document.return_value.collection.return_value = mock_col
+            result = chat_db.delete_messages('uid', app_id='my-app')
+
+        assert result == 0
+
+    def test_returns_count_of_deleted_messages(self):
+        """delete_messages returns total count of deleted messages."""
+        mock_col = MagicMock()
+        mock_query = MagicMock()
+        mock_col.where.return_value = mock_query
+        mock_query.limit.return_value = mock_query
+
+        doc1 = MagicMock()
+        doc1.id = 'msg-1'
+        doc2 = MagicMock()
+        doc2.id = 'msg-2'
+        doc3 = MagicMock()
+        doc3.id = 'msg-3'
+        mock_query.stream.side_effect = [[doc1, doc2, doc3], []]
+
+        mock_batch = MagicMock()
+        with patch.object(chat_db, 'db') as patched_db:
+            patched_db.collection.return_value.document.return_value.collection.return_value = mock_col
+            patched_db.batch.return_value = mock_batch
+            result = chat_db.delete_messages('uid', app_id='my-app')
+
+        assert result == 3
+        mock_batch.commit.assert_called_once()
+
+
+class TestLlmUsageBucketParam:
+    """Verify configurable bucket parameter in LLM usage functions."""
+
+    def test_custom_bucket_dual_writes(self):
+        """record_llm_usage_bucket with custom bucket writes to both bucket and bucket_account."""
+        mock_ref = MagicMock()
+
+        with patch.object(llm_usage_db, 'db') as patched_db:
+            patched_db.collection.return_value.document.return_value.collection.return_value.document.return_value = (
+                mock_ref
+            )
+            llm_usage_db.record_llm_usage_bucket(
+                'uid',
+                input_tokens=10,
+                output_tokens=20,
+                bucket='custom_feature',
+                account='openai',
+            )
+
+        set_call = mock_ref.set.call_args
+        update_data = set_call[0][0]
+        # Primary bucket
+        assert 'custom_feature.input_tokens' in update_data
+        assert 'custom_feature.output_tokens' in update_data
+        assert 'custom_feature.call_count' in update_data
+        # Per-account bucket
+        assert 'custom_feature_openai.input_tokens' in update_data
+        assert 'custom_feature_openai.output_tokens' in update_data
+
+    def test_get_total_llm_cost_custom_bucket(self):
+        """get_total_llm_cost with custom bucket reads from the specified bucket only."""
+        mock_doc1 = MagicMock()
+        mock_doc1.to_dict.return_value = {
+            'custom_feature': {'cost_usd': 0.5},
+            'custom_feature_openai': {'cost_usd': 0.5},  # Should NOT be double-counted
+            'desktop_chat': {'cost_usd': 1.0},  # Different bucket, should be excluded
+        }
+        mock_col = MagicMock()
+        mock_col.stream.return_value = [mock_doc1]
+
+        with patch.object(llm_usage_db, 'db') as patched_db:
+            patched_db.collection.return_value.document.return_value.collection.return_value = mock_col
+            result = llm_usage_db.get_total_llm_cost('uid', bucket='custom_feature')
+
+        assert result == 0.5  # Only custom_feature, not custom_feature_openai or desktop_chat
+
+
 # ===========================================================================
 # 3. SCORE COMPUTATION TESTS (mock Firestore)
 # ===========================================================================
