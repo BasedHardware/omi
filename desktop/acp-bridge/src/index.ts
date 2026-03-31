@@ -702,6 +702,9 @@ async function handleQuery(msg: QueryMessage): Promise<void> {
           mcpServers: buildMcpServers(mode, requestedCwd, sessionKey),
         });
         sessionId = msg.resume;
+        if (requestedModel) {
+          await acpRequest("session/set_model", { sessionId, modelId: requestedModel });
+        }
         sessions.set(sessionKey, { sessionId, cwd: requestedCwd, model: requestedModel });
         isNewSession = false;
         logErr(`ACP session resumed: ${sessionId} (key=${sessionKey})`);
@@ -719,11 +722,11 @@ async function handleQuery(msg: QueryMessage): Promise<void> {
       const sessionResult = (await acpRequest("session/new", sessionParams)) as { sessionId: string };
 
       sessionId = sessionResult.sessionId;
-      sessions.set(sessionKey, { sessionId, cwd: requestedCwd, model: requestedModel });
       isNewSession = true;
       if (requestedModel) {
         await acpRequest("session/set_model", { sessionId, modelId: requestedModel });
       }
+      sessions.set(sessionKey, { sessionId, cwd: requestedCwd, model: requestedModel });
       logErr(`ACP session created: ${sessionId} (key=${sessionKey}, model=${requestedModel || "default"}, cwd=${requestedCwd})`);
     } else {
       isNewSession = false;
