@@ -333,5 +333,5 @@ struct DashboardPage: View {
 #Preview {
     DashboardPage(viewModel: DashboardViewModel(), appState: AppState(), selectedIndex: .constant(0))
         .frame(width: 800, height: 600)
-        .background(OmiColors.backgroundPrimary)
+        .background(NootoColors.backgroundPrimary)
 }
