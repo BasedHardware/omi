@@ -181,6 +181,12 @@ export function useNotifications(): UseNotificationsReturn {
   const handleForegroundMessage = useCallback((payload: MessagePayload) => {
     const notification = payloadToNotification(payload);
 
+    // Skip data-only messages with no body (background sync, etc.)
+    if (!notification.body.trim()) {
+      console.log('[Notifications] Skipping empty-body notification:', notification.type);
+      return;
+    }
+
     setNotifications((prev) => {
       const updated = [notification, ...prev].slice(0, MAX_NOTIFICATIONS);
       saveNotifications(updated);
