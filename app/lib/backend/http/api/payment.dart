@@ -30,12 +30,12 @@ Future<Map<String, dynamic>?> createCheckoutSession({required String priceId}) a
   return null;
 }
 
-Future<bool> cancelSubscription() async {
+Future<bool> cancelSubscription({String? reason, String? reasonDetails}) async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/payments/subscription',
     headers: {},
     method: 'DELETE',
-    body: '',
+    body: reason != null ? jsonEncode({'reason': reason, 'reason_details': reasonDetails}) : '',
   );
   if (response != null && response.statusCode == 200) {
     return true;
