@@ -1319,11 +1319,11 @@ def update_ai_profile(
 
 
 # ============================================================================
-# Desktop LLM Usage (extends existing /v1/users/me/llm-usage endpoints above)
+# Bucket-based LLM Usage (extends existing /v1/users/me/llm-usage endpoints above)
 # ============================================================================
 
 
-class RecordDesktopLlmUsageRequest(BaseModel):
+class RecordLlmUsageBucketRequest(BaseModel):
     input_tokens: int = Field(0, ge=0)
     output_tokens: int = Field(0, ge=0)
     cache_read_tokens: int = Field(0, ge=0)
@@ -1334,11 +1334,11 @@ class RecordDesktopLlmUsageRequest(BaseModel):
 
 
 @router.post('/v1/users/me/llm-usage', tags=['users'])
-def record_desktop_llm_usage(
-    request: RecordDesktopLlmUsageRequest,
+def record_llm_usage_bucket(
+    request: RecordLlmUsageBucketRequest,
     uid: str = Depends(auth.get_current_user_uid),
 ):
-    llm_usage_db.record_desktop_llm_usage(
+    llm_usage_db.record_llm_usage_bucket(
         uid,
         input_tokens=request.input_tokens,
         output_tokens=request.output_tokens,
@@ -1352,6 +1352,6 @@ def record_desktop_llm_usage(
 
 
 @router.get('/v1/users/me/llm-usage/total', tags=['users'])
-def get_total_desktop_llm_cost(uid: str = Depends(auth.get_current_user_uid)):
-    total = llm_usage_db.get_total_desktop_llm_cost(uid)
+def get_total_llm_cost(uid: str = Depends(auth.get_current_user_uid)):
+    total = llm_usage_db.get_total_llm_cost(uid)
     return {'total_cost_usd': total}
