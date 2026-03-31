@@ -219,3 +219,74 @@ def get_global_top_features(days: int = 30, limit: int = 3) -> List[Dict]:
 
     features.sort(key=lambda x: x["total_tokens"], reverse=True)
     return features[:limit]
+
+
+# ============================================================================
+# DESKTOP LLM USAGE
+#
+# Desktop uses a flat key scheme ("desktop_chat" / "desktop_chat_{account}")
+# with fields: input_tokens, output_tokens, cache_read_tokens,
+# cache_write_tokens, total_tokens, cost_usd, call_count.
+#
+# This differs from the {feature}.{model} nesting above.  Both schemas
+# coexist in the same date-keyed documents using Firestore's schemaless design.
+# ============================================================================
+
+
+def record_desktop_llm_usage(
+    uid: str,
+    input_tokens: int,
+    output_tokens: int,
+    cache_read_tokens: int = 0,
+    cache_write_tokens: int = 0,
+    total_tokens: int = 0,
+    cost_usd: float = 0.0,
+    account: str = 'omi',
+) -> None:
+    """Record desktop LLM token usage with atomic increments.
+
+    Matches the Rust backend's field schema exactly so existing analytics
+    and the Swift client see consistent data.
+    """
+    today = datetime.now(timezone.utc).strftime('%Y-%m-%d')
+    ref = db.collection("users").document(uid).collection("llm_usage").document(today)
+
+    # Rust dual-writes: always increment "desktop_chat" (backward compat for
+    # existing queries) AND "desktop_chat_{account}" (per-account breakdown).
+    acct_key = f'desktop_chat_{account}'
+    update = {
+        'desktop_chat.input_tokens': firestore.Increment(input_tokens),
+        'desktop_chat.output_tokens': firestore.Increment(output_tokens),
+        'desktop_chat.cache_read_tokens': firestore.Increment(cache_read_tokens),
+        'desktop_chat.cache_write_tokens': firestore.Increment(cache_write_tokens),
+        'desktop_chat.total_tokens': firestore.Increment(total_tokens),
+        'desktop_chat.cost_usd': firestore.Increment(cost_usd),
+        'desktop_chat.call_count': firestore.Increment(1),
+        f'{acct_key}.input_tokens': firestore.Increment(input_tokens),
+        f'{acct_key}.output_tokens': firestore.Increment(output_tokens),
+        f'{acct_key}.cache_read_tokens': firestore.Increment(cache_read_tokens),
+        f'{acct_key}.cache_write_tokens': firestore.Increment(cache_write_tokens),
+        f'{acct_key}.total_tokens': firestore.Increment(total_tokens),
+        f'{acct_key}.cost_usd': firestore.Increment(cost_usd),
+        f'{acct_key}.call_count': firestore.Increment(1),
+        'date': today,
+        'last_updated': datetime.now(timezone.utc),
+    }
+    ref.set(update, merge=True)
+
+
+def get_total_desktop_llm_cost(uid: str) -> float:
+    """Sum cost_usd from the legacy ``desktop_chat`` bucket only.
+
+    Since record_desktop_llm_usage() dual-writes to both ``desktop_chat`` and
+    ``desktop_chat_{account}``, summing all ``desktop_chat*`` keys would
+    double-count.  The Rust backend also reads only ``desktop_chat.cost_usd``.
+    """
+    col = db.collection("users").document(uid).collection("llm_usage")
+    total = 0.0
+    for doc in col.stream():
+        data = doc.to_dict()
+        dc = data.get('desktop_chat')
+        if isinstance(dc, dict):
+            total += dc.get('cost_usd', 0.0)
+    return round(total, 6)
