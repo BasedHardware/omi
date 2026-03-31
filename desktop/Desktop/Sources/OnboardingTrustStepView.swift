@@ -16,7 +16,7 @@ struct OnboardingTrustStepView: View {
       eyebrow: "Before we continue",
       title: "I’m going to ask for a few permissions.",
       description:
-        "Omi is open source and private by design. During setup, we’ll ask for these permissions to understand your work and help in the right places:",
+        "Nooto is open source and private by design. During setup, we’ll ask for these permissions to understand your work and help in the right places:",
       layoutMode: .centered
     ) {
       VStack(spacing: 18) {
@@ -40,7 +40,7 @@ struct OnboardingTrustStepView: View {
             NSWorkspace.shared.open(url)
           }
           .buttonStyle(.plain)
-          .foregroundColor(OmiColors.textSecondary)
+          .foregroundColor(NootoColors.textSecondary)
           .font(.system(size: 13, weight: .medium))
         }
       }
@@ -59,16 +59,16 @@ struct OnboardingTrustStepView: View {
         .frame(width: 28, height: 28)
         .background(
           RoundedRectangle(cornerRadius: 8, style: .continuous)
-            .fill(OmiColors.backgroundSecondary)
+            .fill(NootoColors.backgroundSecondary)
         )
 
       VStack(alignment: .leading, spacing: 2) {
         Text(title)
           .font(.system(size: 14, weight: .semibold))
-          .foregroundColor(OmiColors.textPrimary)
+          .foregroundColor(NootoColors.textPrimary)
         Text(detail)
           .font(.system(size: 13))
-          .foregroundColor(OmiColors.textSecondary)
+          .foregroundColor(NootoColors.textSecondary)
       }
 
       Spacer()
@@ -76,7 +76,7 @@ struct OnboardingTrustStepView: View {
     .padding(14)
     .background(
       RoundedRectangle(cornerRadius: 14, style: .continuous)
-        .fill(OmiColors.backgroundTertiary.opacity(0.55))
+        .fill(NootoColors.backgroundTertiary.opacity(0.55))
     )
   }
 }
