@@ -801,11 +801,11 @@ extension TranscriptionService {
 
         log("TranscriptionService: Split — first=\(firstHalf.count) bytes, second=\(secondHalf.count) bytes, offset=\(String(format: "%.1f", splitStartSec))s")
 
-        // Transcribe both halves (sequentially to avoid doubling concurrent load)
-        let firstSegments = try await batchTranscribeFull(
+        // Transcribe both halves (recursively split if still too large)
+        let firstSegments = try await batchTranscribeWithSplitting(
             audioData: Data(firstHalf), language: language, vocabulary: vocabulary
         )
-        let secondSegments = try await batchTranscribeFull(
+        let secondSegments = try await batchTranscribeWithSplitting(
             audioData: Data(secondHalf), language: language, vocabulary: vocabulary
         )
 
