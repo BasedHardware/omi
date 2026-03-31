@@ -253,17 +253,7 @@ async fn deepgram_ws_proxy(
     }))
 }
 
-/// Which side of the proxy terminated first
-#[derive(Debug)]
-enum ProxyCloseOrigin {
-    ClientClosed,
-    UpstreamClosed,
-    ClientError,
-    UpstreamError,
-}
-
 /// Bidirectional WebSocket proxy between client (axum) and upstream (tokio-tungstenite).
-/// When one side closes or errors, a close frame is forwarded to the other side before teardown.
 async fn proxy_ws_bidirectional(
     client_socket: axum::extract::ws::WebSocket,
     upstream_url: &str,
@@ -288,71 +278,47 @@ async fn proxy_ws_bidirectional(
 
     // Client → Upstream
     let client_to_upstream = async {
-        while let Some(result) = client_stream.next().await {
-            match result {
-                Ok(msg) => {
-                    let tung_msg = match msg {
-                        AxumMsg::Text(t) => TungMsg::Text(t),
-                        AxumMsg::Binary(b) => TungMsg::Binary(b),
-                        AxumMsg::Ping(p) => TungMsg::Ping(p),
-                        AxumMsg::Pong(p) => TungMsg::Pong(p),
-                        AxumMsg::Close(_) => {
-                            let _ = upstream_sink.close().await;
-                            return ProxyCloseOrigin::ClientClosed;
-                        }
-                    };
-                    if upstream_sink.send(tung_msg).await.is_err() {
-                        return ProxyCloseOrigin::UpstreamError;
-                    }
+        while let Some(Ok(msg)) = client_stream.next().await {
+            let tung_msg = match msg {
+                AxumMsg::Text(t) => TungMsg::Text(t),
+                AxumMsg::Binary(b) => TungMsg::Binary(b),
+                AxumMsg::Ping(p) => TungMsg::Ping(p),
+                AxumMsg::Pong(p) => TungMsg::Pong(p),
+                AxumMsg::Close(_) => {
+                    let _ = upstream_sink.close().await;
+                    return;
                 }
-                Err(_) => return ProxyCloseOrigin::ClientError,
+            };
+            if upstream_sink.send(tung_msg).await.is_err() {
+                return;
             }
         }
-        ProxyCloseOrigin::ClientClosed
     };
 
     // Upstream → Client
     let upstream_to_client = async {
-        while let Some(result) = upstream_stream.next().await {
-            match result {
-                Ok(msg) => {
-                    let axum_msg = match msg {
-                        TungMsg::Text(t) => AxumMsg::Text(t),
-                        TungMsg::Binary(b) => AxumMsg::Binary(b),
-                        TungMsg::Ping(p) => AxumMsg::Ping(p),
-                        TungMsg::Pong(p) => AxumMsg::Pong(p),
-                        TungMsg::Close(_) => {
-                            let _ = client_sink.close().await;
-                            return ProxyCloseOrigin::UpstreamClosed;
-                        }
-                        TungMsg::Frame(_) => continue,
-                    };
-                    if client_sink.send(axum_msg).await.is_err() {
-                        return ProxyCloseOrigin::ClientError;
-                    }
+        while let Some(Ok(msg)) = upstream_stream.next().await {
+            let axum_msg = match msg {
+                TungMsg::Text(t) => AxumMsg::Text(t),
+                TungMsg::Binary(b) => AxumMsg::Binary(b),
+                TungMsg::Ping(p) => AxumMsg::Ping(p),
+                TungMsg::Pong(p) => AxumMsg::Pong(p),
+                TungMsg::Close(_) => {
+                    let _ = client_sink.close().await;
+                    return;
                 }
-                Err(_) => return ProxyCloseOrigin::UpstreamError,
+                TungMsg::Frame(_) => continue,
+            };
+            if client_sink.send(axum_msg).await.is_err() {
+                return;
             }
         }
-        ProxyCloseOrigin::UpstreamClosed
     };
 
-    // Run both directions concurrently; when either ends, gracefully close the other side
-    let origin = tokio::select! {
-        origin = client_to_upstream => origin,
-        origin = upstream_to_client => origin,
-    };
-
-    // Forward close frame to the surviving side with a timeout to prevent hanging
-    let close_timeout = std::time::Duration::from_secs(5);
-    tracing::debug!("deepgram_ws_proxy: proxy ended ({:?})", origin);
-    match origin {
-        ProxyCloseOrigin::UpstreamClosed | ProxyCloseOrigin::UpstreamError => {
-            let _ = tokio::time::timeout(close_timeout, client_sink.close()).await;
-        }
-        ProxyCloseOrigin::ClientClosed | ProxyCloseOrigin::ClientError => {
-            let _ = tokio::time::timeout(close_timeout, upstream_sink.close()).await;
-        }
+    // Run both directions concurrently; when either ends, drop both
+    tokio::select! {
+        _ = client_to_upstream => {},
+        _ = upstream_to_client => {},
     }
 
     Ok(())
