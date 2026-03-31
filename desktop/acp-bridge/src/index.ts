@@ -727,6 +727,12 @@ async function handleQuery(msg: QueryMessage): Promise<void> {
       logErr(`ACP session created: ${sessionId} (key=${sessionKey}, model=${requestedModel || "default"}, cwd=${requestedCwd})`);
     } else {
       isNewSession = false;
+      // Update model on reuse if the requested model differs from the session's stored model
+      if (existing && requestedModel && requestedModel !== existing.model) {
+        await acpRequest("session/set_model", { sessionId, modelId: requestedModel });
+        sessions.set(sessionKey, { sessionId, cwd: requestedCwd, model: requestedModel });
+        logErr(`Updated model on reuse: ${sessionId} (key=${sessionKey}, ${existing.model} -> ${requestedModel})`);
+      }
       logErr(`Reusing existing ACP session: ${sessionId} (key=${sessionKey})`);
     }
     activeSessionId = sessionId;
@@ -811,7 +817,7 @@ async function handleQuery(msg: QueryMessage): Promise<void> {
         }
         authRetryCount++;
         logErr(`session/prompt failed with auth error (code=${err.code}), starting OAuth flow (attempt ${authRetryCount})`);
-        sessions.delete(requestedModel);
+        sessions.delete(sessionKey);
         activeSessionId = "";
         await startAuthFlow();
         return handleQuery(msg);
@@ -820,7 +826,7 @@ async function handleQuery(msg: QueryMessage): Promise<void> {
       // Do NOT retry if we already started fresh (isNewSession) — that would infinite-loop.
       if (!isNewSession && sessionId) {
         logErr(`session/prompt failed with existing session, retrying with fresh session: ${err}`);
-        sessions.delete(requestedModel);
+        sessions.delete(sessionKey);
         activeSessionId = "";
         return handleQuery(msg);
       }
