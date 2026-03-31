@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import Optional, List
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
@@ -469,3 +469,123 @@ def unlock_all_action_items(uid: str):
     if count > 0:
         batch.commit()
     logger.info(f"Unlocked all action items for user {uid}")
+
+
+# ============================================================================
+# DAILY SCORE — computed from action_items
+# ============================================================================
+
+
+def get_daily_score(uid: str, date: str = None) -> dict:
+    """Compute productivity score for a single day from action_items."""
+    if date:
+        day = datetime.strptime(date, '%Y-%m-%d').replace(tzinfo=timezone.utc)
+    else:
+        day = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+
+    day_end = day + timedelta(days=1)
+    col = db.collection('users').document(uid).collection(action_items_collection)
+
+    # Count tasks due today
+    due_query = col.where(filter=FieldFilter('due_at', '>=', day)).where(filter=FieldFilter('due_at', '<', day_end))
+    total = 0
+    completed = 0
+    for doc in due_query.stream():
+        data = doc.to_dict()
+        if data.get('deleted'):
+            continue
+        total += 1
+        if data.get('completed'):
+            completed += 1
+
+    score = round((completed / total * 100) if total > 0 else 0)
+    return {'date': day.strftime('%Y-%m-%d'), 'score': score, 'completed': completed, 'total': total}
+
+
+def get_scores(uid: str, date: str = None) -> dict:
+    """Compute daily, weekly, and overall scores (matching Rust backend behavior).
+
+    Takes a single date (or defaults to today) and returns:
+      daily  — tasks due on that date
+      weekly — tasks due in the 7 days ending on that date
+      overall — all non-deleted tasks
+    """
+    if date:
+        day = datetime.strptime(date, '%Y-%m-%d').replace(tzinfo=timezone.utc)
+    else:
+        day = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+
+    day_start = day
+    day_end = day + timedelta(days=1)
+    week_start = day - timedelta(days=7)
+
+    col = db.collection('users').document(uid).collection(action_items_collection)
+
+    def _score(completed, total):
+        return round((completed / total * 100) if total > 0 else 0, 1)
+
+    # Daily: tasks due today
+    daily_q = col.where(filter=FieldFilter('due_at', '>=', day_start)).where(filter=FieldFilter('due_at', '<', day_end))
+    daily_completed = daily_total = 0
+    for doc in daily_q.stream():
+        data = doc.to_dict()
+        if data.get('deleted'):
+            continue
+        daily_total += 1
+        if data.get('completed'):
+            daily_completed += 1
+
+    # Weekly: tasks created in last 7 days (matches Rust backend which uses created_at)
+    weekly_q = col.where(filter=FieldFilter('created_at', '>=', week_start)).where(
+        filter=FieldFilter('created_at', '<', day_end)
+    )
+    weekly_completed = weekly_total = 0
+    for doc in weekly_q.stream():
+        data = doc.to_dict()
+        if data.get('deleted'):
+            continue
+        weekly_total += 1
+        if data.get('completed'):
+            weekly_completed += 1
+
+    # Overall: all non-deleted tasks
+    overall_completed = overall_total = 0
+    for doc in col.stream():
+        data = doc.to_dict()
+        if data.get('deleted'):
+            continue
+        overall_total += 1
+        if data.get('completed'):
+            overall_completed += 1
+
+    daily = {
+        'score': _score(daily_completed, daily_total),
+        'completed_tasks': daily_completed,
+        'total_tasks': daily_total,
+    }
+    weekly = {
+        'score': _score(weekly_completed, weekly_total),
+        'completed_tasks': weekly_completed,
+        'total_tasks': weekly_total,
+    }
+    overall = {
+        'score': _score(overall_completed, overall_total),
+        'completed_tasks': overall_completed,
+        'total_tasks': overall_total,
+    }
+
+    # Determine default tab (highest score, prefer daily > weekly > overall)
+    if daily['total_tasks'] > 0 and daily['score'] >= weekly['score'] and daily['score'] >= overall['score']:
+        default_tab = 'daily'
+    elif weekly['score'] >= overall['score']:
+        default_tab = 'weekly'
+    else:
+        default_tab = 'overall'
+
+    return {
+        'daily': daily,
+        'weekly': weekly,
+        'overall': overall,
+        'default_tab': default_tab,
+        'date': day.strftime('%Y-%m-%d'),
+    }
