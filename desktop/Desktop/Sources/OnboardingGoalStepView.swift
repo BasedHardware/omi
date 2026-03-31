@@ -19,7 +19,7 @@ struct OnboardingGoalStepView: View {
       totalSteps: totalSteps,
       eyebrow: "Goal",
       title: "Pick one goal.",
-      description: "Omi will optimize for this first."
+      description: "Nooto will optimize for this first."
     ) {
       VStack(alignment: .leading, spacing: 18) {
         GoalChipGrid(
@@ -45,20 +45,20 @@ struct OnboardingGoalStepView: View {
             .padding(.vertical, 14)
             .background(
               RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .fill(OmiColors.backgroundSecondary)
+                .fill(NootoColors.backgroundSecondary)
                 .overlay(
                   RoundedRectangle(cornerRadius: 14, style: .continuous)
                     .stroke(Color.white.opacity(0.08), lineWidth: 1)
                 )
             )
-            .foregroundColor(OmiColors.textPrimary)
+            .foregroundColor(NootoColors.textPrimary)
             .frame(maxWidth: 560)
         }
 
         if let error = coordinator.lastActionError {
           Text(error)
             .font(.system(size: 12, weight: .medium))
-            .foregroundColor(OmiColors.warning)
+            .foregroundColor(NootoColors.warning)
         }
 
         Button(coordinator.isSavingGoal ? "Saving…" : "Continue") {
@@ -116,7 +116,7 @@ private struct GoalChipGrid: View {
         Button(action: { onSelect(item) }) {
           Text(item)
             .font(.system(size: 13, weight: .semibold))
-            .foregroundColor(isSelected ? .black : OmiColors.textSecondary)
+            .foregroundColor(isSelected ? .black : NootoColors.textSecondary)
             .frame(maxWidth: .infinity)
             .padding(.horizontal, 14)
             .padding(.vertical, 12)
