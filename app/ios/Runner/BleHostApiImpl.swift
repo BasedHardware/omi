@@ -16,16 +16,12 @@ final class BleHostApiImpl: BleHostApi {
         bleManager.stopScan()
     }
 
-    func connectPeripheral(uuid: String) throws {
+    func manageDevice(uuid: String, requiresBond: Bool) throws {
         bleManager.connectPeripheral(uuid: uuid)
     }
 
-    func disconnectPeripheral(uuid: String) throws {
+    func unmanageDevice(uuid: String) throws {
         bleManager.disconnectPeripheral(uuid: uuid)
-    }
-
-    func reconnectKnownPeripheral(uuid: String) throws {
-        bleManager.reconnectKnownPeripheral(uuid: uuid)
     }
 
     func requestBond(uuid: String, completion: @escaping (Result<Bool, Error>) -> Void) {
