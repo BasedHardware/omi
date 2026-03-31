@@ -1298,6 +1298,80 @@ def get_css() -> str:
 
 
 # ============================================
+# Calendar Sync Endpoints
+# ============================================
+
+from sync import sync_user_calendar
+
+
+@app.post("/sync", tags=["sync"])
+async def trigger_sync(request: Request):
+    """Manually trigger a calendar sync to push events as Omi memories."""
+    try:
+        body = await request.json()
+        uid = body.get("uid")
+        if not uid:
+            return JSONResponse({"error": "uid is required"}, status_code=400)
+
+        result = sync_user_calendar(
+            uid,
+            get_valid_access_token_fn=get_valid_access_token,
+            calendar_api_request_fn=calendar_api_request,
+            get_default_calendar_fn=get_default_calendar,
+        )
+        return result
+
+    except Exception as e:
+        log(f"Sync error: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+@app.get("/sync/status", tags=["sync"])
+async def sync_status(uid: str = Query(...)):
+    """Get sync status for a user."""
+    last_sync = get_user_setting(uid, "last_sync_at")
+    auto_sync = get_user_setting(uid, "auto_sync_enabled")
+    synced_count = len(get_user_setting(uid, "synced_event_ids") or [])
+    return {
+        "last_sync_at": last_sync,
+        "auto_sync_enabled": auto_sync or False,
+        "synced_events": synced_count,
+    }
+
+
+@app.post("/sync/toggle", tags=["sync"])
+async def toggle_auto_sync(request: Request):
+    """Enable or disable automatic sync for a user."""
+    try:
+        body = await request.json()
+        uid = body.get("uid")
+        enabled = body.get("enabled", True)
+        if not uid:
+            return JSONResponse({"error": "uid is required"}, status_code=400)
+
+        store_user_setting(uid, "auto_sync_enabled", enabled)
+        status = "enabled" if enabled else "disabled"
+        log(f"Auto-sync {status} for {uid}")
+
+        result = {"message": f"Auto-sync {status}"}
+
+        if enabled:
+            sync_result = sync_user_calendar(
+                uid,
+                get_valid_access_token_fn=get_valid_access_token,
+                calendar_api_request_fn=calendar_api_request,
+                get_default_calendar_fn=get_default_calendar,
+            )
+            result["initial_sync"] = sync_result
+
+        return result
+
+    except Exception as e:
+        log(f"Toggle sync error: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+# ============================================
 # Main Entry Point
 # ============================================
 
