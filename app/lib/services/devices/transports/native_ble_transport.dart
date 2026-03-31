@@ -8,9 +8,12 @@ import 'package:omi/utils/logger.dart';
 import 'device_transport.dart';
 
 /// BLE transport backed by native platform APIs via Pigeon.
-/// iOS: CoreBluetooth. Android: BluetoothGatt + CompanionDeviceManager.
+/// Uses the intent-based manageDevice/unmanageDevice API.
+/// Native owns the connection lifecycle (retry, reconnect, bonding).
+/// This transport is long-lived — not recreated on reconnection.
 class NativeBleTransport extends DeviceTransport {
   final String _peripheralUuid;
+  final bool requiresBond;
   final BleHostApi _hostApi = BleHostApi();
   final StreamController<DeviceTransportState> _connectionStateController =
       StreamController<DeviceTransportState>.broadcast();
@@ -20,16 +23,17 @@ class NativeBleTransport extends DeviceTransport {
 
   /// Discovered services from native.
   List<BleService> _services = [];
-  Completer<void>? _connectCompleter;
-  Completer<List<BleService>>? _servicesCompleter;
+
+  /// Completer for initial connect — resolved when onDeviceReady fires.
+  Completer<List<BleService>>? _deviceReadyCompleter;
 
   DeviceTransportState _state = DeviceTransportState.disconnected;
 
-  NativeBleTransport(this._peripheralUuid) {
+  NativeBleTransport(this._peripheralUuid, {this.requiresBond = false}) {
     BleBridge.instance.registerPeripheral(
       peripheralUuid: _peripheralUuid,
       onConnectionState: _handleConnectionState,
-      onServicesDiscovered: _handleServicesDiscovered,
+      onDeviceReady: _handleDeviceReady,
       onCharacteristicValue: _handleCharacteristicValue,
     );
   }
@@ -48,33 +52,30 @@ class NativeBleTransport extends DeviceTransport {
 
     _updateState(DeviceTransportState.connecting);
 
+    _deviceReadyCompleter = Completer<List<BleService>>();
+
     try {
-      _connectCompleter = Completer<void>();
-      // Set services completer early — native may send onServicesDiscovered
-      // together with onPeripheralConnected (when already connected)
-      _servicesCompleter = Completer<List<BleService>>();
-      _hostApi.connectPeripheral(_peripheralUuid);
+      _hostApi.manageDevice(_peripheralUuid, requiresBond);
+    } catch (e) {
+      Logger.debug('[NativeBleTransport] manageDevice failed: $e');
+      _deviceReadyCompleter = null;
+      _updateState(DeviceTransportState.disconnected);
+      rethrow;
+    }
 
-      await _connectCompleter!.future.timeout(const Duration(seconds: 30));
-      _connectCompleter = null;
-
-      // Native owns the full pipeline: connectGatt → discoverServices → onServicesDiscovered.
-      // If services already arrived (from already-connected path), use them.
-      if (_services.isNotEmpty && !_servicesCompleter!.isCompleted) {
-        _servicesCompleter!.complete(_services);
-      }
-
-      _services = await _servicesCompleter!.future.timeout(const Duration(seconds: 15));
-      _servicesCompleter = null;
-
-      // Audio batching disabled — backend expects one Opus frame per WebSocket message.
-      // Batching would require backend changes to handle concatenated frames.
-
+    // Wait for onDeviceReady from native (generous timeout — native owns retry).
+    // No "already connected" fast-path needed: Omi uses START_NOT_STICKY, so the
+    // service stops when the app dies. Device is never connected when app reopens.
+    try {
+      _services = await _deviceReadyCompleter!.future.timeout(
+        const Duration(seconds: 60),
+        onTimeout: () => throw TimeoutException('Device ready timeout after 60s'),
+      );
+      _deviceReadyCompleter = null;
       _updateState(DeviceTransportState.connected);
     } catch (e) {
       Logger.debug('[NativeBleTransport] connect failed: $e');
-      _connectCompleter = null;
-      _servicesCompleter = null;
+      _deviceReadyCompleter = null;
       _updateState(DeviceTransportState.disconnected);
       rethrow;
     }
@@ -86,24 +87,26 @@ class NativeBleTransport extends DeviceTransport {
 
     _updateState(DeviceTransportState.disconnecting);
 
-    try {
-      // Unsubscribe all active streams
-      for (final key in _streamControllers.keys.toList()) {
-        final parts = key.split(':');
-        if (parts.length == 2) {
-          try {
-            _hostApi.unsubscribeCharacteristic(_peripheralUuid, parts[0], parts[1]);
-          } catch (_) {}
-        }
+    // Unsubscribe all active streams
+    for (final key in _streamControllers.keys.toList()) {
+      final parts = key.split(':');
+      if (parts.length == 2) {
+        try {
+          _hostApi.unsubscribeCharacteristic(_peripheralUuid, parts[0], parts[1]);
+        } catch (_) {}
       }
-
-      _closeAllStreams();
-      _hostApi.disconnectPeripheral(_peripheralUuid);
-      _updateState(DeviceTransportState.disconnected);
-    } catch (e) {
-      _updateState(DeviceTransportState.disconnected);
-      rethrow;
     }
+
+    _closeAllStreams();
+    _services = [];
+
+    try {
+      _hostApi.unmanageDevice(_peripheralUuid);
+    } catch (e) {
+      Logger.debug('[NativeBleTransport] unmanageDevice failed: $e');
+    }
+
+    _updateState(DeviceTransportState.disconnected);
   }
 
   @override
@@ -124,8 +127,8 @@ class NativeBleTransport extends DeviceTransport {
     }
   }
 
-  /// Request bonding for devices that require encrypted links (e.g. Limitless).
-  /// Returns true if bonded, false if bond failed or timed out.
+  /// Request bonding — kept as a Dart-callable fallback.
+  /// Primary bonding now happens natively when requiresBond=true.
   @override
   Future<bool> requestBond() async {
     try {
@@ -235,46 +238,42 @@ class NativeBleTransport extends DeviceTransport {
   final Set<String> _activeSubscriptionKeys = {};
 
   void _handleConnectionState(bool connected, String? error) {
-    if (connected) {
-      // Complete pending connect if waiting
-      if (_connectCompleter != null && !_connectCompleter!.isCompleted) {
-        _connectCompleter!.complete();
-      } else {
-        // Auto-reconnect from native — re-discover services and re-subscribe
-        _resubscribeAfterReconnect();
-      }
-    } else {
+    // In the new model, connected=true is signaled by onDeviceReady, not here.
+    // This callback only handles disconnection.
+    if (!connected) {
       // Remember active subscriptions before closing streams
       _activeSubscriptionKeys.clear();
       _activeSubscriptionKeys.addAll(_streamControllers.keys);
 
       _closeAllStreams();
-      _services = []; // Clear so reconnect waits for fresh discovery
+      _services = [];
       _updateState(DeviceTransportState.disconnected);
 
-      // Fail pending completers
-      if (_connectCompleter != null && !_connectCompleter!.isCompleted) {
-        _connectCompleter!.completeError(error ?? 'Disconnected');
+      // Fail pending completer
+      if (_deviceReadyCompleter != null && !_deviceReadyCompleter!.isCompleted) {
+        _deviceReadyCompleter!.completeError(error ?? 'Disconnected before ready');
       }
-      if (_servicesCompleter != null && !_servicesCompleter!.isCompleted) {
-        _servicesCompleter!.completeError(error ?? 'Disconnected');
-      }
+    }
+  }
+
+  void _handleDeviceReady(List<BleService> services) {
+    if (_deviceReadyCompleter != null && !_deviceReadyCompleter!.isCompleted) {
+      // Initial connection
+      _deviceReadyCompleter!.complete(services);
+    } else {
+      // Auto-reconnect from native — re-subscribe to characteristics
+      _resubscribeAfterReconnect(services);
     }
   }
 
   bool _isResubscribing = false;
 
-  Future<void> _resubscribeAfterReconnect() async {
+  void _resubscribeAfterReconnect(List<BleService> services) {
     if (_isResubscribing) return;
     _isResubscribing = true;
+
     try {
-      // Wait for native to complete its connect → MTU → discoverServices flow
-      // Native fires onServicesDiscovered automatically, so just wait for it
-      if (_services.isEmpty) {
-        _servicesCompleter = Completer<List<BleService>>();
-        _services = await _servicesCompleter!.future.timeout(const Duration(seconds: 15));
-        _servicesCompleter = null;
-      }
+      _services = services;
 
       // Re-create stream controllers and re-subscribe to previously active characteristics
       for (final key in _activeSubscriptionKeys) {
@@ -288,17 +287,9 @@ class NativeBleTransport extends DeviceTransport {
       _updateState(DeviceTransportState.connected);
     } catch (e) {
       Logger.debug('[NativeBleTransport] Failed to re-subscribe after reconnect: $e');
-      _servicesCompleter = null;
       _updateState(DeviceTransportState.disconnected);
     } finally {
       _isResubscribing = false;
-    }
-  }
-
-  void _handleServicesDiscovered(List<BleService> services) {
-    _services = services;
-    if (_servicesCompleter != null && !_servicesCompleter!.isCompleted) {
-      _servicesCompleter!.complete(services);
     }
   }
 
