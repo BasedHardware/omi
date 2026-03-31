@@ -698,7 +698,7 @@ final class VADGateService {
     }
 
     /// Auto-emit the current batch buffer when it exceeds maxBatchBytes.
-    /// Stays in .speech state so the next audio continues accumulating into a fresh buffer.
+    /// Transitions to .speech state so the next audio continues accumulating into a fresh buffer.
     /// Called under lock.
     private func autoEmitBatchBuffer(nextChunkMs: Double, nextChunkData: Data) -> BatchGateOutput {
         let bytesPerFrame = 4
@@ -709,7 +709,9 @@ final class VADGateService {
         let emittedDurationSec = Double(completedBuffer.count / bytesPerFrame) / Double(sampleRate)
         batchSpeechStartWallTime = startTime + emittedDurationSec
 
-        // Start fresh accumulation (stay in current state — speech or hangover)
+        // Always transition to .speech for continued accumulation.
+        // If we were in .hangover, staying there would emit a silence-only follow-up chunk.
+        batchState = .speech
         batchAudioBuffer = Data()
 
         log("VADGate [batch]: Auto-emit (max size) — \(completedBuffer.count) bytes (\(String(format: "%.1f", emittedDurationSec))s)")
