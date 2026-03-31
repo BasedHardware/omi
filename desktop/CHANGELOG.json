@@ -1,6 +1,7 @@
 {
   "unreleased": [
-    "Fixed transcription not auto-starting after proxy migration"
+    "Fixed transcription not auto-starting after proxy migration",
+    "Fixed floating bar follow-up input not auto-focusing when restoring a conversation"
   ],
   "releases": [
     {
