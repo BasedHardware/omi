@@ -1,6 +1,7 @@
 {
   "unreleased": [
-    "Fixed WebSocket transcription disconnects: proper handshake detection, audio buffering during reconnection, unlimited retry with backoff, and thread-safe connection state"
+    "Fixed WebSocket transcription disconnects: proper handshake detection, audio buffering during reconnection, unlimited retry with backoff, and thread-safe connection state",
+    "Fixed batch transcription failing on long speech (50s+) by splitting large audio chunks automatically"
   ],
   "releases": [
     {
