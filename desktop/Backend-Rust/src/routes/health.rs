@@ -16,7 +16,7 @@ pub struct HealthResponse {
 async fn health_check() -> Json<HealthResponse> {
     Json(HealthResponse {
         status: "healthy".to_string(),
-        service: "omi-desktop-backend".to_string(),
+        service: "nooto-desktop-backend".to_string(),
         version: env!("CARGO_PKG_VERSION").to_string(),
     })
 }
