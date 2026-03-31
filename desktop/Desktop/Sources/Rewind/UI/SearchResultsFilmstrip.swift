@@ -26,7 +26,7 @@ struct SearchResultsFilmstrip: View {
                     HStack(spacing: 8) {
                         Image(systemName: "magnifyingglass")
                             .scaledFont(size: 12)
-                            .foregroundColor(OmiColors.purplePrimary)
+                            .foregroundColor(NootoColors.brandPrimary)
 
                         Text("\(screenshots.count) results for \"\(query)\"")
                             .scaledFont(size: 13, weight: .medium)
@@ -91,7 +91,7 @@ struct SearchResultsFilmstrip: View {
 
                     // Progress
                     Capsule()
-                        .fill(OmiColors.purplePrimary)
+                        .fill(NootoColors.brandPrimary)
                         .frame(
                             width: max(20, geometry.size.width * progressWidth),
                             height: 4
@@ -303,14 +303,14 @@ struct FilmstripThumbnail: View {
                 .overlay(
                     RoundedRectangle(cornerRadius: isHovered ? 12 : 8)
                         .stroke(
-                            isSelected ? OmiColors.purplePrimary :
+                            isSelected ? NootoColors.brandPrimary :
                             (isHovered ? Color.white.opacity(0.6) : Color.white.opacity(0.15)),
                             lineWidth: isSelected ? 3 : (isHovered ? 2 : 1)
                         )
                 )
                 // Selected glow
                 .shadow(
-                    color: isSelected ? OmiColors.purplePrimary.opacity(0.5) : .clear,
+                    color: isSelected ? NootoColors.brandPrimary.opacity(0.5) : .clear,
                     radius: isSelected ? 12 : 0
                 )
                 // Hover glow
@@ -326,7 +326,7 @@ struct FilmstripThumbnail: View {
                 // Time label
                 Text(screenshot.formattedTime)
                     .scaledFont(size: 11, weight: isSelected ? .semibold : .regular, design: .monospaced)
-                    .foregroundColor(isSelected ? OmiColors.purplePrimary : .white.opacity(0.7))
+                    .foregroundColor(isSelected ? NootoColors.brandPrimary : .white.opacity(0.7))
                     .offset(y: liftOffset / 2)
 
                 // App name (shows on hover or selection)
