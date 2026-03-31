@@ -1,8 +1,13 @@
 {
-  "unreleased": [
-    "Fixed batch transcription failing on long speech (50s+) by splitting large audio chunks automatically"
-  ],
+  "unreleased": [],
   "releases": [
+    {
+      "version": "0.11.203",
+      "date": "2026-03-31",
+      "changes": [
+        "Fixed batch transcription failing on long speech (50s+) by splitting large audio chunks automatically"
+      ]
+    },
     {
       "version": "0.11.202",
       "date": "2026-03-31",
