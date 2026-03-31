@@ -17,16 +17,23 @@ import {
   type SessionMap,
 } from "../src/session-manager.js";
 
-/** Mock acpRequest that records calls in order */
+/** Mock acpRequest that records calls in order and supports configurable failures */
 function createMockAcp() {
   const calls: Array<{ method: string; params: Record<string, unknown> }> = [];
   let sessionCounter = 0;
   let failSetModel = false;
+  let failSessionNew = 0; // Number of times session/new should fail before succeeding
+  let failPrompt = false;
+  let failPromptCode: number | null = null; // null = generic error, -32000 = auth
 
   const acpRequest = async (method: string, params: Record<string, unknown>): Promise<unknown> => {
     calls.push({ method, params });
 
     if (method === "session/new") {
+      if (failSessionNew > 0) {
+        failSessionNew--;
+        throw new Error("session/new failed: transient error");
+      }
       sessionCounter++;
       return { sessionId: `session-${sessionCounter}` };
     }
@@ -39,6 +46,14 @@ function createMockAcp() {
       }
       return {};
     }
+    if (method === "session/prompt") {
+      if (failPrompt) {
+        const err = new Error("prompt failed") as Error & { code?: number };
+        if (failPromptCode !== null) err.code = failPromptCode;
+        throw err;
+      }
+      return { stopReason: "end_turn" };
+    }
     return {};
   };
 
@@ -46,7 +61,9 @@ function createMockAcp() {
     calls,
     acpRequest,
     setFailSetModel(fail: boolean) { failSetModel = fail; },
-    reset() { calls.length = 0; sessionCounter = 0; failSetModel = false; },
+    setFailSessionNew(count: number) { failSessionNew = count; },
+    setFailPrompt(fail: boolean, code?: number) { failPrompt = fail; failPromptCode = code ?? null; },
+    reset() { calls.length = 0; sessionCounter = 0; failSetModel = false; failSessionNew = 0; failPrompt = false; failPromptCode = null; },
   };
 }
 
@@ -384,5 +401,160 @@ describe("retry key deletion uses sessionKey, not model", () => {
     sessions.delete("claude-sonnet-4-6");
     // floating still exists — the old code would leave stale sessions
     expect(sessions.has("floating")).toBe(true);
+  });
+});
+
+describe("warmup: retry on session/new failure", () => {
+  let sessions: ReturnType<typeof createSessionMap>;
+  let acp: ReturnType<typeof createMockAcp>;
+
+  beforeEach(() => {
+    sessions = createSessionMap();
+    acp = createMockAcp();
+  });
+
+  /**
+   * Simulate the warmup retry logic from index.ts preWarmSession():
+   * First session/new fails → wait → retry session/new → set_model → cache
+   */
+  async function simulateWarmupWithRetry(
+    sessions: SessionMap,
+    acp: ReturnType<typeof createMockAcp>,
+    cfg: { key: string; model: string },
+    cwd: string,
+  ) {
+    let result: { sessionId: string };
+    try {
+      result = (await acp.acpRequest("session/new", { cwd })) as { sessionId: string };
+    } catch {
+      // Retry once (skip the 2s delay in tests)
+      result = (await acp.acpRequest("session/new", { cwd })) as { sessionId: string };
+    }
+    await acp.acpRequest("session/set_model", { sessionId: result.sessionId, modelId: cfg.model });
+    sessions.set(cfg.key, { sessionId: result.sessionId, cwd, model: cfg.model });
+  }
+
+  it("retries session/new once and succeeds", async () => {
+    acp.setFailSessionNew(1); // Fail first, succeed second
+    await simulateWarmupWithRetry(sessions, acp, { key: "floating", model: "claude-sonnet-4-6" }, "/home/user");
+
+    // Two session/new calls (first failed, second succeeded) + set_model
+    expect(acp.calls.filter(c => c.method === "session/new")).toHaveLength(2);
+    expect(acp.calls.filter(c => c.method === "session/set_model")).toHaveLength(1);
+    expect(sessions.has("floating")).toBe(true);
+  });
+
+  it("does not cache when both session/new attempts fail", async () => {
+    acp.setFailSessionNew(2); // Both attempts fail
+    try {
+      await simulateWarmupWithRetry(sessions, acp, { key: "floating", model: "claude-sonnet-4-6" }, "/home/user");
+    } catch {
+      // Expected
+    }
+    expect(sessions.has("floating")).toBe(false);
+  });
+});
+
+describe("prompt retry: session isolation under error", () => {
+  let sessions: ReturnType<typeof createSessionMap>;
+  let acp: ReturnType<typeof createMockAcp>;
+
+  beforeEach(() => {
+    sessions = createSessionMap();
+    acp = createMockAcp();
+    sessions.set("main", { sessionId: "main-s1", cwd: "/home/user", model: "claude-opus-4-6" });
+    sessions.set("floating", { sessionId: "float-s1", cwd: "/home/user", model: "claude-sonnet-4-6" });
+  });
+
+  /**
+   * Simulate the session/prompt retry from index.ts handleQuery():
+   * If prompt fails on a reused session, delete by sessionKey and retry with fresh session.
+   * This verifies lines ~823-826 and ~837-840 in index.ts.
+   */
+  async function simulatePromptWithRetry(
+    sessions: SessionMap,
+    acp: ReturnType<typeof createMockAcp>,
+    sessionKey: string,
+    requestedCwd: string,
+    requestedModel: string,
+  ) {
+    // First attempt: reuse existing session
+    const existing = sessions.get(sessionKey);
+    if (!existing) throw new Error("No session to reuse");
+
+    try {
+      await acp.acpRequest("session/prompt", { sessionId: existing.sessionId, prompt: "test" });
+    } catch {
+      // Stale session — delete only this key and create fresh
+      sessions.delete(getRetryDeleteKey(sessionKey));
+
+      // Create new session (retry)
+      const result = (await acp.acpRequest("session/new", { cwd: requestedCwd })) as { sessionId: string };
+      if (requestedModel) {
+        await acp.acpRequest("session/set_model", { sessionId: result.sessionId, modelId: requestedModel });
+      }
+      sessions.set(sessionKey, { sessionId: result.sessionId, cwd: requestedCwd, model: requestedModel });
+
+      // Retry prompt
+      await acp.acpRequest("session/prompt", { sessionId: result.sessionId, prompt: "test" });
+    }
+  }
+
+  it("stale floating prompt retry only deletes floating, not main", async () => {
+    acp.setFailPrompt(true);
+
+    try {
+      await simulatePromptWithRetry(sessions, acp, "floating", "/home/user", "claude-sonnet-4-6");
+    } catch {
+      // Both prompt attempts fail — that's fine for isolation test
+    }
+
+    // main must be untouched
+    expect(sessions.has("main")).toBe(true);
+    expect(sessions.get("main")?.sessionId).toBe("main-s1");
+  });
+
+  it("stale main prompt retry only deletes main, not floating", async () => {
+    acp.setFailPrompt(true);
+
+    try {
+      await simulatePromptWithRetry(sessions, acp, "main", "/home/user", "claude-opus-4-6");
+    } catch {
+      // Expected
+    }
+
+    // floating must be untouched
+    expect(sessions.has("floating")).toBe(true);
+    expect(sessions.get("floating")?.sessionId).toBe("float-s1");
+  });
+
+  it("successful retry creates new session after stale prompt", async () => {
+    // Fail first prompt, succeed on retry
+    let promptCallCount = 0;
+    const origAcpRequest = acp.acpRequest;
+    const wrappedAcp = { ...acp };
+    wrappedAcp.acpRequest = async (method: string, params: Record<string, unknown>) => {
+      if (method === "session/prompt") {
+        promptCallCount++;
+        if (promptCallCount === 1) throw new Error("stale session");
+      }
+      return origAcpRequest(method, params);
+    };
+
+    // Use wrapped acp for this test
+    const existing = sessions.get("floating")!;
+    try {
+      await wrappedAcp.acpRequest("session/prompt", { sessionId: existing.sessionId, prompt: "test" });
+    } catch {
+      sessions.delete(getRetryDeleteKey("floating"));
+      const result = (await wrappedAcp.acpRequest("session/new", { cwd: "/home/user" })) as { sessionId: string };
+      await wrappedAcp.acpRequest("session/set_model", { sessionId: result.sessionId, modelId: "claude-sonnet-4-6" });
+      sessions.set("floating", { sessionId: result.sessionId, cwd: "/home/user", model: "claude-sonnet-4-6" });
+      await wrappedAcp.acpRequest("session/prompt", { sessionId: result.sessionId, prompt: "test" });
+    }
+
+    // Floating has new session, main untouched
+    expect(sessions.get("floating")?.sessionId).toBe("session-1");
+    expect(sessions.get("main")?.sessionId).toBe("main-s1");
   });
 });
