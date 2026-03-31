@@ -152,7 +152,7 @@ struct ConversationsPage: View {
             HStack {
                 Text("Conversations")
                     .scaledFont(size: 18, weight: .semibold)
-                    .foregroundColor(OmiColors.textPrimary)
+                    .foregroundColor(NootoColors.textPrimary)
 
                 Spacer()
 
@@ -180,12 +180,12 @@ struct ConversationsPage: View {
                 Text("Quick Note")
                     .scaledFont(size: 13, weight: .medium)
             }
-            .foregroundColor(OmiColors.textSecondary)
+            .foregroundColor(NootoColors.textSecondary)
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
             .background(
                 Capsule()
-                    .fill(OmiColors.backgroundTertiary)
+                    .fill(NootoColors.backgroundTertiary)
             )
         }
         .buttonStyle(.plain)
@@ -201,12 +201,12 @@ struct ConversationsPage: View {
                 HStack(spacing: 8) {
                     Image(systemName: "magnifyingglass")
                         .scaledFont(size: 13)
-                        .foregroundColor(OmiColors.textTertiary)
+                        .foregroundColor(NootoColors.textTertiary)
 
                     TextField("Search conversations...", text: $searchQuery)
                         .textFieldStyle(.plain)
                         .scaledFont(size: 13)
-                        .foregroundColor(OmiColors.textPrimary)
+                        .foregroundColor(NootoColors.textPrimary)
                         .onChange(of: searchQuery) { _, newValue in
                             // Feed input to debouncer
                             searchDebouncer.inputQuery = newValue
@@ -225,7 +225,7 @@ struct ConversationsPage: View {
                         }) {
                             Image(systemName: "xmark.circle.fill")
                                 .scaledFont(size: 13)
-                                .foregroundColor(OmiColors.textTertiary)
+                                .foregroundColor(NootoColors.textTertiary)
                         }
                         .buttonStyle(.plain)
                     }
@@ -234,7 +234,7 @@ struct ConversationsPage: View {
                 .padding(.vertical, 8)
                 .background(
                     RoundedRectangle(cornerRadius: 8)
-                        .fill(OmiColors.backgroundTertiary.opacity(0.5))
+                        .fill(NootoColors.backgroundTertiary.opacity(0.5))
                 )
 
                 // Filter buttons
@@ -310,17 +310,17 @@ struct ConversationsPage: View {
                     ProgressView()
                     Text("Searching...")
                         .scaledFont(size: 13)
-                        .foregroundColor(OmiColors.textTertiary)
+                        .foregroundColor(NootoColors.textTertiary)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if let error = searchError {
                 VStack(spacing: 12) {
                     Image(systemName: "exclamationmark.triangle")
                         .scaledFont(size: 32)
-                        .foregroundColor(OmiColors.textTertiary)
+                        .foregroundColor(NootoColors.textTertiary)
                     Text(error)
                         .scaledFont(size: 13)
-                        .foregroundColor(OmiColors.textTertiary)
+                        .foregroundColor(NootoColors.textTertiary)
                         .multilineTextAlignment(.center)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -329,13 +329,13 @@ struct ConversationsPage: View {
                 VStack(spacing: 12) {
                     Image(systemName: "magnifyingglass")
                         .scaledFont(size: 32)
-                        .foregroundColor(OmiColors.textTertiary.opacity(0.5))
+                        .foregroundColor(NootoColors.textTertiary.opacity(0.5))
                     Text("No conversations found")
                         .scaledFont(size: 14)
-                        .foregroundColor(OmiColors.textTertiary)
+                        .foregroundColor(NootoColors.textTertiary)
                     Text("Try a different search term")
                         .scaledFont(size: 12)
-                        .foregroundColor(OmiColors.textQuaternary)
+                        .foregroundColor(NootoColors.textQuaternary)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
@@ -450,16 +450,16 @@ struct ConversationsPage: View {
                     Text("Starred")
                         .scaledFont(size: 12, weight: .medium)
                 }
-                .foregroundColor(appState.showStarredOnly ? OmiColors.amber : OmiColors.textSecondary)
+                .foregroundColor(appState.showStarredOnly ? NootoColors.amber : NootoColors.textSecondary)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 6)
                 .background(
                     RoundedRectangle(cornerRadius: 8)
-                        .fill(appState.showStarredOnly ? OmiColors.amber.opacity(0.15) : OmiColors.backgroundTertiary.opacity(0.6))
+                        .fill(appState.showStarredOnly ? NootoColors.amber.opacity(0.15) : NootoColors.backgroundTertiary.opacity(0.6))
                 )
                 .overlay(
                     RoundedRectangle(cornerRadius: 8)
-                        .stroke(appState.showStarredOnly ? OmiColors.amber.opacity(0.4) : Color.clear, lineWidth: 1)
+                        .stroke(appState.showStarredOnly ? NootoColors.amber.opacity(0.4) : Color.clear, lineWidth: 1)
                 )
             }
             .buttonStyle(.plain)
@@ -498,16 +498,16 @@ struct ConversationsPage: View {
                             .scaledFont(size: 12, weight: .medium)
                     }
                 }
-                .foregroundColor(appState.selectedDateFilter != nil ? .black : OmiColors.textSecondary)
+                .foregroundColor(appState.selectedDateFilter != nil ? .black : NootoColors.textSecondary)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 6)
                 .background(
                     RoundedRectangle(cornerRadius: 8)
-                        .fill(appState.selectedDateFilter != nil ? Color.white : OmiColors.backgroundTertiary.opacity(0.6))
+                        .fill(appState.selectedDateFilter != nil ? Color.white : NootoColors.backgroundTertiary.opacity(0.6))
                 )
                 .overlay(
                     RoundedRectangle(cornerRadius: 8)
-                        .stroke(appState.selectedDateFilter != nil ? OmiColors.border : Color.clear, lineWidth: 1)
+                        .stroke(appState.selectedDateFilter != nil ? NootoColors.border : Color.clear, lineWidth: 1)
                 )
             }
             .buttonStyle(.plain)
@@ -525,7 +525,7 @@ struct ConversationsPage: View {
                 }) {
                     Image(systemName: "xmark.circle.fill")
                         .scaledFont(size: 12)
-                        .foregroundColor(OmiColors.textTertiary)
+                        .foregroundColor(NootoColors.textTertiary)
                 }
                 .buttonStyle(.plain)
             }
@@ -555,7 +555,7 @@ struct ConversationsPage: View {
         }
         .padding()
         .frame(width: 300)
-        .background(OmiColors.backgroundSecondary)
+        .background(NootoColors.backgroundSecondary)
     }
 
     private func formatFilterDate(_ date: Date) -> String {
@@ -571,7 +571,7 @@ struct ConversationsPage: View {
             // Selection count
             Text("\(selectedConversationIds.count) selected")
                 .scaledFont(size: 14, weight: .medium)
-                .foregroundColor(OmiColors.textSecondary)
+                .foregroundColor(NootoColors.textSecondary)
 
             Spacer()
 
@@ -585,7 +585,7 @@ struct ConversationsPage: View {
             }) {
                 Text(selectedConversationIds.count == appState.conversations.count ? "Deselect All" : "Select All")
                     .scaledFont(size: 12, weight: .medium)
-                    .foregroundColor(OmiColors.textSecondary)
+                    .foregroundColor(NootoColors.textSecondary)
             }
             .buttonStyle(.plain)
 
@@ -605,16 +605,16 @@ struct ConversationsPage: View {
                     Text("Merge")
                         .scaledFont(size: 13, weight: .semibold)
                 }
-                .foregroundColor(selectedConversationIds.count >= 2 ? OmiColors.textPrimary : OmiColors.textTertiary)
+                .foregroundColor(selectedConversationIds.count >= 2 ? NootoColors.textPrimary : NootoColors.textTertiary)
                 .padding(.horizontal, 16)
                 .padding(.vertical, 8)
                 .background(
                     Capsule()
-                        .fill(selectedConversationIds.count >= 2 ? Color.white : OmiColors.backgroundTertiary)
+                        .fill(selectedConversationIds.count >= 2 ? Color.white : NootoColors.backgroundTertiary)
                 )
                 .overlay(
                     Capsule()
-                        .stroke(selectedConversationIds.count >= 2 ? OmiColors.border : Color.clear, lineWidth: 1)
+                        .stroke(selectedConversationIds.count >= 2 ? NootoColors.border : Color.clear, lineWidth: 1)
                 )
             }
             .buttonStyle(.plain)
@@ -624,7 +624,7 @@ struct ConversationsPage: View {
         .padding(.vertical, 12)
         .background(
             RoundedRectangle(cornerRadius: 12)
-                .fill(OmiColors.backgroundTertiary)
+                .fill(NootoColors.backgroundTertiary)
                 .shadow(color: .black.opacity(0.3), radius: 10, y: -2)
         )
         .padding(.horizontal, 16)
@@ -703,7 +703,7 @@ struct ConversationsPage: View {
             )
             .overlay(
                 Capsule()
-                    .stroke(OmiColors.border, lineWidth: 1)
+                    .stroke(NootoColors.border, lineWidth: 1)
             )
         }
         .buttonStyle(.plain)
@@ -724,7 +724,7 @@ private struct TranscriptNotesDivider: View {
 
     var body: some View {
         Rectangle()
-            .fill(isDragging ? OmiColors.textSecondary : OmiColors.border)
+            .fill(isDragging ? NootoColors.textSecondary : NootoColors.border)
             .frame(width: 1)
             .contentShape(Rectangle().inset(by: -4)) // Larger hit area
             .onHover { hovering in
@@ -751,5 +751,5 @@ private struct TranscriptNotesDivider: View {
 #Preview {
     ConversationsPage(appState: AppState(), selectedConversation: .constant(nil))
         .frame(width: 600, height: 800)
-        .background(OmiColors.backgroundSecondary)
+        .background(NootoColors.backgroundSecondary)
 }
