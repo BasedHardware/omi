@@ -91,7 +91,10 @@ def batch_update_staged_scores(
 
 @router.post('/v1/staged-tasks/promote', tags=['staged-tasks'])
 def promote_staged_task(uid: str = Depends(auth.get_current_user_uid)):
-    return staged_tasks_db.promote_staged_task(uid)
+    action_item = staged_tasks_db.promote_staged_task(uid)
+    if action_item is None:
+        return {'promoted': False, 'reason': 'No staged tasks available', 'promoted_task': None}
+    return {'promoted': True, 'reason': None, 'promoted_task': action_item}
 
 
 @router.post('/v1/staged-tasks/migrate', tags=['staged-tasks'])
