@@ -80,7 +80,6 @@ struct SidebarView: View {
     @ObservedObject private var focusStorage = FocusStorage.shared
     @ObservedObject private var deviceProvider = DeviceProvider.shared
     @ObservedObject private var updaterViewModel = UpdaterViewModel.shared
-    @ObservedObject private var crispManager = CrispManager.shared
 
     // State for Get Omi Widget (shown when no device is paired, dismissible)
     @AppStorage("showGetOmiWidget") private var showGetOmiWidget = true
