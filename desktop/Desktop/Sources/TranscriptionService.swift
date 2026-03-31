@@ -42,6 +42,7 @@ class TranscriptionService: NSObject, URLSessionWebSocketDelegate {
         case missingAPIKey
         case connectionFailed(Error)
         case invalidResponse
+        case payloadTooLarge(statusCode: Int, body: String)
         case webSocketError(String)
 
         var errorDescription: String? {
@@ -52,6 +53,8 @@ class TranscriptionService: NSObject, URLSessionWebSocketDelegate {
                 return "Connection failed: \(error.localizedDescription)"
             case .invalidResponse:
                 return "Invalid response from DeepGram"
+            case .payloadTooLarge(let statusCode, _):
+                return "Payload too large (HTTP \(statusCode))"
             case .webSocketError(let message):
                 return "WebSocket error: \(message)"
             }
@@ -952,6 +955,9 @@ extension TranscriptionService {
             let statusCode = (response as? HTTPURLResponse)?.statusCode ?? -1
             let body = String(data: data, encoding: .utf8) ?? "no body"
             logError("TranscriptionService: Batch full transcription failed with status \(statusCode): \(body)", error: nil)
+            if statusCode == 413 {
+                throw TranscriptionError.payloadTooLarge(statusCode: statusCode, body: body)
+            }
             throw TranscriptionError.invalidResponse
         }
 
@@ -988,6 +994,152 @@ extension TranscriptionService {
         }
 
         return segments
+    }
+
+    // MARK: - Batch Transcription with Splitting
+
+    /// Maximum audio payload size for a single batch transcription request.
+    /// Matches VADGateService.maxBatchBytes. Audio larger than this is proactively split.
+    static let maxBatchPayloadBytes = VADGateService.maxBatchBytes
+
+    /// Bytes per second for stereo 16kHz Int16 PCM audio.
+    static let stereoBytesPerSecond = 64_000
+
+    /// Transcribe audio with automatic splitting for large payloads.
+    /// Proactively splits audio exceeding maxBatchPayloadBytes, and retries with splitting on 413.
+    static func batchTranscribeWithSplitting(
+        audioData: Data,
+        language: String = "en",
+        vocabulary: [String] = []
+    ) async throws -> [TranscriptSegment] {
+        // Proactive split if audio exceeds max payload
+        if audioData.count > maxBatchPayloadBytes {
+            log("TranscriptionService: Audio \(audioData.count) bytes exceeds \(maxBatchPayloadBytes) — splitting")
+            return try await splitAndTranscribe(audioData: audioData, language: language, vocabulary: vocabulary)
+        }
+
+        // Try direct transcription, retry with split on 413
+        do {
+            return try await batchTranscribeFull(audioData: audioData, language: language, vocabulary: vocabulary)
+        } catch TranscriptionError.payloadTooLarge {
+            log("TranscriptionService: Got 413, retrying with split")
+            return try await splitAndTranscribe(audioData: audioData, language: language, vocabulary: vocabulary)
+        }
+    }
+
+    /// Split audio at midpoint with 1s overlap, transcribe each half, merge results.
+    /// Only one level of splitting — halves are sent directly via batchTranscribeFull.
+    static func splitAndTranscribe(
+        audioData: Data,
+        language: String,
+        vocabulary: [String]
+    ) async throws -> [TranscriptSegment] {
+        let overlapBytes = stereoBytesPerSecond  // 1 second overlap
+        let bytesPerFrame = 4  // Stereo Int16: 2 channels * 2 bytes
+
+        // Align midpoint to frame boundary
+        let rawMid = audioData.count / 2
+        let mid = (rawMid / bytesPerFrame) * bytesPerFrame
+
+        // First half: [0, mid + overlap/2)
+        let firstEnd = min(mid + overlapBytes / 2, audioData.count)
+        let alignedFirstEnd = (firstEnd / bytesPerFrame) * bytesPerFrame
+        let firstHalf = audioData.prefix(alignedFirstEnd)
+
+        // Second half: [mid - overlap/2, end)
+        let secondStart = max(mid - overlapBytes / 2, 0)
+        let alignedSecondStart = (secondStart / bytesPerFrame) * bytesPerFrame
+        let secondHalf = audioData.suffix(from: alignedSecondStart)
+
+        let splitStartSec = Double(alignedSecondStart) / Double(stereoBytesPerSecond)
+
+        log("TranscriptionService: Split — first=\(firstHalf.count) bytes, second=\(secondHalf.count) bytes, offset=\(String(format: "%.1f", splitStartSec))s")
+
+        // Transcribe both halves (sequentially to avoid doubling concurrent load)
+        let firstSegments = try await batchTranscribeFull(
+            audioData: Data(firstHalf), language: language, vocabulary: vocabulary
+        )
+        let secondSegments = try await batchTranscribeFull(
+            audioData: Data(secondHalf), language: language, vocabulary: vocabulary
+        )
+
+        // Merge per channel: offset second-half timestamps, dedupe overlap
+        return mergeSegments(first: firstSegments, second: secondSegments, secondOffsetSec: splitStartSec)
+    }
+
+    /// Merge segments from two halves per channel.
+    /// Second-half word timestamps are offset by secondOffsetSec.
+    /// Words in the overlap window are deduped by matching text and timestamp proximity.
+    static func mergeSegments(
+        first: [TranscriptSegment],
+        second: [TranscriptSegment],
+        secondOffsetSec: Double
+    ) -> [TranscriptSegment] {
+        // Group by channel
+        var firstByChannel: [Int: TranscriptSegment] = [:]
+        for seg in first { firstByChannel[seg.channelIndex] = seg }
+
+        var secondByChannel: [Int: TranscriptSegment] = [:]
+        for seg in second { secondByChannel[seg.channelIndex] = seg }
+
+        let allChannels = Set(firstByChannel.keys).union(secondByChannel.keys)
+        var merged: [TranscriptSegment] = []
+
+        for ch in allChannels.sorted() {
+            let firstWords = firstByChannel[ch]?.words ?? []
+            let secondWords = (secondByChannel[ch]?.words ?? []).map { word in
+                TranscriptSegment.Word(
+                    word: word.word,
+                    start: word.start + secondOffsetSec,
+                    end: word.end + secondOffsetSec,
+                    confidence: word.confidence,
+                    speaker: word.speaker,
+                    punctuatedWord: word.punctuatedWord
+                )
+            }
+
+            // Dedupe: find where first-half ends and second-half begins
+            let deduped = dedupeOverlapWords(first: firstWords, second: secondWords)
+
+            let combinedText = deduped.map { $0.punctuatedWord }.joined(separator: " ")
+            let avgConfidence = deduped.isEmpty ? 0.0 : deduped.reduce(0.0) { $0 + $1.confidence } / Double(deduped.count)
+
+            merged.append(TranscriptSegment(
+                text: combinedText,
+                isFinal: true,
+                speechFinal: true,
+                confidence: avgConfidence,
+                words: deduped,
+                channelIndex: ch
+            ))
+        }
+
+        return merged
+    }
+
+    /// Deduplicate words in the overlap window between first and second halves.
+    /// Words from the second half that match a first-half word (same text, within 0.5s) are dropped.
+    static func dedupeOverlapWords(
+        first: [TranscriptSegment.Word],
+        second: [TranscriptSegment.Word]
+    ) -> [TranscriptSegment.Word] {
+        guard let lastFirstWord = first.last else { return second }
+        let overlapEnd = lastFirstWord.end
+
+        var result = first
+        for word in second {
+            // Skip words that fall within the overlap window and match a first-half word
+            if word.start <= overlapEnd + 0.5 {
+                let isDuplicate = first.contains { firstWord in
+                    firstWord.word.lowercased() == word.word.lowercased() &&
+                    abs(firstWord.start - word.start) < 0.5
+                }
+                if isDuplicate { continue }
+            }
+            result.append(word)
+        }
+
+        return result
     }
 }
 
