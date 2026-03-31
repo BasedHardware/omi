@@ -146,8 +146,10 @@ from routers.chat_sessions import SaveMessageRequest, RateMessageRequest  # noqa
 from routers.focus_sessions import CreateFocusSessionRequest  # noqa: E402
 from routers.advice import CreateAdviceRequest  # noqa: E402
 
+# Cannot import routers.users directly — it pulls in database.conversations → utils.other.hume
+# which has heavy deps. Mirror the models here and verify parity via AST test below.
 
-# Mirrors routers/users.py — defined inline to avoid importing the full router
+
 class UpdateNotificationSettingsRequest(BaseModel):
     enabled: bool | None = None
     frequency: int | None = Field(None, ge=0, le=5)
@@ -907,3 +909,122 @@ class TestFocusStatsWireCompat:
         assert distractions[1]['app_or_site'] == 'Twitter'
         assert distractions[1]['total_seconds'] == 180
         assert distractions[1]['count'] == 2
+
+
+# ===========================================================================
+# 8. MODEL PARITY (inline models match routers/users.py source)
+# ===========================================================================
+
+
+class TestModelParity:
+    """Verify inline test models match the real router models via AST."""
+
+    def test_notification_settings_fields_match_source(self):
+        """Inline UpdateNotificationSettingsRequest matches routers/users.py definition."""
+        import ast
+
+        source = (BACKEND_DIR / 'routers' / 'users.py').read_text()
+        tree = ast.parse(source)
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ClassDef) and node.name == 'UpdateNotificationSettingsRequest':
+                field_names = [
+                    stmt.target.id
+                    for stmt in node.body
+                    if isinstance(stmt, ast.AnnAssign) and isinstance(stmt.target, ast.Name)
+                ]
+                break
+        else:
+            pytest.fail("UpdateNotificationSettingsRequest not found in routers/users.py")
+        expected = [f.alias or name for name, f in UpdateNotificationSettingsRequest.model_fields.items()]
+        assert set(field_names) == set(expected), f"Field mismatch: source={field_names} test={expected}"
+
+    def test_llm_usage_fields_match_source(self):
+        """Inline RecordDesktopLlmUsageRequest matches routers/users.py definition."""
+        import ast
+
+        source = (BACKEND_DIR / 'routers' / 'users.py').read_text()
+        tree = ast.parse(source)
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ClassDef) and node.name == 'RecordDesktopLlmUsageRequest':
+                field_names = [
+                    stmt.target.id
+                    for stmt in node.body
+                    if isinstance(stmt, ast.AnnAssign) and isinstance(stmt.target, ast.Name)
+                ]
+                break
+        else:
+            pytest.fail("RecordDesktopLlmUsageRequest not found in routers/users.py")
+        expected = [f.alias or name for name, f in RecordDesktopLlmUsageRequest.model_fields.items()]
+        assert set(field_names) == set(expected), f"Field mismatch: source={field_names} test={expected}"
+
+
+# ===========================================================================
+# 9. RATING=0 BOUNDARY (route rejects 0 despite model allowing it)
+# ===========================================================================
+
+
+class TestRatingZeroBoundary:
+    """Verify rating=0 is accepted by Pydantic but rejected by route logic."""
+
+    def test_rating_0_passes_model(self):
+        """RateMessageRequest allows rating=0 (within ge=-1, le=1)."""
+        r = RateMessageRequest(rating=0)
+        assert r.rating == 0
+
+    def test_rating_0_rejected_by_route(self):
+        """The rate_message route rejects rating=0 with 400."""
+        from routers.chat_sessions import rate_message
+
+        with pytest.raises(Exception) as exc_info:
+            rate_message(message_id='msg-1', request=RateMessageRequest(rating=0), uid='test-uid')
+        assert '400' in str(exc_info.value) or 'Rating must be' in str(exc_info.value)
+
+
+# ===========================================================================
+# 10. MIGRATION BATCH INTEGRATION (exercises real caller accounting)
+# ===========================================================================
+
+
+class TestMigrationBatchIntegration:
+    """Exercise migration functions with enough items to cross batch boundary."""
+
+    def test_migrate_ai_tasks_commits_at_batch_boundary(self):
+        """migrate_ai_tasks with 260 AI tasks triggers batch commit (260*2=520 ops > 500)."""
+
+        def _make_doc(i, source='screenshot'):
+            doc = MagicMock()
+            doc.id = f'task-{i}'
+            doc.to_dict.return_value = {
+                'id': f'task-{i}',
+                'completed': False,
+                'source': source,
+                'relevance_score': i,
+            }
+            return doc
+
+        ai_docs = [_make_doc(i) for i in range(260)]
+
+        mock_action_col = MagicMock()
+        mock_query = MagicMock()
+        mock_query.stream.return_value = ai_docs
+        mock_action_col.where.return_value = mock_query
+        mock_action_col.document.return_value = MagicMock()
+
+        mock_staged_col = MagicMock()
+        mock_staged_col.document.return_value = MagicMock()
+
+        batch1 = MagicMock()
+        batch2 = MagicMock()
+
+        def col_side_effect(col_name):
+            if col_name == 'action_items':
+                return mock_action_col
+            return mock_staged_col
+
+        with patch.object(staged_tasks_db, 'db') as patched_db:
+            patched_db.batch.side_effect = [batch1, batch2]
+            patched_db.collection.return_value.document.return_value.collection.side_effect = col_side_effect
+            result = staged_tasks_db.migrate_ai_tasks('test-uid')
+
+        assert result['moved'] == 257  # 260 - 3 kept
+        batch1.commit.assert_called()  # intermediate commit at 500 ops
