@@ -341,15 +341,15 @@ class TranscriptionService: NSObject, URLSessionWebSocketDelegate {
     // MARK: - Private Methods
 
     private func connect() {
-        let shouldProceed: Bool = withState {
+        let generation: UInt64 = withState {
             guard _connectionState == .disconnected || _connectionState == .reconnecting else {
-                return false
+                return 0  // 0 = signal not to proceed
             }
             _connectionState = .connecting
             _connectionGeneration += 1
-            return true
+            return _connectionGeneration
         }
-        guard shouldProceed else { return }
+        guard generation > 0 else { return }
 
         if useProxy {
             // Proxy mode: get Firebase auth token async, then connect
@@ -358,7 +358,15 @@ class TranscriptionService: NSObject, URLSessionWebSocketDelegate {
                 do {
                     let authService = await MainActor.run { AuthService.shared }
                     let authHeader = try await authService.getAuthHeader()
-                    self.connectWithAuth(authHeader: authHeader)
+                    // Re-check: stop() may have been called while fetching auth token
+                    let stillValid = self.withState {
+                        self._connectionGeneration == generation && self._shouldReconnect && self._connectionState == .connecting
+                    }
+                    guard stillValid else {
+                        log("TranscriptionService: Auth fetched but connection no longer wanted (gen \(generation))")
+                        return
+                    }
+                    self.connectWithAuth(authHeader: authHeader, generation: generation)
                 } catch {
                     logError("TranscriptionService: Failed to get auth token for proxy", error: error)
                     self.onError?(TranscriptionError.connectionFailed(error))
@@ -367,11 +375,11 @@ class TranscriptionService: NSObject, URLSessionWebSocketDelegate {
             }
         } else {
             // Direct Deepgram mode (legacy/developer override)
-            connectWithAuth(authHeader: "Token \(apiKey)")
+            connectWithAuth(authHeader: "Token \(apiKey)", generation: generation)
         }
     }
 
-    private func connectWithAuth(authHeader: String) {
+    private func connectWithAuth(authHeader: String, generation: UInt64) {
         // Build WebSocket URL with parameters
         let wsBase: String
         if useProxy {
@@ -418,7 +426,12 @@ class TranscriptionService: NSObject, URLSessionWebSocketDelegate {
             return
         }
 
-        let generation = withState { _connectionGeneration }
+        // Verify this generation is still current before creating network resources
+        let stillValid = withState { _connectionGeneration == generation && _connectionState == .connecting }
+        guard stillValid else {
+            log("TranscriptionService: Connection no longer wanted (gen \(generation))")
+            return
+        }
         log("TranscriptionService: Connecting to \(url.host ?? "?") (gen \(generation))")
 
         // Create URL request with authorization header
@@ -465,18 +478,22 @@ class TranscriptionService: NSObject, URLSessionWebSocketDelegate {
         webSocketTask: URLSessionWebSocketTask,
         didOpenWithProtocol protocol: String?
     ) {
-        let generation = withState { _connectionGeneration }
-        let isCurrentSession: Bool = withState { _urlSession === session }
-        guard isCurrentSession else {
-            log("TranscriptionService: Ignoring stale didOpen (not current session)")
-            return
-        }
-
-        withState {
+        let (isValid, generation): (Bool, UInt64) = withState {
+            // Only accept if this is the current session AND we still want to be connected
+            guard _urlSession === session && _shouldReconnect && _connectionState == .connecting else {
+                return (false, _connectionGeneration)
+            }
             _connectionState = .connected
             _reconnectAttempts = 0
             _lastDataReceivedAt = Date()
             _lastKeepaliveSuccessAt = Date()
+            return (true, _connectionGeneration)
+        }
+        guard isValid else {
+            log("TranscriptionService: Ignoring stale didOpen (gen \(generation))")
+            // Clean up the unwanted session
+            session.invalidateAndCancel()
+            return
         }
 
         log("TranscriptionService: Connected (gen \(generation), protocol=\(`protocol` ?? "none"))")
@@ -583,7 +600,8 @@ class TranscriptionService: NSObject, URLSessionWebSocketDelegate {
 
     private func handleDisconnection() {
         let (shouldAttemptReconnect, attempt): (Bool, Int) = withState {
-            guard _connectionState != .disconnected else { return (false, 0) }
+            // Idempotent: if already reconnecting or disconnected, this is a duplicate callback
+            guard _connectionState == .connected || _connectionState == .connecting else { return (false, 0) }
 
             let oldSession = _urlSession
             _connectionState = .reconnecting
