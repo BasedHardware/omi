@@ -10729,5 +10729,62 @@
     },
     "willSyncAutomatically": "will sync automatically",
     "enableLocationTitle": "Enable Location",
-    "enableLocationDescription": "Location permission is needed to find nearby Bluetooth devices."
+    "enableLocationDescription": "Location permission is needed to find nearby Bluetooth devices.",
+    "cloudAudioFiles": "Cloud Audio Files",
+    "@cloudAudioFiles": {
+        "description": "Title for cloud audio files section"
+    },
+    "noCloudAudioFiles": "No cloud audio files yet",
+    "@noCloudAudioFiles": {
+        "description": "Empty state for cloud audio files"
+    },
+    "noCloudAudioDescription": "Audio files will appear here once you record conversations with cloud sync enabled.",
+    "@noCloudAudioDescription": {
+        "description": "Description for empty cloud audio state"
+    },
+    "deleteAllAudio": "Delete All Audio",
+    "@deleteAllAudio": {
+        "description": "Button to delete all cloud audio"
+    },
+    "deleteAllAudioTitle": "Delete All Cloud Audio?",
+    "@deleteAllAudioTitle": {
+        "description": "Title for delete all audio dialog"
+    },
+    "deleteAllAudioMessage": "This will permanently delete all your cloud-synced audio files. This action cannot be undone.\n\nNote: The Data Training Program requires cloud-synced audio. Deleting these files will remove your contribution to the program.",
+    "@deleteAllAudioMessage": {
+        "description": "Message for delete all audio dialog"
+    },
+    "deletingAudio": "Deleting audio files...",
+    "@deletingAudio": {
+        "description": "Loading text while deleting audio"
+    },
+    "audioDeletedSuccessfully": "All cloud audio files deleted",
+    "@audioDeletedSuccessfully": {
+        "description": "Success message after deleting audio"
+    },
+    "failedToDeleteAudio": "Failed to delete audio files",
+    "@failedToDeleteAudio": {
+        "description": "Error message when audio deletion fails"
+    },
+    "nAudioFiles": "{count} audio {count, plural, =1{file} other{files}}",
+    "@nAudioFiles": {
+        "description": "Number of audio files",
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    },
+    "preparingCloudAudioTryAgain": "Preparing audio. Please try again in a moment.",
+    "@preparingCloudAudioTryAgain": {
+        "description": "Shown when cloud audio is being prepared and the user should retry shortly"
+    },
+    "failedToPlayCloudAudio": "Failed to play audio",
+    "@failedToPlayCloudAudio": {
+        "description": "Error message when cloud audio playback fails"
+    },
+    "failedToShareCloudAudio": "Failed to share audio",
+    "@failedToShareCloudAudio": {
+        "description": "Error message when cloud audio sharing fails"
+    }
 }

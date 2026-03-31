@@ -9064,4 +9064,53 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get enableLocationDescription => 'Location permission is needed to find nearby Bluetooth devices.';
+
+  @override
+  String get cloudAudioFiles => 'Cloud Audio Files';
+
+  @override
+  String get noCloudAudioFiles => 'No cloud audio files yet';
+
+  @override
+  String get noCloudAudioDescription =>
+      'Audio files will appear here once you record conversations with cloud sync enabled.';
+
+  @override
+  String get deleteAllAudio => 'Delete All Audio';
+
+  @override
+  String get deleteAllAudioTitle => 'Delete All Cloud Audio?';
+
+  @override
+  String get deleteAllAudioMessage =>
+      'This will permanently delete all your cloud-synced audio files. This action cannot be undone.\n\nNote: The Data Training Program requires cloud-synced audio. Deleting these files will remove your contribution to the program.';
+
+  @override
+  String get deletingAudio => 'Deleting audio files...';
+
+  @override
+  String get audioDeletedSuccessfully => 'All cloud audio files deleted';
+
+  @override
+  String get failedToDeleteAudio => 'Failed to delete audio files';
+
+  @override
+  String nAudioFiles(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'files',
+      one: 'file',
+    );
+    return '$count audio $_temp0';
+  }
+
+  @override
+  String get preparingCloudAudioTryAgain => 'Preparing audio. Please try again in a moment.';
+
+  @override
+  String get failedToPlayCloudAudio => 'Failed to play audio';
+
+  @override
+  String get failedToShareCloudAudio => 'Failed to share audio';
 }

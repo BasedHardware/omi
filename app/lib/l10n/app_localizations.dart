@@ -15945,7 +15945,7 @@ abstract class AppLocalizations {
   /// **'Delete All Recordings'**
   String get deleteAllFiles;
 
-  /// Menu option to delete all recordings
+  /// Button text for delete all confirmation
   ///
   /// In en, this message translates to:
   /// **'Delete All'**
@@ -16766,6 +16766,84 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Location permission is needed to find nearby Bluetooth devices.'**
   String get enableLocationDescription;
+
+  /// Title for cloud audio files section
+  ///
+  /// In en, this message translates to:
+  /// **'Cloud Audio Files'**
+  String get cloudAudioFiles;
+
+  /// Empty state for cloud audio files
+  ///
+  /// In en, this message translates to:
+  /// **'No cloud audio files yet'**
+  String get noCloudAudioFiles;
+
+  /// Description for empty cloud audio state
+  ///
+  /// In en, this message translates to:
+  /// **'Audio files will appear here once you record conversations with cloud sync enabled.'**
+  String get noCloudAudioDescription;
+
+  /// Button to delete all cloud audio
+  ///
+  /// In en, this message translates to:
+  /// **'Delete All Audio'**
+  String get deleteAllAudio;
+
+  /// Title for delete all audio dialog
+  ///
+  /// In en, this message translates to:
+  /// **'Delete All Cloud Audio?'**
+  String get deleteAllAudioTitle;
+
+  /// Message for delete all audio dialog
+  ///
+  /// In en, this message translates to:
+  /// **'This will permanently delete all your cloud-synced audio files. This action cannot be undone.\n\nNote: The Data Training Program requires cloud-synced audio. Deleting these files will remove your contribution to the program.'**
+  String get deleteAllAudioMessage;
+
+  /// Loading text while deleting audio
+  ///
+  /// In en, this message translates to:
+  /// **'Deleting audio files...'**
+  String get deletingAudio;
+
+  /// Success message after deleting audio
+  ///
+  /// In en, this message translates to:
+  /// **'All cloud audio files deleted'**
+  String get audioDeletedSuccessfully;
+
+  /// Error message when audio deletion fails
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to delete audio files'**
+  String get failedToDeleteAudio;
+
+  /// Number of audio files
+  ///
+  /// In en, this message translates to:
+  /// **'{count} audio {count, plural, =1{file} other{files}}'**
+  String nAudioFiles(int count);
+
+  /// Shown when cloud audio is being prepared and the user should retry shortly
+  ///
+  /// In en, this message translates to:
+  /// **'Preparing audio. Please try again in a moment.'**
+  String get preparingCloudAudioTryAgain;
+
+  /// Error message when cloud audio playback fails
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to play audio'**
+  String get failedToPlayCloudAudio;
+
+  /// Error message when cloud audio sharing fails
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to share audio'**
+  String get failedToShareCloudAudio;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {
