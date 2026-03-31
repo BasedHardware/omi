@@ -70,6 +70,7 @@ pytest tests/unit/test_lock_bypass_fixes.py -v
 pytest tests/unit/test_dev_api_lock_bypass.py -v
 pytest tests/unit/test_rate_limiting.py -v
 pytest tests/unit/test_sync_v2.py -v
+pytest tests/unit/test_sync_transcription_prefs.py -v
 
 # Fair-use integration tests (require Redis; skip gracefully if unavailable)
 if redis-cli ping >/dev/null 2>&1; then
