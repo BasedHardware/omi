@@ -1,5 +1,7 @@
 {
-  "unreleased": [],
+  "unreleased": [
+    "Fixed floating bar follow-up input not auto-focusing when restoring a conversation"
+  ],
   "releases": [
     {
       "version": "0.11.205",
