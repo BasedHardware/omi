@@ -30,6 +30,7 @@
 import { spawn, type ChildProcess } from "child_process";
 import { createInterface } from "readline";
 import { dirname, join } from "path";
+import { resolveSession, needsModelUpdate, filterSessionsToWarm, getRetryDeleteKey, type SessionEntry } from "./session-manager.js";
 import { fileURLToPath } from "url";
 import { createServer as createNetServer, type Socket } from "net";
 import { tmpdir } from "os";
@@ -590,11 +591,11 @@ async function preWarmSession(cwd?: string, sessionConfigs?: WarmupSessionConfig
   const warmCwd = cwd || process.env.HOME || "/";
 
   // Build the list of sessions to warm: new format (sessionConfigs) takes priority over legacy (models array)
-  const toWarm: WarmupSessionConfig[] = sessionConfigs && sessionConfigs.length > 0
-    ? sessionConfigs.filter((s) => !sessions.has(s.key))
+  const allConfigs: WarmupSessionConfig[] = sessionConfigs && sessionConfigs.length > 0
+    ? sessionConfigs
     : (models && models.length > 0 ? models : [DEFAULT_MODEL, SONNET_MODEL])
-        .filter((m) => !sessions.has(m))
         .map((m) => ({ key: m, model: m }));
+  const toWarm = filterSessionsToWarm(sessions, allConfigs);
 
   if (toWarm.length === 0) {
     logErr("All requested sessions already pre-warmed");
@@ -623,8 +624,10 @@ async function preWarmSession(cwd?: string, sessionConfigs?: WarmupSessionConfig
             result = (await acpRequest("session/new", sessionParams)) as { sessionId: string };
           }
 
-          sessions.set(cfg.key, { sessionId: result.sessionId, cwd: warmCwd, model: cfg.model });
           await acpRequest("session/set_model", { sessionId: result.sessionId, modelId: cfg.model });
+          // Only cache after set_model succeeds — if it fails, the session stays on the default
+          // model and the reuse logic should detect the mismatch and re-set it.
+          sessions.set(cfg.key, { sessionId: result.sessionId, cwd: warmCwd, model: cfg.model });
           logErr(`Pre-warmed session: ${result.sessionId} (key=${cfg.key}, model=${cfg.model}, hasSystemPrompt=${!!cfg.systemPrompt})`);
         } catch (err) {
           if (err instanceof AcpError && err.code === -32000) {
@@ -680,15 +683,12 @@ async function handleQuery(msg: QueryMessage): Promise<void> {
     const requestedCwd = msg.cwd || process.env.HOME || "/";
     let sessionId = "";
 
-    const existing = sessions.get(sessionKey);
-    if (existing) {
-      // If cwd changed, invalidate this specific session
-      if (existing.cwd !== requestedCwd) {
-        logErr(`Cwd changed for ${sessionKey} (${existing.cwd} -> ${requestedCwd}), creating new session`);
-        sessions.delete(sessionKey);
-      } else {
-        sessionId = existing.sessionId;
-      }
+    const resolved = resolveSession(sessions, sessionKey, requestedCwd);
+    if (resolved) {
+      sessionId = resolved.sessionId;
+    } else if (sessions.get(sessionKey)) {
+      // resolveSession deleted it due to cwd change
+      logErr(`Cwd changed for ${sessionKey}, creating new session`);
     }
 
     // Reuse existing session if alive, resume a persisted one, or create a new one
@@ -729,14 +729,14 @@ async function handleQuery(msg: QueryMessage): Promise<void> {
       isNewSession = false;
       // Update model on reuse if the requested model differs from the session's stored model.
       // Wrap in try-catch: if the session is stale, delete it and fall through to session/new.
-      if (existing && requestedModel && requestedModel !== existing.model) {
+      if (needsModelUpdate(resolved?.existing, requestedModel)) {
         try {
           await acpRequest("session/set_model", { sessionId, modelId: requestedModel });
           sessions.set(sessionKey, { sessionId, cwd: requestedCwd, model: requestedModel });
-          logErr(`Updated model on reuse: ${sessionId} (key=${sessionKey}, ${existing.model} -> ${requestedModel})`);
+          logErr(`Updated model on reuse: ${sessionId} (key=${sessionKey}, ${resolved?.existing?.model} -> ${requestedModel})`);
         } catch (setModelErr) {
           logErr(`set_model failed on reuse (stale session?), recreating: ${setModelErr}`);
-          sessions.delete(sessionKey);
+          sessions.delete(getRetryDeleteKey(sessionKey));
           activeSessionId = "";
           return handleQuery(msg);
         }
@@ -825,7 +825,7 @@ async function handleQuery(msg: QueryMessage): Promise<void> {
         }
         authRetryCount++;
         logErr(`session/prompt failed with auth error (code=${err.code}), starting OAuth flow (attempt ${authRetryCount})`);
-        sessions.delete(sessionKey);
+        sessions.delete(getRetryDeleteKey(sessionKey));
         activeSessionId = "";
         await startAuthFlow();
         return handleQuery(msg);
@@ -834,7 +834,7 @@ async function handleQuery(msg: QueryMessage): Promise<void> {
       // Do NOT retry if we already started fresh (isNewSession) — that would infinite-loop.
       if (!isNewSession && sessionId) {
         logErr(`session/prompt failed with existing session, retrying with fresh session: ${err}`);
-        sessions.delete(sessionKey);
+        sessions.delete(getRetryDeleteKey(sessionKey));
         activeSessionId = "";
         return handleQuery(msg);
       }
